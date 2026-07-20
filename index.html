@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>カタモン - カタパルトモンスター</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #0b0d17;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #game {
+    display: block;
+    background: #000;
+    touch-action: none;
+  }
+  #debugPanel {
+    position: fixed;
+    top: 4px;
+    left: 4px;
+    color: #9effa8;
+    font: 12px/1.4 monospace;
+    background: rgba(0,0,0,0.4);
+    padding: 4px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+</div>
+<div id="debugPanel">M1: 地形生成+描画+破壊テスト(タップでクレーター)</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===== 仮想解像度(9:16縦画面) =====
+  const VW = 540;
+  const VH = 960;
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // ===== 効果音(WebAudio合成・音源ファイル不要) =====
+  let soundOn = true;
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playTone(freq, duration, type, peakGain, freqEnd) {
+    if (!soundOn) return;
+    const ac = getAudioCtx();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    if (freqEnd != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), ac.currentTime + duration);
+    gain.gain.setValueAtTime(0.0001, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(peakGain || 0.25, ac.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    osc.connect(gain).connect(ac.destination);
+    osc.start();
+    osc.stop(ac.currentTime + duration + 0.02);
+  }
+
+  function playNoiseBurst(duration, peakGain) {
+    if (!soundOn) return;
+    const ac = getAudioCtx();
+    const bufSize = Math.floor(ac.sampleRate * duration);
+    const buffer = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+    }
+    const src = ac.createBufferSource();
+    src.buffer = buffer;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(peakGain || 0.4, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    src.connect(filter).connect(gain).connect(ac.destination);
+    src.start();
+  }
+
+  function playLaunchSound() { playTone(320, 0.18, 'triangle', 0.2, 720); }
+  function playExplosionSound(blastMul) {
+    playNoiseBurst(0.35, Math.min(0.6, 0.35 * (blastMul || 1)));
+    playTone(90, 0.3, 'sine', 0.3, 40);
+  }
+  function playFallSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
+  function playSpecialSound() { playTone(500, 0.5, 'square', 0.22, 900); }
+  function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const scale = Math.min(viewportW / VW, viewportH / VH);
+    const cssW = VW * scale;
+    const cssH = VH * scale;
+
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    canvas.width = Math.round(VW * dpr);
+    canvas.height = Math.round(VH * dpr);
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    render();
+  }
+
+  // ===== 地形生成 =====
+  const TERRAIN_COLS = 180; // VW=540 → 3px刻み
+  const COL_W = VW / TERRAIN_COLS;
+  const GROUND_MIN_Y = 380;   // 地形が取りうる最も高い(浅い)位置
+  const GROUND_MAX_Y = 860;   // 地形が取りうる最も低い(深い)位置
+  const FLOOR_Y = VH;         // 画面下端(地形ポリゴンの底)
+
+  let heightmap = new Float64Array(TERRAIN_COLS);
+
+  function clampGround(y) {
+    return Math.min(GROUND_MAX_Y, Math.max(GROUND_MIN_Y, y));
+  }
+
+  // 骨格パターン: 片方が高台/中央に山/谷底スタート/なだらか
+  function baseCurve(pattern, t) {
+    // t: 0..1 (左端から右端)。yは小さいほど浅い(高い地形)、大きいほど深い(低い地形)
+    const mid = (GROUND_MIN_Y + GROUND_MAX_Y) / 2;
+    const range = GROUND_MAX_Y - GROUND_MIN_Y;
+    switch (pattern) {
+      case 'plateauLeft':
+        // 左が高台(浅い)、右が低地
+        return GROUND_MIN_Y + range * smoothstep(t, 0.25, 0.75);
+      case 'plateauRight':
+        // 右が高台(浅い)、左が低地
+        return GROUND_MAX_Y - range * smoothstep(t, 0.25, 0.75);
+      case 'mountainCenter':
+        // 中央が山(浅い)、両端が低地(深い)
+        return GROUND_MAX_Y - range * Math.sin(Math.PI * t);
+      case 'valley':
+        // 中央が谷(深い)、両端が高台(浅い)
+        return GROUND_MIN_Y + range * Math.sin(Math.PI * t);
+      case 'rolling':
+      default:
+        return mid;
+    }
+  }
+
+  function smoothstep(t, a, b) {
+    const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
+    return x * x * (3 - 2 * x);
+  }
+
+  // 中点変位法で乱数揺らぎを加える(滑らかなノイズ)
+  function midpointDisplacement(n, roughness) {
+    const size = 1;
+    let arr = new Float64Array(n + 1);
+    arr[0] = (Math.random() - 0.5) * 2;
+    arr[n] = (Math.random() - 0.5) * 2;
+    let step = n;
+    let scale = 1;
+    while (step > 1) {
+      const half = step / 2;
+      for (let i = half; i < n; i += step) {
+        const left = arr[i - half];
+        const right = arr[i + half];
+        arr[i] = (left + right) / 2 + (Math.random() - 0.5) * 2 * scale;
+      }
+      step = half;
+      scale *= roughness;
+    }
+    return arr;
+  }
+
+  function generateTerrain(pattern) {
+    const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling'];
+    const p = pattern || patterns[Math.floor(Math.random() * patterns.length)];
+
+    // 中点変位のnは2の冪にする必要があるため、近い2の冪を使い後でリサンプル
+    let pow = 1;
+    while (pow < TERRAIN_COLS) pow *= 2;
+    const noiseRaw = midpointDisplacement(pow, 0.55);
+    const noiseAmp = 26; // 揺らぎの振幅(px)
+
+    const hm = new Float64Array(TERRAIN_COLS);
+    for (let i = 0; i < TERRAIN_COLS; i++) {
+      const t = i / (TERRAIN_COLS - 1);
+      const base = baseCurve(p, t);
+      const noiseIdx = t * pow;
+      const i0 = Math.floor(noiseIdx);
+      const i1 = Math.min(pow, i0 + 1);
+      const frac = noiseIdx - i0;
+      const noiseVal = noiseRaw[i0] * (1 - frac) + noiseRaw[i1] * frac;
+      hm[i] = clampGround(base + noiseVal * noiseAmp);
+    }
+    // 両端を少しなだらかに(プレイヤー初期足場を安定させる)
+    for (let i = 0; i < 8; i++) {
+      const wL = i / 8;
+      hm[i] = hm[i] * wL + hm[8] * (1 - wL);
+      const j = TERRAIN_COLS - 1 - i;
+      hm[j] = hm[j] * wL + hm[TERRAIN_COLS - 9] * (1 - wL);
+    }
+    return { pattern: p, hm };
+  }
+
+  let currentPattern = null;
+
+  function newTerrain(pattern) {
+    const r = generateTerrain(pattern);
+    heightmap = r.hm;
+    currentPattern = r.pattern;
+    updateDebug();
+  }
+
+  // ===== 地形破壊(クレーター) =====
+  function carveCrater(cx, cy, radius) {
+    const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
+    const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
+    for (let c = colFrom; c <= colTo; c++) {
+      const colX = (c + 0.5) * COL_W;
+      const dx = colX - cx;
+      if (Math.abs(dx) > radius) continue;
+      const dy = Math.sqrt(radius * radius - dx * dx);
+      const craterBottom = cy + dy; // 円の下側の境界(この位置まで地面を削る)
+      if (craterBottom > heightmap[c]) {
+        heightmap[c] = Math.min(FLOOR_Y, craterBottom);
+      }
+    }
+  }
+
+  function groundYAt(x) {
+    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
+    return heightmap[c];
+  }
+
+  // ===== キャラクター =====
+  const CHARACTERS = {
+    medama: {
+      key: 'medama', name: '目玉', desc: '標準型・素直な弾道の万能キャラ',
+      maxHp: 100, blastMul: 1.0, windMul: 1.0, fuelMul: 1.0, velScaleMul: 1.0, tBias: 1.0,
+      color: '#ffd24a', special: '3連弾'
+    },
+    iwa: {
+      key: 'iwa', name: '岩', desc: '重戦車型・HP高、爆風大、弾速遅く風に流されやすい',
+      maxHp: 130, blastMul: 1.35, windMul: 1.4, fuelMul: 0.85, velScaleMul: 0.82, tBias: 1.25,
+      color: '#9a9086', special: '地形大破壊'
+    },
+    tori: {
+      key: 'tori', name: '鳥', desc: 'トリッキー型・HP低、弾が軽く飛距離◎、移動燃料多め',
+      maxHp: 75, blastMul: 0.8, windMul: 0.6, fuelMul: 1.3, velScaleMul: 1.2, tBias: 0.85,
+      color: '#ff8c3a', special: '貫通弾'
+    }
+  };
+  const CHARACTER_LIST = ['medama', 'iwa', 'tori'];
+
+  // キャラ画像(モンスター戦車・右向き)を事前読み込み
+  const charImages = {};
+  for (const key of CHARACTER_LIST) {
+    const img = new Image();
+    img.src = `assets/${key}.png`;
+    charImages[key] = img;
+  }
+  const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
+
+  // ===== ユニット =====
+  const UNIT_RADIUS = 16;
+  const MAX_HP = 100;
+  const FUEL_MAX = 100;
+  const MOVE_SPEED = 95; // px/s
+
+  const player = {
+    x: VW * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
+    color: '#4fc3f7', label: 'YOU', side: 'player',
+    character: null, specialUsed: false
+  };
+  const cpu = {
+    x: VW * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
+    color: '#ff6b6b', label: 'CPU', side: 'cpu',
+    character: null, specialUsed: false
+  };
+
+  function applyCharacter(u, key) {
+    const def = CHARACTERS[key];
+    u.character = key;
+    u.maxHp = def.maxHp;
+    u.hp = def.maxHp;
+    u.fuelMax = Math.round(FUEL_MAX * def.fuelMul);
+    u.fuel = u.fuelMax;
+    u.color = def.color;
+    u.label = def.name;
+  }
+
+  function unitAnchor(u) {
+    // キャラの中心(発射基点/爆風判定の基点)
+    return { x: u.x, y: u.y };
+  }
+
+  function initUnitOnGround(u) {
+    u.y = groundYAt(u.x) - UNIT_RADIUS;
+    u.vy = 0;
+    u.grounded = true;
+    u.fallStartY = u.y;
+  }
+
+  // ===== 風 =====
+  const WIND_ACCEL_MAX = 260; // px/s^2
+  let wind = { dir: 1, strength: 0 }; // strength: 0..1
+
+  function rollWind() {
+    wind.dir = Math.random() < 0.5 ? -1 : 1;
+    wind.strength = Math.random(); // 0(無風)〜1(強風)
+  }
+
+  // ===== 弾道物理 =====
+  const GRAVITY = 650; // px/s^2
+  const MAX_DRAG = 130; // px
+  const VEL_SCALE = 5.6; // px/s per px(ドラッグ量)
+  const FIRE_MIN_DRAG = 12;
+
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,pierce}]
+  let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
+
+  function fireProjectile(owner, anchor, vx, vy, opts) {
+    opts = opts || {};
+    projectiles.push({
+      x: anchor.x, y: anchor.y, vx, vy, owner, radius: 5,
+      blastMul: opts.blastMul || 1,
+      windMul: opts.windMul != null ? opts.windMul : 1,
+      pierce: !!opts.pierce
+    });
+  }
+
+  function rotateVec(vx, vy, deg) {
+    const r = deg * Math.PI / 180;
+    return { vx: vx * Math.cos(r) - vy * Math.sin(r), vy: vx * Math.sin(r) + vy * Math.cos(r) };
+  }
+
+  // キャラ性能+必殺ショットを反映して発射する共通口
+  function launchShot(unit, anchor, vx0, vy0, useSpecial) {
+    const def = CHARACTERS[unit.character];
+    const owner = unit.side;
+
+    if (useSpecial && def.key === 'medama') {
+      // 目玉の必殺: 3連弾(扇状に3発)
+      for (const deg of [-9, 0, 9]) {
+        const v = rotateVec(vx0, vy0, deg);
+        fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul, windMul: def.windMul });
+      }
+    } else if (useSpecial && def.key === 'iwa') {
+      // 岩の必殺: 地形大破壊(巨大クレーター)
+      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 2.6, windMul: def.windMul });
+    } else if (useSpecial && def.key === 'tori') {
+      // 鳥の必殺: 貫通弾(地形を無視して直進)
+      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul, pierce: true });
+    } else {
+      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul });
+    }
+
+    if (useSpecial) {
+      unit.specialUsed = true;
+      triggerSpecialFlash(`必殺: ${def.special}!!`);
+      playSpecialSound();
+    } else {
+      playLaunchSound();
+    }
+  }
+
+  // ===== ターン制御 =====
+  const MAX_TURNS_TOTAL = 20; // 各10ターン(プレイヤー10+CPU10)
+  let currentTurn = 'player';
+  let turnCount = 0;
+  let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
+  let matchOver = false;
+  let winner = null;
+  let cpuThinkTimer = 0;
+  let winStreak = 0;     // 連勝数(CPU AIの精度に反映。負けると0に戻る)
+  let isBossMatch = false; // 10連勝ごとの節目演出フラグ
+  let bossBannerTimer = 0;
+
+  // ===== 移動(燃料制・長押しボタン) =====
+  const BTN_R = 34;
+  const leftBtn = { x: 60, y: VH - 60 };
+  const rightBtn = { x: VW - 60, y: VH - 60 };
+  let moveDir = 0; // -1, 0, 1
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim'
+  let inputPointerId = null;
+
+  // ===== 必殺ショット(1試合1回) =====
+  const specialBtn = { x: VW - 44, y: 106, r: 26 };
+  let specialArmed = false;
+
+  // ===== スコア(連勝を主、与ダメ効率を従とした複合値)=====
+  let runStats = { damageDealt: 0, shots: 0 };
+  function currentEfficiency() {
+    return runStats.shots > 0 ? Math.round(runStats.damageDealt / runStats.shots) : 0;
+  }
+
+  // ===== エフェクト =====
+  let particles = [];   // 爆発パーティクル
+  let floatTexts = [];  // ダメージ数字ポップ
+  let shakeTimer = 0;
+  let shakeMag = 0;
+  let specialFlash = { timer: 0, text: '' };
+
+  function spawnExplosion(x, y, blastMul) {
+    const count = Math.round(14 * Math.min(2, blastMul || 1));
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 60 + Math.random() * 180 * (blastMul || 1);
+      particles.push({
+        x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 40,
+        life: 0.35 + Math.random() * 0.35, maxLife: 0.7,
+        color: Math.random() < 0.5 ? '#ffb84a' : '#ff6b3a', size: 2 + Math.random() * 3
+      });
+    }
+  }
+
+  function spawnDamageText(x, y, dmg) {
+    floatTexts.push({ x, y, text: `-${dmg}`, life: 0.9, vy: -38, color: '#ff6b6b' });
+  }
+
+  function triggerShake(mag, duration) {
+    shakeMag = Math.max(shakeMag, mag);
+    shakeTimer = Math.max(shakeTimer, duration);
+  }
+
+  function triggerSpecialFlash(text) {
+    specialFlash = { timer: 0.9, text };
+  }
+
+  // ===== キャラクター選択画面 =====
+  let gamePhase = 'select'; // 'select' | 'battle'
+  const selectCards = CHARACTER_LIST.map((key, i) => ({ key, x: VW / 2, y: 250 + i * 190, w: VW - 60, h: 160 }));
+
+  function selectCharacterAndStart(key) {
+    player.character = key;
+    cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+    gamePhase = 'battle';
+    winStreak = 0;
+    runStats = { damageDealt: 0, shots: 0 };
+    resetMatch();
+  }
+
+  function wrapText(text, x, y, maxWidth, lineHeight) {
+    let line = '';
+    let cy = y;
+    for (const ch of text) {
+      const test = line + ch;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, x, cy);
+        line = ch;
+        cy += lineHeight;
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, x, cy);
+  }
+
+  function drawCharacterSelect() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('モンスターを選択', VW / 2, 130);
+
+    for (const card of selectCards) {
+      const def = CHARACTERS[card.key];
+      ctx.save();
+      ctx.translate(card.x, card.y);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(-card.w / 2, -card.h / 2, card.w, card.h);
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-card.w / 2, -card.h / 2, card.w, card.h);
+
+      const cImg = charImages[card.key];
+      const cReady = cImg && cImg.complete && cImg.naturalWidth > 0;
+      if (cReady) {
+        const ih = 64;
+        const iw = ih * (cImg.naturalWidth / cImg.naturalHeight);
+        ctx.drawImage(cImg, -card.w / 2 + 20, -ih / 2, iw, ih);
+      } else {
+        ctx.beginPath();
+        ctx.arc(-card.w / 2 + 50, 0, 28, 0, Math.PI * 2);
+        ctx.fillStyle = def.color;
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillText(def.name, -card.w / 2 + 95, -30);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      wrapText(def.desc, -card.w / 2 + 95, -8, card.w - 140, 16);
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(`必殺: ${def.special}`, -card.w / 2 + 95, 52);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // 直撃>至近>爆風減衰のダメージ計算(blastMulでキャラの爆風サイズを反映)
+  function computeDamage(dist, blastMul) {
+    const DIRECT = 20 * blastMul, CLOSE = 48 * blastMul, BLAST = 100 * blastMul;
+    if (dist <= DIRECT) return 45;
+    if (dist <= CLOSE) return Math.round(45 - (dist - DIRECT) / (CLOSE - DIRECT) * 20);
+    if (dist <= BLAST) return Math.round(25 - (dist - CLOSE) / (BLAST - CLOSE) * 25);
+    return 0;
+  }
+
+  function explodeAt(x, y, blastMul, owner) {
+    blastMul = blastMul || 1;
+    carveCrater(x, y, 44 * blastMul);
+    spawnExplosion(x, y, blastMul);
+    triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
+    playExplosionSound(blastMul);
+    for (const u of [player, cpu]) {
+      const a = unitAnchor(u);
+      const dist = Math.hypot(a.x - x, a.y - y);
+      const dmg = computeDamage(dist, blastMul);
+      if (dmg > 0) {
+        u.hp = Math.max(0, u.hp - dmg);
+        spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
+        if (owner === 'player' && u.side === 'cpu') runStats.damageDealt += dmg;
+      }
+    }
+    checkMatchEnd();
+  }
+
+  function estimateFlightTime(vx0, vy0) {
+    if (vy0 < 0) return Math.min(3, (2 * Math.abs(vy0)) / GRAVITY);
+    return 0.6;
+  }
+
+  function checkMatchEnd() {
+    if (matchOver) return;
+    if (player.hp <= 0 || cpu.hp <= 0) {
+      matchOver = true;
+      winner = (player.hp <= 0 && cpu.hp <= 0) ? 'cpu' : (player.hp <= 0 ? 'cpu' : 'player');
+      applyStreakResult();
+    }
+  }
+
+  function judgeByHp() {
+    matchOver = true;
+    const pr = player.hp / player.maxHp;
+    const cr = cpu.hp / cpu.maxHp;
+    winner = pr > cr ? 'player' : 'cpu'; // 同率は引き分けなし・CPU勝ち扱い
+    applyStreakResult();
+  }
+
+  let lastRunStreak = 0;
+  let lastRunEfficiency = 0;
+  function applyStreakResult() {
+    if (winner === 'player') {
+      winStreak++;
+    } else {
+      lastRunStreak = winStreak;
+      lastRunEfficiency = currentEfficiency();
+      winStreak = 0;
+      runStats = { damageDealt: 0, shots: 0 }; // 連勝が途切れたら次の挑戦は与ダメ効率もリセット
+    }
+  }
+
+  function startTurn() {
+    rollWind();
+    if (currentTurn === 'player') {
+      player.fuel = FUEL_MAX;
+    } else {
+      cpu.fuel = FUEL_MAX;
+      cpuThinkTimer = 0.7 + Math.random() * 0.5;
+    }
+  }
+
+  function endTurn() {
+    if (matchOver) return;
+    turnCount++;
+    if (turnCount >= MAX_TURNS_TOTAL) {
+      judgeByHp();
+      return;
+    }
+    currentTurn = currentTurn === 'player' ? 'cpu' : 'player';
+    startTurn();
+  }
+
+  // ===== CPU AI(精度成長型)=====
+  // 連勝数が伸びるほど理論弾道からの誤差が縮む。20連勝〜はほぼ正解弾道。
+  function cpuAccuracyTier(streak) {
+    if (streak < 3) return { name: 'low', jitter: 0.38 };
+    if (streak < 10) return { name: 'mid', jitter: 0.20 };
+    if (streak < 20) return { name: 'high', jitter: 0.09 };
+    return { name: 'perfect', jitter: 0.02 };
+  }
+
+  function cpuAutoTurn() {
+    if (matchOver || projectiles.length) return;
+    const anchor = unitAnchor(cpu);
+    const target = unitAnchor(player);
+    const def = CHARACTERS[cpu.character];
+    const baseT = Math.min(1.7, Math.max(0.7, Math.abs(target.x - anchor.x) / 230)) * def.tBias;
+    const { vx0, vy0 } = perfectAimVelocity(anchor, target, baseT);
+    const tier = cpuAccuracyTier(winStreak);
+    const jitter = tier.jitter;
+    const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
+    const vy = vy0 * (1 + (Math.random() * 2 - 1) * jitter);
+    const useSpecial = !cpu.specialUsed && (tier.name === 'high' || tier.name === 'perfect');
+    launchShot(cpu, anchor, vx, vy, useSpecial);
+    awaitingResolve = true;
+  }
+
+  // 高低差・現在の風を考慮して(anchor→target)を正確に結ぶ「理論上の正解弾道」を逆算
+  function perfectAimVelocity(anchor, target, tHint) {
+    const dx = target.x - anchor.x;
+    const dy = target.y - anchor.y;
+    const distAbs = Math.max(1, Math.abs(dx));
+    const t = tHint || Math.min(1.7, Math.max(0.7, distAbs / 230));
+    const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX;
+    const vx0 = (dx - 0.5 * windAccel * t * t) / t;
+    const vy0 = (dy - 0.5 * GRAVITY * t * t) / t;
+    return { vx0, vy0, t };
+  }
+
+  // 落下ダメージ(安全高度を超えた分だけ減衰なしで加算)
+  function computeFallDamage(fallDist) {
+    const SAFE_FALL = 50;
+    if (fallDist <= SAFE_FALL) return 0;
+    return Math.min(70, Math.round((fallDist - SAFE_FALL) * 0.35));
+  }
+
+  function updateFalling(dt, u) {
+    const groundY = groundYAt(u.x) - UNIT_RADIUS;
+    if (u.grounded) {
+      if (groundY > u.y + 2) {
+        // 足場が崩れて落下開始
+        u.grounded = false;
+        u.vy = 0;
+        u.fallStartY = u.y;
+      } else {
+        u.y = groundY; // 地形に追従(登り降りはそのまま歩ける)
+      }
+    } else {
+      u.vy += GRAVITY * dt;
+      u.y += u.vy * dt;
+      const g2 = groundYAt(u.x) - UNIT_RADIUS;
+      if (u.y >= g2) {
+        const intoVoid = g2 >= FLOOR_Y - UNIT_RADIUS - 2; // クレーターが底まで貫通=場外
+        const fallDist = g2 - u.fallStartY;
+        u.y = g2;
+        u.vy = 0;
+        u.grounded = true;
+        if (fallDist > 15) {
+          playFallSound();
+          triggerShake(3, 0.1);
+        }
+        if (u.hp > 0) {
+          if (intoVoid) {
+            u.hp = 0; // 場外落下は即死
+          } else {
+            const dmg = computeFallDamage(fallDist);
+            if (dmg > 0) {
+              u.hp = Math.max(0, u.hp - dmg);
+              spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, dmg);
+            }
+          }
+          checkMatchEnd();
+        }
+      }
+    }
+  }
+
+  // ===== 描画 =====
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, VH);
+    g.addColorStop(0, '#1a2340');
+    g.addColorStop(0.55, '#2c3a63');
+    g.addColorStop(1, '#4a5a8a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, VW, VH);
+
+    // 遠景の星
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 137.5) % VW;
+      const sy = (i * 71.3) % (GROUND_MIN_Y - 20);
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+  }
+
+  function drawTerrain() {
+    ctx.beginPath();
+    ctx.moveTo(0, heightmap[0]);
+    for (let c = 1; c < TERRAIN_COLS; c++) {
+      ctx.lineTo(c * COL_W, heightmap[c]);
+    }
+    ctx.lineTo(VW, FLOOR_Y);
+    ctx.lineTo(0, FLOOR_Y);
+    ctx.closePath();
+
+    const g = ctx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
+    g.addColorStop(0, '#7bc97e');
+    g.addColorStop(0.12, '#5a9b57');
+    g.addColorStop(0.12, '#8a6a4a');
+    g.addColorStop(1, '#4a3524');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // 表土の輪郭ライン(草の縁取り)
+    ctx.beginPath();
+    ctx.moveTo(0, heightmap[0]);
+    for (let c = 1; c < TERRAIN_COLS; c++) {
+      ctx.lineTo(c * COL_W, heightmap[c]);
+    }
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#9be08a';
+    ctx.stroke();
+  }
+
+  function drawUnit(u) {
+    const a = unitAnchor(u);
+    const isBossUnit = isBossMatch && u.side === 'cpu';
+    const img = u.character ? charImages[u.character] : null;
+    const imgReady = img && img.complete && img.naturalWidth > 0;
+    const facingLeft = u.side === 'cpu'; // 自分は右向き画像そのまま、CPUは反転して内側(左)を向く
+
+    // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
+    const h = SPRITE_SIZE;
+    const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
+    const imgTopAbs = a.y + UNIT_RADIUS - h;
+
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    if (isBossUnit) {
+      ctx.beginPath();
+      ctx.arc(0, UNIT_RADIUS - h / 2, h / 2 + 8, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd24a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    if (imgReady) {
+      ctx.save();
+      ctx.globalAlpha = u.hp > 0 ? 1 : 0.4;
+      if (facingLeft) ctx.scale(-1, 1);
+      ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+      ctx.restore();
+    } else {
+      // 画像読み込み中のフォールバック(色付き円)
+      ctx.beginPath();
+      ctx.arc(0, 0, UNIT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = u.hp > 0 ? u.color : '#555';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(u.label, 0, 4);
+    }
+    ctx.restore();
+
+    if (isBossUnit) {
+      ctx.save();
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('BOSS', a.x, imgTopAbs - 2);
+      ctx.restore();
+    }
+
+    // HPバー
+    const barW = 70, barX = a.x - barW / 2, barY = imgTopAbs - (isBossUnit ? 18 : 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(barX, barY, barW, 8);
+    const ratio = Math.max(0, u.hp / u.maxHp);
+    ctx.fillStyle = ratio > 0.5 ? '#7be07b' : ratio > 0.25 ? '#f0c860' : '#f06060';
+    ctx.fillRect(barX, barY, barW * ratio, 8);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, 8);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(`${u.hp}/${u.maxHp}`, a.x, barY - 3);
+  }
+
+  function drawWindMeter() {
+    const cx = VW / 2, cy = 26;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(cx - 90, cy - 16, 180, 32);
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('WIND', cx, cy - 4);
+
+    const len = 20 + wind.strength * 55;
+    const dir = wind.dir;
+    ctx.strokeStyle = '#ffe08a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - dir * len / 2, cy + 8);
+    ctx.lineTo(cx + dir * len / 2, cy + 8);
+    ctx.stroke();
+    // 矢じり
+    const ax = cx + dir * len / 2;
+    ctx.beginPath();
+    ctx.moveTo(ax, cy + 8);
+    ctx.lineTo(ax - dir * 7, cy + 4);
+    ctx.lineTo(ax - dir * 7, cy + 12);
+    ctx.closePath();
+    ctx.fillStyle = '#ffe08a';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTrajectoryPreview() {
+    if (!aimState) return;
+    const { anchor, curX, curY } = aimState;
+    let dx = curX - anchor.x;
+    let dy = curY - anchor.y;
+    const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
+    if (dist < FIRE_MIN_DRAG) return;
+    const ang = Math.atan2(dy, dx);
+    dx = Math.cos(ang) * dist;
+    dy = Math.sin(ang) * dist;
+
+    // スリングショットの引っ張り線
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(anchor.x, anchor.y);
+    ctx.lineTo(anchor.x + dx, anchor.y + dy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
+    const def = CHARACTERS[player.character];
+    const vx0 = -dx * VEL_SCALE * def.velScaleMul;
+    const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+    const totalT = estimateFlightTime(vx0, vy0);
+    const previewT = totalT * 0.2;
+    const steps = 14;
+    const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * def.windMul;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 1; i <= steps; i++) {
+      const t = (previewT * i) / steps;
+      const px = anchor.x + vx0 * t + 0.5 * windAccel * t * t;
+      const py = anchor.y + vy0 * t + 0.5 * GRAVITY * t * t;
+      ctx.beginPath();
+      ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawProjectile() {
+    for (const p of projectiles) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = p.pierce ? '#b8f2ff' : '#fff2a8';
+      ctx.fill();
+      ctx.strokeStyle = p.pierce ? '#4fc3f7' : '#c88a2a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  const continueBtn = { x: VW / 2, y: VH / 2 + 78, w: 210, h: 46 };
+
+  function drawResultBanner() {
+    if (!matchOver) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(0, VH / 2 - 120, VW, 280);
+    ctx.textAlign = 'center';
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px sans-serif';
+    const msg = winner === 'player' ? 'CPUを撃破!' : 'あなたの負け...';
+    ctx.fillText(msg, VW / 2, VH / 2 - 70);
+
+    if (winner === 'player') {
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 40px sans-serif';
+      ctx.fillText(`${winStreak}連勝!`, VW / 2, VH / 2 - 22);
+      if (winStreak > 0 && winStreak % 10 === 0) {
+        ctx.fillStyle = '#ff8a3a';
+        ctx.font = 'bold 15px sans-serif';
+        ctx.fillText('節目達成の大金星!', VW / 2, VH / 2 + 4);
+      }
+    } else {
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillText(`最終 ${lastRunStreak}連勝`, VW / 2, VH / 2 - 22);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '13px sans-serif';
+    const effShown = winner === 'player' ? currentEfficiency() : lastRunEfficiency;
+    ctx.fillText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20);
+
+    // つぎへ/もう一度ボタン
+    const b = continueBtn;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10) : ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.fillStyle = '#4fc3f7';
+    ctx.fill();
+    ctx.fillStyle = '#0b0d17';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(winner === 'player' ? 'つぎのバトルへ' : 'もう一度挑戦', b.x, b.y + 5);
+    ctx.restore();
+  }
+
+  function drawTurnInfo() {
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'left';
+    const turnLabel = currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン';
+    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 60);
+
+    const activeUnit = currentTurn === 'player' ? player : cpu;
+    const fw = 110, fx = 10, fy = 68;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(fx, fy, fw, 8);
+    ctx.fillStyle = '#8ad0ff';
+    ctx.fillRect(fx, fy, fw * Math.max(0, activeUnit.fuel / activeUnit.fuelMax), 8);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(fx, fy, fw, 8);
+    ctx.font = '10px sans-serif';
+    ctx.fillText('FUEL', fx, fy - 2);
+
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = '#ffd24a';
+    ctx.fillText(`${winStreak}連勝`, VW - 10, 60);
+    ctx.restore();
+  }
+
+  function drawBossBanner() {
+    if (bossBannerTimer <= 0) return;
+    ctx.save();
+    const alpha = Math.min(1, bossBannerTimer / 0.5);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(60,10,10,0.65)';
+    ctx.fillRect(0, VH * 0.32, VW, 70);
+    ctx.fillStyle = '#ffd24a';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('強敵出現!', VW / 2, VH * 0.32 + 45);
+    ctx.restore();
+  }
+
+  function drawSpecialButton() {
+    if (player.specialUsed) return;
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver;
+    const def = CHARACTERS[player.character];
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(specialBtn.x, specialBtn.y, specialBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = specialArmed ? 'rgba(255,120,60,0.85)' : (active ? 'rgba(255,210,74,0.28)' : 'rgba(255,255,255,0.08)');
+    ctx.fill();
+    ctx.strokeStyle = specialArmed ? '#fff' : (active ? '#ffd24a' : 'rgba(255,255,255,0.25)');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('必殺', specialBtn.x, specialBtn.y - 4);
+    ctx.font = '9px sans-serif';
+    ctx.fillText(def.special, specialBtn.x, specialBtn.y + 9);
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    for (const pt of particles) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+      ctx.fillStyle = pt.color;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawFloatTexts() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 3;
+    for (const ft of floatTexts) {
+      ctx.globalAlpha = Math.max(0, ft.life / 0.9);
+      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+    }
+    ctx.restore();
+  }
+
+  function drawSpecialFlash() {
+    if (specialFlash.timer <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, specialFlash.timer * 2.2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#ff6b3a';
+    ctx.lineWidth = 4;
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeText(specialFlash.text, VW / 2, VH * 0.42);
+    ctx.fillText(specialFlash.text, VW / 2, VH * 0.42);
+    ctx.restore();
+  }
+
+  const soundBtn = { x: 30, y: 106, r: 22 };
+  function drawSoundToggle() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(soundBtn.x, soundBtn.y, soundBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(soundOn ? '♪' : '✕', soundBtn.x, soundBtn.y + 1);
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+
+  function drawMoveButtons() {
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver;
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    for (const [btn, glyph] of [[leftBtn, '◀'], [rightBtn, '▶']]) {
+      ctx.beginPath();
+      ctx.arc(btn.x, btn.y, BTN_R, 0, Math.PI * 2);
+      ctx.fillStyle = active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
+      ctx.fill();
+      ctx.strokeStyle = active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(glyph, btn.x, btn.y + 2);
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.save();
+    if (shakeTimer > 0) {
+      const mag = shakeMag * (shakeTimer / 0.3);
+      ctx.translate((Math.random() * 2 - 1) * mag, (Math.random() * 2 - 1) * mag);
+    }
+
+    drawSky();
+    drawTerrain();
+    if (gamePhase === 'select') {
+      drawCharacterSelect();
+      ctx.restore();
+      return;
+    }
+    drawTrajectoryPreview();
+    drawProjectile();
+    drawParticles();
+    drawUnit(player);
+    drawUnit(cpu);
+    drawFloatTexts();
+    drawWindMeter();
+    drawTurnInfo();
+    drawMoveButtons();
+    drawSpecialButton();
+    drawSoundToggle();
+    drawResultBanner();
+    drawBossBanner();
+    drawSpecialFlash();
+    ctx.restore();
+  }
+
+  function updateDebug() {
+    document.getElementById('debugPanel').textContent =
+      `M6: ${currentPattern} / ◀▶長押しで移動・自キャラからドラッグで発射 / ♪で音量切替`;
+  }
+
+  // ===== 入力(引っ張り照準) =====
+  function canvasPointFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const scaleX = VW / rect.width;
+    const scaleY = VH / rect.height;
+    return { x: cx * scaleX, y: cy * scaleY };
+  }
+
+  function hitButton(p, btn) {
+    return Math.hypot(p.x - btn.x, p.y - btn.y) <= BTN_R + 12;
+  }
+
+  function onPointerDown(e) {
+    const p0 = canvasPointFromEvent(e);
+    if (gamePhase === 'select') {
+      for (const card of selectCards) {
+        if (Math.abs(p0.x - card.x) <= card.w / 2 && Math.abs(p0.y - card.y) <= card.h / 2) {
+          selectCharacterAndStart(card.key);
+          return;
+        }
+      }
+      return;
+    }
+
+    if (Math.hypot(p0.x - soundBtn.x, p0.y - soundBtn.y) <= soundBtn.r + 10) {
+      soundOn = !soundOn;
+      if (soundOn) playUiSound();
+      return;
+    }
+
+    if (matchOver) {
+      const b = continueBtn;
+      if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y) <= b.h / 2) {
+        resetMatch();
+      }
+      return;
+    }
+
+    if (currentTurn !== 'player' || awaitingResolve) return;
+    const p = canvasPointFromEvent(e);
+
+    if (!player.specialUsed && Math.hypot(p.x - specialBtn.x, p.y - specialBtn.y) <= specialBtn.r + 10) {
+      specialArmed = !specialArmed;
+      return;
+    }
+    if (hitButton(p, leftBtn)) {
+      inputMode = 'moveL'; inputPointerId = e.pointerId; moveDir = -1;
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (hitButton(p, rightBtn)) {
+      inputMode = 'moveR'; inputPointerId = e.pointerId; moveDir = 1;
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (!player.grounded) return;
+    const anchor = unitAnchor(player);
+    if (Math.hypot(p.x - anchor.x, p.y - anchor.y) <= 70) {
+      inputMode = 'aim'; inputPointerId = e.pointerId;
+      aimState = { anchor, curX: p.x, curY: p.y };
+      canvas.setPointerCapture(e.pointerId);
+    }
+  }
+
+  function onPointerMove(e) {
+    if (e.pointerId !== inputPointerId) return;
+    if (inputMode === 'aim' && aimState) {
+      const p = canvasPointFromEvent(e);
+      aimState.curX = p.x;
+      aimState.curY = p.y;
+    }
+  }
+
+  function onPointerUp(e) {
+    if (e.pointerId !== inputPointerId) return;
+    if (inputMode === 'aim' && aimState) {
+      let dx = aimState.curX - aimState.anchor.x;
+      let dy = aimState.curY - aimState.anchor.y;
+      const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
+      if (dist >= FIRE_MIN_DRAG) {
+        const ang = Math.atan2(dy, dx);
+        dx = Math.cos(ang) * dist;
+        dy = Math.sin(ang) * dist;
+        const def = CHARACTERS[player.character];
+        const vx0 = -dx * VEL_SCALE * def.velScaleMul;
+        const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+        launchShot(player, aimState.anchor, vx0, vy0, specialArmed);
+        runStats.shots++;
+        specialArmed = false;
+        awaitingResolve = true;
+      }
+      aimState = null;
+    } else if (inputMode === 'moveL' || inputMode === 'moveR') {
+      moveDir = 0;
+    }
+    inputMode = null;
+    inputPointerId = null;
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
+
+  function resetMatch() {
+    newTerrain();
+    applyCharacter(player, player.character);
+    applyCharacter(cpu, cpu.character);
+    player.x = VW * 0.15;
+    cpu.x = VW * 0.85;
+    initUnitOnGround(player);
+    initUnitOnGround(cpu);
+    projectiles = [];
+    aimState = null;
+    moveDir = 0;
+    inputMode = null;
+    inputPointerId = null;
+    specialArmed = false;
+    player.specialUsed = false;
+    cpu.specialUsed = false;
+    matchOver = false;
+    winner = null;
+    awaitingResolve = false;
+    turnCount = 0;
+    currentTurn = 'player';
+    particles = [];
+    floatTexts = [];
+    shakeTimer = 0;
+    specialFlash = { timer: 0, text: '' };
+    isBossMatch = winStreak > 0 && winStreak % 10 === 0;
+    bossBannerTimer = isBossMatch ? 2.2 : 0;
+    startTurn();
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === 'r' || e.key === 'R') && gamePhase === 'battle') resetMatch();
+  });
+
+  window.addEventListener('resize', resize);
+
+  // ===== ゲームループ =====
+  let lastTime = 0;
+  function update(dt) {
+    if (gamePhase === 'select') return;
+    if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
+    if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
+    if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
+
+    // パーティクル更新
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const pt = particles[i];
+      pt.vy += 400 * dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.life -= dt;
+      if (pt.life <= 0) particles.splice(i, 1);
+    }
+    // ダメージ数字ポップ更新
+    for (let i = floatTexts.length - 1; i >= 0; i--) {
+      const ft = floatTexts[i];
+      ft.y += ft.vy * dt;
+      ft.life -= dt;
+      if (ft.life <= 0) floatTexts.splice(i, 1);
+    }
+
+    // 弾の物理(複数弾:必殺の3連弾に対応)
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * p.windMul;
+      p.vx += windAccel * dt;
+      p.vy += GRAVITY * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      let hit = false;
+      // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
+      for (const u of [player, cpu]) {
+        if (u.side === p.owner) continue;
+        const a = unitAnchor(u);
+        if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_RADIUS + p.radius) {
+          explodeAt(p.x, p.y, p.blastMul, p.owner);
+          projectiles.splice(i, 1);
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
+
+      if (!p.pierce && p.y >= groundYAt(p.x)) {
+        explodeAt(p.x, p.y, p.blastMul, p.owner);
+        projectiles.splice(i, 1);
+      } else if (p.x < -30 || p.x > VW + 30 || p.y > VH + 60) {
+        projectiles.splice(i, 1); // 画面外(誤爆なしで消滅)
+      }
+    }
+
+    // 落下物理(常時判定)
+    updateFalling(dt, player);
+    updateFalling(dt, cpu);
+
+    if (matchOver) return;
+
+    // 移動(プレイヤーのターンのみ・燃料制)
+    if (currentTurn === 'player' && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
+      const dist = Math.min(MOVE_SPEED * dt, player.fuel);
+      const nx = Math.min(VW - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
+      const moved = Math.abs(nx - player.x);
+      player.x = nx;
+      player.fuel -= moved;
+      player.y = groundYAt(player.x) - UNIT_RADIUS;
+    }
+
+    // CPU思考タイマー
+    if (currentTurn === 'cpu' && !awaitingResolve && cpu.grounded && !projectiles.length) {
+      cpuThinkTimer -= dt;
+      if (cpuThinkTimer <= 0) cpuAutoTurn();
+    }
+
+    // ターン解決(着弾+落下が収まったら手番交代)
+    if (awaitingResolve && !projectiles.length && player.grounded && cpu.grounded) {
+      awaitingResolve = false;
+      endTurn();
+    }
+  }
+
+  function gameLoop(ts) {
+    if (!lastTime) lastTime = ts;
+    const dt = Math.min(0.033, (ts - lastTime) / 1000);
+    lastTime = ts;
+    update(dt);
+    render();
+    requestAnimationFrame(gameLoop);
+  }
+
+  newTerrain(); // 選択画面の背景として地形だけ先に用意
+  resize();
+  requestAnimationFrame(gameLoop);
+})();
+</script>
+</body>
+</html>
