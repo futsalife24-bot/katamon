@@ -15,6 +15,7 @@
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;
   }
   #stage {
     position: fixed;
@@ -27,6 +28,9 @@
     display: block;
     background: #000;
     touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+    -webkit-tap-highlight-color: transparent;
   }
   #debugPanel {
     position: fixed;
@@ -290,7 +294,7 @@
   // ===== ユニット =====
   const UNIT_RADIUS = 16;
   const MAX_HP = 100;
-  const FUEL_MAX = 100;
+  const FUEL_MAX = 34; // 総移動距離(旧100の1/3)
   const MOVE_SPEED = 95; // px/s
 
   const player = {
@@ -411,6 +415,13 @@
   let moveDir = 0; // -1, 0, 1
   let inputMode = null; // 'moveL' | 'moveR' | 'aim'
   let inputPointerId = null;
+
+  // ===== 発射エリア(左右移動ボタンの間・固定位置。自キャラの画面位置に依存しない) =====
+  const fireZone = { x: VW / 2, y: VH - 60, r: 42 };
+  const CANCEL_ZONE_Y = 150; // この高さより上でリリースするとキャンセル
+  function isInCancelZone(x, y) {
+    return y <= CANCEL_ZONE_Y;
+  }
 
   // ===== 必殺ショット(1試合1回) =====
   const specialBtn = { x: VW - 44, y: 106, r: 26 };
@@ -597,10 +608,14 @@
   function startTurn() {
     rollWind();
     if (currentTurn === 'player') {
-      player.fuel = FUEL_MAX;
+      player.fuel = player.fuelMax;
     } else {
-      cpu.fuel = FUEL_MAX;
+      cpu.fuel = cpu.fuelMax;
       cpuThinkTimer = 0.7 + Math.random() * 0.5;
+      const plan = planCpuMove();
+      cpuMoveDir = plan.dir;
+      cpuMoveRemaining = plan.distance;
+      cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
     }
   }
 
@@ -622,6 +637,31 @@
     if (streak < 10) return { name: 'mid', jitter: 0.20 };
     if (streak < 20) return { name: 'high', jitter: 0.09 };
     return { name: 'perfect', jitter: 0.02 };
+  }
+
+  // CPUの移動計画:危機回避(近すぎる)・攻撃調整(遠すぎる)の時だけ動く。むやみに動かない。
+  let cpuMoveDir = 0;
+  let cpuMoveRemaining = 0;
+  let cpuPhase = 'aim'; // 'move' | 'aim'
+
+  function planCpuMove() {
+    const tier = cpuAccuracyTier(winStreak);
+    if (tier.name === 'low') return { dir: 0, distance: 0 }; // 1〜3連勝は動かない
+
+    const dist = Math.abs(player.x - cpu.x);
+    const NEAR = VW * 0.16;  // 近すぎ(自爆や反撃のリスク)→離れる
+    const FAR = VW * 0.60;   // 遠すぎ(命中率のため)→寄る
+
+    let dir = 0;
+    if (dist < NEAR) dir = cpu.x < player.x ? -1 : 1;
+    else if (dist > FAR) dir = cpu.x < player.x ? 1 : -1;
+    if (dir === 0) return { dir: 0, distance: 0 };
+
+    // 中ティアは必要な時でも半分の確率でしか動かない(様子見)
+    if (tier.name === 'mid' && Math.random() < 0.5) return { dir: 0, distance: 0 };
+
+    const willingness = tier.name === 'perfect' ? 1 : tier.name === 'high' ? 0.85 : 0.6;
+    return { dir, distance: cpu.fuelMax * willingness };
   }
 
   function cpuAutoTurn() {
@@ -847,26 +887,34 @@
 
   function drawTrajectoryPreview() {
     if (!aimState) return;
-    const { anchor, curX, curY } = aimState;
-    let dx = curX - anchor.x;
-    let dy = curY - anchor.y;
+    const { anchor, origin, curX, curY } = aimState;
+    const cancelled = isInCancelZone(curX, curY);
+
+    // 発射エリアでの引っ張り視覚(スリング風・固定位置起点)
+    ctx.save();
+    ctx.strokeStyle = cancelled ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(origin.x, origin.y);
+    ctx.lineTo(curX, curY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(curX, curY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = cancelled ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.8)';
+    ctx.fill();
+    ctx.restore();
+
+    if (cancelled) return;
+
+    let dx = curX - origin.x;
+    let dy = curY - origin.y;
     const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
     if (dist < FIRE_MIN_DRAG) return;
     const ang = Math.atan2(dy, dx);
     dx = Math.cos(ang) * dist;
     dy = Math.sin(ang) * dist;
-
-    // スリングショットの引っ張り線
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(anchor.x, anchor.y);
-    ctx.lineTo(anchor.x + dx, anchor.y + dy);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
 
     // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
     const def = CHARACTERS[player.character];
@@ -1076,6 +1124,46 @@
     ctx.restore();
   }
 
+  function drawFireZone() {
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && player.grounded;
+    const armed = !!aimState;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(fireZone.x, fireZone.y, fireZone.r, 0, Math.PI * 2);
+    ctx.fillStyle = armed ? 'rgba(255,255,255,0.32)' : (active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)');
+    ctx.fill();
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('引いて', fireZone.x, fireZone.y - 8);
+    ctx.fillText('発射', fireZone.x, fireZone.y + 8);
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+
+  function drawCancelZone() {
+    if (!aimState) return;
+    const inCancel = isInCancelZone(aimState.curX, aimState.curY);
+    ctx.save();
+    ctx.strokeStyle = inCancel ? 'rgba(255,90,90,0.9)' : 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, CANCEL_ZONE_Y);
+    ctx.lineTo(VW, CANCEL_ZONE_Y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = inCancel ? '#ff5a5a' : 'rgba(255,255,255,0.65)';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(inCancel ? 'ここで離すとキャンセル' : '↑ ここまでドラッグでキャンセル', VW / 2, CANCEL_ZONE_Y - 8);
+    ctx.restore();
+  }
+
   function drawMoveButtons() {
     const active = currentTurn === 'player' && !awaitingResolve && !matchOver;
     ctx.save();
@@ -1119,6 +1207,8 @@
     drawWindMeter();
     drawTurnInfo();
     drawMoveButtons();
+    drawFireZone();
+    drawCancelZone();
     drawSpecialButton();
     drawSoundToggle();
     drawResultBanner();
@@ -1129,7 +1219,7 @@
 
   function updateDebug() {
     document.getElementById('debugPanel').textContent =
-      `M6: ${currentPattern} / ◀▶長押しで移動・自キャラからドラッグで発射 / ♪で音量切替`;
+      `M6: ${currentPattern} / ◀▶長押しで移動・中央エリアからドラッグで発射(上端でキャンセル) / ♪で音量切替`;
   }
 
   // ===== 入力(引っ張り照準) =====
@@ -1147,6 +1237,7 @@
   }
 
   function onPointerDown(e) {
+    e.preventDefault();
     const p0 = canvasPointFromEvent(e);
     if (gamePhase === 'select') {
       for (const card of selectCards) {
@@ -1190,10 +1281,9 @@
       return;
     }
     if (!player.grounded) return;
-    const anchor = unitAnchor(player);
-    if (Math.hypot(p.x - anchor.x, p.y - anchor.y) <= 70) {
+    if (Math.hypot(p.x - fireZone.x, p.y - fireZone.y) <= fireZone.r + 14) {
       inputMode = 'aim'; inputPointerId = e.pointerId;
-      aimState = { anchor, curX: p.x, curY: p.y };
+      aimState = { anchor: unitAnchor(player), origin: { x: fireZone.x, y: fireZone.y }, curX: p.x, curY: p.y };
       canvas.setPointerCapture(e.pointerId);
     }
   }
@@ -1210,20 +1300,22 @@
   function onPointerUp(e) {
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'aim' && aimState) {
-      let dx = aimState.curX - aimState.anchor.x;
-      let dy = aimState.curY - aimState.anchor.y;
-      const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
-      if (dist >= FIRE_MIN_DRAG) {
-        const ang = Math.atan2(dy, dx);
-        dx = Math.cos(ang) * dist;
-        dy = Math.sin(ang) * dist;
-        const def = CHARACTERS[player.character];
-        const vx0 = -dx * VEL_SCALE * def.velScaleMul;
-        const vy0 = -dy * VEL_SCALE * def.velScaleMul;
-        launchShot(player, aimState.anchor, vx0, vy0, specialArmed);
-        runStats.shots++;
-        specialArmed = false;
-        awaitingResolve = true;
+      if (!isInCancelZone(aimState.curX, aimState.curY)) {
+        let dx = aimState.curX - aimState.origin.x;
+        let dy = aimState.curY - aimState.origin.y;
+        const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
+        if (dist >= FIRE_MIN_DRAG) {
+          const ang = Math.atan2(dy, dx);
+          dx = Math.cos(ang) * dist;
+          dy = Math.sin(ang) * dist;
+          const def = CHARACTERS[player.character];
+          const vx0 = -dx * VEL_SCALE * def.velScaleMul;
+          const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+          launchShot(player, aimState.anchor, vx0, vy0, specialArmed);
+          runStats.shots++;
+          specialArmed = false;
+          awaitingResolve = true;
+        }
       }
       aimState = null;
     } else if (inputMode === 'moveL' || inputMode === 'moveR') {
@@ -1236,6 +1328,8 @@
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('dragstart', (e) => e.preventDefault());
   window.addEventListener('pointercancel', onPointerUp);
 
   function resetMatch() {
@@ -1259,6 +1353,9 @@
     awaitingResolve = false;
     turnCount = 0;
     currentTurn = 'player';
+    cpuMoveDir = 0;
+    cpuMoveRemaining = 0;
+    cpuPhase = 'aim';
     particles = [];
     floatTexts = [];
     shakeTimer = 0;
@@ -1346,10 +1443,25 @@
       player.y = groundYAt(player.x) - UNIT_RADIUS;
     }
 
-    // CPU思考タイマー
+    // CPU移動→思考→発射
     if (currentTurn === 'cpu' && !awaitingResolve && cpu.grounded && !projectiles.length) {
-      cpuThinkTimer -= dt;
-      if (cpuThinkTimer <= 0) cpuAutoTurn();
+      if (cpuPhase === 'move') {
+        if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpu.fuel > 0) {
+          const dist = Math.min(MOVE_SPEED * dt, cpu.fuel, cpuMoveRemaining);
+          const nx = Math.min(VW - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpu.x + cpuMoveDir * dist));
+          const moved = Math.abs(nx - cpu.x);
+          cpu.x = nx;
+          cpu.fuel -= moved;
+          cpuMoveRemaining -= moved;
+          cpu.y = groundYAt(cpu.x) - UNIT_RADIUS;
+          if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
+        } else {
+          cpuPhase = 'aim';
+        }
+      } else {
+        cpuThinkTimer -= dt;
+        if (cpuThinkTimer <= 0) cpuAutoTurn();
+      }
     }
 
     // ターン解決(着弾+落下が収まったら手番交代)
