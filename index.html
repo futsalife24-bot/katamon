@@ -416,8 +416,9 @@
   let inputMode = null; // 'moveL' | 'moveR' | 'aim'
   let inputPointerId = null;
 
-  // ===== 発射エリア(左右移動ボタンの間・固定位置。自キャラの画面位置に依存しない) =====
-  const fireZone = { x: VW / 2, y: VH - 60, r: 42 };
+  // ===== 発射エリア(フローティング式:このY座標より下ならどこをタッチしてもそこが引っ張りの起点になる) =====
+  // 固定の1点にすると画面端に近い時にドラッグできる向きが偏るため、タッチ位置そのものを起点にする
+  const AIM_ZONE_Y = 165;
   const CANCEL_ZONE_Y = 150; // この高さより上でリリースするとキャンセル
   function isInCancelZone(x, y) {
     return y <= CANCEL_ZONE_Y;
@@ -787,12 +788,22 @@
     ctx.stroke();
   }
 
+  // 接地点付近の地形傾斜(ラジアン)。急すぎる斜面は見た目が破綻しないようクランプ
+  function groundSlopeAt(x) {
+    const d = 14;
+    const y1 = groundYAt(Math.max(0, x - d));
+    const y2 = groundYAt(Math.min(VW, x + d));
+    const MAX_TILT = 0.5; // 約28.6度
+    return Math.max(-MAX_TILT, Math.min(MAX_TILT, Math.atan2(y2 - y1, 2 * d)));
+  }
+
   function drawUnit(u) {
     const a = unitAnchor(u);
     const isBossUnit = isBossMatch && u.side === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
     const facingLeft = u.side === 'cpu'; // 自分は右向き画像そのまま、CPUは反転して内側(左)を向く
+    const tilt = u.grounded ? groundSlopeAt(u.x) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
     const h = SPRITE_SIZE;
@@ -812,7 +823,12 @@
     if (imgReady) {
       ctx.save();
       ctx.globalAlpha = u.hp > 0 ? 1 : 0.4;
+      // 接地点(0, UNIT_RADIUS)を軸に地形傾斜ぶんだけ回転。flipより外側に回転をかけることで
+      // 反転していても傾き方向が世界座標基準(実際の地形)と一致するようにする
+      ctx.translate(0, UNIT_RADIUS);
+      ctx.rotate(tilt);
       if (facingLeft) ctx.scale(-1, 1);
+      ctx.translate(0, -UNIT_RADIUS);
       ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
       ctx.restore();
     } else {
@@ -1126,22 +1142,13 @@
 
   function drawFireZone() {
     const active = currentTurn === 'player' && !awaitingResolve && !matchOver && player.grounded;
-    const armed = !!aimState;
+    if (!active || aimState) return; // ドラッグ中は引っ張り線自体がフィードバックになるので非表示
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(fireZone.x, fireZone.y, fireZone.r, 0, Math.PI * 2);
-    ctx.fillStyle = armed ? 'rgba(255,255,255,0.32)' : (active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)');
-    ctx.fill();
-    ctx.strokeStyle = active ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+    ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 500) * 0.15;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('引いて', fireZone.x, fireZone.y - 8);
-    ctx.fillText('発射', fireZone.x, fireZone.y + 8);
-    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('↓ この下のどこからでもドラッグして発射 ↓', VW / 2, AIM_ZONE_Y + 22);
     ctx.restore();
   }
 
@@ -1219,7 +1226,7 @@
 
   function updateDebug() {
     document.getElementById('debugPanel').textContent =
-      `M6: ${currentPattern} / ◀▶長押しで移動・中央エリアからドラッグで発射(上端でキャンセル) / ♪で音量切替`;
+      `M6: ${currentPattern} / ◀▶長押しで移動・下部エリアの好きな位置からドラッグで発射(上端でキャンセル) / ♪で音量切替`;
   }
 
   // ===== 入力(引っ張り照準) =====
@@ -1281,9 +1288,10 @@
       return;
     }
     if (!player.grounded) return;
-    if (Math.hypot(p.x - fireZone.x, p.y - fireZone.y) <= fireZone.r + 14) {
+    if (p.y >= AIM_ZONE_Y) {
+      // フローティング式:タッチした位置がそのまま引っ張りの起点になる
       inputMode = 'aim'; inputPointerId = e.pointerId;
-      aimState = { anchor: unitAnchor(player), origin: { x: fireZone.x, y: fireZone.y }, curX: p.x, curY: p.y };
+      aimState = { anchor: unitAnchor(player), origin: { x: p.x, y: p.y }, curX: p.x, curY: p.y };
       canvas.setPointerCapture(e.pointerId);
     }
   }
