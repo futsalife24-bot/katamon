@@ -408,6 +408,13 @@
   let isBossMatch = false; // 10連勝ごとの節目演出フラグ
   let bossBannerTimer = 0;
 
+  // ===== カットイン(ターン交代・タイムアップ演出) =====
+  // 表示中はupdate()を早期returnさせてゲーム進行を止め、切り替わりを分かりやすくする
+  let cutIn = null; // { timer, duration, text, sub, onDone }
+  function showCutIn(text, sub, duration, onDone) {
+    cutIn = { timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
+  }
+
   // ===== 移動(燃料制・長押しボタン) =====
   const BTN_R = 34;
   const leftBtn = { x: 60, y: VH - 60 };
@@ -624,11 +631,12 @@
     if (matchOver) return;
     turnCount++;
     if (turnCount >= MAX_TURNS_TOTAL) {
-      judgeByHp();
+      showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
       return;
     }
     currentTurn = currentTurn === 'player' ? 'cpu' : 'player';
     startTurn();
+    showCutIn(currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン', '', 0.9);
   }
 
   // ===== CPU AI(精度成長型)=====
@@ -1041,6 +1049,31 @@
     ctx.restore();
   }
 
+  function drawCutIn() {
+    if (!cutIn) return;
+    const elapsed = cutIn.duration - cutIn.timer;
+    const fadeIn = Math.min(1, elapsed / 0.15);
+    const fadeOut = Math.min(1, cutIn.timer / 0.25);
+    const alpha = Math.max(0, Math.min(fadeIn, fadeOut));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, VH * 0.4, VW, 120);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, VH * 0.4, VW, 120);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(cutIn.text, VW / 2, VH * 0.4 + 62);
+    if (cutIn.sub) {
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText(cutIn.sub, VW / 2, VH * 0.4 + 92);
+    }
+    ctx.restore();
+  }
+
   function drawBossBanner() {
     if (bossBannerTimer <= 0) return;
     ctx.save();
@@ -1057,7 +1090,7 @@
 
   function drawSpecialButton() {
     if (player.specialUsed) return;
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver;
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
     const def = CHARACTERS[player.character];
     ctx.save();
     ctx.beginPath();
@@ -1141,7 +1174,7 @@
   }
 
   function drawFireZone() {
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && player.grounded;
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn && player.grounded;
     if (!active || aimState) return; // ドラッグ中は引っ張り線自体がフィードバックになるので非表示
     ctx.save();
     ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 500) * 0.15;
@@ -1172,7 +1205,7 @@
   }
 
   function drawMoveButtons() {
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver;
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
     ctx.save();
     ctx.textBaseline = 'middle';
     for (const [btn, glyph] of [[leftBtn, '◀'], [rightBtn, '▶']]) {
@@ -1221,6 +1254,7 @@
     drawResultBanner();
     drawBossBanner();
     drawSpecialFlash();
+    drawCutIn();
     ctx.restore();
   }
 
@@ -1245,6 +1279,7 @@
 
   function onPointerDown(e) {
     e.preventDefault();
+    if (cutIn) return; // カットイン中は入力を受け付けない
     const p0 = canvasPointFromEvent(e);
     if (gamePhase === 'select') {
       for (const card of selectCards) {
@@ -1368,6 +1403,7 @@
     floatTexts = [];
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
+    cutIn = null;
     isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
@@ -1383,6 +1419,17 @@
   let lastTime = 0;
   function update(dt) {
     if (gamePhase === 'select') return;
+
+    if (cutIn) {
+      cutIn.timer -= dt;
+      if (cutIn.timer <= 0) {
+        const done = cutIn.onDone;
+        cutIn = null;
+        if (done) done();
+      }
+      return; // カットイン表示中はターン進行・移動・CPU思考を止める
+    }
+
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
     if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
