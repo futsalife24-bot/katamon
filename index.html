@@ -147,17 +147,76 @@
     render();
   }
 
-  // ===== 地形生成 =====
-  const TERRAIN_COLS = 320; // STAGE_W=960 → 3px刻み
+  // ===== 地形生成(ピクセル単位のマスク方式:キャンバスに地形を描いて円形にくり抜く) =====
+  const TERRAIN_COLS = 320; // STAGE_W=960 → 3px刻み(接地判定・描画キャッシュ用の列)
   const COL_W = STAGE_W / TERRAIN_COLS;
   const GROUND_MIN_Y = 380;   // 地形が取りうる最も高い(浅い)位置
   const GROUND_MAX_Y = 860;   // 地形が取りうる最も低い(深い)位置
-  const FLOOR_Y = VH;         // 画面下端(地形ポリゴンの底)
+  const FLOOR_Y = VH;         // 画面下端(この高さ=地面なし/場外扱い)
 
-  let heightmap = new Float64Array(TERRAIN_COLS);
+  // 実体は不可視のオフスクリーンキャンバス。塗り(source-over)で地面、destination-outで爆風の穴をあける
+  const terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = STAGE_W;
+  terrainCanvas.height = VH;
+  const terrainCtx = terrainCanvas.getContext('2d');
+
+  // 列ごとの「一番上にある地面のY」キャッシュ(接地判定・描画の草ラインに使用。掘削のたびに該当範囲だけ再走査)
+  let surfaceY = new Float64Array(TERRAIN_COLS).fill(FLOOR_Y);
 
   function clampGround(y) {
     return Math.min(GROUND_MAX_Y, Math.max(GROUND_MIN_Y, y));
+  }
+
+  function buildTerrainMask(segments) {
+    terrainCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainCtx.globalCompositeOperation = 'source-over';
+    terrainCtx.fillStyle = '#6b4a30';
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const x = c * COL_W;
+      for (const seg of segments[c]) {
+        const top = seg[0], bottom = seg[1];
+        if (bottom > top) terrainCtx.fillRect(x, top, COL_W + 0.6, bottom - top);
+      }
+    }
+  }
+
+  // 指定した列範囲だけピクセルを走査し、各列の最上段の地面Yを更新する(重い全域スキャンを避けるため)
+  function rescanColumns(colFrom, colTo) {
+    colFrom = Math.max(0, colFrom);
+    colTo = Math.min(TERRAIN_COLS - 1, colTo);
+    if (colFrom > colTo) return;
+    const x0 = Math.max(0, Math.floor(colFrom * COL_W));
+    const x1 = Math.min(STAGE_W, Math.ceil((colTo + 1) * COL_W));
+    const w = x1 - x0;
+    if (w <= 0) return;
+    const imgData = terrainCtx.getImageData(x0, 0, w, VH);
+    const data = imgData.data;
+    for (let c = colFrom; c <= colTo; c++) {
+      const localX = Math.min(w - 1, Math.max(0, Math.round((c + 0.5) * COL_W - x0)));
+      let topY = FLOOR_Y;
+      for (let y = 0; y < VH; y++) {
+        if (data[(y * w + localX) * 4 + 3] > 10) { topY = y; break; }
+      }
+      surfaceY[c] = topY;
+    }
+  }
+
+  // 着弾クレーター:円形にくり抜くので、急斜面でも抉れた場所だけが丸く欠ける
+  function carveCrater(cx, cy, radius) {
+    terrainCtx.save();
+    terrainCtx.globalCompositeOperation = 'destination-out';
+    terrainCtx.beginPath();
+    terrainCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+    terrainCtx.fill();
+    terrainCtx.restore();
+    const colFrom = Math.floor((cx - radius) / COL_W) - 1;
+    const colTo = Math.ceil((cx + radius) / COL_W) + 1;
+    rescanColumns(colFrom, colTo);
+  }
+
+  function groundYAt(x) {
+    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
+    return surfaceY[c];
   }
 
   // 骨格パターン: 片方が高台/中央に山/谷底スタート/なだらか
@@ -210,6 +269,13 @@
     return arr;
   }
 
+  // スポーン地点(左15%/右85%)の列。ランダム地形イベントがここに重ならないよう避ける
+  const SPAWN_COLS = [Math.round(STAGE_W * 0.15 / COL_W), Math.round(STAGE_W * 0.85 / COL_W)];
+  function overlapsSpawn(start, len, margin) {
+    const end = start + len;
+    return SPAWN_COLS.some(sc => sc + margin >= start && sc - margin <= end);
+  }
+
   function generateTerrain(pattern) {
     const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling'];
     const p = pattern || patterns[Math.floor(Math.random() * patterns.length)];
@@ -238,37 +304,83 @@
       const j = TERRAIN_COLS - 1 - i;
       hm[j] = hm[j] * wL + hm[TERRAIN_COLS - 9] * (1 - wL);
     }
-    return { pattern: p, hm };
+
+    // 各列の中身(地面の実区間リスト)。基本は地表〜床までの単一の塊
+    const segments = [];
+    for (let c = 0; c < TERRAIN_COLS; c++) segments.push([[hm[c], FLOOR_Y]]);
+
+    const midStart = 14, midEnd = TERRAIN_COLS - 14;
+
+    // 地面が薄いゾーン(下が空洞。踏み抜いて削れると即落下する危険地帯)
+    if (Math.random() < 0.35) {
+      const zoneLen = 18 + Math.floor(Math.random() * 20);
+      const zoneStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - zoneLen));
+      if (!overlapsSpawn(zoneStart, zoneLen, 20)) {
+        const thinDepth = 34 + Math.random() * 22;
+        for (let c = zoneStart; c < zoneStart + zoneLen && c < midEnd; c++) {
+          segments[c] = [[hm[c], hm[c] + thinDepth]];
+        }
+      }
+    }
+
+    // 浮島ゾーン(通常地形の上空に独立した足場)
+    if (Math.random() < 0.35) {
+      const islandLen = 14 + Math.floor(Math.random() * 12);
+      const islandStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - islandLen));
+      if (!overlapsSpawn(islandStart, islandLen, 20)) {
+        const islandTop = GROUND_MIN_Y - 120 - Math.random() * 60;
+        const islandThickness = 24 + Math.random() * 14;
+        for (let c = islandStart; c < islandStart + islandLen && c < midEnd; c++) {
+          segments[c] = [[islandTop, islandTop + islandThickness], ...segments[c]];
+        }
+      }
+    }
+
+    // 空洞(山の内部の未露出の空間。着弾で偶然開通することがある)
+    if (Math.random() < 0.3) {
+      const cavernLen = 16 + Math.floor(Math.random() * 14);
+      const cavernStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - cavernLen));
+      if (!overlapsSpawn(cavernStart, cavernLen, 20)) {
+        const cavernTop = GROUND_MIN_Y + 70 + Math.random() * 90;
+        const cavernThickness = 50 + Math.random() * 40;
+        for (let c = cavernStart; c < cavernStart + cavernLen && c < midEnd; c++) {
+          const seg = segments[c][0];
+          const top = cavernTop, bottom = Math.min(seg[1] - 20, cavernTop + cavernThickness);
+          if (bottom > top + 15 && top > seg[0] + 15) {
+            segments[c] = [[seg[0], top], [bottom, seg[1]]];
+          }
+        }
+      }
+    }
+
+    // スタート地点浮島(たまにプレイヤー/CPUの出現位置そのものが浮島になる)
+    let startOnIsland = false;
+    if (Math.random() < 0.18) {
+      startOnIsland = true;
+      const islandTop = GROUND_MIN_Y - 90 - Math.random() * 50;
+      const islandThickness = 30;
+      for (const sx of [STAGE_W * 0.15, STAGE_W * 0.85]) {
+        const cCenter = Math.round(sx / COL_W);
+        for (let c = cCenter - 6; c <= cCenter + 6; c++) {
+          if (c < 0 || c >= TERRAIN_COLS) continue;
+          segments[c] = [[islandTop, islandTop + islandThickness]];
+        }
+      }
+    }
+
+    return { pattern: p, segments, startOnIsland };
   }
 
   let currentPattern = null;
+  let startOnIsland = false;
 
   function newTerrain(pattern) {
     const r = generateTerrain(pattern);
-    heightmap = r.hm;
+    buildTerrainMask(r.segments);
+    rescanColumns(0, TERRAIN_COLS - 1);
     currentPattern = r.pattern;
+    startOnIsland = r.startOnIsland;
     updateDebug();
-  }
-
-  // ===== 地形破壊(クレーター) =====
-  function carveCrater(cx, cy, radius) {
-    const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
-    const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
-    for (let c = colFrom; c <= colTo; c++) {
-      const colX = (c + 0.5) * COL_W;
-      const dx = colX - cx;
-      if (Math.abs(dx) > radius) continue;
-      const dy = Math.sqrt(radius * radius - dx * dx);
-      const craterBottom = cy + dy; // 円の下側の境界(この位置まで地面を削る)
-      if (craterBottom > heightmap[c]) {
-        heightmap[c] = Math.min(FLOOR_Y, craterBottom);
-      }
-    }
-  }
-
-  function groundYAt(x) {
-    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
-    return heightmap[c];
   }
 
   // ===== キャラクター =====
@@ -301,10 +413,29 @@
   const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
 
   // ===== ユニット =====
-  const UNIT_RADIUS = 16;
+  const UNIT_RADIUS = 16;      // 接地・アンカー計算用の半径
+  const UNIT_HIT_RADIUS = 30;  // 弾の直撃判定用(見た目のスプライトサイズに合わせて大きめ)
   const MAX_HP = 100;
-  const FUEL_MAX = 34; // 総移動距離(旧100の1/3)
+  const FUEL_MAX = 51; // 総移動距離(旧34の1.5倍)
   const MOVE_SPEED = 95; // px/s
+
+  // ある程度以上の急斜面(崖)は歩いて登れない。上り方向にこの角度を超える段差があると足止めする
+  const MAX_CLIMB_ANGLE = 50 * Math.PI / 180;
+  function limitMoveByClimb(fromX, toX) {
+    const dir = toX > fromX ? 1 : -1;
+    const step = 4;
+    let x = fromX;
+    let prevY = groundYAt(x);
+    while (dir > 0 ? x < toX : x > toX) {
+      const nx = dir > 0 ? Math.min(toX, x + step) : Math.max(toX, x - step);
+      const ny = groundYAt(nx);
+      const climbAngle = Math.atan2(prevY - ny, Math.abs(nx - x)); // 正=上り
+      if (climbAngle > MAX_CLIMB_ANGLE) return x;
+      x = nx;
+      prevY = ny;
+    }
+    return x;
+  }
 
   const player = {
     x: STAGE_W * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
@@ -356,6 +487,15 @@
   const MAX_DRAG = 130; // px
   const VEL_SCALE = 5.6; // px/s per px(ドラッグ量)
   const FIRE_MIN_DRAG = 12;
+  const MIN_LIFT = 90; // px/s。水平に近い引っ張りは重力ですぐ落ちて届かないため、最低限の打ち上げ初速を保証する
+
+  // 引っ張り量(dx,dy)からキャラ性能を反映した発射初速を計算する共通処理(プレビューと実発射で共有)
+  function computeLaunchVelocity(dx, dy, def) {
+    let vx0 = -dx * VEL_SCALE * def.velScaleMul;
+    let vy0 = -dy * VEL_SCALE * def.velScaleMul;
+    if (Math.abs(vx0) > MIN_LIFT && vy0 > -MIN_LIFT) vy0 = -MIN_LIFT;
+    return { vx0, vy0 };
+  }
 
   let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,pierce}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
@@ -406,7 +546,7 @@
   }
 
   // ===== ターン制御 =====
-  const MAX_TURNS_TOTAL = 20; // 各10ターン(プレイヤー10+CPU10)
+  const MAX_TURNS_TOTAL = 30; // 各15ターン(プレイヤー15+CPU15)
   let currentTurn = 'player';
   let turnCount = 0;
   let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
@@ -424,14 +564,20 @@
     cutIn = { timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
   }
 
-  // ===== 移動(燃料制・長押しボタン) =====
+  // ===== 移動(燃料制・長押しボタン。左下にまとめて固定配置) =====
   const BTN_R = 34;
-  const leftBtn = { x: 60, y: VH - 60 };
-  const rightBtn = { x: VW - 60, y: VH - 60 };
+  const leftBtn = { x: 60, y: VH - 70 };
+  const rightBtn = { x: 140, y: VH - 70 };
   let moveDir = 0; // -1, 0, 1
   let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan'
   let inputPointerId = null;
   let panLastX = 0;
+
+  // ===== 視点移動(パン)エリア:左右移動キーの真上の小エリアだけ =====
+  const PAN_ZONE = { x1: 10, y1: VH - 190, x2: 210, y2: VH - 112 };
+  function inPanZone(p) {
+    return p.x >= PAN_ZONE.x1 && p.x <= PAN_ZONE.x2 && p.y >= PAN_ZONE.y1 && p.y <= PAN_ZONE.y2;
+  }
 
   // ===== 発射エリア(フローティング式:このY座標より下ならどこをタッチしてもそこが引っ張りの起点になる) =====
   // 固定の1点にすると画面端に近い時にドラッグできる向きが偏るため、タッチ位置そのものを起点にする
@@ -441,8 +587,8 @@
     return y <= CANCEL_ZONE_Y;
   }
 
-  // ===== 必殺ショット(1試合1回) =====
-  const specialBtn = { x: VW - 44, y: 106, r: 26 };
+  // ===== 必殺ショット(1試合1回・右下に大きく配置) =====
+  const specialBtn = { x: VW - 70, y: VH - 70, r: 52 };
   let specialArmed = false;
 
   // ===== スコア(連勝を主、与ダメ効率を従とした複合値)=====
@@ -624,7 +770,7 @@
   }
 
   function startTurn() {
-    rollWind();
+    if (turnCount % 4 === 0) rollWind(); // 風は自分・相手2ターンずつ(計4ターン)固定
     manualPan = false; // ターン開始でカメラ自動追従に戻す
     if (currentTurn === 'player') {
       player.fuel = player.fuelMax;
@@ -712,13 +858,6 @@
     return { vx0, vy0, t };
   }
 
-  // 落下ダメージ(安全高度を超えた分だけ減衰なしで加算)
-  function computeFallDamage(fallDist) {
-    const SAFE_FALL = 50;
-    if (fallDist <= SAFE_FALL) return 0;
-    return Math.min(70, Math.round((fallDist - SAFE_FALL) * 0.35));
-  }
-
   function updateFalling(dt, u) {
     const groundY = groundYAt(u.x) - UNIT_RADIUS;
     if (u.grounded) {
@@ -746,13 +885,7 @@
         }
         if (u.hp > 0) {
           if (intoVoid) {
-            u.hp = 0; // 場外落下は即死
-          } else {
-            const dmg = computeFallDamage(fallDist);
-            if (dmg > 0) {
-              u.hp = Math.max(0, u.hp - dmg);
-              spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, dmg);
-            }
+            u.hp = 0; // 場外落下は即死(落下ダメージ自体は計算しない)
           }
           checkMatchEnd();
         }
@@ -779,32 +912,18 @@
   }
 
   function drawTerrain() {
-    ctx.beginPath();
-    ctx.moveTo(0, heightmap[0]);
-    for (let c = 1; c < TERRAIN_COLS; c++) {
-      ctx.lineTo(c * COL_W, heightmap[c]);
-    }
-    ctx.lineTo(STAGE_W, FLOOR_Y);
-    ctx.lineTo(0, FLOOR_Y);
-    ctx.closePath();
+    // 地形マスク(ピクセル単位で穴があいた実体)をそのまま描画
+    ctx.drawImage(terrainCanvas, 0, 0);
 
-    const g = ctx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
-    g.addColorStop(0, '#7bc97e');
-    g.addColorStop(0.12, '#5a9b57');
-    g.addColorStop(0.12, '#8a6a4a');
-    g.addColorStop(1, '#4a3524');
-    ctx.fillStyle = g;
-    ctx.fill();
-
-    // 表土の輪郭ライン(草の縁取り)
-    ctx.beginPath();
-    ctx.moveTo(0, heightmap[0]);
-    for (let c = 1; c < TERRAIN_COLS; c++) {
-      ctx.lineTo(c * COL_W, heightmap[c]);
+    // 各列の最上面にだけ草の縁取りを乗せる(浮島の上面などにも自然に乗る)
+    ctx.save();
+    ctx.fillStyle = '#9be08a';
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const y = surfaceY[c];
+      if (y >= FLOOR_Y - 1) continue; // その列に地面なし
+      ctx.fillRect(c * COL_W, y, COL_W + 0.6, 5);
     }
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#9be08a';
-    ctx.stroke();
+    ctx.restore();
   }
 
   // 接地点付近の地形傾斜(ラジアン)。急すぎる斜面は見た目が破綻しないようクランプ
@@ -957,8 +1076,7 @@
 
     // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
     const def = CHARACTERS[player.character];
-    const vx0 = -dx * VEL_SCALE * def.velScaleMul;
-    const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+    const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
     const totalT = estimateFlightTime(vx0, vy0);
     const previewT = totalT * 0.2;
     const steps = 14;
@@ -1071,10 +1189,10 @@
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'left';
     const turnLabel = currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン';
-    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 60);
+    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 80);
 
     const activeUnit = currentTurn === 'player' ? player : cpu;
-    const fw = 110, fx = 10, fy = 68;
+    const fw = 110, fx = 10, fy = 100;
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(fx, fy, fw, 8);
     ctx.fillStyle = '#8ad0ff';
@@ -1088,7 +1206,31 @@
     ctx.textAlign = 'right';
     ctx.font = 'bold 13px sans-serif';
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`${winStreak}連勝`, VW - 10, 60);
+    ctx.fillText(`${winStreak}連勝`, VW - 10, 80);
+    ctx.restore();
+  }
+
+  // ===== ミニマップ(旧視点移動エリアの跡地に配置。ステージ全体とカメラの可視範囲を表示) =====
+  const MINIMAP = { x: 20, y: 46, w: VW - 40, h: 16 };
+  function drawMinimap() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
+    const scale = MINIMAP.w / STAGE_W;
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(MINIMAP.x + cameraX * scale, MINIMAP.y, VW * scale, MINIMAP.h);
+    const py = MINIMAP.y + MINIMAP.h / 2;
+    ctx.beginPath();
+    ctx.arc(MINIMAP.x + player.x * scale, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#4fc3f7';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(MINIMAP.x + cpu.x * scale, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
     ctx.restore();
   }
 
@@ -1197,7 +1339,7 @@
     ctx.restore();
   }
 
-  const soundBtn = { x: 30, y: 106, r: 22 };
+  const soundBtn = { x: VW - 34, y: 26, r: 22 }; // WINDメーターの右・ミニマップと重ならない位置
   function drawSoundToggle() {
     ctx.save();
     ctx.beginPath();
@@ -1225,8 +1367,22 @@
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('↓ この下のどこからでもドラッグして発射 ↓', VW / 2, AIM_ZONE_Y + 22);
-    ctx.font = '11px sans-serif';
-    ctx.fillText('↑ この上を左右ドラッグで視点移動', VW / 2, AIM_ZONE_Y - 22);
+    ctx.restore();
+  }
+
+  function drawPanZoneHint() {
+    if (gamePhase !== 'battle') return;
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(PAN_ZONE.x1, PAN_ZONE.y1, PAN_ZONE.x2 - PAN_ZONE.x1, PAN_ZONE.y2 - PAN_ZONE.y1);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('◀▶ドラッグで視点移動', (PAN_ZONE.x1 + PAN_ZONE.x2) / 2, (PAN_ZONE.y1 + PAN_ZONE.y2) / 2 + 3);
     ctx.restore();
   }
 
@@ -1303,8 +1459,10 @@
     drawPullLine();
     drawOffscreenIndicator();
     drawWindMeter();
+    drawMinimap();
     drawTurnInfo();
     drawMoveButtons();
+    drawPanZoneHint();
     drawFireZone();
     drawCancelZone();
     drawSpecialButton();
@@ -1318,7 +1476,7 @@
 
   function updateDebug() {
     document.getElementById('debugPanel').textContent =
-      `M6: ${currentPattern} / ◀▶長押しで移動・下部エリアの好きな位置からドラッグで発射(上端でキャンセル) / ♪で音量切替`;
+      `${currentPattern}${startOnIsland ? '(浮島スタート)' : ''} / 崖は登れません・地形は丸く抉れます`;
   }
 
   // ===== 入力(引っ張り照準) =====
@@ -1363,9 +1521,8 @@
       return;
     }
 
-    // 上部ゾーンの左右ドラッグでカメラをパン(必殺ボタンの上は除く。どちらのターン中でも可)
-    if (p0.y < AIM_ZONE_Y &&
-        !(!player.specialUsed && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10)) {
+    // 左右移動キーの真上の小エリアの左右ドラッグでカメラをパン(どちらのターン中でも可)
+    if (inPanZone(p0)) {
       inputMode = 'pan'; inputPointerId = e.pointerId;
       panLastX = p0.x;
       canvas.setPointerCapture(e.pointerId);
@@ -1424,8 +1581,7 @@
           dx = Math.cos(ang) * dist;
           dy = Math.sin(ang) * dist;
           const def = CHARACTERS[player.character];
-          const vx0 = -dx * VEL_SCALE * def.velScaleMul;
-          const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+          const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
           launchShot(player, aimState.anchor, vx0, vy0, specialArmed);
           runStats.shots++;
           specialArmed = false;
@@ -1549,7 +1705,7 @@
       for (const u of [player, cpu]) {
         if (u.side === p.owner) continue;
         const a = unitAnchor(u);
-        if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_RADIUS + p.radius) {
+        if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
           explodeAt(p.x, p.y, p.blastMul, p.owner);
           projectiles.splice(i, 1);
           hit = true;
@@ -1575,7 +1731,8 @@
     // 移動(プレイヤーのターンのみ・燃料制)
     if (currentTurn === 'player' && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
       const dist = Math.min(MOVE_SPEED * dt, player.fuel);
-      const nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
+      let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
+      nx = limitMoveByClimb(player.x, nx);
       const moved = Math.abs(nx - player.x);
       player.x = nx;
       player.fuel -= moved;
@@ -1587,7 +1744,8 @@
       if (cpuPhase === 'move') {
         if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpu.fuel > 0) {
           const dist = Math.min(MOVE_SPEED * dt, cpu.fuel, cpuMoveRemaining);
-          const nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpu.x + cpuMoveDir * dist));
+          let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpu.x + cpuMoveDir * dist));
+          nx = limitMoveByClimb(cpu.x, nx);
           const moved = Math.abs(nx - cpu.x);
           cpu.x = nx;
           cpu.fuel -= moved;
