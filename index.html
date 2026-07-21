@@ -61,10 +61,9 @@
   const VH = 960;
 
   // ===== ステージ(横長)とカメラ =====
-  // 画面(VW)はステージの一部を映す窓。カメラは自動追従+上部ゾーンのドラッグで手動パン
+  // 画面(VW)はステージの一部を映す窓。カメラは自動追従+ジョイスティックでの手動パン
   const STAGE_W = 960;
   let cameraX = 0;
-  let manualPan = false; // 手動パン中は自動追従を一時停止(次のターン/発射で解除)
   function clampCameraX(x) {
     return Math.min(STAGE_W - VW, Math.max(0, x));
   }
@@ -150,16 +149,20 @@
   // ===== 地形生成(ピクセル単位のマスク方式:キャンバスに地形を描いて円形にくり抜く) =====
   const TERRAIN_COLS = 320; // STAGE_W=960 → 3px刻み(接地判定・描画キャッシュ用の列)
   const COL_W = STAGE_W / TERRAIN_COLS;
+  const ROW_H = 4; // 縦方向の判定グリッド刻み
+  const ROWS = Math.ceil(VH / ROW_H);
   const GROUND_MIN_Y = 380;   // 地形が取りうる最も高い(浅い)位置
-  const GROUND_MAX_Y = 860;   // 地形が取りうる最も低い(深い)位置
+  const GROUND_MAX_Y = 700;   // 地形が取りうる最も低い(深い)位置(下部コントローラパネルとの間に余白を確保)
   const FLOOR_Y = VH;         // 画面下端(この高さ=地面なし/場外扱い)
 
-  // 実体は不可視のオフスクリーンキャンバス。塗り(source-over)で地面、destination-outで爆風の穴をあける
+  // 実体は不可視のオフスクリーンキャンバス(見た目)。塗り(source-over)で地面、destination-outで爆風の穴をあける
   const terrainCanvas = document.createElement('canvas');
   terrainCanvas.width = STAGE_W;
   terrainCanvas.height = VH;
   const terrainCtx = terrainCanvas.getContext('2d');
 
+  // 判定用のグリッド(見た目のキャンバスとは別に、ロジック側で正確に持つ実体データ)。1=地面,0=空気
+  let solidGrid = new Uint8Array(TERRAIN_COLS * ROWS);
   // 列ごとの「一番上にある地面のY」キャッシュ(接地判定・描画の草ラインに使用。掘削のたびに該当範囲だけ再走査)
   let surfaceY = new Float64Array(TERRAIN_COLS).fill(FLOOR_Y);
 
@@ -171,52 +174,76 @@
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
     terrainCtx.fillStyle = '#6b4a30';
+    solidGrid.fill(0);
     for (let c = 0; c < TERRAIN_COLS; c++) {
       const x = c * COL_W;
       for (const seg of segments[c]) {
         const top = seg[0], bottom = seg[1];
-        if (bottom > top) terrainCtx.fillRect(x, top, COL_W + 0.6, bottom - top);
+        if (bottom <= top) continue;
+        terrainCtx.fillRect(x, top, COL_W + 0.6, bottom - top);
+        const r0 = Math.max(0, Math.floor(top / ROW_H));
+        const r1 = Math.min(ROWS - 1, Math.ceil(bottom / ROW_H));
+        for (let r = r0; r <= r1; r++) solidGrid[r * TERRAIN_COLS + c] = 1;
       }
     }
   }
 
-  // 指定した列範囲だけピクセルを走査し、各列の最上段の地面Yを更新する(重い全域スキャンを避けるため)
-  function rescanColumns(colFrom, colTo) {
+  // グリッド上の地面から、列ごとの最上段Yを再計算する(軽量。掘削のたびに影響範囲だけ呼ぶ)
+  function rescanColumnsFromGrid(colFrom, colTo) {
     colFrom = Math.max(0, colFrom);
     colTo = Math.min(TERRAIN_COLS - 1, colTo);
-    if (colFrom > colTo) return;
-    const x0 = Math.max(0, Math.floor(colFrom * COL_W));
-    const x1 = Math.min(STAGE_W, Math.ceil((colTo + 1) * COL_W));
-    const w = x1 - x0;
-    if (w <= 0) return;
-    const imgData = terrainCtx.getImageData(x0, 0, w, VH);
-    const data = imgData.data;
     for (let c = colFrom; c <= colTo; c++) {
-      const localX = Math.min(w - 1, Math.max(0, Math.round((c + 0.5) * COL_W - x0)));
-      let topY = FLOOR_Y;
-      for (let y = 0; y < VH; y++) {
-        if (data[(y * w + localX) * 4 + 3] > 10) { topY = y; break; }
+      let topRow = ROWS;
+      for (let r = 0; r < ROWS; r++) {
+        if (solidGrid[r * TERRAIN_COLS + c]) { topRow = r; break; }
       }
-      surfaceY[c] = topY;
+      surfaceY[c] = topRow >= ROWS ? FLOOR_Y : topRow * ROW_H;
     }
   }
 
-  // 着弾クレーター:円形にくり抜くので、急斜面でも抉れた場所だけが丸く欠ける
-  function carveCrater(cx, cy, radius) {
+  // 着弾クレーターの実処理:見た目(キャンバス)と判定(グリッド)の両方を円形にくり抜く
+  function carveCraterInternal(cx, cy, radius) {
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'destination-out';
     terrainCtx.beginPath();
     terrainCtx.arc(cx, cy, radius, 0, Math.PI * 2);
     terrainCtx.fill();
     terrainCtx.restore();
-    const colFrom = Math.floor((cx - radius) / COL_W) - 1;
-    const colTo = Math.ceil((cx + radius) / COL_W) + 1;
-    rescanColumns(colFrom, colTo);
+
+    const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
+    const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
+    const rowFrom = Math.max(0, Math.floor((cy - radius) / ROW_H));
+    const rowTo = Math.min(ROWS - 1, Math.ceil((cy + radius) / ROW_H));
+    const r2 = radius * radius;
+    for (let c = colFrom; c <= colTo; c++) {
+      const colCx = (c + 0.5) * COL_W;
+      for (let r = rowFrom; r <= rowTo; r++) {
+        const rowCy = (r + 0.5) * ROW_H;
+        const dx = colCx - cx, dy = rowCy - cy;
+        if (dx * dx + dy * dy <= r2) solidGrid[r * TERRAIN_COLS + c] = 0;
+      }
+    }
+    rescanColumnsFromGrid(colFrom, colTo);
+  }
+
+  let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
+  function carveCrater(cx, cy, radius) {
+    carveCraterInternal(cx, cy, radius);
+    craterHistory.push({ x: cx, y: cy, r: radius });
   }
 
   function groundYAt(x) {
     const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
     return surfaceY[c];
+  }
+
+  // 弾の直撃判定用:列の最上段ではなく、その座標そのものに地面があるかを正確に見る
+  // (浮島の下の空間などで「列の最上段=島の上」を基準にすると何もない場所で爆発してしまうため)
+  function isSolidAt(x, y) {
+    if (y < 0 || y >= VH) return false;
+    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
+    const r = Math.min(ROWS - 1, Math.max(0, Math.floor(y / ROW_H)));
+    return solidGrid[r * TERRAIN_COLS + c] === 1;
   }
 
   // 骨格パターン: 片方が高台/中央に山/谷底スタート/なだらか
@@ -323,13 +350,17 @@
       }
     }
 
-    // 浮島ゾーン(通常地形の上空に独立した足場)
+    // 浮島ゾーン(下は崖である必要はなく、地続きの地形の上空にも現れる。隙間の広さもランダムで
+    // 近ければ「地面が二段」に見え、遠ければ独立した浮島に見える)
     if (Math.random() < 0.35) {
       const islandLen = 14 + Math.floor(Math.random() * 12);
       const islandStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - islandLen));
       if (!overlapsSpawn(islandStart, islandLen, 20)) {
-        const islandTop = GROUND_MIN_Y - 120 - Math.random() * 60;
+        let localMinY = Infinity;
+        for (let c = islandStart; c < islandStart + islandLen && c < midEnd; c++) localMinY = Math.min(localMinY, hm[c]);
+        const gap = 70 + Math.random() * 220; // 近い(二段地形)〜遠い(独立浮島)まで幅を持たせる
         const islandThickness = 24 + Math.random() * 14;
+        const islandTop = Math.max(120, localMinY - gap - islandThickness);
         for (let c = islandStart; c < islandStart + islandLen && c < midEnd; c++) {
           segments[c] = [[islandTop, islandTop + islandThickness], ...segments[c]];
         }
@@ -373,13 +404,28 @@
 
   let currentPattern = null;
   let startOnIsland = false;
+  let currentSegments = null; // 中断/再開用に、生成直後(未破壊)の地形を保持しておく
 
   function newTerrain(pattern) {
     const r = generateTerrain(pattern);
+    currentSegments = r.segments;
+    craterHistory = [];
     buildTerrainMask(r.segments);
-    rescanColumns(0, TERRAIN_COLS - 1);
+    rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
     currentPattern = r.pattern;
     startOnIsland = r.startOnIsland;
+    updateDebug();
+  }
+
+  // 中断データからの地形復元:未破壊の地形を作り直し、記録しておいたクレーターを同じ順で開け直す
+  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland) {
+    currentSegments = segments;
+    buildTerrainMask(segments);
+    rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
+    for (const cr of craters) carveCraterInternal(cr.x, cr.y, cr.r);
+    craterHistory = craters.slice();
+    currentPattern = pattern;
+    startOnIsland = wasStartOnIsland;
     updateDebug();
   }
 
@@ -564,20 +610,23 @@
     cutIn = { timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
   }
 
-  // ===== 移動(燃料制・長押しボタン。左下にまとめて固定配置) =====
-  const BTN_R = 34;
-  const leftBtn = { x: 60, y: VH - 70 };
-  const rightBtn = { x: 140, y: VH - 70 };
-  let moveDir = 0; // -1, 0, 1
-  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan'
-  let inputPointerId = null;
-  let panLastX = 0;
+  // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
+  const CONTROL_PANEL_Y = 760;
+  const PANEL_CY = CONTROL_PANEL_Y + (VH - CONTROL_PANEL_Y) / 2;
 
-  // ===== 視点移動(パン)エリア:左右移動キーの真上の小エリアだけ =====
-  const PAN_ZONE = { x1: 10, y1: VH - 190, x2: 210, y2: VH - 112 };
-  function inPanZone(p) {
-    return p.x >= PAN_ZONE.x1 && p.x <= PAN_ZONE.x2 && p.y >= PAN_ZONE.y1 && p.y <= PAN_ZONE.y2;
-  }
+  // ===== 移動(燃料制・長押しボタン)。左右いっぱいに、視点ジョイスティックを挟んで配置 =====
+  const BTN_R = 34;
+  const leftBtn = { x: 60, y: PANEL_CY };
+  const rightBtn = { x: VW - 60, y: PANEL_CY };
+  let moveDir = 0; // -1, 0, 1
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'joy'
+  let inputPointerId = null;
+
+  // ===== 視点移動ジョイスティック(左右限定・画面下部中央に大きめ配置) =====
+  const JOY = { x: VW / 2, y: PANEL_CY, r: 78, knobR: 30 };
+  const PAN_SPEED = 420; // px/s(スティックを最大まで倒したときの速度)
+  let joyValue = 0;  // -1..1
+  let joyActive = false;
 
   // ===== 発射エリア(フローティング式:このY座標より下ならどこをタッチしてもそこが引っ張りの起点になる) =====
   // 固定の1点にすると画面端に近い時にドラッグできる向きが偏るため、タッチ位置そのものを起点にする
@@ -587,9 +636,21 @@
     return y <= CANCEL_ZONE_Y;
   }
 
-  // ===== 必殺ショット(1試合1回・右下に大きく配置) =====
-  const specialBtn = { x: VW - 70, y: VH - 70, r: 52 };
+  // ===== 必殺ショット(1試合1回・右移動ボタンの上に配置) =====
+  const specialBtn = { x: VW - 60, y: CONTROL_PANEL_Y + 32, r: 32 };
   let specialArmed = false;
+
+  // ===== メニュー(一時停止・タイトルに戻る) =====
+  const menuBtn = { x: 26, y: 20, r: 17 };
+  const menuResumeBtn = { x: VW / 2, y: VH / 2 - 24, w: 260, h: 50 };
+  const menuSuspendBtn = { x: VW / 2, y: VH / 2 + 42, w: 260, h: 50 };
+  let menuOpen = false;
+  function canOpenMenu() {
+    return gamePhase === 'battle' && !awaitingResolve && !cutIn && !matchOver;
+  }
+  function hitRect(p, b) {
+    return Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2;
+  }
 
   // ===== スコア(連勝を主、与ダメ効率を従とした複合値)=====
   let runStats = { damageDealt: 0, shots: 0 };
@@ -633,8 +694,11 @@
   // ===== キャラクター選択画面 =====
   let gamePhase = 'select'; // 'select' | 'battle'
   const selectCards = CHARACTER_LIST.map((key, i) => ({ key, x: VW / 2, y: 250 + i * 190, w: VW - 60, h: 160 }));
+  const resumeBtn = { x: VW / 2, y: 50, w: 300, h: 40 };
 
   function selectCharacterAndStart(key) {
+    clearSuspendedMatch();
+    hasSuspendedSave = false;
     player.character = key;
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
     gamePhase = 'battle';
@@ -642,6 +706,93 @@
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch();
   }
+
+  // ===== 中断/再開(ブラウザを閉じても続きから再開できる) =====
+  const SUSPEND_KEY = 'katamon_suspend_v1';
+
+  function saveSuspendedMatch() {
+    const data = {
+      v: 1,
+      segments: currentSegments,
+      craters: craterHistory,
+      pattern: currentPattern,
+      startOnIsland,
+      playerChar: player.character,
+      cpuChar: cpu.character,
+      player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, specialUsed: player.specialUsed },
+      cpu: { hp: cpu.hp, maxHp: cpu.maxHp, fuel: cpu.fuel, fuelMax: cpu.fuelMax, x: cpu.x, specialUsed: cpu.specialUsed },
+      currentTurn, turnCount,
+      wind: { dir: wind.dir, strength: wind.strength },
+      winStreak, runStats, isBossMatch
+    };
+    try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(data)); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
+  }
+
+  function loadSuspendedMatch() {
+    try {
+      const raw = localStorage.getItem(SUSPEND_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) { return null; }
+  }
+
+  function clearSuspendedMatch() {
+    try { localStorage.removeItem(SUSPEND_KEY); } catch (err) { /* noop */ }
+  }
+
+  function resumeSuspendedMatch() {
+    const data = loadSuspendedMatch();
+    if (!data) return;
+
+    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland);
+
+    player.character = data.playerChar;
+    cpu.character = data.cpuChar;
+    applyCharacter(player, data.playerChar);
+    applyCharacter(cpu, data.cpuChar);
+    Object.assign(player, data.player);
+    Object.assign(cpu, data.cpu);
+    initUnitOnGround(player);
+    initUnitOnGround(cpu);
+    player.y = groundYAt(player.x) - UNIT_RADIUS;
+    cpu.y = groundYAt(cpu.x) - UNIT_RADIUS;
+
+    projectiles = [];
+    aimState = null;
+    moveDir = 0;
+    inputMode = null;
+    inputPointerId = null;
+    specialArmed = false;
+    matchOver = false;
+    winner = null;
+    awaitingResolve = false;
+    currentTurn = data.currentTurn;
+    turnCount = data.turnCount;
+    wind.dir = data.wind.dir;
+    wind.strength = data.wind.strength;
+    winStreak = data.winStreak;
+    runStats = data.runStats;
+    isBossMatch = data.isBossMatch;
+    bossBannerTimer = 0;
+    cpuMoveDir = 0;
+    cpuMoveRemaining = 0;
+    cpuPhase = 'aim';
+    particles = [];
+    floatTexts = [];
+    shakeTimer = 0;
+    specialFlash = { timer: 0, text: '' };
+    cutIn = null;
+    menuOpen = false;
+    joyValue = 0;
+    joyActive = false;
+    cameraX = clampCameraX(player.x - VW / 2);
+    gamePhase = 'battle';
+
+    clearSuspendedMatch();
+    hasSuspendedSave = false;
+    updateDebug();
+  }
+
+  let hasSuspendedSave = !!loadSuspendedMatch();
 
   function wrapText(text, x, y, maxWidth, lineHeight) {
     let line = '';
@@ -667,6 +818,21 @@
     ctx.font = 'bold 22px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('モンスターを選択', VW / 2, 130);
+
+    if (hasSuspendedSave) {
+      const b = resumeBtn;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10);
+      else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+      ctx.fillStyle = '#2c3a63';
+      ctx.fill();
+      ctx.strokeStyle = '#ffd24a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
+    }
 
     for (const card of selectCards) {
       const def = CHARACTERS[card.key];
@@ -771,7 +937,6 @@
 
   function startTurn() {
     if (turnCount % 4 === 0) rollWind(); // 風は自分・相手2ターンずつ(計4ターン)固定
-    manualPan = false; // ターン開始でカメラ自動追従に戻す
     if (currentTurn === 'player') {
       player.fuel = player.fuelMax;
     } else {
@@ -1010,16 +1175,16 @@
   }
 
   function drawWindMeter() {
-    const cx = VW / 2, cy = 26;
+    const cx = VW / 2, cy = 56;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(cx - 90, cy - 16, 180, 32);
+    ctx.fillRect(cx - 70, cy - 16, 140, 32);
     ctx.fillStyle = '#fff';
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('WIND', cx, cy - 4);
 
-    const len = 20 + wind.strength * 55;
+    const len = 16 + wind.strength * 42;
     const dir = wind.dir;
     ctx.strokeStyle = '#ffe08a';
     ctx.lineWidth = 3;
@@ -1036,6 +1201,36 @@
     ctx.closePath();
     ctx.fillStyle = '#ffe08a';
     ctx.fill();
+    ctx.restore();
+  }
+
+  // ===== プレイヤー/CPUのHP・燃料ゲージ(WINDの左右)。燃料はターン開始で満タンに戻るので
+  // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
+  function drawUnitPanel(u, edgeX, align) {
+    const w = 158;
+    const barX = align === 'left' ? edgeX : edgeX - w;
+    const textX = align === 'left' ? barX : barX + w;
+    ctx.save();
+    ctx.textAlign = align;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(u.label, textX, 46);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(barX, 50, w, 9);
+    const hpRatio = Math.max(0, u.hp / u.maxHp);
+    ctx.fillStyle = hpRatio > 0.5 ? '#7be07b' : hpRatio > 0.25 ? '#f0c860' : '#f06060';
+    ctx.fillRect(barX, 50, w * hpRatio, 9);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, 50, w, 9);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(barX, 63, w, 6);
+    const fuelRatio = Math.max(0, u.fuel / u.fuelMax);
+    ctx.fillStyle = '#8ad0ff';
+    ctx.fillRect(barX, 63, w * fuelRatio, 6);
+    ctx.strokeRect(barX, 63, w, 6);
     ctx.restore();
   }
 
@@ -1189,29 +1384,16 @@
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'left';
     const turnLabel = currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン';
-    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 80);
-
-    const activeUnit = currentTurn === 'player' ? player : cpu;
-    const fw = 110, fx = 10, fy = 100;
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(fx, fy, fw, 8);
-    ctx.fillStyle = '#8ad0ff';
-    ctx.fillRect(fx, fy, fw * Math.max(0, activeUnit.fuel / activeUnit.fuelMax), 8);
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(fx, fy, fw, 8);
-    ctx.font = '10px sans-serif';
-    ctx.fillText('FUEL', fx, fy - 2);
+    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 96);
 
     ctx.textAlign = 'right';
-    ctx.font = 'bold 13px sans-serif';
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`${winStreak}連勝`, VW - 10, 80);
+    ctx.fillText(`${winStreak}連勝`, VW - 10, 96);
     ctx.restore();
   }
 
-  // ===== ミニマップ(旧視点移動エリアの跡地に配置。ステージ全体とカメラの可視範囲を表示) =====
-  const MINIMAP = { x: 20, y: 46, w: VW - 40, h: 16 };
+  // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
+  const MINIMAP = { x: 20, y: 104, w: VW - 40, h: 14 };
   function drawMinimap() {
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1339,7 +1521,7 @@
     ctx.restore();
   }
 
-  const soundBtn = { x: VW - 34, y: 26, r: 22 }; // WINDメーターの右・ミニマップと重ならない位置
+  const soundBtn = { x: VW - 28, y: 20, r: 17 }; // 右上・CPUパネルと重ならない高さ
   function drawSoundToggle() {
     ctx.save();
     ctx.beginPath();
@@ -1370,19 +1552,100 @@
     ctx.restore();
   }
 
-  function drawPanZoneHint() {
+  // ===== 下部コントローラパネル(ここより下は地形を描かず操作専用のデッドゾーンにする) =====
+  function drawControlPanel() {
     if (gamePhase !== 'battle') return;
     ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(PAN_ZONE.x1, PAN_ZONE.y1, PAN_ZONE.x2 - PAN_ZONE.x1, PAN_ZONE.y2 - PAN_ZONE.y1);
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#151826';
+    ctx.fillRect(0, CONTROL_PANEL_Y, VW, VH - CONTROL_PANEL_Y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, CONTROL_PANEL_Y);
+    ctx.lineTo(VW, CONTROL_PANEL_Y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawJoystick() {
+    if (gamePhase !== 'battle') return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(JOY.x, JOY.y, JOY.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const knobX = JOY.x + joyValue * JOY.r;
+    ctx.beginPath();
+    ctx.arc(knobX, JOY.y, JOY.knobR, 0, Math.PI * 2);
+    ctx.fillStyle = joyActive ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.28)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('◀▶ドラッグで視点移動', (PAN_ZONE.x1 + PAN_ZONE.x2) / 2, (PAN_ZONE.y1 + PAN_ZONE.y2) / 2 + 3);
+    ctx.fillText('◀ 視点移動 ▶', JOY.x, JOY.y + JOY.r + 16);
+    ctx.restore();
+  }
+
+  function drawMenuButton() {
+    if (gamePhase !== 'battle') return;
+    const active = canOpenMenu();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(menuBtn.x, menuBtn.y, menuBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fill();
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2;
+    for (const dy of [-5, 0, 5]) {
+      ctx.beginPath();
+      ctx.moveTo(menuBtn.x - 8, menuBtn.y + dy);
+      ctx.lineTo(menuBtn.x + 8, menuBtn.y + dy);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawMenuOverlay() {
+    if (!menuOpen) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('メニュー', VW / 2, VH / 2 - 90);
+
+    const items = [
+      [menuResumeBtn, 'ゲームに戻る', ''],
+      [menuSuspendBtn, '中断してタイトルへ', '進行状況を保存します']
+    ];
+    for (const [b, label, sub] of items) {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10);
+      else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+      ctx.fillStyle = '#2c3a63';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText(label, b.x, b.y + (sub ? -3 : 5));
+      if (sub) {
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillText(sub, b.x, b.y + 15);
+      }
+    }
     ctx.restore();
   }
 
@@ -1459,18 +1722,23 @@
     drawPullLine();
     drawOffscreenIndicator();
     drawWindMeter();
+    drawUnitPanel(player, 10, 'left');
+    drawUnitPanel(cpu, VW - 10, 'right');
     drawMinimap();
     drawTurnInfo();
+    drawControlPanel();
     drawMoveButtons();
-    drawPanZoneHint();
+    drawJoystick();
     drawFireZone();
     drawCancelZone();
     drawSpecialButton();
     drawSoundToggle();
+    drawMenuButton();
     drawResultBanner();
     drawBossBanner();
     drawSpecialFlash();
     drawCutIn();
+    drawMenuOverlay();
     ctx.restore();
   }
 
@@ -1498,12 +1766,33 @@
     if (cutIn) return; // カットイン中は入力を受け付けない
     const p0 = canvasPointFromEvent(e);
     if (gamePhase === 'select') {
+      if (hasSuspendedSave && hitRect(p0, resumeBtn)) {
+        resumeSuspendedMatch();
+        return;
+      }
       for (const card of selectCards) {
         if (Math.abs(p0.x - card.x) <= card.w / 2 && Math.abs(p0.y - card.y) <= card.h / 2) {
           selectCharacterAndStart(card.key);
           return;
         }
       }
+      return;
+    }
+
+    if (menuOpen) {
+      if (hitRect(p0, menuResumeBtn)) { menuOpen = false; return; }
+      if (hitRect(p0, menuSuspendBtn)) {
+        saveSuspendedMatch();
+        menuOpen = false;
+        gamePhase = 'select';
+        hasSuspendedSave = true;
+        return;
+      }
+      return; // メニュー表示中は他の操作を無視
+    }
+
+    if (canOpenMenu() && Math.hypot(p0.x - menuBtn.x, p0.y - menuBtn.y) <= menuBtn.r + 10) {
+      menuOpen = true;
       return;
     }
 
@@ -1521,10 +1810,11 @@
       return;
     }
 
-    // 左右移動キーの真上の小エリアの左右ドラッグでカメラをパン(どちらのターン中でも可)
-    if (inPanZone(p0)) {
-      inputMode = 'pan'; inputPointerId = e.pointerId;
-      panLastX = p0.x;
+    // 視点移動ジョイスティック(左右限定・どちらのターン中でも操作可)
+    if (Math.hypot(p0.x - JOY.x, p0.y - JOY.y) <= JOY.r + 10) {
+      inputMode = 'joy'; inputPointerId = e.pointerId;
+      joyActive = true;
+      joyValue = Math.max(-1, Math.min(1, (p0.x - JOY.x) / JOY.r));
       canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -1547,7 +1837,7 @@
       return;
     }
     if (!player.grounded) return;
-    if (p.y >= AIM_ZONE_Y) {
+    if (p.y >= AIM_ZONE_Y && p.y < CONTROL_PANEL_Y) {
       // フローティング式:タッチした位置がそのまま引っ張りの起点になる
       inputMode = 'aim'; inputPointerId = e.pointerId;
       aimState = { anchor: unitAnchor(player), origin: { x: p.x, y: p.y }, curX: p.x, curY: p.y };
@@ -1561,11 +1851,9 @@
       const p = canvasPointFromEvent(e);
       aimState.curX = p.x;
       aimState.curY = p.y;
-    } else if (inputMode === 'pan') {
+    } else if (inputMode === 'joy') {
       const p = canvasPointFromEvent(e);
-      cameraX = clampCameraX(cameraX - (p.x - panLastX));
-      panLastX = p.x;
-      manualPan = true; // 次のターン/発射まで自動追従を止める
+      joyValue = Math.max(-1, Math.min(1, (p.x - JOY.x) / JOY.r));
     }
   }
 
@@ -1591,6 +1879,9 @@
       aimState = null;
     } else if (inputMode === 'moveL' || inputMode === 'moveR') {
       moveDir = 0;
+    } else if (inputMode === 'joy') {
+      joyValue = 0;
+      joyActive = false;
     }
     inputMode = null;
     inputPointerId = null;
@@ -1633,7 +1924,9 @@
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
     cameraX = clampCameraX(player.x - VW / 2);
-    manualPan = false;
+    joyValue = 0;
+    joyActive = false;
+    menuOpen = false;
     isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
@@ -1649,10 +1942,12 @@
   let lastTime = 0;
   function update(dt) {
     if (gamePhase === 'select') return;
+    if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
-    // カメラ自動追従(手動パン中は停止。弾があれば弾、なければ手番側のユニットを追う)
-    if (projectiles.length) manualPan = false;
-    if (!manualPan) {
+    // カメラ:ジョイスティックを倒している間はその速度でパン、離していれば自動追従
+    if (joyValue !== 0) {
+      cameraX = clampCameraX(cameraX + joyValue * PAN_SPEED * dt);
+    } else {
       const focusX = projectiles.length ? projectiles[0].x
         : (currentTurn === 'player' ? player.x : cpu.x);
       const target = clampCameraX(focusX - VW / 2);
@@ -1714,7 +2009,7 @@
       }
       if (hit) continue;
 
-      if (!p.pierce && p.y >= groundYAt(p.x)) {
+      if (!p.pierce && isSolidAt(p.x, p.y)) {
         explodeAt(p.x, p.y, p.blastMul, p.owner);
         projectiles.splice(i, 1);
       } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > VH + 60) {
