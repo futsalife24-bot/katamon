@@ -152,7 +152,7 @@
   const ROW_H = 4; // 縦方向の判定グリッド刻み
   const ROWS = Math.ceil(VH / ROW_H);
   const GROUND_MIN_Y = 380;   // 地形が取りうる最も高い(浅い)位置
-  const GROUND_MAX_Y = 700;   // 地形が取りうる最も低い(深い)位置(下部コントローラパネルとの間に余白を確保)
+  const GROUND_MAX_Y = 600;   // 地形が取りうる最も低い(深い)位置(下部コントローラパネルとの間に余白を確保)
   const FLOOR_Y = VH;         // 画面下端(この高さ=地面なし/場外扱い)
 
   // 実体は不可視のオフスクリーンキャンバス(見た目)。塗り(source-over)で地面、destination-outで爆風の穴をあける
@@ -606,33 +606,29 @@
   }
 
   // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
-  const CONTROL_PANEL_Y = 760;
+  const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
   const PANEL_CY = CONTROL_PANEL_Y + (VH - CONTROL_PANEL_Y) / 2;
 
-  // ===== 視点移動(長押しボタン)。ジョイスティックのすぐ両脇に配置 =====
-  const BTN_R = 34;
-  const leftBtn = { x: 150, y: PANEL_CY };
-  const rightBtn = { x: VW - 150, y: PANEL_CY };
-  let panDir = 0; // -1, 0, 1(ボタン長押しでのカメラパン方向)
-  let inputMode = null; // 'panL' | 'panR' | 'aim' | 'moveJoy'
+  // ===== 移動(長押しボタン)。発射ボタンのすぐ両脇に配置 =====
+  const BTN_R = 51;
+  const leftBtn = { x: 92, y: PANEL_CY };
+  const rightBtn = { x: VW - 92, y: PANEL_CY };
+  let moveDir = 0; // -1, 0, 1
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan'
   let inputPointerId = null;
 
-  // ===== 移動ジョイスティック(左右限定・画面下部中央に大きめ配置) =====
-  const JOY = { x: VW / 2, y: PANEL_CY, r: 78, knobR: 30 };
-  const PAN_SPEED = 420; // px/s(パンボタンを押している間の速度)
-  let moveJoyValue = 0;  // -1..1(倒した強さがそのまま移動速度に反映)
-  let moveJoyActive = false;
-
-  // ===== 発射エリア(フローティング式:このY座標より下ならどこをタッチしてもそこが引っ張りの起点になる) =====
-  // 固定の1点にすると画面端に近い時にドラッグできる向きが偏るため、タッチ位置そのものを起点にする
-  const AIM_ZONE_Y = 165;
-  const CANCEL_ZONE_Y = 150; // この高さより上でリリースするとキャンセル
+  // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
+  const FIRE_BTN = { x: VW / 2, y: PANEL_CY, r: 117 };
   function isInCancelZone(x, y) {
-    return y <= CANCEL_ZONE_Y;
+    // 発射ボタンの中まで戻して離すとキャンセル
+    return Math.hypot(x - FIRE_BTN.x, y - FIRE_BTN.y) <= FIRE_BTN.r;
   }
 
-  // ===== 必殺ショット(1試合1回・右の視点移動ボタンの上に配置) =====
-  const specialBtn = { x: VW - 150, y: CONTROL_PANEL_Y + 32, r: 32 };
+  // ===== 視点移動:画面(コントローラパネルより上)を直接スライドでパン。離しても位置はそのまま =====
+  let panLastX = 0;
+
+  // ===== 必殺ショット(1試合1回・右移動ボタンの上に配置) =====
+  const specialBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 46, r: 46 };
   let specialArmed = false;
 
   // ===== メニュー(一時停止・タイトルに戻る) =====
@@ -753,7 +749,7 @@
 
     projectiles = [];
     aimState = null;
-    panDir = 0;
+    moveDir = 0;
     inputMode = null;
     inputPointerId = null;
     specialArmed = false;
@@ -777,8 +773,6 @@
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
     menuOpen = false;
-    moveJoyValue = 0;
-    moveJoyActive = false;
     cameraX = clampCameraX(player.x - VW / 2);
     gamePhase = 'battle';
 
@@ -1537,18 +1531,6 @@
     ctx.restore();
   }
 
-  function drawFireZone() {
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn && player.grounded;
-    if (!active || aimState) return; // ドラッグ中は引っ張り線自体がフィードバックになるので非表示
-    ctx.save();
-    ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 500) * 0.15;
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('↓ この下のどこからでもドラッグして発射 ↓', VW / 2, AIM_ZONE_Y + 22);
-    ctx.restore();
-  }
-
   // ===== 下部コントローラパネル(ここより下は地形を描かず操作専用のデッドゾーンにする) =====
   function drawControlPanel() {
     if (gamePhase !== 'battle') return;
@@ -1564,28 +1546,23 @@
     ctx.restore();
   }
 
-  function drawJoystick() {
+  function drawFireButton() {
     if (gamePhase !== 'battle') return;
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn && player.grounded;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(JOY.x, JOY.y, JOY.r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.arc(FIRE_BTN.x, FIRE_BTN.y, FIRE_BTN.r, 0, Math.PI * 2);
+    ctx.fillStyle = aimState ? 'rgba(255,210,74,0.16)' : active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 2;
     ctx.stroke();
-    const knobX = JOY.x + moveJoyValue * JOY.r;
-    ctx.beginPath();
-    ctx.arc(knobX, JOY.y, JOY.knobR, 0, Math.PI * 2);
-    ctx.fillStyle = moveJoyActive ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.28)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('◀ 移動 ▶', JOY.x, JOY.y + JOY.r + 16);
+    if (!aimState) {
+      ctx.fillStyle = active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('引いて発射', FIRE_BTN.x, FIRE_BTN.y + 5);
+    }
     ctx.restore();
   }
 
@@ -1650,27 +1627,26 @@
     if (!aimState) return;
     const inCancel = isInCancelZone(aimState.curX, aimState.curY);
     ctx.save();
-    ctx.strokeStyle = inCancel ? 'rgba(255,90,90,0.9)' : 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = inCancel ? 'rgba(255,90,90,0.9)' : 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 5]);
     ctx.beginPath();
-    ctx.moveTo(0, CANCEL_ZONE_Y);
-    ctx.lineTo(VW, CANCEL_ZONE_Y);
+    ctx.arc(FIRE_BTN.x, FIRE_BTN.y, FIRE_BTN.r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = inCancel ? '#ff5a5a' : 'rgba(255,255,255,0.65)';
+    ctx.fillStyle = inCancel ? '#ff5a5a' : 'rgba(255,255,255,0.55)';
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(inCancel ? 'ここで離すとキャンセル' : '↑ ここまでドラッグでキャンセル', VW / 2, CANCEL_ZONE_Y - 8);
+    ctx.fillText(inCancel ? 'ここで離すとキャンセル' : '', FIRE_BTN.x, FIRE_BTN.y - FIRE_BTN.r - 10);
     ctx.restore();
   }
 
-  function drawPanButtons() {
-    const active = gamePhase === 'battle' && !cutIn; // パンはどちらのターン中でも操作可
+  function drawMoveButtons() {
+    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
     ctx.save();
     ctx.textBaseline = 'middle';
     for (const [btn, dir, glyph] of [[leftBtn, -1, '◀'], [rightBtn, 1, '▶']]) {
-      const held = panDir === dir;
+      const held = active && moveDir === dir;
       ctx.beginPath();
       ctx.arc(btn.x, btn.y, BTN_R, 0, Math.PI * 2);
       ctx.fillStyle = held ? 'rgba(255,255,255,0.4)' : active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
@@ -1679,7 +1655,7 @@
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = 'bold 26px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(glyph, btn.x, btn.y + 2);
     }
@@ -1725,9 +1701,8 @@
     drawMinimap();
     drawTurnInfo();
     drawControlPanel();
-    drawPanButtons();
-    drawJoystick();
-    drawFireZone();
+    drawMoveButtons();
+    drawFireButton();
     drawCancelZone();
     drawSpecialButton();
     drawSoundToggle();
@@ -1808,38 +1783,35 @@
       return;
     }
 
-    // 視点パンボタン(左右限定・どちらのターン中でも操作可)
-    if (hitButton(p0, leftBtn)) {
-      inputMode = 'panL'; inputPointerId = e.pointerId; panDir = -1;
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-    if (hitButton(p0, rightBtn)) {
-      inputMode = 'panR'; inputPointerId = e.pointerId; panDir = 1;
-      canvas.setPointerCapture(e.pointerId);
-      return;
+    // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
+    if (currentTurn === 'player' && !awaitingResolve) {
+      if (hitButton(p0, leftBtn)) {
+        inputMode = 'moveL'; inputPointerId = e.pointerId; moveDir = -1;
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (hitButton(p0, rightBtn)) {
+        inputMode = 'moveR'; inputPointerId = e.pointerId; moveDir = 1;
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (!player.specialUsed && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
+        specialArmed = !specialArmed;
+        return;
+      }
+      if (player.grounded && Math.hypot(p0.x - FIRE_BTN.x, p0.y - FIRE_BTN.y) <= FIRE_BTN.r + 10) {
+        // 固定アンカー式:発射ボタンの中心から引っ張った分だけ飛ぶ
+        inputMode = 'aim'; inputPointerId = e.pointerId;
+        aimState = { anchor: unitAnchor(player), origin: { x: FIRE_BTN.x, y: FIRE_BTN.y }, curX: p0.x, curY: p0.y };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
     }
 
-    if (currentTurn !== 'player' || awaitingResolve) return;
-    const p = canvasPointFromEvent(e);
-
-    if (!player.specialUsed && Math.hypot(p.x - specialBtn.x, p.y - specialBtn.y) <= specialBtn.r + 10) {
-      specialArmed = !specialArmed;
-      return;
-    }
-    // 移動ジョイスティック(左右限定・自分のターンでのみ操作可)
-    if (Math.hypot(p.x - JOY.x, p.y - JOY.y) <= JOY.r + 10) {
-      inputMode = 'moveJoy'; inputPointerId = e.pointerId;
-      moveJoyActive = true;
-      moveJoyValue = Math.max(-1, Math.min(1, (p.x - JOY.x) / JOY.r));
-      canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-    if (!player.grounded) return;
-    if (p.y >= AIM_ZONE_Y && p.y < CONTROL_PANEL_Y) {
-      // フローティング式:タッチした位置がそのまま引っ張りの起点になる
-      inputMode = 'aim'; inputPointerId = e.pointerId;
-      aimState = { anchor: unitAnchor(player), origin: { x: p.x, y: p.y }, curX: p.x, curY: p.y };
+    // それ以外は画面を直接スライドして視点移動(どちらのターン中でも可・離しても位置はそのまま)
+    if (p0.y < CONTROL_PANEL_Y) {
+      inputMode = 'pan'; inputPointerId = e.pointerId;
+      panLastX = p0.x;
       canvas.setPointerCapture(e.pointerId);
     }
   }
@@ -1850,9 +1822,10 @@
       const p = canvasPointFromEvent(e);
       aimState.curX = p.x;
       aimState.curY = p.y;
-    } else if (inputMode === 'moveJoy') {
+    } else if (inputMode === 'pan') {
       const p = canvasPointFromEvent(e);
-      moveJoyValue = Math.max(-1, Math.min(1, (p.x - JOY.x) / JOY.r));
+      cameraX = clampCameraX(cameraX - (p.x - panLastX));
+      panLastX = p.x;
     }
   }
 
@@ -1876,11 +1849,8 @@
         }
       }
       aimState = null;
-    } else if (inputMode === 'panL' || inputMode === 'panR') {
-      panDir = 0;
-    } else if (inputMode === 'moveJoy') {
-      moveJoyValue = 0;
-      moveJoyActive = false;
+    } else if (inputMode === 'moveL' || inputMode === 'moveR') {
+      moveDir = 0;
     }
     inputMode = null;
     inputPointerId = null;
@@ -1903,7 +1873,7 @@
     initUnitOnGround(cpu);
     projectiles = [];
     aimState = null;
-    panDir = 0;
+    moveDir = 0;
     inputMode = null;
     inputPointerId = null;
     specialArmed = false;
@@ -1923,8 +1893,6 @@
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
     cameraX = clampCameraX(player.x - VW / 2);
-    moveJoyValue = 0;
-    moveJoyActive = false;
     menuOpen = false;
     isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
@@ -1943,13 +1911,9 @@
     if (gamePhase === 'select') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
-    // カメラ:パンボタンを押している間はその速度でパン、離していれば自動追従
-    if (panDir !== 0) {
-      cameraX = clampCameraX(cameraX + panDir * PAN_SPEED * dt);
-    } else {
-      const focusX = projectiles.length ? projectiles[0].x
-        : (currentTurn === 'player' ? player.x : cpu.x);
-      const target = clampCameraX(focusX - VW / 2);
+    // カメラ:弾が飛んでいる間だけ自動で追従する。それ以外は指でスライドした位置のまま維持する(戻さない)
+    if (projectiles.length) {
+      const target = clampCameraX(projectiles[0].x - VW / 2);
       cameraX += (target - cameraX) * Math.min(1, dt * 5);
     }
 
@@ -2022,10 +1986,9 @@
 
     if (matchOver) return;
 
-    // 移動(プレイヤーのターンのみ・燃料制)。ジョイスティックの倒し具合が速度に反映される
-    if (currentTurn === 'player' && !awaitingResolve && moveJoyValue !== 0 && player.grounded && player.fuel > 0) {
-      const moveDir = moveJoyValue > 0 ? 1 : -1;
-      const dist = Math.min(MOVE_SPEED * Math.abs(moveJoyValue) * dt, player.fuel);
+    // 移動(プレイヤーのターンのみ・燃料制・長押しボタン)
+    if (currentTurn === 'player' && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
+      const dist = Math.min(MOVE_SPEED * dt, player.fuel);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
       nx = limitMoveByClimb(player.x, nx);
       const moved = Math.abs(nx - player.x);
