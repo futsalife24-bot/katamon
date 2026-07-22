@@ -60,6 +60,14 @@
   const VW = 540;
   const VH = 960;
 
+  // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
+  const LAST_UPDATED_TEXT = (() => {
+    const d = new Date(document.lastModified);
+    if (isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `最終更新: ${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+  })();
+
   // ===== ステージ(横長)とカメラ =====
   // 画面(VW)はステージの一部を映す窓。カメラは自動追従+ジョイスティックでの手動パン
   const STAGE_W = 960;
@@ -197,6 +205,22 @@
   terrainCanvas.height = VH;
   const terrainCtx = terrainCanvas.getContext('2d');
 
+  // 地形の質感用ノイズタイル(1度だけ生成し、繰り返しパターンとして焼き込む。点描だとムラや塊が
+  // 出てしまうため、ピクセル単位のノイズタイルの方が均一な粒立ちになる)
+  const noiseTile = document.createElement('canvas');
+  noiseTile.width = 28;
+  noiseTile.height = 28;
+  (() => {
+    const ntCtx = noiseTile.getContext('2d');
+    const img = ntCtx.createImageData(28, 28);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() < 0.5 ? 0 : 255;
+      img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v;
+      img.data[i + 3] = Math.round(Math.random() * 46);
+    }
+    ntCtx.putImageData(img, 0, 0);
+  })();
+
   // 判定用のグリッド(見た目のキャンバスとは別に、ロジック側で正確に持つ実体データ)。1=地面,0=空気
   let solidGrid = new Uint8Array(TERRAIN_COLS * ROWS);
   // 列ごとの「一番上にある地面のY」キャッシュ(接地判定・描画の草ラインに使用。掘削のたびに該当範囲だけ再走査)
@@ -225,17 +249,12 @@
         for (let r = r0; r <= r1; r++) solidGrid[r * TERRAIN_COLS + c] = 1;
       }
     }
-    // 質感付け:細かい粒を大量に焼き込んで単色塗りっぽさを消す(生成時の1回だけなので毎フレームのコストはゼロ)
-    // 粒を大きく/少なくすると「斑点」として目立ってしまうため、小さく・大量にして粒立ちを目立たせない
+    // 質感付け:ピクセル単位のノイズタイルを繰り返し焼き込んで単色塗りっぽさを消す
+    // (点描だと粒がランダムに寄り集まって「塊」に見えてしまうため、均一なタイルパターンにする)
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'source-atop';
-    for (let i = 0; i < 3200; i++) {
-      const sx = Math.random() * STAGE_W;
-      const sy = GROUND_MIN_Y + Math.random() * (FLOOR_Y - GROUND_MIN_Y);
-      const shade = Math.random() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.045)';
-      terrainCtx.fillStyle = shade;
-      terrainCtx.fillRect(sx, sy, 0.6 + Math.random() * 1.1, 0.6 + Math.random() * 1.1);
-    }
+    terrainCtx.fillStyle = terrainCtx.createPattern(noiseTile, 'repeat');
+    terrainCtx.fillRect(0, 0, STAGE_W, VH);
     terrainCtx.restore();
   }
 
@@ -419,16 +438,27 @@
     }
 
     // 空洞(山の内部の未露出の空間。着弾で偶然開通することがある)
+    // レンズ状に丸くすぼませ、縁も波打たせることで、四角い穴に見えないようにする
     if (Math.random() < 0.3) {
-      const cavernLen = 16 + Math.floor(Math.random() * 14);
+      const cavernLen = 22 + Math.floor(Math.random() * 16);
       const cavernStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - cavernLen));
       if (!overlapsSpawn(cavernStart, cavernLen, 20)) {
-        const cavernTop = GROUND_MIN_Y + 70 + Math.random() * 90;
-        const cavernThickness = 50 + Math.random() * 40;
-        for (let c = cavernStart; c < cavernStart + cavernLen && c < midEnd; c++) {
+        const cavernCy = GROUND_MIN_Y + 100 + Math.random() * 80;
+        const cavernHalfH = 42 + Math.random() * 26;
+        const wobbleAmp = 8 + Math.random() * 8;
+        const phase = Math.random() * Math.PI * 2;
+        for (let i = 0; i < cavernLen; i++) {
+          const c = cavernStart + i;
+          if (c >= midEnd) break;
           const seg = segments[c][0];
-          const top = cavernTop, bottom = Math.min(seg[1] - 20, cavernTop + cavernThickness);
-          if (bottom > top + 15 && top > seg[0] + 15) {
+          const t = i / (cavernLen - 1);
+          const taper = Math.sin(t * Math.PI); // 両端でゼロ→中央で1(レンズ状に丸くすぼめる)
+          if (taper < 0.1) continue; // 端は開けずに閉じておく
+          const wobble = Math.sin(t * 7 + phase) * wobbleAmp;
+          const halfH = cavernHalfH * taper;
+          const top = cavernCy - halfH + wobble * 0.5;
+          const bottom = Math.min(seg[1] - 20, cavernCy + halfH + wobble * 0.5);
+          if (bottom > top + 12 && top > seg[0] + 15) {
             segments[c] = [[seg[0], top], [bottom, seg[1]]];
           }
         }
@@ -931,6 +961,13 @@
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText(`必殺: ${def.special}`, -card.w / 2 + 95, 52);
       ctx.restore();
+    }
+
+    if (LAST_UPDATED_TEXT) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 16);
     }
     ctx.restore();
   }
