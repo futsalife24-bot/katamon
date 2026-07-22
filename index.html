@@ -225,17 +225,16 @@
         for (let r = r0; r <= r1; r++) solidGrid[r * TERRAIN_COLS + c] = 1;
       }
     }
-    // 質感付け:小さな斑点を焼き込んで単色塗りっぽさを消す(生成時の1回だけなので毎フレームのコストはゼロ)
+    // 質感付け:細かい粒を大量に焼き込んで単色塗りっぽさを消す(生成時の1回だけなので毎フレームのコストはゼロ)
+    // 粒を大きく/少なくすると「斑点」として目立ってしまうため、小さく・大量にして粒立ちを目立たせない
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'source-atop';
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 3200; i++) {
       const sx = Math.random() * STAGE_W;
       const sy = GROUND_MIN_Y + Math.random() * (FLOOR_Y - GROUND_MIN_Y);
-      const shade = Math.random() < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)';
+      const shade = Math.random() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.045)';
       terrainCtx.fillStyle = shade;
-      terrainCtx.beginPath();
-      terrainCtx.arc(sx, sy, 2 + Math.random() * 4, 0, Math.PI * 2);
-      terrainCtx.fill();
+      terrainCtx.fillRect(sx, sy, 0.6 + Math.random() * 1.1, 0.6 + Math.random() * 1.1);
     }
     terrainCtx.restore();
   }
