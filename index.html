@@ -69,11 +69,34 @@
   })();
 
   // ===== ステージ(横長)とカメラ =====
-  // 画面(VW)はステージの一部を映す窓。カメラは自動追従+ジョイスティックでの手動パン
+  // 初期状態はステージ全幅。ピンチアウトで従来の等倍サイズまで拡大できる。
   const STAGE_W = 960;
+  const MIN_CAMERA_ZOOM = VW / STAGE_W;
+  const MAX_CAMERA_ZOOM = 1;
+  let cameraZoom = MIN_CAMERA_ZOOM;
   let cameraX = 0;
+  function clampCameraZoom(zoom) {
+    return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
+  }
+  function visibleWorldWidth() {
+    return VW / cameraZoom;
+  }
   function clampCameraX(x) {
-    return Math.min(STAGE_W - VW, Math.max(0, x));
+    return Math.min(Math.max(0, STAGE_W - visibleWorldWidth()), Math.max(0, x));
+  }
+  function centerCameraOn(worldX) {
+    return clampCameraX(worldX - visibleWorldWidth() / 2);
+  }
+  function applyWorldCamera(parallaxFactor = 1) {
+    ctx.translate(0, CONTROL_PANEL_Y);
+    ctx.scale(cameraZoom, cameraZoom);
+    ctx.translate(-cameraX * parallaxFactor, -CONTROL_PANEL_Y);
+  }
+  function worldToScreenX(worldX) {
+    return (worldX - cameraX) * cameraZoom;
+  }
+  function worldToScreenY(worldY) {
+    return CONTROL_PANEL_Y + (worldY - CONTROL_PANEL_Y) * cameraZoom;
   }
 
   const canvas = document.getElementById('game');
@@ -205,6 +228,124 @@
   terrainCanvas.height = VH;
   const terrainCtx = terrainCanvas.getContext('2d');
 
+  // 地形マスク全体から境界線を作る専用キャンバス。最上面の点を結ぶ方式だと、浮島や縦崖を
+  // またいで長い線が出るため、実際の地形シルエットを膨張させて全周の輪郭だけを抜き出す。
+  const terrainRimCanvas = document.createElement('canvas');
+  terrainRimCanvas.width = STAGE_W;
+  terrainRimCanvas.height = VH;
+  const terrainRimCtx = terrainRimCanvas.getContext('2d');
+  const terrainRimLayer = document.createElement('canvas');
+  terrainRimLayer.width = STAGE_W;
+  terrainRimLayer.height = VH;
+  const terrainRimLayerCtx = terrainRimLayer.getContext('2d');
+
+  function paintTerrainRimLayer(color, radius) {
+    terrainRimLayerCtx.save();
+    terrainRimLayerCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainRimLayerCtx.globalCompositeOperation = 'source-over';
+    terrainRimLayerCtx.imageSmoothingEnabled = true;
+    for (let i = 0; i < 16; i++) {
+      const angle = i * Math.PI * 2 / 16;
+      terrainRimLayerCtx.drawImage(terrainCanvas, Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    terrainRimLayerCtx.globalCompositeOperation = 'source-in';
+    terrainRimLayerCtx.fillStyle = color;
+    terrainRimLayerCtx.fillRect(0, 0, STAGE_W, VH);
+    terrainRimLayerCtx.globalCompositeOperation = 'destination-out';
+    terrainRimLayerCtx.drawImage(terrainCanvas, 0, 0);
+    terrainRimLayerCtx.restore();
+    terrainRimCtx.drawImage(terrainRimLayer, 0, 0);
+  }
+
+  function rebuildTerrainRim() {
+    terrainRimCtx.clearRect(0, 0, STAGE_W, VH);
+    paintTerrainRimLayer(currentTheme.rimShadow, 6);
+    paintTerrainRimLayer(currentTheme.rim, 3);
+  }
+
+  // 既存の薄床地形を土台にして、橋だと一目で分かる装飾だけを別レイヤーに描く。
+  // 地形と同じクレーターで削るため、爆破後に絵だけ宙へ残ることもない。
+  const bridgeCanvas = document.createElement('canvas');
+  bridgeCanvas.width = STAGE_W;
+  bridgeCanvas.height = VH;
+  const bridgeCtx = bridgeCanvas.getContext('2d');
+
+  function rebuildBridgeDecoration() {
+    bridgeCtx.clearRect(0, 0, STAGE_W, VH);
+    if (!currentBridge) return;
+    const { startX, endX, y, style } = currentBridge;
+    const length = endX - startX;
+    const plankStep = style === 'rope' ? 11 : 15;
+    const postStep = style === 'rope' ? 44 : 38;
+
+    bridgeCtx.save();
+    bridgeCtx.lineCap = 'round';
+    bridgeCtx.lineJoin = 'round';
+
+    // 橋桁と板張り
+    bridgeCtx.fillStyle = '#6b3f24';
+    bridgeCtx.fillRect(startX - 8, y - 6, length + 16, 19);
+    bridgeCtx.fillStyle = '#b8793f';
+    bridgeCtx.fillRect(startX - 5, y - 5, length + 10, 11);
+    bridgeCtx.strokeStyle = '#3b2418';
+    bridgeCtx.lineWidth = 2;
+    for (let x = startX; x <= endX; x += plankStep) {
+      bridgeCtx.beginPath();
+      bridgeCtx.moveTo(x, y - 5);
+      bridgeCtx.lineTo(x + Math.sin(x * 0.17 + currentBridge.seed) * 2, y + 7);
+      bridgeCtx.stroke();
+    }
+    bridgeCtx.strokeStyle = '#2b1a12';
+    bridgeCtx.lineWidth = 5;
+    bridgeCtx.beginPath();
+    bridgeCtx.moveTo(startX - 5, y + 13);
+    bridgeCtx.lineTo(endX + 5, y + 13);
+    bridgeCtx.stroke();
+
+    // 支柱・手すり。ロープ橋は上の線を少したるませる。
+    const posts = [];
+    for (let x = startX; x <= endX + 1; x += postStep) posts.push(Math.min(x, endX));
+    if (posts[posts.length - 1] !== endX) posts.push(endX);
+    bridgeCtx.strokeStyle = '#4a2b1b';
+    bridgeCtx.lineWidth = 5;
+    for (const x of posts) {
+      bridgeCtx.beginPath();
+      bridgeCtx.moveTo(x, y + 10);
+      bridgeCtx.lineTo(x, y - 32);
+      bridgeCtx.stroke();
+    }
+    bridgeCtx.strokeStyle = style === 'rope' ? '#d3b27a' : '#7e512e';
+    bridgeCtx.lineWidth = style === 'rope' ? 3 : 5;
+    bridgeCtx.beginPath();
+    bridgeCtx.moveTo(posts[0], y - 29);
+    for (let i = 1; i < posts.length; i++) {
+      if (style === 'rope') {
+        const midX = (posts[i - 1] + posts[i]) / 2;
+        bridgeCtx.quadraticCurveTo(midX, y - 20, posts[i], y - 29);
+      } else {
+        bridgeCtx.lineTo(posts[i], y - 29);
+      }
+    }
+    bridgeCtx.stroke();
+
+    // 地面の表面に見える補強材。長い橋ほど三角形が増えて橋らしく見える。
+    bridgeCtx.strokeStyle = 'rgba(62,34,20,0.9)';
+    bridgeCtx.lineWidth = 4;
+    for (let x = startX; x + postStep <= endX; x += postStep) {
+      bridgeCtx.beginPath();
+      bridgeCtx.moveTo(x, y + 15);
+      bridgeCtx.lineTo(x + postStep / 2, y + 40);
+      bridgeCtx.lineTo(x + postStep, y + 15);
+      bridgeCtx.stroke();
+    }
+
+    // 両端の橋台
+    bridgeCtx.fillStyle = '#51483f';
+    bridgeCtx.fillRect(startX - 12, y - 3, 10, 28);
+    bridgeCtx.fillRect(endX + 2, y - 3, 10, 28);
+    bridgeCtx.restore();
+  }
+
   // 地形の質感用ノイズタイル(1度だけ生成し、繰り返しパターンとして焼き込む。点描だとムラや塊が
   // 出てしまうため、ピクセル単位のノイズタイルの方が均一な粒立ちになる)
   const noiseTile = document.createElement('canvas');
@@ -230,7 +371,7 @@
     return Math.min(GROUND_MAX_Y, Math.max(GROUND_MIN_Y, y));
   }
 
-  function buildTerrainMask(segments) {
+  function buildTerrainMask(segments, refreshRim = true) {
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
     const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
@@ -256,6 +397,8 @@
     terrainCtx.fillStyle = terrainCtx.createPattern(noiseTile, 'repeat');
     terrainCtx.fillRect(0, 0, STAGE_W, VH);
     terrainCtx.restore();
+    rebuildBridgeDecoration();
+    if (refreshRim) rebuildTerrainRim();
   }
 
   // グリッド上の地面から、列ごとの最上段Yを再計算する(軽量。掘削のたびに影響範囲だけ呼ぶ)
@@ -272,13 +415,19 @@
   }
 
   // 着弾クレーターの実処理:見た目(キャンバス)と判定(グリッド)の両方を円形にくり抜く
-  function carveCraterInternal(cx, cy, radius) {
+  function carveCraterInternal(cx, cy, radius, refreshRim = true) {
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'destination-out';
     terrainCtx.beginPath();
     terrainCtx.arc(cx, cy, radius, 0, Math.PI * 2);
     terrainCtx.fill();
     terrainCtx.restore();
+    bridgeCtx.save();
+    bridgeCtx.globalCompositeOperation = 'destination-out';
+    bridgeCtx.beginPath();
+    bridgeCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+    bridgeCtx.fill();
+    bridgeCtx.restore();
 
     const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
     const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
@@ -294,6 +443,7 @@
       }
     }
     rescanColumnsFromGrid(colFrom, colTo);
+    if (refreshRim) rebuildTerrainRim();
   }
 
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
@@ -334,6 +484,9 @@
       case 'valley':
         // 中央が谷(深い)、両端が高台(浅い)
         return GROUND_MIN_Y + range * Math.sin(Math.PI * t);
+      case 'bridge':
+        // 橋用。左右の岸を近い高さにそろえ、中央へ細い足場を架けやすくする
+        return mid + Math.sin(t * Math.PI * 2) * range * 0.045;
       case 'rolling':
       default:
         return mid;
@@ -373,15 +526,47 @@
     return SPAWN_COLS.some(sc => sc + margin >= start && sc - margin <= end);
   }
 
+  const ISLAND_SHAPES = ['lens', 'long', 'jagged', 'mesa'];
+  function addFloatingIsland(segments, start, len, islandTop, thickness, shape, phase) {
+    for (let i = 0; i < len; i++) {
+      const c = start + i;
+      if (c < 0 || c >= TERRAIN_COLS) continue;
+      const t = (i + 0.5) / len;
+      const taper = Math.sin(t * Math.PI);
+      if (taper < 0.08) continue;
+
+      let topOffset = 0;
+      let depth = thickness;
+      if (shape === 'lens') {
+        topOffset = (1 - taper) * thickness * 0.28;
+        depth = Math.max(8, thickness * (0.35 + taper * 0.65));
+      } else if (shape === 'long') {
+        topOffset = Math.sin(t * Math.PI * 4 + phase) * 2;
+        depth = Math.max(10, thickness * (0.7 + taper * 0.2) + Math.sin(t * 9 + phase) * 3);
+      } else if (shape === 'jagged') {
+        topOffset = (1 - taper) * 9 + Math.sin(t * 12 + phase) * 3.5;
+        depth = Math.max(9, thickness * (0.52 + taper * 0.48) + Math.sin(t * 17 + phase) * 5);
+      } else {
+        // mesa:中央は平らで、両端だけ丸くすぼむ大型足場向け
+        const edge = Math.max(0, (0.2 - Math.min(t, 1 - t)) / 0.2);
+        topOffset = edge * 8;
+        depth = Math.max(10, thickness * (0.72 + taper * 0.28));
+      }
+
+      const top = islandTop + topOffset;
+      segments[c] = [[top, top + depth], ...segments[c]];
+    }
+  }
+
   function generateTerrain(pattern) {
-    const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling'];
+    const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge'];
     const p = pattern || patterns[Math.floor(Math.random() * patterns.length)];
 
     // 中点変位のnは2の冪にする必要があるため、近い2の冪を使い後でリサンプル
     let pow = 1;
     while (pow < TERRAIN_COLS) pow *= 2;
     const noiseRaw = midpointDisplacement(pow, 0.55);
-    const noiseAmp = 26; // 揺らぎの振幅(px)
+    const noiseAmp = p === 'bridge' ? 9 : 26; // 橋は接続部を安定させるため凹凸を控えめにする
 
     const hm = new Float64Array(TERRAIN_COLS);
     for (let i = 0; i < TERRAIN_COLS; i++) {
@@ -407,9 +592,33 @@
     for (let c = 0; c < TERRAIN_COLS; c++) segments.push([[hm[c], FLOOR_Y]]);
 
     const midStart = 14, midEnd = TERRAIN_COLS - 14;
+    let bridge = null;
 
-    // 地面が薄いゾーン(下が空洞。踏み抜いて削れると即落下する危険地帯)
-    if (Math.random() < 0.35) {
+    // 橋ステージ:既存の薄床地形に、長さが毎回変わる橋イラストを重ねる。
+    if (p === 'bridge') {
+      const bridgeLen = 30 + Math.floor(Math.random() * 61); // 約90〜270px
+      const rawStart = Math.floor(TERRAIN_COLS / 2 - bridgeLen / 2 + (Math.random() - 0.5) * 28);
+      const bridgeStart = Math.max(midStart + 18, Math.min(midEnd - bridgeLen - 18, rawStart));
+      const leftY = hm[Math.max(0, bridgeStart - 1)];
+      const rightY = hm[Math.min(TERRAIN_COLS - 1, bridgeStart + bridgeLen)];
+      const bridgeY = clampGround((leftY + rightY) / 2 - 4);
+      // 当たり判定に必要な最小限の薄さだけ残し、見た目は橋の板と桁が足場になる。
+      const thinDepth = 8 + Math.random() * 5;
+      for (let i = 0; i < bridgeLen; i++) {
+        const c = bridgeStart + i;
+        if (c < midStart || c >= midEnd) continue;
+        hm[c] = bridgeY;
+        segments[c] = [[bridgeY, bridgeY + thinDepth]];
+      }
+      bridge = {
+        startX: bridgeStart * COL_W,
+        endX: (bridgeStart + bridgeLen) * COL_W,
+        y: bridgeY,
+        style: Math.random() < 0.5 ? 'timber' : 'rope',
+        seed: Math.random() * 1000
+      };
+    // 通常ステージにも、ときどき短い薄床を混ぜる。
+    } else if (Math.random() < 0.35) {
       const zoneLen = 18 + Math.floor(Math.random() * 20);
       const zoneStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - zoneLen));
       if (!overlapsSpawn(zoneStart, zoneLen, 20)) {
@@ -420,20 +629,35 @@
       }
     }
 
-    // 浮島ゾーン(下は崖である必要はなく、地続きの地形の上空にも現れる。隙間の広さもランダムで
-    // 近ければ「地面が二段」に見え、遠ければ独立した浮島に見える)
-    if (Math.random() < 0.35) {
-      const islandLen = 14 + Math.floor(Math.random() * 12);
-      const islandStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - islandLen));
-      if (!overlapsSpawn(islandStart, islandLen, 20)) {
+    // 浮島ゾーン。崖・薄床の有無とは完全に独立して抽選し、連続した普通の地面の上にも出現する。
+    // 下の地面は必ず残すので、島と同じ幅の縦穴や崖は作らない。
+    const floatingIslandCount = Math.random() < 0.58 ? (Math.random() < 0.22 ? 2 : 1) : 0;
+    const floatingIslandRanges = [];
+    for (let islandIndex = 0; islandIndex < floatingIslandCount; islandIndex++) {
+      const sizeRoll = Math.random();
+      const islandLen = sizeRoll < 0.22
+        ? 10 + Math.floor(Math.random() * 10)
+        : sizeRoll < 0.55
+          ? 38 + Math.floor(Math.random() * 25)
+          : 20 + Math.floor(Math.random() * 18);
+      let islandStart = -1;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const candidate = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - islandLen));
+        const overlapsOtherIsland = floatingIslandRanges.some(r => candidate < r.end + 10 && candidate + islandLen > r.start - 10);
+        if (!overlapsSpawn(candidate, islandLen, 20) && !overlapsOtherIsland) {
+          islandStart = candidate;
+          break;
+        }
+      }
+      if (islandStart >= 0) {
         let localMinY = Infinity;
         for (let c = islandStart; c < islandStart + islandLen && c < midEnd; c++) localMinY = Math.min(localMinY, hm[c]);
         const gap = 70 + Math.random() * 220; // 近い(二段地形)〜遠い(独立浮島)まで幅を持たせる
-        const islandThickness = 24 + Math.random() * 14;
+        const shape = ISLAND_SHAPES[Math.floor(Math.random() * ISLAND_SHAPES.length)];
+        const islandThickness = shape === 'long' ? 18 + Math.random() * 20 : 24 + Math.random() * 34;
         const islandTop = Math.max(120, localMinY - gap - islandThickness);
-        for (let c = islandStart; c < islandStart + islandLen && c < midEnd; c++) {
-          segments[c] = [[islandTop, islandTop + islandThickness], ...segments[c]];
-        }
+        addFloatingIsland(segments, islandStart, islandLen, islandTop, islandThickness, shape, Math.random() * Math.PI * 2);
+        floatingIslandRanges.push({ start: islandStart, end: islandStart + islandLen });
       }
     }
 
@@ -450,7 +674,8 @@
         for (let i = 0; i < cavernLen; i++) {
           const c = cavernStart + i;
           if (c >= midEnd) break;
-          const seg = segments[c][0];
+          const groundIndex = segments[c].length - 1;
+          const seg = segments[c][groundIndex];
           const t = i / (cavernLen - 1);
           const taper = Math.sin(t * Math.PI); // 両端でゼロ→中央で1(レンズ状に丸くすぼめる)
           if (taper < 0.1) continue; // 端は開けずに閉じておく
@@ -459,32 +684,34 @@
           const top = cavernCy - halfH + wobble * 0.5;
           const bottom = Math.min(seg[1] - 20, cavernCy + halfH + wobble * 0.5);
           if (bottom > top + 12 && top > seg[0] + 15) {
-            segments[c] = [[seg[0], top], [bottom, seg[1]]];
+            segments[c] = [...segments[c].slice(0, groundIndex), [seg[0], top], [bottom, seg[1]]];
           }
         }
       }
     }
 
-    // スタート地点浮島(たまにプレイヤー/CPUの出現位置そのものが浮島になる)
+    // スタート地点浮島(たまにプレイヤー/CPUの出現位置そのものが浮島になる)。
+    // 真下の通常地面は消さずに残し、不自然な島幅ぴったりの縦穴を作らない。
     let startOnIsland = false;
     if (Math.random() < 0.18) {
       startOnIsland = true;
-      const islandTop = GROUND_MIN_Y - 90 - Math.random() * 50;
-      const islandThickness = 30;
       for (const sx of [STAGE_W * 0.15, STAGE_W * 0.85]) {
         const cCenter = Math.round(sx / COL_W);
-        for (let c = cCenter - 6; c <= cCenter + 6; c++) {
-          if (c < 0 || c >= TERRAIN_COLS) continue;
-          segments[c] = [[islandTop, islandTop + islandThickness]];
-        }
+        const islandLen = 18 + Math.floor(Math.random() * 18);
+        const islandStart = cCenter - Math.floor(islandLen / 2);
+        const islandTop = GROUND_MIN_Y - 90 - Math.random() * 50;
+        const islandThickness = 28 + Math.random() * 18;
+        const shape = ['mesa', 'lens', 'jagged'][Math.floor(Math.random() * 3)];
+        addFloatingIsland(segments, islandStart, islandLen, islandTop, islandThickness, shape, Math.random() * Math.PI * 2);
       }
     }
 
-    return { pattern: p, segments, startOnIsland };
+    return { pattern: p, segments, startOnIsland, bridge };
   }
 
   let currentPattern = null;
   let startOnIsland = false;
+  let currentBridge = null;
   let currentSegments = null; // 中断/再開用に、生成直後(未破壊)の地形を保持しておく
 
   function newTerrain(pattern) {
@@ -493,6 +720,7 @@
     parallaxSeed = Math.random() * 10000;
     const r = generateTerrain(pattern);
     currentSegments = r.segments;
+    currentBridge = r.bridge || null;
     craterHistory = [];
     buildTerrainMask(r.segments);
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
@@ -502,14 +730,16 @@
   }
 
   // 中断データからの地形復元:未破壊の地形を作り直し、記録しておいたクレーターを同じ順で開け直す
-  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed) {
+  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed, savedBridge) {
     currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
     currentTheme = THEMES[currentThemeKey];
     parallaxSeed = savedParallaxSeed || 0;
     currentSegments = segments;
-    buildTerrainMask(segments);
+    currentBridge = savedBridge || null;
+    buildTerrainMask(segments, false);
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
-    for (const cr of craters) carveCraterInternal(cr.x, cr.y, cr.r);
+    for (const cr of craters) carveCraterInternal(cr.x, cr.y, cr.r, false);
+    rebuildTerrainRim();
     craterHistory = craters.slice();
     currentPattern = pattern;
     startOnIsland = wasStartOnIsland;
@@ -549,18 +779,65 @@
   const UNIT_RADIUS = 16;      // 接地・アンカー計算用の半径
   const UNIT_HIT_RADIUS = 30;  // 弾の直撃判定用(見た目のスプライトサイズに合わせて大きめ)
   const MAX_HP = 100;
-  const FUEL_MAX = 51; // 総移動距離(旧34の1.5倍)
+  const FUEL_MAX = 102; // 全キャラの基本移動可能距離を従来の2倍にする
   const MOVE_SPEED = 95; // px/s
+  const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX
+
+  function randomInitialSpecialCharge() {
+    // 開幕時だけ 0 / 1 / 2 / 3 / MAX を同率で抽選する。
+    return Math.floor(Math.random() * (SPECIAL_CHARGE_MAX + 1));
+  }
+
+  function isSpecialReady(u) {
+    return u.specialCharge >= SPECIAL_CHARGE_MAX;
+  }
+
+  function advanceSpecialCharge(u) {
+    u.specialCharge = Math.min(SPECIAL_CHARGE_MAX, u.specialCharge + 1);
+  }
 
   // ある程度以上の急斜面(崖)は歩いて登れない。上り方向にこの角度を超える段差があると足止めする
   const MAX_CLIMB_ANGLE = 58 * Math.PI / 180;
   const CLIMB_LOOKAHEAD = 26; // px。移動は1フレームあたり数pxしか進まないため、常にこの距離先の傾斜で判定する
+  const MAX_CLIMB_RISE = Math.ceil(Math.tan(MAX_CLIMB_ANGLE) * CLIMB_LOOKAHEAD);
+
+  // 同じ列に浮島と地面がある場合も、列の最上面ではなくキャラの足元に最も近い地面を選ぶ。
+  // 探索開始地点がすでに地中なら、登れない縦壁としてnullを返す。
+  function walkableGroundYAt(x, referenceGroundY) {
+    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
+    const startY = Math.max(0, referenceGroundY - MAX_CLIMB_RISE);
+    const startRow = Math.min(ROWS - 1, Math.max(0, Math.floor(startY / ROW_H)));
+    if (solidGrid[startRow * TERRAIN_COLS + c]) return null;
+    for (let r = startRow + 1; r < ROWS; r++) {
+      if (solidGrid[r * TERRAIN_COLS + c]) return r * ROW_H;
+    }
+    return FLOOR_Y;
+  }
+
+  // 落下中は直前の足位置より下にある最初の足場を探す。浮島の上面をすり抜けず、
+  // 頭上の別レイヤーへ吸い上げられることもない。
+  function groundYBelow(x, fromY) {
+    const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
+    const startRow = Math.min(ROWS - 1, Math.max(0, Math.floor(fromY / ROW_H)));
+    for (let r = startRow; r < ROWS; r++) {
+      if (solidGrid[r * TERRAIN_COLS + c]) return r * ROW_H;
+    }
+    return FLOOR_Y;
+  }
+
   // 進行方向の少し先までの傾斜を見て、急坂ならその場で足止めする(細かい地形ノイズに反応しないよう固定距離で判定)
-  function limitMoveByClimb(fromX, toX) {
+  function limitMoveByClimb(u, toX) {
+    const fromX = u.x;
+    if (toX === fromX) return fromX;
     const dir = toX > fromX ? 1 : -1;
-    const nx = fromX + dir * CLIMB_LOOKAHEAD;
-    const y1 = groundYAt(fromX);
-    const y2 = groundYAt(nx);
+    const nx = Math.min(STAGE_W - 1, Math.max(0, fromX + dir * CLIMB_LOOKAHEAD));
+    const feetY = u.y + UNIT_RADIUS;
+    const targetGround = walkableGroundYAt(toX, feetY);
+    const aheadGround = walkableGroundYAt(nx, feetY);
+    if (targetGround === null || aheadGround === null) return fromX;
+    const currentGround = walkableGroundYAt(fromX, feetY);
+    const y1 = currentGround === null ? feetY : currentGround;
+    const y2 = aheadGround;
     const climbAngle = Math.atan2(y1 - y2, CLIMB_LOOKAHEAD); // 正=上り
     if (climbAngle > MAX_CLIMB_ANGLE) return fromX;
     return toX;
@@ -571,7 +848,9 @@
   // 自然に落下させる(常にYを地形に同期させてしまうと、足元が無くなっても「歩いて降りる」形になり
   // 場外判定が発生しない=落下自滅ができなくなるため)
   function followGroundOrFall(u) {
-    const groundY = groundYAt(u.x) - UNIT_RADIUS;
+    const surfaceY = walkableGroundYAt(u.x, u.y + UNIT_RADIUS);
+    if (surfaceY === null) return; // 移動前の崖判定で止まるため、ここは防御用
+    const groundY = surfaceY - UNIT_RADIUS;
     if (groundY - u.y > FALL_TRIGGER) {
       u.grounded = false;
       u.vy = 0;
@@ -585,13 +864,13 @@
     x: STAGE_W * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#4fc3f7', label: 'YOU', side: 'player',
-    character: null, specialUsed: false
+    character: null, specialCharge: 0
   };
   const cpu = {
     x: STAGE_W * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ff6b6b', label: 'CPU', side: 'cpu',
-    character: null, specialUsed: false
+    character: null, specialCharge: 0
   };
 
   function applyCharacter(u, key) {
@@ -662,25 +941,26 @@
   function launchShot(unit, anchor, vx0, vy0, useSpecial) {
     const def = CHARACTERS[unit.character];
     const owner = unit.side;
+    const activateSpecial = useSpecial && isSpecialReady(unit);
 
-    if (useSpecial && def.key === 'medama') {
+    if (activateSpecial && def.key === 'medama') {
       // 目玉の必殺: 3連弾(扇状に3発)
       for (const deg of [-9, 0, 9]) {
         const v = rotateVec(vx0, vy0, deg);
         fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul, windMul: def.windMul });
       }
-    } else if (useSpecial && def.key === 'iwa') {
+    } else if (activateSpecial && def.key === 'iwa') {
       // 岩の必殺: 地形大破壊(巨大クレーター)
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 2.6, windMul: def.windMul });
-    } else if (useSpecial && def.key === 'tori') {
+    } else if (activateSpecial && def.key === 'tori') {
       // 鳥の必殺: 貫通弾(地形を無視して直進)
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul, pierce: true });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul });
     }
 
-    if (useSpecial) {
-      unit.specialUsed = true;
+    if (activateSpecial) {
+      unit.specialCharge = 0;
       triggerSpecialFlash(`必殺: ${def.special}!!`);
       playSpecialSound();
     } else {
@@ -711,12 +991,12 @@
   const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
   const PANEL_CY = CONTROL_PANEL_Y + (VH - CONTROL_PANEL_Y) / 2;
 
-  // ===== 移動(長押しボタン)。発射ボタンのすぐ両脇に配置 =====
+  // ===== 移動(長押しボタン)。発射ジョイスティックの左右斜め下に配置 =====
   const BTN_R = 51;
-  const leftBtn = { x: 92, y: PANEL_CY };
-  const rightBtn = { x: VW - 92, y: PANEL_CY };
+  const leftBtn = { x: 98, y: PANEL_CY + 64 };
+  const rightBtn = { x: VW - 98, y: PANEL_CY + 64 };
   let moveDir = 0; // -1, 0, 1
-  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan'
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch'
   let inputPointerId = null;
 
   // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
@@ -728,9 +1008,11 @@
 
   // ===== 視点移動:画面(コントローラパネルより上)を直接スライドでパン。離しても位置はそのまま =====
   let panLastX = 0;
+  const activeTouchPoints = new Map();
+  let pinchState = null;
 
-  // ===== 必殺ショット(1試合1回・右移動ボタンの上に配置) =====
-  const specialBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 46, r: 46 };
+  // ===== 必殺ショット(4段階リチャージ・右移動ボタンの上に配置) =====
+  const specialBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 66, r: 46 };
   let specialArmed = false;
 
   // ===== メニュー(一時停止・タイトルに戻る) =====
@@ -805,20 +1087,22 @@
 
   function saveSuspendedMatch() {
     const data = {
-      v: 1,
+      v: 2,
       segments: currentSegments,
       craters: craterHistory,
       pattern: currentPattern,
       startOnIsland,
+      bridge: currentBridge,
       themeKey: currentThemeKey,
       parallaxSeed,
       playerChar: player.character,
       cpuChar: cpu.character,
-      player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, specialUsed: player.specialUsed },
-      cpu: { hp: cpu.hp, maxHp: cpu.maxHp, fuel: cpu.fuel, fuelMax: cpu.fuelMax, x: cpu.x, specialUsed: cpu.specialUsed },
+      player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, y: player.y, specialCharge: player.specialCharge },
+      cpu: { hp: cpu.hp, maxHp: cpu.maxHp, fuel: cpu.fuel, fuelMax: cpu.fuelMax, x: cpu.x, y: cpu.y, specialCharge: cpu.specialCharge },
       currentTurn, turnCount,
       wind: { dir: wind.dir, strength: wind.strength },
-      winStreak, runStats, isBossMatch
+      winStreak, runStats, isBossMatch,
+      camera: { x: cameraX, zoom: cameraZoom }
     };
     try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(data)); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
   }
@@ -838,7 +1122,7 @@
     const data = loadSuspendedMatch();
     if (!data) return;
 
-    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed);
+    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
 
     player.character = data.playerChar;
     cpu.character = data.cpuChar;
@@ -846,16 +1130,28 @@
     applyCharacter(cpu, data.cpuChar);
     Object.assign(player, data.player);
     Object.assign(cpu, data.cpu);
-    initUnitOnGround(player);
-    initUnitOnGround(cpu);
-    player.y = groundYAt(player.x) - UNIT_RADIUS;
-    cpu.y = groundYAt(cpu.x) - UNIT_RADIUS;
+    // v1の旧セーブにはyが無いので、その場合だけ従来どおり列の最上面へ置く。
+    // 新しいセーブは保存時の高さを基準に、同じレイヤーの足場へ復帰させる。
+    for (const [u, saved] of [[player, data.player], [cpu, data.cpu]]) {
+      // 旧セーブは「未使用=満タン、使用済み=空」として新チャージ制へ移行する。
+      u.specialCharge = Number.isFinite(saved.specialCharge)
+        ? Math.max(0, Math.min(SPECIAL_CHARGE_MAX, saved.specialCharge))
+        : (saved.specialUsed ? 0 : SPECIAL_CHARGE_MAX);
+      const savedY = Number.isFinite(saved.y) ? saved.y : groundYAt(u.x) - UNIT_RADIUS;
+      const nearbyGround = walkableGroundYAt(u.x, savedY + UNIT_RADIUS);
+      u.y = (nearbyGround === null ? groundYAt(u.x) : nearbyGround) - UNIT_RADIUS;
+      u.vy = 0;
+      u.grounded = true;
+      u.fallStartY = u.y;
+    }
 
     projectiles = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
     inputPointerId = null;
+    activeTouchPoints.clear();
+    pinchState = null;
     specialArmed = false;
     matchOver = false;
     winner = null;
@@ -877,7 +1173,8 @@
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
     menuOpen = false;
-    cameraX = clampCameraX(player.x - VW / 2);
+    cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : MIN_CAMERA_ZOOM);
+    cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(player.x));
     gamePhase = 'battle';
 
     clearSuspendedMatch();
@@ -1007,6 +1304,20 @@
     return 0.6;
   }
 
+  // 水平付近では「発射高度へ戻るまでの時間」がほぼ0になるため、時間だけで
+  // ガイド長を決めると点が発射位置に固まる。角度に関係なく最低限の距離を見せる。
+  const TRAJECTORY_PREVIEW_MIN_DISTANCE = 100;
+  const TRAJECTORY_PREVIEW_MAX_MIN_TIME = 0.45;
+  function trajectoryPreviewDuration(vx0, vy0) {
+    const normalPreviewTime = estimateFlightTime(vx0, vy0) * 0.2;
+    const speed = Math.max(1, Math.hypot(vx0, vy0));
+    const minimumVisibleTime = Math.min(
+      TRAJECTORY_PREVIEW_MAX_MIN_TIME,
+      TRAJECTORY_PREVIEW_MIN_DISTANCE / speed
+    );
+    return Math.max(normalPreviewTime, minimumVisibleTime);
+  }
+
   function checkMatchEnd() {
     if (matchOver) return;
     if (player.hp <= 0 || cpu.hp <= 0) {
@@ -1053,6 +1364,8 @@
 
   function endTurn() {
     if (matchOver) return;
+    // そのキャラが1手番を終えるごとに1段階。使用した手番の終了時から再充填を始める。
+    advanceSpecialCharge(currentTurn === 'player' ? player : cpu);
     turnCount++;
     if (turnCount >= MAX_TURNS_TOTAL) {
       showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
@@ -1108,7 +1421,7 @@
     const jitter = tier.jitter;
     const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
     const vy = vy0 * (1 + (Math.random() * 2 - 1) * jitter);
-    const useSpecial = !cpu.specialUsed && (tier.name === 'high' || tier.name === 'perfect');
+    const useSpecial = isSpecialReady(cpu) && (tier.name === 'high' || tier.name === 'perfect');
     launchShot(cpu, anchor, vx, vy, useSpecial);
     awaitingResolve = true;
   }
@@ -1126,8 +1439,9 @@
   }
 
   function updateFalling(dt, u) {
-    const groundY = groundYAt(u.x) - UNIT_RADIUS;
     if (u.grounded) {
+      const nearbyGround = walkableGroundYAt(u.x, u.y + UNIT_RADIUS);
+      const groundY = (nearbyGround === null ? u.y + UNIT_RADIUS : nearbyGround) - UNIT_RADIUS;
       if (groundY > u.y + 2) {
         // 足場が崩れて落下開始
         u.grounded = false;
@@ -1137,9 +1451,10 @@
         u.y = groundY; // 地形に追従(登り降りはそのまま歩ける)
       }
     } else {
+      const previousFeetY = u.y + UNIT_RADIUS;
       u.vy += GRAVITY * dt;
       u.y += u.vy * dt;
-      const g2 = groundYAt(u.x) - UNIT_RADIUS;
+      const g2 = groundYBelow(u.x, previousFeetY) - UNIT_RADIUS;
       if (u.y >= g2) {
         const intoVoid = g2 >= FLOOR_Y - UNIT_RADIUS - 2; // クレーターが底まで貫通=場外
         const fallDist = g2 - u.fallStartY;
@@ -1213,7 +1528,6 @@
 
   function drawClouds() {
     ctx.save();
-    ctx.translate(-cameraX * 0.1, 0);
     ctx.fillStyle = currentTheme.cloud;
     const t = Date.now() * 0.008;
     for (let i = 0; i < 6; i++) {
@@ -1226,38 +1540,36 @@
 
   function drawParallax() {
     ctx.save();
-    ctx.translate(-cameraX * 0.15, 0);
+    applyWorldCamera(0.15);
     drawHillLayer(parallaxSeed, 220, 46, currentTheme.farHill);
     ctx.restore();
     ctx.save();
-    ctx.translate(-cameraX * 0.35, 0);
+    applyWorldCamera(0.35);
     drawHillLayer(parallaxSeed + 500, 270, 60, currentTheme.nearHill);
     ctx.restore();
+    ctx.save();
+    applyWorldCamera(0.1);
     drawClouds();
+    ctx.restore();
   }
 
   function drawTerrain() {
     // 地形マスク(ピクセル単位で穴があいた実体)をそのまま描画
     ctx.drawImage(terrainCanvas, 0, 0);
-
-    // 各列の最上面にだけ表土の縁取りを乗せる(浮島の上面などにも自然に乗る)。二色重ねで厚み感を出す
-    ctx.save();
-    for (let c = 0; c < TERRAIN_COLS; c++) {
-      const y = surfaceY[c];
-      if (y >= FLOOR_Y - 1) continue; // その列に地面なし
-      ctx.fillStyle = currentTheme.rimShadow;
-      ctx.fillRect(c * COL_W, y + 3, COL_W + 0.6, 3);
-      ctx.fillStyle = currentTheme.rim;
-      ctx.fillRect(c * COL_W, y, COL_W + 0.6, 4);
-    }
-    ctx.restore();
+    // 地形マスクから生成した全周の境界線。浮島・縦崖・爆破穴も実際の形どおりに縁取る。
+    ctx.drawImage(terrainRimCanvas, 0, 0);
+    // 橋は既存の薄床地形に重ねた装飾。地形と一緒に爆破で削れる。
+    ctx.drawImage(bridgeCanvas, 0, 0);
   }
 
   // 接地点付近の地形傾斜(ラジアン)。急すぎる斜面は見た目が破綻しないようクランプ
-  function groundSlopeAt(x) {
+  function groundSlopeAt(u) {
     const d = 14;
-    const y1 = groundYAt(Math.max(0, x - d));
-    const y2 = groundYAt(Math.min(STAGE_W, x + d));
+    const feetY = u.y + UNIT_RADIUS;
+    const leftGround = walkableGroundYAt(Math.max(0, u.x - d), feetY);
+    const rightGround = walkableGroundYAt(Math.min(STAGE_W, u.x + d), feetY);
+    const y1 = leftGround === null ? feetY : leftGround;
+    const y2 = rightGround === null ? feetY : rightGround;
     const MAX_TILT = 0.5; // 約28.6度
     return Math.max(-MAX_TILT, Math.min(MAX_TILT, Math.atan2(y2 - y1, 2 * d)));
   }
@@ -1268,7 +1580,7 @@
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
     const facingLeft = u.side === 'cpu'; // 自分は右向き画像そのまま、CPUは反転して内側(左)を向く
-    const tilt = u.grounded ? groundSlopeAt(u.x) : 0; // 空中では傾けない
+    const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
     const h = SPRITE_SIZE;
@@ -1434,8 +1746,7 @@
     // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
     const def = CHARACTERS[player.character];
     const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
-    const totalT = estimateFlightTime(vx0, vy0);
-    const previewT = totalT * 0.2;
+    const previewT = trajectoryPreviewDuration(vx0, vy0);
     const steps = 14;
     const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * def.windMul;
 
@@ -1454,11 +1765,11 @@
 
   // 画面外の敵の方向インジケータ(スクリーン座標)
   function drawOffscreenIndicator() {
-    const sx = cpu.x - cameraX;
+    const sx = worldToScreenX(cpu.x);
     if (sx >= -UNIT_RADIUS && sx <= VW + UNIT_RADIUS) return;
     const onRight = sx > VW;
     const ix = onRight ? VW - 16 : 16;
-    const iy = Math.max(180, Math.min(VH - 140, cpu.y));
+    const iy = Math.max(180, Math.min(CONTROL_PANEL_Y - 30, worldToScreenY(cpu.y)));
     ctx.save();
     ctx.fillStyle = 'rgba(255,107,107,0.9)';
     ctx.beginPath();
@@ -1562,7 +1873,7 @@
     ctx.fillRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
     const scale = MINIMAP.w / STAGE_W;
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.fillRect(MINIMAP.x + cameraX * scale, MINIMAP.y, VW * scale, MINIMAP.h);
+    ctx.fillRect(MINIMAP.x + cameraX * scale, MINIMAP.y, Math.min(STAGE_W, visibleWorldWidth()) * scale, MINIMAP.h);
     const py = MINIMAP.y + MINIMAP.h / 2;
     ctx.beginPath();
     ctx.arc(MINIMAP.x + player.x * scale, py, 3, 0, Math.PI * 2);
@@ -1575,6 +1886,15 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
+    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(cameraZoom * 100)}%`, MINIMAP.x + MINIMAP.w / 2, MINIMAP.y + 11);
+    if (cameraZoom <= MIN_CAMERA_ZOOM + 0.001 && gamePhase === 'battle') {
+      ctx.fillStyle = 'rgba(255,255,255,0.58)';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('2本指で広げて拡大', MINIMAP.x + MINIMAP.w / 2, MINIMAP.y + 28);
+    }
     ctx.restore();
   }
 
@@ -1618,8 +1938,9 @@
   }
 
   function drawSpecialButton() {
-    if (player.specialUsed) return;
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
+    const ready = isSpecialReady(player);
+    const active = ready && currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
+    const chargeRatio = player.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[player.character];
     ctx.save();
     ctx.beginPath();
@@ -1629,13 +1950,32 @@
     ctx.strokeStyle = specialArmed ? '#fff' : (active ? '#ffd24a' : 'rgba(255,255,255,0.25)');
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
+
+    // 外周ゲージで0〜MAXの充填量を常時見せる。
+    if (chargeRatio > 0) {
+      ctx.beginPath();
+      ctx.arc(
+        specialBtn.x,
+        specialBtn.y,
+        specialBtn.r - 4,
+        -Math.PI / 2,
+        -Math.PI / 2 + Math.PI * 2 * chargeRatio
+      );
+      ctx.strokeStyle = ready ? '#ffd24a' : 'rgba(255,210,74,0.72)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = ready ? '#fff' : 'rgba(255,255,255,0.62)';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('必殺', specialBtn.x, specialBtn.y - 4);
-    ctx.font = '9px sans-serif';
-    ctx.fillText(def.special, specialBtn.x, specialBtn.y + 9);
+    ctx.fillText('必殺', specialBtn.x, specialBtn.y - 12);
+    ctx.font = '8px sans-serif';
+    ctx.fillText(def.special, specialBtn.x, specialBtn.y + 1);
+    ctx.fillStyle = ready ? '#ffd24a' : 'rgba(255,255,255,0.72)';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText(ready ? 'MAX' : `${player.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17);
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
   }
@@ -1844,7 +2184,7 @@
     drawParallax();
     if (gamePhase === 'select') {
       ctx.save();
-      ctx.translate(-cameraX, 0);
+      applyWorldCamera();
       drawTerrain();
       ctx.restore();
       drawCharacterSelect();
@@ -1854,7 +2194,7 @@
 
     // ワールドレイヤー(カメラの影響を受ける)
     ctx.save();
-    ctx.translate(-cameraX, 0);
+    applyWorldCamera();
     drawTerrain();
     drawTrajectoryPreview();
     drawProjectile();
@@ -1900,6 +2240,29 @@
     const scaleX = VW / rect.width;
     const scaleY = VH / rect.height;
     return { x: cx * scaleX, y: cy * scaleY };
+  }
+
+  function beginPinchIfPossible() {
+    const touches = [...activeTouchPoints.entries()].filter(([, p]) => p.y < CONTROL_PANEL_Y);
+    if (touches.length < 2) return false;
+    const [first, second] = touches.slice(-2);
+    const a = first[1], b = second[1];
+    const distance = Math.hypot(b.x - a.x, b.y - a.y);
+    if (distance < 12) return false;
+    const midpointX = (a.x + b.x) / 2;
+
+    // 1本目で始まっていたパンを2本指ズームへ切り替える。
+    if (inputMode === 'aim') aimState = null;
+    if (inputMode === 'moveL' || inputMode === 'moveR') moveDir = 0;
+    inputMode = 'pinch';
+    inputPointerId = null;
+    pinchState = {
+      ids: [first[0], second[0]],
+      startDistance: distance,
+      startZoom: cameraZoom,
+      anchorWorldX: cameraX + midpointX / cameraZoom
+    };
+    return true;
   }
 
   function hitButton(p, btn) {
@@ -1955,6 +2318,13 @@
       return;
     }
 
+    // 戦場エリアの2本指操作。指を広げると等倍へ、縮めると全景へ戻る。
+    if (e.pointerType === 'touch' && p0.y < CONTROL_PANEL_Y) {
+      activeTouchPoints.set(e.pointerId, p0);
+      canvas.setPointerCapture(e.pointerId);
+      if (beginPinchIfPossible()) return;
+    }
+
     // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
     if (currentTurn === 'player' && !awaitingResolve) {
       if (hitButton(p0, leftBtn)) {
@@ -1967,7 +2337,7 @@
         canvas.setPointerCapture(e.pointerId);
         return;
       }
-      if (!player.specialUsed && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
+      if (isSpecialReady(player) && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
         specialArmed = !specialArmed;
         return;
       }
@@ -1989,19 +2359,39 @@
   }
 
   function onPointerMove(e) {
+    const p = canvasPointFromEvent(e);
+    if (e.pointerType === 'touch' && activeTouchPoints.has(e.pointerId)) {
+      activeTouchPoints.set(e.pointerId, p);
+    }
+    if (pinchState && pinchState.ids.includes(e.pointerId)) {
+      const a = activeTouchPoints.get(pinchState.ids[0]);
+      const b = activeTouchPoints.get(pinchState.ids[1]);
+      if (a && b) {
+        const distance = Math.max(12, Math.hypot(b.x - a.x, b.y - a.y));
+        const midpointX = (a.x + b.x) / 2;
+        cameraZoom = clampCameraZoom(pinchState.startZoom * distance / pinchState.startDistance);
+        cameraX = clampCameraX(pinchState.anchorWorldX - midpointX / cameraZoom);
+      }
+      return;
+    }
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'aim' && aimState) {
-      const p = canvasPointFromEvent(e);
       aimState.curX = p.x;
       aimState.curY = p.y;
     } else if (inputMode === 'pan') {
-      const p = canvasPointFromEvent(e);
-      cameraX = clampCameraX(cameraX - (p.x - panLastX));
+      cameraX = clampCameraX(cameraX - (p.x - panLastX) / cameraZoom);
       panLastX = p.x;
     }
   }
 
   function onPointerUp(e) {
+    if (e.pointerType === 'touch') activeTouchPoints.delete(e.pointerId);
+    if (pinchState && pinchState.ids.includes(e.pointerId)) {
+      pinchState = null;
+      inputMode = null;
+      inputPointerId = null;
+      return;
+    }
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'aim' && aimState) {
       if (!isInCancelZone(aimState.curX, aimState.curY)) {
@@ -2048,9 +2438,11 @@
     moveDir = 0;
     inputMode = null;
     inputPointerId = null;
+    activeTouchPoints.clear();
+    pinchState = null;
     specialArmed = false;
-    player.specialUsed = false;
-    cpu.specialUsed = false;
+    player.specialCharge = randomInitialSpecialCharge();
+    cpu.specialCharge = randomInitialSpecialCharge();
     matchOver = false;
     winner = null;
     awaitingResolve = false;
@@ -2064,7 +2456,8 @@
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
-    cameraX = clampCameraX(player.x - VW / 2);
+    cameraZoom = MIN_CAMERA_ZOOM;
+    cameraX = 0;
     menuOpen = false;
     isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
@@ -2085,7 +2478,7 @@
 
     // カメラ:弾が飛んでいる間だけ自動で追従する。それ以外は指でスライドした位置のまま維持する(戻さない)
     if (projectiles.length) {
-      const target = clampCameraX(projectiles[0].x - VW / 2);
+      const target = centerCameraOn(projectiles[0].x);
       cameraX += (target - cameraX) * Math.min(1, dt * 5);
     }
 
@@ -2162,7 +2555,7 @@
     if (currentTurn === 'player' && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
       const dist = Math.min(MOVE_SPEED * dt, player.fuel);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
-      nx = limitMoveByClimb(player.x, nx);
+      nx = limitMoveByClimb(player, nx);
       const moved = Math.abs(nx - player.x);
       player.x = nx;
       player.fuel -= moved;
@@ -2175,7 +2568,7 @@
         if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpu.fuel > 0) {
           const dist = Math.min(MOVE_SPEED * dt, cpu.fuel, cpuMoveRemaining);
           let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpu.x + cpuMoveDir * dist));
-          nx = limitMoveByClimb(cpu.x, nx);
+          nx = limitMoveByClimb(cpu, nx);
           const moved = Math.abs(nx - cpu.x);
           cpu.x = nx;
           cpu.fuel -= moved;
