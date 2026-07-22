@@ -479,6 +479,21 @@
     return toX;
   }
 
+  const FALL_TRIGGER = 22; // px。移動先の地面がこれ以上下にある場合は歩いて追従させず落下扱いにする
+  // 歩行中の接地追従:通常の緩やかな上り下りはそのまま歩けるが、崖や浮島の縁など大きな段差では
+  // 自然に落下させる(常にYを地形に同期させてしまうと、足元が無くなっても「歩いて降りる」形になり
+  // 場外判定が発生しない=落下自滅ができなくなるため)
+  function followGroundOrFall(u) {
+    const groundY = groundYAt(u.x) - UNIT_RADIUS;
+    if (groundY - u.y > FALL_TRIGGER) {
+      u.grounded = false;
+      u.vy = 0;
+      u.fallStartY = u.y;
+    } else {
+      u.y = groundY;
+    }
+  }
+
   const player = {
     x: STAGE_W * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
@@ -619,9 +634,9 @@
 
   // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
   const FIRE_BTN = { x: VW / 2, y: PANEL_CY, r: 117 };
+  const CANCEL_RADIUS = 26; // ボタン中心のごく近くまで戻した時だけキャンセル(パワー調整の可動域を広く取る)
   function isInCancelZone(x, y) {
-    // 発射ボタンの中まで戻して離すとキャンセル
-    return Math.hypot(x - FIRE_BTN.x, y - FIRE_BTN.y) <= FIRE_BTN.r;
+    return Math.hypot(x - FIRE_BTN.x, y - FIRE_BTN.y) <= CANCEL_RADIUS;
   }
 
   // ===== 視点移動:画面(コントローラパネルより上)を直接スライドでパン。離しても位置はそのまま =====
@@ -1631,7 +1646,7 @@
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 5]);
     ctx.beginPath();
-    ctx.arc(FIRE_BTN.x, FIRE_BTN.y, FIRE_BTN.r, 0, Math.PI * 2);
+    ctx.arc(FIRE_BTN.x, FIRE_BTN.y, CANCEL_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = inCancel ? '#ff5a5a' : 'rgba(255,255,255,0.55)';
@@ -1693,7 +1708,6 @@
     ctx.restore();
 
     // UIレイヤー(スクリーン固定)
-    drawPullLine();
     drawOffscreenIndicator();
     drawWindMeter();
     drawUnitPanel(player, 10, 'left');
@@ -1703,6 +1717,7 @@
     drawControlPanel();
     drawMoveButtons();
     drawFireButton();
+    drawPullLine();
     drawCancelZone();
     drawSpecialButton();
     drawSoundToggle();
@@ -1994,7 +2009,7 @@
       const moved = Math.abs(nx - player.x);
       player.x = nx;
       player.fuel -= moved;
-      player.y = groundYAt(player.x) - UNIT_RADIUS;
+      followGroundOrFall(player);
     }
 
     // CPU移動→思考→発射
@@ -2008,7 +2023,7 @@
           cpu.x = nx;
           cpu.fuel -= moved;
           cpuMoveRemaining -= moved;
-          cpu.y = groundYAt(cpu.x) - UNIT_RADIUS;
+          followGroundOrFall(cpu);
           if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
         } else {
           cpuPhase = 'aim';
