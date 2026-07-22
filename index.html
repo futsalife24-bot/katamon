@@ -155,6 +155,42 @@
   const GROUND_MAX_Y = 600;   // 地形が取りうる最も低い(深い)位置(下部コントローラパネルとの間に余白を確保)
   const FLOOR_Y = VH;         // 画面下端(この高さ=地面なし/場外扱い)
 
+  // ===== ステージの見た目テーマ(空・地形・草・遠景の配色セット。試合ごとにランダムで選ぶ) =====
+  const THEMES = {
+    grass: {
+      sky: ['#1a2340', '#2c3a63', '#4a5a8a'],
+      dirtTop: '#7a5a3a', dirtBottom: '#33241a',
+      rim: '#9be08a', rimShadow: '#4f8a4f',
+      farHill: 'rgba(58,70,112,0.55)', nearHill: 'rgba(60,88,66,0.55)',
+      cloud: 'rgba(255,255,255,0.22)'
+    },
+    desert: {
+      sky: ['#3a2b1a', '#6b4a2a', '#c98a4a'],
+      dirtTop: '#c9954a', dirtBottom: '#5a3a1c',
+      rim: '#e0c37a', rimShadow: '#a97f30',
+      farHill: 'rgba(110,66,40,0.5)', nearHill: 'rgba(160,110,60,0.5)',
+      cloud: 'rgba(255,240,220,0.18)'
+    },
+    snow: {
+      sky: ['#233047', '#3c5170', '#7c9bb8'],
+      dirtTop: '#e8eef5', dirtBottom: '#6f7f93',
+      rim: '#ffffff', rimShadow: '#b9cadd',
+      farHill: 'rgba(90,110,140,0.5)', nearHill: 'rgba(140,160,182,0.45)',
+      cloud: 'rgba(255,255,255,0.3)'
+    },
+    volcanic: {
+      sky: ['#200f14', '#4a1a20', '#8a3018'],
+      dirtTop: '#5a4038', dirtBottom: '#180f0d',
+      rim: '#ff7a3a', rimShadow: '#a8371a',
+      farHill: 'rgba(50,20,20,0.6)', nearHill: 'rgba(96,32,20,0.55)',
+      cloud: 'rgba(255,160,100,0.14)'
+    }
+  };
+  const THEME_KEYS = Object.keys(THEMES);
+  let currentTheme = THEMES.grass;
+  let currentThemeKey = 'grass';
+  let parallaxSeed = 0; // 遠景の山の形を試合ごとに変えるための位相オフセット
+
   // 実体は不可視のオフスクリーンキャンバス(見た目)。塗り(source-over)で地面、destination-outで爆風の穴をあける
   const terrainCanvas = document.createElement('canvas');
   terrainCanvas.width = STAGE_W;
@@ -173,7 +209,10 @@
   function buildTerrainMask(segments) {
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
-    terrainCtx.fillStyle = '#6b4a30';
+    const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
+    grad.addColorStop(0, currentTheme.dirtTop);
+    grad.addColorStop(1, currentTheme.dirtBottom);
+    terrainCtx.fillStyle = grad;
     solidGrid.fill(0);
     for (let c = 0; c < TERRAIN_COLS; c++) {
       const x = c * COL_W;
@@ -186,6 +225,19 @@
         for (let r = r0; r <= r1; r++) solidGrid[r * TERRAIN_COLS + c] = 1;
       }
     }
+    // 質感付け:小さな斑点を焼き込んで単色塗りっぽさを消す(生成時の1回だけなので毎フレームのコストはゼロ)
+    terrainCtx.save();
+    terrainCtx.globalCompositeOperation = 'source-atop';
+    for (let i = 0; i < 260; i++) {
+      const sx = Math.random() * STAGE_W;
+      const sy = GROUND_MIN_Y + Math.random() * (FLOOR_Y - GROUND_MIN_Y);
+      const shade = Math.random() < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)';
+      terrainCtx.fillStyle = shade;
+      terrainCtx.beginPath();
+      terrainCtx.arc(sx, sy, 2 + Math.random() * 4, 0, Math.PI * 2);
+      terrainCtx.fill();
+    }
+    terrainCtx.restore();
   }
 
   // グリッド上の地面から、列ごとの最上段Yを再計算する(軽量。掘削のたびに影響範囲だけ呼ぶ)
@@ -407,6 +459,9 @@
   let currentSegments = null; // 中断/再開用に、生成直後(未破壊)の地形を保持しておく
 
   function newTerrain(pattern) {
+    currentThemeKey = THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)];
+    currentTheme = THEMES[currentThemeKey];
+    parallaxSeed = Math.random() * 10000;
     const r = generateTerrain(pattern);
     currentSegments = r.segments;
     craterHistory = [];
@@ -418,7 +473,10 @@
   }
 
   // 中断データからの地形復元:未破壊の地形を作り直し、記録しておいたクレーターを同じ順で開け直す
-  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland) {
+  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed) {
+    currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
+    currentTheme = THEMES[currentThemeKey];
+    parallaxSeed = savedParallaxSeed || 0;
     currentSegments = segments;
     buildTerrainMask(segments);
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
@@ -723,6 +781,8 @@
       craters: craterHistory,
       pattern: currentPattern,
       startOnIsland,
+      themeKey: currentThemeKey,
+      parallaxSeed,
       playerChar: player.character,
       cpuChar: cpu.character,
       player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, specialUsed: player.specialUsed },
@@ -749,7 +809,7 @@
     const data = loadSuspendedMatch();
     if (!data) return;
 
-    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland);
+    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed);
 
     player.character = data.playerChar;
     cpu.character = data.cpuChar;
@@ -1067,9 +1127,9 @@
   // ===== 描画 =====
   function drawSky() {
     const g = ctx.createLinearGradient(0, 0, 0, VH);
-    g.addColorStop(0, '#1a2340');
-    g.addColorStop(0.55, '#2c3a63');
-    g.addColorStop(1, '#4a5a8a');
+    g.addColorStop(0, currentTheme.sky[0]);
+    g.addColorStop(0.55, currentTheme.sky[1]);
+    g.addColorStop(1, currentTheme.sky[2]);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, VW, VH);
 
@@ -1082,17 +1142,77 @@
     }
   }
 
+  // ===== 遠景パララックス(山のシルエット・雲。カメラより遅く動いて奥行きを出す) =====
+  function bgHillY(x, seedOffset, baseY, amp) {
+    const p = x + seedOffset;
+    return baseY
+      + Math.sin(p * 0.006) * amp
+      + Math.sin(p * 0.017 + 1.3) * amp * 0.4
+      + Math.sin(p * 0.041 + 2.7) * amp * 0.18;
+  }
+
+  function drawHillLayer(seedOffset, baseY, amp, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const fromX = -200, toX = STAGE_W + 200, step = 24;
+    ctx.moveTo(fromX, bgHillY(fromX, seedOffset, baseY, amp));
+    for (let x = fromX + step; x <= toX; x += step) {
+      ctx.lineTo(x, bgHillY(x, seedOffset, baseY, amp));
+    }
+    ctx.lineTo(toX, GROUND_MAX_Y + 50);
+    ctx.lineTo(fromX, GROUND_MAX_Y + 50);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCloudShape(cx, cy, r) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - r * 0.6, cy + r * 0.15, r * 0.6, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + r * 0.6, cy + r * 0.1, r * 0.65, r * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawClouds() {
+    ctx.save();
+    ctx.translate(-cameraX * 0.1, 0);
+    ctx.fillStyle = currentTheme.cloud;
+    const t = Date.now() * 0.008;
+    for (let i = 0; i < 6; i++) {
+      const cx = ((i * 260 + t * 4 + parallaxSeed) % (STAGE_W + 400)) - 200;
+      const cy = 60 + (i % 3) * 45;
+      drawCloudShape(cx, cy, 34 + (i % 2) * 14);
+    }
+    ctx.restore();
+  }
+
+  function drawParallax() {
+    ctx.save();
+    ctx.translate(-cameraX * 0.15, 0);
+    drawHillLayer(parallaxSeed, 220, 46, currentTheme.farHill);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-cameraX * 0.35, 0);
+    drawHillLayer(parallaxSeed + 500, 270, 60, currentTheme.nearHill);
+    ctx.restore();
+    drawClouds();
+  }
+
   function drawTerrain() {
     // 地形マスク(ピクセル単位で穴があいた実体)をそのまま描画
     ctx.drawImage(terrainCanvas, 0, 0);
 
-    // 各列の最上面にだけ草の縁取りを乗せる(浮島の上面などにも自然に乗る)
+    // 各列の最上面にだけ表土の縁取りを乗せる(浮島の上面などにも自然に乗る)。二色重ねで厚み感を出す
     ctx.save();
-    ctx.fillStyle = '#9be08a';
     for (let c = 0; c < TERRAIN_COLS; c++) {
       const y = surfaceY[c];
       if (y >= FLOOR_Y - 1) continue; // その列に地面なし
-      ctx.fillRect(c * COL_W, y, COL_W + 0.6, 5);
+      ctx.fillStyle = currentTheme.rimShadow;
+      ctx.fillRect(c * COL_W, y + 3, COL_W + 0.6, 3);
+      ctx.fillStyle = currentTheme.rim;
+      ctx.fillRect(c * COL_W, y, COL_W + 0.6, 4);
     }
     ctx.restore();
   }
@@ -1685,6 +1805,7 @@
     }
 
     drawSky();
+    drawParallax();
     if (gamePhase === 'select') {
       ctx.save();
       ctx.translate(-cameraX, 0);
@@ -1732,7 +1853,7 @@
 
   function updateDebug() {
     document.getElementById('debugPanel').textContent =
-      `${currentPattern}${startOnIsland ? '(浮島スタート)' : ''} / 崖は登れません・地形は丸く抉れます`;
+      `${currentPattern}${startOnIsland ? '(浮島スタート)' : ''} / テーマ:${currentThemeKey}`;
   }
 
   // ===== 入力(引っ張り照準) =====
