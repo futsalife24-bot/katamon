@@ -6,6 +6,10 @@
 <title>カタモン - カタパルトモンスター</title>
 <link rel="preload" as="image" href="assets/loading-emblem.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/kyoryu.png">
+<link rel="preload" as="image" href="assets/medama.png">
+<link rel="preload" as="image" href="assets/iwa.png">
+<link rel="preload" as="image" href="assets/tori.png">
 <style>
   html, body {
     margin: 0;
@@ -35,6 +39,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   #debugPanel {
+    display: none;
     position: fixed;
     top: 4px;
     left: 4px;
@@ -103,6 +108,7 @@
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const debugPanel = document.getElementById('debugPanel');
 
   // ===== 効果音(WebAudio合成・音源ファイル不要) =====
   let soundOn = true;
@@ -782,30 +788,59 @@
 
   // ===== キャラクター =====
   const CHARACTERS = {
-    medama: {
-      key: 'medama', name: '目玉', desc: '標準型・素直な弾道の万能キャラ',
+    kyoryu: {
+      key: 'kyoryu', name: '恐竜', role: 'バランス型', roleEn: 'BALANCE',
+      desc: '耐久・火力・移動力が高水準。どんな地形にも対応しやすい王道タイプ。',
+      selectStats: [3, 3, 3], specialDesc: '高威力・大爆風の万能砲撃',
       maxHp: 100, blastMul: 1.0, windMul: 1.0, fuelMul: 1.0, velScaleMul: 1.0, tBias: 1.0,
+      color: '#76d64b', special: '強化砲弾'
+    },
+    medama: {
+      key: 'medama', name: '目玉', role: 'トリッキー型', roleEn: 'TRICKY',
+      desc: '風に強い軽快な弾と3連弾で角度を散らす。読み合いで翻弄する技巧派。',
+      selectStats: [2, 3, 4], specialDesc: '扇状に3発を一斉射撃',
+      maxHp: 90, blastMul: 0.9, windMul: 0.75, fuelMul: 1.1, velScaleMul: 1.05, tBias: 0.9,
       color: '#ffd24a', special: '3連弾'
     },
     iwa: {
-      key: 'iwa', name: '岩', desc: '重戦車型・HP高、爆風大、弾速遅く風に流されやすい',
+      key: 'iwa', name: '岩', role: '重戦車型', roleEn: 'HEAVY',
+      desc: '高耐久と巨大な爆風が強み。重量弾は遅く、風読みが勝負。',
+      selectStats: [5, 5, 2], specialDesc: '超巨大クレーターを生成',
       maxHp: 130, blastMul: 1.35, windMul: 1.4, fuelMul: 0.85, velScaleMul: 0.82, tBias: 1.25,
       color: '#9a9086', special: '地形大破壊'
     },
     tori: {
-      key: 'tori', name: '鳥', desc: 'トリッキー型・HP低、弾が軽く飛距離◎、移動燃料多め',
+      key: 'tori', name: '鳥', role: 'スピード型', roleEn: 'SPEED',
+      desc: '最高クラスの移動力と高速弾で先手を取る。長距離戦と奇襲が得意。',
+      selectStats: [2, 2, 5], specialDesc: '地形を無視して貫通',
       maxHp: 75, blastMul: 0.8, windMul: 0.6, fuelMul: 1.3, velScaleMul: 1.2, tBias: 0.85,
       color: '#ff8c3a', special: '貫通弾'
     }
   };
-  const CHARACTER_LIST = ['medama', 'iwa', 'tori'];
+  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori'];
 
   // キャラ画像(モンスター戦車・右向き)を事前読み込み
   const charImages = {};
+  let characterImagesReady = 0;
+  let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
     const img = new Image();
+    img.decoding = 'async';
+    img.fetchPriority = 'high';
+    img.onload = () => { characterImagesReady++; };
+    img.onerror = () => { characterImagesFailed++; };
     img.src = `assets/${key}.png`;
     charImages[key] = img;
+  }
+
+  function areCoreImagesReady() {
+    const titleSettled = titleLogoReady || titleLogoFailed;
+    const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
+    return titleSettled && charactersSettled;
+  }
+
+  function getCoreImageProgress() {
+    return characterImagesReady + characterImagesFailed + ((titleLogoReady || titleLogoFailed) ? 1 : 0);
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
   let loadingEmblemReady = false;
@@ -999,6 +1034,9 @@
     } else if (activateSpecial && def.key === 'tori') {
       // 鳥の必殺: 貫通弾(地形を無視して直進)
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul, pierce: true });
+    } else if (activateSpecial && def.key === 'kyoryu') {
+      // 恐竜の必殺: 強化砲弾(バランス型らしい高威力・大爆風の一撃)
+      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 1.8, windMul: def.windMul });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul });
     }
@@ -1114,8 +1152,8 @@
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'title' | 'select' | 'battle'
   const titleVsCpuBtn = { x: VW / 2, y: 650, w: 340, h: 76 };
-  const selectCards = CHARACTER_LIST.map((key, i) => ({ key, x: VW / 2, y: 250 + i * 190, w: VW - 60, h: 160 }));
-  const resumeBtn = { x: VW / 2, y: 50, w: 300, h: 40 };
+  const selectCards = CHARACTER_LIST.map((key, i) => ({ key, x: VW / 2, y: 202 + i * 172, w: VW - 44, h: 156 }));
+  const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
 
   function selectCharacterAndStart(key) {
     clearSuspendedMatch();
@@ -1343,74 +1381,210 @@
     ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 45);
     ctx.fillStyle = 'rgba(255,255,255,0.62)';
     ctx.font = '11px sans-serif';
-    ctx.fillText('タイトルを準備しています', VW / 2, VH / 2 + 68);
+    ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 1}`, VW / 2, VH / 2 + 68);
     ctx.restore();
+  }
+
+  function selectRoundedRect(x, y, w, h, radius) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, radius);
+    else ctx.rect(x, y, w, h);
+  }
+
+  function drawSelectStat(label, value, x, y, color) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, x, y);
+    for (let i = 0; i < 5; i++) {
+      selectRoundedRect(x + i * 13, y + 6, 10, 4, 2);
+      ctx.fillStyle = i < value ? color : 'rgba(255,255,255,0.13)';
+      ctx.fill();
+    }
   }
 
   function drawCharacterSelect() {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    const overlay = ctx.createLinearGradient(0, 0, 0, VH);
+    overlay.addColorStop(0, 'rgba(3,8,20,0.82)');
+    overlay.addColorStop(0.72, 'rgba(7,13,26,0.68)');
+    overlay.addColorStop(1, 'rgba(2,5,13,0.88)');
+    ctx.fillStyle = overlay;
     ctx.fillRect(0, 0, VW, VH);
+
+    const headerGlow = ctx.createRadialGradient(VW / 2, 78, 0, VW / 2, 78, 260);
+    headerGlow.addColorStop(0, 'rgba(79,195,247,0.15)');
+    headerGlow.addColorStop(1, 'rgba(79,195,247,0)');
+    ctx.fillStyle = headerGlow;
+    ctx.fillRect(0, 0, VW, 145);
+
+    ctx.strokeStyle = 'rgba(255,210,74,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(42, 88);
+    ctx.lineTo(152, 88);
+    ctx.moveTo(VW - 152, 88);
+    ctx.lineTo(VW - 42, 88);
+    ctx.stroke();
+    ctx.fillStyle = '#ffd24a';
+    ctx.beginPath();
+    ctx.arc(VW / 2, 88, 3, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = 'bold 24px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('モンスターを選択', VW / 2, 130);
+    ctx.fillText('モンスターを選択', VW / 2, 78);
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('能力と必殺技を見比べて、相棒を選ぼう', VW / 2, 111);
 
     if (hasSuspendedSave) {
       const b = resumeBtn;
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10);
-      else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-      ctx.fillStyle = '#2c3a63';
+      selectRoundedRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 12);
+      ctx.fillStyle = 'rgba(27,45,78,0.96)';
       ctx.fill();
       ctx.strokeStyle = '#ffd24a';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 15px sans-serif';
+      ctx.font = 'bold 13px sans-serif';
       ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
     }
 
-    for (const card of selectCards) {
+    for (let cardIndex = 0; cardIndex < selectCards.length; cardIndex++) {
+      const card = selectCards[cardIndex];
       const def = CHARACTERS[card.key];
       ctx.save();
       ctx.translate(card.x, card.y);
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fillRect(-card.w / 2, -card.h / 2, card.w, card.h);
+
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 8;
+      selectRoundedRect(-card.w / 2, -card.h / 2, card.w, card.h, 17);
+      const cardFill = ctx.createLinearGradient(-card.w / 2, -card.h / 2, card.w / 2, card.h / 2);
+      cardFill.addColorStop(0, 'rgba(15,24,42,0.97)');
+      cardFill.addColorStop(0.68, 'rgba(26,35,52,0.94)');
+      cardFill.addColorStop(1, `${def.color}22`);
+      ctx.fillStyle = cardFill;
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+
       ctx.strokeStyle = def.color;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(-card.w / 2, -card.h / 2, card.w, card.h);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      selectRoundedRect(-card.w / 2 + 5, -card.h / 2 + 5, card.w - 10, card.h - 10, 13);
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      selectRoundedRect(-card.w / 2, -card.h / 2 + 18, 5, card.h - 36, 3);
+      ctx.fillStyle = def.color;
+      ctx.fill();
+
+      const imageBox = { x: -card.w / 2 + 14, y: -card.h / 2 + 14, w: 132, h: card.h - 28 };
+      selectRoundedRect(imageBox.x, imageBox.y, imageBox.w, imageBox.h, 13);
+      const imageGlow = ctx.createRadialGradient(imageBox.x + imageBox.w / 2, -10, 4, imageBox.x + imageBox.w / 2, -10, 80);
+      imageGlow.addColorStop(0, `${def.color}33`);
+      imageGlow.addColorStop(0.65, 'rgba(10,18,32,0.74)');
+      imageGlow.addColorStop(1, 'rgba(4,8,18,0.92)');
+      ctx.fillStyle = imageGlow;
+      ctx.fill();
+      ctx.strokeStyle = `${def.color}77`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.ellipse(imageBox.x + imageBox.w / 2, 39, 48, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.38)';
+      ctx.fill();
 
       const cImg = charImages[card.key];
       const cReady = cImg && cImg.complete && cImg.naturalWidth > 0;
+      const imageCx = imageBox.x + imageBox.w / 2;
+      const imageCy = -7;
       if (cReady) {
-        const ih = 64;
-        const iw = ih * (cImg.naturalWidth / cImg.naturalHeight);
-        ctx.drawImage(cImg, -card.w / 2 + 20, -ih / 2, iw, ih);
+        const imageScale = Math.min(118 / cImg.naturalWidth, 94 / cImg.naturalHeight);
+        const iw = cImg.naturalWidth * imageScale;
+        const ih = cImg.naturalHeight * imageScale;
+        ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
       } else {
         ctx.beginPath();
-        ctx.arc(-card.w / 2 + 50, 0, 28, 0, Math.PI * 2);
+        ctx.arc(imageCx, imageCy, 31, 0, Math.PI * 2);
         ctx.fillStyle = def.color;
         ctx.fill();
       }
 
-      ctx.fillStyle = '#fff';
+      selectRoundedRect(imageCx - 44, 48, 88, 18, 9);
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fill();
+      ctx.strokeStyle = `${def.color}99`;
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(def.role, imageCx, 61);
+
+      const textX = -card.w / 2 + 160;
+      const contentRight = card.w / 2 - 14;
+      const contentW = contentRight - textX;
       ctx.textAlign = 'left';
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText(def.name, -card.w / 2 + 95, -30);
-      ctx.font = '12px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      wrapText(def.desc, -card.w / 2 + 95, -8, card.w - 140, 16);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(def.name, textX, -48);
+
+      const roleX = textX + 54;
+      selectRoundedRect(roleX, -65, 70, 20, 10);
+      ctx.fillStyle = `${def.color}22`;
+      ctx.fill();
+      ctx.strokeStyle = `${def.color}99`;
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(def.roleEn, roleX + 35, -51);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      ctx.font = 'bold 30px monospace';
+      ctx.fillText(String(cardIndex + 1).padStart(2, '0'), contentRight, -45);
+
+      ctx.textAlign = 'left';
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      wrapText(def.desc, textX, -22, contentW, 14);
+
+      drawSelectStat('耐久', def.selectStats[0], textX, 16, def.color);
+      drawSelectStat('火力', def.selectStats[1], textX + 96, 16, def.color);
+      drawSelectStat('機動', def.selectStats[2], textX + 192, 16, def.color);
+
+      selectRoundedRect(textX, 40, contentW, 32, 9);
+      ctx.fillStyle = 'rgba(255,210,74,0.09)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,210,74,0.48)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
       ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('SPECIAL', textX + 10, 51);
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`必殺: ${def.special}`, -card.w / 2 + 95, 52);
+      ctx.fillText(def.special, textX + 10, 66);
+      ctx.fillStyle = 'rgba(255,255,255,0.60)';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(def.specialDesc, contentRight - 10, 65);
       ctx.restore();
     }
 
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('カードをタップして出撃', VW / 2, 824);
+
     if (LAST_UPDATED_TEXT) {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '11px sans-serif';
-      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255,255,255,0.34)';
+      ctx.font = '10px sans-serif';
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 16);
     }
     ctx.restore();
@@ -2355,6 +2529,8 @@
   }
 
   function render() {
+    // 地形名・テーマ表示は対戦中だけ見せ、タイトルやキャラ選択では内部情報を隠す。
+    debugPanel.style.display = gamePhase === 'battle' ? 'block' : 'none';
     ctx.save();
     if (shakeTimer > 0) {
       const mag = shakeMag * (shakeTimer / 0.3);
@@ -2363,7 +2539,7 @@
 
     drawSky();
     drawParallax();
-    if (gamePhase === 'loading' && (titleLogoReady || titleLogoFailed)) gamePhase = 'title';
+    if (gamePhase === 'loading' && areCoreImagesReady()) gamePhase = 'title';
     if (gamePhase === 'loading') {
       ctx.save();
       applyWorldCamera();
@@ -2429,7 +2605,7 @@
   }
 
   function updateDebug() {
-    document.getElementById('debugPanel').textContent =
+    debugPanel.textContent =
       `${currentPattern}${startOnIsland ? '(浮島スタート)' : ''} / テーマ:${currentThemeKey}`;
   }
 
