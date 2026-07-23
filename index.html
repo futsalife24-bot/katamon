@@ -116,50 +116,66 @@
     return audioCtx;
   }
 
-  function playTone(freq, duration, type, peakGain, freqEnd) {
+  function playTone(freq, duration, type, peakGain, freqEnd, delay, attack) {
     if (!soundOn) return;
     const ac = getAudioCtx();
+    const startAt = ac.currentTime + (delay || 0);
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.type = type || 'sine';
-    osc.frequency.setValueAtTime(freq, ac.currentTime);
-    if (freqEnd != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), ac.currentTime + duration);
-    gain.gain.setValueAtTime(0.0001, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(peakGain || 0.25, ac.currentTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    osc.frequency.setValueAtTime(freq, startAt);
+    if (freqEnd != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), startAt + duration);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(peakGain || 0.25, startAt + (attack == null ? 0.015 : attack));
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
     osc.connect(gain).connect(ac.destination);
-    osc.start();
-    osc.stop(ac.currentTime + duration + 0.02);
+    osc.start(startAt);
+    osc.stop(startAt + duration + 0.02);
   }
 
-  function playNoiseBurst(duration, peakGain) {
+  function playFilteredNoise(duration, peakGain, filterType, frequency, delay, attack, q) {
     if (!soundOn) return;
     const ac = getAudioCtx();
+    const startAt = ac.currentTime + (delay || 0);
     const bufSize = Math.floor(ac.sampleRate * duration);
     const buffer = ac.createBuffer(1, bufSize, ac.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+      const decay = Math.pow(1 - i / bufSize, 1.35);
+      data[i] = (Math.random() * 2 - 1) * decay;
     }
     const src = ac.createBufferSource();
     src.buffer = buffer;
     const filter = ac.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 900;
+    filter.type = filterType || 'lowpass';
+    filter.frequency.setValueAtTime(frequency || 900, startAt);
+    filter.Q.value = q == null ? 0.8 : q;
     const gain = ac.createGain();
-    gain.gain.setValueAtTime(peakGain || 0.4, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(peakGain || 0.4, startAt + (attack == null ? 0.003 : attack));
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
     src.connect(filter).connect(gain).connect(ac.destination);
-    src.start();
+    src.start(startAt);
   }
 
-  function playLaunchSound() { playTone(320, 0.18, 'triangle', 0.2, 720); }
-  function playExplosionSound(blastMul) {
-    playNoiseBurst(0.35, Math.min(0.6, 0.35 * (blastMul || 1)));
-    playTone(90, 0.3, 'sine', 0.3, 40);
+  function playLaunchSound() {
+    // 信管の作動クリック→火薬の短い噴出→低い発射圧。上昇電子音は使わない。
+    playFilteredNoise(0.045, 0.22, 'highpass', 1800, 0, 0.001, 0.7);
+    playFilteredNoise(0.18, 0.13, 'bandpass', 820, 0.018, 0.004, 1.1);
+    playTone(145, 0.13, 'sine', 0.18, 62, 0.006, 0.002);
   }
-  function playFallSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
-  function playSpecialSound() { playTone(500, 0.5, 'square', 0.22, 900); }
+  function playExplosionSound(blastMul) {
+    // 小さな破裂音と短い低音を重ね、重すぎない着弾爆発にする。
+    const power = Math.min(1.35, Math.max(0.72, Math.sqrt(blastMul || 1)));
+    playFilteredNoise(0.055, 0.17 * power, 'highpass', 1650, 0, 0.001, 0.6);
+    playFilteredNoise(0.26, 0.30 * power, 'lowpass', 680, 0.004, 0.002, 0.75);
+    playTone(92, 0.23, 'sine', 0.24 * power, 42, 0.003, 0.002);
+  }
+  function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
+  function playSpecialSound() {
+    playLaunchSound();
+    playTone(420, 0.28, 'triangle', 0.12, 680, 0.035, 0.005);
+  }
   function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
 
   function resize() {
@@ -528,6 +544,23 @@
     return SPAWN_COLS.some(sc => sc + margin >= start && sc - margin <= end);
   }
 
+  function applyNaturalThinFloor(segments, hm, start, len, baseDepth) {
+    const shoulder = Math.max(5, Math.floor(len * 0.3));
+    const phase = Math.random() * Math.PI * 2;
+    for (let i = 0; i < len; i++) {
+      const c = start + i;
+      if (c < 0 || c >= TERRAIN_COLS) continue;
+
+      // 両端では通常の地面の厚さを保ち、中央へ向けて洞窟状になだらかに薄くする。
+      const edgeDistance = Math.min(i, len - 1 - i);
+      const thinBlend = smoothstep(edgeDistance, 0, shoulder);
+      const organicDepth = baseDepth * (0.95 + Math.sin(i * 0.52 + phase) * 0.05);
+      const fullDepth = FLOOR_Y - hm[c];
+      const depth = fullDepth + (organicDepth - fullDepth) * thinBlend;
+      segments[c] = [[hm[c], Math.min(FLOOR_Y, hm[c] + depth)]];
+    }
+  }
+
   const ISLAND_SHAPES = ['lens', 'long', 'jagged', 'mesa'];
   function addFloatingIsland(segments, start, len, islandTop, thickness, shape, phase) {
     for (let i = 0; i < len; i++) {
@@ -625,9 +658,8 @@
       const zoneStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - zoneLen));
       if (!overlapsSpawn(zoneStart, zoneLen, 20)) {
         const thinDepth = 34 + Math.random() * 22;
-        for (let c = zoneStart; c < zoneStart + zoneLen && c < midEnd; c++) {
-          segments[c] = [[hm[c], hm[c] + thinDepth]];
-        }
+        const actualLen = Math.min(zoneLen, midEnd - zoneStart);
+        applyNaturalThinFloor(segments, hm, zoneStart, actualLen, thinDepth);
       }
     }
 
@@ -798,12 +830,7 @@
   const MAX_HP = 100;
   const FUEL_MAX = 102; // 全キャラの基本移動可能距離を従来の2倍にする
   const MOVE_SPEED = 95; // px/s
-  const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX
-
-  function randomInitialSpecialCharge() {
-    // 開幕時だけ 0 / 1 / 2 / 3 / MAX を同率で抽選する。
-    return Math.floor(Math.random() * (SPECIAL_CHARGE_MAX + 1));
-  }
+  const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX。新規挑戦は0、次戦へ残量を持ち越す
 
   function isSpecialReady(u) {
     return u.specialCharge >= SPECIAL_CHARGE_MAX;
@@ -1006,6 +1033,7 @@
 
   // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
   const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
+  const DEAD_LINE_Y = CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
   const PANEL_CY = CONTROL_PANEL_Y + (VH - CONTROL_PANEL_Y) / 2;
 
   // ===== 移動(長押しボタン)。発射ジョイスティックの左右斜め下に配置 =====
@@ -1097,7 +1125,7 @@
     gamePhase = 'battle';
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
-    resetMatch();
+    resetMatch(false);
   }
 
   // ===== 中断/再開(ブラウザを閉じても続きから再開できる) =====
@@ -1557,7 +1585,20 @@
     return { vx0, vy0, t };
   }
 
+  function eliminateAtDeadLine(u) {
+    if (u.hp <= 0 || u.y + UNIT_RADIUS < DEAD_LINE_Y) return false;
+    u.hp = 0;
+    u.vy = 0;
+    u.grounded = true;
+    playDeadLineSound();
+    triggerShake(5, 0.18);
+    checkMatchEnd();
+    return true;
+  }
+
   function updateFalling(dt, u) {
+    // 地面が残っていても、車体下端がデッドラインへ触れた時点で敗北。
+    if (eliminateAtDeadLine(u)) return;
     if (u.grounded) {
       const nearbyGround = walkableGroundYAt(u.x, u.y + UNIT_RADIUS);
       const groundY = (nearbyGround === null ? u.y + UNIT_RADIUS : nearbyGround) - UNIT_RADIUS;
@@ -1573,6 +1614,7 @@
       const previousFeetY = u.y + UNIT_RADIUS;
       u.vy += GRAVITY * dt;
       u.y += u.vy * dt;
+      if (eliminateAtDeadLine(u)) return;
       const g2 = groundYBelow(u.x, previousFeetY) - UNIT_RADIUS;
       if (u.y >= g2) {
         const intoVoid = g2 >= FLOOR_Y - UNIT_RADIUS - 2; // クレーターが底まで貫通=場外
@@ -1581,7 +1623,6 @@
         u.vy = 0;
         u.grounded = true;
         if (fallDist > 15) {
-          playFallSound();
           triggerShake(3, 0.1);
         }
         if (u.hp > 0) {
@@ -1679,6 +1720,27 @@
     ctx.drawImage(terrainRimCanvas, 0, 0);
     // 橋は既存の薄床地形に重ねた装飾。地形と一緒に爆破で削れる。
     ctx.drawImage(bridgeCanvas, 0, 0);
+  }
+
+  function drawDeadLine() {
+    const y = worldToScreenY(DEAD_LINE_Y);
+    const pulse = 0.68 + Math.sin(performance.now() * 0.006) * 0.18;
+    ctx.save();
+    ctx.shadowColor = `rgba(255,45,55,${pulse})`;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = `rgba(255,72,72,${pulse + 0.12})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([13, 7]);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(VW, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,95,95,0.95)';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('DEAD LINE', VW / 2, y - 6);
+    ctx.restore();
   }
 
   // 接地点付近の地形傾斜(ラジアン)。急すぎる斜面は見た目が破綻しないようクランプ
@@ -2343,6 +2405,7 @@
     ctx.restore();
 
     // UIレイヤー(スクリーン固定)
+    drawDeadLine();
     drawOffscreenIndicator();
     drawWindMeter();
     drawUnitPanel(player, 10, 'left');
@@ -2459,7 +2522,7 @@
     if (matchOver) {
       const b = continueBtn;
       if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y) <= b.h / 2) {
-        resetMatch();
+        resetMatch(true);
       }
       return;
     }
@@ -2571,7 +2634,9 @@
   canvas.addEventListener('dragstart', (e) => e.preventDefault());
   window.addEventListener('pointercancel', onPointerUp);
 
-  function resetMatch() {
+  function resetMatch(carrySpecialCharge) {
+    const playerCharge = carrySpecialCharge ? player.specialCharge : 0;
+    const cpuCharge = carrySpecialCharge ? cpu.specialCharge : 0;
     newTerrain();
     applyCharacter(player, player.character);
     applyCharacter(cpu, cpu.character);
@@ -2587,8 +2652,8 @@
     activeTouchPoints.clear();
     pinchState = null;
     specialArmed = false;
-    player.specialCharge = randomInitialSpecialCharge();
-    cpu.specialCharge = randomInitialSpecialCharge();
+    player.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, playerCharge));
+    cpu.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, cpuCharge));
     matchOver = false;
     winner = null;
     awaitingResolve = false;
@@ -2611,7 +2676,7 @@
   }
 
   window.addEventListener('keydown', (e) => {
-    if ((e.key === 'r' || e.key === 'R') && gamePhase === 'battle') resetMatch();
+    if ((e.key === 'r' || e.key === 'R') && gamePhase === 'battle') resetMatch(false);
   });
 
   window.addEventListener('resize', resize);
