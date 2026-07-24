@@ -122,7 +122,9 @@
   const titleBgm = document.getElementById('titleBgm');
   titleBgm.volume = 0.34;
   const TITLE_BGM_LOOP_GAP_MS = 2000;
+  const TITLE_START_MAX_WAIT_MS = 1500;
   let titleBgmLoopTimer = null;
+  let titleStartTimeout = null;
   let titleStartPending = false;
   let titleStartFailed = false;
   // BGMはバックグラウンドで先読みする。端末によっては全曲バッファリング通知が来ないため、
@@ -157,22 +159,32 @@
       playTitleBgm(true).catch(() => {});
     }, TITLE_BGM_LOOP_GAP_MS);
   });
+  function finishTitleStart(failed = false) {
+    if (!titleStartPending) return;
+    if (titleStartTimeout !== null) {
+      clearTimeout(titleStartTimeout);
+      titleStartTimeout = null;
+    }
+    titleStartPending = false;
+    titleStartFailed = failed;
+    if (gamePhase === 'press') gamePhase = 'title';
+  }
   function enterTitleFromTap() {
     if (titleStartPending) return;
     titleStartPending = true;
     titleStartFailed = false;
-    // play()のPromiseは実際に再生を開始したタイミングで完了する。
-    // その瞬間にタイトルを出すことで、画面とBGMのずれを防ぐ。
-    playTitleBgm(true)
-      .then(() => {
-        titleStartPending = false;
-        gamePhase = 'title';
-      })
-      .catch(() => {
-        // 再生に失敗した時はタイトルへ進めず、TAP画面で再試行できるようにする。
-        titleStartPending = false;
-        titleStartFailed = true;
-      });
+    // 通常は実際の再生開始と同時にタイトルへ進む。端末側の音源準備が停止しても、
+    // 最大1.5秒で必ず画面遷移し、以後のタップでBGM再生を再試行できるようにする。
+    titleStartTimeout = setTimeout(() => {
+      finishTitleStart(titleBgm.paused);
+    }, TITLE_START_MAX_WAIT_MS);
+    try {
+      playTitleBgm(true)
+        .then(() => { finishTitleStart(false); })
+        .catch(() => { finishTitleStart(true); });
+    } catch (_) {
+      finishTitleStart(true);
+    }
   }
   function stopTitleBgm(reset = true) {
     clearTitleBgmLoopTimer();
@@ -404,6 +416,24 @@
     }
   };
   const THEME_KEYS = Object.keys(THEMES);
+  const STAGE_BACKGROUND_SOURCES = {
+    grass: 'assets/stage-grass-bg.jpg?v=1',
+    desert: 'assets/stage-desert-bg.jpg?v=1',
+    snow: 'assets/stage-snow-bg.jpg?v=1',
+    volcanic: 'assets/stage-volcanic-bg.jpg?v=1'
+  };
+  const stageBackgroundImages = {};
+  for (const key of THEME_KEYS) {
+    const image = new Image();
+    image.decoding = 'async';
+    image.fetchPriority = 'low';
+    image.src = STAGE_BACKGROUND_SOURCES[key];
+    stageBackgroundImages[key] = image;
+  }
+  function getReadyStageBackground() {
+    const image = stageBackgroundImages[currentThemeKey];
+    return image && image.complete && image.naturalWidth > 0 ? image : null;
+  }
   const THEME_FX = {
     grass: {
       glow: 'rgba(126,210,255,0.22)', orb: '#d9f1ff',
@@ -1489,17 +1519,100 @@
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'battle'
   const titleVsCpuBtn = { x: VW / 2, y: 650, w: 340, h: 76 };
-  const SELECT_PAGE_SIZE = 4;
-  let selectPage = 0;
-  const selectPagePrevBtn = { x: 176, y: 840, w: 54, h: 32 };
-  const selectPageNextBtn = { x: 364, y: 840, w: 54, h: 32 };
-  function getSelectPageCount() {
-    return Math.ceil(CHARACTER_LIST.length / SELECT_PAGE_SIZE);
+  const SELECT_WHEEL_CENTER_Y = 454;
+  const SELECT_WHEEL_RADIUS_Y = 328;
+  const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
+  const SELECT_WHEEL_DRAG_STEP = 150;
+  const SELECT_WHEEL_DEPTH_SHIFT_X = 89;
+  const SELECT_WHEEL_DEPTH_LIFT_Y = 18;
+  const selectFocusedMainCard = { x: 187, y: SELECT_WHEEL_CENTER_Y, w: 338, h: 200 };
+  const selectSortieBtn = { x: 438, y: SELECT_WHEEL_CENTER_Y, w: 168, h: 200 };
+  let selectWheelPosition = 0;
+  let selectWheelVelocity = 0;
+  let selectWheelDragging = false;
+  let selectWheelLastY = 0;
+  let selectWheelLastTime = 0;
+  let selectWheelTravel = 0;
+  let selectWheelTapKey = null;
+
+  function wrapSelectWheelPosition(value) {
+    const count = CHARACTER_LIST.length;
+    return ((value % count) + count) % count;
   }
+
+  function getSelectWheelDelta(index) {
+    const count = CHARACTER_LIST.length;
+    let delta = index - selectWheelPosition;
+    while (delta > count / 2) delta -= count;
+    while (delta < -count / 2) delta += count;
+    return delta;
+  }
+
+  function getFocusedSelectIndex() {
+    return ((Math.round(selectWheelPosition) % CHARACTER_LIST.length) + CHARACTER_LIST.length) % CHARACTER_LIST.length;
+  }
+
   function getVisibleSelectCards() {
-    const start = selectPage * SELECT_PAGE_SIZE;
-    return CHARACTER_LIST.slice(start, start + SELECT_PAGE_SIZE)
-      .map((key, i) => ({ key, x: VW / 2, y: 202 + i * 172, w: VW - 44, h: 156, order: start + i + 1 }));
+    const focusedIndex = getFocusedSelectIndex();
+    return CHARACTER_LIST.map((key, index) => {
+      const delta = getSelectWheelDelta(index);
+      const angle = delta * SELECT_WHEEL_ANGLE_STEP;
+      const depth = Math.cos(angle);
+      const alpha = depth >= 0
+        ? 0.28 + depth * 0.72
+        : 0.18 + (depth + 1) * 0.12;
+      return {
+        key,
+        index,
+        order: index + 1,
+        delta,
+        depth,
+        scale: 1,
+        horizontalScale: 1,
+        verticalScale: 1,
+        alpha,
+        // 最奥のカードは発射ギアの背後まで右へ回り込み、斜め向きの水車を形作る。
+        x: selectFocusedMainCard.x + (1 - depth) * SELECT_WHEEL_DEPTH_SHIFT_X,
+        y: SELECT_WHEEL_CENTER_Y + Math.sin(angle) * SELECT_WHEEL_RADIUS_Y - (1 - depth) * SELECT_WHEEL_DEPTH_LIFT_Y,
+        w: selectFocusedMainCard.w,
+        h: selectFocusedMainCard.h,
+        focused: index === focusedIndex && Math.abs(delta) < 0.15
+      };
+    }).sort((a, b) => a.depth - b.depth);
+  }
+
+  function getSelectCardAtPoint(point) {
+    const cards = getVisibleSelectCards().slice().sort((a, b) => b.depth - a.depth);
+    const focusedCard = cards.find(card => card.focused);
+    if (focusedCard && (hitRect(point, selectFocusedMainCard) || hitRect(point, selectSortieBtn))) return focusedCard;
+    for (const card of cards) {
+      if (card.focused) continue;
+      if (card.depth < 0) continue;
+      const halfW = card.w * card.scale * card.horizontalScale / 2;
+      const halfH = card.h * card.scale * card.verticalScale / 2;
+      if (Math.abs(point.x - card.x) <= halfW && Math.abs(point.y - card.y) <= halfH) return card;
+    }
+    return null;
+  }
+
+  function focusSelectWheelIndex(index) {
+    const delta = getSelectWheelDelta(index);
+    selectWheelPosition = wrapSelectWheelPosition(selectWheelPosition + delta);
+    selectWheelVelocity = 0;
+  }
+
+  function updateSelectWheel(dt) {
+    if (selectWheelDragging) return;
+    if (Math.abs(selectWheelVelocity) > 0.035) {
+      selectWheelPosition = wrapSelectWheelPosition(selectWheelPosition + selectWheelVelocity * dt);
+      selectWheelVelocity *= Math.exp(-5.8 * dt);
+      return;
+    }
+    selectWheelVelocity = 0;
+    const targetIndex = getFocusedSelectIndex();
+    const delta = getSelectWheelDelta(targetIndex);
+    selectWheelPosition = wrapSelectWheelPosition(selectWheelPosition + delta * Math.min(1, dt * 11));
+    if (Math.abs(delta) < 0.001) selectWheelPosition = targetIndex;
   }
   const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
 
@@ -1773,6 +1886,214 @@
     }
   }
 
+  function drawWheelSelectCard(card, def) {
+    const main = { x: card.x, y: card.y, w: card.w, h: card.h };
+    const left = main.x - main.w / 2;
+    const top = main.y - main.h / 2;
+
+    ctx.save();
+    ctx.globalAlpha = card.alpha;
+    ctx.shadowColor = card.focused ? `${def.color}aa` : 'rgba(0,0,0,0.72)';
+    ctx.shadowBlur = card.focused ? 28 : 16;
+    ctx.shadowOffsetY = card.focused ? 0 : 7;
+    selectRoundedRect(left, top, main.w, main.h, 18);
+    const cardFill = ctx.createLinearGradient(left, top, left + main.w, top + main.h);
+    cardFill.addColorStop(0, 'rgba(13,23,40,0.99)');
+    cardFill.addColorStop(0.72, 'rgba(24,35,52,0.98)');
+    cardFill.addColorStop(1, `${def.color}42`);
+    ctx.fillStyle = cardFill;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = card.focused ? 3 : 2;
+    ctx.stroke();
+
+    selectRoundedRect(left + 5, top + 5, main.w - 10, main.h - 10, 14);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 左側のキャラクター表示枠
+    const imageBox = { x: left + 10, y: top + 10, w: 112, h: main.h - 20 };
+    selectRoundedRect(imageBox.x, imageBox.y, imageBox.w, imageBox.h, 13);
+    const imageGlow = ctx.createRadialGradient(
+      imageBox.x + imageBox.w / 2, imageBox.y + 72, 5,
+      imageBox.x + imageBox.w / 2, imageBox.y + 72, 82
+    );
+    imageGlow.addColorStop(0, `${def.color}48`);
+    imageGlow.addColorStop(0.62, 'rgba(8,17,31,0.78)');
+    imageGlow.addColorStop(1, 'rgba(3,7,16,0.96)');
+    ctx.fillStyle = imageGlow;
+    ctx.fill();
+    ctx.strokeStyle = `${def.color}88`;
+    ctx.stroke();
+
+    const cImg = charImages[card.key];
+    const cReady = cImg && cImg.complete && cImg.naturalWidth > 0;
+    const imageCx = imageBox.x + imageBox.w / 2;
+    const imageCy = imageBox.y + 74;
+    if (cReady) {
+      const imageScale = Math.min(104 / cImg.naturalWidth, 112 / cImg.naturalHeight);
+      const iw = cImg.naturalWidth * imageScale;
+      const ih = cImg.naturalHeight * imageScale;
+      if (def.facesLeft) {
+        ctx.save();
+        ctx.translate(imageCx, imageCy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(cImg, -iw / 2, -ih / 2, iw, ih);
+        ctx.restore();
+      } else {
+        ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(imageCx, imageCy, 31, 0, Math.PI * 2);
+      ctx.fillStyle = def.color;
+      ctx.fill();
+    }
+
+    selectRoundedRect(imageBox.x + 12, imageBox.y + imageBox.h - 30, imageBox.w - 24, 19, 10);
+    ctx.fillStyle = 'rgba(0,0,0,0.74)';
+    ctx.fill();
+    ctx.strokeStyle = `${def.color}aa`;
+    ctx.stroke();
+    ctx.fillStyle = def.color;
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(def.role, imageCx, imageBox.y + imageBox.h - 16);
+
+    // 2/3幅の中へ情報を再配置する。
+    const textX = left + 132;
+    const contentRight = left + main.w - 12;
+    const contentW = contentRight - textX;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${def.name.length >= 5 ? 16 : 20}px sans-serif`;
+    ctx.fillText(def.name, textX, top + 31);
+
+    selectRoundedRect(contentRight - 68, top + 12, 64, 19, 10);
+    ctx.fillStyle = `${def.color}22`;
+    ctx.fill();
+    ctx.strokeStyle = `${def.color}99`;
+    ctx.stroke();
+    ctx.fillStyle = def.color;
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(def.roleEn, contentRight - 36, top + 25);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    wrapText(def.desc, textX, top + 53, contentW, 13);
+
+    drawSelectStat('耐久', def.selectStats[0], textX, top + 101, def.color);
+    drawSelectStat('火力', def.selectStats[1], textX + 64, top + 101, def.color);
+    drawSelectStat('機動', def.selectStats[2], textX + 128, top + 101, def.color);
+
+    selectRoundedRect(textX, top + 127, contentW, 55, 10);
+    ctx.fillStyle = 'rgba(255,210,74,0.09)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,210,74,0.46)';
+    ctx.stroke();
+    ctx.fillStyle = '#ffd24a';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SPECIAL', textX + 9, top + 141);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(def.special, textX + 9, top + 158);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '8px sans-serif';
+    ctx.fillText(def.specialDesc, textX + 9, top + 174);
+
+    ctx.restore();
+  }
+
+  function drawFixedSelectSortieButton() {
+    const sortie = selectSortieBtn;
+    const gearR = 66;
+    const cardRight = selectFocusedMainCard.x + selectFocusedMainCard.w / 2;
+    ctx.save();
+
+    // カード右端へ届く発射レバー。先端位置は常に固定。
+    ctx.beginPath();
+    ctx.moveTo(sortie.x - 38, sortie.y - 23);
+    ctx.lineTo(cardRight, sortie.y);
+    ctx.lineTo(sortie.x - 38, sortie.y + 23);
+    ctx.lineTo(sortie.x - 38, sortie.y + 11);
+    ctx.lineTo(sortie.x - 4, sortie.y + 11);
+    ctx.lineTo(sortie.x - 4, sortie.y - 11);
+    ctx.lineTo(sortie.x - 38, sortie.y - 11);
+    ctx.closePath();
+    const leverFill = ctx.createLinearGradient(cardRight, sortie.y, sortie.x, sortie.y);
+    leverFill.addColorStop(0, '#ffe39a');
+    leverFill.addColorStop(0.45, '#c78a2e');
+    leverFill.addColorStop(1, '#64421d');
+    ctx.fillStyle = leverFill;
+    ctx.fill();
+    ctx.strokeStyle = '#fff2bd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 長方形カードとは別物に見える、カタパルトの発射ギア。
+    ctx.save();
+    ctx.translate(sortie.x, sortie.y);
+    ctx.fillStyle = '#7c5426';
+    for (let i = 0; i < 12; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI * 2 * i) / 12);
+      selectRoundedRect(-6, -gearR - 10, 12, 19, 3);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.shadowColor = 'rgba(255,190,62,0.42)';
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.arc(0, 0, gearR, 0, Math.PI * 2);
+    const gearFill = ctx.createRadialGradient(-18, -22, 5, 0, 0, gearR);
+    gearFill.addColorStop(0, '#f2bd57');
+    gearFill.addColorStop(0.42, '#a96e29');
+    gearFill.addColorStop(0.74, '#48301e');
+    gearFill.addColorStop(1, '#171f2c');
+    ctx.fillStyle = gearFill;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#ffe4a0';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 50, 0, Math.PI * 2);
+    ctx.fillStyle = '#13263a';
+    ctx.fill();
+    ctx.strokeStyle = '#7fadd0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * 2 * i) / 6;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * 57, Math.sin(a) * 57, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffe09a';
+      ctx.fill();
+      ctx.strokeStyle = '#51371f';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#fff3c5';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 25px sans-serif';
+    ctx.fillText('出撃', 0, -4);
+    ctx.fillStyle = '#f2bd57';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('LAUNCH', 0, 19);
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('TAP', 0, 37);
+    ctx.restore();
+    ctx.restore();
+  }
+
   function drawCharacterSelect() {
     ctx.save();
     ctx.fillStyle = '#000';
@@ -1803,7 +2124,7 @@
     ctx.fillText('モンスターを選択', VW / 2, 78);
     ctx.fillStyle = 'rgba(255,255,255,0.62)';
     ctx.font = '11px sans-serif';
-    ctx.fillText('能力と必殺技を見比べて、相棒を選ぼう', VW / 2, 111);
+    ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 111);
 
     if (hasSuspendedSave) {
       const b = resumeBtn;
@@ -1818,27 +2139,71 @@
       ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
     }
 
+    // 手前左から出撃ギアの背後へ回り込む、横角度のついた楕円水車軌道。
+    ctx.save();
+    const wheelCenterX = selectFocusedMainCard.x + SELECT_WHEEL_DEPTH_SHIFT_X;
+    const wheelCenterY = SELECT_WHEEL_CENTER_Y - SELECT_WHEEL_DEPTH_LIFT_Y;
+    const wheelHalo = ctx.createRadialGradient(wheelCenterX, wheelCenterY, 30, wheelCenterX, wheelCenterY, 340);
+    wheelHalo.addColorStop(0, 'rgba(79,195,247,0.12)');
+    wheelHalo.addColorStop(0.52, 'rgba(255,210,74,0.035)');
+    wheelHalo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = wheelHalo;
+    ctx.fillRect(0, 118, VW, 720);
+    ctx.strokeStyle = 'rgba(79,195,247,0.16)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 13]);
+    for (const lane of [-1, 1]) {
+      const laneOffset = lane * 7;
+      ctx.beginPath();
+      for (let sample = 0; sample <= 72; sample++) {
+        const angle = (sample / 72) * Math.PI * 2;
+        const depth = Math.cos(angle);
+        const x = selectFocusedMainCard.x + (1 - depth) * SELECT_WHEEL_DEPTH_SHIFT_X + laneOffset;
+        const y = SELECT_WHEEL_CENTER_Y
+          + Math.sin(angle) * SELECT_WHEEL_RADIUS_Y
+          - (1 - depth) * SELECT_WHEEL_DEPTH_LIFT_Y;
+        if (sample === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 124, VW, 708);
+    ctx.clip();
     const visibleCards = getVisibleSelectCards();
     for (let cardIndex = 0; cardIndex < visibleCards.length; cardIndex++) {
       const card = visibleCards[cardIndex];
       const def = CHARACTERS[card.key];
+      drawWheelSelectCard(card, def);
+      continue;
+      if (card.focused) {
+        drawFocusedSelectCard(card, def);
+        continue;
+      }
       ctx.save();
       ctx.translate(card.x, card.y);
+      ctx.globalAlpha = card.alpha;
+      ctx.scale(card.scale * card.horizontalScale, card.scale * card.verticalScale);
 
-      ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = 18;
-      ctx.shadowOffsetY = 8;
+      ctx.shadowColor = card.focused ? `${def.color}aa` : 'rgba(0,0,0,0.65)';
+      ctx.shadowBlur = card.focused ? 28 : 18;
+      ctx.shadowOffsetY = card.focused ? 0 : 8;
       selectRoundedRect(-card.w / 2, -card.h / 2, card.w, card.h, 17);
       const cardFill = ctx.createLinearGradient(-card.w / 2, -card.h / 2, card.w / 2, card.h / 2);
       cardFill.addColorStop(0, 'rgba(15,24,42,0.97)');
       cardFill.addColorStop(0.68, 'rgba(26,35,52,0.94)');
-      cardFill.addColorStop(1, `${def.color}22`);
+      cardFill.addColorStop(1, card.focused ? `${def.color}42` : `${def.color}22`);
       ctx.fillStyle = cardFill;
       ctx.fill();
       ctx.shadowColor = 'transparent';
 
       ctx.strokeStyle = def.color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = card.focused ? 3 : 2;
       ctx.stroke();
       selectRoundedRect(-card.w / 2 + 5, -card.h / 2 + 5, card.w - 10, card.h - 10, 13);
       ctx.strokeStyle = 'rgba(255,255,255,0.10)';
@@ -1950,36 +2315,46 @@
       ctx.font = '9px sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(def.specialDesc, contentRight - 10, 65);
+
+      if (card.focused) {
+        ctx.textAlign = 'center';
+        selectRoundedRect(-55, -card.h / 2 - 13, 110, 22, 11);
+        ctx.fillStyle = def.color;
+        ctx.fill();
+        ctx.fillStyle = '#071019';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('●  READY  ●', 0, -card.h / 2 + 2);
+
+        ctx.strokeStyle = '#fff2ad';
+        ctx.lineWidth = 2;
+        const corner = 19;
+        const edgeX = card.w / 2 + 7;
+        const edgeY = card.h / 2 + 7;
+        for (const sx of [-1, 1]) {
+          for (const sy of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(sx * (edgeX - corner), sy * edgeY);
+            ctx.lineTo(sx * edgeX, sy * edgeY);
+            ctx.lineTo(sx * edgeX, sy * (edgeY - corner));
+            ctx.stroke();
+          }
+        }
+      }
       ctx.restore();
     }
+    ctx.restore();
+    drawFixedSelectSortieButton();
 
-    const pageCount = getSelectPageCount();
-    if (pageCount > 1) {
-      for (const [button, label, enabled] of [
-        [selectPagePrevBtn, '‹', selectPage > 0],
-        [selectPageNextBtn, '›', selectPage < pageCount - 1]
-      ]) {
-        selectRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, 10);
-        ctx.fillStyle = enabled ? 'rgba(27,45,78,0.96)' : 'rgba(20,28,43,0.55)';
-        ctx.fill();
-        ctx.strokeStyle = enabled ? '#ffd24a' : 'rgba(255,255,255,0.18)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.fillStyle = enabled ? '#fff' : 'rgba(255,255,255,0.32)';
-        ctx.font = 'bold 23px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(label, button.x, button.y + 8);
-      }
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${selectPage + 1} / ${pageCount}`, VW / 2, 844);
-    }
+    // 出撃ボタンは固定。手前で止まったカードへ矢印だけがぴったり接続する。
+    const focusedIndex = getFocusedSelectIndex();
 
     ctx.fillStyle = 'rgba(255,255,255,0.52)';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('カードをタップして出撃', VW / 2, 884);
+    ctx.fillText('↑  上下にスワイプ  ↓', VW / 2, 856);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(`${String(focusedIndex + 1).padStart(2, '0')} / ${String(CHARACTER_LIST.length).padStart(2, '0')}`, VW / 2, 884);
 
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.34)';
@@ -2220,6 +2595,19 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, VW, VH);
 
+    const stageBackground = getReadyStageBackground();
+    if (stageBackground) {
+      ctx.drawImage(stageBackground, 0, 0, VW, VH);
+      // HUD・弾道・キャラクターの視認性を保ちつつ、生成背景の色彩を残す。
+      const readabilityShade = ctx.createLinearGradient(0, 0, 0, VH);
+      readabilityShade.addColorStop(0, 'rgba(5,10,18,0.06)');
+      readabilityShade.addColorStop(0.48, 'rgba(5,10,18,0.03)');
+      readabilityShade.addColorStop(1, 'rgba(5,10,18,0.19)');
+      ctx.fillStyle = readabilityShade;
+      ctx.fillRect(0, 0, VW, VH);
+    }
+
+    if (!stageBackground) {
     // テーマごとの天体と地平線の光。背景画像を増やさず、試合ごとに位置が少し変わる。
     const orbX = 78 + ((parallaxSeed * 0.137) % (VW - 156));
     const orbY = currentThemeKey === 'desert' ? 168 : 92;
@@ -2269,6 +2657,7 @@
       lavaGlow.addColorStop(1, 'rgba(255,50,10,0)');
       ctx.fillStyle = lavaGlow;
       ctx.fillRect(0, 170, VW, GROUND_MIN_Y);
+    }
     }
 
     // 星・火の粉・雪・砂埃をテーマ別に描き分ける。
@@ -2361,6 +2750,8 @@
   }
 
   function drawParallax() {
+    // 専用背景が読み込めたテーマでは、画像内の遠景を活かして二重の山・雲を描かない。
+    if (getReadyStageBackground()) return;
     ctx.save();
     applyWorldCamera(0.15);
     drawHillLayer(parallaxSeed, 220, 46, currentTheme.farHill);
@@ -3220,7 +3611,9 @@
     if (gamePhase === 'title') {
       if (hitRect(p0, titleVsCpuBtn)) {
         playUiSound();
-        selectPage = 0;
+        selectWheelPosition = 0;
+        selectWheelVelocity = 0;
+        selectWheelDragging = false;
         gamePhase = 'select';
       }
       return;
@@ -3230,22 +3623,16 @@
         resumeSuspendedMatch();
         return;
       }
-      if (hitRect(p0, selectPagePrevBtn) && selectPage > 0) {
-        selectPage--;
-        playUiSound();
-        return;
-      }
-      if (hitRect(p0, selectPageNextBtn) && selectPage < getSelectPageCount() - 1) {
-        selectPage++;
-        playUiSound();
-        return;
-      }
-      for (const card of getVisibleSelectCards()) {
-        if (Math.abs(p0.x - card.x) <= card.w / 2 && Math.abs(p0.y - card.y) <= card.h / 2) {
-          selectCharacterAndStart(card.key);
-          return;
-        }
-      }
+      const tappedCard = getSelectCardAtPoint(p0);
+      selectWheelDragging = true;
+      selectWheelLastY = p0.y;
+      selectWheelLastTime = e.timeStamp;
+      selectWheelTravel = 0;
+      selectWheelTapKey = tappedCard?.key || null;
+      selectWheelVelocity = 0;
+      inputMode = 'selectWheel';
+      inputPointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -3346,7 +3733,15 @@
       return;
     }
     if (e.pointerId !== inputPointerId) return;
-    if (inputMode === 'aim' && aimState) {
+    if (inputMode === 'selectWheel' && gamePhase === 'select') {
+      const dy = p.y - selectWheelLastY;
+      const elapsed = Math.max(8, e.timeStamp - selectWheelLastTime) / 1000;
+      selectWheelPosition = wrapSelectWheelPosition(selectWheelPosition - dy / SELECT_WHEEL_DRAG_STEP);
+      selectWheelVelocity = Math.max(-9, Math.min(9, (-dy / SELECT_WHEEL_DRAG_STEP) / elapsed));
+      selectWheelTravel += Math.abs(dy);
+      selectWheelLastY = p.y;
+      selectWheelLastTime = e.timeStamp;
+    } else if (inputMode === 'aim' && aimState) {
       aimState.curX = p.x;
       aimState.curY = p.y;
     } else if (inputMode === 'pan') {
@@ -3361,10 +3756,36 @@
       inputMode = null;
       inputPointerId = null;
       if (e.type === 'pointerup' && gamePhase === 'press') {
-        // このユーザー操作の中で直接play()を呼ぶ。成功するまでタイトルは表示しない。
+        // このユーザー操作の中で直接play()を呼ぶ。音源待ちが止まっても安全弁でタイトルへ進む。
         enterTitleFromTap();
         playUiSound();
       }
+      return;
+    }
+    if (inputMode === 'selectWheel' && e.pointerId === inputPointerId) {
+      const p = canvasPointFromEvent(e);
+      selectWheelDragging = false;
+      if (e.type === 'pointerup' && selectWheelTravel < 10) {
+        const tappedCard = getSelectCardAtPoint(p);
+        if (tappedCard && tappedCard.key === selectWheelTapKey) {
+          if (tappedCard.index === getFocusedSelectIndex() && Math.abs(getSelectWheelDelta(tappedCard.index)) < 0.15) {
+            if (hitRect(p, selectSortieBtn)) {
+              playUiSound();
+              inputMode = null;
+              inputPointerId = null;
+              selectWheelTapKey = null;
+              selectCharacterAndStart(tappedCard.key);
+              return;
+            }
+          } else {
+            focusSelectWheelIndex(tappedCard.index);
+            playUiSound();
+          }
+        }
+      }
+      selectWheelTapKey = null;
+      inputMode = null;
+      inputPointerId = null;
       return;
     }
     if (pinchState && pinchState.ids.includes(e.pointerId)) {
@@ -3401,6 +3822,12 @@
 
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('wheel', (e) => {
+    if (gamePhase !== 'select') return;
+    e.preventDefault();
+    selectWheelDragging = false;
+    selectWheelVelocity = Math.max(-8, Math.min(8, selectWheelVelocity + e.deltaY * 0.018));
+  }, { passive: false });
   window.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('dragstart', (e) => e.preventDefault());
@@ -3457,6 +3884,10 @@
   // ===== ゲームループ =====
   let lastTime = 0;
   function update(dt) {
+    if (gamePhase === 'select') {
+      updateSelectWheel(dt);
+      return;
+    }
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
