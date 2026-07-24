@@ -10,6 +10,7 @@
 <link rel="preload" as="image" href="assets/medama.png">
 <link rel="preload" as="image" href="assets/iwa.png">
 <link rel="preload" as="image" href="assets/tori.png">
+<link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 <style>
   html, body {
     margin: 0;
@@ -58,6 +59,10 @@
   <canvas id="game"></canvas>
 </div>
 <div id="debugPanel">M1: 地形生成+描画+破壊テスト(タップでクレーター)</div>
+<audio id="titleBgm" preload="auto">
+  <source src="assets/title-bgm.mp3?v=2" type="audio/mpeg">
+</audio>
+<audio id="stageBgm" preload="none"></audio>
 
 <script>
 (() => {
@@ -112,7 +117,119 @@
 
   // ===== 効果音(WebAudio合成・音源ファイル不要) =====
   let soundOn = true;
+  // ブラウザの自動再生制限に合わせ、タイトル画面での最初のタップから再生する。
+  // タイトル→キャラ選択は同じ再生を維持し、出撃時に停止する。
+  const titleBgm = document.getElementById('titleBgm');
+  titleBgm.volume = 0.34;
+  const TITLE_BGM_LOOP_GAP_MS = 2000;
+  let titleBgmLoopTimer = null;
+  let titleStartPending = false;
+  let titleStartFailed = false;
+  // BGMはバックグラウンドで先読みする。端末によっては全曲バッファリング通知が来ないため、
+  // ロード完了条件には含めず、TAP後に実際の再生開始とタイトル遷移を同期する。
+  titleBgm.load();
+  function clearTitleBgmLoopTimer() {
+    if (titleBgmLoopTimer === null) return;
+    clearTimeout(titleBgmLoopTimer);
+    titleBgmLoopTimer = null;
+  }
+  function playTitleBgm(restart = false) {
+    if (!soundOn) return Promise.resolve();
+    if (restart) {
+      clearTitleBgmLoopTimer();
+      titleBgm.pause();
+      if (titleBgm.readyState > HTMLMediaElement.HAVE_NOTHING) titleBgm.currentTime = 0;
+    }
+    const result = titleBgm.play();
+    return result && typeof result.then === 'function' ? result : Promise.resolve();
+  }
+  function startTitleBgm() {
+    if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+    if (titleBgmLoopTimer !== null) return;
+    playTitleBgm().catch(() => {});
+  }
+  titleBgm.addEventListener('ended', () => {
+    clearTitleBgmLoopTimer();
+    if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+    titleBgmLoopTimer = setTimeout(() => {
+      titleBgmLoopTimer = null;
+      if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+      playTitleBgm(true).catch(() => {});
+    }, TITLE_BGM_LOOP_GAP_MS);
+  });
+  function enterTitleFromTap() {
+    if (titleStartPending) return;
+    titleStartPending = true;
+    titleStartFailed = false;
+    // play()のPromiseは実際に再生を開始したタイミングで完了する。
+    // その瞬間にタイトルを出すことで、画面とBGMのずれを防ぐ。
+    playTitleBgm(true)
+      .then(() => {
+        titleStartPending = false;
+        gamePhase = 'title';
+      })
+      .catch(() => {
+        // 再生に失敗した時はタイトルへ進めず、TAP画面で再試行できるようにする。
+        titleStartPending = false;
+        titleStartFailed = true;
+      });
+  }
+  function stopTitleBgm(reset = true) {
+    clearTitleBgmLoopTimer();
+    titleBgm.pause();
+    if (reset && titleBgm.readyState > HTMLMediaElement.HAVE_NOTHING) titleBgm.currentTime = 0;
+  }
+  const stageBgm = document.getElementById('stageBgm');
+  const STAGE_BGM_SOURCES = {
+    grass: 'assets/stage-grass.mp3?v=1',
+    desert: 'assets/stage-desert.mp3?v=1',
+    snow: 'assets/stage-snow.mp3?v=1',
+    volcanic: 'assets/stage-volcanic.mp3?v=1'
+  };
+  const STAGE_BGM_VOLUME = 0.28;
+  stageBgm.volume = STAGE_BGM_VOLUME;
+  stageBgm.loop = true;
+  let stageBgmTheme = null;
+  let stageBgmRestoreTimer = null;
+  function playStageBgm(themeKey, restart = false) {
+    if (!soundOn || gamePhase !== 'battle') return;
+    const src = STAGE_BGM_SOURCES[themeKey] || STAGE_BGM_SOURCES.grass;
+    if (stageBgmTheme !== themeKey) {
+      stageBgm.pause();
+      stageBgm.src = src;
+      stageBgmTheme = themeKey;
+      stageBgm.load();
+      restart = true;
+    }
+    if (restart && stageBgmRestoreTimer !== null) {
+      clearTimeout(stageBgmRestoreTimer);
+      stageBgmRestoreTimer = null;
+    }
+    if (restart) stageBgm.volume = STAGE_BGM_VOLUME;
+    if (restart && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
+    const result = stageBgm.play();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+  }
+  function stopStageBgm(reset = true) {
+    if (stageBgmRestoreTimer !== null) {
+      clearTimeout(stageBgmRestoreTimer);
+      stageBgmRestoreTimer = null;
+    }
+    stageBgm.volume = STAGE_BGM_VOLUME;
+    stageBgm.pause();
+    if (reset && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
+  }
+  function duckStageBgm(duration = 1800) {
+    if (!soundOn || stageBgm.paused) return;
+    if (stageBgmRestoreTimer !== null) clearTimeout(stageBgmRestoreTimer);
+    stageBgm.volume = 0.11;
+    stageBgmRestoreTimer = setTimeout(() => {
+      stageBgmRestoreTimer = null;
+      stageBgm.volume = STAGE_BGM_VOLUME;
+    }, duration);
+  }
   let audioCtx = null;
+  let sfxCompressor = null;
   function getAudioCtx() {
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -120,6 +237,22 @@
     }
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
+  }
+
+  function getSfxDestination(ac) {
+    if (!sfxCompressor) {
+      const compressor = ac.createDynamicsCompressor();
+      compressor.threshold.value = -16;
+      compressor.knee.value = 18;
+      compressor.ratio.value = 5;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.18;
+      const master = ac.createGain();
+      master.gain.value = 0.78;
+      compressor.connect(master).connect(ac.destination);
+      sfxCompressor = compressor;
+    }
+    return sfxCompressor;
   }
 
   function playTone(freq, duration, type, peakGain, freqEnd, delay, attack) {
@@ -134,7 +267,7 @@
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(peakGain || 0.25, startAt + (attack == null ? 0.015 : attack));
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-    osc.connect(gain).connect(ac.destination);
+    osc.connect(gain).connect(getSfxDestination(ac));
     osc.start(startAt);
     osc.stop(startAt + duration + 0.02);
   }
@@ -160,22 +293,30 @@
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(peakGain || 0.4, startAt + (attack == null ? 0.003 : attack));
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-    src.connect(filter).connect(gain).connect(ac.destination);
+    src.connect(filter).connect(gain).connect(getSfxDestination(ac));
     src.start(startAt);
   }
 
   function playLaunchSound() {
-    // 信管の作動クリック→火薬の短い噴出→低い発射圧。上昇電子音は使わない。
-    playFilteredNoise(0.045, 0.22, 'highpass', 1800, 0, 0.001, 0.7);
-    playFilteredNoise(0.18, 0.13, 'bandpass', 820, 0.018, 0.004, 1.1);
-    playTone(145, 0.13, 'sine', 0.18, 62, 0.006, 0.002);
+    // 金属信管→撃鉄→火薬噴出→砲身の低い圧力を短時間に重ねる。
+    playTone(1650, 0.028, 'square', 0.055, 980, 0, 0.001);
+    playFilteredNoise(0.032, 0.16, 'highpass', 2300, 0.004, 0.001, 0.9);
+    playTone(420, 0.10, 'triangle', 0.075, 285, 0.012, 0.002);
+    playFilteredNoise(0.21, 0.18, 'bandpass', 760, 0.016, 0.002, 0.82);
+    playFilteredNoise(0.14, 0.13, 'lowpass', 320, 0.019, 0.002, 0.7);
+    playTone(126, 0.22, 'sine', 0.24, 46, 0.012, 0.002);
   }
   function playExplosionSound(blastMul) {
-    // 小さな破裂音と短い低音を重ね、重すぎない着弾爆発にする。
+    // 破裂の芯・土煙・低音・飛び散る破片を重ねた小型爆発。
     const power = Math.min(1.35, Math.max(0.72, Math.sqrt(blastMul || 1)));
-    playFilteredNoise(0.055, 0.17 * power, 'highpass', 1650, 0, 0.001, 0.6);
-    playFilteredNoise(0.26, 0.30 * power, 'lowpass', 680, 0.004, 0.002, 0.75);
-    playTone(92, 0.23, 'sine', 0.24 * power, 42, 0.003, 0.002);
+    playFilteredNoise(0.042, 0.23 * power, 'highpass', 1900, 0, 0.001, 0.65);
+    playFilteredNoise(0.32, 0.34 * power, 'lowpass', 620, 0.003, 0.002, 0.72);
+    playFilteredNoise(0.19, 0.19 * power, 'bandpass', 980, 0.012, 0.002, 0.9);
+    playTone(94, 0.34, 'sine', 0.30 * power, 35, 0.002, 0.002);
+    playTone(330, 0.20, 'triangle', 0.07 * power, 185, 0.018, 0.002);
+    for (let i = 0; i < 4; i++) {
+      playFilteredNoise(0.035 + i * 0.009, 0.055 * power, 'highpass', 1300 + i * 420, 0.045 + i * 0.038, 0.001, 1.4);
+    }
   }
   function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
   function playSpecialSound() {
@@ -183,6 +324,27 @@
     playTone(420, 0.28, 'triangle', 0.12, 680, 0.035, 0.005);
   }
   function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
+  function playVictorySound() {
+    duckStageBgm(2200);
+    const notes = [392, 523.25, 659.25, 783.99];
+    notes.forEach((freq, i) => {
+      playTone(freq, 0.34, 'triangle', 0.13, freq * 1.01, i * 0.12, 0.012);
+      playTone(freq / 2, 0.42, 'sine', 0.075, null, i * 0.12, 0.018);
+    });
+    for (const freq of [523.25, 659.25, 783.99]) {
+      playTone(freq, 0.78, 'triangle', 0.08, null, 0.52, 0.025);
+    }
+    playFilteredNoise(0.55, 0.055, 'highpass', 3600, 0.42, 0.02, 0.7);
+  }
+  function playDefeatSound() {
+    duckStageBgm(2100);
+    const notes = [392, 349.23, 293.66, 196];
+    notes.forEach((freq, i) => {
+      playTone(freq, 0.34 + i * 0.04, 'triangle', 0.105, freq * 0.94, i * 0.16, 0.012);
+    });
+    playTone(82, 0.72, 'sine', 0.20, 38, 0.48, 0.012);
+    playFilteredNoise(0.32, 0.09, 'lowpass', 260, 0.49, 0.008, 0.75);
+  }
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -242,6 +404,28 @@
     }
   };
   const THEME_KEYS = Object.keys(THEMES);
+  const THEME_FX = {
+    grass: {
+      glow: 'rgba(126,210,255,0.22)', orb: '#d9f1ff',
+      particle: 'rgba(174,255,168,0.72)', strata: 'rgba(255,222,160,0.10)',
+      stoneLight: 'rgba(236,213,172,0.16)', stoneDark: 'rgba(38,24,16,0.20)'
+    },
+    desert: {
+      glow: 'rgba(255,177,82,0.34)', orb: '#ffd47d',
+      particle: 'rgba(255,220,154,0.38)', strata: 'rgba(255,223,153,0.14)',
+      stoneLight: 'rgba(255,226,168,0.18)', stoneDark: 'rgba(83,44,18,0.20)'
+    },
+    snow: {
+      glow: 'rgba(156,221,255,0.30)', orb: '#eefaff',
+      particle: 'rgba(255,255,255,0.72)', strata: 'rgba(214,240,255,0.17)',
+      stoneLight: 'rgba(255,255,255,0.22)', stoneDark: 'rgba(62,87,116,0.17)'
+    },
+    volcanic: {
+      glow: 'rgba(255,76,28,0.34)', orb: '#ff7040',
+      particle: 'rgba(255,132,47,0.76)', strata: 'rgba(255,105,47,0.12)',
+      stoneLight: 'rgba(255,142,91,0.13)', stoneDark: 'rgba(10,5,5,0.30)'
+    }
+  };
   let currentTheme = THEMES.grass;
   let currentThemeKey = 'grass';
   let parallaxSeed = 0; // 遠景の山の形を試合ごとに変えるための位相オフセット
@@ -395,6 +579,63 @@
     return Math.min(GROUND_MAX_Y, Math.max(GROUND_MIN_Y, y));
   }
 
+  function drawTerrainDetails() {
+    const fx = THEME_FX[currentThemeKey];
+    const detailTop = 220;
+    terrainCtx.save();
+    terrainCtx.globalCompositeOperation = 'source-atop';
+
+    // 地層の流れ。太いベタ線ではなく、ゆるい曲線を重ねて岩肌の奥行きを出す。
+    terrainCtx.lineCap = 'round';
+    terrainCtx.strokeStyle = fx.strata;
+    terrainCtx.lineWidth = 2;
+    for (let band = 0; band < 9; band++) {
+      const baseY = detailTop + 26 + band * 44;
+      terrainCtx.beginPath();
+      for (let x = -20; x <= STAGE_W + 20; x += 18) {
+        const y = baseY
+          + Math.sin(x * 0.012 + band * 1.7 + parallaxSeed * 0.001) * 6
+          + Math.sin(x * 0.031 + band) * 2;
+        if (x === -20) terrainCtx.moveTo(x, y);
+        else terrainCtx.lineTo(x, y);
+      }
+      terrainCtx.stroke();
+    }
+
+    // 小石と埋まった岩片。生成シードから位置を固定して、再描画時にも形が変わらないようにする。
+    for (let i = 0; i < 150; i++) {
+      const x = (i * 73.37 + parallaxSeed * 0.41) % STAGE_W;
+      const y = detailTop + 18 + ((i * 47.19 + parallaxSeed * 0.17) % (VH - detailTop - 22));
+      const rw = 2.4 + (i % 5) * 0.9;
+      const rh = 1.5 + (i % 3) * 0.8;
+      terrainCtx.save();
+      terrainCtx.translate(x, y);
+      terrainCtx.rotate(Math.sin(i * 2.13) * 0.75);
+      terrainCtx.fillStyle = i % 3 === 0 ? fx.stoneLight : fx.stoneDark;
+      terrainCtx.beginPath();
+      terrainCtx.ellipse(0, 0, rw, rh, 0, 0, Math.PI * 2);
+      terrainCtx.fill();
+      if (i % 11 === 0) {
+        terrainCtx.strokeStyle = fx.stoneLight;
+        terrainCtx.lineWidth = 0.8;
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(-rw * 0.65, 0);
+        terrainCtx.lineTo(0, -rh * 0.45);
+        terrainCtx.lineTo(rw * 0.55, rh * 0.18);
+        terrainCtx.stroke();
+      }
+      terrainCtx.restore();
+    }
+
+    // 表面直下を少し明るくし、地面が一枚絵ではなく厚みのある断面に見えるようにする。
+    const surfaceGlow = terrainCtx.createLinearGradient(0, detailTop, 0, detailTop + 320);
+    surfaceGlow.addColorStop(0, 'rgba(255,255,255,0.11)');
+    surfaceGlow.addColorStop(1, 'rgba(255,255,255,0)');
+    terrainCtx.fillStyle = surfaceGlow;
+    terrainCtx.fillRect(0, detailTop, STAGE_W, 320);
+    terrainCtx.restore();
+  }
+
   function buildTerrainMask(segments, refreshRim = true) {
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
@@ -421,6 +662,7 @@
     terrainCtx.fillStyle = terrainCtx.createPattern(noiseTile, 'repeat');
     terrainCtx.fillRect(0, 0, STAGE_W, VH);
     terrainCtx.restore();
+    drawTerrainDetails();
     rebuildBridgeDecoration();
     if (refreshRim) rebuildTerrainRim();
   }
@@ -815,11 +1057,53 @@
       selectStats: [2, 2, 5], specialDesc: '地形を無視して貫通',
       maxHp: 75, blastMul: 0.8, windMul: 0.6, fuelMul: 1.3, velScaleMul: 1.2, tBias: 0.85,
       color: '#ff8c3a', special: '貫通弾'
+    },
+    barugerukan: {
+      key: 'barugerukan', name: 'バルゲルカン', role: '連射型', roleEn: 'RAPID',
+      desc: '水弾をばらまく軽快なヘリ戦車。高い機動力と連射で相手を追い詰める。',
+      selectStats: [2, 3, 5], specialDesc: '5発の水弾を扇状に一斉発射',
+      maxHp: 82, blastMul: 0.78, windMul: 0.9, fuelMul: 1.2, velScaleMul: 1.05, tBias: 0.9,
+      color: '#59c9ff', special: 'スライム掃射'
+    },
+    nisenmono: {
+      key: 'nisenmono', name: 'ニセンモノ', role: '防御型', roleEn: 'GUARD',
+      desc: '圧倒的な耐久で戦線を支える石像戦車。重く遅いが風には強い。',
+      selectStats: [5, 3, 1], specialDesc: '高速・貫通する光線弾を放つ',
+      maxHp: 140, blastMul: 1.0, windMul: 0.55, fuelMul: 0.72, velScaleMul: 0.9, tBias: 1.2,
+      color: '#a7aab8', special: 'プリズム狙撃'
+    },
+    burumutan: {
+      key: 'burumutan', name: 'ブルームタン', role: '支援型', roleEn: 'SUPPORT',
+      desc: '花の力で持久戦を制する支援戦車。耐久と回復でじわじわ勝つ。',
+      selectStats: [4, 2, 3], specialDesc: '自身のHPを30回復して砲撃',
+      maxHp: 110, blastMul: 0.9, windMul: 0.85, fuelMul: 1.0, velScaleMul: 0.95, tBias: 1.1,
+      color: '#f56f9a', special: '再生ブルーム'
+    },
+    sumoeru: {
+      key: 'sumoeru', name: 'スモエル', role: '爆発型', roleEn: 'BURST',
+      desc: '花火筒を背負うお祭り砲撃戦車。爆風で地形ごと一気に崩す。',
+      selectStats: [3, 4, 2], specialDesc: '4発の爆裂花火を扇状に打ち上げ',
+      maxHp: 100, blastMul: 1.15, windMul: 1.1, fuelMul: 0.9, velScaleMul: 0.9, tBias: 1.1,
+      color: '#b277ff', special: '花火乱れ撃ち', facesLeft: true
+    },
+    doRednote: {
+      key: 'doRednote', name: '弩レッドノート', role: '狙撃型', roleEn: 'SNIPER',
+      desc: '弩で超高速の矢弾を放つ狙撃戦車。遠距離から正確に仕留める。',
+      selectStats: [3, 4, 3], specialDesc: '高速で地形を貫く一撃',
+      maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, tBias: 0.8,
+      color: '#f14b46', special: '貫通狙撃', asset: 'do-rednote', facesLeft: true
+    },
+    mocchario: {
+      key: 'mocchario', name: 'モッチャリオ', role: '砲撃型', roleEn: 'CANNON',
+      desc: '口から高火力砲を放つ重量級。機動力を捨てて爆風で制圧する。',
+      selectStats: [4, 4, 2], specialDesc: '大爆風の高威力レーザー砲',
+      maxHp: 110, blastMul: 1.25, windMul: 1.05, fuelMul: 0.85, velScaleMul: 0.92, tBias: 1.15,
+      color: '#ff84aa', special: 'さくら砲'
     }
   };
-  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori'];
+  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario'];
 
-  // キャラ画像(モンスター戦車・右向き)を事前読み込み
+  // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
@@ -829,18 +1113,18 @@
     img.fetchPriority = 'high';
     img.onload = () => { characterImagesReady++; };
     img.onerror = () => { characterImagesFailed++; };
-    img.src = `assets/${key}.png`;
+    img.src = `assets/${CHARACTERS[key].asset || key}.png`;
     charImages[key] = img;
   }
-
   function areCoreImagesReady() {
     const titleSettled = titleLogoReady || titleLogoFailed;
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
-    return titleSettled && charactersSettled;
+    const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
+    return titleSettled && charactersSettled && timeBackgroundSettled;
   }
 
   function getCoreImageProgress() {
-    return characterImagesReady + characterImagesFailed + ((titleLogoReady || titleLogoFailed) ? 1 : 0);
+    return characterImagesReady + characterImagesFailed + ((titleLogoReady || titleLogoFailed) ? 1 : 0) + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
   let loadingEmblemReady = false;
@@ -857,6 +1141,28 @@
   titleLogoImage.onload = () => { titleLogoReady = true; };
   titleLogoImage.onerror = () => { titleLogoFailed = true; };
   titleLogoImage.src = 'assets/title-logo.png';
+  // 起動した端末のローカル時刻で、タイトル背景を朝・昼・夕・夜に切り替える。
+  function getTitleTimeTheme(hour) {
+    if (hour >= 4 && hour < 10) return 'morning';
+    if (hour >= 10 && hour < 16) return 'day';
+    if (hour >= 16 && hour < 19) return 'evening';
+    return 'night';
+  }
+  const titleTimeTheme = getTitleTimeTheme(new Date().getHours());
+  const titleTimeBackgroundPaths = {
+    morning: 'assets/title-morning.jpg',
+    day: 'assets/title-day.jpg',
+    evening: 'assets/title-evening.jpg',
+    night: 'assets/title-night.jpg'
+  };
+  let titleTimeBackgroundReady = false;
+  let titleTimeBackgroundFailed = false;
+  const titleTimeBackgroundImage = new Image();
+  titleTimeBackgroundImage.decoding = 'async';
+  titleTimeBackgroundImage.fetchPriority = 'high';
+  titleTimeBackgroundImage.onload = () => { titleTimeBackgroundReady = true; };
+  titleTimeBackgroundImage.onerror = () => { titleTimeBackgroundFailed = true; };
+  titleTimeBackgroundImage.src = titleTimeBackgroundPaths[titleTimeTheme];
   const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
 
   // ===== ユニット =====
@@ -1037,6 +1343,33 @@
     } else if (activateSpecial && def.key === 'kyoryu') {
       // 恐竜の必殺: 強化砲弾(バランス型らしい高威力・大爆風の一撃)
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 1.8, windMul: def.windMul });
+    } else if (activateSpecial && def.key === 'barugerukan') {
+      // バルゲルカンの必殺: 5連掃射(水弾を広範囲へばらまく)
+      for (const deg of [-16, -8, 0, 8, 16]) {
+        const v = rotateVec(vx0, vy0, deg);
+        fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul * 0.76, windMul: def.windMul });
+      }
+    } else if (activateSpecial && def.key === 'nisenmono') {
+      // ニセンモノの必殺: 高速貫通レーザー
+      fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, { blastMul: def.blastMul * 1.2, windMul: def.windMul, pierce: true });
+    } else if (activateSpecial && def.key === 'burumutan') {
+      // ブルームタンの必殺: 自己回復後に花弾を発射
+      const heal = Math.min(30, unit.maxHp - unit.hp);
+      unit.hp += heal;
+      if (heal > 0) spawnHealText(unit.x, unit.y - 32, heal);
+      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul });
+    } else if (activateSpecial && def.key === 'sumoeru') {
+      // スモエルの必殺: 爆裂花火4連射
+      for (const deg of [-15, -5, 5, 15]) {
+        const v = rotateVec(vx0, vy0, deg);
+        fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul * 1.15, windMul: def.windMul });
+      }
+    } else if (activateSpecial && def.key === 'doRednote') {
+      // 弩レッドノートの必殺: 超高速の貫通狙撃
+      fireProjectile(owner, anchor, vx0 * 2.15, vy0 * 2.15, { blastMul: def.blastMul * 1.25, windMul: def.windMul, pierce: true });
+    } else if (activateSpecial && def.key === 'mocchario') {
+      // モッチャリオの必殺: 高火力・大爆風のレーザー砲
+      fireProjectile(owner, anchor, vx0 * 1.1, vy0 * 1.1, { blastMul: def.blastMul * 2.0, windMul: def.windMul });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul, windMul: def.windMul });
     }
@@ -1140,6 +1473,10 @@
     floatTexts.push({ x, y, text: `-${dmg}`, life: 0.9, vy: -38, color: '#ff6b6b' });
   }
 
+  function spawnHealText(x, y, amount) {
+    floatTexts.push({ x, y, text: `+${amount}`, life: 0.9, vy: -38, color: '#7dff9b' });
+  }
+
   function triggerShake(mag, duration) {
     shakeMag = Math.max(shakeMag, mag);
     shakeTimer = Math.max(shakeTimer, duration);
@@ -1150,9 +1487,20 @@
   }
 
   // ===== タイトル・キャラクター選択画面 =====
-  let gamePhase = 'loading'; // 'loading' | 'title' | 'select' | 'battle'
+  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'battle'
   const titleVsCpuBtn = { x: VW / 2, y: 650, w: 340, h: 76 };
-  const selectCards = CHARACTER_LIST.map((key, i) => ({ key, x: VW / 2, y: 202 + i * 172, w: VW - 44, h: 156 }));
+  const SELECT_PAGE_SIZE = 4;
+  let selectPage = 0;
+  const selectPagePrevBtn = { x: 176, y: 840, w: 54, h: 32 };
+  const selectPageNextBtn = { x: 364, y: 840, w: 54, h: 32 };
+  function getSelectPageCount() {
+    return Math.ceil(CHARACTER_LIST.length / SELECT_PAGE_SIZE);
+  }
+  function getVisibleSelectCards() {
+    const start = selectPage * SELECT_PAGE_SIZE;
+    return CHARACTER_LIST.slice(start, start + SELECT_PAGE_SIZE)
+      .map((key, i) => ({ key, x: VW / 2, y: 202 + i * 172, w: VW - 44, h: 156, order: start + i + 1 }));
+  }
   const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
 
   function selectCharacterAndStart(key) {
@@ -1160,6 +1508,7 @@
     hasSuspendedSave = false;
     player.character = key;
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+    stopTitleBgm();
     gamePhase = 'battle';
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
@@ -1259,7 +1608,9 @@
     menuOpen = false;
     cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : MIN_CAMERA_ZOOM);
     cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(player.x));
+    stopTitleBgm();
     gamePhase = 'battle';
+    playStageBgm(currentThemeKey, true);
 
     clearSuspendedMatch();
     hasSuspendedSave = false;
@@ -1286,7 +1637,14 @@
 
   function drawTitleScreen() {
     ctx.save();
-    ctx.fillStyle = 'rgba(5,10,24,0.66)';
+    if (titleTimeBackgroundReady) {
+      ctx.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
+    }
+    const titleShade = ctx.createLinearGradient(0, 0, 0, VH);
+    titleShade.addColorStop(0, 'rgba(4,8,20,0.20)');
+    titleShade.addColorStop(0.45, 'rgba(4,8,20,0.34)');
+    titleShade.addColorStop(1, 'rgba(4,8,20,0.72)');
+    ctx.fillStyle = titleShade;
     ctx.fillRect(0, 0, VW, VH);
 
     // 透明余白を表示時にトリミングし、ロゴ本体を画面上部へ寄せる。
@@ -1351,15 +1709,16 @@
 
   function drawLoadingScreen() {
     ctx.save();
-    ctx.fillStyle = 'rgba(5,10,24,0.82)';
+    ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, VW, VH);
 
-    const angle = (Date.now() % 1800) / 1800 * Math.PI * 2;
-    const spinnerY = VH / 2 - 42;
+    const angle = (Date.now() % 3600) / 3600 * Math.PI * 2;
+    const spinnerY = VH / 2 - 100;
+    const spinnerX = VW / 2;
     if (loadingEmblemReady) {
       const emblemSize = 112;
       ctx.save();
-      ctx.translate(VW / 2, spinnerY);
+      ctx.translate(spinnerX, spinnerY);
       ctx.rotate(angle);
       ctx.shadowColor = 'rgba(255,210,74,0.35)';
       ctx.shadowBlur = 14;
@@ -1375,13 +1734,24 @@
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#fff';
+    const readyToStart = gamePhase === 'press';
+    const pulse = 0.55 + Math.sin(Date.now() / 260) * 0.28;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 45);
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
-    ctx.font = '11px sans-serif';
-    ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 1}`, VW / 2, VH / 2 + 68);
+    if (readyToStart) {
+      ctx.fillStyle = titleStartPending ? 'rgba(255,255,255,0.78)' : `rgba(255,210,74,${Math.min(1, pulse + 0.18)})`;
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText(titleStartPending ? 'STARTING BGM...' : 'TAP TO START', VW / 2, VH / 2 + 30);
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(titleStartPending ? 'タイトルを準備しています' : (titleStartFailed ? 'BGMを開始できませんでした。もう一度タップしてください' : '画面をタップしてタイトルBGMを開始'), VW / 2, VH / 2 + 53);
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 30);
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 2}`, VW / 2, VH / 2 + 53);
+    }
     ctx.restore();
   }
 
@@ -1405,11 +1775,7 @@
 
   function drawCharacterSelect() {
     ctx.save();
-    const overlay = ctx.createLinearGradient(0, 0, 0, VH);
-    overlay.addColorStop(0, 'rgba(3,8,20,0.82)');
-    overlay.addColorStop(0.72, 'rgba(7,13,26,0.68)');
-    overlay.addColorStop(1, 'rgba(2,5,13,0.88)');
-    ctx.fillStyle = overlay;
+    ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, VW, VH);
 
     const headerGlow = ctx.createRadialGradient(VW / 2, 78, 0, VW / 2, 78, 260);
@@ -1452,8 +1818,9 @@
       ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
     }
 
-    for (let cardIndex = 0; cardIndex < selectCards.length; cardIndex++) {
-      const card = selectCards[cardIndex];
+    const visibleCards = getVisibleSelectCards();
+    for (let cardIndex = 0; cardIndex < visibleCards.length; cardIndex++) {
+      const card = visibleCards[cardIndex];
       const def = CHARACTERS[card.key];
       ctx.save();
       ctx.translate(card.x, card.y);
@@ -1507,7 +1874,16 @@
         const imageScale = Math.min(118 / cImg.naturalWidth, 94 / cImg.naturalHeight);
         const iw = cImg.naturalWidth * imageScale;
         const ih = cImg.naturalHeight * imageScale;
-        ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
+        // 選択画面では全キャラを右向きで統一。左向き素材だけここで反転する。
+        if (def.facesLeft) {
+          ctx.save();
+          ctx.translate(imageCx, imageCy);
+          ctx.scale(-1, 1);
+          ctx.drawImage(cImg, -iw / 2, -ih / 2, iw, ih);
+          ctx.restore();
+        } else {
+          ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
+        }
       } else {
         ctx.beginPath();
         ctx.arc(imageCx, imageCy, 31, 0, Math.PI * 2);
@@ -1530,10 +1906,10 @@
       const contentW = contentRight - textX;
       ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 22px sans-serif';
+      ctx.font = `bold ${def.name.length >= 5 ? 17 : 22}px sans-serif`;
       ctx.fillText(def.name, textX, -48);
 
-      const roleX = textX + 54;
+      const roleX = contentRight - 122;
       selectRoundedRect(roleX, -65, 70, 20, 10);
       ctx.fillStyle = `${def.color}22`;
       ctx.fill();
@@ -1547,7 +1923,7 @@
       ctx.textAlign = 'right';
       ctx.fillStyle = 'rgba(255,255,255,0.10)';
       ctx.font = 'bold 30px monospace';
-      ctx.fillText(String(cardIndex + 1).padStart(2, '0'), contentRight, -45);
+      ctx.fillText(String(card.order).padStart(2, '0'), contentRight, -45);
 
       ctx.textAlign = 'left';
       ctx.font = '11px sans-serif';
@@ -1577,10 +1953,33 @@
       ctx.restore();
     }
 
+    const pageCount = getSelectPageCount();
+    if (pageCount > 1) {
+      for (const [button, label, enabled] of [
+        [selectPagePrevBtn, '‹', selectPage > 0],
+        [selectPageNextBtn, '›', selectPage < pageCount - 1]
+      ]) {
+        selectRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, 10);
+        ctx.fillStyle = enabled ? 'rgba(27,45,78,0.96)' : 'rgba(20,28,43,0.55)';
+        ctx.fill();
+        ctx.strokeStyle = enabled ? '#ffd24a' : 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.fillStyle = enabled ? '#fff' : 'rgba(255,255,255,0.32)';
+        ctx.font = 'bold 23px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, button.x, button.y + 8);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${selectPage + 1} / ${pageCount}`, VW / 2, 844);
+    }
+
     ctx.fillStyle = 'rgba(255,255,255,0.52)';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('カードをタップして出撃', VW / 2, 824);
+    ctx.fillText('カードをタップして出撃', VW / 2, 884);
 
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.34)';
@@ -1661,11 +2060,13 @@
   function applyStreakResult() {
     if (winner === 'player') {
       winStreak++;
+      playVictorySound();
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
       winStreak = 0;
       runStats = { damageDealt: 0, shots: 0 }; // 連勝が途切れたら次の挑戦は与ダメ効率もリセット
+      playDefeatSound();
     }
   }
 
@@ -1811,6 +2212,7 @@
 
   // ===== 描画 =====
   function drawSky() {
+    const fx = THEME_FX[currentThemeKey];
     const g = ctx.createLinearGradient(0, 0, 0, VH);
     g.addColorStop(0, currentTheme.sky[0]);
     g.addColorStop(0.55, currentTheme.sky[1]);
@@ -1818,13 +2220,91 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, VW, VH);
 
-    // 遠景の星
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    for (let i = 0; i < 40; i++) {
-      const sx = (i * 137.5) % VW;
-      const sy = (i * 71.3) % (GROUND_MIN_Y - 20);
-      ctx.fillRect(sx, sy, 1.5, 1.5);
+    // テーマごとの天体と地平線の光。背景画像を増やさず、試合ごとに位置が少し変わる。
+    const orbX = 78 + ((parallaxSeed * 0.137) % (VW - 156));
+    const orbY = currentThemeKey === 'desert' ? 168 : 92;
+    const orbRadius = currentThemeKey === 'desert' ? 32 : currentThemeKey === 'volcanic' ? 22 : 20;
+    const glow = ctx.createRadialGradient(orbX, orbY, 0, orbX, orbY, orbRadius * 4.8);
+    glow.addColorStop(0, fx.glow);
+    glow.addColorStop(0.36, fx.glow);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(orbX - orbRadius * 5, orbY - orbRadius * 5, orbRadius * 10, orbRadius * 10);
+    ctx.save();
+    ctx.shadowColor = fx.orb;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = fx.orb;
+    ctx.beginPath();
+    ctx.arc(orbX, orbY, orbRadius, 0, Math.PI * 2);
+    ctx.fill();
+    if (currentThemeKey === 'grass' || currentThemeKey === 'snow') {
+      ctx.fillStyle = currentTheme.sky[0];
+      ctx.beginPath();
+      ctx.arc(orbX + 8, orbY - 5, orbRadius * 0.92, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.restore();
+
+    if (currentThemeKey === 'snow') {
+      // 淡いオーロラ。主張を抑えてUIと弾道を見やすく保つ。
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.lineCap = 'round';
+      for (let band = 0; band < 3; band++) {
+        const aurora = ctx.createLinearGradient(0, 0, VW, 0);
+        aurora.addColorStop(0, 'rgba(76,255,208,0)');
+        aurora.addColorStop(0.45, band === 1 ? 'rgba(96,196,255,0.65)' : 'rgba(98,255,195,0.55)');
+        aurora.addColorStop(1, 'rgba(132,109,255,0)');
+        ctx.strokeStyle = aurora;
+        ctx.lineWidth = 16 - band * 3;
+        ctx.beginPath();
+        ctx.moveTo(-40, 105 + band * 28);
+        ctx.bezierCurveTo(120, 35 + band * 22, 350, 210 - band * 18, VW + 40, 70 + band * 30);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (currentThemeKey === 'volcanic') {
+      const lavaGlow = ctx.createRadialGradient(VW * 0.62, GROUND_MIN_Y + 10, 10, VW * 0.62, GROUND_MIN_Y, 260);
+      lavaGlow.addColorStop(0, 'rgba(255,72,20,0.34)');
+      lavaGlow.addColorStop(1, 'rgba(255,50,10,0)');
+      ctx.fillStyle = lavaGlow;
+      ctx.fillRect(0, 170, VW, GROUND_MIN_Y);
+    }
+
+    // 星・火の粉・雪・砂埃をテーマ別に描き分ける。
+    const t = performance.now() * 0.001;
+    for (let i = 0; i < 44; i++) {
+      let sx = (i * 137.5 + parallaxSeed * 0.19) % VW;
+      let sy = (i * 71.3 + parallaxSeed * 0.07) % (GROUND_MIN_Y - 24);
+      let size = 0.8 + (i % 4) * 0.45;
+      let alpha = 0.35 + (i % 5) * 0.1;
+      if (currentThemeKey === 'volcanic') {
+        sx = (sx + Math.sin(t * 0.7 + i) * 18 + VW) % VW;
+        sy = GROUND_MIN_Y - ((sy + t * (18 + i % 7)) % (GROUND_MIN_Y - 36));
+        size += 0.6;
+      } else if (currentThemeKey === 'snow') {
+        sx = (sx + t * (5 + i % 4)) % VW;
+        sy = (sy + t * (12 + i % 6)) % (GROUND_MIN_Y - 18);
+      } else if (currentThemeKey === 'desert') {
+        sx = (sx + t * (10 + i % 7)) % VW;
+        sy = 145 + (sy % 185) + Math.sin(t + i) * 5;
+        alpha *= 0.48;
+      } else {
+        alpha *= 0.72 + Math.sin(t * 2 + i) * 0.2;
+      }
+      ctx.globalAlpha = Math.max(0.08, alpha);
+      ctx.fillStyle = fx.particle;
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    const vignette = ctx.createRadialGradient(VW / 2, VH * 0.4, 80, VW / 2, VH * 0.4, VW * 0.72);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, VW, VH);
   }
 
   // ===== 遠景パララックス(山のシルエット・雲。カメラより遅く動いて奥行きを出す) =====
@@ -1849,6 +2329,14 @@
     ctx.lineTo(fromX, GROUND_MAX_Y + 50);
     ctx.closePath();
     ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(fromX, bgHillY(fromX, seedOffset, baseY, amp));
+    for (let x = fromX + step; x <= toX; x += step) {
+      ctx.lineTo(x, bgHillY(x, seedOffset, baseY, amp));
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -1934,7 +2422,9 @@
     const isBossUnit = isBossMatch && u.side === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
-    const facingLeft = u.side === 'cpu'; // 自分は右向き画像そのまま、CPUは反転して内側(左)を向く
+    const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
+    // プレイヤーは右、CPUは左を向く。左向き素材だけ反転ルールを入れ替える。
+    const facingLeft = (u.side === 'cpu') !== sourceFacesLeft;
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
@@ -2149,13 +2639,81 @@
   function drawProjectile() {
     for (const p of projectiles) {
       ctx.save();
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-      ctx.fillStyle = p.pierce ? '#b8f2ff' : '#fff2a8';
-      ctx.fill();
-      ctx.strokeStyle = p.pierce ? '#4fc3f7' : '#c88a2a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.atan2(p.vy, p.vx));
+
+      if (p.pierce) {
+        // 貫通弾は高密度のエネルギーボルト。芯・外光・速度線を分けて描く。
+        ctx.shadowColor = '#5de8ff';
+        ctx.shadowBlur = 18;
+        const beam = ctx.createLinearGradient(-32, 0, 13, 0);
+        beam.addColorStop(0, 'rgba(79,195,247,0)');
+        beam.addColorStop(0.55, 'rgba(79,195,247,0.48)');
+        beam.addColorStop(1, '#dfffff');
+        ctx.strokeStyle = beam;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(-32, 0);
+        ctx.lineTo(12, 0);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-20, 0);
+        ctx.lineTo(15, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#eaffff';
+        ctx.beginPath();
+        ctx.moveTo(17, 0);
+        ctx.lineTo(7, -6);
+        ctx.lineTo(7, 6);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        // 通常弾は金属製の砲弾。飛翔方向に合わせた尾・胴・帯・先端で立体感を出す。
+        const hot = p.blastMul > 1.45;
+        const trail = ctx.createLinearGradient(-30, 0, -4, 0);
+        trail.addColorStop(0, 'rgba(255,120,36,0)');
+        trail.addColorStop(0.55, hot ? 'rgba(255,80,20,0.45)' : 'rgba(255,192,74,0.30)');
+        trail.addColorStop(1, hot ? 'rgba(255,223,112,0.92)' : 'rgba(255,238,170,0.72)');
+        ctx.strokeStyle = trail;
+        ctx.lineWidth = hot ? 7 : 5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-30, 0);
+        ctx.lineTo(-4, 0);
+        ctx.stroke();
+
+        ctx.shadowColor = hot ? '#ff5b22' : '#ffd45c';
+        ctx.shadowBlur = hot ? 16 : 9;
+        const shell = ctx.createLinearGradient(0, -6, 0, 6);
+        shell.addColorStop(0, '#fff2b0');
+        shell.addColorStop(0.28, hot ? '#d85a24' : '#9a7541');
+        shell.addColorStop(0.72, hot ? '#71301f' : '#40372e');
+        shell.addColorStop(1, '#17191d');
+        ctx.fillStyle = shell;
+        ctx.beginPath();
+        ctx.moveTo(11, 0);
+        ctx.quadraticCurveTo(6, -6, -5, -5);
+        ctx.lineTo(-9, -3);
+        ctx.lineTo(-9, 3);
+        ctx.lineTo(-5, 5);
+        ctx.quadraticCurveTo(6, 6, 11, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+        ctx.fillStyle = hot ? '#ff9d42' : '#d0a451';
+        ctx.fillRect(-4, -5, 3, 10);
+        ctx.strokeStyle = 'rgba(255,255,255,0.48)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-3, -3.2);
+        ctx.lineTo(5.5, -2.4);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
@@ -2537,19 +3095,15 @@
       ctx.translate((Math.random() * 2 - 1) * mag, (Math.random() * 2 - 1) * mag);
     }
 
-    drawSky();
-    drawParallax();
-    if (gamePhase === 'loading' && areCoreImagesReady()) gamePhase = 'title';
+    if (gamePhase === 'loading' && areCoreImagesReady()) gamePhase = 'press';
     if (gamePhase === 'loading') {
-      ctx.save();
-      applyWorldCamera();
-      drawTerrain();
-      ctx.restore();
       drawLoadingScreen();
       ctx.restore();
       return;
     }
     if (gamePhase === 'title') {
+      drawSky();
+      drawParallax();
       ctx.save();
       applyWorldCamera();
       drawTerrain();
@@ -2558,15 +3112,19 @@
       ctx.restore();
       return;
     }
-    if (gamePhase === 'select') {
-      ctx.save();
-      applyWorldCamera();
-      drawTerrain();
+    if (gamePhase === 'press') {
+      drawLoadingScreen();
       ctx.restore();
+      return;
+    }
+    if (gamePhase === 'select') {
       drawCharacterSelect();
       ctx.restore();
       return;
     }
+
+    drawSky();
+    drawParallax();
 
     // ワールドレイヤー(カメラの影響を受ける)
     ctx.save();
@@ -2651,9 +3209,18 @@
     if (cutIn) return; // カットイン中は入力を受け付けない
     const p0 = canvasPointFromEvent(e);
     if (gamePhase === 'loading') return;
+    if (gamePhase === 'press') {
+      // 指を離した瞬間を、スマホで確実な音声再生トリガーとして使う。
+      inputMode = 'start';
+      inputPointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    startTitleBgm();
     if (gamePhase === 'title') {
       if (hitRect(p0, titleVsCpuBtn)) {
         playUiSound();
+        selectPage = 0;
         gamePhase = 'select';
       }
       return;
@@ -2663,7 +3230,17 @@
         resumeSuspendedMatch();
         return;
       }
-      for (const card of selectCards) {
+      if (hitRect(p0, selectPagePrevBtn) && selectPage > 0) {
+        selectPage--;
+        playUiSound();
+        return;
+      }
+      if (hitRect(p0, selectPageNextBtn) && selectPage < getSelectPageCount() - 1) {
+        selectPage++;
+        playUiSound();
+        return;
+      }
+      for (const card of getVisibleSelectCards()) {
         if (Math.abs(p0.x - card.x) <= card.w / 2 && Math.abs(p0.y - card.y) <= card.h / 2) {
           selectCharacterAndStart(card.key);
           return;
@@ -2677,8 +3254,10 @@
       if (hitRect(p0, menuSuspendBtn)) {
         saveSuspendedMatch();
         menuOpen = false;
+        stopStageBgm();
         gamePhase = 'title';
         hasSuspendedSave = true;
+        startTitleBgm();
         return;
       }
       return; // メニュー表示中は他の操作を無視
@@ -2691,7 +3270,14 @@
 
     if (Math.hypot(p0.x - soundBtn.x, p0.y - soundBtn.y) <= soundBtn.r + 10) {
       soundOn = !soundOn;
-      if (soundOn) playUiSound();
+      if (soundOn) {
+        playUiSound();
+        if (gamePhase === 'battle') playStageBgm(currentThemeKey);
+        else startTitleBgm();
+      } else {
+        titleBgm.pause();
+        stageBgm.pause();
+      }
       return;
     }
 
@@ -2771,6 +3357,16 @@
 
   function onPointerUp(e) {
     if (e.pointerType === 'touch') activeTouchPoints.delete(e.pointerId);
+    if (inputMode === 'start' && e.pointerId === inputPointerId) {
+      inputMode = null;
+      inputPointerId = null;
+      if (e.type === 'pointerup' && gamePhase === 'press') {
+        // このユーザー操作の中で直接play()を呼ぶ。成功するまでタイトルは表示しない。
+        enterTitleFromTap();
+        playUiSound();
+      }
+      return;
+    }
     if (pinchState && pinchState.ids.includes(e.pointerId)) {
       pinchState = null;
       inputMode = null;
@@ -2849,6 +3445,7 @@
     isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
+    if (gamePhase === 'battle') playStageBgm(currentThemeKey, true);
   }
 
   window.addEventListener('keydown', (e) => {
