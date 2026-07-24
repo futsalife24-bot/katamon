@@ -2012,6 +2012,7 @@
     if (Math.abs(delta) < 0.001) selectWheelPosition = targetIndex;
   }
   const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
+  const selectBackBtn = { x: 62, y: 32, w: 104, h: 34 };
 
   function selectCharacterAndStart(key) {
     clearSuspendedMatch();
@@ -2804,6 +2805,16 @@
     ctx.fillStyle = 'rgba(255,255,255,0.62)';
     ctx.font = '11px sans-serif';
     ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 111);
+
+    angularPlatePath(selectBackBtn.x, selectBackBtn.y, selectBackBtn.w, selectBackBtn.h, 8);
+    ctx.fillStyle = 'rgba(18,24,29,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = '#8c5b2c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#ffe2a1';
+    ctx.font = 'bold 12px "Yu Gothic UI", sans-serif';
+    ctx.fillText('‹  戻る', selectBackBtn.x, selectBackBtn.y + 4);
 
     if (hasSuspendedSave) {
       const b = resumeBtn;
@@ -4064,9 +4075,7 @@
       battleMode === 'free' ? '同じ条件でもう一戦' : (winner === 'player' ? 'つぎのバトルへ' : 'もう一度挑戦'),
       true
     );
-    if (battleMode === 'free' || winner !== 'player') {
-      drawResultButton(resultTitleBtn, 'タイトルへ戻る', false);
-    }
+    drawResultButton(resultTitleBtn, 'タイトルへ戻る', false);
     ctx.restore();
   }
 
@@ -4777,6 +4786,15 @@
       return;
     }
     if (gamePhase === 'select') {
+      if (hitRect(p0, selectBackBtn)) {
+        playUiSound();
+        selectWheelDragging = false;
+        selectWheelVelocity = 0;
+        inputMode = null;
+        inputPointerId = null;
+        gamePhase = 'title';
+        return;
+      }
       if (hasSuspendedSave && hitRect(p0, resumeBtn)) {
         resumeSuspendedMatch();
         return;
@@ -4832,7 +4850,7 @@
         resetMatch(true);
         return;
       }
-      if ((battleMode === 'free' || winner !== 'player') && hitRect(p0, resultTitleBtn)) {
+      if (hitRect(p0, resultTitleBtn)) {
         returnToTitleFromResult();
       }
       return;
@@ -5275,7 +5293,7 @@
   if ('serviceWorker' in navigator
       && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js?v=2', { updateViaCache: 'none' }).catch(() => {});
     });
   }
 })();
