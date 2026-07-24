@@ -90,12 +90,14 @@
   })();
 
   // ===== ステージ(横長)とカメラ =====
-  // 初期状態はステージ全幅。ピンチアウトで従来の等倍サイズまで拡大できる。
-  const STAGE_W = 960;
+  // 通常はキャラ周辺を見せ、ミニマップとピンチインで全景を確認する。
+  const STAGE_W = 1440;
   const MIN_CAMERA_ZOOM = VW / STAGE_W;
+  const DEFAULT_CAMERA_ZOOM = 0.78;
   const MAX_CAMERA_ZOOM = 1;
-  let cameraZoom = MIN_CAMERA_ZOOM;
+  let cameraZoom = DEFAULT_CAMERA_ZOOM;
   let cameraX = 0;
+  let cameraTargetX = null;
   function clampCameraZoom(zoom) {
     return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
   }
@@ -107,6 +109,15 @@
   }
   function centerCameraOn(worldX) {
     return clampCameraX(worldX - visibleWorldWidth() / 2);
+  }
+  function focusCameraOn(worldX, immediate = false) {
+    const target = centerCameraOn(worldX);
+    if (immediate) {
+      cameraX = target;
+      cameraTargetX = null;
+    } else {
+      cameraTargetX = target;
+    }
   }
   function applyWorldCamera(parallaxFactor = 1) {
     ctx.translate(0, CONTROL_PANEL_Y);
@@ -205,7 +216,8 @@
     grass: 'assets/stage-grass.mp3?v=1',
     desert: 'assets/stage-desert.mp3?v=1',
     snow: 'assets/stage-snow.mp3?v=1',
-    volcanic: 'assets/stage-volcanic.mp3?v=1'
+    volcanic: 'assets/stage-volcanic.mp3?v=1',
+    arena: 'assets/stage-boss-arena.mp3?v=1'
   };
   const STAGE_BGM_VOLUME = 0.28;
   stageBgm.volume = STAGE_BGM_VOLUME;
@@ -214,11 +226,12 @@
   let stageBgmRestoreTimer = null;
   function playStageBgm(themeKey, restart = false) {
     if (!soundOn || gamePhase !== 'battle') return;
-    const src = STAGE_BGM_SOURCES[themeKey] || STAGE_BGM_SOURCES.grass;
-    if (stageBgmTheme !== themeKey) {
+    const bgmKey = currentPattern === 'tieredBasin' ? 'arena' : themeKey;
+    const src = STAGE_BGM_SOURCES[bgmKey] || STAGE_BGM_SOURCES.grass;
+    if (stageBgmTheme !== bgmKey) {
       stageBgm.pause();
       stageBgm.src = src;
-      stageBgmTheme = themeKey;
+      stageBgmTheme = bgmKey;
       stageBgm.load();
       restart = true;
     }
@@ -341,8 +354,15 @@
   }
   function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
   function playSpecialSound() {
-    playLaunchSound();
-    playTone(420, 0.28, 'triangle', 0.12, 680, 0.035, 0.005);
+    // 通常砲撃よりも「溜め → 解放」がはっきり分かる、短い必殺専用ジングル。
+    // BGMは少しだけ退避させ、低域の衝撃と高域のきらめきを重ねる。
+    duckStageBgm(720);
+    playTone(190, 0.16, 'sawtooth', 0.075, 460, 0, 0.006);
+    playTone(460, 0.34, 'triangle', 0.14, 1240, 0.045, 0.009);
+    playTone(990, 0.18, 'sine', 0.08, 1760, 0.12, 0.004);
+    playFilteredNoise(0.12, 0.095, 'bandpass', 1650, 0.09, 0.004, 1.25);
+    playFilteredNoise(0.30, 0.16, 'lowpass', 410, 0.15, 0.003, 0.72);
+    playTone(72, 0.31, 'sine', 0.18, 40, 0.16, 0.004);
   }
   function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
   function playVictorySound() {
@@ -385,7 +405,7 @@
   }
 
   // ===== 地形生成(ピクセル単位のマスク方式:キャンバスに地形を描いて円形にくり抜く) =====
-  const TERRAIN_COLS = 320; // STAGE_W=960 → 3px刻み(接地判定・描画キャッシュ用の列)
+  const TERRAIN_COLS = Math.ceil(STAGE_W / 3); // 約3px刻みを保ち、横長化しても判定を粗くしない
   const COL_W = STAGE_W / TERRAIN_COLS;
   const ROW_H = 4; // 縦方向の判定グリッド刻み
   const ROWS = Math.ceil(VH / ROW_H);
@@ -424,15 +444,22 @@
       cloud: 'rgba(255,160,100,0.14)'
     }
   };
+  const THEME_LABELS = {
+    grass: '草原',
+    desert: '砂漠',
+    snow: '雪原',
+    volcanic: '火山'
+  };
   const THEME_KEYS = Object.keys(THEMES);
   const STAGE_BACKGROUND_SOURCES = {
     grass: 'assets/stage-grass-bg.jpg?v=1',
     desert: 'assets/stage-desert-bg.jpg?v=1',
     snow: 'assets/stage-snow-bg.jpg?v=1',
-    volcanic: 'assets/stage-volcanic-bg.jpg?v=1'
+    volcanic: 'assets/stage-volcanic-bg.jpg?v=1',
+    bossArena: 'assets/stage-boss-arena-bg.jpg?v=1'
   };
   const stageBackgroundImages = {};
-  for (const key of THEME_KEYS) {
+  for (const key of Object.keys(STAGE_BACKGROUND_SOURCES)) {
     const image = new Image();
     image.decoding = 'async';
     image.fetchPriority = 'low';
@@ -440,7 +467,10 @@
     stageBackgroundImages[key] = image;
   }
   function getReadyStageBackground() {
-    const image = stageBackgroundImages[currentThemeKey];
+    const backgroundKey = currentPattern === 'tieredBasin'
+      ? 'bossArena'
+      : currentThemeKey;
+    const image = stageBackgroundImages[backgroundKey];
     return image && image.complete && image.naturalWidth > 0 ? image : null;
   }
   const THEME_FX = {
@@ -506,8 +536,9 @@
 
   function rebuildTerrainRim() {
     terrainRimCtx.clearRect(0, 0, STAGE_W, VH);
-    paintTerrainRimLayer(currentTheme.rimShadow, 6);
-    paintTerrainRimLayer(currentTheme.rim, 3);
+    const arena = currentPattern === 'tieredBasin';
+    paintTerrainRimLayer(arena ? '#090c11' : currentTheme.rimShadow, 6);
+    paintTerrainRimLayer(arena ? '#b98238' : currentTheme.rim, 3);
   }
 
   // 既存の薄床地形を土台にして、橋だと一目で分かる装飾だけを別レイヤーに描く。
@@ -516,6 +547,67 @@
   bridgeCanvas.width = STAGE_W;
   bridgeCanvas.height = VH;
   const bridgeCtx = bridgeCanvas.getContext('2d');
+
+  // 闘技場専用の鉄柵・鋲・補強材。地形とは別レイヤーにして、爆風で地面と一緒に欠けるようにする。
+  const arenaDecorationCanvas = document.createElement('canvas');
+  arenaDecorationCanvas.width = STAGE_W;
+  arenaDecorationCanvas.height = VH;
+  const arenaDecorationCtx = arenaDecorationCanvas.getContext('2d');
+
+  function rebuildArenaDecoration() {
+    arenaDecorationCtx.clearRect(0, 0, STAGE_W, VH);
+    if (currentPattern !== 'tieredBasin') return;
+
+    const wallEdge = STAGE_W * ARENA_WALL_RATIO;
+    const drawFence = (startX, endX, y) => {
+      const posts = [];
+      for (let x = startX; x <= endX; x += 42) posts.push(x);
+      if (!posts.length || posts[posts.length - 1] < endX - 8) posts.push(endX);
+
+      arenaDecorationCtx.save();
+      arenaDecorationCtx.lineCap = 'round';
+      arenaDecorationCtx.lineJoin = 'round';
+      arenaDecorationCtx.shadowColor = 'rgba(0,0,0,0.55)';
+      arenaDecorationCtx.shadowBlur = 3;
+      arenaDecorationCtx.strokeStyle = '#171d25';
+      arenaDecorationCtx.lineWidth = 6;
+      for (const x of posts) {
+        arenaDecorationCtx.beginPath();
+        arenaDecorationCtx.moveTo(x, y + 2);
+        arenaDecorationCtx.lineTo(x, y - 29);
+        arenaDecorationCtx.stroke();
+      }
+      arenaDecorationCtx.strokeStyle = '#59616d';
+      arenaDecorationCtx.lineWidth = 3;
+      for (const railY of [y - 22, y - 10]) {
+        arenaDecorationCtx.beginPath();
+        arenaDecorationCtx.moveTo(startX, railY);
+        arenaDecorationCtx.lineTo(endX, railY);
+        arenaDecorationCtx.stroke();
+      }
+      arenaDecorationCtx.fillStyle = '#d39a45';
+      for (const x of posts) {
+        arenaDecorationCtx.beginPath();
+        arenaDecorationCtx.arc(x, y - 22, 2.3, 0, Math.PI * 2);
+        arenaDecorationCtx.fill();
+        arenaDecorationCtx.beginPath();
+        arenaDecorationCtx.moveTo(x - 4, y - 29);
+        arenaDecorationCtx.lineTo(x, y - 36);
+        arenaDecorationCtx.lineTo(x + 4, y - 29);
+        arenaDecorationCtx.closePath();
+        arenaDecorationCtx.fill();
+      }
+      arenaDecorationCtx.restore();
+    };
+
+    for (const shelf of ARENA_SHELVES) {
+      const shelfEdge = STAGE_W * shelf.reach;
+      // 中央側はキャラ1体分以上あけ、柵の切れ目から能動的に一段下へ降りられる見た目にする。
+      const exitGap = 54;
+      drawFence(wallEdge + 18, shelfEdge - exitGap, shelf.y);
+      drawFence(STAGE_W - shelfEdge + exitGap, STAGE_W - wallEdge - 18, shelf.y);
+    }
+  }
 
   function rebuildBridgeDecoration() {
     bridgeCtx.clearRect(0, 0, STAGE_W, VH);
@@ -619,6 +711,60 @@
   }
 
   function drawTerrainDetails() {
+    if (currentPattern === 'tieredBasin') {
+      terrainCtx.save();
+      terrainCtx.globalCompositeOperation = 'source-atop';
+
+      // 黒鉄を埋め込んだ石造り。通常ステージの土・小石とは明確に見分けられる質感にする。
+      const steelShade = terrainCtx.createLinearGradient(0, 0, STAGE_W, 0);
+      steelShade.addColorStop(0, 'rgba(9,13,18,0.50)');
+      steelShade.addColorStop(0.5, 'rgba(74,80,88,0.18)');
+      steelShade.addColorStop(1, 'rgba(9,13,18,0.50)');
+      terrainCtx.fillStyle = steelShade;
+      terrainCtx.fillRect(0, 0, STAGE_W, VH);
+
+      // 石組みの継ぎ目。
+      terrainCtx.strokeStyle = 'rgba(8,10,14,0.62)';
+      terrainCtx.lineWidth = 2;
+      for (let y = 16; y < VH; y += 30) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(0, y);
+        terrainCtx.lineTo(STAGE_W, y);
+        terrainCtx.stroke();
+        const offset = (Math.floor(y / 30) % 2) * 24;
+        for (let x = offset; x < STAGE_W; x += 48) {
+          terrainCtx.beginPath();
+          terrainCtx.moveTo(x, y - 30);
+          terrainCtx.lineTo(x, y);
+          terrainCtx.stroke();
+        }
+      }
+
+      // 三段棚の上面は真鍮の縁と鋲で補強する。
+      for (const shelf of ARENA_SHELVES) {
+        terrainCtx.fillStyle = 'rgba(202,143,58,0.72)';
+        terrainCtx.fillRect(0, shelf.y, STAGE_W, 4);
+        terrainCtx.fillStyle = 'rgba(246,192,91,0.82)';
+        for (let x = 12; x < STAGE_W; x += 28) {
+          terrainCtx.beginPath();
+          terrainCtx.arc(x, shelf.y + 8, 2, 0, Math.PI * 2);
+          terrainCtx.fill();
+        }
+      }
+
+      // 壁面の斜め補強帯。source-atopなので地形の内側だけに残る。
+      terrainCtx.strokeStyle = 'rgba(116,126,139,0.32)';
+      terrainCtx.lineWidth = 7;
+      for (let x = -VH; x < STAGE_W + VH; x += 96) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(x, VH);
+        terrainCtx.lineTo(x + VH * 0.42, 0);
+        terrainCtx.stroke();
+      }
+      terrainCtx.restore();
+      return;
+    }
+
     const fx = THEME_FX[currentThemeKey];
     const detailTop = 220;
     terrainCtx.save();
@@ -679,8 +825,14 @@
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
     const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
-    grad.addColorStop(0, currentTheme.dirtTop);
-    grad.addColorStop(1, currentTheme.dirtBottom);
+    if (currentPattern === 'tieredBasin') {
+      grad.addColorStop(0, '#4c535d');
+      grad.addColorStop(0.35, '#2c323b');
+      grad.addColorStop(1, '#11151b');
+    } else {
+      grad.addColorStop(0, currentTheme.dirtTop);
+      grad.addColorStop(1, currentTheme.dirtBottom);
+    }
     terrainCtx.fillStyle = grad;
     solidGrid.fill(0);
     for (let c = 0; c < TERRAIN_COLS; c++) {
@@ -703,6 +855,7 @@
     terrainCtx.restore();
     drawTerrainDetails();
     rebuildBridgeDecoration();
+    rebuildArenaDecoration();
     if (refreshRim) rebuildTerrainRim();
   }
 
@@ -733,6 +886,12 @@
     bridgeCtx.arc(cx, cy, radius, 0, Math.PI * 2);
     bridgeCtx.fill();
     bridgeCtx.restore();
+    arenaDecorationCtx.save();
+    arenaDecorationCtx.globalCompositeOperation = 'destination-out';
+    arenaDecorationCtx.beginPath();
+    arenaDecorationCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+    arenaDecorationCtx.fill();
+    arenaDecorationCtx.restore();
 
     const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
     const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
@@ -793,6 +952,22 @@
       case 'valley':
         // 中央が谷(深い)、両端が高台(浅い)
         return GROUND_MIN_Y + range * Math.sin(Math.PI * t);
+      case 'tieredBasin': {
+        // 横に広げた「臼」型。外周高台→中段テラス→中央谷底の順に下がる。
+        const fromCenter = Math.abs(t - 0.5);
+        const highY = GROUND_MIN_Y + range * 0.05;
+        const terraceY = GROUND_MIN_Y + range * 0.43;
+        const basinY = GROUND_MAX_Y - range * 0.03;
+        if (fromCenter >= 0.38) return highY;
+        // 斜面を短く、平らな段を長くして、ズーム中でも3階層を読み取りやすくする。
+        if (fromCenter >= 0.34) {
+          const blend = smoothstep(fromCenter, 0.34, 0.38);
+          return terraceY + (highY - terraceY) * blend;
+        }
+        if (fromCenter >= 0.22) return terraceY;
+        const blend = smoothstep(fromCenter, 0.15, 0.22);
+        return basinY + (terraceY - basinY) * blend;
+      }
       case 'bridge':
         // 橋用。左右の岸を近い高さにそろえ、中央へ細い足場を架けやすくする
         return mid + Math.sin(t * Math.PI * 2) * range * 0.045;
@@ -884,15 +1059,50 @@
     }
   }
 
+  const ARENA_WALL_RATIO = 0.095;
+  const ARENA_SHELVES = Object.freeze([
+    Object.freeze({ y: 365, bottom: 387, reach: 0.205 }),
+    Object.freeze({ y: 445, bottom: 468, reach: 0.235 }),
+    Object.freeze({ y: 525, bottom: 549, reach: 0.265 })
+  ]);
+
+  // 左右の外壁から3本ずつ棚が内側へ伸び、中央下部は完全な奈落になる闘技場マップ。
+  // 高さ1本のハイトマップでは庇の下の空間を表現できないため、列ごとの複数区間で専用構築する。
+  function buildMortarShelfTerrain(segments, hm) {
+    // 外壁は画面上端より先まで続くため、上に乗れる「台座」にはならない。
+    const wallTop = 0;
+    const wallBottom = 625;
+    // 上段＜中段＜下段の順で少しずつ長くし、中央へ歩けば一段下の棚へ降りられるようにする。
+
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const t = c / (TERRAIN_COLS - 1);
+      const edgeDistance = Math.min(t, 1 - t);
+      const columnSegments = [];
+
+      if (edgeDistance <= ARENA_WALL_RATIO) {
+        // 外壁は画面上端から底まで一枚の塊。ここへ各棚が横からつながる。
+        columnSegments.push([wallTop, wallBottom]);
+      } else {
+        for (const shelf of ARENA_SHELVES) {
+          if (edgeDistance <= shelf.reach) columnSegments.push([shelf.y, shelf.bottom]);
+        }
+      }
+
+      segments[c] = columnSegments;
+      hm[c] = columnSegments.length ? columnSegments[0][0] : FLOOR_Y;
+    }
+  }
+
   function generateTerrain(pattern) {
-    const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge'];
+    // 闘技場マップは少し出やすくして、横長ステージの階層戦を体験しやすくする。
+    const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'tieredBasin'];
     const p = pattern || patterns[Math.floor(Math.random() * patterns.length)];
 
     // 中点変位のnは2の冪にする必要があるため、近い2の冪を使い後でリサンプル
     let pow = 1;
     while (pow < TERRAIN_COLS) pow *= 2;
     const noiseRaw = midpointDisplacement(pow, 0.55);
-    const noiseAmp = p === 'bridge' ? 9 : 26; // 橋は接続部を安定させるため凹凸を控えめにする
+    const noiseAmp = p === 'bridge' ? 9 : p === 'tieredBasin' ? 11 : 26; // 橋と階層地形は輪郭を読みやすくする
 
     const hm = new Float64Array(TERRAIN_COLS);
     for (let i = 0; i < TERRAIN_COLS; i++) {
@@ -943,7 +1153,9 @@
         style: Math.random() < 0.5 ? 'timber' : 'rope',
         seed: Math.random() * 1000
       };
-    // 通常ステージにも、ときどき短い薄床を混ぜる。
+    // 闘技場マップはランダムな斜面ではなく、中央が奈落になった左右三段棚の専用シルエットに置き換える。
+    } else if (p === 'tieredBasin') {
+      buildMortarShelfTerrain(segments, hm);
     } else if (Math.random() < 0.35) {
       const zoneLen = 18 + Math.floor(Math.random() * 20);
       const zoneStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - zoneLen));
@@ -956,7 +1168,9 @@
 
     // 浮島ゾーン。崖・薄床の有無とは完全に独立して抽選し、連続した普通の地面の上にも出現する。
     // 下の地面は必ず残すので、島と同じ幅の縦穴や崖は作らない。
-    const floatingIslandCount = Math.random() < 0.58 ? (Math.random() < 0.22 ? 2 : 1) : 0;
+    const floatingIslandCount = p === 'tieredBasin'
+      ? 0
+      : (Math.random() < 0.58 ? (Math.random() < 0.22 ? 2 : 1) : 0);
     const floatingIslandRanges = [];
     for (let islandIndex = 0; islandIndex < floatingIslandCount; islandIndex++) {
       const sizeRoll = Math.random();
@@ -988,7 +1202,7 @@
 
     // 空洞(山の内部の未露出の空間。着弾で偶然開通することがある)
     // レンズ状に丸くすぼませ、縁も波打たせることで、四角い穴に見えないようにする
-    if (Math.random() < 0.3) {
+    if (p !== 'tieredBasin' && Math.random() < 0.3) {
       const cavernLen = 22 + Math.floor(Math.random() * 16);
       const cavernStart = midStart + Math.floor(Math.random() * Math.max(1, midEnd - midStart - cavernLen));
       if (!overlapsSpawn(cavernStart, cavernLen, 20)) {
@@ -1018,7 +1232,7 @@
     // スタート地点浮島(たまにプレイヤー/CPUの出現位置そのものが浮島になる)。
     // 真下の通常地面は消さずに残し、不自然な島幅ぴったりの縦穴を作らない。
     let startOnIsland = false;
-    if (Math.random() < 0.18) {
+    if (p !== 'tieredBasin' && Math.random() < 0.18) {
       startOnIsland = true;
       for (const sx of [STAGE_W * 0.15, STAGE_W * 0.85]) {
         const cCenter = Math.round(sx / COL_W);
@@ -1038,18 +1252,68 @@
   let startOnIsland = false;
   let currentBridge = null;
   let currentSegments = null; // 中断/再開用に、生成直後(未破壊)の地形を保持しておく
+  let arenaObstacles = []; // 闘技場中央に鎖で吊るす、砲弾だけを遮る障害物
+
+  function rebuildArenaObstacles() {
+    arenaObstacles = [];
+    if (currentPattern !== 'tieredBasin') return;
+
+    // parallaxSeedから毎試合同じ配置を復元できる疑似乱数を作る。
+    let state = (Math.floor(parallaxSeed * 1000) ^ 0x9e3779b9) >>> 0;
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const count = 2 + Math.floor(random() * 2);
+    const minX = STAGE_W * 0.34;
+    const maxX = STAGE_W * 0.66;
+    const slotW = (maxX - minX) / count;
+    for (let i = 0; i < count; i++) {
+      const x = minX + slotW * (i + 0.28 + random() * 0.44);
+      arenaObstacles.push({
+        x,
+        anchorX: x + (random() - 0.5) * 70,
+        anchorY: 92 + random() * 34,
+        y: 238 + random() * 188,
+        radius: 22 + Math.floor(random() * 7),
+        sway: 9 + random() * 9,
+        phase: random() * Math.PI * 2,
+        shape: random() < 0.55 ? 'ball' : 'block'
+      });
+    }
+  }
+
+  function arenaObstaclePosition(obstacle, nowMs = performance.now()) {
+    return {
+      x: obstacle.x + Math.sin(nowMs * 0.00072 + obstacle.phase) * obstacle.sway,
+      y: obstacle.y
+    };
+  }
+
+  function hitArenaObstacle(x, y, radius = 0) {
+    if (currentPattern !== 'tieredBasin') return null;
+    const now = performance.now();
+    for (const obstacle of arenaObstacles) {
+      const p = arenaObstaclePosition(obstacle, now);
+      if (Math.hypot(x - p.x, y - p.y) <= obstacle.radius + radius) {
+        return { obstacle, x: p.x, y: p.y };
+      }
+    }
+    return null;
+  }
 
   function newTerrain(pattern) {
     currentThemeKey = THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)];
     currentTheme = THEMES[currentThemeKey];
     parallaxSeed = Math.random() * 10000;
     const r = generateTerrain(pattern);
+    currentPattern = r.pattern;
+    rebuildArenaObstacles();
     currentSegments = r.segments;
     currentBridge = r.bridge || null;
     craterHistory = [];
     buildTerrainMask(r.segments);
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
-    currentPattern = r.pattern;
     startOnIsland = r.startOnIsland;
     updateDebug();
   }
@@ -1059,6 +1323,8 @@
     currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
     currentTheme = THEMES[currentThemeKey];
     parallaxSeed = savedParallaxSeed || 0;
+    currentPattern = pattern;
+    rebuildArenaObstacles();
     currentSegments = segments;
     currentBridge = savedBridge || null;
     buildTerrainMask(segments, false);
@@ -1066,7 +1332,6 @@
     for (const cr of craters) carveCraterInternal(cr.x, cr.y, cr.r, false);
     rebuildTerrainRim();
     craterHistory = craters.slice();
-    currentPattern = pattern;
     startOnIsland = wasStartOnIsland;
     updateDebug();
   }
@@ -1334,6 +1599,16 @@
   let calmBattle = false;
 
   function rollWind() {
+    if (battleMode === 'free') {
+      const selected = WIND_OPTIONS[freeModeConfig.windIndex] || WIND_OPTIONS[0];
+      if (selected.key !== 'random') {
+        calmBattle = selected.key === 'calm';
+        calmWind = selected.key === 'calm';
+        wind.dir = selected.dir || 1;
+        wind.strength = selected.strength;
+        return;
+      }
+    }
     calmWind = calmBattle || Math.random() < CALM_WIND_CHANCE;
     if (calmWind) {
       wind.dir = 1;
@@ -1347,7 +1622,7 @@
   // ===== 弾道物理 =====
   const GRAVITY = 650; // px/s^2
   const MAX_DRAG = 130; // px
-  const VEL_SCALE = 6.5; // px/s per px(ドラッグ量)。水平方向でも十分届くよう底上げ
+  const VEL_SCALE = 7.8; // 横長ステージでも高角度砲撃が届くよう、旧値から約20%延長
   const FIRE_MIN_DRAG = 12;
 
   // 引っ張り量(dx,dy)からキャラ性能を反映した発射初速を計算する共通処理(プレビューと実発射で共有)
@@ -1490,7 +1765,7 @@
 
     if (activateSpecial) {
       unit.specialCharge = 0;
-      triggerSpecialFlash(`必殺: ${def.special}!!`);
+      triggerSpecialFlash(`必殺: ${def.special}!!`, def);
       playSpecialSound();
     } else {
       playLaunchSound();
@@ -1569,7 +1844,7 @@
   let floatTexts = [];  // ダメージ数字ポップ
   let shakeTimer = 0;
   let shakeMag = 0;
-  let specialFlash = { timer: 0, text: '' };
+  let specialFlash = { timer: 0, text: '', color: '#ff9d42', sub: '' };
 
   function spawnExplosion(x, y, blastMul) {
     const count = Math.round(14 * Math.min(2, blastMul || 1));
@@ -1597,13 +1872,50 @@
     shakeTimer = Math.max(shakeTimer, duration);
   }
 
-  function triggerSpecialFlash(text) {
-    specialFlash = { timer: 0.9, text };
+  function triggerSpecialFlash(text, def) {
+    specialFlash = {
+      timer: 1.12,
+      text,
+      color: def?.color || '#ff9d42',
+      sub: def?.specialDesc || 'SPECIAL ATTACK'
+    };
   }
 
   // ===== タイトル・キャラクター選択画面 =====
-  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'battle'
-  const titleVsCpuBtn = { x: VW / 2, y: 650, w: 340, h: 76 };
+  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'freeSetup' | 'battle'
+  let battleMode = 'normal'; // 'normal' | 'free'
+  const titleVsCpuBtn = { x: VW / 2, y: 628, w: 382, h: 70 };
+  const titleFreeBtn = { x: VW / 2, y: 716, w: 382, h: 70 };
+  const FREE_TERRAIN_OPTIONS = [
+    { key: 'random', name: 'ランダム', sub: '毎回ちがう戦場' },
+    { key: 'plateauLeft', name: '左高台', sub: '左から右へ下る地形' },
+    { key: 'plateauRight', name: '右高台', sub: '右から左へ下る地形' },
+    { key: 'mountainCenter', name: '中央山', sub: '中央を制する高地戦' },
+    { key: 'valley', name: '中央谷', sub: '中央へ落ち込む谷間' },
+    { key: 'rolling', name: '丘陵', sub: '起伏が続く基本地形' },
+    { key: 'bridge', name: '大橋', sub: '中央の細い橋が勝負所' },
+    { key: 'tieredBasin', name: '闘技場マップ', sub: '黒鉄の三段落下デスマッチ' }
+  ];
+  const WIND_OPTIONS = [
+    { key: 'random', name: 'ランダム', sub: '4ターンごとに変化', dir: 1, strength: 0 },
+    { key: 'left', name: '← 左向き', sub: '固定風・強さ60%', dir: -1, strength: 0.6 },
+    { key: 'calm', name: '無風', sub: '風の影響なし', dir: 1, strength: 0 },
+    { key: 'right', name: '右向き →', sub: '固定風・強さ60%', dir: 1, strength: 0.6 }
+  ];
+  const freeModeConfig = {
+    playerIndex: 0,
+    cpuIndex: 1,
+    terrainIndex: FREE_TERRAIN_OPTIONS.findIndex(option => option.key === 'tieredBasin'),
+    windIndex: 0
+  };
+  const freeRows = {
+    player: { y: 220, h: 102 },
+    cpu: { y: 344, h: 102 },
+    terrain: { y: 474, h: 86 },
+    wind: { y: 580, h: 86 }
+  };
+  const freeStartBtn = { x: VW / 2, y: 712, w: 350, h: 64 };
+  const freeBackBtn = { x: VW / 2, y: 794, w: 210, h: 42 };
   const SELECT_WHEEL_CENTER_Y = 454;
   const SELECT_WHEEL_RADIUS_Y = 328;
   const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
@@ -1704,8 +2016,38 @@
   function selectCharacterAndStart(key) {
     clearSuspendedMatch();
     hasSuspendedSave = false;
+    battleMode = 'normal';
     player.character = key;
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+    stopTitleBgm();
+    gamePhase = 'battle';
+    winStreak = 0;
+    runStats = { damageDealt: 0, shots: 0 };
+    resetMatch(false);
+  }
+
+  function wrapOptionIndex(value, length) {
+    return ((value % length) + length) % length;
+  }
+
+  function changeFreeOption(kind, direction) {
+    const lengths = {
+      player: CHARACTER_LIST.length,
+      cpu: CHARACTER_LIST.length,
+      terrain: FREE_TERRAIN_OPTIONS.length,
+      wind: WIND_OPTIONS.length
+    };
+    const property = `${kind}Index`;
+    freeModeConfig[property] = wrapOptionIndex(freeModeConfig[property] + direction, lengths[kind]);
+    playUiSound();
+  }
+
+  function startFreeMatch() {
+    clearSuspendedMatch();
+    hasSuspendedSave = false;
+    battleMode = 'free';
+    player.character = CHARACTER_LIST[freeModeConfig.playerIndex];
+    cpu.character = CHARACTER_LIST[freeModeConfig.cpuIndex];
     stopTitleBgm();
     gamePhase = 'battle';
     winStreak = 0;
@@ -1718,7 +2060,10 @@
 
   function saveSuspendedMatch() {
     const data = {
-      v: 2,
+      v: 3,
+      battleMode,
+      freeModeConfig: { ...freeModeConfig },
+      stageW: STAGE_W,
       segments: currentSegments,
       craters: craterHistory,
       pattern: currentPattern,
@@ -1741,7 +2086,11 @@
   function loadSuspendedMatch() {
     try {
       const raw = localStorage.getItem(SUSPEND_KEY);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
+      if (!data || !Array.isArray(data.segments) || data.segments.length !== TERRAIN_COLS) return null;
+      return data;
     } catch (err) { return null; }
   }
 
@@ -1752,6 +2101,14 @@
   function resumeSuspendedMatch() {
     const data = loadSuspendedMatch();
     if (!data) return;
+
+    battleMode = data.battleMode === 'free' ? 'free' : 'normal';
+    if (data.freeModeConfig) {
+      freeModeConfig.playerIndex = wrapOptionIndex(Number(data.freeModeConfig.playerIndex) || 0, CHARACTER_LIST.length);
+      freeModeConfig.cpuIndex = wrapOptionIndex(Number(data.freeModeConfig.cpuIndex) || 0, CHARACTER_LIST.length);
+      freeModeConfig.terrainIndex = wrapOptionIndex(Number(data.freeModeConfig.terrainIndex) || 0, FREE_TERRAIN_OPTIONS.length);
+      freeModeConfig.windIndex = wrapOptionIndex(Number(data.freeModeConfig.windIndex) || 0, WIND_OPTIONS.length);
+    }
 
     loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
 
@@ -1808,8 +2165,9 @@
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
     menuOpen = false;
-    cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : MIN_CAMERA_ZOOM);
+    cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
     cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(player.x));
+    cameraTargetX = null;
     stopTitleBgm();
     gamePhase = 'battle';
     playStageBgm(currentThemeKey, true);
@@ -1835,6 +2193,120 @@
       }
     }
     if (line) ctx.fillText(line, x, cy);
+  }
+
+  function angularPlatePath(x, y, w, h, cut = 14) {
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2 + cut, y - h / 2);
+    ctx.lineTo(x + w / 2 - cut, y - h / 2);
+    ctx.lineTo(x + w / 2, y - h / 2 + cut);
+    ctx.lineTo(x + w / 2, y + h / 2 - cut);
+    ctx.lineTo(x + w / 2 - cut, y + h / 2);
+    ctx.lineTo(x - w / 2 + cut, y + h / 2);
+    ctx.lineTo(x - w / 2, y + h / 2 - cut);
+    ctx.lineTo(x - w / 2, y - h / 2 + cut);
+    ctx.closePath();
+  }
+
+  function drawRivet(x, y) {
+    const rivet = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, 6);
+    rivet.addColorStop(0, '#fff1a3');
+    rivet.addColorStop(0.42, '#b47728');
+    rivet.addColorStop(1, '#35200e');
+    ctx.fillStyle = rivet;
+    ctx.beginPath();
+    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#160e08';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawTitleModeButton(button, label, sub, kind) {
+    const isFree = kind === 'free';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.82)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 8;
+    angularPlatePath(button.x, button.y, button.w + 10, button.h + 10, 18);
+    const timber = ctx.createLinearGradient(0, button.y - button.h / 2, 0, button.y + button.h / 2);
+    timber.addColorStop(0, '#6d3b1c');
+    timber.addColorStop(0.45, '#351b11');
+    timber.addColorStop(1, '#170d09');
+    ctx.fillStyle = timber;
+    ctx.fill();
+    ctx.strokeStyle = '#1b0e08';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    angularPlatePath(button.x, button.y - 2, button.w, button.h, 14);
+    const steel = ctx.createLinearGradient(0, button.y - button.h / 2, 0, button.y + button.h / 2);
+    if (isFree) {
+      steel.addColorStop(0, '#315a58');
+      steel.addColorStop(0.48, '#163c3e');
+      steel.addColorStop(1, '#092326');
+    } else {
+      steel.addColorStop(0, '#46566a');
+      steel.addColorStop(0.48, '#273747');
+      steel.addColorStop(1, '#111b27');
+    }
+    ctx.fillStyle = steel;
+    ctx.fill();
+    ctx.strokeStyle = isFree ? '#e28b37' : '#e6aa3b';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 左の紋章板。通常戦は照準、フリーは工具ギアを模した簡易アイコン。
+    const badgeX = button.x - button.w / 2 + 43;
+    ctx.fillStyle = isFree ? '#873e22' : '#a35a1d';
+    ctx.beginPath();
+    ctx.arc(badgeX, button.y - 2, 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#f1b74d';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = '#fff0b4';
+    ctx.lineWidth = 3;
+    if (isFree) {
+      ctx.beginPath();
+      ctx.arc(badgeX, button.y - 2, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(badgeX + Math.cos(a) * 12, button.y - 2 + Math.sin(a) * 12);
+        ctx.lineTo(badgeX + Math.cos(a) * 18, button.y - 2 + Math.sin(a) * 18);
+        ctx.stroke();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(badgeX, button.y - 2, 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(badgeX - 18, button.y - 2);
+      ctx.lineTo(badgeX + 18, button.y - 2);
+      ctx.moveTo(badgeX, button.y - 20);
+      ctx.lineTo(badgeX, button.y + 16);
+      ctx.stroke();
+    }
+
+    drawRivet(button.x - button.w / 2 + 15, button.y - button.h / 2 + 14);
+    drawRivet(button.x + button.w / 2 - 15, button.y - button.h / 2 + 14);
+    drawRivet(button.x - button.w / 2 + 15, button.y + button.h / 2 - 14);
+    drawRivet(button.x + button.w / 2 - 15, button.y + button.h / 2 - 14);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff6dc';
+    ctx.strokeStyle = '#090b0d';
+    ctx.lineWidth = 5;
+    ctx.font = '900 23px "Arial Black", Impact, "Yu Gothic UI", sans-serif';
+    ctx.strokeText(label, button.x + 25, button.y - 7);
+    ctx.fillText(label, button.x + 25, button.y - 7);
+    ctx.fillStyle = isFree ? '#ffc071' : '#d9e7ee';
+    ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
+    ctx.fillText(sub, button.x + 25, button.y + 18);
+    ctx.restore();
   }
 
   function drawTitleScreen() {
@@ -1873,39 +2345,138 @@
     }
     ctx.restore();
 
-    const b = titleVsCpuBtn;
-    ctx.save();
-    ctx.shadowColor = 'rgba(255,174,46,0.35)';
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 18);
-    else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-    const buttonGrad = ctx.createLinearGradient(0, b.y - b.h / 2, 0, b.y + b.h / 2);
-    buttonGrad.addColorStop(0, '#314a68');
-    buttonGrad.addColorStop(1, '#17243b');
-    ctx.fillStyle = buttonGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#ffd24a';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.restore();
+    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', 'モンスターを選んで連勝へ挑め', 'normal');
+    drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
 
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = 'rgba(255,225,169,0.62)';
     ctx.textAlign = 'center';
-    ctx.font = 'bold 25px sans-serif';
-    ctx.fillText('VS: CPU', b.x, b.y - 3);
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.font = '11px sans-serif';
-    ctx.fillText('ひとりで対戦', b.x, b.y + 21);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.58)';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('モンスターを選んで、カタパルトバトルへ', VW / 2, 742);
+    ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
+    ctx.fillText('SELECT A BATTLE MODE', VW / 2, 775);
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.38)';
       ctx.font = '11px sans-serif';
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 18);
     }
+    ctx.restore();
+  }
+
+  function drawFreeArrow(x, y, direction) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(16,27,34,0.96)';
+    ctx.strokeStyle = '#c78335';
+    ctx.lineWidth = 2;
+    angularPlatePath(x, y, 48, 54, 9);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffe2a1';
+    ctx.beginPath();
+    if (direction < 0) {
+      ctx.moveTo(x + 6, y - 11);
+      ctx.lineTo(x - 9, y);
+      ctx.lineTo(x + 6, y + 11);
+    } else {
+      ctx.moveTo(x - 6, y - 11);
+      ctx.lineTo(x + 9, y);
+      ctx.lineTo(x - 6, y + 11);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFreeRow(row, label, value, sub, kind, imageKey) {
+    const x = VW / 2;
+    ctx.save();
+    angularPlatePath(x, row.y, 458, row.h, 14);
+    const fill = ctx.createLinearGradient(0, row.y - row.h / 2, 0, row.y + row.h / 2);
+    fill.addColorStop(0, 'rgba(55,70,77,0.97)');
+    fill.addColorStop(0.12, 'rgba(26,37,43,0.98)');
+    fill.addColorStop(1, 'rgba(9,17,22,0.98)');
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = '#8c5b2c';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d39b4b';
+    ctx.font = '900 10px "Arial Black", "Yu Gothic UI", sans-serif';
+    ctx.fillText(label, 60, row.y - row.h / 2 + 20);
+
+    if (imageKey) {
+      const img = charImages[imageKey];
+      if (img && img.complete && img.naturalWidth > 0) {
+        const size = row.h - 26;
+        ctx.save();
+        ctx.translate(126, row.y + 8);
+        if (kind === 'cpu') ctx.scale(-1, 1);
+        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        ctx.restore();
+      }
+    }
+
+    const valueX = imageKey ? 306 : VW / 2;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff5dc';
+    ctx.strokeStyle = '#070a0c';
+    ctx.lineWidth = 4;
+    ctx.font = `900 ${imageKey ? 21 : 20}px "Arial Black", "Yu Gothic UI", sans-serif`;
+    ctx.strokeText(value, valueX, row.y + 1);
+    ctx.fillText(value, valueX, row.y + 1);
+    ctx.fillStyle = 'rgba(220,232,231,0.72)';
+    ctx.font = '10px "Yu Gothic UI", sans-serif';
+    ctx.fillText(sub, valueX, row.y + 24);
+
+    drawFreeArrow(48, row.y + 7, -1);
+    drawFreeArrow(VW - 48, row.y + 7, 1);
+    ctx.restore();
+  }
+
+  function drawFreeSetupScreen() {
+    ctx.save();
+    if (titleTimeBackgroundReady) ctx.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
+    const shade = ctx.createLinearGradient(0, 0, 0, VH);
+    shade.addColorStop(0, 'rgba(4,8,14,0.56)');
+    shade.addColorStop(0.35, 'rgba(4,8,14,0.82)');
+    shade.addColorStop(1, 'rgba(4,8,14,0.94)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, VW, VH);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f3ad47';
+    ctx.strokeStyle = '#160d08';
+    ctx.lineWidth = 7;
+    ctx.font = '900 38px "Arial Black", Impact, sans-serif';
+    ctx.strokeText('FREE MODE', VW / 2, 78);
+    ctx.fillText('FREE MODE', VW / 2, 78);
+    ctx.fillStyle = '#fff0cd';
+    ctx.font = 'bold 12px "Yu Gothic UI", sans-serif';
+    ctx.fillText('演習条件を選択せよ', VW / 2, 105);
+
+    const playerKey = CHARACTER_LIST[freeModeConfig.playerIndex];
+    const cpuKey = CHARACTER_LIST[freeModeConfig.cpuIndex];
+    const terrain = FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
+    const windOption = WIND_OPTIONS[freeModeConfig.windIndex];
+    drawFreeRow(freeRows.player, 'YOUR MONSTER', CHARACTERS[playerKey].name, CHARACTERS[playerKey].role, 'player', playerKey);
+    drawFreeRow(freeRows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
+    drawFreeRow(freeRows.terrain, 'STAGE FORM', terrain.name, terrain.sub, 'terrain');
+    drawFreeRow(freeRows.wind, 'WIND SETTING', windOption.name, windOption.sub, 'wind');
+
+    drawTitleModeButton(freeStartBtn, 'START BATTLE', 'この条件で演習開始', 'normal');
+
+    angularPlatePath(freeBackBtn.x, freeBackBtn.y, freeBackBtn.w, freeBackBtn.h, 10);
+    ctx.fillStyle = 'rgba(18,24,29,0.94)';
+    ctx.fill();
+    ctx.strokeStyle = '#78512e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#d6c6ad';
+    ctx.font = 'bold 13px "Yu Gothic UI", sans-serif';
+    ctx.fillText('‹  タイトルへ戻る', freeBackBtn.x, freeBackBtn.y + 5);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.font = '10px "Yu Gothic UI", sans-serif';
+    ctx.fillText('左右の矢印で条件を切り替え', VW / 2, 842);
     ctx.restore();
   }
 
@@ -2562,6 +3133,11 @@
   let lastRunStreak = 0;
   let lastRunEfficiency = 0;
   function applyStreakResult() {
+    if (battleMode === 'free') {
+      if (winner === 'player') playVictorySound();
+      else playDefeatSound();
+      return;
+    }
     if (winner === 'player') {
       winStreak++;
       playVictorySound();
@@ -2578,8 +3154,10 @@
     if (turnCount % 4 === 0) rollWind(); // 風は自分・相手2ターンずつ(計4ターン)固定
     if (currentTurn === 'player') {
       player.fuel = player.fuelMax;
+      focusCameraOn(player.x);
     } else {
       cpu.fuel = cpu.fuelMax;
+      focusCameraOn(cpu.x);
       cpuThinkTimer = 0.7 + Math.random() * 0.5;
       const plan = planCpuMove();
       cpuMoveDir = plan.dir;
@@ -2625,7 +3203,7 @@
 
     const dist = Math.abs(player.x - cpu.x);
     const NEAR = 150;  // 近すぎ(自爆や反撃のリスク)→離れる
-    const FAR = 500;   // 遠すぎ(命中率のため)→寄る
+    const FAR = 760;   // 横長ステージでは遠距離戦を基本にし、極端に遠い時だけ寄る
 
     let dir = 0;
     if (dist < NEAR) dir = cpu.x < player.x ? -1 : 1;
@@ -2644,7 +3222,7 @@
     const anchor = unitAnchor(cpu);
     const target = unitAnchor(player);
     const def = CHARACTERS[cpu.character];
-    const baseT = Math.min(1.7, Math.max(0.7, Math.abs(target.x - anchor.x) / 230)) * def.tBias;
+    const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * def.tBias;
     const tier = cpuAccuracyTier(winStreak);
     const useSpecial = isSpecialReady(cpu) && (tier.name === 'high' || tier.name === 'perfect');
     const aimWindMul = useSpecial && def.key === 'tori' ? def.windMul * 0.55 : (def.windMul || 1);
@@ -2662,7 +3240,7 @@
     const dx = target.x - anchor.x;
     const dy = target.y - anchor.y;
     const distAbs = Math.max(1, Math.abs(dx));
-    const t = tHint || Math.min(1.7, Math.max(0.7, distAbs / 230));
+    const t = tHint || Math.min(2.2, Math.max(0.72, distAbs / 300));
     const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * windMul;
     const gravity = GRAVITY * gravityMul;
     const vx0 = ((dx - 0.5 * windAccel * t * t) / t) / launchSpeedMul;
@@ -2908,6 +3486,99 @@
     ctx.drawImage(terrainRimCanvas, 0, 0);
     // 橋は既存の薄床地形に重ねた装飾。地形と一緒に爆破で削れる。
     ctx.drawImage(bridgeCanvas, 0, 0);
+    // 闘技場だけの鉄柵・補強材。キャラクターより手前へ出ず、地形と一緒に爆破で欠ける。
+    ctx.drawImage(arenaDecorationCanvas, 0, 0);
+  }
+
+  function drawArenaObstacles() {
+    if (currentPattern !== 'tieredBasin' || !arenaObstacles.length) return;
+    const now = performance.now();
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const obstacle of arenaObstacles) {
+      const p = arenaObstaclePosition(obstacle, now);
+
+      // 鎖は純粋な装飾。弾の判定は先端の鉄球・鉄塊だけに持たせる。
+      const dx = p.x - obstacle.anchorX;
+      const dy = p.y - obstacle.anchorY;
+      const chainLength = Math.hypot(dx, dy);
+      const links = Math.max(4, Math.floor(chainLength / 14));
+      ctx.strokeStyle = '#1a2029';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < links; i++) {
+        const t = (i + 0.5) / links;
+        const lx = obstacle.anchorX + dx * t;
+        const ly = obstacle.anchorY + dy * t;
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(Math.atan2(dy, dx) + (i % 2 ? Math.PI / 2 : 0));
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 7, 4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const r = obstacle.radius;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.shadowColor = 'rgba(0,0,0,0.75)';
+      ctx.shadowBlur = 10;
+      if (obstacle.shape === 'ball') {
+        ctx.fillStyle = '#202630';
+        ctx.strokeStyle = '#9a6b31';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 12; i++) {
+          const a = i * Math.PI * 2 / 12;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a - 0.09) * (r - 2), Math.sin(a - 0.09) * (r - 2));
+          ctx.lineTo(Math.cos(a) * (r + 10), Math.sin(a) * (r + 10));
+          ctx.lineTo(Math.cos(a + 0.09) * (r - 2), Math.sin(a + 0.09) * (r - 2));
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 2, 0, 0, r);
+        g.addColorStop(0, '#69717d');
+        g.addColorStop(0.45, '#343b46');
+        g.addColorStop(1, '#11161d');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        const size = r * 1.55;
+        ctx.rotate(Math.PI / 4);
+        const g = ctx.createLinearGradient(-size, -size, size, size);
+        g.addColorStop(0, '#606975');
+        g.addColorStop(0.45, '#2b323c');
+        g.addColorStop(1, '#10151c');
+        ctx.fillStyle = g;
+        ctx.strokeStyle = '#ad7937';
+        ctx.lineWidth = 4;
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+        ctx.strokeRect(-size / 2, -size / 2, size, size);
+        ctx.strokeStyle = 'rgba(220,166,84,0.62)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.34, 0);
+        ctx.lineTo(size * 0.34, 0);
+        ctx.moveTo(0, -size * 0.34);
+        ctx.lineTo(0, size * 0.34);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#d7a04e';
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + Math.PI / 4;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r * 0.58, Math.sin(a) * r * 0.58, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   function drawDeadLine() {
@@ -3019,31 +3690,72 @@
     ctx.fillText(`${u.hp}/${u.maxHp}`, a.x, barY - 3);
   }
 
-  function drawWindMeter() {
-    const cx = VW / 2, cy = 56;
+  function drawBattleHudBackdrop() {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(cx - 70, cy - 16, 140, 32);
-    ctx.fillStyle = '#fff';
-    ctx.font = '11px sans-serif';
+    const hudBottom = 116;
+    const bg = ctx.createLinearGradient(0, 0, 0, hudBottom);
+    bg.addColorStop(0, 'rgba(5,9,20,0.97)');
+    bg.addColorStop(0.72, 'rgba(12,22,39,0.94)');
+    bg.addColorStop(1, 'rgba(8,15,28,0.82)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, VW, hudBottom);
+    ctx.strokeStyle = 'rgba(111,205,255,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, hudBottom - 0.5);
+    ctx.lineTo(VW, hudBottom - 0.5);
+    ctx.stroke();
+
+    const badgeW = 156;
+    const badgeX = VW / 2 - badgeW / 2;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(badgeX, 6, badgeW, 25, 13) : ctx.rect(badgeX, 6, badgeW, 25);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,210,74,0.42)';
+    ctx.stroke();
+    ctx.fillStyle = '#f4f7ff';
+    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(calmWind ? 'CALM' : 'WIND', cx, cy - 4);
+    const stageName = currentPattern === 'tieredBasin'
+      ? '闘技場ステージ'
+      : `${THEME_LABELS[currentThemeKey] || 'バトル'}ステージ`;
+    ctx.fillText(stageName, VW / 2, 23);
+    ctx.restore();
+  }
+
+  function drawWindMeter() {
+    const cx = VW / 2, cardY = 46, cardW = 164, cardH = 40;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(cx - cardW / 2, cardY, cardW, cardH, 8) : ctx.rect(cx - cardW / 2, cardY, cardW, cardH);
+    ctx.fillStyle = 'rgba(2,7,16,0.82)';
+    ctx.fill();
+    ctx.strokeStyle = calmWind ? 'rgba(114,232,255,0.72)' : 'rgba(255,224,138,0.62)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
+    ctx.fillStyle = calmWind ? '#72e8ff' : '#ffe08a';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(calmWind ? '無風 / CALM' : `風力 ${windLevel}`, cx, cardY + 12);
 
     const len = calmWind ? 28 : 16 + wind.strength * 42;
     const dir = calmWind ? 1 : wind.dir;
     ctx.strokeStyle = calmWind ? '#72e8ff' : '#ffe08a';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(cx - dir * len / 2, cy + 8);
-    ctx.lineTo(cx + dir * len / 2, cy + 8);
+    ctx.moveTo(cx - dir * len / 2, cardY + 28);
+    ctx.lineTo(cx + dir * len / 2, cardY + 28);
     ctx.stroke();
     if (!calmWind) {
       // 矢じり
       const ax = cx + dir * len / 2;
       ctx.beginPath();
-      ctx.moveTo(ax, cy + 8);
-      ctx.lineTo(ax - dir * 7, cy + 4);
-      ctx.lineTo(ax - dir * 7, cy + 12);
+      ctx.moveTo(ax, cardY + 28);
+      ctx.lineTo(ax - dir * 7, cardY + 24);
+      ctx.lineTo(ax - dir * 7, cardY + 32);
       ctx.closePath();
       ctx.fillStyle = '#ffe08a';
       ctx.fill();
@@ -3054,30 +3766,46 @@
   // ===== プレイヤー/CPUのHP・燃料ゲージ(WINDの左右)。燃料はターン開始で満タンに戻るので
   // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
   function drawUnitPanel(u, edgeX, align) {
-    const w = 158;
+    const w = 168;
     const barX = align === 'left' ? edgeX : edgeX - w;
-    const textX = align === 'left' ? barX : barX + w;
+    // 角のメニュー/音量ボタンと距離を取るため、名前カードは一段下に配置する。
+    const cardY = 46;
+    const accent = align === 'left' ? '#4fc3f7' : '#ff6b6b';
     ctx.save();
-    ctx.textAlign = align;
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.fillText(u.label, textX, 46);
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(barX, cardY, w, 40, 8) : ctx.rect(barX, cardY, w, 40);
+    ctx.fillStyle = 'rgba(2,7,16,0.82)';
+    ctx.fill();
+    ctx.strokeStyle = `${accent}99`;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    ctx.fillRect(align === 'left' ? barX : barX + w - 3, cardY + 7, 3, 26);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(barX, 50, w, 9);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(u.label, barX + 9, cardY + 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 9, cardY + 12);
+
+    const innerX = barX + 9;
+    const innerW = w - 18;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(innerX, cardY + 17, innerW, 9);
     const hpRatio = Math.max(0, u.hp / u.maxHp);
     ctx.fillStyle = hpRatio > 0.5 ? '#7be07b' : hpRatio > 0.25 ? '#f0c860' : '#f06060';
-    ctx.fillRect(barX, 50, w * hpRatio, 9);
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, 50, w, 9);
+    ctx.fillRect(innerX, cardY + 17, innerW * hpRatio, 9);
+    ctx.strokeStyle = 'rgba(255,255,255,0.34)';
+    ctx.strokeRect(innerX, cardY + 17, innerW, 9);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(barX, 63, w, 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(innerX, cardY + 30, innerW, 5);
     const fuelRatio = Math.max(0, u.fuel / u.fuelMax);
     ctx.fillStyle = '#8ad0ff';
-    ctx.fillRect(barX, 63, w * fuelRatio, 6);
-    ctx.strokeRect(barX, 63, w, 6);
+    ctx.fillRect(innerX, cardY + 30, innerW * fuelRatio, 5);
     ctx.restore();
   }
 
@@ -3265,13 +3993,39 @@
     }
   }
 
-  const continueBtn = { x: VW / 2, y: VH / 2 + 78, w: 210, h: 46 };
+  const continueBtn = { x: VW / 2, y: VH / 2 + 72, w: 210, h: 46 };
+  const resultTitleBtn = { x: VW / 2, y: VH / 2 + 132, w: 210, h: 42 };
+
+  function drawResultButton(button, label, primary) {
+    ctx.beginPath();
+    ctx.roundRect
+      ? ctx.roundRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, 10)
+      : ctx.rect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h);
+    if (primary) {
+      const fill = ctx.createLinearGradient(button.x - button.w / 2, button.y, button.x + button.w / 2, button.y);
+      fill.addColorStop(0, '#38aee8');
+      fill.addColorStop(0.5, '#76dcff');
+      fill.addColorStop(1, '#38aee8');
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.fillStyle = '#07111d';
+    } else {
+      ctx.fillStyle = 'rgba(8,15,28,0.92)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,210,74,0.82)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffe08a';
+    }
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText(label, button.x, button.y + 5);
+  }
 
   function drawResultBanner() {
     if (!matchOver) return;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
-    ctx.fillRect(0, VH / 2 - 120, VW, 280);
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(0, VH / 2 - 130, VW, winner === 'player' ? 280 : 330);
     ctx.textAlign = 'center';
 
     ctx.fillStyle = '#fff';
@@ -3279,7 +4033,11 @@
     const msg = winner === 'player' ? 'CPUを撃破!' : 'あなたの負け...';
     ctx.fillText(msg, VW / 2, VH / 2 - 70);
 
-    if (winner === 'player') {
+    if (battleMode === 'free') {
+      ctx.fillStyle = '#ffd24a';
+      ctx.font = 'bold 30px "Yu Gothic UI", sans-serif';
+      ctx.fillText(winner === 'player' ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22);
+    } else if (winner === 'player') {
       ctx.fillStyle = '#ffd24a';
       ctx.font = 'bold 40px sans-serif';
       ctx.fillText(`${winStreak}連勝!`, VW / 2, VH / 2 - 22);
@@ -3296,71 +4054,217 @@
 
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '13px sans-serif';
-    const effShown = winner === 'player' ? currentEfficiency() : lastRunEfficiency;
+    const effShown = battleMode === 'free'
+      ? currentEfficiency()
+      : (winner === 'player' ? currentEfficiency() : lastRunEfficiency);
     ctx.fillText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20);
 
-    // つぎへ/もう一度ボタン
-    const b = continueBtn;
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10) : ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-    ctx.fillStyle = '#4fc3f7';
-    ctx.fill();
-    ctx.fillStyle = '#0b0d17';
-    ctx.font = 'bold 16px sans-serif';
-    ctx.fillText(winner === 'player' ? 'つぎのバトルへ' : 'もう一度挑戦', b.x, b.y + 5);
+    drawResultButton(
+      continueBtn,
+      battleMode === 'free' ? '同じ条件でもう一戦' : (winner === 'player' ? 'つぎのバトルへ' : 'もう一度挑戦'),
+      true
+    );
+    if (battleMode === 'free' || winner !== 'player') {
+      drawResultButton(resultTitleBtn, 'タイトルへ戻る', false);
+    }
     ctx.restore();
+  }
+
+  function returnToTitleFromResult() {
+    stopStageBgm();
+    projectiles = [];
+    aimState = null;
+    moveDir = 0;
+    inputMode = null;
+    awaitingResolve = false;
+    matchOver = false;
+    winner = null;
+    cutIn = null;
+    gamePhase = 'title';
+    startTitleBgm();
   }
 
   function drawTurnInfo() {
     ctx.save();
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(8, 94, VW - 16, 19, 6) : ctx.rect(8, 94, VW - 16, 19);
+    ctx.fillStyle = currentTurn === 'player' ? 'rgba(38,111,155,0.7)' : 'rgba(145,53,64,0.7)';
+    ctx.fill();
+    ctx.strokeStyle = currentTurn === 'player' ? 'rgba(79,195,247,0.7)' : 'rgba(255,107,107,0.7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'left';
     const turnLabel = currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン';
-    ctx.fillText(`${turnLabel} (Turn ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL})`, 10, 96);
     const actingUnit = currentTurn === 'player' ? player : cpu;
-    if (actingUnit.moveLockTurns > 0) {
-      ctx.fillStyle = '#72e8ff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(`⚡ 移動封印 ${actingUnit.moveLockTurns}手`, 10, 112);
-    }
+    const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
+    ctx.fillText(`${turnLabel}　TURN ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL}${lockLabel}`, 16, 108);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ffd24a';
-    ctx.fillText(`${winStreak}連勝`, VW - 10, 96);
+    ctx.fillText(battleMode === 'free' ? 'FREE' : `${winStreak}連勝`, VW - 16, 108);
     ctx.restore();
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
-  const MINIMAP = { x: 20, y: 104, w: VW - 40, h: 14 };
-  function drawMinimap() {
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
-    const scale = MINIMAP.w / STAGE_W;
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.fillRect(MINIMAP.x + cameraX * scale, MINIMAP.y, Math.min(STAGE_W, visibleWorldWidth()) * scale, MINIMAP.h);
-    const py = MINIMAP.y + MINIMAP.h / 2;
-    ctx.beginPath();
-    ctx.arc(MINIMAP.x + player.x * scale, py, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#4fc3f7';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(MINIMAP.x + cpu.x * scale, py, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff6b6b';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(MINIMAP.x, MINIMAP.y, MINIMAP.w, MINIMAP.h);
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(cameraZoom * 100)}%`, MINIMAP.x + MINIMAP.w / 2, MINIMAP.y + 11);
-    if (cameraZoom <= MIN_CAMERA_ZOOM + 0.001 && gamePhase === 'battle') {
-      ctx.fillStyle = 'rgba(255,255,255,0.58)';
-      ctx.font = '10px sans-serif';
-      ctx.fillText('2本指で広げて拡大', MINIMAP.x + MINIMAP.w / 2, MINIMAP.y + 28);
+  const MINIMAP = { x: 13, y: 120, w: VW - 26, h: 56 };
+  function isInMinimap(p) {
+    return p.x >= MINIMAP.x && p.x <= MINIMAP.x + MINIMAP.w
+      && p.y >= MINIMAP.y && p.y <= MINIMAP.y + MINIMAP.h;
+  }
+  function moveCameraFromMinimap(point, snapToMarker = false) {
+    const pad = 4;
+    const innerX = MINIMAP.x + pad;
+    const innerY = MINIMAP.y + pad;
+    const innerW = MINIMAP.w - pad * 2;
+    const innerH = MINIMAP.h - pad * 2;
+    const mapWorldTop = 260;
+    const mapWorldBottom = Math.max(CONTROL_PANEL_Y + 8, GROUND_MAX_Y + 44);
+    const mapWorldH = mapWorldBottom - mapWorldTop;
+    const toMapX = x => innerX + (Math.max(0, Math.min(STAGE_W, x)) / STAGE_W) * innerW;
+    const toMapY = y => innerY + Math.max(0, Math.min(1, (y - mapWorldTop) / mapWorldH)) * innerH;
+
+    // P/Eマーカーを直接タップした時は、圧縮座標の誤差を挟まず本人の中心へ合わせる。
+    if (snapToMarker) {
+      for (const unit of [player, cpu]) {
+        if (Math.hypot(point.x - toMapX(unit.x), point.y - toMapY(unit.y)) <= 18) {
+          focusCameraOn(unit.x, true);
+          return;
+        }
+      }
     }
+
+    const ratio = Math.max(0, Math.min(1, (point.x - innerX) / innerW));
+    cameraX = centerCameraOn(ratio * STAGE_W);
+    cameraTargetX = null;
+  }
+  // 世界全体を圧縮する縦長ミニマップ。STAGE_Wだけを参照するため、将来の横長ステージにも追従する。
+  function drawMinimap() {
+    const map = MINIMAP;
+    const pad = 4;
+    const innerX = map.x + pad;
+    const innerY = map.y + pad;
+    const innerW = map.w - pad * 2;
+    const innerH = map.h - pad * 2;
+    const mapWorldTop = 260;
+    const mapWorldBottom = Math.max(CONTROL_PANEL_Y + 8, GROUND_MAX_Y + 44);
+    const mapWorldH = mapWorldBottom - mapWorldTop;
+    const toMapX = x => innerX + (Math.max(0, Math.min(STAGE_W, x)) / STAGE_W) * innerW;
+    const toMapY = y => innerY + Math.max(0, Math.min(1, (y - mapWorldTop) / mapWorldH)) * innerH;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(map.x, map.y, map.w, map.h, 8) : ctx.rect(map.x, map.y, map.w, map.h);
+    ctx.fillStyle = 'rgba(3,9,19,0.24)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(183,222,255,0.56)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(innerX, innerY, innerW, innerH);
+    ctx.clip();
+
+    // solidGridの実際の塊を圧縮して描き、浮島の下や爆破穴を空洞のまま残す。
+    const startRow = Math.max(0, Math.floor(mapWorldTop / ROW_H));
+    const endRow = Math.min(ROWS - 1, Math.ceil(mapWorldBottom / ROW_H));
+    const terrainFill = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
+    terrainFill.addColorStop(0, 'rgba(235,243,255,0.30)');
+    terrainFill.addColorStop(1, 'rgba(78,116,155,0.54)');
+    ctx.fillStyle = terrainFill;
+    ctx.beginPath();
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const x0 = innerX + c / TERRAIN_COLS * innerW;
+      const x1 = innerX + (c + 1) / TERRAIN_COLS * innerW;
+      let runStart = -1;
+      for (let r = startRow; r <= endRow + 1; r++) {
+        const solid = r <= endRow && solidGrid[r * TERRAIN_COLS + c] === 1;
+        if (solid && runStart < 0) runStart = r;
+        if (!solid && runStart >= 0) {
+          const y0 = toMapY(runStart * ROW_H);
+          const y1 = toMapY(r * ROW_H);
+          ctx.rect(x0, y0, Math.max(1, x1 - x0 + 0.25), Math.max(1, y1 - y0));
+          runStart = -1;
+        }
+      }
+    }
+    ctx.fill();
+
+    // 各地形塊の上面と下面を細く縁取りし、浮島であることを判別しやすくする。
+    ctx.beginPath();
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const x0 = innerX + c / TERRAIN_COLS * innerW;
+      const x1 = innerX + (c + 1) / TERRAIN_COLS * innerW;
+      for (let r = startRow; r <= endRow; r++) {
+        if (solidGrid[r * TERRAIN_COLS + c] !== 1) continue;
+        const aboveSolid = r > startRow && solidGrid[(r - 1) * TERRAIN_COLS + c] === 1;
+        const belowSolid = r < endRow && solidGrid[(r + 1) * TERRAIN_COLS + c] === 1;
+        if (!aboveSolid) {
+          const y = toMapY(r * ROW_H);
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x1, y);
+        }
+        if (!belowSolid) {
+          const y = toMapY((r + 1) * ROW_H);
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x1, y);
+        }
+      }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 鎖は省き、実際に砲弾判定を持つ先端障害物だけをミニマップへ表示する。
+    if (currentPattern === 'tieredBasin') {
+      const now = performance.now();
+      ctx.fillStyle = '#d7a04e';
+      ctx.strokeStyle = '#fff2c2';
+      ctx.lineWidth = 0.8;
+      for (const obstacle of arenaObstacles) {
+        const p = arenaObstaclePosition(obstacle, now);
+        ctx.beginPath();
+        ctx.arc(toMapX(p.x), toMapY(p.y), 2.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    // 現在カメラに映っている横幅を淡く表示して、ズーム時の位置を把握しやすくする。
+    const cameraMapX = toMapX(cameraX);
+    const cameraMapW = Math.min(STAGE_W, visibleWorldWidth()) / STAGE_W * innerW;
+    ctx.fillStyle = 'rgba(121,214,255,0.13)';
+    ctx.fillRect(cameraMapX, innerY, cameraMapW, innerH);
+    ctx.strokeStyle = 'rgba(143,229,255,0.88)';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(cameraMapX + 0.5, innerY + 0.5, Math.max(1, cameraMapW - 1), innerH - 1);
+    const drawUnitMark = (u, color, label) => {
+      const x = toMapX(u.x), y = toMapY(u.y);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.24;
+      ctx.beginPath(); ctx.moveTo(x, innerY); ctx.lineTo(x, y); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(x, y, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(label, x, Math.max(innerY + 8, y - 6));
+    };
+    drawUnitMark(player, '#4fc3f7', 'P');
+    drawUnitMark(cpu, '#ff6b6b', 'E');
+    ctx.restore();
+
+    const heightGap = Math.round(Math.abs(player.y - cpu.y));
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('MAP', map.x + 7, map.y + 11);
+    ctx.textAlign = 'right';
+    ctx.fillText(`ΔH ${heightGap}`, map.x + map.w - 7, map.y + 11);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText(`${Math.round(cameraZoom * 100)}%`, map.x + map.w / 2, map.y + map.h - 6);
     ctx.restore();
   }
 
@@ -3488,17 +4392,61 @@
 
   function drawSpecialFlash() {
     if (specialFlash.timer <= 0) return;
+    const duration = 1.12;
+    const progress = Math.max(0, Math.min(1, 1 - specialFlash.timer / duration));
+    const alpha = Math.sin(Math.min(1, progress * 3.4) * Math.PI / 2) * Math.min(1, specialFlash.timer * 3.1);
+    const color = specialFlash.color || '#ff9d42';
+    const bandY = VH * 0.33;
+    const bandH = 166;
     ctx.save();
-    ctx.globalAlpha = Math.min(1, specialFlash.timer * 2.2);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.globalAlpha = alpha;
+
+    // 画面全体のフラッシュと、中央に寄る斜めのスピードライン。
+    const glow = ctx.createRadialGradient(VW / 2, VH * 0.42, 8, VW / 2, VH * 0.42, VW * 0.76);
+    glow.addColorStop(0, `${color}55`);
+    glow.addColorStop(0.46, `${color}1d`);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
     ctx.fillRect(0, 0, VW, VH);
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#ff6b3a';
-    ctx.lineWidth = 4;
-    ctx.font = 'bold 28px sans-serif';
+    ctx.fillStyle = 'rgba(1,4,12,0.64)';
+    ctx.fillRect(0, bandY, VW, bandH);
+    ctx.strokeStyle = `${color}dd`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, bandY + 1, VW, bandH - 2);
+    ctx.strokeStyle = `${color}88`;
+    ctx.lineWidth = 1;
+    for (let i = -4; i <= 4; i++) {
+      const offset = i * 58 + progress * 190;
+      ctx.beginPath();
+      ctx.moveTo(offset - 110, bandY + bandH);
+      ctx.lineTo(offset + 125, bandY);
+      ctx.stroke();
+    }
+    const centerGlow = ctx.createLinearGradient(0, bandY, VW, bandY + bandH);
+    centerGlow.addColorStop(0, 'rgba(0,0,0,0)');
+    centerGlow.addColorStop(0.5, `${color}35`);
+    centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = centerGlow;
+    ctx.fillRect(0, bandY, VW, bandH);
+
     ctx.textAlign = 'center';
-    ctx.strokeText(specialFlash.text, VW / 2, VH * 0.42);
-    ctx.fillText(specialFlash.text, VW / 2, VH * 0.42);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#050914';
+    ctx.lineWidth = 5;
+    ctx.font = '900 29px sans-serif';
+    ctx.strokeText(specialFlash.text, VW / 2, bandY + 78);
+    ctx.fillText(specialFlash.text, VW / 2, bandY + 78);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('SPECIAL ATTACK', VW / 2, bandY + 102);
+    if (specialFlash.sub) {
+      ctx.fillStyle = 'rgba(255,255,255,0.86)';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(specialFlash.sub, VW / 2, bandY + 124);
+    }
     ctx.restore();
   }
 
@@ -3654,7 +4602,7 @@
 
   function render() {
     // 地形名・テーマ表示は対戦中だけ見せ、タイトルやキャラ選択では内部情報を隠す。
-    debugPanel.style.display = gamePhase === 'battle' ? 'block' : 'none';
+    debugPanel.style.display = 'none';
     ctx.save();
     if (shakeTimer > 0) {
       const mag = shakeMag * (shakeTimer / 0.3);
@@ -3688,6 +4636,11 @@
       ctx.restore();
       return;
     }
+    if (gamePhase === 'freeSetup') {
+      drawFreeSetupScreen();
+      ctx.restore();
+      return;
+    }
 
     drawSky();
     drawParallax();
@@ -3696,6 +4649,7 @@
     ctx.save();
     applyWorldCamera();
     drawTerrain();
+    drawArenaObstacles();
     drawTrajectoryPreview();
     drawProjectile();
     drawParticles();
@@ -3707,6 +4661,7 @@
     // UIレイヤー(スクリーン固定)
     drawDeadLine();
     drawOffscreenIndicator();
+    drawBattleHudBackdrop();
     drawWindMeter();
     drawUnitPanel(player, 10, 'left');
     drawUnitPanel(cpu, VW - 10, 'right');
@@ -3786,10 +4741,38 @@
     if (gamePhase === 'title') {
       if (hitRect(p0, titleVsCpuBtn)) {
         playUiSound();
+        battleMode = 'normal';
         selectWheelPosition = 0;
         selectWheelVelocity = 0;
         selectWheelDragging = false;
         gamePhase = 'select';
+      } else if (hitRect(p0, titleFreeBtn)) {
+        playUiSound();
+        gamePhase = 'freeSetup';
+      }
+      return;
+    }
+    if (gamePhase === 'freeSetup') {
+      if (hitRect(p0, freeStartBtn)) {
+        playUiSound();
+        startFreeMatch();
+        return;
+      }
+      if (hitRect(p0, freeBackBtn)) {
+        playUiSound();
+        gamePhase = 'title';
+        return;
+      }
+      for (const [kind, row] of Object.entries(freeRows)) {
+        if (Math.abs(p0.y - (row.y + 7)) > row.h / 2) continue;
+        if (p0.x <= 86) {
+          changeFreeOption(kind, -1);
+          return;
+        }
+        if (p0.x >= VW - 86) {
+          changeFreeOption(kind, 1);
+          return;
+        }
       }
       return;
     }
@@ -3847,7 +4830,20 @@
       const b = continueBtn;
       if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y) <= b.h / 2) {
         resetMatch(true);
+        return;
       }
+      if ((battleMode === 'free' || winner !== 'player') && hitRect(p0, resultTitleBtn)) {
+        returnToTitleFromResult();
+      }
+      return;
+    }
+
+    // ミニマップはタップ/ドラッグした地点へ即座に視点移動する。
+    if (isInMinimap(p0)) {
+      moveCameraFromMinimap(p0, true);
+      inputMode = 'minimap';
+      inputPointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -3904,6 +4900,7 @@
         const midpointX = (a.x + b.x) / 2;
         cameraZoom = clampCameraZoom(pinchState.startZoom * distance / pinchState.startDistance);
         cameraX = clampCameraX(pinchState.anchorWorldX - midpointX / cameraZoom);
+        cameraTargetX = null;
       }
       return;
     }
@@ -3919,8 +4916,11 @@
     } else if (inputMode === 'aim' && aimState) {
       aimState.curX = p.x;
       aimState.curY = p.y;
+    } else if (inputMode === 'minimap') {
+      moveCameraFromMinimap(p);
     } else if (inputMode === 'pan') {
       cameraX = clampCameraX(cameraX - (p.x - panLastX) / cameraZoom);
+      cameraTargetX = null;
       panLastX = p.x;
     }
   }
@@ -4011,13 +5011,24 @@
   function resetMatch(carrySpecialCharge) {
     const playerCharge = carrySpecialCharge ? player.specialCharge : 0;
     const cpuCharge = carrySpecialCharge ? cpu.specialCharge : 0;
-    calmBattle = Math.random() < CALM_BATTLE_CHANCE;
+    // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
+    isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
+    const freeWind = battleMode === 'free' ? WIND_OPTIONS[freeModeConfig.windIndex] : null;
+    calmBattle = freeWind && freeWind.key !== 'random'
+      ? freeWind.key === 'calm'
+      : Math.random() < CALM_BATTLE_CHANCE;
     calmWind = false;
-    newTerrain();
+    const freeTerrain = battleMode === 'free' ? FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex] : null;
+    const selectedTerrain = isBossMatch
+      ? 'tieredBasin'
+      : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined);
+    newTerrain(selectedTerrain);
     applyCharacter(player, player.character);
     applyCharacter(cpu, cpu.character);
-    player.x = STAGE_W * 0.15;
-    cpu.x = STAGE_W * 0.85;
+    // 闘技場マップは外壁の天辺ではなく、左右から内側へ伸びる上段棚を開始位置にする。
+    const mortarShelfStart = currentPattern === 'tieredBasin';
+    player.x = STAGE_W * (mortarShelfStart ? 0.18 : 0.15);
+    cpu.x = STAGE_W * (mortarShelfStart ? 0.82 : 0.85);
     initUnitOnGround(player);
     initUnitOnGround(cpu);
     projectiles = [];
@@ -4044,10 +5055,9 @@
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
     cutIn = null;
-    cameraZoom = MIN_CAMERA_ZOOM;
-    cameraX = 0;
+    cameraZoom = DEFAULT_CAMERA_ZOOM;
+    focusCameraOn(player.x, true);
     menuOpen = false;
-    isBossMatch = winStreak > 0 && winStreak % 10 === 0;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
     if (gamePhase === 'battle') playStageBgm(currentThemeKey, true);
@@ -4069,10 +5079,17 @@
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
-    // カメラ:弾が飛んでいる間だけ自動で追従する。それ以外は指でスライドした位置のまま維持する(戻さない)
+    // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
     if (projectiles.length) {
       const target = centerCameraOn(projectiles[0].x);
       cameraX += (target - cameraX) * Math.min(1, dt * 5);
+      cameraTargetX = null;
+    } else if (cameraTargetX !== null) {
+      cameraX += (cameraTargetX - cameraX) * Math.min(1, dt * 6);
+      if (Math.abs(cameraTargetX - cameraX) < 0.5) {
+        cameraX = cameraTargetX;
+        cameraTargetX = null;
+      }
     }
 
     // 演出系の更新はカットイン中も続ける(シェイクが残り続けて震え続けるのを防ぐ)
@@ -4158,6 +5175,23 @@
         }
       }
       if (hit) continue;
+
+      // 闘技場の鎖には当たらず、先端の鉄球・鉄塊だけが砲弾を遮る。
+      // 地形グリッドには入れないため、落下中のキャラが空中障害物へ着地することはない。
+      const obstacleHit = p.fireworkShard ? null : hitArenaObstacle(p.x, p.y, p.radius);
+      if (obstacleHit) {
+        if (p.emp) {
+          emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
+        } else if (p.firework) {
+          explodeAt(obstacleHit.x, obstacleHit.y, 0.5, p.owner, 0.65);
+          spawnFireworkBurst(p);
+        } else {
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
+        }
+        triggerShake(2.5, 0.1);
+        projectiles.splice(i, 1);
+        continue;
+      }
 
       if (fireworkDue) {
         spawnFireworkBurst(p);
