@@ -1133,6 +1133,7 @@
     if (refreshRim) rebuildTerrainRim();
   }
 
+  const TRAIL_MARK_STEP = 4; // 花火の拡散弾が軌跡を刻む間隔(px)
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
   function carveTrailMark(cx, cy, radius) {
     carveCraterInternal(cx, cy, radius, false);
@@ -1476,6 +1477,7 @@
   let currentBridge = null;
   let currentSegments = null; // 中断/再開用に、生成直後(未破壊)の地形を保持しておく
   let arenaObstacles = []; // 闘技場中央に鎖で吊るす、砲弾だけを遮る障害物
+  let simTimeMs = 0;       // 対戦開始からの経過時間。障害物の揺れの基準に使う
 
   function rebuildArenaObstacles() {
     arenaObstacles = [];
@@ -1506,7 +1508,7 @@
     }
   }
 
-  function arenaObstaclePosition(obstacle, nowMs = performance.now()) {
+  function arenaObstaclePosition(obstacle, nowMs = simTimeMs) {
     return {
       x: obstacle.x + Math.sin(nowMs * 0.00072 + obstacle.phase) * obstacle.sway,
       y: obstacle.y
@@ -1515,7 +1517,7 @@
 
   function hitArenaObstacle(x, y, radius = 0) {
     if (currentPattern !== 'tieredBasin') return null;
-    const now = performance.now();
+    const now = simTimeMs;
     for (const obstacle of arenaObstacles) {
       const p = arenaObstaclePosition(obstacle, now);
       if (Math.hypot(x - p.x, y - p.y) <= obstacle.radius + radius) {
@@ -1924,6 +1926,7 @@
       fireworkShard: !!opts.fireworkShard,
       fireworkTimer: 0,
       travelDistance: 0,
+      trailCarvedTo: 0,        // 軌跡を刻み終えた距離。フレームレートに依存させないため
       maxDistance: opts.maxDistance || 0,
       trailRadius: opts.trailRadius || 0,
       hitTargets: []
@@ -2410,6 +2413,7 @@
       bridge: currentBridge,
       themeKey: currentThemeKey,
       parallaxSeed,
+      simTimeMs, // 再開時に闘技場の障害物の揺れが飛ばないよう位相も持ち越す
       playerChar: player.character,
       cpuChar: cpu.character,
       player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, y: player.y, specialCharge: player.specialCharge, moveLockTurns: player.moveLockTurns },
@@ -2450,6 +2454,8 @@
     }
 
     loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
+    // 旧セーブには無いので0から。障害物の揺れが少しずれるだけで実害はない。
+    simTimeMs = Number.isFinite(data.simTimeMs) ? data.simTimeMs : 0;
 
     player.character = data.playerChar;
     cpu.character = data.cpuChar;
@@ -3896,7 +3902,7 @@
 
   function drawArenaObstacles() {
     if (currentPattern !== 'tieredBasin' || !arenaObstacles.length) return;
-    const now = performance.now();
+    const now = simTimeMs; // 当たり判定と同じ時計。ズレると「見えている位置」で当たらなくなる
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -4718,7 +4724,7 @@
 
     // 鎖は省き、実際に砲弾判定を持つ先端障害物だけをミニマップへ表示する。
     if (currentPattern === 'tieredBasin') {
-      const now = performance.now();
+      const now = simTimeMs;
       ctx.fillStyle = '#d7a04e';
       ctx.strokeStyle = '#fff2c2';
       ctx.lineWidth = 0.8;
@@ -6068,6 +6074,7 @@
       ? 'tieredBasin'
       : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined);
     newTerrain(selectedTerrain);
+    simTimeMs = 0;
     applyCharacter(player, player.character);
     applyCharacter(cpu, cpu.character);
     // 闘技場マップは外壁の天辺ではなく、左右から内側へ伸びる上段棚を開始位置にする。
@@ -6208,6 +6215,10 @@
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
+    // 対戦内の経過時間。壁時計ではなくこれを使うことで、障害物の揺れが
+    // 「端末をいつ起動したか」に左右されなくなる(中断再開でも位相が続く)。
+    simTimeMs += dt * 1000;
+
     // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
     if (projectiles.length) {
       const target = centerCameraOn(projectiles[0].x);
@@ -6283,10 +6294,19 @@
 
       if (p.firework) p.fireworkTimer += dt;
       if (p.fireworkShard) {
-        p.travelDistance += Math.hypot(p.vx * dt, p.vy * dt);
-        if (p.trailRadius > 0) {
-          carveTrailMark(p.x, p.y, p.trailRadius);
-          trailDirty = true;
+        const stepX = p.vx * dt;
+        const stepY = p.vy * dt;
+        const stepLen = Math.hypot(stepX, stepY);
+        p.travelDistance += stepLen;
+        // 軌跡は「一定距離ごと」に刻む。毎フレーム刻むと、削れ方もcraterHistoryの
+        // 長さもフレームレート次第で変わり、中断セーブが端末ごとに食い違う。
+        if (p.trailRadius > 0 && stepLen > 0) {
+          while (p.trailCarvedTo + TRAIL_MARK_STEP <= p.travelDistance) {
+            p.trailCarvedTo += TRAIL_MARK_STEP;
+            const back = (p.travelDistance - p.trailCarvedTo) / stepLen; // 0=現在地, 1=1フレーム前
+            carveTrailMark(p.x - stepX * back, p.y - stepY * back, p.trailRadius);
+            trailDirty = true;
+          }
         }
         if (p.travelDistance >= p.maxDistance) {
           projectiles.splice(i, 1);
