@@ -62,7 +62,19 @@ function getSheet() {
     sheet.appendRow(HEADERS);
     sheet.setFrozenRows(1);
   }
+  // "2026-07" や数字だけのIDをシートが日付・数値へ勝手に変換すると、
+  // 書き込んだ値と読み戻した値が一致しなくなる。該当列は必ず書式をテキストに固定する。
+  sheet.getRange('A:B').setNumberFormat('@');
   return sheet;
+}
+
+/** 過去に日付として保存されてしまった行も拾えるよう、期間の表記を揃える。 */
+function normalizePeriod(value) {
+  if (value instanceof Date) {
+    var tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+    return Utilities.formatDate(value, tz, 'yyyy-MM');
+  }
+  return String(value);
 }
 
 function readRows(sheet) {
@@ -73,7 +85,7 @@ function readRows(sheet) {
   for (var i = 0; i < values.length; i++) {
     rows.push({
       rowIndex: i + 2,
-      period: String(values[i][0]),
+      period: normalizePeriod(values[i][0]),
       deviceId: String(values[i][1]),
       name: String(values[i][2]),
       streak: Number(values[i][3]) || 0,
@@ -155,6 +167,8 @@ function submitScore(params) {
       sheet.getRange(mine.rowIndex, 3).setValue(entry.name);
     }
 
+    // 書き込みを確定させてから読み戻す。挟まないと直前の変更が見えないことがある。
+    SpreadsheetApp.flush();
     var result = buildBoard(entry.deviceId);
     result.ok = true;
     result.updated = updated;
