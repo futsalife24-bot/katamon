@@ -61,6 +61,59 @@
     pointer-events: none;
     white-space: pre;
   }
+  /* 名前入力のオーバーレイ。ゲーム本体の真鍮×黒鉄の意匠に寄せてある。 */
+  #nameOverlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(2, 5, 10, 0.82);
+    z-index: 20;
+    padding: 16px;
+  }
+  #nameOverlay.open { display: flex; }
+  #nameBox {
+    width: min(360px, 100%);
+    box-sizing: border-box;
+    padding: 22px 20px 18px;
+    background: linear-gradient(180deg, rgba(55,70,77,0.97), rgba(26,37,43,0.98) 55%, rgba(9,17,22,0.98));
+    border: 2px solid #c78335;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    text-align: center;
+  }
+  #nameTitle { color: #fff5dc; font-size: 18px; font-weight: 900; }
+  #nameNote { color: #d39b4b; font-size: 11px; margin-top: 6px; }
+  #nameInput {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 14px;
+    padding: 12px 10px;
+    font-size: 18px;
+    text-align: center;
+    color: #fff5dc;
+    background: rgba(6,12,18,0.9);
+    border: 2px solid rgba(199,131,53,0.7);
+    border-radius: 4px;
+    outline: none;
+  }
+  #nameInput:focus { border-color: #ffd24a; }
+  #nameButtons { display: flex; gap: 10px; margin-top: 16px; }
+  #nameButtons button {
+    flex: 1;
+    padding: 12px 0;
+    font-size: 15px;
+    font-weight: 900;
+    font-family: inherit;
+    color: #fff5dc;
+    background: linear-gradient(180deg, rgba(55,70,77,0.97), rgba(9,17,22,0.98));
+    border: 2px solid #c78335;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #nameButtons #nameOk { border-color: #ffd24a; color: #ffe2a1; }
 </style>
 </head>
 <body>
@@ -68,6 +121,18 @@
   <canvas id="game"></canvas>
 </div>
 <div id="debugPanel">M1: 地形生成+描画+破壊テスト(タップでクレーター)</div>
+<!-- 名前入力だけはCanvasではなくHTMLで受ける。日本語入力(IME)を自前で作るのは非現実的なため。 -->
+<div id="nameOverlay">
+  <div id="nameBox">
+    <div id="nameTitle">ランキング用の名前</div>
+    <div id="nameNote">12文字まで。あとから変更できます。</div>
+    <input id="nameInput" type="text" maxlength="12" autocomplete="off" placeholder="ななし">
+    <div id="nameButtons">
+      <button id="nameCancel" type="button">やめる</button>
+      <button id="nameOk" type="button">決定</button>
+    </div>
+  </div>
+</div>
 <audio id="titleBgm" preload="auto">
   <source src="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 </audio>
@@ -2271,9 +2336,14 @@
   }
 
   // ===== タイトル・キャラクター選択画面 =====
-  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'freeSetup' | 'battle'
+  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
   let battleMode = 'normal'; // 'normal' | 'free'
   const titleVsCpuBtn = { x: VW / 2, y: 628, w: 382, h: 70 };
+  // ランキングは対戦モードではないので、2つのモードボタンより控えめな細い帯にする。
+  const titleRankingBtn = { x: VW / 2, y: 800, w: 382, h: 46 };
+  const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
+  const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
+  const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
   const titleFreeBtn = { x: VW / 2, y: 716, w: 382, h: 70 };
   const FREE_TERRAIN_OPTIONS = [
     { key: 'random', name: 'ランダム', sub: '毎回ちがう戦場' },
@@ -2809,6 +2879,20 @@
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
     ctx.fillText('SELECT A BATTLE MODE', VW / 2, 775);
+    ctx.restore();
+
+    drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
+      cut: 10, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 3
+    });
+    drawOutlinedText('RANKING', titleRankingBtn.x - 34, titleRankingBtn.y + 5, {
+      font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+    });
+    drawOutlinedText('連勝記録', titleRankingBtn.x + 58, titleRankingBtn.y + 5, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+
+    ctx.save();
+    ctx.textAlign = 'center';
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.38)';
       ctx.font = '11px sans-serif';
@@ -3630,6 +3714,8 @@
       lastRunEfficiency = currentEfficiency();
       winStreak = 0;
       runStats = { damageDealt: 0, shots: 0 }; // 連勝が途切れたら次の挑戦は与ダメ効率もリセット
+      // ランキングへ送るのは「連勝が途切れた瞬間」。1勝もしていない挑戦は送らない。
+      if (lastRunStreak > 0) submitScore(lastRunStreak, lastRunEfficiency);
     }
   }
 
@@ -4588,6 +4674,128 @@
     '時間切れ': { sub: 'TIME UP', color: '#ffd24a' }
   };
 
+  function drawRankingRow(y, rank, name, streak, eff, highlight) {
+    const w = 466;
+    const left = VW / 2 - w / 2;
+    ctx.save();
+    ctx.fillStyle = highlight ? 'rgba(199,131,53,0.26)' : (rank % 2 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.16)');
+    ctx.fillRect(left, y - 15, w, 30);
+    if (highlight) {
+      ctx.strokeStyle = UI.gold;
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(left + 0.8, y - 14.2, w - 1.6, 28.4);
+    }
+    ctx.restore();
+    // 上位3人は色を変えて一目で分かるようにする
+    const rankColor = rank === 1 ? '#ffd24a' : rank === 2 ? '#dfe6ef' : rank === 3 ? '#e0a26a' : UI.brassLabel;
+    drawOutlinedText(String(rank), left + 30, y + 5, {
+      font: `900 ${rank <= 3 ? 19 : 15}px ${UI_FONT_HEAVY}`, color: rankColor, lineWidth: 3.5
+    });
+    drawOutlinedText(name, left + 56, y + 5, {
+      font: `900 15px ${UI_FONT_HEAVY}`, color: highlight ? '#fff' : UI.parchment, lineWidth: 3.5, align: 'left'
+    });
+    drawOutlinedText(`${streak}`, left + w - 96, y + 5, {
+      font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
+    });
+    drawOutlinedText(`${eff}`, left + w - 32, y + 5, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+  }
+
+  function drawRankingScreen() {
+    ctx.save();
+    const bg = ctx.createLinearGradient(0, 0, 0, VH);
+    bg.addColorStop(0, '#0b1420');
+    bg.addColorStop(1, '#05080d');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.restore();
+
+    drawOutlinedText('ランキング', VW / 2, 104, {
+      font: `900 26px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    const periodLabel = rankingBoard ? `${rankingBoard.period} の記録` : '今月の記録';
+    drawOutlinedText(periodLabel, VW / 2, 132, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+
+    // 戻る・名前変更
+    for (const [b, label] of [[rankingBackBtn, '‹  戻る'], [rankingNameBtn, hasRankingName() ? '名前を変更' : '名前を登録']]) {
+      drawIronPlate(b.x, b.y, b.w, b.h, { cut: 8, lineWidth: 2 });
+      drawOutlinedText(label, b.x, b.y + 4, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+      });
+    }
+
+    if (rankingState === 'loading') {
+      drawOutlinedText('読み込み中…', VW / 2, VH / 2, {
+        font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+      return;
+    }
+    if (rankingState === 'error') {
+      drawOutlinedText(rankingError || '通信に失敗しました', VW / 2, VH / 2 - 30, {
+        font: `900 15px ${UI_FONT_HEAVY}`, color: '#ff8a8a', lineWidth: 4
+      });
+      drawOutlinedText('電波の届く場所でもう一度お試しください', VW / 2, VH / 2 - 4, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+      drawIronPlate(rankingRetryBtn.x, rankingRetryBtn.y, rankingRetryBtn.w, rankingRetryBtn.h, {
+        cut: 10, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
+      });
+      drawOutlinedText('再読み込み', rankingRetryBtn.x, rankingRetryBtn.y + 5, {
+        font: `900 15px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+      return;
+    }
+    if (!rankingBoard) return;
+
+    // 見出し
+    const headerY = 168;
+    const w = 466;
+    const left = VW / 2 - w / 2;
+    drawOutlinedText('順位', left + 30, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
+    drawOutlinedText('なまえ', left + 56, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3, align: 'left' });
+    drawOutlinedText('連勝', left + w - 96, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
+    drawOutlinedText('効率', left + w - 32, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
+
+    if (!rankingBoard.top.length) {
+      drawOutlinedText('まだ誰も記録を残していません', VW / 2, VH / 2 - 40, {
+        font: `900 15px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+      drawOutlinedText('CPUバトルで連勝すると記録されます', VW / 2, VH / 2 - 14, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    } else {
+      const myRank = rankingBoard.me ? rankingBoard.me.rank : -1;
+      for (let i = 0; i < rankingBoard.top.length; i++) {
+        const e = rankingBoard.top[i];
+        drawRankingRow(190 + i * 31, e.rank, e.name, e.streak, e.efficiency, e.rank === myRank);
+      }
+    }
+
+    // 自分が20位より下なら、下部に自分の行を別枠で出す
+    if (rankingBoard.me && rankingBoard.me.rank > rankingBoard.top.length) {
+      const y = VH - 96;
+      drawOutlinedText('あなたの順位', VW / 2, y - 26, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+      drawRankingRow(y, rankingBoard.me.rank, rankingBoard.me.name, rankingBoard.me.streak, rankingBoard.me.efficiency, true);
+    } else if (!rankingBoard.me) {
+      drawOutlinedText(hasRankingName()
+        ? '今月はまだ記録がありません'
+        : '名前を登録すると記録が残せます', VW / 2, VH - 96, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    }
+
+    if (pendingScore) {
+      drawOutlinedText('未送信の記録があります', VW / 2, VH - 52, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: '#ffb45e', lineWidth: 3
+      });
+    }
+  }
+
   function drawMatchEndReason() {
     if (!matchEndBannerVisible()) return;
     const style = MATCH_END_LABELS[matchEndReason] || MATCH_END_LABELS['撃破'];
@@ -5181,6 +5389,152 @@
     ctx.restore();
   }
 
+  // ===== オンラインランキング =====
+  // GASのウェブアプリを叩く。応答に2〜3秒かかるので、待っている間の表示を必ず出す。
+  const RANKING_API = 'https://script.google.com/macros/s/AKfycbyFxQKTuCylftKIDWJnQXIp4LaHMlMA0D5EBpO3sZuZQsp90evJ95EjvWiP_wxAK69t/exec';
+  const RANKING_KEY = 'katamon_ranking_v1';
+  const RANKING_TIMEOUT_MS = 12000;
+
+  let rankingProfile = { deviceId: '', name: '' };
+  let pendingScore = null;   // 送信できなかったスコア。次の機会に送り直す
+  let rankingBoard = null;   // { period, total, top[], me }
+  let rankingState = 'idle'; // 'idle' | 'loading' | 'ready' | 'error'
+  let rankingError = '';
+
+  function makeDeviceId() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let id = '';
+    for (let i = 0; i < 16; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
+  }
+
+  function loadRankingProfile() {
+    try {
+      const raw = localStorage.getItem(RANKING_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && typeof d.deviceId === 'string') rankingProfile.deviceId = d.deviceId;
+        if (d && typeof d.name === 'string') rankingProfile.name = d.name;
+        if (d && d.pending && typeof d.pending === 'object') pendingScore = d.pending;
+      }
+    } catch (err) { /* 読めなければ新規扱いでよい */ }
+    if (!rankingProfile.deviceId) {
+      rankingProfile.deviceId = makeDeviceId();
+      saveRankingProfile();
+    }
+  }
+
+  function saveRankingProfile() {
+    try {
+      localStorage.setItem(RANKING_KEY, JSON.stringify({
+        deviceId: rankingProfile.deviceId,
+        name: rankingProfile.name,
+        pending: pendingScore
+      }));
+    } catch (err) { /* 保存できなくてもゲームは続行できる */ }
+  }
+
+  function hasRankingName() {
+    return !!rankingProfile.name;
+  }
+
+  // GASは別ドメインへリダイレクトするが、単純なGETなのでCORSは通る(実機で確認済み)。
+  async function callRanking(params) {
+    const query = Object.keys(params)
+      .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+      .join('&');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RANKING_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${RANKING_API}?${query}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = JSON.parse(await res.text());
+      if (!data || data.ok !== true) throw new Error((data && data.error) || 'ランキングの応答が不正です');
+      return data;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function applyBoard(data) {
+    rankingBoard = { period: data.period, total: data.total, top: data.top || [], me: data.me || null };
+    rankingState = 'ready';
+    rankingError = '';
+  }
+
+  async function fetchRankingBoard() {
+    rankingState = 'loading';
+    rankingError = '';
+    try {
+      applyBoard(await callRanking({ action: 'top', id: rankingProfile.deviceId }));
+    } catch (err) {
+      rankingState = 'error';
+      rankingError = err && err.name === 'AbortError' ? '通信がタイムアウトしました' : '通信に失敗しました';
+    }
+  }
+
+  // 連勝が途切れた瞬間に呼ぶ。失敗しても捨てずに貯めておき、次の機会に送り直す。
+  async function submitScore(streak, efficiency) {
+    if (!hasRankingName()) return;
+    pendingScore = { streak, efficiency };
+    saveRankingProfile();
+    try {
+      applyBoard(await callRanking({
+        action: 'submit',
+        id: rankingProfile.deviceId,
+        name: rankingProfile.name,
+        streak,
+        eff: efficiency
+      }));
+      pendingScore = null;
+      saveRankingProfile();
+    } catch (err) {
+      // 貯めたまま残す。次回の送信時か起動時に再挑戦する。
+    }
+  }
+
+  function flushPendingScore() {
+    if (!pendingScore || !hasRankingName()) return;
+    const queued = pendingScore;
+    submitScore(queued.streak, queued.efficiency);
+  }
+
+  // ===== 名前入力(HTMLのオーバーレイ)=====
+  const nameOverlay = document.getElementById('nameOverlay');
+  const nameInput = document.getElementById('nameInput');
+  let nameDialogDone = null;
+
+  function openNameDialog(onDone) {
+    nameDialogDone = onDone || null;
+    nameInput.value = rankingProfile.name || '';
+    nameOverlay.classList.add('open');
+    // スマホでキーボードを確実に出すため、表示が確定してから焦点を当てる
+    setTimeout(() => { try { nameInput.focus(); nameInput.select(); } catch (err) { /* noop */ } }, 30);
+  }
+
+  function closeNameDialog(saved) {
+    nameOverlay.classList.remove('open');
+    try { nameInput.blur(); } catch (err) { /* noop */ }
+    const done = nameDialogDone;
+    nameDialogDone = null;
+    if (done) done(saved);
+  }
+
+  document.getElementById('nameOk').addEventListener('click', () => {
+    const value = nameInput.value.replace(/[\r\n\t]/g, ' ').trim().slice(0, 12);
+    rankingProfile.name = value || 'ななし';
+    saveRankingProfile();
+    playUiSound();
+    closeNameDialog(true);
+  });
+  document.getElementById('nameCancel').addEventListener('click', () => {
+    playUiSound();
+    closeNameDialog(false);
+  });
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('nameOk').click();
+  });
+
   const soundBtn = { x: VW - 28, y: 20, r: 17 }; // 右上・CPUパネルと重ならない高さ
   // ===== サウンド設定パネル(BGM/効果音を個別に段階調整) =====
   let soundPanelOpen = false;
@@ -5759,6 +6113,13 @@
       ctx.restore();
       return;
     }
+    if (gamePhase === 'ranking') {
+      drawRankingScreen();
+      drawSoundToggle();
+      drawSoundPanel();
+      ctx.restore();
+      return;
+    }
 
     drawSky();
     drawParallax();
@@ -5925,9 +6286,35 @@
         selectWheelVelocity = 0;
         selectWheelDragging = false;
         gamePhase = 'select';
+      } else if (hitRect(p0, titleRankingBtn)) {
+        playUiSound();
+        gamePhase = 'ranking';
+        fetchRankingBoard();
       } else if (hitRect(p0, titleFreeBtn)) {
         playUiSound();
         gamePhase = 'freeSetup';
+      }
+      return;
+    }
+    if (gamePhase === 'ranking') {
+      if (hitRect(p0, rankingBackBtn)) {
+        playUiSound();
+        gamePhase = 'title';
+        return;
+      }
+      if (hitRect(p0, rankingNameBtn)) {
+        playUiSound();
+        openNameDialog(saved => {
+          // 名前を決めた直後に、貯めてある記録があれば送って一覧を更新する
+          if (!saved) return;
+          if (pendingScore) flushPendingScore();
+          else fetchRankingBoard();
+        });
+        return;
+      }
+      if (rankingState === 'error' && hitRect(p0, rankingRetryBtn)) {
+        playUiSound();
+        fetchRankingBoard();
       }
       return;
     }
@@ -6306,7 +6693,8 @@
 
   // バトル中と各選択画面で捕まえる。タイトルでは戻る操作でそのまま終了できるようにしておく。
   function backTrapWanted() {
-    return gamePhase === 'battle' || gamePhase === 'select' || gamePhase === 'freeSetup';
+    return gamePhase === 'battle' || gamePhase === 'select'
+      || gamePhase === 'freeSetup' || gamePhase === 'ranking';
   }
 
   function syncBackTrap() {
@@ -6322,6 +6710,12 @@
     armBackTrap();
     if (confirmDialog) {
       confirmDialog = null;
+      playUiSound();
+      return;
+    }
+    if (gamePhase === 'ranking') {
+      // 見るだけの画面なので、確認を挟まずそのままタイトルへ返す
+      gamePhase = 'title';
       playUiSound();
       return;
     }
@@ -6600,6 +6994,10 @@
   }
 
   newTerrain(); // 選択画面の背景として地形だけ先に用意
+  loadRankingProfile();
+  // 前回オフラインで送れなかった記録があれば、起動時に送り直す
+  flushPendingScore();
+
   resize();
   requestAnimationFrame(gameLoop);
 
