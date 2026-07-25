@@ -3619,21 +3619,17 @@
 
   let lastRunStreak = 0;
   let lastRunEfficiency = 0;
+  // 連勝やスコアの集計は決着した瞬間に確定させる。
+  // 勝敗音は着弾と同時だと早すぎるので、決まり手の宣告に合わせて別途鳴らす。
   function applyStreakResult() {
-    if (battleMode === 'free') {
-      if (winner === 'player') playVictorySound();
-      else playDefeatSound();
-      return;
-    }
+    if (battleMode === 'free') return;
     if (winner === 'player') {
       winStreak++;
-      playVictorySound();
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
       winStreak = 0;
       runStats = { damageDealt: 0, shots: 0 }; // 連勝が途切れたら次の挑戦は与ダメ効率もリセット
-      playDefeatSound();
     }
   }
 
@@ -6390,9 +6386,10 @@
     if (matchEndPause > 0) {
       const before = matchEndPause;
       matchEndPause = Math.max(0, matchEndPause - dt);
-      // 余韻が明けて宣告へ移る瞬間に一度だけ合図を鳴らす
+      // 余韻が明けて宣告へ移る瞬間に、勝敗音を一度だけ鳴らす
       if (before > MATCH_END_BANNER && matchEndPause <= MATCH_END_BANNER) {
-        playSpecialSound();
+        if (winner === 'player') playVictorySound();
+        else playDefeatSound();
         triggerShake(5, 0.2);
       }
     }
