@@ -81,6 +81,31 @@
   const VW = 540;
   const VH = 960;
 
+  // ===== UI意匠トークン(真鍮×黒鉄) =====
+  // タイトル/フリーモード画面で確立した「重厚な鉄板に真鍮の縁と鋲」の意匠を、
+  // 戦闘画面のHUD・コントローラでも共通で使うための定義。
+  // 色を直書きせずここを参照することで、全画面の配色を一箇所で調整できる。
+  const UI = {
+    brass: '#c78335',        // プレートの縁
+    brassDark: '#8c5b2c',    // 縁の影側
+    brassLabel: '#d39b4b',   // 小見出し・ラベル
+    brassLight: '#ffe2a1',   // 明るい装飾・アイコン
+    parchment: '#fff5dc',    // 主要な文字色
+    ink: '#070a0c',          // 文字の縁取り
+    gold: '#ffd24a',         // 強調・発光系
+    plateTop: 'rgba(55,70,77,0.97)',
+    plateMid: 'rgba(26,37,43,0.98)',
+    plateBottom: 'rgba(9,17,22,0.98)',
+    hpHigh: '#7be07b',
+    hpMid: '#f0c860',
+    hpLow: '#f06060',
+    fuel: '#8ad0ff',
+    ally: '#4fc3f7',
+    enemy: '#ff6b6b'
+  };
+  const UI_FONT = '"Yu Gothic UI", sans-serif';
+  const UI_FONT_HEAVY = '"Arial Black", "Yu Gothic UI", sans-serif';
+
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
     const d = new Date(document.lastModified);
@@ -136,11 +161,48 @@
   const debugPanel = document.getElementById('debugPanel');
 
   // ===== 効果音(WebAudio合成・音源ファイル不要) =====
+  // 音量はBGMと効果音を別系統で0〜100%保持し、localStorageに永続化する。
+  // 各音の設計上のバランス(BGMは控えめ等)は基準値として残し、ユーザー設定は倍率として掛ける。
+  const AUDIO_KEY = 'katamon_audio_v1';
+  const TITLE_BGM_BASE_VOLUME = 0.34;
+  const STAGE_BGM_BASE_VOLUME = 0.28;
+  const STAGE_BGM_DUCK_RATIO = 0.39; // カットイン等で一時的に下げる割合
+  const SFX_MASTER_BASE = 0.78;
   let soundOn = true;
+  let bgmVolume = 1;
+  let sfxVolume = 1;
+  let stageBgmDucked = false;
+  let sfxMasterGain = null;
+
+  (function loadAudioSettings() {
+    try {
+      const raw = localStorage.getItem(AUDIO_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (typeof d.soundOn === 'boolean') soundOn = d.soundOn;
+      if (typeof d.bgm === 'number') bgmVolume = Math.min(1, Math.max(0, d.bgm));
+      if (typeof d.sfx === 'number') sfxVolume = Math.min(1, Math.max(0, d.sfx));
+    } catch (err) { /* 読めなければ既定値のまま */ }
+  })();
+  function saveAudioSettings() {
+    try {
+      localStorage.setItem(AUDIO_KEY, JSON.stringify({ soundOn, bgm: bgmVolume, sfx: sfxVolume }));
+    } catch (err) { /* 保存できなくてもゲームは続行できる */ }
+  }
+  // 音量0はミュートと同義に扱い、無音の再生を続けないようにする。
+  function bgmAudible() { return soundOn && bgmVolume > 0; }
+  function sfxAudible() { return soundOn && sfxVolume > 0; }
+  function applyAudioVolumes() {
+    const on = soundOn ? 1 : 0;
+    titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmVolume * on;
+    stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmVolume * on * (stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1);
+    if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxVolume * on;
+  }
+
   // ブラウザの自動再生制限に合わせ、タイトル画面での最初のタップから再生する。
   // タイトル→キャラ選択は同じ再生を維持し、出撃時に停止する。
   const titleBgm = document.getElementById('titleBgm');
-  titleBgm.volume = 0.34;
+  titleBgm.volume = TITLE_BGM_BASE_VOLUME;
   const TITLE_BGM_LOOP_GAP_MS = 2000;
   const TITLE_START_MAX_WAIT_MS = 1500;
   let titleBgmLoopTimer = null;
@@ -156,7 +218,7 @@
     titleBgmLoopTimer = null;
   }
   function playTitleBgm(restart = false) {
-    if (!soundOn) return Promise.resolve();
+    if (!bgmAudible()) return Promise.resolve();
     if (restart) {
       clearTitleBgmLoopTimer();
       titleBgm.pause();
@@ -166,16 +228,16 @@
     return result && typeof result.then === 'function' ? result : Promise.resolve();
   }
   function startTitleBgm() {
-    if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+    if (!bgmAudible() || (gamePhase !== 'title' && gamePhase !== 'select')) return;
     if (titleBgmLoopTimer !== null) return;
     playTitleBgm().catch(() => {});
   }
   titleBgm.addEventListener('ended', () => {
     clearTitleBgmLoopTimer();
-    if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+    if (!bgmAudible() || (gamePhase !== 'title' && gamePhase !== 'select')) return;
     titleBgmLoopTimer = setTimeout(() => {
       titleBgmLoopTimer = null;
-      if (!soundOn || (gamePhase !== 'title' && gamePhase !== 'select')) return;
+      if (!bgmAudible() || (gamePhase !== 'title' && gamePhase !== 'select')) return;
       playTitleBgm(true).catch(() => {});
     }, TITLE_BGM_LOOP_GAP_MS);
   });
@@ -219,13 +281,14 @@
     volcanic: 'assets/stage-volcanic.mp3?v=1',
     arena: 'assets/stage-boss-arena.mp3?v=1'
   };
-  const STAGE_BGM_VOLUME = 0.28;
-  stageBgm.volume = STAGE_BGM_VOLUME;
+  stageBgm.volume = STAGE_BGM_BASE_VOLUME;
   stageBgm.loop = true;
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
+  // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgmの両方が揃った時点)。
+  applyAudioVolumes();
   function playStageBgm(themeKey, restart = false) {
-    if (!soundOn || gamePhase !== 'battle') return;
+    if (!bgmAudible() || gamePhase !== 'battle') return;
     const bgmKey = currentPattern === 'tieredBasin' ? 'arena' : themeKey;
     const src = STAGE_BGM_SOURCES[bgmKey] || STAGE_BGM_SOURCES.grass;
     if (stageBgmTheme !== bgmKey) {
@@ -239,7 +302,10 @@
       clearTimeout(stageBgmRestoreTimer);
       stageBgmRestoreTimer = null;
     }
-    if (restart) stageBgm.volume = STAGE_BGM_VOLUME;
+    if (restart) {
+      stageBgmDucked = false;
+      applyAudioVolumes();
+    }
     if (restart && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
     const result = stageBgm.play();
     if (result && typeof result.catch === 'function') result.catch(() => {});
@@ -249,18 +315,32 @@
       clearTimeout(stageBgmRestoreTimer);
       stageBgmRestoreTimer = null;
     }
-    stageBgm.volume = STAGE_BGM_VOLUME;
+    stageBgmDucked = false;
+    applyAudioVolumes();
     stageBgm.pause();
     if (reset && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
   }
   function duckStageBgm(duration = 1800) {
-    if (!soundOn || stageBgm.paused) return;
+    if (!bgmAudible() || stageBgm.paused) return;
     if (stageBgmRestoreTimer !== null) clearTimeout(stageBgmRestoreTimer);
-    stageBgm.volume = 0.11;
+    stageBgmDucked = true;
+    applyAudioVolumes();
     stageBgmRestoreTimer = setTimeout(() => {
       stageBgmRestoreTimer = null;
-      stageBgm.volume = STAGE_BGM_VOLUME;
+      stageBgmDucked = false;
+      applyAudioVolumes();
     }, duration);
+  }
+  // 音量やON/OFFを変えた直後に、今の画面にふさわしいBGMの再生/停止を合わせる。
+  function refreshBgmPlayback() {
+    if (!bgmAudible()) {
+      clearTitleBgmLoopTimer();
+      titleBgm.pause();
+      stageBgm.pause();
+      return;
+    }
+    if (gamePhase === 'battle') playStageBgm(currentThemeKey);
+    else if (gamePhase === 'title' || gamePhase === 'select') startTitleBgm();
   }
   let audioCtx = null;
   let sfxCompressor = null;
@@ -282,15 +362,18 @@
       compressor.attack.value = 0.003;
       compressor.release.value = 0.18;
       const master = ac.createGain();
-      master.gain.value = 0.78;
+      master.gain.value = SFX_MASTER_BASE;
       compressor.connect(master).connect(ac.destination);
       sfxCompressor = compressor;
+      // 効果音の音量設定はこのマスターゲインで一括調整する。
+      sfxMasterGain = master;
+      applyAudioVolumes();
     }
     return sfxCompressor;
   }
 
   function playTone(freq, duration, type, peakGain, freqEnd, delay, attack) {
-    if (!soundOn) return;
+    if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
     const osc = ac.createOscillator();
@@ -307,7 +390,7 @@
   }
 
   function playFilteredNoise(duration, peakGain, filterType, frequency, delay, attack, q) {
-    if (!soundOn) return;
+    if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
     const bufSize = Math.floor(ac.sampleRate * duration);
@@ -1801,8 +1884,9 @@
   const leftBtn = { x: 98, y: PANEL_CY + 64 };
   const rightBtn = { x: VW - 98, y: PANEL_CY + 64 };
   let moveDir = 0; // -1, 0, 1
-  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch'
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch' | 'volumeSlider'
   let inputPointerId = null;
+  let volumeDragKey = null; // 音量スライダーをドラッグ中の対象('bgm' | 'sfx')
 
   // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
   const FIRE_BTN = { x: VW / 2, y: PANEL_CY, r: 117 };
@@ -2209,18 +2293,67 @@
     ctx.closePath();
   }
 
-  function drawRivet(x, y) {
-    const rivet = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, 6);
+  function drawRivet(x, y, r = 5.5) {
+    const rivet = ctx.createRadialGradient(x - r * 0.36, y - r * 0.36, r * 0.18, x, y, r * 1.1);
     rivet.addColorStop(0, '#fff1a3');
     rivet.addColorStop(0.42, '#b47728');
     rivet.addColorStop(1, '#35200e');
     ctx.fillStyle = rivet;
     ctx.beginPath();
-    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#160e08';
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  // ===== 戦闘UI共用:真鍮縁の黒鉄プレート =====
+  // opts: cut(角の落とし幅) / edge(縁色) / lineWidth / fill(塗りの上書き) /
+  //       rivets(四隅に鋲) / rivetInset / glow(縁の発光色)
+  function drawIronPlate(x, y, w, h, opts = {}) {
+    const cut = opts.cut != null ? opts.cut : 12;
+    ctx.save();
+    angularPlatePath(x, y, w, h, cut);
+    let fill = opts.fill;
+    if (!fill) {
+      const g = ctx.createLinearGradient(0, y - h / 2, 0, y + h / 2);
+      g.addColorStop(0, UI.plateTop);
+      g.addColorStop(0.12, UI.plateMid);
+      g.addColorStop(1, UI.plateBottom);
+      fill = g;
+    }
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (opts.glow) {
+      ctx.shadowColor = opts.glow;
+      ctx.shadowBlur = 12;
+    }
+    ctx.strokeStyle = opts.edge || UI.brass;
+    ctx.lineWidth = opts.lineWidth != null ? opts.lineWidth : 2.5;
+    ctx.stroke();
+    ctx.restore();
+    if (opts.rivets) {
+      const ins = opts.rivetInset != null ? opts.rivetInset : 13;
+      const rr = opts.rivetRadius != null ? opts.rivetRadius : 4;
+      drawRivet(x - w / 2 + ins, y - h / 2 + ins, rr);
+      drawRivet(x + w / 2 - ins, y - h / 2 + ins, rr);
+      drawRivet(x - w / 2 + ins, y + h / 2 - ins, rr);
+      drawRivet(x + w / 2 - ins, y + h / 2 - ins, rr);
+    }
+  }
+
+  // ===== 戦闘UI共用:縁取り文字(小さくても潰れない視認性重視) =====
+  function drawOutlinedText(text, x, y, opts = {}) {
+    ctx.save();
+    ctx.textAlign = opts.align || 'center';
+    ctx.font = opts.font || `900 16px ${UI_FONT_HEAVY}`;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = opts.outline || UI.ink;
+    ctx.lineWidth = opts.lineWidth != null ? opts.lineWidth : 4;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = opts.color || UI.parchment;
+    ctx.fillText(text, x, y);
+    ctx.restore();
   }
 
   function drawTitleModeButton(button, label, sub, kind) {
@@ -3705,70 +3838,66 @@
     ctx.save();
     const hudBottom = 116;
     const bg = ctx.createLinearGradient(0, 0, 0, hudBottom);
-    bg.addColorStop(0, 'rgba(5,9,20,0.97)');
-    bg.addColorStop(0.72, 'rgba(12,22,39,0.94)');
-    bg.addColorStop(1, 'rgba(8,15,28,0.82)');
+    bg.addColorStop(0, 'rgba(28,34,39,0.97)');
+    bg.addColorStop(0.06, 'rgba(16,21,26,0.96)');
+    bg.addColorStop(0.72, 'rgba(11,16,21,0.94)');
+    bg.addColorStop(1, 'rgba(8,12,16,0.84)');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, VW, hudBottom);
-    ctx.strokeStyle = 'rgba(111,205,255,0.28)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, hudBottom - 0.5);
-    ctx.lineTo(VW, hudBottom - 0.5);
-    ctx.stroke();
 
-    const badgeW = 156;
-    const badgeX = VW / 2 - badgeW / 2;
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(badgeX, 6, badgeW, 25, 13) : ctx.rect(badgeX, 6, badgeW, 25);
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,210,74,0.42)';
-    ctx.stroke();
-    ctx.fillStyle = '#f4f7ff';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'center';
+    // 下端の真鍮レール(コントローラ側と対になる額縁)
+    const rail = ctx.createLinearGradient(0, hudBottom - 4, 0, hudBottom + 2);
+    rail.addColorStop(0, '#241608');
+    rail.addColorStop(0.4, '#c89753');
+    rail.addColorStop(0.72, '#8a5c25');
+    rail.addColorStop(1, '#1c1207');
+    ctx.fillStyle = rail;
+    ctx.fillRect(0, hudBottom - 4, VW, 6);
+    ctx.restore();
+
+    // ステージ名の真鍮プレート
     const stageName = currentPattern === 'tieredBasin'
       ? '闘技場ステージ'
       : `${THEME_LABELS[currentThemeKey] || 'バトル'}ステージ`;
-    ctx.fillText(stageName, VW / 2, 23);
-    ctx.restore();
+    drawIronPlate(VW / 2, 19, 178, 27, { cut: 9, lineWidth: 2 });
+    drawOutlinedText(stageName, VW / 2, 24, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
+    });
   }
 
   function drawWindMeter() {
     const cx = VW / 2, cardY = 46, cardW = 164, cardH = 40;
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(cx - cardW / 2, cardY, cardW, cardH, 8) : ctx.rect(cx - cardW / 2, cardY, cardW, cardH);
-    ctx.fillStyle = 'rgba(2,7,16,0.82)';
-    ctx.fill();
-    ctx.strokeStyle = calmWind ? 'rgba(114,232,255,0.72)' : 'rgba(255,224,138,0.62)';
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
+    const accent = calmWind ? '#72e8ff' : UI.brassLight;
+    drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
+      cut: 10,
+      edge: calmWind ? 'rgba(114,232,255,0.75)' : UI.brass,
+      lineWidth: 2
+    });
 
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
-    ctx.fillStyle = calmWind ? '#72e8ff' : '#ffe08a';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(calmWind ? '無風 / CALM' : `風力 ${windLevel}`, cx, cardY + 12);
+    drawOutlinedText(calmWind ? '無風 / CALM' : `風力 ${windLevel}`, cx, cardY + 14, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 3
+    });
 
+    ctx.save();
     const len = calmWind ? 28 : 16 + wind.strength * 42;
     const dir = calmWind ? 1 : wind.dir;
-    ctx.strokeStyle = calmWind ? '#72e8ff' : '#ffe08a';
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - dir * len / 2, cardY + 28);
-    ctx.lineTo(cx + dir * len / 2, cardY + 28);
+    ctx.moveTo(cx - dir * len / 2, cardY + 29);
+    ctx.lineTo(cx + dir * len / 2, cardY + 29);
     ctx.stroke();
     if (!calmWind) {
       // 矢じり
       const ax = cx + dir * len / 2;
       ctx.beginPath();
-      ctx.moveTo(ax, cardY + 28);
-      ctx.lineTo(ax - dir * 7, cardY + 24);
-      ctx.lineTo(ax - dir * 7, cardY + 32);
+      ctx.moveTo(ax + dir * 2, cardY + 29);
+      ctx.lineTo(ax - dir * 7, cardY + 25);
+      ctx.lineTo(ax - dir * 7, cardY + 33);
       ctx.closePath();
-      ctx.fillStyle = '#ffe08a';
+      ctx.fillStyle = accent;
       ctx.fill();
     }
     ctx.restore();
@@ -3778,45 +3907,63 @@
   // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
   function drawUnitPanel(u, edgeX, align) {
     const w = 168;
+    const h = 40;
     const barX = align === 'left' ? edgeX : edgeX - w;
     // 角のメニュー/音量ボタンと距離を取るため、名前カードは一段下に配置する。
     const cardY = 46;
-    const accent = align === 'left' ? '#4fc3f7' : '#ff6b6b';
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(barX, cardY, w, 40, 8) : ctx.rect(barX, cardY, w, 40);
-    ctx.fillStyle = 'rgba(2,7,16,0.82)';
-    ctx.fill();
-    ctx.strokeStyle = `${accent}99`;
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
-    ctx.fillStyle = accent;
-    ctx.fillRect(align === 'left' ? barX : barX + w - 3, cardY + 7, 3, 26);
+    // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
+    const accent = align === 'left' ? UI.ally : UI.enemy;
+    const isTurn = (align === 'left') === (currentTurn === 'player');
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(u.label, barX + 9, cardY + 12);
-    ctx.fillStyle = 'rgba(255,255,255,0.86)';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 9, cardY + 12);
+    // 手番側のカードだけ縁を光らせ、今どちらの番かカードでも分かるようにする
+    drawIronPlate(barX + w / 2, cardY + h / 2, w, h, {
+      cut: 10,
+      edge: isTurn ? accent : UI.brass,
+      lineWidth: isTurn ? 2.6 : 2,
+      glow: isTurn ? accent : null
+    });
+
+    ctx.save();
+    // 陣営色のタブ
+    ctx.fillStyle = accent;
+    ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, cardY + 9, 3, 22);
+    ctx.restore();
+
+    drawOutlinedText(u.label, barX + 10, cardY + 14, {
+      align: 'left', font: `900 12px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
+    });
+    drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 10, cardY + 14, {
+      align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
 
     const innerX = barX + 9;
     const innerW = w - 18;
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(innerX, cardY + 17, innerW, 9);
     const hpRatio = Math.max(0, u.hp / u.maxHp);
-    ctx.fillStyle = hpRatio > 0.5 ? '#7be07b' : hpRatio > 0.25 ? '#f0c860' : '#f06060';
-    ctx.fillRect(innerX, cardY + 17, innerW * hpRatio, 9);
-    ctx.strokeStyle = 'rgba(255,255,255,0.34)';
-    ctx.strokeRect(innerX, cardY + 17, innerW, 9);
+    ctx.save();
+    // HPゲージ(黒い溝に嵌った真鍮枠のバー)
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(innerX, cardY + 18, innerW, 9);
+    const hpColor = hpRatio > 0.5 ? UI.hpHigh : hpRatio > 0.25 ? UI.hpMid : UI.hpLow;
+    const hpGrad = ctx.createLinearGradient(0, cardY + 18, 0, cardY + 27);
+    hpGrad.addColorStop(0, '#ffffff55');
+    hpGrad.addColorStop(0.35, hpColor);
+    hpGrad.addColorStop(1, '#00000055');
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(innerX, cardY + 18, innerW * hpRatio, 9);
+    ctx.fillStyle = hpGrad;
+    ctx.fillRect(innerX, cardY + 18, innerW * hpRatio, 9);
+    ctx.strokeStyle = 'rgba(255,226,161,0.55)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(innerX + 0.5, cardY + 18.5, innerW - 1, 8);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    // 燃料ゲージ
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(innerX, cardY + 30, innerW, 5);
     const fuelRatio = Math.max(0, u.fuel / u.fuelMax);
-    ctx.fillStyle = '#8ad0ff';
+    ctx.fillStyle = UI.fuel;
     ctx.fillRect(innerX, cardY + 30, innerW * fuelRatio, 5);
+    ctx.strokeStyle = 'rgba(255,226,161,0.3)';
+    ctx.strokeRect(innerX + 0.5, cardY + 30.5, innerW - 1, 4);
     ctx.restore();
   }
 
@@ -4008,67 +4155,84 @@
   const resultTitleBtn = { x: VW / 2, y: VH / 2 + 132, w: 210, h: 42 };
 
   function drawResultButton(button, label, primary) {
-    ctx.beginPath();
-    ctx.roundRect
-      ? ctx.roundRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, 10)
-      : ctx.rect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h);
     if (primary) {
-      const fill = ctx.createLinearGradient(button.x - button.w / 2, button.y, button.x + button.w / 2, button.y);
-      fill.addColorStop(0, '#38aee8');
-      fill.addColorStop(0.5, '#76dcff');
-      fill.addColorStop(1, '#38aee8');
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.fillStyle = '#07111d';
+      // 主要ボタンは磨いた真鍮そのもの
+      const fill = ctx.createLinearGradient(0, button.y - button.h / 2, 0, button.y + button.h / 2);
+      fill.addColorStop(0, '#ffe6b0');
+      fill.addColorStop(0.38, '#e0aa55');
+      fill.addColorStop(0.62, '#b9812f');
+      fill.addColorStop(1, '#7d5219');
+      drawIronPlate(button.x, button.y, button.w, button.h, {
+        cut: 12, fill, edge: '#fff1cd', lineWidth: 2.4, glow: 'rgba(255,205,110,0.6)',
+        rivets: true, rivetInset: 15, rivetRadius: 3.4
+      });
+      drawOutlinedText(label, button.x, button.y + 6, {
+        font: `900 16px ${UI_FONT_HEAVY}`, color: '#2a1a06', outline: 'rgba(255,240,205,0.9)', lineWidth: 3
+      });
     } else {
-      ctx.fillStyle = 'rgba(8,15,28,0.92)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,210,74,0.82)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = '#ffe08a';
+      drawIronPlate(button.x, button.y, button.w, button.h, {
+        cut: 12, lineWidth: 2.2, rivets: true, rivetInset: 15, rivetRadius: 3.4
+      });
+      drawOutlinedText(label, button.x, button.y + 6, {
+        font: `900 15px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3.5
+      });
     }
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText(label, button.x, button.y + 5);
   }
 
   function drawResultBanner() {
     if (!matchOver) return;
+    const won = winner === 'player';
+    const bandY = VH / 2 - 130;
+    const bandH = won ? 280 : 330;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, VH / 2 - 130, VW, winner === 'player' ? 280 : 330);
-    ctx.textAlign = 'center';
+    // 石版のような帯(上下を真鍮で締める)
+    const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
+    band.addColorStop(0, 'rgba(6,9,12,0.9)');
+    band.addColorStop(0.5, 'rgba(14,19,24,0.93)');
+    band.addColorStop(1, 'rgba(6,9,12,0.9)');
+    ctx.fillStyle = band;
+    ctx.fillRect(0, bandY, VW, bandH);
+    for (const ry of [bandY, bandY + bandH - 4]) {
+      const rail = ctx.createLinearGradient(0, ry, 0, ry + 4);
+      rail.addColorStop(0, '#3a2510');
+      rail.addColorStop(0.45, won ? '#f0c274' : '#b98a6a');
+      rail.addColorStop(1, '#241608');
+      ctx.fillStyle = rail;
+      ctx.fillRect(0, ry, VW, 4);
+    }
+    ctx.restore();
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px sans-serif';
-    const msg = winner === 'player' ? 'CPUを撃破!' : 'あなたの負け...';
-    ctx.fillText(msg, VW / 2, VH / 2 - 70);
+    drawOutlinedText(won ? 'CPUを撃破!' : 'あなたの負け...', VW / 2, VH / 2 - 70, {
+      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
 
     if (battleMode === 'free') {
-      ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 30px "Yu Gothic UI", sans-serif';
-      ctx.fillText(winner === 'player' ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22);
-    } else if (winner === 'player') {
-      ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 40px sans-serif';
-      ctx.fillText(`${winStreak}連勝!`, VW / 2, VH / 2 - 22);
+      drawOutlinedText(won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
+        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+      });
+    } else if (won) {
+      drawOutlinedText(`${winStreak}連勝!`, VW / 2, VH / 2 - 22, {
+        font: `900 42px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 6
+      });
       if (winStreak > 0 && winStreak % 10 === 0) {
-        ctx.fillStyle = '#ff8a3a';
-        ctx.font = 'bold 15px sans-serif';
-        ctx.fillText('節目達成の大金星!', VW / 2, VH / 2 + 4);
+        drawOutlinedText('節目達成の大金星!', VW / 2, VH / 2 + 4, {
+          font: `900 16px ${UI_FONT_HEAVY}`, color: '#ff8a3a', lineWidth: 4
+        });
       }
     } else {
-      ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 30px sans-serif';
-      ctx.fillText(`最終 ${lastRunStreak}連勝`, VW / 2, VH / 2 - 22);
+      drawOutlinedText(`最終 ${lastRunStreak}連勝`, VW / 2, VH / 2 - 22, {
+        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+      });
     }
 
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = '13px sans-serif';
+    ctx.save();
+    ctx.textAlign = 'center';
     const effShown = battleMode === 'free'
       ? currentEfficiency()
-      : (winner === 'player' ? currentEfficiency() : lastRunEfficiency);
-    ctx.fillText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20);
+      : (won ? currentEfficiency() : lastRunEfficiency);
+    drawOutlinedText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
+    });
 
     drawResultButton(
       continueBtn,
@@ -4094,26 +4258,34 @@
   }
 
   function drawTurnInfo() {
+    const isPlayer = currentTurn === 'player';
+    const accent = isPlayer ? UI.ally : UI.enemy;
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(8, 94, VW - 16, 19, 6) : ctx.rect(8, 94, VW - 16, 19);
-    ctx.fillStyle = currentTurn === 'player' ? 'rgba(38,111,155,0.7)' : 'rgba(145,53,64,0.7)';
+    ctx.roundRect ? ctx.roundRect(8, 94, VW - 16, 19, 5) : ctx.rect(8, 94, VW - 16, 19);
+    const bar = ctx.createLinearGradient(0, 94, 0, 113);
+    bar.addColorStop(0, isPlayer ? 'rgba(30,62,86,0.92)' : 'rgba(92,36,42,0.92)');
+    bar.addColorStop(1, isPlayer ? 'rgba(12,26,38,0.92)' : 'rgba(44,16,20,0.92)');
+    ctx.fillStyle = bar;
     ctx.fill();
-    ctx.strokeStyle = currentTurn === 'player' ? 'rgba(79,195,247,0.7)' : 'rgba(255,107,107,0.7)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = UI.brass;
+    ctx.lineWidth = 1.4;
     ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'left';
-    const turnLabel = currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン';
-    const actingUnit = currentTurn === 'player' ? player : cpu;
-    const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
-    ctx.fillText(`${turnLabel}　TURN ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL}${lockLabel}`, 16, 108);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffd24a';
-    ctx.fillText(battleMode === 'free' ? 'FREE' : `${winStreak}連勝`, VW - 16, 108);
+    // 手番側を示す色帯
+    ctx.fillStyle = accent;
+    ctx.fillRect(isPlayer ? 9 : VW - 15, 97, 6, 13);
     ctx.restore();
+
+    const turnLabel = isPlayer ? 'あなたのターン' : 'CPUのターン';
+    const actingUnit = isPlayer ? player : cpu;
+    const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
+    drawOutlinedText(
+      `${turnLabel}　TURN ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL}${lockLabel}`,
+      20, 108, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
+    );
+    drawOutlinedText(battleMode === 'free' ? 'FREE' : `${winStreak}連勝`, VW - 20, 108, {
+      align: 'right', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+    });
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
@@ -4164,11 +4336,11 @@
 
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(map.x, map.y, map.w, map.h, 8) : ctx.rect(map.x, map.y, map.w, map.h);
-    ctx.fillStyle = 'rgba(3,9,19,0.24)';
+    ctx.roundRect ? ctx.roundRect(map.x, map.y, map.w, map.h, 6) : ctx.rect(map.x, map.y, map.w, map.h);
+    ctx.fillStyle = 'rgba(3,9,19,0.34)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(183,222,255,0.56)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(199,131,53,0.85)';
+    ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.save();
     ctx.beginPath();
@@ -4322,39 +4494,70 @@
     const chargeRatio = player.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[player.character];
     ctx.save();
+    // 台座の影
+    ctx.beginPath();
+    ctx.arc(specialBtn.x, specialBtn.y + 3, specialBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fill();
+
+    // 黒鉄の本体(発動待機中は灼熱色)
+    const sBody = ctx.createRadialGradient(
+      specialBtn.x - specialBtn.r * 0.35, specialBtn.y - specialBtn.r * 0.4, specialBtn.r * 0.1,
+      specialBtn.x, specialBtn.y, specialBtn.r
+    );
+    if (specialArmed) {
+      sBody.addColorStop(0, '#ffb45e'); sBody.addColorStop(0.55, '#e0642a'); sBody.addColorStop(1, '#7a2410');
+    } else if (ready) {
+      sBody.addColorStop(0, '#574a26'); sBody.addColorStop(0.6, '#332c17'); sBody.addColorStop(1, '#15120a');
+    } else {
+      sBody.addColorStop(0, '#2b333a'); sBody.addColorStop(0.6, '#1a2026'); sBody.addColorStop(1, '#0c1014');
+    }
     ctx.beginPath();
     ctx.arc(specialBtn.x, specialBtn.y, specialBtn.r, 0, Math.PI * 2);
-    ctx.fillStyle = specialArmed ? 'rgba(255,120,60,0.85)' : (active ? 'rgba(255,210,74,0.28)' : 'rgba(255,255,255,0.08)');
+    ctx.fillStyle = sBody;
     ctx.fill();
-    ctx.strokeStyle = specialArmed ? '#fff' : (active ? '#ffd24a' : 'rgba(255,255,255,0.25)');
-    ctx.lineWidth = 2;
+
+    // 真鍮の外輪(溜まりきると発光)
+    if (ready) { ctx.shadowColor = specialArmed ? '#ffd08a' : UI.gold; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = specialArmed ? '#fff2d0' : ready ? UI.gold : 'rgba(126,116,99,0.5)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(specialBtn.x, specialBtn.y, specialBtn.r - 2, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     // 外周ゲージで0〜MAXの充填量を常時見せる。
     if (chargeRatio > 0) {
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.arc(
         specialBtn.x,
         specialBtn.y,
-        specialBtn.r - 4,
+        specialBtn.r - 7,
         -Math.PI / 2,
         -Math.PI / 2 + Math.PI * 2 * chargeRatio
       );
-      ctx.strokeStyle = ready ? '#ffd24a' : 'rgba(255,210,74,0.72)';
+      ctx.strokeStyle = ready ? UI.gold : 'rgba(255,210,74,0.72)';
       ctx.lineWidth = 5;
       ctx.stroke();
+      ctx.lineCap = 'butt';
     }
+    ctx.restore();
 
-    ctx.fillStyle = ready ? '#fff' : 'rgba(255,255,255,0.62)';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.save();
     ctx.textBaseline = 'middle';
-    ctx.fillText('必殺', specialBtn.x, specialBtn.y - 12);
-    ctx.font = '8px sans-serif';
-    ctx.fillText(def.special, specialBtn.x, specialBtn.y + 1);
-    ctx.fillStyle = ready ? '#ffd24a' : 'rgba(255,255,255,0.72)';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText(ready ? 'MAX' : `${player.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17);
+    drawOutlinedText('必殺', specialBtn.x, specialBtn.y - 12, {
+      font: `900 13px ${UI_FONT_HEAVY}`,
+      color: ready ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 3.5
+    });
+    drawOutlinedText(def.special, specialBtn.x, specialBtn.y + 2, {
+      font: `900 8px ${UI_FONT_HEAVY}`,
+      color: ready ? UI.brassLight : 'rgba(226,232,240,0.5)', lineWidth: 3
+    });
+    drawOutlinedText(ready ? 'MAX' : `${player.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
+      font: `900 11px ${UI_FONT_HEAVY}`,
+      color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
+    });
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
   }
@@ -4460,57 +4663,327 @@
   }
 
   const soundBtn = { x: VW - 28, y: 20, r: 17 }; // 右上・CPUパネルと重ならない高さ
+  // ===== サウンド設定パネル(BGM/効果音を個別に段階調整) =====
+  let soundPanelOpen = false;
+  const SOUND_SLIDER_X = VW / 2 - 150;
+  const SOUND_SLIDER_W = 300;
+  const SOUND_SEGMENTS = 20;              // インジケーターの目盛り数
+  const SOUND_STEP = 1 / SOUND_SEGMENTS;  // 5%刻み。目盛り1個=1段階に揃える
+  const soundPanel = { x: VW / 2, y: VH / 2 + 6, w: 434, h: 356 };
+  const soundMasterBtn = { x: VW / 2, y: VH / 2 - 96, w: 300, h: 50 };
+  const soundRows = {
+    bgm: { y: VH / 2 - 6, label: 'BGM', sub: '音楽' },
+    sfx: { y: VH / 2 + 66, label: 'SE', sub: '効果音' }
+  };
+  const soundCloseBtn = { x: VW / 2, y: VH / 2 + 142, w: 200, h: 46 };
+
+  function soundRowAtPoint(p) {
+    if (p.x < SOUND_SLIDER_X - 28 || p.x > SOUND_SLIDER_X + SOUND_SLIDER_W + 28) return null;
+    for (const key of Object.keys(soundRows)) {
+      if (Math.abs(p.y - soundRows[key].y) <= 26) return key;
+    }
+    return null;
+  }
+  function volumeOf(key) { return key === 'bgm' ? bgmVolume : sfxVolume; }
+  function setVolumeFromPoint(key, p) {
+    const raw = (p.x - SOUND_SLIDER_X) / SOUND_SLIDER_W;
+    const snapped = Math.round(Math.min(1, Math.max(0, raw)) / SOUND_STEP) * SOUND_STEP;
+    const v = Math.min(1, Math.max(0, Math.round(snapped * 100) / 100));
+    if (volumeOf(key) === v) return;
+    if (key === 'bgm') bgmVolume = v; else sfxVolume = v;
+    applyAudioVolumes();
+    // BGMは音量0で止め、0から上げた時に鳴り直す必要がある
+    if (key === 'bgm') refreshBgmPlayback();
+  }
+
   function drawSoundToggle() {
+    const muted = !soundOn;
     ctx.save();
     ctx.beginPath();
     ctx.arc(soundBtn.x, soundBtn.y, soundBtn.r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    const body = ctx.createRadialGradient(soundBtn.x - 6, soundBtn.y - 7, 2, soundBtn.x, soundBtn.y, soundBtn.r);
+    body.addColorStop(0, muted ? '#2b3138' : '#4a4029');
+    body.addColorStop(1, muted ? '#0d1114' : '#17150a');
+    ctx.fillStyle = body;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = muted ? 'rgba(126,116,99,0.6)' : UI.brass;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = '18px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(soundOn ? '♪' : '✕', soundBtn.x, soundBtn.y + 1);
-    ctx.textBaseline = 'alphabetic';
     ctx.restore();
+    drawOutlinedText(muted ? '✕' : '♪', soundBtn.x, soundBtn.y + 6, {
+      font: `900 16px ${UI_FONT_HEAVY}`,
+      color: muted ? 'rgba(226,232,240,0.62)' : UI.brassLight, lineWidth: 3
+    });
+  }
+
+  // 段階式インジケーター1本ぶん
+  function drawVolumeRow(key) {
+    const row = soundRows[key];
+    const value = volumeOf(key);
+    const live = soundOn && value > 0;
+    drawOutlinedText(`${row.label}  ${row.sub}`, SOUND_SLIDER_X, row.y - 20, {
+      align: 'left', font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+    drawOutlinedText(value <= 0 ? 'OFF' : `${Math.round(value * 100)}%`, SOUND_SLIDER_X + SOUND_SLIDER_W, row.y - 20, {
+      align: 'right', font: `900 14px ${UI_FONT_HEAVY}`,
+      color: live ? UI.parchment : 'rgba(226,232,240,0.5)', lineWidth: 3
+    });
+
+    ctx.save();
+    // 溝
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(SOUND_SLIDER_X - 5, row.y - 10, SOUND_SLIDER_W + 10, 24);
+    ctx.strokeStyle = 'rgba(199,131,53,0.72)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(SOUND_SLIDER_X - 5.5, row.y - 10.5, SOUND_SLIDER_W + 11, 25);
+
+    // 目盛り(点灯するほど真鍮が明るくなる)
+    const gap = 3;
+    const segW = (SOUND_SLIDER_W - gap * (SOUND_SEGMENTS - 1)) / SOUND_SEGMENTS;
+    for (let i = 0; i < SOUND_SEGMENTS; i++) {
+      const t = (i + 1) / SOUND_SEGMENTS;
+      const on = live && value >= t - 1e-6;
+      const x = SOUND_SLIDER_X + i * (segW + gap);
+      if (on) {
+        const hot = t > 0.8;
+        ctx.fillStyle = hot ? '#ffd08a' : '#e0aa55';
+        ctx.shadowColor = hot ? '#ffd9a0' : 'rgba(224,170,85,0.9)';
+        ctx.shadowBlur = 7;
+      } else {
+        ctx.fillStyle = 'rgba(255,226,161,0.12)';
+        ctx.shadowBlur = 0;
+      }
+      ctx.fillRect(x, row.y - 6, segW, 16);
+    }
+    ctx.shadowBlur = 0;
+
+    // つまみ(ドラッグできることを示す)
+    const knobX = SOUND_SLIDER_X + SOUND_SLIDER_W * value;
+    const knob = ctx.createLinearGradient(knobX - 7, 0, knobX + 7, 0);
+    knob.addColorStop(0, '#7d5219');
+    knob.addColorStop(0.4, '#ffe6b0');
+    knob.addColorStop(0.7, '#c08c3c');
+    knob.addColorStop(1, '#5c3c18');
+    ctx.fillStyle = knob;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(knobX - 7, row.y - 15, 14, 34, 4);
+    else ctx.rect(knobX - 7, row.y - 15, 14, 34);
+    ctx.fill();
+    ctx.strokeStyle = '#2a1a06';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSoundPanel() {
+    if (!soundPanelOpen) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(2,4,7,0.82)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.restore();
+
+    drawIronPlate(soundPanel.x, soundPanel.y, soundPanel.w, soundPanel.h, {
+      cut: 20, lineWidth: 3, rivets: true, rivetInset: 20, rivetRadius: 4.4
+    });
+
+    drawOutlinedText('サウンド設定', VW / 2, VH / 2 - 140, {
+      font: `900 24px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    ctx.save();
+    const rule = ctx.createLinearGradient(VW / 2 - 130, 0, VW / 2 + 130, 0);
+    rule.addColorStop(0, 'rgba(199,131,53,0)');
+    rule.addColorStop(0.5, 'rgba(240,200,128,0.8)');
+    rule.addColorStop(1, 'rgba(199,131,53,0)');
+    ctx.fillStyle = rule;
+    ctx.fillRect(VW / 2 - 130, VH / 2 - 126, 260, 2);
+    ctx.restore();
+
+    // マスターON/OFF
+    drawIronPlate(soundMasterBtn.x, soundMasterBtn.y, soundMasterBtn.w, soundMasterBtn.h, {
+      cut: 12, lineWidth: 2.4,
+      edge: soundOn ? UI.brass : 'rgba(126,116,99,0.6)',
+      fill: soundOn ? null : 'rgba(16,20,24,0.96)'
+    });
+    drawOutlinedText(soundOn ? 'サウンド  ON' : 'サウンド  OFF', soundMasterBtn.x - 34, soundMasterBtn.y + 6, {
+      font: `900 17px ${UI_FONT_HEAVY}`,
+      color: soundOn ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 4
+    });
+    // 小さなランプで状態を示す
+    ctx.save();
+    const lampX = soundMasterBtn.x + 104;
+    const lamp = ctx.createRadialGradient(lampX - 2, soundMasterBtn.y - 2, 1, lampX, soundMasterBtn.y, 10);
+    lamp.addColorStop(0, soundOn ? '#fff3cf' : '#4a5158');
+    lamp.addColorStop(0.5, soundOn ? '#ffc85e' : '#2b3138');
+    lamp.addColorStop(1, soundOn ? '#8a5a12' : '#14181c');
+    ctx.fillStyle = lamp;
+    if (soundOn) { ctx.shadowColor = '#ffcf74'; ctx.shadowBlur = 12; }
+    ctx.beginPath();
+    ctx.arc(lampX, soundMasterBtn.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#2a1a06';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+
+    drawVolumeRow('bgm');
+    drawVolumeRow('sfx');
+
+    drawIronPlate(soundCloseBtn.x, soundCloseBtn.y, soundCloseBtn.w, soundCloseBtn.h, {
+      cut: 12, lineWidth: 2.2, rivets: true, rivetInset: 14, rivetRadius: 3.2
+    });
+    drawOutlinedText('閉じる', soundCloseBtn.x, soundCloseBtn.y + 6, {
+      font: `900 16px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3.5
+    });
   }
 
   // ===== 下部コントローラパネル(ここより下は地形を描かず操作専用のデッドゾーンにする) =====
   function drawControlPanel() {
     if (gamePhase !== 'battle') return;
+    const top = CONTROL_PANEL_Y;
     ctx.save();
-    ctx.fillStyle = '#151826';
-    ctx.fillRect(0, CONTROL_PANEL_Y, VW, VH - CONTROL_PANEL_Y);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+
+    // 黒鉄の地板(上端が明るい、擦れた金属)
+    const plate = ctx.createLinearGradient(0, top, 0, VH);
+    plate.addColorStop(0, '#39434b');
+    plate.addColorStop(0.05, '#232c33');
+    plate.addColorStop(0.45, '#151b21');
+    plate.addColorStop(1, '#0b1015');
+    ctx.fillStyle = plate;
+    ctx.fillRect(0, top, VW, VH - top);
+
+    // ヘアライン(横方向の擦れ)で圧延鋼の質感を出す
+    ctx.globalAlpha = 0.045;
+    ctx.strokeStyle = '#cfe4ff';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, CONTROL_PANEL_Y);
-    ctx.lineTo(VW, CONTROL_PANEL_Y);
-    ctx.stroke();
+    for (let y = top + 8; y < VH; y += 7) {
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(VW, y + 0.5);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // 戦場との境界を仕切る真鍮レール
+    const rail = ctx.createLinearGradient(0, top - 3, 0, top + 6);
+    rail.addColorStop(0, '#4a3016');
+    rail.addColorStop(0.38, '#efc880');
+    rail.addColorStop(0.66, '#a9722f');
+    rail.addColorStop(1, '#241608');
+    ctx.fillStyle = rail;
+    ctx.fillRect(0, top - 3, VW, 9);
     ctx.restore();
+
+    // レール上の鋲
+    for (let x = 30; x < VW; x += 60) drawRivet(x, top + 1.5, 3.4);
   }
 
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
     const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn && player.grounded;
+    const cx = FIRE_BTN.x, cy = FIRE_BTN.y, r = FIRE_BTN.r;
+
+    // 引っ張り量から「パワー%」と「仰角」を算出して数値で見せる。
+    // ポトリス/ガンバウンドの角度・パワー表示にあたるもので、感覚頼みだった照準を再現しやすくする。
+    let power = 0, elevDeg = 0, aiming = false, cancelling = false;
+    if (aimState) {
+      const dx = aimState.curX - aimState.origin.x;
+      const dy = aimState.curY - aimState.origin.y;
+      const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
+      power = Math.round((dist / MAX_DRAG) * 100);
+      // 発射方向は引っ張りの逆向きなので、仰角は引っ張りの下向き成分から求まる
+      elevDeg = Math.round(Math.atan2(dy, Math.abs(dx)) * 180 / Math.PI);
+      aiming = dist >= FIRE_MIN_DRAG;
+      cancelling = isInCancelZone(aimState.curX, aimState.curY);
+    }
+
     ctx.save();
+    // 台座の影
     ctx.beginPath();
-    ctx.arc(FIRE_BTN.x, FIRE_BTN.y, FIRE_BTN.r, 0, Math.PI * 2);
-    ctx.fillStyle = aimState ? 'rgba(255,210,74,0.16)' : active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
+    ctx.arc(cx, cy + 5, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fill();
-    ctx.strokeStyle = active ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 2;
+
+    // 砲座本体(状態で色味が変わる:通常=鉄、照準中=熱を帯びた金、キャンセル=赤)
+    const body = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.42, r * 0.08, cx, cy, r);
+    if (cancelling) {
+      body.addColorStop(0, '#63292a'); body.addColorStop(0.6, '#3b1618'); body.addColorStop(1, '#1a0a0b');
+    } else if (aiming) {
+      body.addColorStop(0, '#4d4430'); body.addColorStop(0.6, '#2d2b1d'); body.addColorStop(1, '#14150f');
+    } else if (active) {
+      body.addColorStop(0, '#3d4850'); body.addColorStop(0.6, '#222a31'); body.addColorStop(1, '#0e1318');
+    } else {
+      body.addColorStop(0, '#262c31'); body.addColorStop(0.6, '#181d22'); body.addColorStop(1, '#0b0e12');
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = body;
+    ctx.fill();
+
+    // 真鍮の外輪
+    const ring = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+    ring.addColorStop(0, '#f2cd8b');
+    ring.addColorStop(0.34, '#a9722f');
+    ring.addColorStop(0.62, '#dda85a');
+    ring.addColorStop(1, '#573916');
+    ctx.strokeStyle = active ? ring : 'rgba(126,116,99,0.5)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 3.5, 0, Math.PI * 2);
     ctx.stroke();
-    if (!aimState) {
-      ctx.fillStyle = active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)';
-      ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('引いて発射', FIRE_BTN.x, FIRE_BTN.y + 5);
+
+    // 内側の刻み目盛り(砲の照準環らしさ)
+    ctx.strokeStyle = active ? 'rgba(255,226,161,0.34)' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2 - Math.PI / 2;
+      const long = i % 6 === 0;
+      const r1 = r - 12, r2 = r - (long ? 22 : 17);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      ctx.stroke();
+    }
+
+    // パワーゲージ(真上から時計回りに溜まる)
+    if (aiming && !cancelling) {
+      const gr = r - 15;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(0,0,0,0.42)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, gr, -Math.PI / 2, Math.PI * 1.5);
+      ctx.stroke();
+      const t = power / 100;
+      const gaugeColor = t > 0.85 ? '#ff6a4d' : t > 0.55 ? UI.gold : '#8fe07a';
+      ctx.strokeStyle = gaugeColor;
+      ctx.shadowColor = gaugeColor;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(cx, cy, gr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.lineCap = 'butt';
     }
     ctx.restore();
+
+    // 中央の表示
+    if (cancelling) {
+      // 中心付近はキャンセル圏のリングと指の位置が重なるため、文字はリングの外へ逃がす
+      drawOutlinedText('キャンセル', cx, cy + 56, { font: `900 21px ${UI_FONT_HEAVY}`, color: '#ff9c9c' });
+      drawOutlinedText('離すと中止', cx, cy + 76, { font: `900 11px ${UI_FONT_HEAVY}`, color: 'rgba(255,180,180,0.85)', lineWidth: 3 });
+    } else if (aiming) {
+      drawOutlinedText('POWER', cx, cy - 36, { font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
+      drawOutlinedText(String(power), cx, cy + 6, { font: `900 46px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5 });
+      drawOutlinedText(`仰角 ${elevDeg}°`, cx, cy + 34, { font: `900 15px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3.5 });
+    } else if (active) {
+      drawOutlinedText('引いて発射', cx, cy + 5, { font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5 });
+      drawOutlinedText('PULL & RELEASE', cx, cy + 26, { font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(255,226,161,0.6)', lineWidth: 3 });
+    } else {
+      // 自分の手番でない理由が分かるようにしておく(以前は暗くなるだけだった)
+      const reason = matchOver ? '試合終了' : !player.grounded ? '落下中' : awaitingResolve ? '着弾を待っています' : '相手の手番';
+      drawOutlinedText(reason, cx, cy + 5, { font: `900 15px ${UI_FONT_HEAVY}`, color: 'rgba(226,232,240,0.5)', lineWidth: 3.5 });
+    }
   }
 
   function drawMenuButton() {
@@ -4538,36 +5011,43 @@
   function drawMenuOverlay() {
     if (!menuOpen) return;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillStyle = 'rgba(2,4,7,0.8)';
     ctx.fillRect(0, 0, VW, VH);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('メニュー', VW / 2, VH / 2 - 90);
+    ctx.restore();
+
+    // 見出しはプレートを敷かない(「プレート=押せる」と読めるようにするため)。
+    // 代わりに真鍮の二重罫線で挟んでラベルだと分かるようにする。
+    drawOutlinedText('メニュー', VW / 2, VH / 2 - 88, {
+      font: `900 26px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    ctx.save();
+    for (const [dy, alpha] of [[-112, 0.85], [-72, 0.5]]) {
+      const rule = ctx.createLinearGradient(VW / 2 - 120, 0, VW / 2 + 120, 0);
+      rule.addColorStop(0, 'rgba(199,131,53,0)');
+      rule.addColorStop(0.5, `rgba(240,200,128,${alpha})`);
+      rule.addColorStop(1, 'rgba(199,131,53,0)');
+      ctx.fillStyle = rule;
+      ctx.fillRect(VW / 2 - 120, VH / 2 + dy, 240, 2);
+    }
+    ctx.restore();
 
     const items = [
       [menuResumeBtn, 'ゲームに戻る', ''],
       [menuSuspendBtn, '中断してタイトルへ', '進行状況を保存します']
     ];
     for (const [b, label, sub] of items) {
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 10);
-      else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-      ctx.fillStyle = '#2c3a63';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.fillText(label, b.x, b.y + (sub ? -3 : 5));
+      drawIronPlate(b.x, b.y, b.w, b.h, {
+        cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
+      });
+      drawOutlinedText(label, b.x, b.y + (sub ? -2 : 6), {
+        font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
       if (sub) {
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.fillText(sub, b.x, b.y + 15);
+        drawOutlinedText(sub, b.x, b.y + 16, {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+        });
       }
     }
-    ctx.restore();
   }
 
   function drawCancelZone() {
@@ -4590,23 +5070,67 @@
 
   function drawMoveButtons() {
     const active = currentTurn === 'player' && player.moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn;
-    ctx.save();
-    ctx.textBaseline = 'middle';
-    for (const [btn, dir, glyph] of [[leftBtn, -1, '◀'], [rightBtn, 1, '▶']]) {
-      const held = active && moveDir === dir;
+    const size = BTN_R * 2;
+    // 残り燃料を移動ボタン側にも出しておくと、動かす前に「あと何歩ぶんか」が判断できる
+    const fuelRatio = player.fuelMax > 0 ? Math.max(0, player.fuel / player.fuelMax) : 0;
+    const canMove = active && fuelRatio > 0;
+
+    for (const [btn, dir] of [[leftBtn, -1], [rightBtn, 1]]) {
+      const held = canMove && moveDir === dir;
+      ctx.save();
+      // 押し込み感:押している間だけ少し沈める
+      const dy = held ? 2 : 0;
       ctx.beginPath();
-      ctx.arc(btn.x, btn.y, BTN_R, 0, Math.PI * 2);
-      ctx.fillStyle = held ? 'rgba(255,255,255,0.4)' : active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
+      angularPlatePath(btn.x, btn.y + 4, size, size, 18);
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fill();
-      ctx.strokeStyle = active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(glyph, btn.x, btn.y + 2);
+      ctx.restore();
+
+      drawIronPlate(btn.x, btn.y + dy, size, size, {
+        cut: 18,
+        edge: canMove ? (held ? '#ffd98f' : UI.brass) : 'rgba(120,112,96,0.5)',
+        lineWidth: held ? 3.4 : 2.6,
+        glow: held ? 'rgba(255,205,110,0.75)' : null,
+        fill: held
+          ? 'rgba(74,63,38,0.98)'
+          : canMove ? null : 'rgba(18,22,26,0.96)',
+        rivets: true,
+        rivetInset: 15,
+        rivetRadius: 3.6
+      });
+
+      // 真鍮の山形(シェブロン)。押下時は明るく光らせる
+      ctx.save();
+      ctx.translate(btn.x + dir * 3, btn.y + dy);
+      ctx.scale(dir, 1);
+      ctx.strokeStyle = canMove ? (held ? '#fff3cf' : UI.brassLight) : 'rgba(200,196,186,0.34)';
+      ctx.lineWidth = held ? 6.5 : 5.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (held) { ctx.shadowColor = '#ffdc9a'; ctx.shadowBlur = 10; }
+      for (const ox of [-9, 4]) {
+        ctx.beginPath();
+        ctx.moveTo(ox - 5, -13);
+        ctx.lineTo(ox + 8, 0);
+        ctx.lineTo(ox - 5, 13);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 燃料の残量バー(プレート下辺)
+      const barW = size - 34;
+      const barX = btn.x - barW / 2;
+      const barY = btn.y + dy + BTN_R - 15;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(barX, barY, barW, 5);
+      ctx.fillStyle = canMove ? UI.fuel : 'rgba(140,150,160,0.45)';
+      ctx.fillRect(barX, barY, barW * fuelRatio, 5);
+      ctx.strokeStyle = 'rgba(255,226,161,0.42)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, 4);
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   function render() {
@@ -4632,6 +5156,8 @@
       drawTerrain();
       ctx.restore();
       drawTitleScreen();
+      drawSoundToggle();
+      drawSoundPanel();
       ctx.restore();
       return;
     }
@@ -4642,11 +5168,15 @@
     }
     if (gamePhase === 'select') {
       drawCharacterSelect();
+      drawSoundToggle();
+      drawSoundPanel();
       ctx.restore();
       return;
     }
     if (gamePhase === 'freeSetup') {
       drawFreeSetupScreen();
+      drawSoundToggle();
+      drawSoundPanel();
       ctx.restore();
       return;
     }
@@ -4689,6 +5219,7 @@
     drawSpecialFlash();
     drawCutIn();
     drawMenuOverlay();
+    drawSoundPanel();
     ctx.restore();
   }
 
@@ -4747,6 +5278,46 @@
       return;
     }
     startTitleBgm();
+
+    // サウンド設定は全画面共通で扱う。パネルが開いている間は他の入力を通さない。
+    if (soundPanelOpen) {
+      if (hitRect(p0, soundCloseBtn)) {
+        soundPanelOpen = false;
+        saveAudioSettings();
+        playUiSound();
+        return;
+      }
+      if (hitRect(p0, soundMasterBtn)) {
+        soundOn = !soundOn;
+        applyAudioVolumes();
+        refreshBgmPlayback();
+        saveAudioSettings();
+        if (soundOn) playUiSound();
+        return;
+      }
+      const row = soundRowAtPoint(p0);
+      if (row) {
+        inputMode = 'volumeSlider';
+        inputPointerId = e.pointerId;
+        volumeDragKey = row;
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* 合成イベント等では捕捉できない */ }
+        setVolumeFromPoint(row, p0);
+        return;
+      }
+      // パネル外をタップしたら閉じる
+      if (!hitRect(p0, soundPanel)) {
+        soundPanelOpen = false;
+        saveAudioSettings();
+      }
+      return;
+    }
+    // ポーズメニュー表示中は♪が覆い隠されているので、見えないボタンには反応させない。
+    if (!menuOpen && Math.hypot(p0.x - soundBtn.x, p0.y - soundBtn.y) <= soundBtn.r + 10) {
+      soundPanelOpen = true;
+      playUiSound();
+      return;
+    }
+
     if (gamePhase === 'title') {
       if (hitRect(p0, titleVsCpuBtn)) {
         playUiSound();
@@ -4831,19 +5402,6 @@
       return;
     }
 
-    if (Math.hypot(p0.x - soundBtn.x, p0.y - soundBtn.y) <= soundBtn.r + 10) {
-      soundOn = !soundOn;
-      if (soundOn) {
-        playUiSound();
-        if (gamePhase === 'battle') playStageBgm(currentThemeKey);
-        else startTitleBgm();
-      } else {
-        titleBgm.pause();
-        stageBgm.pause();
-      }
-      return;
-    }
-
     if (matchOver) {
       const b = continueBtn;
       if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y) <= b.h / 2) {
@@ -4923,6 +5481,10 @@
       return;
     }
     if (e.pointerId !== inputPointerId) return;
+    if (inputMode === 'volumeSlider') {
+      if (volumeDragKey) setVolumeFromPoint(volumeDragKey, p);
+      return;
+    }
     if (inputMode === 'selectWheel' && gamePhase === 'select') {
       const dy = p.y - selectWheelLastY;
       const elapsed = Math.max(8, e.timeStamp - selectWheelLastTime) / 1000;
@@ -4945,6 +5507,16 @@
 
   function onPointerUp(e) {
     if (e.pointerType === 'touch') activeTouchPoints.delete(e.pointerId);
+    if (inputMode === 'volumeSlider' && e.pointerId === inputPointerId) {
+      const key = volumeDragKey;
+      inputMode = null;
+      inputPointerId = null;
+      volumeDragKey = null;
+      saveAudioSettings();
+      // 決めた音量を耳で確認できるよう、離した瞬間に一度だけ鳴らす
+      if (key === 'sfx') playUiSound();
+      return;
+    }
     if (inputMode === 'start' && e.pointerId === inputPointerId) {
       inputMode = null;
       inputPointerId = null;
