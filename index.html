@@ -342,6 +342,55 @@
     if (gamePhase === 'battle') playStageBgm(currentThemeKey);
     else if (gamePhase === 'title' || gamePhase === 'select') startTitleBgm();
   }
+
+  // ===== 画面を離れた時の停止/復帰 =====
+  // スマホをスリープさせたりアプリを切り替えても、audio要素は再生を続けてしまう。
+  // 描画ループ(rAF)は勝手に止まるのに音だけ鳴り続けるため、明示的に止める。
+  let bgmHiddenState = null;
+  function suspendAudioForHidden() {
+    if (bgmHiddenState) return; // 二重呼び出し(visibilitychange と pagehide)を無視する
+    bgmHiddenState = {
+      // ループ待ちの無音区間で隠れた場合も「鳴っていた」とみなして復帰させる
+      title: !titleBgm.paused || titleBgmLoopTimer !== null,
+      stage: !stageBgm.paused
+    };
+    clearTitleBgmLoopTimer();
+    titleBgm.pause();
+    stageBgm.pause();
+    if (audioCtx && audioCtx.state === 'running') {
+      const p = audioCtx.suspend();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+  }
+  function resumeAudioAfterVisible() {
+    const state = bgmHiddenState;
+    bgmHiddenState = null;
+    if (audioCtx && audioCtx.state === 'suspended') {
+      const p = audioCtx.resume();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+    if (!state || !bgmAudible()) return;
+    // 復帰時はフェーズ判定に頼らず、隠れる直前に鳴っていた方をそのまま鳴らし直す
+    // (フリーモード設定画面などフェーズ分岐に該当しない場面でも無音にならないように)
+    const target = state.stage ? stageBgm : state.title ? titleBgm : null;
+    if (!target) return;
+    const played = target.play();
+    if (played && typeof played.catch === 'function') {
+      // ロック解除直後などは自動再生が拒否されることがある。
+      // その場合は次のタップ(ユーザー操作)で鳴らし直す。
+      played.catch(() => { bgmRetryTarget = target; });
+    }
+  }
+  // 自動再生を拒否された時の再開待ち。onPointerDownから拾う。
+  let bgmRetryTarget = null;
+  function retryBgmOnUserGesture() {
+    if (!bgmRetryTarget) return;
+    const target = bgmRetryTarget;
+    bgmRetryTarget = null;
+    if (!bgmAudible()) return;
+    const played = target.play();
+    if (played && typeof played.catch === 'function') played.catch(() => {});
+  }
   let audioCtx = null;
   let sfxCompressor = null;
   function getAudioCtx() {
@@ -5278,6 +5327,7 @@
       return;
     }
     startTitleBgm();
+    retryBgmOnUserGesture();
 
     // サウンド設定は全画面共通で扱う。パネルが開いている間は他の入力を通さない。
     if (soundPanelOpen) {
@@ -5658,6 +5708,16 @@
   });
 
   window.addEventListener('resize', resize);
+  // スリープ・アプリ切り替え・タブ移動でBGMを止め、戻ってきたら鳴らし直す
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) suspendAudioForHidden();
+    else resumeAudioAfterVisible();
+  });
+  // iOSなどvisibilitychangeが来ない経路(bfcache行き)の保険
+  window.addEventListener('pagehide', suspendAudioForHidden);
+  window.addEventListener('pageshow', () => {
+    if (!document.hidden) resumeAudioAfterVisible();
+  });
 
   // ===== ゲームループ =====
   let lastTime = 0;
