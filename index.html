@@ -575,6 +575,17 @@
       playFilteredNoise(0.035 + i * 0.009, 0.055 * power, 'highpass', 1300 + i * 420, 0.045 + i * 0.038, 0.001, 1.4);
     }
   }
+  // 花火の拡散弾用の軽い破裂音。爆発音は音源が9本もあり、0.5秒に24発鳴らすと
+  // 音が潰れるうえ負荷も跳ねるので、専用の軽い音にしたうえで鳴らす数を間引く。
+  let lastCrackleAt = -1e9;
+  function playCrackleSound(blastMul) {
+    const now = performance.now();
+    if (now - lastCrackleAt < 55) return;
+    lastCrackleAt = now;
+    const power = Math.min(1, Math.max(0.5, blastMul || 0.5));
+    playFilteredNoise(0.055, 0.16 * power, 'highpass', 1600, 0, 0.001, 0.7);
+    playFilteredNoise(0.09, 0.1 * power, 'bandpass', 780, 0.004, 0.002, 1.1);
+  }
   function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
   function playSpecialSound() {
     // 通常砲撃よりも「溜め → 解放」がはっきり分かる、短い必殺専用ジングル。
@@ -1133,12 +1144,7 @@
     if (refreshRim) rebuildTerrainRim();
   }
 
-  const TRAIL_MARK_STEP = 4; // 花火の拡散弾が軌跡を刻む間隔(px)
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
-  function carveTrailMark(cx, cy, radius) {
-    carveCraterInternal(cx, cy, radius, false);
-    craterHistory.push({ x: cx, y: cy, r: radius });
-  }
   function carveCrater(cx, cy, radius) {
     carveCraterInternal(cx, cy, radius);
     craterHistory.push({ x: cx, y: cy, r: radius });
@@ -1926,9 +1932,8 @@
       fireworkShard: !!opts.fireworkShard,
       fireworkTimer: 0,
       travelDistance: 0,
-      trailCarvedTo: 0,        // 軌跡を刻み終えた距離。フレームレートに依存させないため
+      shardBlasts: 0,          // 拡散弾が起こし終えた爆発の回数
       maxDistance: opts.maxDistance || 0,
-      trailRadius: opts.trailRadius || 0,
       hitTargets: []
     });
   }
@@ -1938,33 +1943,62 @@
     return { vx: vx * Math.cos(r) - vy * Math.sin(r), vy: vx * Math.sin(r) + vy * Math.cos(r) };
   }
 
+  // ===== 花火(スモエルの必殺)=====
+  const FIREWORK_FUSE_SEC = 3;                      // 着弾も手動起爆もされなかった時の自動炸裂
+  const FIREWORK_SHARD_BLASTS = [0.5, 0.34, 0.22];  // 拡散弾が進みながら起こす爆発。大→中→小
+  const FIREWORK_SHARD_RANGE = 180;                 // 拡散弾が進む距離
+  const FIREWORK_SHARD_DAMAGE_MUL = 0.18;           // 拡散弾1発ぶんのダメージは小さく
+  const FIREWORK_BURST_DAMAGE_CAP = 22;             // 1炸裂でユニット1体が拡散弾から受ける合計上限
+  let fireworkBurstDamage = null;
+
   function spawnFireworkBurst(p) {
-    const speed = 300;
+    const speed = 360;
     const baseAngle = Math.atan2(p.vy, p.vx);
+    // 24発ぶんの爆発が素通しで合算されると即死するので、炸裂ごとに被ダメージ上限を持たせる。
+    fireworkBurstDamage = { player: 0, cpu: 0 };
     spawnExplosion(p.x, p.y, 0.55);
     for (let i = 0; i < 8; i++) {
       const angle = baseAngle + (Math.PI * 2 * i) / 8;
       fireProjectile(p.owner, { x: p.x, y: p.y }, Math.cos(angle) * speed, Math.sin(angle) * speed, {
-        blastMul: 0.4,
-        damageMul: 0.3,
         windMul: 0,
         gravityMul: 0,
         pierce: true,
         fireworkShard: true,
-        maxDistance: 150,
-        trailRadius: 5
+        maxDistance: FIREWORK_SHARD_RANGE
       });
     }
   }
 
-  function applyFireworkShardHit(p, u) {
-    if (p.hitTargets.includes(u.side)) return;
-    p.hitTargets.push(u.side);
-    const damage = Math.max(1, Math.round(45 * p.damageMul * (CHARACTERS[u.character]?.damageTakenMul || 1)));
-    u.hp = Math.max(0, u.hp - damage);
-    spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, damage);
-    if (p.owner === 'player' && u.side === 'cpu') runStats.damageDealt += damage;
+  // 拡散弾の爆発。地形の縁の再構築だけは呼び出し側で1フレームに1回へまとめる。
+  function fireworkShardExplode(p, blastMul, x, y) {
+    const radius = 44 * blastMul;
+    carveCraterInternal(x, y, radius, false);
+    craterHistory.push({ x, y, r: radius });
+    spawnExplosion(x, y, blastMul * 0.5);
+    playCrackleSound(blastMul);
+    for (const u of [player, cpu]) {
+      const dealt = fireworkBurstDamage ? fireworkBurstDamage[u.side] : 0;
+      const budget = FIREWORK_BURST_DAMAGE_CAP - dealt;
+      if (budget <= 0) continue;
+      const a = unitAnchor(u);
+      const raw = computeDamage(Math.hypot(a.x - x, a.y - y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
+      if (raw <= 0) continue;
+      const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
+      const dmg = Math.min(budget, Math.max(1, Math.round(raw * takenMul)));
+      if (fireworkBurstDamage) fireworkBurstDamage[u.side] += dmg;
+      u.hp = Math.max(0, u.hp - dmg);
+      spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
+      if (p.owner === 'player' && u.side === 'cpu') runStats.damageDealt += dmg;
+    }
     checkMatchEnd();
+  }
+
+  // プレイヤーが手動で起爆できる、飛行中の花火本体を返す。
+  function playerFireworkInFlight() {
+    for (const p of projectiles) {
+      if (p.firework && !p.fireworkShard && p.owner === 'player') return p;
+    }
+    return null;
   }
 
   // キャラ性能+必殺ショットを反映して発射する共通口。
@@ -2027,9 +2061,10 @@
         gravityMul: def.gravityMul
       });
     } else if (activateSpecial && def.key === 'sumoeru') {
-      // スモエルの必殺: 着弾または時間経過で8方向へ散る空中花火。
+      // スモエルの必殺: 着弾・手動起爆・3秒経過のいずれかで8方向へ散る花火。
+      // 本体の威力は通常弾と同じ。細かく削るのは拡散弾側の役目。
       fireProjectile(owner, anchor, vx0, vy0, {
-        blastMul: def.blastMul * 0.72,
+        blastMul: def.blastMul,
         windMul: def.windMul,
         firework: true
       });
@@ -4814,9 +4849,11 @@
   }
 
   function drawSpecialButton() {
-    const ready = isSpecialReady(player);
+    // 花火が飛んでいる間は、このボタンが手動起爆に切り替わる。
+    const detonatable = currentTurn === 'player' && !matchOver && !!playerFireworkInFlight();
+    const ready = detonatable || isSpecialReady(player);
     const active = ready && currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
-    const chargeRatio = player.specialCharge / SPECIAL_CHARGE_MAX;
+    const chargeRatio = detonatable ? 1 : player.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[player.character];
     ctx.save();
     // 台座の影
@@ -4830,7 +4867,7 @@
       specialBtn.x - specialBtn.r * 0.35, specialBtn.y - specialBtn.r * 0.4, specialBtn.r * 0.1,
       specialBtn.x, specialBtn.y, specialBtn.r
     );
-    if (specialArmed) {
+    if (specialArmed || detonatable) {
       sBody.addColorStop(0, '#ffb45e'); sBody.addColorStop(0.55, '#e0642a'); sBody.addColorStop(1, '#7a2410');
     } else if (ready) {
       sBody.addColorStop(0, '#574a26'); sBody.addColorStop(0.6, '#332c17'); sBody.addColorStop(1, '#15120a');
@@ -4843,8 +4880,8 @@
     ctx.fill();
 
     // 真鍮の外輪(溜まりきると発光)
-    if (ready) { ctx.shadowColor = specialArmed ? '#ffd08a' : UI.gold; ctx.shadowBlur = 14; }
-    ctx.strokeStyle = specialArmed ? '#fff2d0' : ready ? UI.gold : 'rgba(126,116,99,0.5)';
+    if (ready) { ctx.shadowColor = (specialArmed || detonatable) ? '#ffd08a' : UI.gold; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = (specialArmed || detonatable) ? '#fff2d0' : ready ? UI.gold : 'rgba(126,116,99,0.5)';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(specialBtn.x, specialBtn.y, specialBtn.r - 2, 0, Math.PI * 2);
@@ -4871,15 +4908,15 @@
 
     ctx.save();
     ctx.textBaseline = 'middle';
-    drawOutlinedText('必殺', specialBtn.x, specialBtn.y - 12, {
+    drawOutlinedText(detonatable ? '起爆' : '必殺', specialBtn.x, specialBtn.y - 12, {
       font: `900 13px ${UI_FONT_HEAVY}`,
       color: ready ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 3.5
     });
-    drawOutlinedText(def.special, specialBtn.x, specialBtn.y + 2, {
+    drawOutlinedText(detonatable ? 'BOOM' : def.special, specialBtn.x, specialBtn.y + 2, {
       font: `900 8px ${UI_FONT_HEAVY}`,
       color: ready ? UI.brassLight : 'rgba(226,232,240,0.5)', lineWidth: 3
     });
-    drawOutlinedText(ready ? 'MAX' : `${player.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
+    drawOutlinedText(detonatable ? 'TAP' : ready ? 'MAX' : `${player.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
       font: `900 11px ${UI_FONT_HEAVY}`,
       color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
     });
@@ -5891,6 +5928,15 @@
       if (beginPinchIfPossible()) return;
     }
 
+    // 発射後は入力を止めているが、花火の手動起爆だけは例外として受け付ける。
+    // 信管を満了させるだけなので、炸裂そのものは通常どおり更新処理側で起きる。
+    const flyingFirework = currentTurn === 'player' && !matchOver ? playerFireworkInFlight() : null;
+    if (flyingFirework && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
+      flyingFirework.fireworkTimer = FIREWORK_FUSE_SEC;
+      playUiSound();
+      return;
+    }
+
     // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
     if (currentTurn === 'player' && !awaitingResolve) {
       if (player.moveLockTurns <= 0 && hitButton(p0, leftBtn)) {
@@ -6298,15 +6344,15 @@
         const stepY = p.vy * dt;
         const stepLen = Math.hypot(stepX, stepY);
         p.travelDistance += stepLen;
-        // 軌跡は「一定距離ごと」に刻む。毎フレーム刻むと、削れ方もcraterHistoryの
-        // 長さもフレームレート次第で変わり、中断セーブが端末ごとに食い違う。
-        if (p.trailRadius > 0 && stepLen > 0) {
-          while (p.trailCarvedTo + TRAIL_MARK_STEP <= p.travelDistance) {
-            p.trailCarvedTo += TRAIL_MARK_STEP;
-            const back = (p.travelDistance - p.trailCarvedTo) / stepLen; // 0=現在地, 1=1フレーム前
-            carveTrailMark(p.x - stepX * back, p.y - stepY * back, p.trailRadius);
-            trailDirty = true;
-          }
+        // 爆発の位置はフレーム数ではなく「進んだ距離」で決める。毎フレーム基準だと
+        // 削れ方も craterHistory の長さもフレームレート次第で変わってしまう。
+        const stride = p.maxDistance / FIREWORK_SHARD_BLASTS.length;
+        while (p.shardBlasts < FIREWORK_SHARD_BLASTS.length
+               && p.travelDistance >= stride * (p.shardBlasts + 1)) {
+          const back = stepLen > 0 ? (p.travelDistance - stride * (p.shardBlasts + 1)) / stepLen : 0;
+          fireworkShardExplode(p, FIREWORK_SHARD_BLASTS[p.shardBlasts], p.x - stepX * back, p.y - stepY * back);
+          p.shardBlasts++;
+          trailDirty = true;
         }
         if (p.travelDistance >= p.maxDistance) {
           projectiles.splice(i, 1);
@@ -6314,28 +6360,29 @@
         }
       }
 
-      const fireworkDue = p.firework && !p.fireworkShard && p.fireworkTimer >= 1.1;
+      const fireworkDue = p.firework && !p.fireworkShard && p.fireworkTimer >= FIREWORK_FUSE_SEC;
 
       let hit = false;
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
-      for (const u of [player, cpu]) {
-        if (u.side === p.owner) continue;
-        const a = unitAnchor(u);
-        if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
-          if (p.fireworkShard) {
-            applyFireworkShardHit(p, u);
-          } else if (p.emp) {
-            emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
-          } else if (p.firework) {
-            explodeAt(p.x, p.y, 0.5, p.owner, 0.65);
-            spawnFireworkBurst(p);
-          } else {
-            explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+      // 拡散弾は素通りさせ、ダメージは進行中の爆発だけに任せる(二重取りの防止)。
+      if (!p.fireworkShard) {
+        for (const u of [player, cpu]) {
+          if (u.side === p.owner) continue;
+          const a = unitAnchor(u);
+          if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
+            if (p.emp) {
+              emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
+            } else if (p.firework) {
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+              spawnFireworkBurst(p);
+            } else {
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+            }
+            if (p.lightning) spawnLightningRemnant(p);
+            projectiles.splice(i, 1);
+            hit = true;
+            break;
           }
-          if (p.lightning) spawnLightningRemnant(p);
-          if (!p.fireworkShard) projectiles.splice(i, 1);
-          hit = true;
-          break;
         }
       }
       if (hit) continue;
@@ -6347,7 +6394,7 @@
         if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
         } else if (p.firework) {
-          explodeAt(obstacleHit.x, obstacleHit.y, 0.5, p.owner, 0.65);
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
           spawnFireworkBurst(p);
         } else {
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
@@ -6366,7 +6413,7 @@
       if (!p.pierce && isSolidAt(p.x, p.y)) {
         if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
         else if (p.firework) {
-          explodeAt(p.x, p.y, 0.5, p.owner, 0.65);
+          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
           spawnFireworkBurst(p);
         } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
         if (p.lightning) spawnLightningRemnant(p);
