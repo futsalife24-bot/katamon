@@ -192,11 +192,23 @@
   // 音量0はミュートと同義に扱い、無音の再生を続けないようにする。
   function bgmAudible() { return soundOn && bgmVolume > 0; }
   function sfxAudible() { return soundOn && sfxVolume > 0; }
+  // スライダーの位置(0〜1)を実際の音量倍率へ変換する。
+  // 人間の音量感覚は対数的なので、位置をそのまま倍率にすると上半分がほとんど効かず
+  // 「絞っても大して小さくならない」と感じる。全域が効くようdBで等間隔に配る。
+  // 全開=0dB、下げるほど急に小さくなり、下限は-40dB(ほぼ無音)。
+  const VOLUME_RANGE_DB = 40;
+  function volumeCurve(position) {
+    if (position <= 0) return 0;
+    if (position >= 1) return 1;
+    return Math.pow(10, (position - 1) * VOLUME_RANGE_DB / 20);
+  }
   function applyAudioVolumes() {
     const on = soundOn ? 1 : 0;
-    titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmVolume * on;
-    stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmVolume * on * (stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1);
-    if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxVolume * on;
+    const bgmGain = volumeCurve(bgmVolume) * on;
+    const sfxGain = volumeCurve(sfxVolume) * on;
+    titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
+    stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * (stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1);
+    if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
 
   // ブラウザの自動再生制限に合わせ、タイトル画面での最初のタップから再生する。
