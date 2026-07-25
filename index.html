@@ -209,6 +209,9 @@
     const duck = stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1;
     if (titleBgmGain && stageBgmGain) {
       // WebAudio経由に切り替わっている場合(iOS等)は、GainNodeが最終音量を決める。
+      // 要素側は素通し(1.0)に固定しないと、切替前の音量が残って二重に減衰してしまう。
+      titleBgm.volume = 1;
+      stageBgm.volume = 1;
       titleBgmGain.gain.value = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgmGain.gain.value = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
     } else {
@@ -225,7 +228,21 @@
   let stageBgmGain = null;
   let bgmSourceNodes = { title: null, stage: null };
   let mediaVolumeSupported = true;
+  // iOS/iPadOSは volume を代入しても音量に反映されない。
+  // 厄介なことにバージョンによっては「値は保持して読み戻せるが音は変わらない」ため、
+  // 読み戻しによる判定では見抜けない。iOS系はUAで判断して無条件にWebAudio経由にする。
+  function isIosLike() {
+    const ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    // iPadOS 13以降はMacintoshを名乗るので、タッチ対応の有無で見分ける
+    if (/Macintosh/.test(ua) && typeof document.ontouchend !== 'undefined') return true;
+    return false;
+  }
   function detectMediaVolumeSupport() {
+    if (isIosLike()) {
+      mediaVolumeSupported = false;
+      return;
+    }
     try {
       const original = titleBgm.volume;
       const probe = original === 0.5 ? 0.25 : 0.5;
@@ -239,7 +256,15 @@
   // BGMをWebAudioへ繋ぎ直す。ユーザー操作の中から呼ぶこと(iOSはAudioContextの作成/再開に操作が要る)。
   function ensureBgmGraph() {
     if (mediaVolumeSupported) return;            // 通常の端末は従来経路のまま触らない
-    if (titleBgmGain && stageBgmGain) return;    // 構築済み
+    if (titleBgmGain && stageBgmGain) {
+      // 構築済みでも、復帰直後などにcontextが止まっていると無音になる。
+      // WebAudio経由の時はBGMの生命線なので、操作のたびに起こしておく。
+      if (audioCtx && audioCtx.state === 'suspended') {
+        const resumed = audioCtx.resume();
+        if (resumed && typeof resumed.catch === 'function') resumed.catch(() => {});
+      }
+      return;
+    }
     try {
       const ac = getAudioCtx();
       if (!titleBgmGain) { titleBgmGain = ac.createGain(); titleBgmGain.connect(ac.destination); }
@@ -4943,6 +4968,13 @@
 
     drawVolumeRow('bgm');
     drawVolumeRow('sfx');
+
+    // BGMの音量制御がどの経路か。端末差の切り分け用に小さく出しておく。
+    drawOutlinedText(
+      titleBgmGain ? 'BGM出力: WebAudio' : mediaVolumeSupported ? 'BGM出力: 標準' : 'BGM出力: WebAudio(準備中)',
+      VW / 2, VH / 2 + 108,
+      { font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(226,232,240,0.42)', lineWidth: 2.5 }
+    );
 
     drawIronPlate(soundCloseBtn.x, soundCloseBtn.y, soundCloseBtn.w, soundCloseBtn.h, {
       cut: 12, lineWidth: 2.2, rivets: true, rivetInset: 14, rivetRadius: 3.2
