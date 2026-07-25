@@ -1630,9 +1630,54 @@
       selectStats: [4, 4, 2], specialDesc: '大爆風の高威力レーザー砲',
       maxHp: 110, blastMul: 1.25, windMul: 1.05, fuelMul: 0.85, velScaleMul: 0.92, specialVelocityMul: 1.1, tBias: 1.15,
       color: '#ff84aa', special: 'さくら砲'
+    },
+    mecha: {
+      key: 'mecha', name: 'メカ', role: '斉射型', roleEn: 'SALVO',
+      desc: '三連装砲を備えた機械戦車。まとまった弾幕で確実に削り取る。',
+      selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に高速斉射',
+      maxHp: 98, blastMul: 0.95, windMul: 0.8, fuelMul: 1.0, velScaleMul: 1.1, specialVelocityMul: 1.0, tBias: 0.95,
+      color: '#e8d48a', special: '三連装砲'
+    },
+    akuma: {
+      key: 'akuma', name: '悪魔', role: '雷撃型', roleEn: 'BOLT',
+      desc: '雷を直線で叩き込む魔導バイク。軽く速いがHPは薄い。',
+      selectStats: [2, 5, 4], specialDesc: '重力・風・障害物を無視して直進する電撃',
+      maxHp: 84, blastMul: 1.1, windMul: 0.95, fuelMul: 1.15, velScaleMul: 1.12, specialVelocityMul: 2.0, tBias: 0.9,
+      color: '#ff3b5c', special: 'ライトニング', facesLeft: true
+    },
+    jinba: {
+      key: 'jinba', name: '人馬', role: '突撃型', roleEn: 'CHARGE',
+      desc: '槍と肩砲を備えた四脚戦車。走り回りながら高速弾で圧をかける。',
+      selectStats: [4, 3, 4], specialDesc: '地形を貫き大爆発する突撃槍',
+      maxHp: 108, blastMul: 0.95, windMul: 0.6, fuelMul: 1.25, velScaleMul: 1.15, specialVelocityMul: 1.3, tBias: 0.9,
+      color: '#3fd6b0', special: 'Dスマッシュ', facesLeft: true
+    },
+    kishi: {
+      key: 'kishi', name: '騎士', role: '重装型', roleEn: 'FORTRESS',
+      desc: '盾と大槍で固めた白銀の重装戦車。鈍いが硬く、一撃が重い。',
+      selectStats: [5, 4, 2], specialDesc: '自分のHPを15払い超高威力の一撃',
+      maxHp: 132, blastMul: 1.15, windMul: 0.65, fuelMul: 0.8, velScaleMul: 0.88, damageTakenMul: 0.8, specialVelocityMul: 1.0, tBias: 1.2,
+      color: '#f2c94c', special: '最終奥義', facesLeft: true
+    },
+    neko: {
+      key: 'neko', name: '猫', role: '翻弄型', roleEn: 'TRICK',
+      desc: '肉球砲を構えた身軽な猫戦車。逃げ回りながら相手の足を止める。',
+      selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし移動を1手封じる',
+      maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
+      color: '#ffe14d', special: '猫だまし爆弾', facesLeft: true
     }
   };
-  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario'];
+  // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
+  const CHARACTER_FACES = {
+    kyoryu: [0.64, 0.20, 0.36], medama: [0.58, 0.36, 0.38], iwa: [0.68, 0.40, 0.40],
+    tori: [0.54, 0.48, 0.36], barugerukan: [0.45, 0.42, 0.40], nisenmono: [0.42, 0.40, 0.44],
+    burumutan: [0.62, 0.60, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
+    mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
+    jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34]
+  };
+  const DEFAULT_FACE = [0.5, 0.3, 0.42];
+
+  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko'];
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
@@ -1863,6 +1908,7 @@
     opts = opts || {};
     projectiles.push({
       x: anchor.x, y: anchor.y, vx, vy, owner, radius: 5,
+      originX: anchor.x, originY: anchor.y,   // 電撃ビームを発射点から伸ばすのに使う
       blastMul: opts.blastMul || 1,
       windMul: opts.windMul != null ? opts.windMul : 1,
       gravityMul: opts.gravityMul != null ? opts.gravityMul : 1,
@@ -1872,6 +1918,8 @@
       empRadius: opts.empRadius || 90,
       empTurns: opts.empTurns || 2,
       noTerrain: !!opts.noTerrain,
+      ignoreObstacles: !!opts.ignoreObstacles,
+      lightning: !!opts.lightning,
       firework: !!opts.firework,
       fireworkShard: !!opts.fireworkShard,
       fireworkTimer: 0,
@@ -1916,11 +1964,21 @@
     checkMatchEnd();
   }
 
-  // キャラ性能+必殺ショットを反映して発射する共通口
-  function launchShot(unit, anchor, vx0, vy0, useSpecial) {
+  // キャラ性能+必殺ショットを反映して発射する共通口。
+  // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
+  function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred) {
     const def = CHARACTERS[unit.character];
     const owner = unit.side;
-    const activateSpecial = useSpecial && isSpecialReady(unit);
+    // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
+    const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
+
+    if (activateSpecial && !deferred) {
+      unit.specialCharge = 0;
+      triggerSpecialFlash(`必殺: ${def.special}!!`, def);
+      playSpecialSound();
+      pendingShot = { timer: SPECIAL_FLASH_DURATION, fire: () => launchShot(unit, anchor, vx0, vy0, true, true) };
+      return;
+    }
 
     if (activateSpecial && def.key === 'medama') {
       // 目玉の必殺: 地形を削らず、着弾点から電磁波を放って移動を封じる。
@@ -1978,6 +2036,50 @@
     } else if (activateSpecial && def.key === 'mocchario') {
       // モッチャリオの必殺: 高火力・大爆風のレーザー砲
       fireProjectile(owner, anchor, vx0 * 1.1, vy0 * 1.1, { blastMul: def.blastMul * 2.0, windMul: def.windMul });
+    } else if (activateSpecial && def.key === 'mecha') {
+      // メカの必殺: 狭い扇状に3発を高速斉射
+      for (const deg of [-5, 0, 5]) {
+        const v = rotateVec(vx0, vy0, deg);
+        fireProjectile(owner, anchor, v.vx * 1.25, v.vy * 1.25, { blastMul: def.blastMul * 0.85, windMul: def.windMul });
+      }
+    } else if (activateSpecial && def.key === 'akuma') {
+      // 悪魔の必殺: 重力も風も空中障害物も無視してまっすぐ走る電撃。地面か相手で止まる。
+      fireProjectile(owner, anchor, vx0 * 2, vy0 * 2, {
+        blastMul: def.blastMul * 1.2,
+        windMul: 0,
+        gravityMul: 0,
+        damageMul: 1.35,
+        ignoreObstacles: true,
+        lightning: true
+      });
+    } else if (activateSpecial && def.key === 'jinba') {
+      // 人馬の必殺: 地形を貫通して進む大爆発の突撃槍
+      fireProjectile(owner, anchor, vx0 * 1.3, vy0 * 1.3, {
+        blastMul: def.blastMul * 1.9,
+        windMul: def.windMul,
+        pierce: true
+      });
+    } else if (activateSpecial && def.key === 'kishi') {
+      // 騎士の必殺: 自分のHPを代償に超高威力の一撃を放つ。自滅はしない。
+      const cost = Math.min(15, Math.max(0, unit.hp - 1));
+      if (cost > 0) {
+        unit.hp -= cost;
+        spawnDamageText(unit.x, unit.y - UNIT_RADIUS - 10, cost);
+      }
+      fireProjectile(owner, anchor, vx0, vy0, {
+        blastMul: def.blastMul * 1.7,
+        windMul: def.windMul,
+        damageMul: 1.5
+      });
+    } else if (activateSpecial && def.key === 'neko') {
+      // 猫の必殺: 大爆風で地形を削りつつ、当たった相手の移動を1手だけ封じる。
+      fireProjectile(owner, anchor, vx0, vy0, {
+        blastMul: def.blastMul * 1.5,
+        windMul: def.windMul,
+        emp: true,
+        empRadius: def.empRadius,
+        empTurns: 1
+      });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, {
         blastMul: def.blastMul,
@@ -1986,13 +2088,8 @@
       });
     }
 
-    if (activateSpecial) {
-      unit.specialCharge = 0;
-      triggerSpecialFlash(`必殺: ${def.special}!!`, def);
-      playSpecialSound();
-    } else {
-      playLaunchSound();
-    }
+    // チャージ消費・カットイン・必殺音は保留に入る前に済ませてある。
+    if (!activateSpecial) playLaunchSound();
   }
 
   // ===== ターン制御 =====
@@ -2068,7 +2165,10 @@
   let floatTexts = [];  // ダメージ数字ポップ
   let shakeTimer = 0;
   let shakeMag = 0;
+  const SPECIAL_FLASH_DURATION = 1.12;
   let specialFlash = { timer: 0, text: '', color: '#ff9d42', sub: '' };
+  let pendingShot = null;    // 必殺カットインを見せ終わるまで発射を待たせる
+  let lightningBeams = [];   // 着弾後に一瞬だけ残る電撃の残像
 
   function spawnExplosion(x, y, blastMul) {
     const count = Math.round(14 * Math.min(2, blastMul || 1));
@@ -2096,9 +2196,14 @@
     shakeTimer = Math.max(shakeTimer, duration);
   }
 
+  function spawnLightningRemnant(p) {
+    lightningBeams.push({ x0: p.originX, y0: p.originY, x1: p.x, y1: p.y, life: 0.24, maxLife: 0.24 });
+  }
+
   function triggerSpecialFlash(text, def) {
     specialFlash = {
-      timer: 1.12,
+      timer: SPECIAL_FLASH_DURATION,
+      key: def?.key || null,
       text,
       color: def?.color || '#ff9d42',
       sub: def?.specialDesc || 'SPECIAL ATTACK'
@@ -2385,9 +2490,11 @@
     cpuPhase = 'aim';
     particles = [];
     empRings = [];
+    lightningBeams = [];
     floatTexts = [];
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
+    pendingShot = null;
     cutIn = null;
     menuOpen = false;
     cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
@@ -3509,9 +3616,12 @@
     const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * def.tBias;
     const tier = cpuAccuracyTier(winStreak);
     const useSpecial = isSpecialReady(cpu) && (tier.name === 'high' || tier.name === 'perfect');
-    const aimWindMul = useSpecial && def.key === 'tori' ? def.windMul * 0.55 : (def.windMul || 1);
+    // 悪魔の必殺は重力も風も受けないので、逆算も直線で行わないと大きく外れる。
+    const straightAim = useSpecial && def.key === 'akuma';
+    const aimWindMul = straightAim ? 0 : (useSpecial && def.key === 'tori' ? def.windMul * 0.55 : (def.windMul || 1));
+    const aimGravityMul = straightAim ? 0 : (def.gravityMul || 1);
     const launchSpeedMul = useSpecial ? (def.specialVelocityMul || 1) : 1;
-    const { vx0, vy0 } = perfectAimVelocity(anchor, target, baseT, def.gravityMul || 1, aimWindMul, launchSpeedMul);
+    const { vx0, vy0 } = perfectAimVelocity(anchor, target, baseT, aimGravityMul, aimWindMul, launchSpeedMul);
     const jitter = tier.jitter;
     const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
     const vy = vy0 * (1 + (Math.random() * 2 - 1) * jitter);
@@ -4145,10 +4255,12 @@
     // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
     const def = CHARACTERS[player.character];
     const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
-    const gravity = GRAVITY * (def.gravityMul || 1);
+    // 悪魔の必殺を構えている間は弾が直進するので、ガイドも重力・風を切って直線にする。
+    const straightGuide = specialArmed && isSpecialReady(player) && def.key === 'akuma';
+    const gravity = straightGuide ? 0 : GRAVITY * (def.gravityMul || 1);
     const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * (def.guideMul || 1);
     const steps = 14;
-    const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * def.windMul;
+    const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * def.windMul;
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -4191,8 +4303,65 @@
     ctx.restore();
   }
 
+  // 発射点から現在地(着弾点)までを一本の電撃ビームとして描く。
+  // 影(shadowBlur)は長い線に掛けると重いので使わず、太さ違いの3本重ねで発光に見せる。
+  function drawLightningPath(x0, y0, x1, y1, alpha, headRadius) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    if (len < 2) return;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const segments = Math.max(4, Math.min(72, Math.round(len / 26)));
+    const now = performance.now();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // 外側2層は加算合成にして、明るい地形の上でも発光が沈まないようにする。
+    const layers = [
+      { w: 18, c: 'rgba(120,60,235,0.5)', add: true },
+      { w: 8, c: 'rgba(196,150,255,0.95)', add: true },
+      { w: 2.4, c: '#ffffff', add: false }
+    ];
+    for (const layer of layers) {
+      ctx.globalCompositeOperation = layer.add ? 'lighter' : 'source-over';
+      ctx.strokeStyle = layer.c;
+      ctx.lineWidth = layer.w;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      for (let s = 1; s < segments; s++) {
+        const t = s / segments;
+        // 両端は軸上に固定し、中ほどだけ大きく振れさせると雷らしい形になる
+        const sway = Math.sin(s * 2.3 + now * 0.021) * 8 * Math.sin(t * Math.PI);
+        ctx.lineTo(x0 + dx * t + nx * sway, y0 + dy * t + ny * sway);
+      }
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+    if (headRadius > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      const head = ctx.createRadialGradient(x1, y1, 0, x1, y1, headRadius * 3.4);
+      head.addColorStop(0, 'rgba(255,255,255,1)');
+      head.addColorStop(0.32, 'rgba(214,170,255,0.85)');
+      head.addColorStop(1, 'rgba(120,60,235,0)');
+      ctx.fillStyle = head;
+      ctx.beginPath();
+      ctx.arc(x1, y1, headRadius * 3.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawProjectile() {
+    for (const b of lightningBeams) {
+      drawLightningPath(b.x0, b.y0, b.x1, b.y1, Math.max(0, b.life / b.maxLife) * 0.9, 0);
+    }
     for (const p of projectiles) {
+      if (p.lightning) {
+        drawLightningPath(p.originX, p.originY, p.x, p.y, 1, 4.6);
+        continue;
+      }
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
@@ -4742,6 +4911,55 @@
     ctx.restore();
   }
 
+  // カットイン左側の顔アップ。読み込み済みのキャラ画像を切り出して円窓に描くだけなので負荷は軽い。
+  // 描けた場合だけtrueを返し、呼び出し側が文字の配置を切り替える。
+  function drawSpecialFlashPortrait(key, cx, cy, r, color, progress) {
+    const def = key ? CHARACTERS[key] : null;
+    const img = key ? charImages[key] : null;
+    if (!def || !img || !img.complete || !img.naturalWidth) return false;
+    const [fx, fy, fw] = CHARACTER_FACES[key] || DEFAULT_FACE;
+    const sw = img.naturalWidth * fw;
+    const sh = sw;
+    const sx = Math.max(0, Math.min(img.naturalWidth - sw, img.naturalWidth * fx - sw / 2));
+    const sy = Math.max(0, Math.min(Math.max(0, img.naturalHeight - sh), img.naturalHeight * fy - sh / 2));
+    // 登場時に少しだけ寄る。止まった絵より勢いが出る。
+    const zoom = 1.16 - 0.16 * Math.min(1, progress * 3);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    const back = ctx.createRadialGradient(cx, cy - r * 0.3, 4, cx, cy, r);
+    back.addColorStop(0, `${color}55`);
+    back.addColorStop(1, 'rgba(2,6,14,0.95)');
+    ctx.fillStyle = back;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    const d = r * 2 * zoom;
+    if (def.facesLeft) {
+      // 元画像が左向きのキャラは、ゲーム中の表示と同じ向きに揃える
+      ctx.translate(cx, cy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, sx, sy, sw, sh, -d / 2, -d / 2, d, d);
+    } else {
+      ctx.drawImage(img, sx, sy, sw, sh, cx - d / 2, cy - d / 2, d, d);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    return true;
+  }
+
   function drawSpecialFlash() {
     if (specialFlash.timer <= 0) return;
     const duration = 1.12;
@@ -4781,23 +4999,35 @@
     ctx.fillStyle = centerGlow;
     ctx.fillRect(0, bandY, VW, bandH);
 
+    // 顔アップを左に置けた時だけ、文字を右へ寄せて左揃えにする。
+    const portrait = drawSpecialFlashPortrait(specialFlash.key, 92, bandY + bandH / 2, 56, color, progress);
+    const textLeft = portrait ? 170 : 0;
+    const textCx = portrait ? textLeft + (VW - textLeft - 16) / 2 : VW / 2;
+
     ctx.textAlign = 'center';
     ctx.shadowColor = color;
     ctx.shadowBlur = 16;
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#050914';
     ctx.lineWidth = 5;
-    ctx.font = '900 29px sans-serif';
-    ctx.strokeText(specialFlash.text, VW / 2, bandY + 78);
-    ctx.fillText(specialFlash.text, VW / 2, bandY + 78);
+    // 技名が長い時にはみ出さないよう、収まる大きさまで詰める
+    let titleSize = 29;
+    ctx.font = `900 ${titleSize}px sans-serif`;
+    const maxTitleW = VW - textLeft - 24;
+    while (titleSize > 17 && ctx.measureText(specialFlash.text).width > maxTitleW) {
+      titleSize -= 1;
+      ctx.font = `900 ${titleSize}px sans-serif`;
+    }
+    ctx.strokeText(specialFlash.text, textCx, bandY + 78);
+    ctx.fillText(specialFlash.text, textCx, bandY + 78);
     ctx.shadowBlur = 0;
     ctx.fillStyle = color;
     ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('SPECIAL ATTACK', VW / 2, bandY + 102);
+    ctx.fillText('SPECIAL ATTACK', textCx, bandY + 102);
     if (specialFlash.sub) {
       ctx.fillStyle = 'rgba(255,255,255,0.86)';
       ctx.font = '11px sans-serif';
-      ctx.fillText(specialFlash.sub, VW / 2, bandY + 124);
+      ctx.fillText(specialFlash.sub, textCx, bandY + 124);
     }
     ctx.restore();
   }
@@ -5790,9 +6020,11 @@
     cpuPhase = 'aim';
     particles = [];
     empRings = [];
+    lightningBeams = [];
     floatTexts = [];
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
+    pendingShot = null;
     cutIn = null;
     cameraZoom = DEFAULT_CAMERA_ZOOM;
     focusCameraOn(player.x, true);
@@ -5845,6 +6077,19 @@
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
     if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
+    // カットインが終わったところで、保留していた必殺の弾を発射する。
+    if (pendingShot) {
+      pendingShot.timer -= dt;
+      if (pendingShot.timer <= 0) {
+        const fire = pendingShot.fire;
+        pendingShot = null;
+        fire();
+      }
+    }
+    for (let i = lightningBeams.length - 1; i >= 0; i--) {
+      lightningBeams[i].life -= dt;
+      if (lightningBeams[i].life <= 0) lightningBeams.splice(i, 1);
+    }
 
     // パーティクル更新
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -5883,7 +6128,8 @@
       const p = projectiles[i];
       const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * p.windMul;
       p.vx += windAccel * dt;
-      p.vy += GRAVITY * (p.gravityMul || 1) * dt;
+      // gravityMulは0(無重力の電撃)を取り得るので、||でのフォールバックは使えない。
+      p.vy += GRAVITY * (p.gravityMul != null ? p.gravityMul : 1) * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
@@ -5918,6 +6164,7 @@
           } else {
             explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
           }
+          if (p.lightning) spawnLightningRemnant(p);
           if (!p.fireworkShard) projectiles.splice(i, 1);
           hit = true;
           break;
@@ -5927,7 +6174,7 @@
 
       // 闘技場の鎖には当たらず、先端の鉄球・鉄塊だけが砲弾を遮る。
       // 地形グリッドには入れないため、落下中のキャラが空中障害物へ着地することはない。
-      const obstacleHit = p.fireworkShard ? null : hitArenaObstacle(p.x, p.y, p.radius);
+      const obstacleHit = (p.fireworkShard || p.ignoreObstacles) ? null : hitArenaObstacle(p.x, p.y, p.radius);
       if (obstacleHit) {
         if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
@@ -5954,6 +6201,7 @@
           explodeAt(p.x, p.y, 0.5, p.owner, 0.65);
           spawnFireworkBurst(p);
         } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+        if (p.lightning) spawnLightningRemnant(p);
         projectiles.splice(i, 1);
       } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > VH + 60) {
         projectiles.splice(i, 1); // 画面外(誤爆なしで消滅)
@@ -6001,7 +6249,8 @@
     }
 
     // ターン解決(着弾+落下が収まったら手番交代)
-    if (awaitingResolve && !projectiles.length && player.grounded && cpu.grounded) {
+    // pendingShotがある間はまだ弾が出ていないだけなので、ターンを終わらせてはいけない。
+    if (awaitingResolve && !pendingShot && !projectiles.length && player.grounded && cpu.grounded) {
       awaitingResolve = false;
       endTurn();
     }
