@@ -2343,6 +2343,15 @@
   const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
   const selectBackBtn = { x: 62, y: 32, w: 104, h: 34 };
 
+  // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
+  function leaveSelectToTitle() {
+    selectWheelDragging = false;
+    selectWheelVelocity = 0;
+    inputMode = null;
+    inputPointerId = null;
+    gamePhase = 'title';
+  }
+
   function selectCharacterAndStart(key) {
     clearSuspendedMatch();
     hasSuspendedSave = false;
@@ -2495,6 +2504,7 @@
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
+    confirmDialog = null;
     cutIn = null;
     menuOpen = false;
     cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
@@ -5385,6 +5395,57 @@
     ctx.restore();
   }
 
+  // ===== はい/いいえの確認ダイアログ =====
+  // 戻る操作の誤爆で選択画面から抜けてしまうのを防ぐために使う。
+  let confirmDialog = null; // { text, sub, onYes }
+  const confirmYesBtn = { x: VW / 2 - 78, y: VH / 2 + 30, w: 136, h: 50 };
+  const confirmNoBtn = { x: VW / 2 + 78, y: VH / 2 + 30, w: 136, h: 50 };
+  const confirmPanel = { x: VW / 2, y: VH / 2 - 4, w: 360, h: 200 };
+
+  function openConfirmDialog(text, sub, onYes) {
+    confirmDialog = { text, sub, onYes };
+    playUiSound();
+  }
+
+  function drawConfirmDialog() {
+    if (!confirmDialog) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(2,4,7,0.82)';
+    ctx.fillRect(0, 0, VW, VH);
+    // 背後のキャラカードが明るく透けて読みにくいので、下地を一枚敷く。
+    ctx.translate(confirmPanel.x - confirmPanel.w / 2, confirmPanel.y - confirmPanel.h / 2);
+    const face = ctx.createLinearGradient(0, 0, 0, confirmPanel.h);
+    face.addColorStop(0, UI.plateTop);
+    face.addColorStop(0.55, UI.plateMid);
+    face.addColorStop(1, UI.plateBottom);
+    ctx.fillStyle = face;
+    ctx.fillRect(0, 0, confirmPanel.w, confirmPanel.h);
+    ctx.strokeStyle = UI.brass;
+    ctx.lineWidth = 2.6;
+    ctx.strokeRect(1.3, 1.3, confirmPanel.w - 2.6, confirmPanel.h - 2.6);
+    ctx.strokeStyle = 'rgba(255,226,161,0.22)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(6, 6, confirmPanel.w - 12, confirmPanel.h - 12);
+    ctx.restore();
+
+    drawOutlinedText(confirmDialog.text, VW / 2, VH / 2 - 48, {
+      font: `900 22px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    if (confirmDialog.sub) {
+      drawOutlinedText(confirmDialog.sub, VW / 2, VH / 2 - 20, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    }
+    for (const [b, label] of [[confirmYesBtn, 'はい'], [confirmNoBtn, 'いいえ']]) {
+      drawIronPlate(b.x, b.y, b.w, b.h, {
+        cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
+      });
+      drawOutlinedText(label, b.x, b.y + 6, {
+        font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+    }
+  }
+
   function drawMenuOverlay() {
     if (!menuOpen) return;
     ctx.save();
@@ -5547,6 +5608,7 @@
       drawCharacterSelect();
       drawSoundToggle();
       drawSoundPanel();
+      drawConfirmDialog();
       ctx.restore();
       return;
     }
@@ -5554,6 +5616,7 @@
       drawFreeSetupScreen();
       drawSoundToggle();
       drawSoundPanel();
+      drawConfirmDialog();
       ctx.restore();
       return;
     }
@@ -5658,6 +5721,23 @@
     startTitleBgm();
     retryBgmOnUserGesture();
 
+    // 確認ダイアログが最優先。開いている間は他の入力を一切通さない。
+    if (confirmDialog) {
+      if (hitRect(p0, confirmYesBtn)) {
+        const onYes = confirmDialog.onYes;
+        confirmDialog = null;
+        playUiSound();
+        if (onYes) onYes();
+        return;
+      }
+      // いいえ、およびダイアログ外のタップはどちらも取り消し扱い(安全側)
+      if (hitRect(p0, confirmNoBtn) || !hitRect(p0, confirmPanel)) {
+        confirmDialog = null;
+        playUiSound();
+      }
+      return;
+    }
+
     // サウンド設定は全画面共通で扱う。パネルが開いている間は他の入力を通さない。
     if (soundPanelOpen) {
       if (hitRect(p0, soundCloseBtn)) {
@@ -5738,11 +5818,7 @@
     if (gamePhase === 'select') {
       if (hitRect(p0, selectBackBtn)) {
         playUiSound();
-        selectWheelDragging = false;
-        selectWheelVelocity = 0;
-        inputMode = null;
-        inputPointerId = null;
-        gamePhase = 'title';
+        leaveSelectToTitle();
         return;
       }
       if (hasSuspendedSave && hitRect(p0, resumeBtn)) {
@@ -6025,6 +6101,7 @@
     shakeTimer = 0;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
+    confirmDialog = null;
     cutIn = null;
     cameraZoom = DEFAULT_CAMERA_ZOOM;
     focusCameraOn(player.x, true);
@@ -6048,6 +6125,77 @@
   window.addEventListener('pagehide', suspendAudioForHidden);
   window.addEventListener('pageshow', () => {
     if (!document.hidden) resumeAudioAfterVisible();
+  });
+
+  // ===== 端末の「戻る」操作 =====
+  // Androidの戻るボタンやiOSのスワイプバックは、そのままだとバトル中にアプリごと終了してしまう。
+  // 履歴にダミーを1つ積んでおき、戻る操作をpopstateで受け取ってメニュー表示に振り替える。
+  let backTrapDepth = 0;     // 積んであるダミーの数(0か1)
+  let ignoringBackPop = false; // 自分でhistory.back()した分のpopstateを無視するため
+
+  function armBackTrap() {
+    if (backTrapDepth > 0) return;
+    try {
+      history.pushState({ katamonGuard: true }, '');
+      backTrapDepth = 1;
+    } catch (err) { /* 履歴を触れない環境では戻る操作の制御を諦める */ }
+  }
+
+  function disarmBackTrap() {
+    if (backTrapDepth <= 0) return;
+    backTrapDepth = 0;
+    ignoringBackPop = true;
+    try {
+      history.back();
+    } catch (err) { ignoringBackPop = false; }
+  }
+
+  // バトル中と各選択画面で捕まえる。タイトルでは戻る操作でそのまま終了できるようにしておく。
+  function backTrapWanted() {
+    return gamePhase === 'battle' || gamePhase === 'select' || gamePhase === 'freeSetup';
+  }
+
+  function syncBackTrap() {
+    if (backTrapWanted()) armBackTrap();
+    else disarmBackTrap();
+  }
+
+  window.addEventListener('popstate', () => {
+    if (ignoringBackPop) { ignoringBackPop = false; return; }
+    backTrapDepth = 0; // ブラウザ側でダミーが1つ消費された
+    if (!backTrapWanted()) return;
+    // 捕まえたら必ず積み直す。これを忘れると次の戻る操作でアプリが終了する。
+    armBackTrap();
+    if (confirmDialog) {
+      confirmDialog = null;
+      playUiSound();
+      return;
+    }
+    if (gamePhase === 'select') {
+      openConfirmDialog('メニューに戻りますか?', 'キャラクター選択をやめます', leaveSelectToTitle);
+      return;
+    }
+    if (gamePhase === 'freeSetup') {
+      openConfirmDialog('メニューに戻りますか?', 'フリーモードの設定をやめます', () => { gamePhase = 'title'; });
+      return;
+    }
+    if (soundPanelOpen) {
+      soundPanelOpen = false;
+      saveAudioSettings();
+      playUiSound();
+      return;
+    }
+    if (menuOpen) {
+      menuOpen = false;
+      playUiSound();
+      return;
+    }
+    if (canOpenMenu()) {
+      menuOpen = true;
+      playUiSound();
+      return;
+    }
+    // 発射中やカットイン中はメニューを開けない。握りつぶすだけにして終了だけは防ぐ。
   });
 
   // ===== ゲームループ =====
@@ -6260,6 +6408,7 @@
     if (!lastTime) lastTime = ts;
     const dt = Math.min(0.033, (ts - lastTime) / 1000);
     lastTime = ts;
+    syncBackTrap();
     update(dt);
     render();
     requestAnimationFrame(gameLoop);
