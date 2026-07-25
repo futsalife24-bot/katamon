@@ -206,9 +206,60 @@
     const on = soundOn ? 1 : 0;
     const bgmGain = volumeCurve(bgmVolume) * on;
     const sfxGain = volumeCurve(sfxVolume) * on;
-    titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
-    stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * (stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1);
+    const duck = stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1;
+    if (titleBgmGain && stageBgmGain) {
+      // WebAudio経由に切り替わっている場合(iOS等)は、GainNodeが最終音量を決める。
+      titleBgmGain.gain.value = TITLE_BGM_BASE_VOLUME * bgmGain;
+      stageBgmGain.gain.value = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
+    } else {
+      titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
+      stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
+    }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
+  }
+
+  // ===== iOS対策:audio要素の音量が変えられない端末ではWebAudio経由にする =====
+  // iOS Safariは HTMLMediaElement.volume への代入を黙って無視する(音量は本体ボタンのみ)。
+  // そのままだとBGMのスライダーだけ全く効かないため、判定して経路を切り替える。
+  let titleBgmGain = null;
+  let stageBgmGain = null;
+  let bgmSourceNodes = { title: null, stage: null };
+  let mediaVolumeSupported = true;
+  function detectMediaVolumeSupport() {
+    try {
+      const original = titleBgm.volume;
+      const probe = original === 0.5 ? 0.25 : 0.5;
+      titleBgm.volume = probe;
+      mediaVolumeSupported = Math.abs(titleBgm.volume - probe) < 0.01;
+      titleBgm.volume = original;
+    } catch (err) {
+      mediaVolumeSupported = false;
+    }
+  }
+  // BGMをWebAudioへ繋ぎ直す。ユーザー操作の中から呼ぶこと(iOSはAudioContextの作成/再開に操作が要る)。
+  function ensureBgmGraph() {
+    if (mediaVolumeSupported) return;            // 通常の端末は従来経路のまま触らない
+    if (titleBgmGain && stageBgmGain) return;    // 構築済み
+    try {
+      const ac = getAudioCtx();
+      if (!titleBgmGain) { titleBgmGain = ac.createGain(); titleBgmGain.connect(ac.destination); }
+      if (!stageBgmGain) { stageBgmGain = ac.createGain(); stageBgmGain.connect(ac.destination); }
+      // createMediaElementSourceは1要素につき1回しか呼べないので、個別に記録しておく
+      if (!bgmSourceNodes.title) {
+        bgmSourceNodes.title = ac.createMediaElementSource(titleBgm);
+        bgmSourceNodes.title.connect(titleBgmGain);
+      }
+      if (!bgmSourceNodes.stage) {
+        bgmSourceNodes.stage = ac.createMediaElementSource(stageBgm);
+        bgmSourceNodes.stage.connect(stageBgmGain);
+      }
+      applyAudioVolumes();
+    } catch (err) {
+      // 途中で失敗しても再生自体は続けたいので、以後は諦めて従来経路に任せる
+      mediaVolumeSupported = true;
+      titleBgmGain = null;
+      stageBgmGain = null;
+    }
   }
 
   // ブラウザの自動再生制限に合わせ、タイトル画面での最初のタップから再生する。
@@ -265,6 +316,8 @@
   }
   function enterTitleFromTap() {
     if (titleStartPending) return;
+    // 最初のタップ(確実なユーザー操作)のうちにWebAudio経路を用意しておく
+    ensureBgmGraph();
     titleStartPending = true;
     titleStartFailed = false;
     // 通常は実際の再生開始と同時にタイトルへ進む。端末側の音源準備が停止しても、
@@ -298,6 +351,7 @@
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
   // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgmの両方が揃った時点)。
+  detectMediaVolumeSupport();
   applyAudioVolumes();
   function playStageBgm(themeKey, restart = false) {
     if (!bgmAudible() || gamePhase !== 'battle') return;
@@ -5338,6 +5392,7 @@
       canvas.setPointerCapture(e.pointerId);
       return;
     }
+    ensureBgmGraph();
     startTitleBgm();
     retryBgmOnUserGesture();
 
