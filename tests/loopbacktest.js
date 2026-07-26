@@ -6,7 +6,9 @@ const path = require('path');
 const { fork } = require('child_process');
 
 const FRAMES_PER_ROUND = 10; // 1ラウンド ≒ 166ms
-const MAX_ROUNDS = 900;
+// 30 turn match + cut-ins needs more than 900 simulated frames under the
+// deliberate 12-round relay delay. This is a harness deadline, not gameplay.
+const MAX_ROUNDS = 1800;
 
 let pass = 0, fail = 0;
 const log = [];
@@ -61,6 +63,9 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
 
   let hostState = null, guestState = null;
   let connectedAtRound = -1;
+  // Do not let the connection-detecting step fire: its resulting snapshot is
+  // the initial-state assertion, so an impact must not race that observation.
+  let autoFireEnabled = false;
   let sawGuestFire = false, sawHostFire = false;
   let guardHits = 0;
 
@@ -69,8 +74,8 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
     relay(guest, host);
     deliver();
     const [h, g] = await Promise.all([
-      host.ask({ kind: 'step', frames: FRAMES_PER_ROUND, autoFire: true, autoSpecial }, 'stepped'),
-      guest.ask({ kind: 'step', frames: FRAMES_PER_ROUND, autoFire: true, autoSpecial }, 'stepped')
+      host.ask({ kind: 'step', frames: FRAMES_PER_ROUND, autoFire: autoFireEnabled, autoSpecial }, 'stepped'),
+      guest.ask({ kind: 'step', frames: FRAMES_PER_ROUND, autoFire: autoFireEnabled, autoSpecial }, 'stepped')
     ]);
     hostState = h.state; guestState = g.state;
     if (h.fired) sawHostFire = true;
@@ -95,6 +100,7 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
         `${hostState.units.map(u => u.ch)} / ${guestState.units.map(u => u.ch)}`);
       check('風が一致して始まる', JSON.stringify(hostState.wind) === JSON.stringify(guestState.wind),
         `${JSON.stringify(hostState.wind)}/${JSON.stringify(guestState.wind)}`);
+      autoFireEnabled = true;
     }
     if (hostState.matchOver && guestState.matchOver) break;
   }

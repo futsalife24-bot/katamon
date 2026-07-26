@@ -11,6 +11,7 @@ node tests/regressiontest.js p1
 node tests/regressiontest.js e1
 node tests/resulttest.js
 node tests/loopbacktest.js
+node tests/stage3test.js
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -25,6 +26,7 @@ node tests/loopbacktest.js
 | `resulttest.js` | 結果画面の「タイトルへ戻る」。勝利時だけ中断セーブして連勝を守る(26項目) |
 | `peer.js` | ループバック対戦の「1タブぶん」。`loopbacktest.js` から fork される |
 | `loopbacktest.js` | オンライン対戦。host/guest を別プロセスで動かし、親が遅延とロスを注入して中継する(93項目) |
+| `stage3test.js` | Firebase Stage 3の部屋コード・SSE・commit/reveal・ルール文面をネットワークなしで確認する |
 
 ## 注意
 

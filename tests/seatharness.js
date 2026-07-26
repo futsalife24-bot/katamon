@@ -6,6 +6,7 @@
 //   node tests/seattest.js e1    (オンライン対戦のゲスト想定の席)
 const fs = require('fs');
 const path = require('path');
+if (!globalThis.crypto) globalThis.crypto = require('crypto').webcrypto;
 
 const SEAT = process.argv[2] === 'e1' ? 'e1' : 'p1';
 const HTML = path.join(__dirname, '..', 'index.html');
@@ -30,6 +31,7 @@ const HOOK = `
     render: () => render(),
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
+    setTerrain: (pattern) => { newTerrain(pattern); },
     chars: () => CHARACTER_LIST.slice(),
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
@@ -65,6 +67,8 @@ const HOOK = `
     setTransport: (fn) => { makeTransport = fn; },
     beginOnline: (role) => beginOnline(role),
     endOnline: (sendBye) => endOnline(sendBye),
+    exitOnlineFromMenu: () => exitOnlineFromMenu(),
+    setOnlineKind: (kind) => { if (online) online.kind = kind; },
     onlineState: () => (online ? {
       role: online.role, phase: online.phase, seat: online.seat,
       queued: online.queue.length, peerLeft: online.peerLeft,
@@ -77,6 +81,7 @@ const HOOK = `
     charges: () => units.map(u => u.specialCharge),
     fillCharges: () => { for (const u of units) u.specialCharge = SPECIAL_CHARGE_MAX; },
     proto: () => PROTO_VERSION,
+    stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken }),
     setPhase: (p) => { gamePhase = p; },
     controls: () => units.map(u => u.id + ':' + u.control).join(','),
     unitState: () => units.map(u => ({ id: u.id, hp: u.hp, x: Math.round(u.x * 100) / 100, ch: u.character })),

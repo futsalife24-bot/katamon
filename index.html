@@ -114,6 +114,38 @@
     cursor: pointer;
   }
   #nameButtons #nameOk { border-color: #ffd24a; color: #ffe2a1; }
+  /* Firebase対戦ロビー。Canvas外に置くことで、スマホのIME・共有・コピーを素直に使える。 */
+  #onlineLobby {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    z-index: 24; padding: 16px; background: rgba(2, 5, 10, 0.86);
+    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+  }
+  #onlineLobby.open { display: flex; }
+  #onlineLobbyBox {
+    width: min(390px, 100%); box-sizing: border-box; padding: 22px 20px 18px;
+    color: #fff5dc; text-align: center; border: 2px solid #c78335; border-radius: 8px;
+    background: linear-gradient(180deg, #37464d, #16252b 54%, #091116);
+    box-shadow: 0 16px 52px rgba(0,0,0,.68);
+  }
+  #onlineLobbyTitle { font-weight: 900; font-size: 20px; letter-spacing: .04em; }
+  #onlineLobbyNote, #onlineLobbyStatus { margin-top: 7px; font-size: 12px; line-height: 1.55; }
+  #onlineLobbyNote { color: #d39b4b; } #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; }
+  #onlineRoomCode { margin: 14px 0 8px; color: #ffd24a; font: 900 28px/1 monospace; letter-spacing: .16em; }
+  #onlineRoomInput, #onlineCharacter {
+    width: 100%; box-sizing: border-box; padding: 11px 10px; color: #fff5dc; text-align: center;
+    font: 700 17px "Yu Gothic UI", sans-serif; background: rgba(6,12,18,.92);
+    border: 2px solid rgba(199,131,53,.7); border-radius: 4px; outline: none;
+  }
+  #onlineRoomInput:focus, #onlineCharacter:focus { border-color: #ffd24a; }
+  #onlineLobbyButtons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+  #onlineLobbyButtons button {
+    min-height: 45px; padding: 9px 6px; color: #fff5dc; font: 900 14px "Yu Gothic UI", sans-serif;
+    border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
+  }
+  #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
+  #onlineCopy { grid-column: span 2; display: none; }
+  #onlineLobby.busy button { opacity: .56; pointer-events: none; }
+  @media (max-height: 660px) { #onlineLobbyBox { padding: 15px; } #onlineLobbyTitle { font-size: 18px; } #onlineRoomCode { margin: 9px 0; } }
 </style>
 </head>
 <body>
@@ -130,6 +162,23 @@
     <div id="nameButtons">
       <button id="nameCancel" type="button">やめる</button>
       <button id="nameOk" type="button">決定</button>
+    </div>
+  </div>
+</div>
+<!-- 実対戦はIME/クリップボード/共有を使うため、タイトルCanvasの上にHTMLロビーを重ねる。 -->
+<div id="onlineLobby" aria-live="polite">
+  <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
+    <div id="onlineLobbyTitle">ONLINE 1V1</div>
+    <div id="onlineLobbyNote">部屋を作るか、8文字の合言葉で参加しよう</div>
+    <div id="onlineRoomCode"></div>
+    <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="例: A2BC3DEF">
+    <select id="onlineCharacter" aria-label="使用モンスター"></select>
+    <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
+    <div id="onlineLobbyButtons">
+      <button id="onlineCreate" type="button">部屋を作る</button>
+      <button id="onlineJoin" type="button">部屋に入る</button>
+      <button id="onlineCopy" type="button">合言葉をコピー / 共有</button>
+      <button id="onlineCancel" type="button">タイトルへ戻る</button>
     </div>
   </div>
 </div>
@@ -2436,13 +2485,14 @@
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
   let battleMode = 'normal'; // 'normal' | 'free'
-  const titleVsCpuBtn = { x: VW / 2, y: 628, w: 382, h: 70 };
+  const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
+  const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
   // ランキングは対戦モードではないので、2つのモードボタンより控えめな細い帯にする。
-  const titleRankingBtn = { x: VW / 2, y: 800, w: 382, h: 46 };
+  const titleRankingBtn = { x: VW / 2, y: 856, w: 382, h: 42 };
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
   const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
-  const titleFreeBtn = { x: VW / 2, y: 716, w: 382, h: 70 };
+  const titleFreeBtn = { x: VW / 2, y: 762, w: 382, h: 54 };
   const FREE_TERRAIN_OPTIONS = [
     { key: 'random', name: 'ランダム', sub: '毎回ちがう戦場' },
     { key: 'plateauLeft', name: '左高台', sub: '左から右へ下る地形' },
@@ -2794,7 +2844,7 @@
 
   let hasSuspendedSave = !!loadSuspendedMatch();
 
-  // ===== オンライン対戦(Stage 2b: 同一端末の2タブをBroadcastChannelで繋ぐ)=====
+  // ===== オンライン対戦(Stage 3: Firebase REST/SSE、開発時はBroadcastChannel)=====
   //
   // 方式は「行動側権威 + ターン境界スナップショット」。
   //   撃った側 : 自分で物理を回して着弾させ、ターンの切れ目に buildSnapshot() を送る
@@ -2802,10 +2852,219 @@
   // 演出が多少ズレても最後に必ず揃うので、決定性(可変dt・非シード地形)を直さなくて済む。
   //
   // 通信は send/onMessage/close の3つだけのインターフェースに切ってある。
-  // Firebase RTDB へ移すときは makeTransport を差し替えるだけでよい。
-  const PROTO_VERSION = 1;
+  const PROTO_VERSION = 2;
   const LOOPBACK_ROOM = 'katamon-loopback';
   const NET_RETRY_SEC = 0.6; // 相手待ちの間、join/hello を撒き直す間隔
+  const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const ROOM_CODE_LENGTH = 8;
+  const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
+  const FIREBASE = {
+    apiKey: 'AIzaSyAoKk4qwhIlLeuMXfosRUpSgVqXiDjskDc',
+    databaseURL: 'https://katamon-online-default-rtdb.asia-southeast1.firebasedatabase.app'
+  };
+  const FIREBASE_AUTH_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
+  const FIREBASE_REFRESH_URL = 'https://securetoken.googleapis.com/v1/token';
+
+  function normalizeRoomCode(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').split('').filter(ch => ROOM_ALPHABET.includes(ch)).join('').slice(0, ROOM_CODE_LENGTH);
+  }
+  function isRoomCode(value) { return typeof value === 'string' && new RegExp(`^[${ROOM_ALPHABET}]{${ROOM_CODE_LENGTH}}$`).test(value); }
+  function generateRoomCode(random = Math.random) {
+    let code = '';
+    for (let i = 0; i < ROOM_CODE_LENGTH; i++) code += ROOM_ALPHABET[Math.floor(random() * ROOM_ALPHABET.length)];
+    return code;
+  }
+  function parseFirebaseSse(data) {
+    try {
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      if (!parsed || typeof parsed.path !== 'string') return [];
+      const path = parsed.path.replace(/^\/+/, '');
+      if (parsed.data == null) return [];
+      if (!path) return Object.entries(parsed.data || {}).map(([key, msg]) => ({ key, msg })).filter(x => x.msg && typeof x.msg === 'object');
+      const pathParts = path.split('/').filter(Boolean);
+      // ServerValue.TIMESTAMP の解決などは /pushKey/sentAt の子更新として来る。
+      // それは完成した通信パケットではないため、message本体(/pushKey)だけを渡す。
+      if (pathParts.length !== 1) return [];
+      const key = pathParts[0];
+      return typeof parsed.data === 'object' ? [{ key, msg: parsed.data }] : [];
+    } catch (_) { return []; }
+  }
+  function createSseDeduper() {
+    const seen = new Set();
+    return key => {
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    };
+  }
+  function secureNonce() {
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') throw new Error('安全な乱数を利用できません');
+    const bytes = new Uint8Array(24);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function sha256Hex(value) {
+    if (!globalThis.crypto || !globalThis.crypto.subtle) throw new Error('SHA-256を利用できません');
+    const bytes = new TextEncoder().encode(String(value));
+    const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function commitPayload(character, nonce) { return sha256Hex(`${character}:${nonce}`); }
+  async function fairFirstPlayer(room, hostNonce, guestNonce) {
+    const digest = await sha256Hex(`${room}:${hostNonce}:${guestNonce}`);
+    return (parseInt(digest.slice(-1), 16) & 1) === 0 ? 'p1' : 'e1';
+  }
+
+  function decodeFirebaseJwtPayload(idToken) {
+    if (typeof idToken !== 'string') return null;
+    const parts = idToken.split('.');
+    if (parts.length !== 3 || !/^[A-Za-z0-9_-]+$/.test(parts[1]) || typeof atob !== 'function') return null;
+    try {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const binary = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
+      const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+      const text = typeof TextDecoder === 'function' ? new TextDecoder().decode(bytes) : binary;
+      const payload = JSON.parse(text);
+      return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null;
+    } catch (_) { return null; }
+  }
+  function firebaseServerTimeOffsetFromToken(idToken, receivedAt) {
+    const payload = decodeFirebaseJwtPayload(idToken);
+    if (!Number.isFinite(receivedAt) || !payload || !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)) return null;
+    const iatMs = payload.iat * 1000;
+    const tokenLifetime = payload.exp - payload.iat;
+    const iatYear = Number.isSafeInteger(iatMs) ? new Date(iatMs).getUTCFullYear() : 0;
+    if (!Number.isSafeInteger(iatMs) || iatYear < 2023 || iatYear > 2099 || tokenLifetime <= 0 || tokenLifetime > 2 * 60 * 60) return null;
+    return estimateFirebaseServerNow(receivedAt, iatMs - receivedAt) === null ? null : iatMs - receivedAt;
+  }
+  let firebaseAuth = null;
+  async function ensureFirebaseAuth(force = false) {
+    const now = Date.now();
+    if (!force && firebaseAuth && firebaseAuth.idToken && Number.isFinite(firebaseAuth.serverTimeOffset) && firebaseAuth.expiresAt > now + 60 * 1000) return firebaseAuth;
+    // 一度でも匿名UIDを得た後は、refresh失敗を新規signUpで隠さない。
+    // UIDが変わると既存ルームのhost/guest権限を失うため、同じrefresh tokenで後で再試行する。
+    if (firebaseAuth) {
+      try {
+        if (!firebaseAuth.refreshToken) throw new Error('refresh token missing');
+        const response = await fetch(`${FIREBASE_REFRESH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(firebaseAuth.refreshToken)}`
+        });
+        if (!response.ok) throw new Error('token refresh failed');
+        const data = await response.json();
+        const receivedAt = Date.now();
+        const serverTimeOffset = firebaseServerTimeOffsetFromToken(data.id_token, receivedAt);
+        if (serverTimeOffset === null) throw new Error('token-time-invalid');
+        const refreshed = { uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: receivedAt + Number(data.expires_in || 3600) * 1000, serverTimeOffset };
+        Object.assign(firebaseAuth, refreshed);
+        return firebaseAuth;
+      } catch (err) {
+        // firebaseAuthは残す。30秒後のrefreshFirebaseTransport再試行も同じUIDで行える。
+        throw new Error(err && err.message === 'token-time-invalid' ? '認証の時刻情報を確認できません。端末の日時と通信を確認して再試行します。' : '認証の更新に失敗しました。通信を確認して再試行します。');
+      }
+    }
+    // 新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ。
+    try {
+      const response = await fetch(`${FIREBASE_AUTH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true })
+      });
+      if (!response.ok) throw new Error('anonymous sign-in failed');
+      const data = await response.json();
+      const receivedAt = Date.now();
+      const serverTimeOffset = firebaseServerTimeOffsetFromToken(data.idToken, receivedAt);
+      if (serverTimeOffset === null) throw new Error('token-time-invalid');
+      const signedIn = { uid: data.localId, idToken: data.idToken, refreshToken: data.refreshToken, expiresAt: receivedAt + Number(data.expiresIn || 3600) * 1000, serverTimeOffset };
+      firebaseAuth = firebaseAuth ? Object.assign(firebaseAuth, signedIn) : signedIn;
+      return firebaseAuth;
+    } catch (err) {
+      throw new Error(err && err.message === 'token-time-invalid' ? '認証の時刻情報を確認できません。端末の日時と通信を確認してもう一度お試しください。' : 'オンライン対戦に接続できません。通信設定を確認してもう一度お試しください。');
+    }
+  }
+  async function firebaseRequest(path, auth, options = {}) {
+    const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
+    return response.status === 204 ? null : response.json();
+  }
+  function estimateFirebaseServerNow(clientNow, serverTimeOffset) {
+    if (!Number.isFinite(clientNow) || !Number.isFinite(serverTimeOffset)) return null;
+    const estimated = clientNow + serverTimeOffset;
+    return Number.isFinite(estimated) && estimated >= 1700000000000 ? estimated : null;
+  }
+  function firebaseServerNow(auth, clientNow = Date.now()) {
+    const estimated = estimateFirebaseServerNow(clientNow, auth && auth.serverTimeOffset);
+    if (estimated === null) throw new Error('Firebaseのサーバー時刻を確認できません。通信を確認してもう一度お試しください。');
+    return estimated;
+  }
+  const FIREBASE_PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+  let firebaseLastPushTime = 0;
+  let firebaseLastPushRand = [];
+  function firebasePushId(now = Date.now(), random = Math.random) {
+    const duplicateTime = now === firebaseLastPushTime;
+    firebaseLastPushTime = now;
+    const timeChars = new Array(8);
+    for (let i = 7; i >= 0; i--) { timeChars[i] = FIREBASE_PUSH_CHARS.charAt(now % 64); now = Math.floor(now / 64); }
+    if (!duplicateTime) firebaseLastPushRand = Array.from({ length: 12 }, () => Math.floor(random() * 64));
+    else {
+      let i = 11;
+      for (; i >= 0 && firebaseLastPushRand[i] === 63; i--) firebaseLastPushRand[i] = 0;
+      if (i >= 0) firebaseLastPushRand[i]++;
+    }
+    return timeChars.join('') + firebaseLastPushRand.map(i => FIREBASE_PUSH_CHARS.charAt(i)).join('');
+  }
+  function stableFirebaseJson(value) {
+    if (Array.isArray(value)) return `[${value.map(stableFirebaseJson).join(',')}]`;
+    if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableFirebaseJson(value[key])}`).join(',')}}`;
+    return JSON.stringify(value);
+  }
+  function normalizeFirebaseMessageForCompare(msg) {
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return msg;
+    // RTDB は空配列を欠落させたり、配列を数字キーのオブジェクトとして返すことがある。
+    // 条件付きPUTの重複照合では、その保存表現の差だけを同一と扱う。
+    return (msg.t === 'start' || msg.t === 'state') ? { ...msg, snap: normalizeFirebaseSnapshot(msg.snap) } : msg;
+  }
+  function createSerialSendQueue(write, onFatal) {
+    let poisoned = false;
+    let chain = Promise.resolve();
+    return {
+      send: item => {
+        chain = chain.then(async () => {
+          if (poisoned) return false;
+          try { await write(item); return true; }
+          catch (err) {
+            poisoned = true;
+            if (onFatal) onFatal(err);
+            return false;
+          }
+        });
+        return chain;
+      },
+      isPoisoned: () => poisoned
+    };
+  }
+  function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+  async function firebasePutMessageIfAbsent(path, auth, body) {
+    const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+    const response = await fetch(url, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
+    });
+    if (response.ok) return;
+    if (response.status === 412) {
+      const existing = await firebaseRequest(path, auth);
+      if (stableFirebaseJson(normalizeFirebaseMessageForCompare(existing)) === stableFirebaseJson(normalizeFirebaseMessageForCompare(body))) return;
+      throw new Error('同じ通信IDに異なる内容が保存されています');
+    }
+    throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
+  }
+  async function firebasePutMessageWithRetry(path, auth, body, retryDelays = [0, 250, 750]) {
+    let lastError;
+    for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+      if (attempt > 0) await waitForFirebaseRetry(retryDelays[attempt]);
+      try { await firebasePutMessageIfAbsent(path, auth, body); return; }
+      catch (err) { lastError = err; }
+    }
+    throw lastError || new Error('通信に失敗しました。');
+  }
 
   function makeBroadcastTransport(room) {
     let ch;
@@ -2816,6 +3075,56 @@
       send: (msg) => { try { ch.postMessage(msg); } catch (err) { /* 閉じた後の送信は捨てる */ } },
       onMessage: (fn) => { handler = fn; },
       close: () => { try { ch.close(); } catch (err) { /* noop */ } }
+    };
+  }
+  function makeFirebaseTransport(room, auth, onStatus, onAuthRevoked, onFatal) {
+    if (typeof EventSource !== 'function') return null;
+    let handler = null;
+    let closed = false;
+    const acceptKey = createSseDeduper();
+    const backlog = [];
+    let source = null;
+    let sendQueue = null;
+    const receive = event => {
+      for (const item of parseFirebaseSse(event.data)) {
+        if (!acceptKey(item.key)) continue;
+        if (handler) handler(item.msg); else backlog.push(item.msg);
+      }
+    };
+    function connect() {
+      const eventUrl = `${FIREBASE.databaseURL}/rooms/${encodeURIComponent(room)}/messages.json?auth=${encodeURIComponent(auth.idToken)}`;
+      try { source = new EventSource(eventUrl); } catch (_) { return false; }
+      source.addEventListener('put', receive);
+      source.addEventListener('patch', receive);
+      source.addEventListener('auth_revoked', () => { if (!closed && onAuthRevoked) onAuthRevoked(); });
+      source.addEventListener('cancel', () => { if (!closed && onStatus) onStatus('部屋が終了したか、通信が切れました。'); });
+      source.onopen = () => { if (onStatus) onStatus('接続しました。相手を待っています…'); };
+      source.onerror = () => { if (!closed && onStatus) onStatus('接続が不安定です。再接続を試しています…'); };
+      return true;
+    }
+    if (!connect()) return null;
+    sendQueue = createSerialSendQueue(async ({ path, body }) => {
+      await firebasePutMessageWithRetry(path, auth, body);
+    }, err => {
+      if (closed) return;
+      if (onStatus) onStatus(err && err.message ? err.message : '通信に失敗しました。対戦を終了します。');
+      if (err && String(err.message || '').includes('認証') && onAuthRevoked) onAuthRevoked();
+      if (onFatal) onFatal(err);
+    });
+    return {
+      send: msg => {
+        if (closed || sendQueue.isPoisoned()) return;
+        // 固定push ID + 固定sentAtでPUTする。応答喪失時は同じパスを再試行し、412なら保存済み本文を照合する。
+        const key = firebasePushId();
+        let sentAt;
+        try { sentAt = firebaseServerNow(auth); }
+        catch (err) { if (onFatal) onFatal(err); return; }
+        const body = { ...msg, sentAt };
+        sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/messages/${key}`, body });
+      },
+      onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
+      reconnect: () => { if (closed) return false; try { if (source) source.close(); } catch (_) { /* noop */ } return connect(); },
+      close: () => { closed = true; try { if (source) source.close(); } catch (_) { /* noop */ } }
     };
   }
   // テストからは別の実装(子プロセス間の中継など)を挿し込む。
@@ -2834,14 +3143,274 @@
 
   // 出会いと退出の合図は進行を書き換えないので、待たせずその場で処理する。
   // これをキューに積むと、弾が飛んだまま決着した局面で bye が永久に届かなくなる。
-  const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye']);
+  const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye', 'commit', 'reveal', 'ping']);
+  const FIREBASE_MESSAGE_TYPES = new Set(['join', 'hello', 'start', 'ready', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'ping']);
+  function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
+  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']);
+  function hasSafeTerrainSegments(segments) {
+    // buildTerrainMask は全列を前提に segments[c] を反復する。形と上限をここで固定する。
+    return Array.isArray(segments) && segments.length === TERRAIN_COLS && segments.every(column =>
+      Array.isArray(column) && column.length <= 8 && column.every(segment =>
+        Array.isArray(segment) && segment.length === 2
+        && isFiniteIn(segment[0], 0, VH) && isFiniteIn(segment[1], 0, VH) && segment[1] > segment[0]
+      )
+    );
+  }
+  function hasSafeBridge(bridge) {
+    if (bridge == null) return true;
+    return typeof bridge === 'object' && !Array.isArray(bridge)
+      && isFiniteIn(bridge.startX, 0, STAGE_W) && isFiniteIn(bridge.endX, 0, STAGE_W) && bridge.endX > bridge.startX
+      && isFiniteIn(bridge.y, 0, VH) && (bridge.style === 'timber' || bridge.style === 'rope') && isFiniteIn(bridge.seed, 0, 10000);
+  }
+  function hasSafeUnitSnapshot(unit, id) {
+    return unit && typeof unit === 'object' && !Array.isArray(unit) && unit.id === id && CHARACTER_LIST.includes(unit.character)
+      && isFiniteIn(unit.hp, 0, 200) && isFiniteIn(unit.maxHp, 1, 200) && unit.hp <= unit.maxHp
+      && isFiniteIn(unit.fuel, 0, 10000) && isFiniteIn(unit.fuelMax, 0, 10000) && unit.fuel <= unit.fuelMax
+      && isFiniteIn(unit.x, UNIT_RADIUS, STAGE_W - UNIT_RADIUS) && isFiniteIn(unit.y, -UNIT_RADIUS, VH)
+      && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 2);
+  }
+  function snapshotValidationReason(snap) {
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
+    if (snap.v !== SNAPSHOT_VERSION) return 'snap.v';
+    if (snap.battleMode !== 'normal') return 'snap.battleMode';
+    if (!hasSafeTerrainSegments(snap.segments)) return 'snap.segments';
+    // 着弾中心は弾の当たり判定で画面端を少し越えうる。最大クレーター半径のぶんだけ
+    // 余白を許可しつつ、極端な座標は従来どおり通信境界で弾く。
+    if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, STAGE_W + 600) && isFiniteIn(cr.y, -600, VH + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
+    if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
+    if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
+    if (!Array.isArray(snap.units) || snap.units.length !== 2 || !hasSafeUnitSnapshot(snap.units[0], 'p1') || !hasSafeUnitSnapshot(snap.units[1], 'e1')) return 'snap.units';
+    if (!Array.isArray(snap.turnOrder) || snap.turnOrder.length !== 2 || snap.turnOrder[0] !== 'p1' || snap.turnOrder[1] !== 'e1' || !isFiniteIn(snap.activeIndex, 0, 1) || !isFiniteIn(snap.turnCount, 0, 10000)) return 'snap.turn';
+    if (!snap.wind || typeof snap.wind !== 'object' || !isFiniteIn(snap.wind.dir, -1, 1) || !isFiniteIn(snap.wind.strength, 0, 2) || typeof snap.wind.calmWind !== 'boolean' || typeof snap.wind.calmBattle !== 'boolean') return 'snap.wind';
+    if (!isFiniteIn(snap.winStreak, 0, 100000) || !snap.runStats || typeof snap.runStats !== 'object' || !isFiniteIn(snap.runStats.damageDealt, 0, 1000000) || !isFiniteIn(snap.runStats.shots, 0, 1000000) || typeof snap.isBossMatch !== 'boolean') return 'snap.stats';
+    if (!snap.camera || typeof snap.camera !== 'object' || !isFiniteIn(snap.camera.x, 0, STAGE_W) || !isFiniteIn(snap.camera.zoom, 0.1, 8)) return 'snap.camera';
+    return '';
+  }
+  function normalizeRtdbDenseArray(value) {
+    // RTDB は配列を {"0": ..., "1": ...} のようなオブジェクトで返すことがある。
+    // 数字キーが 0..n-1 に隙間なく並ぶものだけを配列として復元する。
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return null;
+    const keys = Object.keys(value);
+    if (!keys.every(key => /^(0|[1-9]\d*)$/.test(key))) return null;
+    const indices = keys.map(Number).sort((a, b) => a - b);
+    if (!indices.every((index, expected) => index === expected)) return null;
+    return indices.map(index => value[index]);
+  }
+  function normalizeFirebaseSnapshot(snap) {
+    // RTDB は空配列をノードとして保存せず、配列を数字キーのオブジェクトとして返すこともある。
+    // 欠落/null と、隙間のない数字キー配列だけを元の正規形へ戻す。疎な添字や余計なキーは
+    // validator に残して拒否し、通信データを勝手に解釈しない。
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return snap;
+    const normalized = { ...snap };
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'craters') || normalized.craters === null) {
+      normalized.craters = [];
+    } else {
+      normalized.craters = normalizeRtdbDenseArray(normalized.craters) || normalized.craters;
+    }
+    const columns = normalizeRtdbDenseArray(normalized.segments);
+    if (columns) {
+      normalized.segments = columns.map(column => {
+        if (column === null) return [];
+        const segments = normalizeRtdbDenseArray(column);
+        if (!segments) return column;
+        return segments.map(segment => normalizeRtdbDenseArray(segment) || segment);
+      });
+    }
+    return normalized;
+  }
+  function hasSafeSnapshot(snap) { return snapshotValidationReason(snap) === ''; }
+  function validateFirebaseMessageDetail(msg) {
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return { ok: false, reason: 'packet.type' };
+    if (msg.v !== PROTO_VERSION) return { ok: false, reason: 'packet.v' };
+    if (typeof msg.from !== 'string' || msg.from.length < 1 || msg.from.length > 128) return { ok: false, reason: 'packet.from' };
+    if (!FIREBASE_MESSAGE_TYPES.has(msg.t)) return { ok: false, reason: 'packet.t' };
+    if (!Number.isFinite(msg.sentAt)) return { ok: false, reason: `${msg.t}.sentAt` };
+    if (msg.t === 'commit') return /^[0-9a-f]{64}$/.test(msg.hash || '') ? { ok: true } : { ok: false, reason: 'commit.hash' };
+    if (msg.t === 'reveal') return CHARACTER_LIST.includes(msg.character) && /^[0-9a-f]{48}$/.test(msg.nonce || '') ? { ok: true } : { ok: false, reason: 'reveal.characterOrNonce' };
+    if (msg.t === 'start') { const reason = snapshotValidationReason(msg.snap); return reason ? { ok: false, reason: `start.${reason}` } : { ok: true }; }
+    if (msg.t === 'state') { const reason = snapshotValidationReason(msg.snap); return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionId' }; }
+    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, STAGE_H + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, STAGE_H + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1' ? { ok: true } : { ok: false, reason: 'boom.unitId' };
+    if (msg.t === 'result') return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && (msg.winner === 'player' || msg.winner === 'cpu') && typeof msg.reason === 'string' && msg.reason.length <= 120 && Array.isArray(msg.units) && msg.units.length === 2 && msg.units.every(u => u && (u.id === 'p1' || u.id === 'e1') && isFiniteIn(Number(u.hp), 0, MAX_HP)) ? { ok: true } : { ok: false, reason: 'result.payload' };
+    return { ok: true };
+  }
+  function validateFirebaseMessage(msg) { return validateFirebaseMessageDetail(msg).ok; }
+  function acceptPeerCommit(currentHash, incomingHash) {
+    if (currentHash == null) return { accept: true, hash: incomingHash };
+    if (currentHash === incomingHash) return { accept: false, duplicate: true };
+    return { accept: false, error: '相手が選択内容を差し替えました' };
+  }
+  function acceptPeerReveal(alreadySeen) { return !alreadySeen; }
+  const FIREBASE_ACTION_ID_RE = /^[0-9a-f]{48}$/;
+  const FIREBASE_PENDING_VISIBLE_TIMEOUT_MS = 15000;
+  const FIREBASE_HEARTBEAT_VISIBLE_INTERVAL_MS = 10000;
+  const FIREBASE_PEER_VISIBLE_TIMEOUT_MS = 35000;
+  function firebaseMonotonicNow() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+  function firebaseActionMatches(msg, action) {
+    return !!action && FIREBASE_ACTION_ID_RE.test(msg.actionId || '')
+      && msg.actionId === action.actionId && msg.from === action.from;
+  }
+  function bufferFirebaseTerminal(pending, msg) {
+    if (!pending) return { ok: true, pending: msg };
+    // result は送達保証のため同じactionIdで2通送る。早着の段階でも同一送信者の重複だけ無害化する。
+    if (pending.t === 'result' && msg.t === 'result' && pending.actionId === msg.actionId && pending.from === msg.from) {
+      return { ok: true, pending, duplicate: true };
+    }
+    return { ok: false };
+  }
+  function advanceFirebasePendingVisibleTime(entry, now, hidden) {
+    const elapsed = Math.max(0, now - entry.checkedAt);
+    entry.checkedAt = now;
+    if (!hidden) entry.visibleMs += elapsed;
+    return entry.visibleMs >= FIREBASE_PENDING_VISIBLE_TIMEOUT_MS;
+  }
+  function advanceFirebasePeerLiveness(entry, now, hidden) {
+    const elapsed = Math.max(0, now - entry.checkedAt);
+    entry.checkedAt = now;
+    if (hidden) return { pingDue: false, timedOut: false };
+    entry.peerVisibleMs += elapsed;
+    entry.pingVisibleMs += elapsed;
+    return {
+      pingDue: entry.pingVisibleMs >= FIREBASE_HEARTBEAT_VISIBLE_INTERVAL_MS,
+      timedOut: entry.peerVisibleMs >= FIREBASE_PEER_VISIBLE_TIMEOUT_MS
+    };
+  }
+  function resetFirebasePeerLiveness(entry, now) {
+    entry.peerVisibleMs = 0;
+    entry.checkedAt = now;
+  }
+  function resetFirebasePendingTerminalClocks() {
+    if (!online || online.kind !== 'firebase' || !online.pendingRemoteTerminals) return;
+    const now = firebaseMonotonicNow();
+    for (const entry of online.pendingRemoteTerminals.values()) entry.checkedAt = now;
+    if (online.peerLiveness) online.peerLiveness.checkedAt = now;
+  }
+  function updateFirebasePendingTerminals() {
+    if (!online || online.kind !== 'firebase' || !online.pendingRemoteTerminals || !online.pendingRemoteTerminals.size) return;
+    const now = firebaseMonotonicNow();
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    for (const entry of online.pendingRemoteTerminals.values()) {
+      if (advanceFirebasePendingVisibleTime(entry, now, hidden)) {
+        rejectFirebaseMessage('相手の行動通知が届かず接続を中断しました。');
+        return;
+      }
+    }
+  }
+  function noteFirebasePeerMessage() {
+    if (!online || online.kind !== 'firebase' || !online.peerLiveness) return;
+    resetFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow());
+  }
+  function updateFirebasePeerLiveness() {
+    if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !online.peerLiveness) return;
+    const liveness = advanceFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow(), typeof document !== 'undefined' && document.hidden);
+    if (liveness.timedOut) {
+      rejectFirebaseMessage('相手との通信が途切れたため対戦を中断しました。');
+      return;
+    }
+    if (liveness.pingDue) {
+      online.peerLiveness.pingVisibleMs = 0;
+      netSend({ t: 'ping' });
+    }
+  }
+  function firebaseFlowAllows(msg, flow) {
+    if (msg.t === 'fire') return !!flow && flow.activeId === msg.unitId && flow.remoteUnitId === msg.unitId && !flow.remoteAction;
+    if (msg.t === 'state' || msg.t === 'result') return !!flow && firebaseActionMatches(msg, flow.remoteAction);
+    return true;
+  }
+  function stateSnapshotMatchesBaseline(snap, baseline) {
+    if (!snap || !baseline || !Array.isArray(snap.units) || !Array.isArray(baseline.units)) return false;
+    if (snap.turnCount !== baseline.turnCount || snap.turnOrder[0] !== baseline.turnOrder[0] || snap.turnOrder[1] !== baseline.turnOrder[1]
+      || snap.units[0].maxHp !== baseline.units[0].maxHp || snap.units[1].maxHp !== baseline.units[1].maxHp
+      || snap.pattern !== baseline.pattern || snap.themeKey !== baseline.themeKey || snap.parallaxSeed !== baseline.parallaxSeed
+      || JSON.stringify(snap.segments) !== JSON.stringify(baseline.segments) || JSON.stringify(snap.bridge) !== JSON.stringify(baseline.bridge)) return false;
+    if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return false;
+    return snap.units.every((saved, i) => {
+      const local = baseline.units[i];
+      return Math.abs(saved.hp - local.hp) <= 5 && Math.abs(saved.x - local.x) <= 160 && Math.abs(saved.y - local.y) <= 160
+        && Math.abs(saved.fuel - local.fuel) <= 24 && Math.abs(saved.specialCharge - local.specialCharge) <= 1;
+    });
+  }
+  function firebaseStateMatchesLocal(snap) {
+    // state は相手端末の描画フレーム差を少し許容する一方、地形の差し替えや大幅なHP/座標改ざんは拒否する。
+    if (!snap || !Array.isArray(snap.units) || !online) return false;
+    const expectedP1 = online.role === 'host' ? online.selfCharacter : online.peerCharacter;
+    const expectedE1 = online.role === 'host' ? online.peerCharacter : online.selfCharacter;
+    if (snap.units[0].character !== expectedP1 || snap.units[1].character !== expectedE1) return false;
+    return stateSnapshotMatchesBaseline(snap, buildSnapshot());
+  }
+  function rejectFirebaseMessage(reason) {
+    if (!online) return;
+    online.protocolError = reason;
+    online.phase = 'ended';
+    // 対戦開始前はCanvasのエラー表示が見えないので、ロビーにも理由を出す。
+    if (!onlineLobby.classList.contains('hidden')) onlineLobbyStatus(reason);
+    try { online.transport.close(); } catch (_) { /* noop */ }
+  }
   // 詰まりの保険。ここまで待たされたメッセージは、多少演出が切れても適用してしまう。
   const NET_QUEUE_MAX_HOLD = 5;
+
+  function enqueueNetMessage(msg) {
+    const item = { msg, held: 0 };
+    if (!online) return;
+    online.queue.push(item);
+  }
+  function firebaseCompletedTerminalStatus(msg) {
+    const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg.actionId);
+    if (!completed) return '';
+    if (completed.from === msg.from && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
+    return 'mismatch';
+  }
+  function rememberFirebaseTerminal(msg) {
+    if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
+    online.completedRemoteActions.set(msg.actionId, { from: msg.from, t: msg.t });
+    while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
+  }
+  function receiveFirebaseTerminal(msg) {
+    const completed = firebaseCompletedTerminalStatus(msg);
+    if (completed === 'duplicate-result') return true;
+    if (completed === 'mismatch') {
+      rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+      return true;
+    }
+    if (online.remoteAction) {
+      if (!firebaseActionMatches(msg, online.remoteAction)) {
+        rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+        return true;
+      }
+      enqueueNetMessage(msg);
+      return true;
+    }
+    const existing = online.pendingRemoteTerminals.get(msg.actionId);
+    const buffered = bufferFirebaseTerminal(existing && existing.msg, msg);
+    if (!buffered.ok) {
+      rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+      return true;
+    }
+    if (!buffered.duplicate) online.pendingRemoteTerminals.set(msg.actionId, {
+      msg: buffered.pending, visibleMs: 0, checkedAt: firebaseMonotonicNow()
+    });
+    if (online.pendingRemoteTerminals.size > 16) rejectFirebaseMessage('不正な通信順序です（terminal.buffer）');
+    return true;
+  }
 
   // 進行を書き換えるメッセージは即座に適用しない。カットイン中や弾が飛んでいる最中に
   // 状態を差し替えると、演出が切れたり必殺の保留が二重発射になるため、いったんキューに積む。
   function netReceive(msg) {
     if (!online || !msg || msg.from === online.clientId) return; // 自分の送信は無視
+    if (online.kind === 'firebase') {
+      if (msg.t === 'start' || msg.t === 'state') msg = { ...msg, snap: normalizeFirebaseSnapshot(msg.snap) };
+      const validation = validateFirebaseMessageDetail(msg);
+      if (!validation.ok) {
+        rejectFirebaseMessage(`不正な通信データを受信しました（${validation.reason}）`);
+        return;
+      }
+      noteFirebasePeerMessage();
+      if (msg.t === 'state' || msg.t === 'result') {
+        receiveFirebaseTerminal(msg);
+        return;
+      }
+    }
     if (msg.v !== PROTO_VERSION) {
       online.versionMismatch = true;
       return;
@@ -2850,28 +3419,49 @@
       applyNetMessage(msg);
       return;
     }
-    online.queue.push({ msg, held: 0 });
+    enqueueNetMessage(msg);
   }
 
   // キューを流していい状態か。「弾が飛んでいない・落下していない・カットインも必殺の保留も無い」。
   function netCanApply() {
-    return !cutIn && !pendingShot && !projectiles.length && units.every(u => u.grounded);
+    return !cutIn && !pendingShot && !projectiles.length && units.every(u => u.grounded) && !(online && online.kind === 'firebase' && awaitingResolve);
   }
 
   function netDrainQueue(dt) {
     if (!online || !online.queue.length) return;
-    online.queue[0].held += dt || 0;
-    const forced = online.queue[0].held >= NET_QUEUE_MAX_HOLD;
-    while (online.queue.length && (netCanApply() || forced)) {
+    while (online.queue.length) {
+      const next = online.queue[0];
+      next.held += dt || 0;
+      const forced = next.held >= NET_QUEUE_MAX_HOLD && !(online.kind === 'firebase' && awaitingResolve);
+      if (!netCanApply() && !forced) break;
       applyNetMessage(online.queue.shift().msg);
+      if (!online || online.phase === 'ended') break;
     }
   }
 
   function applyNetMessage(msg) {
+    // SSEではfireと直後のstateが同じイベント周期で届く。受信時ではなくFIFOキューから
+    // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
+    if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
+      const completed = firebaseCompletedTerminalStatus(msg);
+      if (completed === 'duplicate-result') return;
+      if (completed === 'mismatch') {
+        rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+        return;
+      }
+    }
+    if (online && online.kind === 'firebase' && !firebaseFlowAllows(msg, {
+      activeId: activeUnit().id,
+      remoteUnitId: unitById(msg.unitId || '') && unitById(msg.unitId).control === 'remote' ? msg.unitId : null,
+      remoteAction: online.remoteAction
+    })) {
+      rejectFirebaseMessage(`不正な通信順序です（${msg.t}.flow）`);
+      return;
+    }
     switch (msg.t) {
       case 'join':
         // ゲストが来た。ホストだけが試合の実体を配る。
-        if (online.role === 'host') sendMatchStart();
+        if (online.role === 'host' && online.kind !== 'firebase') sendMatchStart();
         break;
       case 'hello':
         // ホストが先に開いて待っていた。まだ試合を受け取っていなければ参加を要求し、
@@ -2881,6 +3471,12 @@
         break;
       case 'start':
         if (online.role !== 'guest') break;
+        if (online.kind === 'firebase' && (online.phase === 'playing' || online.phase === 'ended')) break; // SSE再送/リプレイは無害に捨てる
+        if (online.kind === 'firebase' && !online.revealVerified) {
+          online.protocolError = 'キャラクター確認が完了していません';
+          break;
+        }
+        if (online.kind === 'firebase') { applyFirebaseStart(msg); break; }
         applySnapshot(msg.snap);
         setOnlineSeat(online.seat);
         battleMode = 'normal';
@@ -2901,6 +3497,21 @@
         // 移動そのものは送っていないので、撃つ直前の立ち位置をここで合わせる。
         u.x = msg.x;
         u.y = msg.y;
+        // state/result を受けるまでの紐付けを先に確立する。非アクティブタブでSSEだけが
+        // 先行しても、後続パケットを正しい行動へ結び付けられる。
+        if (online.kind === 'firebase') {
+          online.remoteAction = { unitId: msg.unitId, actionId: msg.actionId, from: msg.from, sentAt: msg.sentAt, resolved: false };
+          const bufferedEntry = online.pendingRemoteTerminals.get(msg.actionId);
+          const buffered = bufferedEntry && bufferedEntry.msg;
+          if (buffered) {
+            if (!firebaseActionMatches(buffered, online.remoteAction)) {
+              rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+              break;
+            }
+            online.pendingRemoteTerminals.delete(msg.actionId);
+            enqueueNetMessage(buffered);
+          }
+        }
         launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial);
         awaitingResolve = true;
         break;
@@ -2915,11 +3526,37 @@
       case 'state':
         // ターン境界の権威。ここで完全に揃う。
         if (online.phase !== 'playing') break;
+        if (online.kind === 'firebase') {
+          if (!online.remoteAction || !online.remoteAction.resolved || msg.snap.turnOrder[msg.snap.activeIndex] !== online.seat || !firebaseStateMatchesLocal(msg.snap)) {
+            rejectFirebaseMessage('相手の行動と一致しない状態更新です');
+            break;
+          }
+          rememberFirebaseTerminal(msg);
+          online.remoteAction = null;
+        }
         applySnapshot(msg.snap);
         setOnlineSeat(online.seat);
         break;
       case 'result':
         if (online.phase !== 'playing') break;
+        if (online.kind === 'firebase') {
+          const playerAlive = teamAlive('player');
+          const cpuAlive = teamAlive('cpu');
+          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : null;
+          if (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner) {
+            rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
+            break;
+          }
+          rememberFirebaseTerminal(msg);
+          online.remoteAction = null;
+          projectiles = [];
+          awaitingResolve = false;
+          matchOver = true;
+          winner = msg.winner;
+          beginMatchEnd(msg.reason);
+          online.phase = 'ended';
+          break;
+        }
         for (const u of msg.units) {
           const target = unitById(u.id);
           if (target) target.hp = u.hp;
@@ -2935,12 +3572,35 @@
         online.peerLeft = true;
         online.phase = 'ended';
         break;
+      case 'commit':
+        if (online.kind !== 'firebase' || online.phase === 'ended' || typeof msg.hash !== 'string') break;
+        {
+          const decision = acceptPeerCommit(online.peerCommit, msg.hash);
+          if (decision.error) { rejectFirebaseMessage(decision.error); break; }
+          if (decision.duplicate) break; // 同じpushの再送は無害に無視する
+          online.peerCommit = decision.hash;
+        }
+        online.peerCommitted = true;
+        onlineLobbyStatus('相手がモンスターを確定しました。確認中…');
+        maybeRevealCharacter();
+        break;
+      case 'reveal':
+        if (online.kind !== 'firebase' || online.phase === 'ended') break;
+        verifyPeerReveal(msg);
+        break;
+      case 'ping':
+        // Firebase限定の生存確認。進行状態やロビー状態を変えない。
+        break;
     }
   }
 
   // ホストが試合の実体(地形・キャラ・手番)を作って配る。join のたびに現在の状態を送るので、
   // 取りこぼしても次の join で追いつける。解禁は ready が返ってきてから。
   function sendMatchStart() {
+    // ループバックは既存どおりjoinの再送でstartも再送する。Firebaseは永続SSEのpush keyで
+    // 重複を除き、commit/reveal後の開始を一度だけにする。
+    if (!online || (online.kind === 'firebase' && online.matchStarted)) return;
+    if (online.kind === 'firebase') online.matchStarted = true;
     netSend({ t: 'start', snap: buildSnapshot() });
   }
 
@@ -2948,22 +3608,233 @@
   function netSyncTurn(actedUnit) {
     if (!isOnline() || online.phase !== 'playing') return;
     if (!actedUnit || actedUnit.control !== 'local') return;
+    if (online.kind === 'firebase') {
+      const action = online.localAction;
+      if (!action || action.unitId !== actedUnit.id || !FIREBASE_ACTION_ID_RE.test(action.actionId || '')) {
+        rejectFirebaseMessage('ローカル行動IDを確認できません');
+        return;
+      }
+      netSend({ t: 'state', snap: buildSnapshot(), actionId: action.actionId });
+      online.localAction = null;
+      return;
+    }
     netSend({ t: 'state', snap: buildSnapshot() });
   }
 
   // 決着も行動側が決める。両者が独立に判定するとHPが1違うだけで勝敗が食い違う。
   function netSyncResult(reason) {
     if (!isOnline() || online.resultSent) return;
+    let actionId = null;
+    if (online.kind === 'firebase') {
+      const action = online.localAction;
+      if (!action || !FIREBASE_ACTION_ID_RE.test(action.actionId || '')) {
+        rejectFirebaseMessage('ローカル行動IDを確認できません');
+        return;
+      }
+      actionId = action.actionId;
+    }
     online.resultSent = true;
     online.phase = 'ended';
-    netSend({ t: 'result', winner, reason, units: units.map(u => ({ id: u.id, hp: u.hp })) });
+    const result = { t: 'result', winner, reason, units: units.map(u => ({ id: u.id, hp: u.hp })), ...(actionId ? { actionId } : {}) };
+    // 決着は再送しても受信側がphaseで一度しか適用しない。1通落ちても片方だけ残さない。
+    netSend(result);
+    netSend(result);
+  }
+
+  const onlineLobbyEl = document.getElementById('onlineLobby');
+  const onlineRoomInput = document.getElementById('onlineRoomInput');
+  const onlineRoomCodeEl = document.getElementById('onlineRoomCode');
+  const onlineCharacterEl = document.getElementById('onlineCharacter');
+  const onlineLobbyStatusEl = document.getElementById('onlineLobbyStatus');
+  const onlineCopyBtn = document.getElementById('onlineCopy');
+  let onlineLobbyBusy = false;
+  function onlineLobbyStatus(text) { if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = text; }
+  function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); }
+  function populateOnlineCharacters() {
+    if (!onlineCharacterEl || onlineCharacterEl.dataset.ready) return;
+    for (const key of CHARACTER_LIST) {
+      const option = document.createElement('option'); option.value = key; option.textContent = CHARACTERS[key].name;
+      onlineCharacterEl.appendChild(option);
+    }
+    onlineCharacterEl.dataset.ready = '1';
+  }
+  function openOnlineLobby() {
+    if (!onlineLobbyEl) return;
+    populateOnlineCharacters();
+    onlineLobbyBusy = false;
+    onlineLobbyEl.classList.remove('busy');
+    onlineLobbyEl.classList.add('open');
+    if (onlineRoomInput) onlineRoomInput.value = '';
+    if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
+    if (onlineCopyBtn) onlineCopyBtn.style.display = 'none';
+    onlineLobbyStatus('部屋を作るか、相手の合言葉を入力してください。');
+  }
+  function setOnlineLobbyBusy(busy) {
+    onlineLobbyBusy = busy;
+    if (onlineLobbyEl) onlineLobbyEl.classList.toggle('busy', busy);
+  }
+  function selectedOnlineCharacter() {
+    return onlineCharacterEl && CHARACTER_LIST.includes(onlineCharacterEl.value) ? onlineCharacterEl.value : CHARACTER_LIST[0];
+  }
+  async function createFirebaseRoom() {
+    const auth = await ensureFirebaseAuth();
+    const now = firebaseServerNow(auth);
+    for (let i = 0; i < 6; i++) {
+      const code = generateRoomCode();
+      const room = { protocol: PROTO_VERSION, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS, messages: {} };
+      try {
+        await firebaseRequest(`rooms/${code}`, auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(room) });
+        return { code, auth };
+      } catch (_) { /* 衝突と時刻ずれを含む。数回だけ別コードを試す。 */ }
+    }
+    throw new Error('部屋を作れませんでした。端末の日時・通信を確認してお試しください。');
+  }
+  async function claimFirebaseRoom(code) {
+    const auth = await ensureFirebaseAuth();
+    firebaseServerNow(auth); // オフセットが無い/不正なら入室前に止める。
+    try {
+      await firebaseRequest(`rooms/${code}/guestUid`, auth, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(auth.uid)
+      });
+      return { code, auth };
+    } catch (_) {
+      throw new Error('この部屋には入れません。合言葉・有効期限・空き状況を確認してください。');
+    }
+  }
+  function scheduleFirebaseTokenRefresh() {
+    if (!online || online.kind !== 'firebase') return;
+    if (online.authRefreshTimer) clearTimeout(online.authRefreshTimer);
+    const wait = Math.max(30000, online.auth.expiresAt - Date.now() - 60000);
+    online.authRefreshTimer = setTimeout(async () => {
+      await refreshFirebaseTransport(false);
+      scheduleFirebaseTokenRefresh();
+    }, wait);
+  }
+  async function refreshFirebaseTransport(force) {
+    if (!online || online.kind !== 'firebase' || online.authRefreshing) return;
+    online.authRefreshing = true;
+    try {
+      await ensureFirebaseAuth(force);
+      if (!online || online.kind !== 'firebase') return;
+      if (!online.transport.reconnect || !online.transport.reconnect()) throw new Error('SSEを再接続できません');
+      onlineLobbyStatus('認証を更新して再接続しました。');
+    } catch (err) {
+      if (online) {
+        onlineLobbyStatus('認証の更新に失敗しました。30秒後に同じアカウントで再試行します。');
+        if (online.authRetryTimer) clearTimeout(online.authRetryTimer);
+        online.authRetryTimer = setTimeout(async () => {
+          await refreshFirebaseTransport(true);
+          scheduleFirebaseTokenRefresh();
+        }, 30000);
+      }
+    } finally {
+      if (online) online.authRefreshing = false;
+    }
+  }
+  function beginFirebaseOnline(role, code, auth, character) {
+    const transport = makeFirebaseTransport(code, auth, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
+      if (online && online.kind === 'firebase') rejectFirebaseMessage(err && err.message ? `通信を継続できません（${err.message}）` : '通信を継続できません');
+    });
+    if (!transport) throw new Error('このブラウザはオンライン通信に対応していません。');
+    online = {
+      kind: 'firebase', role, room: code, auth, transport, clientId: auth.uid,
+      seat: role === 'host' ? 'p1' : 'e1', phase: 'selecting', queue: [], retryTimer: 0,
+      resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false,
+      selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
+      peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
+      localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
+      peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() }
+    };
+    transport.onMessage(netReceive);
+    setOnlineSeat(online.seat);
+    clearSuspendedMatch(); hasSuspendedSave = false;
+    battleMode = 'normal'; winStreak = 0; runStats = { damageDealt: 0, shots: 0 };
+    onlineLobbyStatus('モンスターを確定しています…');
+    scheduleFirebaseTokenRefresh();
+    commitOwnCharacter();
+  }
+  async function commitOwnCharacter() {
+    if (!online || online.kind !== 'firebase' || online.selfCommit) return;
+    try {
+      online.selfCommit = await commitPayload(online.selfCharacter, online.selfNonce);
+      if (!online || online.kind !== 'firebase') return;
+      netSend({ t: 'commit', hash: online.selfCommit });
+      onlineLobbyStatus('モンスターを確定しました。相手を待っています…');
+      maybeRevealCharacter();
+    } catch (err) {
+      if (online) online.protocolError = '安全な確認処理に失敗しました';
+      onlineLobbyStatus('この端末では安全な確認処理を使えません。');
+    }
+  }
+  function maybeRevealCharacter() {
+    if (!online || online.kind !== 'firebase' || !online.selfCommit || !online.peerCommitted || online.selfRevealed) return;
+    online.selfRevealed = true;
+    netSend({ t: 'reveal', character: online.selfCharacter, nonce: online.selfNonce });
+    onlineLobbyStatus('相手のモンスターを検証しています…');
+  }
+  async function verifyPeerReveal(msg) {
+    if (!online || online.kind !== 'firebase') return;
+    if (!acceptPeerReveal(online.peerRevealSeen)) { rejectFirebaseMessage('相手が選択内容を重複公開しました'); return; }
+    online.peerRevealSeen = true;
+    if (!CHARACTER_LIST.includes(msg.character) || typeof msg.nonce !== 'string' || msg.nonce.length < 24) {
+      online.protocolError = '相手の選択データが不正です'; onlineLobbyStatus(online.protocolError); return;
+    }
+    try {
+      const expected = await commitPayload(msg.character, msg.nonce);
+      if (!online || expected !== online.peerCommit) {
+        if (online) { online.protocolError = 'キャラクター確認が一致しません'; onlineLobbyStatus(online.protocolError); }
+        return;
+      }
+      online.peerCharacter = msg.character;
+      online.peerNonce = msg.nonce;
+      online.revealVerified = true;
+      onlineLobbyStatus('確認完了。対戦を開始します…');
+      maybeStartFirebaseMatch();
+    } catch (_) { if (online) { online.protocolError = '確認処理に失敗しました'; onlineLobbyStatus(online.protocolError); } }
+  }
+  async function maybeStartFirebaseMatch() {
+    if (!online || online.kind !== 'firebase' || online.role !== 'host' || !online.revealVerified || !online.selfRevealed || online.matchStarted) return;
+    online.matchStarted = true;
+    try {
+      player.character = online.selfCharacter;
+      cpu.character = online.peerCharacter;
+      stopTitleBgm(); gamePhase = 'battle'; resetMatch(false);
+      const first = await fairFirstPlayer(online.room, online.selfNonce, online.peerNonce);
+      if (!online || online.kind !== 'firebase') return;
+      activeIndex = first === 'p1' ? 0 : 1;
+      online.phase = 'starting';
+      netSend({ t: 'start', snap: buildSnapshot() });
+      closeOnlineLobby();
+    } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
+  }
+  async function applyFirebaseStart(msg) {
+    if (!online || online.kind !== 'firebase' || online.role !== 'guest' || online.phase === 'playing' || online.startVerifying || !online.revealVerified) return;
+    online.startVerifying = true;
+    try {
+      // ゲスト側も同じnonce列から先攻を再計算し、ホストのスナップショットを検証する。
+      const first = await fairFirstPlayer(online.room, online.peerNonce, online.selfNonce);
+      const chars = Array.isArray(msg.snap && msg.snap.units) ? msg.snap.units : [];
+      const hostChar = chars.find(u => u && u.id === 'p1');
+      const guestChar = chars.find(u => u && u.id === 'e1');
+      if (!online || online.kind !== 'firebase' || !msg.snap || Number(msg.snap.activeIndex) !== (first === 'p1' ? 0 : 1)
+          || !hostChar || !guestChar || hostChar.character !== online.peerCharacter || guestChar.character !== online.selfCharacter) {
+        if (online) { online.startVerifying = false; online.protocolError = '先攻確認が一致しません'; onlineLobbyStatus(online.protocolError); }
+        return;
+      }
+      applySnapshot(msg.snap);
+      setOnlineSeat(online.seat);
+      battleMode = 'normal'; stopTitleBgm(); gamePhase = 'battle'; playStageBgm(currentThemeKey, true);
+      online.phase = 'playing';
+      netSend({ t: 'ready' });
+      closeOnlineLobby();
+    } catch (_) { if (online) { online.startVerifying = false; online.protocolError = '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
 
   function beginOnline(role) {
     const transport = makeTransport(LOOPBACK_ROOM);
     if (!transport) return false; // BroadcastChannelが無い環境では黙って諦める
     online = {
-      role,
+      kind: 'loopback', role,
       transport,
       clientId: `${role}-${Math.random().toString(36).slice(2, 10)}`,
       seat: role === 'host' ? 'p1' : 'e1',
@@ -2972,7 +3843,7 @@
       retryTimer: 0,
       resultSent: false,
       peerLeft: false,
-      versionMismatch: false
+      versionMismatch: false, matchStarted: false
     };
     transport.onMessage(netReceive);
     setOnlineSeat(online.seat);
@@ -2991,12 +3862,21 @@
     return true;
   }
 
-  function endOnline(sendBye) {
+  function endOnline(sendBye, cleanup = true, skipDeferredCleanup = false) {
     if (!online) return;
-    if (sendBye) netSend({ t: 'bye' });
-    online.transport.close();
+    const leaving = online;
+    if (leaving.authRefreshTimer) clearTimeout(leaving.authRefreshTimer);
+    if (leaving.authRetryTimer) clearTimeout(leaving.authRetryTimer);
+    if (sendBye) { netSend({ t: 'bye' }); netSend({ t: 'bye' }); }
+    leaving.transport.close();
+    if (cleanup && !skipDeferredCleanup && leaving.kind === 'firebase' && leaving.role === 'host') {
+      // sendChainに積んだbye POSTよりDELETEが先着しないよう少しだけ待つ。
+      // pagehideはタイマーが停止しうるため、そこではskipDeferredCleanup=trueとしてTTLに任せる。
+      setTimeout(() => firebaseRequest(`rooms/${leaving.room}`, leaving.auth, { method: 'DELETE' }).catch(() => {}), 1000);
+    }
     online = null;
     setLocalSeat('p1');
+    closeOnlineLobby();
   }
 
   // 開発用の入口はタイトルに着いてから開く。読み込み中に試合へ飛ばすと
@@ -3021,6 +3901,10 @@
   function updateOnline(dt) {
     startPendingLoopback();
     if (!online) return;
+    updateFirebasePendingTerminals();
+    if (!online || online.phase === 'ended') return;
+    updateFirebasePeerLiveness();
+    if (!online || online.phase === 'ended') return;
     netDrainQueue(dt);
     if (online.phase !== 'waiting') return;
     online.retryTimer -= dt;
@@ -3246,12 +4130,13 @@
     ctx.restore();
 
     drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', 'モンスターを選んで連勝へ挑め', 'normal');
+    drawTitleModeButton(titleOnlineBtn, 'ONLINE 1V1', '合言葉で友だちとリアルタイム対戦', 'online');
     drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
 
     ctx.fillStyle = 'rgba(255,225,169,0.62)';
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
-    ctx.fillText('SELECT A BATTLE MODE', VW / 2, 775);
+    ctx.fillText('SELECT A BATTLE MODE', VW / 2, 820);
     ctx.restore();
 
     drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
@@ -5323,7 +6208,10 @@
     if (!isOnline() || matchOver) return;
     let title = null;
     let sub = '';
-    if (online.versionMismatch) {
+    if (online.protocolError) {
+      title = 'オンライン対戦を開始できません';
+      sub = online.protocolError;
+    } else if (online.versionMismatch) {
       title = 'アプリを更新してください';
       sub = '相手と通信のバージョンが違います';
     } else if (online.peerLeft) {
@@ -5332,6 +6220,9 @@
     } else if (online.phase === 'waiting') {
       title = '相手を待っています…';
       sub = online.role === 'host' ? 'HOST' : 'GUEST';
+    } else if (online.phase === 'selecting') {
+      title = 'モンスターを確認しています…';
+      sub = online.peerCommitted ? '相手の公開を待っています' : '相手の選択を待っています';
     }
     if (!title) return;
     ctx.save();
@@ -5457,6 +6348,14 @@
     cutIn = null;
     gamePhase = 'title';
     startTitleBgm();
+  }
+
+  function exitOnlineFromMenu() {
+    // Firebase/loopback共通。hostのFirebase部屋削除とbyeは endOnline に一元化する。
+    endOnline(true);
+    menuOpen = false;
+    hasSuspendedSave = false;
+    returnToTitleFromResult();
   }
 
   function drawTurnInfo() {
@@ -6111,6 +7010,64 @@
     if (e.key === 'Enter') document.getElementById('nameOk').click();
   });
 
+  // ===== オンラインロビー(HTML) =====
+  // テスト用DOMにはロビー要素が無いので、実ブラウザにだけイベントを登録する。
+  if (onlineRoomInput) {
+    onlineRoomInput.addEventListener('input', () => {
+      const normalized = normalizeRoomCode(onlineRoomInput.value);
+      if (onlineRoomInput.value !== normalized) onlineRoomInput.value = normalized;
+    });
+  }
+  const onlineCreateButton = document.getElementById('onlineCreate');
+  const onlineJoinButton = document.getElementById('onlineJoin');
+  const onlineCancelButton = document.getElementById('onlineCancel');
+  if (onlineCreateButton) onlineCreateButton.addEventListener('click', async () => {
+    if (onlineLobbyBusy || online) return;
+    setOnlineLobbyBusy(true); onlineLobbyStatus('匿名で接続し、部屋を作っています…');
+    try {
+      const { code, auth } = await createFirebaseRoom();
+      if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
+      if (onlineRoomInput) onlineRoomInput.value = code;
+      if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
+      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter());
+      setOnlineLobbyBusy(false);
+    } catch (err) {
+      setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '部屋を作れませんでした。');
+    }
+  });
+  if (onlineJoinButton) onlineJoinButton.addEventListener('click', async () => {
+    if (onlineLobbyBusy || online) return;
+    const code = normalizeRoomCode(onlineRoomInput && onlineRoomInput.value);
+    if (!isRoomCode(code)) { onlineLobbyStatus('合言葉は、紛らわしい文字を含まない8文字で入力してください。'); return; }
+    if (onlineRoomInput) onlineRoomInput.value = code;
+    setOnlineLobbyBusy(true); onlineLobbyStatus('部屋に参加しています…');
+    try {
+      const { auth } = await claimFirebaseRoom(code);
+      if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
+      if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
+      beginFirebaseOnline('guest', code, auth, selectedOnlineCharacter());
+      setOnlineLobbyBusy(false);
+    } catch (err) {
+      setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '部屋に入れませんでした。');
+    }
+  });
+  if (onlineCopyBtn) onlineCopyBtn.addEventListener('click', async () => {
+    const code = onlineRoomCodeEl && onlineRoomCodeEl.textContent;
+    if (!isRoomCode(code)) return;
+    const text = `カタモン ONLINE 1V1 合言葉: ${code}`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'カタモン ONLINE 1V1', text });
+      else if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(code);
+      else throw new Error('unsupported');
+      onlineLobbyStatus('合言葉を共有しました。相手の参加を待っています…');
+    } catch (_) { onlineLobbyStatus(`合言葉: ${code}（長押しでコピーしてください）`); }
+  });
+  if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
+    if (online) endOnline(true);
+    else closeOnlineLobby();
+    gamePhase = 'title'; startTitleBgm();
+  });
+
   const soundBtn = { x: VW - 28, y: 20, r: 17 }; // 右上・CPUパネルと重ならない高さ
   // ===== サウンド設定パネル(BGM/効果音を個別に段階調整) =====
   let soundPanelOpen = false;
@@ -6540,7 +7497,7 @@
 
     const items = [
       [menuResumeBtn, 'ゲームに戻る', ''],
-      [menuSuspendBtn, '中断してタイトルへ', '進行状況を保存します']
+      [menuSuspendBtn, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']
     ];
     for (const [b, label, sub] of items) {
       drawIronPlate(b.x, b.y, b.w, b.h, {
@@ -6863,6 +7820,9 @@
         selectWheelVelocity = 0;
         selectWheelDragging = false;
         gamePhase = 'select';
+      } else if (hitRect(p0, titleOnlineBtn)) {
+        playUiSound();
+        openOnlineLobby();
       } else if (hitRect(p0, titleRankingBtn)) {
         playUiSound();
         gamePhase = 'ranking';
@@ -6945,6 +7905,10 @@
     if (menuOpen) {
       if (hitRect(p0, menuResumeBtn)) { menuOpen = false; return; }
       if (hitRect(p0, menuSuspendBtn)) {
+        if (isOnline()) {
+          exitOnlineFromMenu();
+          return;
+        }
         saveSuspendedMatch();
         menuOpen = false;
         stopStageBgm();
@@ -6962,7 +7926,7 @@
     }
 
     // 相手が消えた/通信バージョンが違うときは、どこをタップしてもタイトルへ抜けられるようにする。
-    if (isOnline() && (online.peerLeft || online.versionMismatch) && !matchOver) {
+    if (isOnline() && (online.peerLeft || online.versionMismatch || online.protocolError) && !matchOver) {
       endOnline(false);
       returnToTitleFromResult();
       return;
@@ -7155,11 +8119,16 @@
           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
           // 相手には「誰がどこからどう撃ったか」だけを送り、演出は相手側で再生させる。
           // 移動は送っていないので、撃つ直前の立ち位置をここに載せて合わせる。
+          let actionId = null;
+          if (isOnline() && online.kind === 'firebase') {
+            actionId = secureNonce();
+            online.localAction = { unitId: me.id, actionId };
+          }
           if (isOnline()) {
             netSend({
               t: 'fire', unitId: me.id, x: me.x, y: me.y,
               anchor: { x: aimState.anchor.x, y: aimState.anchor.y },
-              vx0, vy0, useSpecial: specialArmed
+              vx0, vy0, useSpecial: specialArmed, ...(actionId ? { actionId } : {})
             });
           }
           launchShot(me, aimState.anchor, vx0, vy0, specialArmed);
@@ -7262,11 +8231,17 @@
   window.addEventListener('resize', resize);
   // スリープ・アプリ切り替え・タブ移動でBGMを止め、戻ってきたら鳴らし直す
   document.addEventListener('visibilitychange', () => {
+    resetFirebasePendingTerminalClocks();
     if (document.hidden) suspendAudioForHidden();
     else resumeAudioAfterVisible();
   });
   // iOSなどvisibilitychangeが来ない経路(bfcache行き)の保険
-  window.addEventListener('pagehide', suspendAudioForHidden);
+  window.addEventListener('pagehide', () => {
+    // ホストだけは部屋を残さないよう、終了通知と削除をベストエフォートで投げる。
+    // ここで待つとbfcache/終了処理を妨げるため、失敗は次の期限切れに任せる。
+    if (online && online.kind === 'firebase' && online.role === 'host') endOnline(true, true, true);
+    suspendAudioForHidden();
+  });
   window.addEventListener('pageshow', () => {
     if (!document.hidden) resumeAudioAfterVisible();
   });
@@ -7585,6 +8560,10 @@
         awaitingResolve = false;
         const acted = activeUnit();
         endTurn();
+        if (isOnline() && online.kind === 'firebase' && acted.control === 'remote' && online.remoteAction && online.remoteAction.unitId === acted.id) {
+          // state/resultは相手の発射をローカルで最後まで解決してからだけ受け入れる。
+          online.remoteAction.resolved = true;
+        }
         netSyncTurn(acted); // 行動した側だけが、切り替わったあとの状態を権威として送る
       }
     } else {
