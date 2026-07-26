@@ -3815,7 +3815,8 @@
       winStreak = 0;
       runStats = { damageDealt: 0, shots: 0 }; // 連勝が途切れたら次の挑戦は与ダメ効率もリセット
       // ランキングへ送るのは「連勝が途切れた瞬間」。1勝もしていない挑戦は送らない。
-      if (lastRunStreak > 0) submitScore(lastRunStreak, lastRunEfficiency);
+      // 連勝中はキャラを変えずに戦い続けるので、負けた時のキャラ=その挑戦のキャラ。
+      if (lastRunStreak > 0) submitScore(lastRunStreak, lastRunEfficiency, player.character);
     }
   }
 
@@ -4749,8 +4750,18 @@
 
   const continueBtn = { x: VW / 2, y: VH / 2 + 72, w: 210, h: 46 };
   const resultTitleBtn = { x: VW / 2, y: VH / 2 + 132, w: 210, h: 42 };
+  // ランキング送信の行を出す時は、その分だけボタンを下げる(描画と当たり判定の両方で使う)
+  const RESULT_BUTTON_SHIFT = 44;
+  function submitResultVisible() {
+    return matchOver && winner !== 'player' && battleMode !== 'free' && submitState !== 'idle';
+  }
+  function resultButtonShift() {
+    return submitResultVisible() ? RESULT_BUTTON_SHIFT : 0;
+  }
 
-  function drawResultButton(button, label, primary) {
+  function drawResultButton(rawButton, label, primary) {
+    const shift = resultButtonShift();
+    const button = shift ? { ...rawButton, y: rawButton.y + shift } : rawButton;
     if (primary) {
       // 主要ボタンは磨いた真鍮そのもの
       const fill = ctx.createLinearGradient(0, button.y - button.h / 2, 0, button.y + button.h / 2);
@@ -4783,7 +4794,24 @@
     '時間切れ': { sub: 'TIME UP', color: '#ffd24a' }
   };
 
-  function drawRankingRow(y, rank, name, streak, eff, highlight) {
+  // 収まらない名前は末尾を「…」に詰める。詰めないと右隣のキャラ名に重なる。
+  function fitText(text, font, maxWidth) {
+    ctx.save();
+    ctx.font = font;
+    let s = String(text == null ? '' : text);
+    if (ctx.measureText(s).width <= maxWidth) { ctx.restore(); return s; }
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxWidth) s = s.slice(0, -1);
+    ctx.restore();
+    return s + '…';
+  }
+
+  // 記録に残っているキャラのキーから表示名を引く。未登録の古い記録は「−」。
+  function characterLabel(key) {
+    const def = key && CHARACTERS[key];
+    return def ? def.name : '−';
+  }
+
+  function drawRankingRow(y, rank, name, streak, eff, highlight, character) {
     const w = 466;
     const left = VW / 2 - w / 2;
     ctx.save();
@@ -4800,8 +4828,13 @@
     drawOutlinedText(String(rank), left + 30, y + 5, {
       font: `900 ${rank <= 3 ? 19 : 15}px ${UI_FONT_HEAVY}`, color: rankColor, lineWidth: 3.5
     });
-    drawOutlinedText(name, left + 56, y + 5, {
-      font: `900 15px ${UI_FONT_HEAVY}`, color: highlight ? '#fff' : UI.parchment, lineWidth: 3.5, align: 'left'
+    const nameFont = `900 15px ${UI_FONT_HEAVY}`;
+    drawOutlinedText(fitText(name, nameFont, 168), left + 56, y + 5, {
+      font: nameFont, color: highlight ? '#fff' : UI.parchment, lineWidth: 3.5, align: 'left'
+    });
+    const charFont = `900 12px ${UI_FONT_HEAVY}`;
+    drawOutlinedText(fitText(characterLabel(character), charFont, 98), left + 240, y + 5, {
+      font: charFont, color: highlight ? '#ffe3ab' : UI.brassLabel, lineWidth: 3, align: 'left'
     });
     drawOutlinedText(`${streak}`, left + w - 96, y + 5, {
       font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
@@ -4865,7 +4898,8 @@
     const left = VW / 2 - w / 2;
     drawOutlinedText('順位', left + 30, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
     drawOutlinedText('なまえ', left + 56, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3, align: 'left' });
-    drawOutlinedText('連勝', left + w - 96, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
+    drawOutlinedText('カタモン', left + 240, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3, align: 'left' });
+    drawOutlinedText('連勝', left + w - 96, headerY,{ font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
     drawOutlinedText('効率', left + w - 32, headerY, { font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
 
     if (!rankingBoard.top.length) {
@@ -4879,7 +4913,7 @@
       const myRank = rankingBoard.me ? rankingBoard.me.rank : -1;
       for (let i = 0; i < rankingBoard.top.length; i++) {
         const e = rankingBoard.top[i];
-        drawRankingRow(190 + i * 31, e.rank, e.name, e.streak, e.efficiency, e.rank === myRank);
+        drawRankingRow(190 + i * 31, e.rank, e.name, e.streak, e.efficiency, e.rank === myRank, e.character);
       }
     }
 
@@ -4889,7 +4923,7 @@
       drawOutlinedText('あなたの順位', VW / 2, y - 26, {
         font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
       });
-      drawRankingRow(y, rankingBoard.me.rank, rankingBoard.me.name, rankingBoard.me.streak, rankingBoard.me.efficiency, true);
+      drawRankingRow(y, rankingBoard.me.rank, rankingBoard.me.name, rankingBoard.me.streak, rankingBoard.me.efficiency, true, rankingBoard.me.character);
     } else if (!rankingBoard.me) {
       drawOutlinedText(hasRankingName()
         ? '今月はまだ記録がありません'
@@ -4901,6 +4935,55 @@
     if (pendingScore) {
       drawOutlinedText('未送信の記録があります', VW / 2, VH - 52, {
         font: `900 10px ${UI_FONT_HEAVY}`, color: '#ffb45e', lineWidth: 3
+      });
+    }
+  }
+
+  // 敗北画面に、ランキング送信の顛末を出す。
+  // 通信は結果画面が出てから終わるので、ここは「送信中→順位」と後から書き換わる。
+  function drawSubmitResult(y) {
+    if (submitState === 'idle') return;
+    if (submitState === 'sending') {
+      drawOutlinedText('記録を送信中…', VW / 2, y, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+      return;
+    }
+    if (submitState === 'noname') {
+      drawOutlinedText('名前を登録するとランキングに残せます', VW / 2, y, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+      return;
+    }
+    if (submitState === 'failed') {
+      drawOutlinedText('記録を送れませんでした', VW / 2, y, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: '#ff9a9a', lineWidth: 3
+      });
+      drawOutlinedText('次に電波が届いた時に送り直します', VW / 2, y + 18, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+      return;
+    }
+    if (!submitRank) return;
+
+    // 届いた瞬間だけ少し大きく出して、見逃さないようにする
+    const pop = 1 + 0.5 * Math.max(0, Math.min(1, submitRevealTimer / 0.9));
+    ctx.save();
+    ctx.translate(VW / 2, y);
+    ctx.scale(pop, pop);
+    if (submitUpdated) {
+      drawOutlinedText(`${submitRank}位 入賞!`, 0, 0, {
+        font: `900 26px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+      });
+    } else {
+      drawOutlinedText(`現在 ${submitRank}位`, 0, 0, {
+        font: `900 18px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+    }
+    ctx.restore();
+    if (!submitUpdated) {
+      drawOutlinedText('自己ベストの更新はなし', VW / 2, y + 20, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
       });
     }
   }
@@ -4937,7 +5020,7 @@
     if (!matchOver || matchEndPause > 0) return;
     const won = winner === 'player';
     const bandY = VH / 2 - 130;
-    const bandH = won ? 280 : 330;
+    const bandH = (won ? 280 : 330) + resultButtonShift();
     ctx.save();
     // 石版のような帯(上下を真鍮で締める)
     const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
@@ -4987,6 +5070,8 @@
     drawOutlinedText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20, {
       font: `900 13px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
     });
+
+    if (!won && battleMode !== 'free') drawSubmitResult(VH / 2 + 56);
 
     drawResultButton(
       continueBtn,
@@ -5510,6 +5595,13 @@
   let rankingState = 'idle'; // 'idle' | 'loading' | 'ready' | 'error'
   let rankingError = '';
 
+  // 敗北画面で「◯位入賞!」を出すための、直前の送信の結果。
+  // GASの応答は2〜3秒かかるので、結果画面を出しながら裏で待って後から差し込む。
+  let submitState = 'idle'; // 'idle' | 'sending' | 'done' | 'failed' | 'noname'
+  let submitRank = 0;
+  let submitUpdated = false;
+  let submitRevealTimer = 0; // 順位が届いた瞬間の演出用
+
   function makeDeviceId() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let id = '';
@@ -5583,29 +5675,42 @@
   }
 
   // 連勝が途切れた瞬間に呼ぶ。失敗しても捨てずに貯めておき、次の機会に送り直す。
-  async function submitScore(streak, efficiency) {
-    if (!hasRankingName()) return;
-    pendingScore = { streak, efficiency };
+  async function submitScore(streak, efficiency, character) {
+    if (!hasRankingName()) {
+      submitState = 'noname';
+      return;
+    }
+    submitState = 'sending';
+    submitRank = 0;
+    submitUpdated = false;
+    pendingScore = { streak, efficiency, character };
     saveRankingProfile();
     try {
-      applyBoard(await callRanking({
+      const data = await callRanking({
         action: 'submit',
         id: rankingProfile.deviceId,
         name: rankingProfile.name,
         streak,
-        eff: efficiency
-      }));
+        eff: efficiency,
+        char: character || ''
+      });
+      applyBoard(data);
       pendingScore = null;
       saveRankingProfile();
+      submitRank = data.me ? data.me.rank : 0;
+      submitUpdated = data.updated === true;
+      submitState = 'done';
+      submitRevealTimer = 0.9;
     } catch (err) {
       // 貯めたまま残す。次回の送信時か起動時に再挑戦する。
+      submitState = 'failed';
     }
   }
 
   function flushPendingScore() {
     if (!pendingScore || !hasRankingName()) return;
     const queued = pendingScore;
-    submitScore(queued.streak, queued.efficiency);
+    submitScore(queued.streak, queued.efficiency, queued.character);
   }
 
   // ===== 名前入力(HTMLのオーバーレイ)=====
@@ -6495,12 +6600,13 @@
 
     if (matchOver) {
       if (matchEndPause > 0) return; // 決着理由を見せている間は誤タップで飛ばさせない
+      const shift = resultButtonShift();
       const b = continueBtn;
-      if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y) <= b.h / 2) {
+      if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) {
         resetMatch(true);
         return;
       }
-      if (hitRect(p0, resultTitleBtn)) {
+      if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) {
         returnToTitleFromResult();
       }
       return;
@@ -6739,6 +6845,9 @@
     turnSettle = TURN_SETTLE_SEC;
     winner = null;
     awaitingResolve = false;
+    submitState = 'idle';
+    submitRank = 0;
+    submitRevealTimer = 0;
     turnCount = 0;
     turnOrder = units.map(u => u.id);
     activeIndex = 0;
@@ -6887,6 +6996,7 @@
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
     if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
+    if (submitRevealTimer > 0) submitRevealTimer = Math.max(0, submitRevealTimer - dt);
     if (matchEndPause > 0) {
       const before = matchEndPause;
       matchEndPause = Math.max(0, matchEndPause - dt);
@@ -7107,6 +7217,7 @@
   loadRankingProfile();
   // 前回オフラインで送れなかった記録があれば、起動時に送り直す
   flushPendingScore();
+
 
 
   resize();

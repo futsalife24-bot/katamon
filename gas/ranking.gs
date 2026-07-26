@@ -10,7 +10,8 @@
  */
 
 var SHEET_NAME = 'ranking';
-var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt'];
+// 列を増やす時は末尾に足すこと。既存行の意味が変わらずに済む。
+var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character'];
 
 // 異常値の足切り。これを超える申告は保存せず捨てる。
 var MAX_STREAK = 200;
@@ -59,12 +60,17 @@ function getSheet() {
   var sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(HEADERS);
+    sheet.setFrozenRows(1);
+  }
+  // 列を追加した後も動くよう、見出し行が足りていなければ書き直す。
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() < HEADERS.length) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     sheet.setFrozenRows(1);
   }
   // "2026-07" や数字だけのIDをシートが日付・数値へ勝手に変換すると、
   // 書き込んだ値と読み戻した値が一致しなくなる。該当列は必ず書式をテキストに固定する。
   sheet.getRange('A:B').setNumberFormat('@');
+  sheet.getRange('G:G').setNumberFormat('@');
   return sheet;
 }
 
@@ -90,7 +96,8 @@ function readRows(sheet) {
       name: String(values[i][2]),
       streak: Number(values[i][3]) || 0,
       efficiency: Number(values[i][4]) || 0,
-      updatedAt: values[i][5]
+      updatedAt: values[i][5],
+      character: String(values[i][6] == null ? '' : values[i][6])
     });
   }
   return rows;
@@ -107,6 +114,12 @@ function sanitizeName(raw) {
   if (!name) name = 'ななし';
   if (name.length > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH);
   return name;
+}
+
+/** 使用キャラのキー。表示名はゲーム側で引くので、ここでは英数字のキーだけを受け付ける。 */
+function sanitizeCharacter(raw) {
+  var key = String(raw == null ? '' : raw).trim();
+  return /^[A-Za-z0-9_]{1,24}$/.test(key) ? key : '';
 }
 
 /** 1台あたりの1日の送信回数を数える。上限を超えたら false。 */
@@ -136,7 +149,8 @@ function submitScore(params) {
     deviceId: deviceId,
     name: sanitizeName(params.name),
     streak: streak,
-    efficiency: efficiency
+    efficiency: efficiency,
+    character: sanitizeCharacter(params.char)
   };
 
   // 同じ端末の行を読んで書き換えるので、同時実行を直列化する
@@ -155,12 +169,12 @@ function submitScore(params) {
 
     var updated = false;
     if (!mine) {
-      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date()]);
+      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date(), entry.character]);
       updated = true;
     } else if (isBetter(entry, mine)) {
-      // 自己ベストを更新した時だけ上書きする
-      sheet.getRange(mine.rowIndex, 3, 1, 4)
-        .setValues([[entry.name, entry.streak, entry.efficiency, new Date()]]);
+      // 自己ベストを更新した時だけ上書きする。使用キャラも記録時のものへ差し替える。
+      sheet.getRange(mine.rowIndex, 3, 1, 5)
+        .setValues([[entry.name, entry.streak, entry.efficiency, new Date(), entry.character]]);
       updated = true;
     } else if (mine.name !== entry.name) {
       // スコアが伸びていなくても、名前の変更だけは反映する
@@ -195,14 +209,14 @@ function buildBoard(deviceId) {
 
   var top = [];
   for (var i = 0; i < Math.min(TOP_COUNT, rows.length); i++) {
-    top.push({ rank: i + 1, name: rows[i].name, streak: rows[i].streak, efficiency: rows[i].efficiency });
+    top.push({ rank: i + 1, name: rows[i].name, streak: rows[i].streak, efficiency: rows[i].efficiency, character: rows[i].character });
   }
 
   var me = null;
   if (deviceId) {
     for (var j = 0; j < rows.length; j++) {
       if (rows[j].deviceId === deviceId) {
-        me = { rank: j + 1, name: rows[j].name, streak: rows[j].streak, efficiency: rows[j].efficiency };
+        me = { rank: j + 1, name: rows[j].name, streak: rows[j].streak, efficiency: rows[j].efficiency, character: rows[j].character };
         break;
       }
     }
