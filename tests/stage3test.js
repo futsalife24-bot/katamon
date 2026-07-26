@@ -139,6 +139,13 @@ function check(name, value) {
   grossState.units[0].hp = Math.max(0, grossState.units[0].hp - 50);
   check('A large HP-only divergence no longer disconnects the match (action-side authority)', h.stateSnapshotMatchesBaseline(grossState, safeSnap));
   check('Mismatch reason is empty for HP-only divergence, even when large', h.stateSnapshotMismatchReason(grossState, safeSnap) === '');
+  // 実機:相手が撃つ前に移動すると必ず fuel.0 で切断された。移動そのものは通信しておらず、
+  // fire は移動後の座標しか運ばないため、受信側は相手の燃料を減らしようがない。
+  // 満タンから使い切りまでのどの差でも受理できること。
+  const fuelDrift = JSON.parse(JSON.stringify(safeSnap));
+  fuelDrift.units[0].fuel = 0;
+  check('A fuel-only divergence no longer disconnects the match (movement is not replicated)',
+    safeSnap.units[0].fuel > 24 && h.stateSnapshotMismatchReason(fuelDrift, safeSnap) === '');
   // 座標は依然として大きくズレたら拒否する。可変dtで動く要因が薄く、実機での
   // 誤検知報告もまだ無いため、こちらは従来どおりの安全側に倒す。
   const grossPosition = JSON.parse(JSON.stringify(safeSnap));
