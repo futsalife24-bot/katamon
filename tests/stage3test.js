@@ -14,7 +14,29 @@ function check(name, value) {
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
-  check('protocol 2', app.proto() === 2);
+  check('loopback protocol remains v2', app.proto() === 2);
+  check('Firebase lobby protocol is v3 with two player and two spectator seats', h.firebaseProto() === 3
+    && JSON.stringify(h.firebaseSeats()) === JSON.stringify(['p1', 'e1', 's1', 's2'])
+    && JSON.stringify(h.firebasePlayerSeats()) === JSON.stringify(['p1', 'e1']));
+  const roundId = 'r'.repeat(48).replace(/r/g, 'c');
+  const nextRoundId = 'd'.repeat(48);
+  const firebasePacket = (t, extra = {}) => ({
+    v: 3, from: 'peer-p1', seat: 'p1', roundId, t, sentAt: Date.now(), ...extra
+  });
+  check('Firebase round IDs are fresh 48-hex values', /^[0-9a-f]{48}$/.test(h.firebaseRoundId())
+    && h.firebaseRoundId() !== h.firebaseRoundId());
+  check('Firebase v3 rejects missing or malformed seat and roundId',
+    !h.validateFirebaseMessage(firebasePacket('ready', { seat: 'x1' }))
+    && !h.validateFirebaseMessage(firebasePacket('ready', { roundId: 'bad' }))
+    && !h.validateFirebaseMessage({ ...firebasePacket('ready'), from: '' }));
+  check('Firebase v3 accepts lobby control packets only with a valid seat/from/roundId envelope',
+    h.validateFirebaseMessage(firebasePacket('ready'))
+    && h.validateFirebaseMessage(firebasePacket('lobbyState', { status: 'lobby', nextRoundId }))
+    && h.validateFirebaseMessage(firebasePacket('rematchVote', { vote: true })));
+  const normalizedLobby = h.normalizeLobbySettings({ terrain: 'not-a-map', wind: 'not-a-wind', turnsPerPlayer: 999, revision: -1 });
+  check('host lobby settings are normalized to the supported terrain/wind/turn values',
+    [10, 15, 20].includes(normalizedLobby.turnsPerPlayer) && normalizedLobby.revision >= 0
+    && typeof normalizedLobby.terrain === 'string' && typeof normalizedLobby.wind === 'string');
   check('room code normalizes separators / ambiguous chars', h.normalizeRoomCode('ab-cd ef2o3') === 'ABCDEF23');
   check('room code accepts exactly 8 allowed chars', h.isRoomCode('A2BC3DEF'));
   check('room code rejects ambiguous/short code', !h.isRoomCode('A2BC3DEO') && !h.isRoomCode('A2BC3DE'));
@@ -84,12 +106,15 @@ function check(name, value) {
   // ステージで再現した。RTDBはnullの値をキーごと保存しないため、bridge:nullで送った
   // スナップショットは受信側で bridge キー自体が欠落する(undefined)。normalize前は
   // JSON.stringify(undefined) !== JSON.stringify(null) で必ず不一致になっていた。
-  const missingBridgeSnapshot = JSON.parse(JSON.stringify(safeSnap));
+  // The selected map is random; construct the documented RTDB null shape
+  // explicitly instead of assuming this particular battle has no bridge.
+  const nullBridgeBaseline = { ...safeSnap, bridge: null };
+  const missingBridgeSnapshot = JSON.parse(JSON.stringify(nullBridgeBaseline));
   delete missingBridgeSnapshot.bridge;
-  check('Snapshot without a bridge key reproduces the RTDB-omitted-null shape', !('bridge' in missingBridgeSnapshot) && safeSnap.bridge === null);
+  check('Snapshot without a bridge key reproduces the RTDB-omitted-null shape', !('bridge' in missingBridgeSnapshot) && nullBridgeBaseline.bridge === null);
   const normalizedMissingBridge = h.normalizeFirebaseSnapshot(missingBridgeSnapshot);
   check('Firebase normalizes an RTDB-omitted bridge key back to null', normalizedMissingBridge.bridge === null);
-  check('A normalized missing bridge now matches a local null-bridge baseline', h.stateSnapshotMismatchReason(normalizedMissingBridge, safeSnap) === '');
+  check('A normalized missing bridge now matches a local null-bridge baseline', h.stateSnapshotMismatchReason(normalizedMissingBridge, nullBridgeBaseline) === '');
   check('An un-normalized missing bridge previously mismatched (regression guard)', h.stateSnapshotMismatchReason(missingBridgeSnapshot, safeSnap) === 'terrain.bridge');
   const outgoingState = { v: 2, t: 'state', from: 'peer', sentAt: 123, actionId, snap: tieredStart };
   const storedState = JSON.parse(JSON.stringify(outgoingState));
@@ -170,6 +195,7 @@ function check(name, value) {
   // 未定義の識別子(STAGE_H)を参照していても素通りし、fire だけが永久に届かないバグを見逃した。
   // 正常な fire を1本通すこと。ここが本番で最初に流れるパケットそのものになる。
   const validFire = { v: 2, from: 'peer', t: 'fire', sentAt: Date.now(), actionId, unitId: 'e1', x: 1224, y: 512, anchor: { x: 1224, y: 512 }, vx0: -320, vy0: -460, useSpecial: false };
+  const validV3Fire = { ...validFire, v: 3, seat: 'e1', roundId };
   // 端末が古い版を掴んでいるのか本当に不具合なのかを切り分けるため、タイトルへ build 番号を出している。
   // sw.js のキャッシュ版数とずれると、その表示が当てにならなくなる。
   const readRepoFile = name => require('fs').readFileSync(require('path').join(__dirname, '..', name), 'utf8');
@@ -180,6 +206,22 @@ function check(name, value) {
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
 
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
+  check('Firebase v3 fire keeps the v2 payload checks behind the required round envelope',
+    h.validateFirebaseMessage(validV3Fire)
+    && !h.validateFirebaseMessage({ ...validV3Fire, roundId: 'bad' })
+    && !h.validateFirebaseMessage({ ...validV3Fire, seat: 's1', actionId: 'bad' }));
+  const validV3State = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'state', sentAt: Date.now(), actionId, unitId: 'e1', snap: safeSnap };
+  const validV3Result = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'result', sentAt: Date.now(), actionId, unitId: 'e1', winner: 'player', reason: '撃破', units: safeSnap.units.map(u => ({ id: u.id, hp: u.hp })) };
+  check('Firebase v3 state/result require the action unit to match the sender seat',
+    h.validateFirebaseMessage(validV3State) && h.validateFirebaseMessage(validV3Result)
+    && h.firebasePacketSeatAllowed(validV3State) && h.firebasePacketSeatAllowed(validV3Result)
+    && !h.validateFirebaseMessage({ ...validV3State, unitId: 'p1' })
+    && !h.validateFirebaseMessage({ ...validV3Result, unitId: 'p1' })
+    && !h.firebasePacketSeatAllowed({ ...validV3State, unitId: 'p1' })
+    && !h.firebasePacketSeatAllowed({ ...validV3Result, unitId: 'p1' }));
+  check('Firebase v3 accepts presence from every non-host seat and rejects host presence',
+    ['e1', 's1', 's2'].every(seat => h.validateFirebaseMessage(firebasePacket('presence', { seat })) && h.firebasePacketSeatAllowed(firebasePacket('presence', { seat })))
+    && !h.firebasePacketSeatAllowed(firebasePacket('presence', { seat: 'p1' })));
   check('Firebase fire diagnostic reports no reason for a normal packet', h.validateFirebaseMessageDetail(validFire).ok === true);
   // 座標の上下限そのものも踏む。片側でも未定義参照が残っていればここで落ちる。
   const edgeFire = { ...validFire, x: -1000, y: -1000, anchor: { x: 1440 + 1000, y: 960 + 1000 } };
@@ -192,20 +234,156 @@ function check(name, value) {
   app.beginOnline('guest');
   app.exitOnlineFromMenu();
   const loopbackExit = !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && sent >= 2 && closed === 1;
-  app.beginOnline('guest');
-  app.setOnlineKind('firebase');
+  h.setOnlineForLogTest({
+    kind: 'firebase', phase: 'results', participantRole: 'player', role: 'host', seat: 'p1', clientId: 'self',
+    slots: {}, settings: { terrain: 'grass', wind: 'calm', turns: 10 }, rematchVotes: {}, log: [], queue: [], transport: { close: () => { closed++; } }
+  });
   app.exitOnlineFromMenu();
-  check('menu exit closes loopback and Firebase transports without a suspended save', loopbackExit && !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && sent >= 4 && closed === 2);
+  check('menu exit closes loopback, while Firebase keeps the results lobby open',
+    loopbackExit && !!app.onlineState() && app.onlineState().phase === 'results' && !app.hasSave() && closed === 1);
 
   const rulesText = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const staleRoundOnline = {
+    kind: 'firebase', clientId: 'self', currentRoundId: roundId, phase: 'lobby', participantRole: 'player',
+    transport: { setRoundId: () => true, reconnect: () => true, close: () => {} }, rematchVotes: {}
+  };
+  h.setOnlineForLogTest(staleRoundOnline);
+  h.receiveFirebaseForTest(firebasePacket('lobbyState', { roundId: nextRoundId, status: 'revealing' }));
+  const staleRoundIgnored = staleRoundOnline.phase === 'lobby';
+  h.receiveFirebaseForTest(firebasePacket('lobbyState', { status: 'revealing' }));
+  check('Firebase ignores stale-round lobby packets but applies the current round', staleRoundIgnored && staleRoundOnline.phase === 'revealing');
+  h.setOnlineForLogTest({ kind: 'firebase', participantRole: 'spectator', phase: 'playing', transport: { close: () => {} } });
+  check('spectator input remains locked even while the current round is playing', app.inputLocked() === true);
+  h.setOnlineForLogTest(null);
+  check('lobby allocation blind-claims player then spectator seats without a pre-member room read',
+    htmlText.includes("for (const candidate of ['e1', 's1', 's2'])")
+    && htmlText.includes('firebaseClaimEmptySlot(`rooms/${code}/slots/${candidate}`, auth,')
+    && htmlText.includes('// Rulesは非memberのreadを許可しない。e1→s1→s2を条件付きPUTで確保してから読む。'));
+  check('Firebase slot claims use an atomic null_etag conditional PUT and release only a failed claimant seat',
+    htmlText.includes("'if-match': 'null_etag'")
+    && htmlText.includes('async function firebaseClaimEmptySlot')
+    && htmlText.includes('if (response.status === 412) return false;')
+    && htmlText.includes('rooms/${code}/slots/${seat}`, auth, { method: \'DELETE\' }'));
+  check('only the opposing player seat can supply commit/reveal data',
+    htmlText.includes("if (msg.seat !== online.peerSeat) break;")
+    && htmlText.includes("case 'commit':") && htmlText.includes("case 'reveal':"));
+  check('host start waits for both ready players, then enters the reveal gate',
+    htmlText.includes("!online.selfReady || !online.peerReady || !online.peerCommitted")
+    && htmlText.includes("status: 'revealing'") && htmlText.includes('maybeRevealCharacter()'));
+  check('locked settings stay disabled after either player has readied',
+    htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby' && !online.selfReady && !online.peerReady;")
+    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
+  check('both rematch votes reset a new round with automatic readiness',
+    htmlText.includes('online.rematchVotes.p1 && online.rematchVotes.e1')
+    && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')
+    && htmlText.includes('resetLocalFirebaseRoundState(autoReady === true)')
+    && htmlText.includes('if (autoReady && isFirebasePlayer()) commitOwnCharacter();'));
+  check('either player can return to the lobby and clear readiness for a fresh choice',
+    htmlText.includes("online.rematchVotes[online.seat] = false;")
+    && htmlText.includes("netSend({ t: 'rematchVote', vote: false })")
+    && htmlText.includes('await resetFirebaseRound(false)')
+    && htmlText.includes("netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
+    && htmlText.includes("online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;")
+    && htmlText.includes('online.rematchVotes = {};'));
+  check('Firebase result opens the results lobby instead of directly exiting the room',
+    htmlText.includes("online.phase = 'results';") && htmlText.includes('openFirebaseResultsLobby()')
+    && htmlText.includes('id="onlineRematch"') && htmlText.includes('このまま再戦')
+    && htmlText.includes('id="onlineReturnLobby"') && htmlText.includes('ロビーへ戻る')
+    && htmlText.includes('#onlineLobby.in-room.results #onlineRematch { display: block; }')
+    && htmlText.includes('#onlineLobby.in-room.results #onlineReturnLobby { display: block; }')
+    && htmlText.includes("online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。')"));
+  // v3ルールの実行可能な検証。tests/V3_RULES_SPEC.md のチェックリストをここへ落とし込んだ。
+  // クライアントがv3で、デプロイ済みルールがv2のままだと部屋の作成すら通らず、
+  // オンライン対戦が全滅する。両者が必ず同じ版であることをここで縛る。
   const rules = JSON.parse(rulesText).rules.rooms.$room;
-  check('rules default deny and room code validation', rulesText.includes('".read": false') && rules['.write'].includes('$room.matches'));
-  check('rules restrict guest claim and append-only messages', rules.guestUid['.write'].includes('!data.exists()') && rules.messages.$message['.write'].includes('!data.exists()'));
-  check('rules reject a host claiming its own guest seat', rules.guestUid['.write'].includes("hostUid').val() !== auth.uid"));
-  check('rules validate protocol, sender and bounded client timestamp', rules.messages.$message['.validate'].includes("'sentAt'") && rules.messages.$message['.validate'].includes("'from'"));
-  check('rules whitelist actionId and require it for fire/state/result', rules.messages.$message.$other['.validate'] === false && rules.messages.$message.actionId['.validate'].includes('{48}') && rules.messages.$message['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','actionId'])") && rules.messages.$message['.validate'].includes("'state' && newData.hasChildren(['snap','actionId'])") && rules.messages.$message['.validate'].includes("'result' && newData.hasChildren(['winner','reason','units','actionId'])"));
-  check('rules permit heartbeat without actionId', rules.messages.$message['.validate'].includes("newData.child('t').val() === 'ping'") && rules.messages.$message.t['.validate'].includes("newData.val() === 'ping'"));
+  // 旧v2ルールが残っていると rounds/slots が無く、この下が軒並み TypeError で落ちる。
+  // 「クライアントはv3、デプロイ済みルールはv2」が本番で一番危ない状態なので、
+  // スタックトレースではなく理由の分かる失敗にして先へ進めない。
+  const hasV3Shape = !!(rules && rules.rounds && rules.rounds.$roundId && rules.rounds.$roundId.messages && rules.slots && rules.slots.$seat);
+  check('database.rules.json uses the v3 room shape (rounds/slots)', hasV3Shape);
+  if (!hasV3Shape) {
+    console.error('  !! database.rules.json is still the v2 schema. Migrate it before shipping the v3 client.');
+    console.log(`\n${pass}/${pass + fail} passed`);
+    process.exitCode = 1;
+    return;
+  }
+  const msg = rules.rounds.$roundId.messages.$message;
+  const seat = rules.slots.$seat;
+  const seats = ['p1', 'e1', 's1', 's2'];
+  check('rules default deny at the root and constrain the room code',
+    rulesText.includes('".read": false') && rulesText.includes('".write": false') && rules['.write'].includes('$room.matches'));
+  check('rules accept only protocol 3 rooms',
+    rules.protocol['.validate'] === 'newData.val() === 3' && rules['.write'].includes("child('protocol').val() === 3"));
+  check('rules require the four named slots and reject unknown room children',
+    rules.$other['.validate'] === false && ['settings', 'slots', 'round', 'rounds'].every(k => rules['.validate'].includes("'" + k + "'")));
+  check('rules let a room be created only by its own host with p1 pre-claimed and no other seat',
+    rules['.write'].includes("child('hostUid').val() === auth.uid")
+    && rules['.write'].includes("child('slots').child('p1').child('uid').val() === auth.uid")
+    && rules['.write'].includes("!newData.child('slots').child('e1').exists()"));
+  check('rules restrict reads to seated members inside the expiry window',
+    rules['.read'].includes("child('expiresAt').val() > now")
+    && seats.every(x => rules['.read'].includes("child('" + x + "').child('uid').val() === auth.uid")));
+  check('rules allow claiming only a vacant e1/s1/s2 seat while the room is in lobby',
+    seat['.write'].includes('$seat.matches(/^(e1|s1|s2)$/)')
+    && seat['.write'].includes("child('status').val() === 'lobby'")
+    && seat['.write'].includes('!data.exists()'));
+  check('rules forbid taking a second seat',
+    seats.every(x => seat['.write'].includes("child('" + x + "').child('uid').val() !== auth.uid")));
+  check('rules pin a claimed seat to the caller and allow releasing only your own',
+    seat.uid['.validate'].includes('newData.val() === auth.uid') && seat['.write'].includes("data.child('uid').val() === auth.uid"));
+  check('rules let only p1 change settings, and only while in lobby',
+    rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
+    && rules.settings['.write'].includes("child('status').val() === 'lobby'"));
+  check('rules bound the settings payload to supported values',
+    rules.settings.$other['.validate'] === false && rules.settings.turnsPerPlayer['.validate'].includes('10')
+    && rules.settings.terrain['.validate'].includes('tieredBasin') && rules.settings.wind['.validate'].includes('calm'));
+  check('rules let only p1 change round status or open the next round',
+    rules.round['.write'].includes("child('p1').child('uid').val() === auth.uid")
+    && rules.rounds.$roundId['.write'].includes("child('p1').child('uid').val() === auth.uid")
+    && rules.rounds.$roundId['.write'].includes('!data.exists()'));
+  check('rules constrain the round id and status enum',
+    rules.round.id['.validate'].includes('{48}')
+    && ['lobby', 'revealing', 'playing', 'results'].every(x => rules.round.status['.validate'].includes("'" + x + "'")));
+  check('rules keep the per-round message log append-only', msg['.write'].includes('!data.exists()'));
+  check('rules bind every packet to its sender, its claimed seat and the current round',
+    msg['.write'].includes("child('from').val() === auth.uid")
+    && msg['.write'].includes("child(newData.child('seat').val()).child('uid').val() === auth.uid")
+    && msg['.write'].includes("child('round').child('id').val() === $roundId"));
+  check('rules stop a packet being written into another round',
+    msg['.validate'].includes("child('roundId').val() === $roundId") && msg.roundId['.validate'].includes('{48}'));
+  check('rules require v3 plus the seat/roundId envelope on every packet',
+    msg['.validate'].includes("'v','t','from','seat','roundId','sentAt'")
+    && msg.v['.validate'] === 'newData.val() === 3'
+    && seats.every(x => msg.seat['.validate'].includes("'" + x + "'")));
+  check('rules keep spectators read-only for game-affecting packets',
+    msg['.write'].includes("newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('t').val() === 'presence'"));
+  check('rules reserve host-only packets for p1',
+    msg['.write'].includes("newData.child('t').val() !== 'settings'") && msg['.write'].includes("newData.child('seat').val() === 'p1'"));
+  check('rules retain actionId and payload limits for fire/state/result',
+    msg.$other['.validate'] === false && msg.actionId['.validate'].includes('{48}')
+    && msg['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','actionId'])")
+    && msg['.validate'].includes("'state' && newData.hasChildren(['snap','actionId','unitId'])")
+    && msg['.validate'].includes("'result' && newData.hasChildren(['winner','reason','units','actionId','unitId'])"));
+  check('rules force unitId to match the sender seat',
+    msg.unitId['.validate'].includes("newData.val() === newData.parent().child('seat').val()"));
+  check('rules bound the client timestamp on every packet',
+    msg['.validate'].includes('now - 120000') && msg.sentAt['.validate'].includes('now + 120000'));
+  check('rules permit heartbeat and presence without actionId',
+    msg['.validate'].includes("newData.child('t').val() === 'ping'")
+    && msg.t['.validate'].includes("newData.val() === 'ping'") && msg.t['.validate'].includes("newData.val() === 'presence'"));
+  check('rules let only the two players publish the spectator snapshot for the current round',
+    rules.rounds.$roundId.latestSnapshot['.write'].includes("child('round').child('id').val() === $roundId")
+    && rules.rounds.$roundId.latestSnapshot['.write'].includes("child('e1').child('uid').val() === auth.uid")
+    && !rules.rounds.$roundId.latestSnapshot['.write'].includes("child('s1')"));
+  check('rules let only the host delete the room',
+    rules['.write'].includes("data.exists() && !newData.exists() && data.child('hostUid').val() === auth.uid"));
+  // クライアントの protocol と、ルールが受け付ける protocol は必ず一致させる。
+  // ここがずれると本番で「部屋を作れません」から先へ一切進めなくなる。
+  const clientProto = /const FIREBASE_PROTO_VERSION = (\d+);/.exec(htmlText);
+  check('deployed rules protocol matches the client FIREBASE_PROTO_VERSION',
+    !!clientProto && rules.protocol['.validate'] === 'newData.val() === ' + clientProto[1]);
+
   check('refresh failure keeps the existing anonymous identity', htmlText.includes('if (firebaseAuth) {') && htmlText.includes('新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ'));
   check('host cleanup waits after bye and pagehide leaves TTL cleanup', htmlText.includes('skipDeferredCleanup') && htmlText.includes('), 1000)') && htmlText.includes('endOnline(true, true, true)'));
 
