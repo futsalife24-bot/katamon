@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v29';
+  const BUILD_ID = 'v30';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3473,6 +3473,9 @@
   }
   function rejectFirebaseMessage(reason) {
     if (!online) return;
+    // 二重に呼ばれても最初の理由だけを残す。毎フレーム呼ばれてリングバッファが
+    // 同じ行で埋まり、肝心の直前のやり取りが消えてしまう事故を実際に起こした。
+    if (online.protocolError) return;
     logOnlineEvent({ type: 'reject', reason });
     online.protocolError = reason;
     online.phase = 'ended';
@@ -3546,11 +3549,26 @@
     online.completedRemoteActions.set(msg.actionId, { from: msg.from, t: msg.t });
     while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
   }
+  // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
+  // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
+  // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
+  function firebaseResultConcedes(msg) {
+    if (!msg || msg.t !== 'result') return false;
+    const senderUnit = unitById(msg.seat);
+    return !!senderUnit && msg.winner !== senderUnit.team;
+  }
+
   function receiveFirebaseTerminal(msg) {
     const completed = firebaseCompletedTerminalStatus(msg);
     if (completed === 'duplicate-result') return true;
     if (completed === 'mismatch') {
       rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+      return true;
+    }
+    // 敗北宣言は対応する fire を持たない(撃たずに落下死した場合など)。
+    // 保留に積むと相手の発射をいつまでも待ち、15秒後に誤って切断してしまう。
+    if (!online.remoteAction && firebaseResultConcedes(msg)) {
+      enqueueNetMessage(msg);
       return true;
     }
     if (online.remoteAction) {
@@ -3832,8 +3850,7 @@
           // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
           // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
           // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
-          const senderUnit = unitById(msg.seat);
-          const concedes = !!senderUnit && msg.winner !== senderUnit.team;
+          const concedes = firebaseResultConcedes(msg);
           if (!concedes && (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
             rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
             break;
@@ -4419,6 +4436,8 @@
   function updateOnline(dt) {
     startPendingLoopback();
     if (!online) return;
+    // 既に終わっている接続を毎フレーム再判定しない。保留中の通知は放棄する。
+    if (online.phase === 'ended' || online.protocolError) return;
     updateFirebasePendingTerminals();
     if (!online || online.phase === 'ended') return;
     updateFirebasePeerLiveness();

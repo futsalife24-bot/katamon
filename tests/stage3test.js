@@ -312,13 +312,24 @@ function check(name, value) {
     && syncResultSrc[0].includes('actionId = secureNonce();')
     && syncResultSrc[0].includes('actionUnitId = online.seat;'));
   check('a peer conceding its own defeat is accepted even when the local sim disagrees',
-    htmlText.includes('const concedes = !!senderUnit && msg.winner !== senderUnit.team;')
+    htmlText.includes('function firebaseResultConcedes(msg)')
+    && htmlText.includes('const concedes = firebaseResultConcedes(msg);')
     && htmlText.includes('if (!concedes && (!online.remoteAction'));
-  // 降参は通すが、勝利の主張は通さない。concedes は「送信者の陣営 !== 勝者」でのみ真になる。
+  // 降参は通すが、勝利の主張は通さない。判定は「送信者の陣営 !== 勝者」でのみ真になる。
   check('a peer cannot claim its own victory through the concession path', (() => {
-    const m = /const concedes = !!senderUnit && msg\.winner !== senderUnit\.team;/.exec(htmlText);
-    return !!m && !/msg\.winner === senderUnit\.team/.test(htmlText);
+    const src = /function firebaseResultConcedes\(msg\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+    return !!src && /msg\.winner !== senderUnit\.team/.test(src[0]) && !/msg\.winner === senderUnit\.team/.test(src[0]);
   })());
+  // 実機:降参の result は対応する fire を持たないため保留に積まれ、15秒後に
+  // 「相手の行動通知が届かず接続を中断しました。」で切れていた。applyNetMessage の
+  // 降参処理まで届く前に握り潰されていたのが原因。
+  check('a conceding result bypasses the pending-terminal buffer that waits for a fire',
+    htmlText.includes('if (!online.remoteAction && firebaseResultConcedes(msg)) {'));
+  // 同じ理由の拒否が毎フレーム走り、リングバッファが同じ行で埋まって履歴が消えた。
+  check('rejection is idempotent so the log keeps the first cause',
+    htmlText.includes('if (online.protocolError) return;'));
+  check('an ended connection is not re-evaluated every frame',
+    htmlText.includes("if (online.phase === 'ended' || online.protocolError) return;"));
   check('a conceded result copies the declared HP so the loser is shown as defeated',
     htmlText.includes('if (concedes) {') && htmlText.includes('for (const u of msg.units) {'));
   // 移動の配信(2026-07-27)。移動を送っていなかったことが、燃料不一致・落下死が
