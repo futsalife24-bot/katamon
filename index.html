@@ -1894,18 +1894,62 @@
     }
   }
 
+  // ===== ユニット =====
+  // 進行ロジックは必ず units 配列を回す。将来の2vs2やオンライン対戦では、
+  // ここに要素を足すだけで済むようにしてある。
+  // player / cpu は 1vs1 の間だけ有効な別名で、UI側はこちらを直接参照している
+  // (HUDの4体対応は別段階の作業なので、いまはあえて手を付けない)。
+  //   id      … 弾のownerや通信で個体を指す不変のキー
+  //   team    … 陣営。勝敗判定・味方判定はすべてこれで行う
+  //   control … 'local'(この端末の操作) / 'cpu'(AI) / 将来 'remote'(相手端末)
   const player = {
     x: STAGE_W * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
-    color: '#4fc3f7', label: 'YOU', side: 'player',
+    color: '#4fc3f7', label: 'YOU',
+    id: 'p1', team: 'player', control: 'local',
     character: null, specialCharge: 0, moveLockTurns: 0
   };
   const cpu = {
     x: STAGE_W * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
-    color: '#ff6b6b', label: 'CPU', side: 'cpu',
+    color: '#ff6b6b', label: 'CPU',
+    id: 'e1', team: 'cpu', control: 'cpu',
     character: null, specialCharge: 0, moveLockTurns: 0
   };
+  const units = [player, cpu];
+
+  function unitById(id) {
+    for (const u of units) if (u.id === id) return u;
+    return null;
+  }
+
+  // 弾の owner はユニットIDなので、陣営を見るには一度ユニットを引き直す。
+  function teamOfOwner(owner) {
+    const u = unitById(owner);
+    return u ? u.team : null;
+  }
+
+  function teamAlive(team) {
+    for (const u of units) if (u.team === team && u.hp > 0) return true;
+    return false;
+  }
+
+  // 自分から見て一番近い敵。CPUの狙う相手を決めるのに使う。
+  function nearestEnemy(u) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const other of units) {
+      if (other.team === u.team || other.hp <= 0) continue;
+      const d = Math.abs(other.x - u.x);
+      if (d < bestDist) { bestDist = d; best = other; }
+    }
+    return best;
+  }
+
+  // 与ダメ効率に積むのは「プレイヤー陣営が敵陣営へ与えた分」だけ。自爆や味方誤爆は数えない。
+  function creditDamage(owner, target, amount) {
+    if (teamOfOwner(owner) === 'player' && target.team !== 'player') runStats.damageDealt += amount;
+  }
 
   function applyCharacter(u, key) {
     const def = CHARACTERS[key];
@@ -2020,7 +2064,8 @@
     const speed = 360;
     const baseAngle = Math.atan2(p.vy, p.vx);
     // 24発ぶんの爆発が素通しで合算されると即死するので、炸裂ごとに被ダメージ上限を持たせる。
-    fireworkBurstDamage = { player: 0, cpu: 0 };
+    fireworkBurstDamage = {};
+    for (const u of units) fireworkBurstDamage[u.id] = 0;
     spawnExplosion(p.x, p.y, 0.55);
     for (let i = 0; i < 8; i++) {
       const angle = baseAngle + (Math.PI * 2 * i) / 8;
@@ -2041,8 +2086,8 @@
     craterHistory.push({ x, y, r: radius });
     spawnExplosion(x, y, blastMul * 0.5);
     playCrackleSound(blastMul);
-    for (const u of [player, cpu]) {
-      const dealt = fireworkBurstDamage ? fireworkBurstDamage[u.side] : 0;
+    for (const u of units) {
+      const dealt = fireworkBurstDamage ? (fireworkBurstDamage[u.id] || 0) : 0;
       const budget = FIREWORK_BURST_DAMAGE_CAP - dealt;
       if (budget <= 0) continue;
       const a = unitAnchor(u);
@@ -2050,10 +2095,10 @@
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
       const dmg = Math.min(budget, Math.max(1, Math.round(raw * takenMul)));
-      if (fireworkBurstDamage) fireworkBurstDamage[u.side] += dmg;
+      if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
       u.hp = Math.max(0, u.hp - dmg);
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
-      if (p.owner === 'player' && u.side === 'cpu') runStats.damageDealt += dmg;
+      creditDamage(p.owner, u, dmg);
     }
     checkMatchEnd();
   }
@@ -2061,7 +2106,7 @@
   // プレイヤーが手動で起爆できる、飛行中の花火本体を返す。
   function playerFireworkInFlight() {
     for (const p of projectiles) {
-      if (p.firework && !p.fireworkShard && p.owner === 'player') return p;
+      if (p.firework && !p.fireworkShard && p.owner === player.id) return p;
     }
     return null;
   }
@@ -2070,7 +2115,7 @@
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred) {
     const def = CHARACTERS[unit.character];
-    const owner = unit.side;
+    const owner = unit.id;
     // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
 
@@ -2196,9 +2241,15 @@
   }
 
   // ===== ターン制御 =====
-  const MAX_TURNS_TOTAL = 30; // 各15ターン(プレイヤー15+CPU15)
-  let currentTurn = 'player';
+  const TURNS_PER_UNIT = 15;  // 1体あたりの手番数。総ターン数は参加人数に比例させる
+  let turnOrder = units.map(u => u.id); // 手番はこの並びで回る
+  let activeIndex = 0;
   let turnCount = 0;
+  function maxTurnsTotal() { return TURNS_PER_UNIT * Math.max(1, turnOrder.length); }
+  function activeUnit() { return unitById(turnOrder[activeIndex]) || units[0]; }
+  function isPlayerTurn() { return activeUnit().team === 'player'; }
+  // 手番を持っているのがこの端末で操作するユニットか(将来のオンライン対戦の入力ガード)
+  function isLocalTurn() { return activeUnit().control === 'local'; }
   let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
   const TURN_SETTLE_SEC = 0.8; // 着弾が収まってから手番を交代するまでの余韻
   let turnSettle = TURN_SETTLE_SEC;
@@ -2527,9 +2578,21 @@
   // ===== 中断/再開(ブラウザを閉じても続きから再開できる) =====
   const SUSPEND_KEY = 'katamon_suspend_v1';
 
-  function saveSuspendedMatch() {
-    const data = {
-      v: 3,
+  const SNAPSHOT_VERSION = 4;
+
+  function serializeUnit(u) {
+    return {
+      id: u.id, team: u.team, control: u.control, character: u.character,
+      hp: u.hp, maxHp: u.maxHp, fuel: u.fuel, fuelMax: u.fuelMax,
+      x: u.x, y: u.y, specialCharge: u.specialCharge, moveLockTurns: u.moveLockTurns
+    };
+  }
+
+  // 試合の状態を丸ごと1つのオブジェクトにする。中断セーブはこれをlocalStorageへ
+  // 書くだけの薄い層で、オンライン対戦のターン境界の同期にもそのまま使える。
+  function buildSnapshot() {
+    return {
+      v: SNAPSHOT_VERSION,
       battleMode,
       freeModeConfig: { ...freeModeConfig },
       stageW: STAGE_W,
@@ -2541,25 +2604,42 @@
       themeKey: currentThemeKey,
       parallaxSeed,
       simTimeMs, // 再開時に闘技場の障害物の揺れが飛ばないよう位相も持ち越す
-      playerChar: player.character,
-      cpuChar: cpu.character,
-      player: { hp: player.hp, maxHp: player.maxHp, fuel: player.fuel, fuelMax: player.fuelMax, x: player.x, y: player.y, specialCharge: player.specialCharge, moveLockTurns: player.moveLockTurns },
-      cpu: { hp: cpu.hp, maxHp: cpu.maxHp, fuel: cpu.fuel, fuelMax: cpu.fuelMax, x: cpu.x, y: cpu.y, specialCharge: cpu.specialCharge, moveLockTurns: cpu.moveLockTurns },
-      currentTurn, turnCount,
+      units: units.map(serializeUnit),
+      turnOrder: turnOrder.slice(),
+      activeIndex, turnCount,
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, zoom: cameraZoom }
     };
-    try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(data)); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
+  }
+
+  // v3までは player/cpu の2固定だった。現行の units 形式へ寄せてから読む。
+  function migrateSnapshot(data) {
+    if (!data || Array.isArray(data.units)) return data;
+    if (!data.player || !data.cpu) return null;
+    data.units = [
+      { ...data.player, id: 'p1', team: 'player', control: 'local', character: data.playerChar },
+      { ...data.cpu, id: 'e1', team: 'cpu', control: 'cpu', character: data.cpuChar }
+    ];
+    data.turnOrder = ['p1', 'e1'];
+    data.activeIndex = data.currentTurn === 'cpu' ? 1 : 0;
+    data.v = SNAPSHOT_VERSION;
+    return data;
+  }
+
+  function saveSuspendedMatch() {
+    try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(buildSnapshot())); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
   }
 
   function loadSuspendedMatch() {
     try {
       const raw = localStorage.getItem(SUSPEND_KEY);
       if (!raw) return null;
-      const data = JSON.parse(raw);
+      const data = migrateSnapshot(JSON.parse(raw));
       // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
       if (!data || !Array.isArray(data.segments) || data.segments.length !== TERRAIN_COLS) return null;
+      // 人数が今のモデルと違うセーブは復元しない(2vs2導入時の食い違い対策)
+      if (!Array.isArray(data.units) || data.units.length !== units.length) return null;
       return data;
     } catch (err) { return null; }
   }
@@ -2568,10 +2648,9 @@
     try { localStorage.removeItem(SUSPEND_KEY); } catch (err) { /* noop */ }
   }
 
-  function resumeSuspendedMatch() {
-    const data = loadSuspendedMatch();
-    if (!data) return;
-
+  // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
+  // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
+  function applySnapshot(data) {
     battleMode = data.battleMode === 'free' ? 'free' : 'normal';
     if (data.freeModeConfig) {
       freeModeConfig.playerIndex = wrapOptionIndex(Number(data.freeModeConfig.playerIndex) || 0, CHARACTER_LIST.length);
@@ -2584,15 +2663,17 @@
     // 旧セーブには無いので0から。障害物の揺れが少しずれるだけで実害はない。
     simTimeMs = Number.isFinite(data.simTimeMs) ? data.simTimeMs : 0;
 
-    player.character = data.playerChar;
-    cpu.character = data.cpuChar;
-    applyCharacter(player, data.playerChar);
-    applyCharacter(cpu, data.cpuChar);
-    Object.assign(player, data.player);
-    Object.assign(cpu, data.cpu);
     // v1の旧セーブにはyが無いので、その場合だけ従来どおり列の最上面へ置く。
     // 新しいセーブは保存時の高さを基準に、同じレイヤーの足場へ復帰させる。
-    for (const [u, saved] of [[player, data.player], [cpu, data.cpu]]) {
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      const saved = data.units[i];
+      applyCharacter(u, saved.character);
+      u.hp = saved.hp;
+      u.maxHp = saved.maxHp;
+      u.fuel = saved.fuel;
+      u.fuelMax = saved.fuelMax;
+      u.x = saved.x;
       u.moveLockTurns = Number.isFinite(saved.moveLockTurns) ? Math.max(0, Math.min(2, saved.moveLockTurns)) : 0;
       // 旧セーブは「未使用=満タン、使用済み=空」として新チャージ制へ移行する。
       u.specialCharge = Number.isFinite(saved.specialCharge)
@@ -2620,7 +2701,8 @@
     turnSettle = TURN_SETTLE_SEC;
     winner = null;
     awaitingResolve = false;
-    currentTurn = data.currentTurn;
+    turnOrder = Array.isArray(data.turnOrder) && data.turnOrder.length ? data.turnOrder.slice() : units.map(u => u.id);
+    activeIndex = Math.max(0, Math.min(turnOrder.length - 1, Number(data.activeIndex) || 0));
     turnCount = data.turnCount;
     wind.dir = data.wind.dir;
     wind.strength = data.wind.strength;
@@ -2646,6 +2728,12 @@
     cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
     cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(player.x));
     cameraTargetX = null;
+  }
+
+  function resumeSuspendedMatch() {
+    const data = loadSuspendedMatch();
+    if (!data) return;
+    applySnapshot(data);
     stopTitleBgm();
     gamePhase = 'battle';
     playStageBgm(currentThemeKey, true);
@@ -3606,8 +3694,9 @@
   function emitEmp(x, y, radius, owner, turns) {
     spawnEmpPulse(x, y, radius);
     triggerShake(2.5, 0.16);
-    for (const u of [player, cpu]) {
-      if (u.side === owner) continue;
+    const ownerTeam = teamOfOwner(owner);
+    for (const u of units) {
+      if (u.team === ownerTeam) continue; // 味方は巻き込まない
       const dist = Math.hypot(u.x - x, u.y - y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
@@ -3615,7 +3704,7 @@
       u.hp = Math.max(0, u.hp - damage);
       u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
       spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, damage);
-      if (owner === 'player' && u.side === 'cpu') runStats.damageDealt += damage;
+      creditDamage(owner, u, damage);
     }
     triggerSpecialFlash(`電磁波: 移動封印 ${turns}手`);
     playExplosionSound(0.8);
@@ -3628,7 +3717,7 @@
     spawnExplosion(x, y, blastMul);
     triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
     playExplosionSound(blastMul);
-    for (const u of [player, cpu]) {
+    for (const u of units) {
       const a = unitAnchor(u);
       const dist = Math.hypot(a.x - x, a.y - y);
       const dmg = computeDamage(dist, blastMul, damageMul);
@@ -3637,7 +3726,7 @@
         const actualDamage = Math.max(1, Math.round(dmg * takenMul));
         u.hp = Math.max(0, u.hp - actualDamage);
         spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
-        if (owner === 'player' && u.side === 'cpu') runStats.damageDealt += actualDamage;
+        creditDamage(owner, u, actualDamage);
       }
     }
     checkMatchEnd();
@@ -3684,19 +3773,30 @@
 
   function checkMatchEnd(reason) {
     if (matchOver) return;
-    if (player.hp <= 0 || cpu.hp <= 0) {
-      matchOver = true;
-      winner = (player.hp <= 0 && cpu.hp <= 0) ? 'cpu' : (player.hp <= 0 ? 'cpu' : 'player');
-      beginMatchEnd(reason || '撃破');
-      applyStreakResult();
+    const playerAlive = teamAlive('player');
+    const cpuAlive = teamAlive('cpu');
+    if (playerAlive && cpuAlive) return;
+    matchOver = true;
+    winner = playerAlive ? 'player' : 'cpu'; // 相打ちはCPU勝ち扱い(引き分けは設けない)
+    beginMatchEnd(reason || '撃破');
+    applyStreakResult();
+  }
+
+  // 陣営の残存率。2vs2ではチーム合計で比べる。
+  function teamHpRatio(team) {
+    let hp = 0;
+    let max = 0;
+    for (const u of units) {
+      if (u.team !== team) continue;
+      hp += u.hp;
+      max += u.maxHp;
     }
+    return max > 0 ? hp / max : 0;
   }
 
   function judgeByHp() {
     matchOver = true;
-    const pr = player.hp / player.maxHp;
-    const cr = cpu.hp / cpu.maxHp;
-    winner = pr > cr ? 'player' : 'cpu'; // 同率は引き分けなし・CPU勝ち扱い
+    winner = teamHpRatio('player') > teamHpRatio('cpu') ? 'player' : 'cpu'; // 同率は引き分けなし・CPU勝ち扱い
     beginMatchEnd('時間切れ');
     applyStreakResult();
   }
@@ -3720,15 +3820,14 @@
   }
 
   function startTurn() {
-    if (turnCount % 4 === 0) rollWind(); // 風は自分・相手2ターンずつ(計4ターン)固定
-    if (currentTurn === 'player') {
-      player.fuel = player.fuelMax;
-      focusCameraOn(player.x);
-    } else {
-      cpu.fuel = cpu.fuelMax;
-      focusCameraOn(cpu.x);
+    // 風は全員が2巡するごとに切り替える(1vs1では従来どおり4ターンごと)
+    if (turnCount % (turnOrder.length * 2) === 0) rollWind();
+    const acting = activeUnit();
+    acting.fuel = acting.fuelMax;
+    focusCameraOn(acting.x);
+    if (acting.control === 'cpu') {
       cpuThinkTimer = 0.7 + Math.random() * 0.5;
-      const plan = planCpuMove();
+      const plan = planCpuMove(acting);
       cpuMoveDir = plan.dir;
       cpuMoveRemaining = plan.distance;
       cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
@@ -3737,18 +3836,23 @@
 
   function endTurn() {
     if (matchOver) return;
-    const actingUnit = currentTurn === 'player' ? player : cpu;
-    if (actingUnit.moveLockTurns > 0) actingUnit.moveLockTurns--;
+    const acting = activeUnit();
+    if (acting.moveLockTurns > 0) acting.moveLockTurns--;
     // そのキャラが1手番を終えるごとに1段階。使用した手番の終了時から再充填を始める。
-    advanceSpecialCharge(actingUnit);
+    advanceSpecialCharge(acting);
     turnCount++;
-    if (turnCount >= MAX_TURNS_TOTAL) {
+    if (turnCount >= maxTurnsTotal()) {
       showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
       return;
     }
-    currentTurn = currentTurn === 'player' ? 'cpu' : 'player';
+    // 倒れたユニットの手番は飛ばす。1vs1では倒れた時点で決着なので通らないが、
+    // 2vs2ではここが無いと死体に手番が渡って進行が止まる。
+    for (let i = 0; i < turnOrder.length; i++) {
+      activeIndex = (activeIndex + 1) % turnOrder.length;
+      if (activeUnit().hp > 0) break;
+    }
     startTurn();
-    showCutIn(currentTurn === 'player' ? 'あなたのターン' : 'CPUのターン', '', 0.9);
+    showCutIn(isPlayerTurn() ? 'あなたのターン' : 'CPUのターン', '', 0.9);
   }
 
   // ===== CPU AI(精度成長型)=====
@@ -3765,35 +3869,40 @@
   let cpuMoveRemaining = 0;
   let cpuPhase = 'aim'; // 'move' | 'aim'
 
-  function planCpuMove() {
+  function planCpuMove(self) {
     const tier = cpuAccuracyTier(winStreak);
-    if (cpu.moveLockTurns > 0) return { dir: 0, distance: 0 };
+    if (self.moveLockTurns > 0) return { dir: 0, distance: 0 };
     if (tier.name === 'low') return { dir: 0, distance: 0 }; // 1〜3連勝は動かない
 
-    const dist = Math.abs(player.x - cpu.x);
+    const foe = nearestEnemy(self);
+    if (!foe) return { dir: 0, distance: 0 };
+    const dist = Math.abs(foe.x - self.x);
     const NEAR = 150;  // 近すぎ(自爆や反撃のリスク)→離れる
     const FAR = 760;   // 横長ステージでは遠距離戦を基本にし、極端に遠い時だけ寄る
 
     let dir = 0;
-    if (dist < NEAR) dir = cpu.x < player.x ? -1 : 1;
-    else if (dist > FAR) dir = cpu.x < player.x ? 1 : -1;
+    if (dist < NEAR) dir = self.x < foe.x ? -1 : 1;
+    else if (dist > FAR) dir = self.x < foe.x ? 1 : -1;
     if (dir === 0) return { dir: 0, distance: 0 };
 
     // 中ティアは必要な時でも半分の確率でしか動かない(様子見)
     if (tier.name === 'mid' && Math.random() < 0.5) return { dir: 0, distance: 0 };
 
     const willingness = tier.name === 'perfect' ? 1 : tier.name === 'high' ? 0.85 : 0.6;
-    return { dir, distance: cpu.fuelMax * willingness };
+    return { dir, distance: self.fuelMax * willingness };
   }
 
   function cpuAutoTurn() {
     if (matchOver || projectiles.length) return;
-    const anchor = unitAnchor(cpu);
-    const target = unitAnchor(player);
-    const def = CHARACTERS[cpu.character];
+    const self = activeUnit();
+    const foe = nearestEnemy(self);
+    if (!foe) return;
+    const anchor = unitAnchor(self);
+    const target = unitAnchor(foe);
+    const def = CHARACTERS[self.character];
     const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * def.tBias;
     const tier = cpuAccuracyTier(winStreak);
-    const useSpecial = isSpecialReady(cpu) && (tier.name === 'high' || tier.name === 'perfect');
+    const useSpecial = isSpecialReady(self) && (tier.name === 'high' || tier.name === 'perfect');
     // 悪魔の必殺は重力も風も受けないので、逆算も直線で行わないと大きく外れる。
     const straightAim = useSpecial && def.key === 'akuma';
     const aimWindMul = straightAim ? 0 : (useSpecial && def.key === 'tori' ? def.windMul * 0.55 : (def.windMul || 1));
@@ -3803,7 +3912,7 @@
     const jitter = tier.jitter;
     const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
     const vy = vy0 * (1 + (Math.random() * 2 - 1) * jitter);
-    launchShot(cpu, anchor, vx, vy, useSpecial);
+    launchShot(self, anchor, vx, vy, useSpecial);
     awaitingResolve = true;
   }
 
@@ -4188,12 +4297,12 @@
 
   function drawUnit(u) {
     const a = unitAnchor(u);
-    const isBossUnit = isBossMatch && u.side === 'cpu';
+    const isBossUnit = isBossMatch && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
     const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
     // プレイヤーは右、CPUは左を向く。左向き素材だけ反転ルールを入れ替える。
-    const facingLeft = (u.side === 'cpu') !== sourceFacesLeft;
+    const facingLeft = (u.team === 'cpu') !== sourceFacesLeft;
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
@@ -4341,7 +4450,7 @@
     const cardY = 46;
     // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
     const accent = align === 'left' ? UI.ally : UI.enemy;
-    const isTurn = (align === 'left') === (currentTurn === 'player');
+    const isTurn = (align === 'left') === isPlayerTurn();
 
     // 手番側のカードだけ縁を光らせ、今どちらの番かカードでも分かるようにする
     drawIronPlate(barX + w / 2, cardY + h / 2, w, h, {
@@ -4906,7 +5015,7 @@
   }
 
   function drawTurnInfo() {
-    const isPlayer = currentTurn === 'player';
+    const isPlayer = isPlayerTurn();
     const accent = isPlayer ? UI.ally : UI.enemy;
     ctx.save();
     ctx.beginPath();
@@ -4928,7 +5037,7 @@
     const actingUnit = isPlayer ? player : cpu;
     const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
     drawOutlinedText(
-      `${turnLabel}　TURN ${Math.min(turnCount + 1, MAX_TURNS_TOTAL)}/${MAX_TURNS_TOTAL}${lockLabel}`,
+      `${turnLabel}　TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}${lockLabel}`,
       20, 108, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
     );
     drawOutlinedText(battleMode === 'free' ? 'FREE' : `${winStreak}連勝`, VW - 20, 108, {
@@ -4956,7 +5065,7 @@
 
     // P/Eマーカーを直接タップした時は、圧縮座標の誤差を挟まず本人の中心へ合わせる。
     if (snapToMarker) {
-      for (const unit of [player, cpu]) {
+      for (const unit of units) {
         if (Math.hypot(point.x - toMapX(unit.x), point.y - toMapY(unit.y)) <= 18) {
           focusCameraOn(unit.x, true);
           return;
@@ -5138,9 +5247,9 @@
 
   function drawSpecialButton() {
     // 花火が飛んでいる間は、このボタンが手動起爆に切り替わる。
-    const detonatable = currentTurn === 'player' && !matchOver && !!playerFireworkInFlight();
+    const detonatable = isLocalTurn() && !matchOver && !!playerFireworkInFlight();
     const ready = detonatable || isSpecialReady(player);
-    const active = ready && currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn;
+    const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn;
     const chargeRatio = detonatable ? 1 : player.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[player.character];
     ctx.save();
@@ -5760,7 +5869,7 @@
 
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
-    const active = currentTurn === 'player' && !awaitingResolve && !matchOver && !cutIn && player.grounded;
+    const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && player.grounded;
     const cx = FIRE_BTN.x, cy = FIRE_BTN.y, r = FIRE_BTN.r;
 
     // 引っ張り量から「パワー%」と「仰角」を算出して数値で見せる。
@@ -6000,7 +6109,7 @@
   }
 
   function drawMoveButtons() {
-    const active = currentTurn === 'player' && player.moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn;
+    const active = isLocalTurn() && player.moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn;
     const size = BTN_R * 2;
     // 残り燃料を移動ボタン側にも出しておくと、動かす前に「あと何歩ぶんか」が判断できる
     const fuelRatio = player.fuelMax > 0 ? Math.max(0, player.fuel / player.fuelMax) : 0;
@@ -6415,7 +6524,7 @@
 
     // 発射後は入力を止めているが、花火の手動起爆だけは例外として受け付ける。
     // 信管を満了させるだけなので、炸裂そのものは通常どおり更新処理側で起きる。
-    const flyingFirework = currentTurn === 'player' && !matchOver ? playerFireworkInFlight() : null;
+    const flyingFirework = isLocalTurn() && !matchOver ? playerFireworkInFlight() : null;
     if (flyingFirework && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
       flyingFirework.fireworkTimer = FIREWORK_FUSE_SEC;
       playUiSound();
@@ -6423,7 +6532,7 @@
     }
 
     // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
-    if (currentTurn === 'player' && !awaitingResolve) {
+    if (isLocalTurn() && !awaitingResolve) {
       if (player.moveLockTurns <= 0 && hitButton(p0, leftBtn)) {
         inputMode = 'moveL'; inputPointerId = e.pointerId; moveDir = -1;
         canvas.setPointerCapture(e.pointerId);
@@ -6631,7 +6740,8 @@
     winner = null;
     awaitingResolve = false;
     turnCount = 0;
-    currentTurn = 'player';
+    turnOrder = units.map(u => u.id);
+    activeIndex = 0;
     cpuMoveDir = 0;
     cpuMoveRemaining = 0;
     cpuPhase = 'aim';
@@ -6872,8 +6982,8 @@
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
       // 拡散弾は素通りさせ、ダメージは進行中の爆発だけに任せる(二重取りの防止)。
       if (!p.fireworkShard) {
-        for (const u of [player, cpu]) {
-          if (u.side === p.owner) continue;
+        for (const u of units) {
+          if (u.id === p.owner) continue;
           const a = unitAnchor(u);
           if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
             if (p.emp) {
@@ -6931,13 +7041,12 @@
     if (trailDirty) rebuildTerrainRim();
 
     // 落下物理(常時判定)
-    updateFalling(dt, player);
-    updateFalling(dt, cpu);
+    for (const u of units) updateFalling(dt, u);
 
     if (matchOver) return;
 
     // 移動(プレイヤーのターンのみ・燃料制・長押しボタン)
-    if (currentTurn === 'player' && player.moveLockTurns <= 0 && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
+    if (isLocalTurn() && player.moveLockTurns <= 0 && !awaitingResolve && moveDir !== 0 && player.grounded && player.fuel > 0) {
       const dist = Math.min(MOVE_SPEED * dt, player.fuel);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, player.x + moveDir * dist));
       nx = limitMoveByClimb(player, nx);
@@ -6948,17 +7057,18 @@
     }
 
     // CPU移動→思考→発射
-    if (currentTurn === 'cpu' && !awaitingResolve && cpu.grounded && !projectiles.length) {
+    const cpuActor = activeUnit();
+    if (cpuActor.control === 'cpu' && !awaitingResolve && cpuActor.grounded && !projectiles.length) {
       if (cpuPhase === 'move') {
-        if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpu.fuel > 0) {
-          const dist = Math.min(MOVE_SPEED * dt, cpu.fuel, cpuMoveRemaining);
-          let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpu.x + cpuMoveDir * dist));
-          nx = limitMoveByClimb(cpu, nx);
-          const moved = Math.abs(nx - cpu.x);
-          cpu.x = nx;
-          cpu.fuel -= moved;
+        if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpuActor.fuel > 0) {
+          const dist = Math.min(MOVE_SPEED * dt, cpuActor.fuel, cpuMoveRemaining);
+          let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpuActor.x + cpuMoveDir * dist));
+          nx = limitMoveByClimb(cpuActor, nx);
+          const moved = Math.abs(nx - cpuActor.x);
+          cpuActor.x = nx;
+          cpuActor.fuel -= moved;
           cpuMoveRemaining -= moved;
-          followGroundOrFall(cpu);
+          followGroundOrFall(cpuActor);
           if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
         } else {
           cpuPhase = 'aim';
@@ -6972,7 +7082,7 @@
     // ターン解決(着弾+落下が収まったら手番交代)
     // pendingShotがある間はまだ弾が出ていないだけなので、ターンを終わらせてはいけない。
     // 着弾した瞬間に手番が変わると爆発や破片を見る間がないので、少し置いてから交代する。
-    if (awaitingResolve && !pendingShot && !projectiles.length && player.grounded && cpu.grounded) {
+    if (awaitingResolve && !pendingShot && !projectiles.length && units.every(u => u.grounded)) {
       turnSettle -= dt;
       if (turnSettle <= 0) {
         awaitingResolve = false;
@@ -6997,6 +7107,7 @@
   loadRankingProfile();
   // 前回オフラインで送れなかった記録があれば、起動時に送り直す
   flushPendingScore();
+
 
   resize();
   requestAnimationFrame(gameLoop);
