@@ -3364,7 +3364,7 @@
   }
   function stateSnapshotMatchesBaseline(snap, baseline) { return stateSnapshotMismatchReason(snap, baseline) === ''; }
   function firebaseStateMismatchReason(snap) {
-    // state は相手端末の描画フレーム差を少し許容する一方、地形の差し替えや大幅なHP/座標改ざんは拒否する。
+    // state は相手端末の描画フレーム差を少し許容する一方、地形の差し替えや大幅な座標改ざんは拒否する。HPはaction-side authorityのため入口範囲だけ検証する。
     if (!snap || !Array.isArray(snap.units) || !online) return 'precondition';
     const expectedP1 = online.role === 'host' ? online.selfCharacter : online.peerCharacter;
     const expectedE1 = online.role === 'host' ? online.peerCharacter : online.selfCharacter;
