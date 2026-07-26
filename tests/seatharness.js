@@ -53,6 +53,14 @@ const HOOK = `
     mode: () => battleMode,
     freeConfig: () => ({ ...freeModeConfig }),
     startFree: () => { startFreeMatch(); },
+    resultTitleBtn: () => ({ ...resultTitleBtn, shift: resultButtonShift() }),
+    continueBtn: () => ({ ...continueBtn, shift: resultButtonShift() }),
+    keepsRunOnExit: () => keepsRunOnExit(),
+    endPause: () => matchEndPause,
+    hasSave: () => hasSuspendedSave,
+    setStreak: (n) => { winStreak = n; },
+    isBoss: () => isBossMatch,
+    pattern: () => currentPattern,
     canvas
   };
   const __panelLog = [];

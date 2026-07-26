@@ -9,6 +9,7 @@ node tests/seattest.js p1
 node tests/seattest.js e1
 node tests/regressiontest.js p1
 node tests/regressiontest.js e1
+node tests/resulttest.js
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -20,6 +21,7 @@ node tests/regressiontest.js e1
 | `seatharness.js` | スタブとフックの土台。`globalThis.__kt` にゲーム内部を露出する |
 | `seattest.js` | Stage 2a「視点の切り離し」。入力・HUD・弾のowner・勝敗が席側を向いているか(18項目) |
 | `regressiontest.js` | CPU戦の完走・中断再開のラウンドトリップ・フリーモード(20項目) |
+| `resulttest.js` | 結果画面の「タイトルへ戻る」。勝利時だけ中断セーブして連勝を守る(26項目) |
 
 ## 注意
 

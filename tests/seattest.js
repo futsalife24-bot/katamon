@@ -79,6 +79,11 @@ check('移動で自席の燃料が減る', me.fuel < beforeFuel, `${beforeFuel}�
 check('相手は動かない', Math.abs(foe.x - foeBeforeX) < 0.001, `dx=${(foe.x - foeBeforeX).toFixed(3)}`);
 
 // ---- 6. 発射入力が自席の弾を撃つ ----
+// 直前の移動で崖から落ちると grounded が外れて発射ボタンが無効になる。
+// 地形は毎回ランダムなので、撃てる状態に戻るまで待ってから撃つ。
+let g2 = 0;
+while (!kt.hud().fireActive && g2++ < 4000 && !kt.state().matchOver) kt.step(1 / 60);
+check('発射できる状態になる', kt.hud().fireActive, `guard=${g2} grounded=${kt.localUnit().grounded}`);
 const fb = kt.fireBtn();
 const aid = down(fb.x, fb.y);
 move(aid, fb.x - 60, fb.y + 60); // 左下へ引く=右上へ飛ぶ

@@ -5113,8 +5113,25 @@
       battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
       true
     );
-    drawResultButton(resultTitleBtn, 'タイトルへ戻る', false);
+    drawResultButton(resultTitleBtn, keepsRunOnExit() ? '中断してタイトルへ' : 'タイトルへ戻る', false);
     ctx.restore();
+  }
+
+  // 勝利画面から抜けるときは、連勝を捨てずに済ませる。
+  // 「タイトルへ戻る」の誤タップで連勝がゼロになるのが一番痛いので、
+  // 勝った直後だけは「つぎのバトルへ」と同じ状態を作ってから中断セーブする。
+  // 敗北時は連勝が既に0でランキング送信も済んでおり、守るものが無いので従来どおり。
+  function keepsRunOnExit() {
+    return matchOver && battleMode !== 'free' && localWon();
+  }
+
+  function suspendRunToTitle() {
+    // resetMatch の末尾はステージBGMを鳴らし直すので、先にタイトルへ移してから呼ぶ。
+    gamePhase = 'title';
+    resetMatch(true);      // つぎの試合(ボス戦の判定・地形・キャラ・必殺チャージの持ち越し)を用意
+    saveSuspendedMatch();  // winStreak / runStats / isBossMatch ごと保存される
+    hasSuspendedSave = true;
+    returnToTitleFromResult();
   }
 
   function returnToTitleFromResult() {
@@ -6644,7 +6661,8 @@
         return;
       }
       if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) {
-        returnToTitleFromResult();
+        if (keepsRunOnExit()) suspendRunToTitle();
+        else returnToTitleFromResult();
       }
       return;
     }
