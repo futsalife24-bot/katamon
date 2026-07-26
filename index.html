@@ -228,7 +228,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v21';
+  const BUILD_ID = 'v22';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3217,6 +3217,12 @@
       normalized.craters = [];
     } else {
       normalized.craters = normalizeRtdbDenseArray(normalized.craters) || normalized.craters;
+    }
+    // RTDBは値がnullのキーを保存しない。橋の無い地形はbridge:nullで送っているため、
+    // 受信側では欠落(undefined)として届く。そのままだと baseline の null と型が
+    // 揃わずJSON比較が常に不一致になり、橋の無いほぼ全ての試合でstateが拒否されていた。
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'bridge')) {
+      normalized.bridge = null;
     }
     const columns = normalizeRtdbDenseArray(normalized.segments);
     if (columns) {

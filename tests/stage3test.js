@@ -80,6 +80,17 @@ function check(name, value) {
   const nullCratersSnapshot = h.normalizeFirebaseSnapshot({ ...safeSnap, craters: null });
   check('Firebase normalizes RTDB null craters to an empty array', Array.isArray(nullCratersSnapshot.craters)
     && h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: nullCratersSnapshot }));
+  // 実機で「相手の行動と一致しない状態更新です（terrain.bridge）」が橋の無いほぼ全ての
+  // ステージで再現した。RTDBはnullの値をキーごと保存しないため、bridge:nullで送った
+  // スナップショットは受信側で bridge キー自体が欠落する(undefined)。normalize前は
+  // JSON.stringify(undefined) !== JSON.stringify(null) で必ず不一致になっていた。
+  const missingBridgeSnapshot = JSON.parse(JSON.stringify(safeSnap));
+  delete missingBridgeSnapshot.bridge;
+  check('Snapshot without a bridge key reproduces the RTDB-omitted-null shape', !('bridge' in missingBridgeSnapshot) && safeSnap.bridge === null);
+  const normalizedMissingBridge = h.normalizeFirebaseSnapshot(missingBridgeSnapshot);
+  check('Firebase normalizes an RTDB-omitted bridge key back to null', normalizedMissingBridge.bridge === null);
+  check('A normalized missing bridge now matches a local null-bridge baseline', h.stateSnapshotMismatchReason(normalizedMissingBridge, safeSnap) === '');
+  check('An un-normalized missing bridge previously mismatched (regression guard)', h.stateSnapshotMismatchReason(missingBridgeSnapshot, safeSnap) === 'terrain.bridge');
   const outgoingState = { v: 2, t: 'state', from: 'peer', sentAt: 123, actionId, snap: tieredStart };
   const storedState = JSON.parse(JSON.stringify(outgoingState));
   delete storedState.snap.craters;
