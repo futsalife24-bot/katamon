@@ -10,6 +10,7 @@ node tests/seattest.js e1
 node tests/regressiontest.js p1
 node tests/regressiontest.js e1
 node tests/resulttest.js
+node tests/loopbacktest.js
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -22,6 +23,8 @@ node tests/resulttest.js
 | `seattest.js` | Stage 2a「視点の切り離し」。入力・HUD・弾のowner・勝敗が席側を向いているか(18項目) |
 | `regressiontest.js` | CPU戦の完走・中断再開のラウンドトリップ・フリーモード(20項目) |
 | `resulttest.js` | 結果画面の「タイトルへ戻る」。勝利時だけ中断セーブして連勝を守る(26項目) |
+| `peer.js` | ループバック対戦の「1タブぶん」。`loopbacktest.js` から fork される |
+| `loopbacktest.js` | オンライン対戦。host/guest を別プロセスで動かし、親が遅延とロスを注入して中継する(93項目) |
 
 ## 注意
 
@@ -31,3 +34,6 @@ node tests/resulttest.js
   `showCutIn` の `onDone`(タイムアップ判定など)が消えて試合が終わらなくなる。
   飛ばさず `settle()` で経過させること
 - スタブなので描画結果の見た目は確認できない。**色や配置の最終判断は実機で目視すること**
+- **`loopbacktest.js` だけは子プロセスを2つ立てる。** harness は `globalThis` にゲームを展開するので、
+  1プロセスに2インスタンスは置けない。通信は `kt.setTransport()` で差し替えて親が中継する
+- 完走まで1〜3分かかる(1試合を何度も通すため)。遅延・ロス・必殺・プロトコル不一致の7シナリオ

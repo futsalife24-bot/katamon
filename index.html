@@ -1942,18 +1942,34 @@
     if (u.id === localUnitId) return 'あなたのターン';
     return u.control === 'cpu' ? 'CPUのターン' : '相手のターン';
   }
-  // 席を移すと操作権も一緒に動く。Stage 2b でリモート対戦を入れる際は
-  // 相手側の control を 'remote' にする分岐がここに増える。
-  function setLocalSeat(id) {
+  // 席を移すと操作権も一緒に動く。相手をAIにするか相手端末にするかで control が変わる。
+  function setSeat(id, foeControl) {
     if (!unitById(id)) return;
     localUnitId = id;
-    for (const u of units) u.control = (u.id === id) ? 'local' : 'cpu';
+    for (const u of units) u.control = (u.id === id) ? 'local' : foeControl;
   }
-  // 開発用:?seat=e1 で右側の席に座ってCPU戦を通し、視点の切り離しが効いているか確かめる。
-  try {
-    const seatParam = new URLSearchParams(location.search).get('seat');
+  function setLocalSeat(id) { setSeat(id, 'cpu'); }   // CPU戦
+  function setOnlineSeat(id) { setSeat(id, 'remote'); } // オンライン対戦
+
+  // オンライン対戦中かどうか。UI・連勝・中断まわりの分岐はすべてこれを見る。
+  // 中身は §オンライン対戦 で作る。ここで宣言だけ先にしておくのは、
+  // 初期化時に走る中断セーブの読み込みより前に参照できるようにするため。
+  let online = null;
+  function isOnline() { return online !== null; }
+  // 相手待ち・決着後は自分の操作を受け付けない。
+  // ガードは launchShot ではなく入力受付レイヤに置く(必殺の保留中に状態が届いても二重発射しないため)。
+  function netInputLocked() { return isOnline() && online.phase !== 'playing'; }
+  // 開発用の入口。完成していない機能なのでタイトルには何も出していない。
+  //   ?seat=e1                      … 右側の席に座ってCPU戦を通す(視点の切り離しの確認)
+  //   ?loopback=host / =guest       … 同一端末の2タブで対戦する(Stage 2b)
+  //   ?netdelay=500&netloss=0.1     … 遅延(ms)とパケットロス(0〜0.9)を注入する
+  const devParams = (() => {
+    try { return new URLSearchParams(location.search); } catch (_) { return null; }
+  })();
+  if (devParams) {
+    const seatParam = devParams.get('seat');
     if (seatParam === 'p1' || seatParam === 'e1') setLocalSeat(seatParam);
-  } catch (_) { /* URLSearchParams が無い環境では既定の席のまま */ }
+  }
 
   // 弾の owner はユニットIDなので、陣営を見るには一度ユニットを引き直す。
   function teamOfOwner(owner) {
@@ -2659,6 +2675,8 @@
   }
 
   function saveSuspendedMatch() {
+    // 対人戦は片方だけ中断しても再開できないので保存しない(復帰はStage 4の課題)。
+    if (isOnline()) return;
     try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(buildSnapshot())); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
   }
 
@@ -2775,6 +2793,242 @@
   }
 
   let hasSuspendedSave = !!loadSuspendedMatch();
+
+  // ===== オンライン対戦(Stage 2b: 同一端末の2タブをBroadcastChannelで繋ぐ)=====
+  //
+  // 方式は「行動側権威 + ターン境界スナップショット」。
+  //   撃った側 : 自分で物理を回して着弾させ、ターンの切れ目に buildSnapshot() を送る
+  //   受けた側 : 発射コマンドを再生して見た目を合わせ、届いたスナップショットで上書きする
+  // 演出が多少ズレても最後に必ず揃うので、決定性(可変dt・非シード地形)を直さなくて済む。
+  //
+  // 通信は send/onMessage/close の3つだけのインターフェースに切ってある。
+  // Firebase RTDB へ移すときは makeTransport を差し替えるだけでよい。
+  const PROTO_VERSION = 1;
+  const LOOPBACK_ROOM = 'katamon-loopback';
+  const NET_RETRY_SEC = 0.6; // 相手待ちの間、join/hello を撒き直す間隔
+
+  function makeBroadcastTransport(room) {
+    let ch;
+    try { ch = new BroadcastChannel(room); } catch (err) { return null; }
+    let handler = null;
+    ch.onmessage = (ev) => { if (handler) handler(ev.data); };
+    return {
+      send: (msg) => { try { ch.postMessage(msg); } catch (err) { /* 閉じた後の送信は捨てる */ } },
+      onMessage: (fn) => { handler = fn; },
+      close: () => { try { ch.close(); } catch (err) { /* noop */ } }
+    };
+  }
+  // テストからは別の実装(子プロセス間の中継など)を挿し込む。
+  let makeTransport = makeBroadcastTransport;
+
+  // 実回線の粗さを手元で再現するための注入口。URLから ?netdelay=500&netloss=0.1 で指定できる。
+  const netSim = { delayMs: 0, lossRate: 0 };
+
+  function netSend(msg) {
+    if (!online) return;
+    const packet = { v: PROTO_VERSION, from: online.clientId, ...msg };
+    if (netSim.lossRate > 0 && Math.random() < netSim.lossRate) return; // 落とす
+    if (netSim.delayMs > 0) setTimeout(() => { if (online) online.transport.send(packet); }, netSim.delayMs);
+    else online.transport.send(packet);
+  }
+
+  // 出会いと退出の合図は進行を書き換えないので、待たせずその場で処理する。
+  // これをキューに積むと、弾が飛んだまま決着した局面で bye が永久に届かなくなる。
+  const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye']);
+  // 詰まりの保険。ここまで待たされたメッセージは、多少演出が切れても適用してしまう。
+  const NET_QUEUE_MAX_HOLD = 5;
+
+  // 進行を書き換えるメッセージは即座に適用しない。カットイン中や弾が飛んでいる最中に
+  // 状態を差し替えると、演出が切れたり必殺の保留が二重発射になるため、いったんキューに積む。
+  function netReceive(msg) {
+    if (!online || !msg || msg.from === online.clientId) return; // 自分の送信は無視
+    if (msg.v !== PROTO_VERSION) {
+      online.versionMismatch = true;
+      return;
+    }
+    if (NET_CONTROL_TYPES.has(msg.t)) {
+      applyNetMessage(msg);
+      return;
+    }
+    online.queue.push({ msg, held: 0 });
+  }
+
+  // キューを流していい状態か。「弾が飛んでいない・落下していない・カットインも必殺の保留も無い」。
+  function netCanApply() {
+    return !cutIn && !pendingShot && !projectiles.length && units.every(u => u.grounded);
+  }
+
+  function netDrainQueue(dt) {
+    if (!online || !online.queue.length) return;
+    online.queue[0].held += dt || 0;
+    const forced = online.queue[0].held >= NET_QUEUE_MAX_HOLD;
+    while (online.queue.length && (netCanApply() || forced)) {
+      applyNetMessage(online.queue.shift().msg);
+    }
+  }
+
+  function applyNetMessage(msg) {
+    switch (msg.t) {
+      case 'join':
+        // ゲストが来た。ホストだけが試合の実体を配る。
+        if (online.role === 'host') sendMatchStart();
+        break;
+      case 'hello':
+        // ホストが先に開いて待っていた。まだ試合を受け取っていなければ参加を要求し、
+        // 受け取り済みなら ready を撒き直す(ackが落ちてホストが待ち続けるのを防ぐ)。
+        if (online.role !== 'guest') break;
+        netSend({ t: online.phase === 'waiting' ? 'join' : 'ready' });
+        break;
+      case 'start':
+        if (online.role !== 'guest') break;
+        applySnapshot(msg.snap);
+        setOnlineSeat(online.seat);
+        battleMode = 'normal';
+        stopTitleBgm();
+        gamePhase = 'battle';
+        playStageBgm(currentThemeKey, true);
+        online.phase = 'playing';
+        netSend({ t: 'ready' });
+        break;
+      case 'ready':
+        // ゲストが試合を受け取ってから、はじめてホストの操作を解禁する。
+        // ここを待たないと、遅延の大きい回線でホストが先に撃ててしまう。
+        if (online.role === 'host') online.phase = 'playing';
+        break;
+      case 'fire': {
+        const u = unitById(msg.unitId);
+        if (!u || u.control !== 'remote') break;
+        // 移動そのものは送っていないので、撃つ直前の立ち位置をここで合わせる。
+        u.x = msg.x;
+        u.y = msg.y;
+        launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial);
+        awaitingResolve = true;
+        break;
+      }
+      case 'boom': {
+        // 花火の手動起爆。信管を満了させるだけで、炸裂は通常の更新処理で起きる。
+        for (const p of projectiles) {
+          if (p.firework && !p.fireworkShard && p.owner === msg.unitId) p.fireworkTimer = FIREWORK_FUSE_SEC;
+        }
+        break;
+      }
+      case 'state':
+        // ターン境界の権威。ここで完全に揃う。
+        if (online.phase !== 'playing') break;
+        applySnapshot(msg.snap);
+        setOnlineSeat(online.seat);
+        break;
+      case 'result':
+        if (online.phase !== 'playing') break;
+        for (const u of msg.units) {
+          const target = unitById(u.id);
+          if (target) target.hp = u.hp;
+        }
+        projectiles = [];
+        awaitingResolve = false;
+        matchOver = true;
+        winner = msg.winner;
+        beginMatchEnd(msg.reason);
+        online.phase = 'ended';
+        break;
+      case 'bye':
+        online.peerLeft = true;
+        online.phase = 'ended';
+        break;
+    }
+  }
+
+  // ホストが試合の実体(地形・キャラ・手番)を作って配る。join のたびに現在の状態を送るので、
+  // 取りこぼしても次の join で追いつける。解禁は ready が返ってきてから。
+  function sendMatchStart() {
+    netSend({ t: 'start', snap: buildSnapshot() });
+  }
+
+  // ターンの切れ目に、行動した側が権威として状態を送る。
+  function netSyncTurn(actedUnit) {
+    if (!isOnline() || online.phase !== 'playing') return;
+    if (!actedUnit || actedUnit.control !== 'local') return;
+    netSend({ t: 'state', snap: buildSnapshot() });
+  }
+
+  // 決着も行動側が決める。両者が独立に判定するとHPが1違うだけで勝敗が食い違う。
+  function netSyncResult(reason) {
+    if (!isOnline() || online.resultSent) return;
+    online.resultSent = true;
+    online.phase = 'ended';
+    netSend({ t: 'result', winner, reason, units: units.map(u => ({ id: u.id, hp: u.hp })) });
+  }
+
+  function beginOnline(role) {
+    const transport = makeTransport(LOOPBACK_ROOM);
+    if (!transport) return false; // BroadcastChannelが無い環境では黙って諦める
+    online = {
+      role,
+      transport,
+      clientId: `${role}-${Math.random().toString(36).slice(2, 10)}`,
+      seat: role === 'host' ? 'p1' : 'e1',
+      phase: 'waiting',
+      queue: [],
+      retryTimer: 0,
+      resultSent: false,
+      peerLeft: false,
+      versionMismatch: false
+    };
+    transport.onMessage(netReceive);
+    setOnlineSeat(online.seat);
+    if (role === 'host') {
+      // 地形とキャラはホストが決める。キャラ選択の同期はStage 3の課題なので、いまは両方ランダム。
+      battleMode = 'normal';
+      winStreak = 0;
+      runStats = { damageDealt: 0, shots: 0 };
+      player.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+      cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+      stopTitleBgm();
+      gamePhase = 'battle';
+      resetMatch(false);
+    }
+    netSend({ t: role === 'host' ? 'hello' : 'join' });
+    return true;
+  }
+
+  function endOnline(sendBye) {
+    if (!online) return;
+    if (sendBye) netSend({ t: 'bye' });
+    online.transport.close();
+    online = null;
+    setLocalSeat('p1');
+  }
+
+  // 開発用の入口はタイトルに着いてから開く。読み込み中に試合へ飛ばすと
+  // 画像が揃う前に描き始めてしまい、音も端末のロック解除前で鳴らない。
+  let pendingLoopback = null;
+  function startPendingLoopback() {
+    if (!pendingLoopback || gamePhase !== 'title') return;
+    const role = pendingLoopback;
+    pendingLoopback = null;
+    beginOnline(role);
+  }
+
+  // 開発用パラメータの適用。devParams は席の切り替えと同じところで作ってある。
+  if (devParams) {
+    const lb = devParams.get('loopback');
+    if (lb === 'host' || lb === 'guest') pendingLoopback = lb;
+    netSim.delayMs = Math.max(0, Number(devParams.get('netdelay')) || 0);
+    netSim.lossRate = Math.min(0.9, Math.max(0, Number(devParams.get('netloss')) || 0));
+  }
+
+  // 相手が来るまでは join/hello を撒き続ける。どちらが先に開いても繋がるようにするため。
+  function updateOnline(dt) {
+    startPendingLoopback();
+    if (!online) return;
+    netDrainQueue(dt);
+    if (online.phase !== 'waiting') return;
+    online.retryTimer -= dt;
+    if (online.retryTimer <= 0) {
+      online.retryTimer = NET_RETRY_SEC;
+      netSend({ t: online.role === 'host' ? 'hello' : 'join' });
+    }
+  }
 
   function wrapText(text, x, y, maxWidth, lineHeight) {
     let line = '';
@@ -3802,15 +4056,23 @@
     matchEndPause = MATCH_END_PAUSE;
   }
 
+  // オンライン対戦では、決着を宣言していいのは「その手番を持っていた側」だけ。
+  // 両者が独立に判定すると、演出のズレでHPが1違うだけで勝敗が食い違う。
+  function canDeclareMatchEnd() {
+    return !isOnline() || isLocalTurn();
+  }
+
   function checkMatchEnd(reason) {
     if (matchOver) return;
     const playerAlive = teamAlive('player');
     const cpuAlive = teamAlive('cpu');
     if (playerAlive && cpuAlive) return;
+    if (!canDeclareMatchEnd()) return; // 相手からの result を待つ
     matchOver = true;
     winner = playerAlive ? 'player' : 'cpu'; // 相打ちはCPU勝ち扱い(引き分けは設けない)
     beginMatchEnd(reason || '撃破');
     applyStreakResult();
+    netSyncResult(reason || '撃破');
   }
 
   // 陣営の残存率。2vs2ではチーム合計で比べる。
@@ -3826,10 +4088,14 @@
   }
 
   function judgeByHp() {
+    // 時間切れの判定も行動側が計算して送る(endTurn は手番を進める前に抜けるので、
+    // ここでの activeUnit() はまだ「最後に動いた側」を指している)。
+    if (!canDeclareMatchEnd()) return;
     matchOver = true;
     winner = teamHpRatio('player') > teamHpRatio('cpu') ? 'player' : 'cpu'; // 同率は引き分けなし・CPU勝ち扱い
     beginMatchEnd('時間切れ');
     applyStreakResult();
+    netSyncResult('時間切れ');
   }
 
   let lastRunStreak = 0;
@@ -3838,6 +4104,8 @@
   // 勝敗音は着弾と同時だと早すぎるので、決まり手の宣告に合わせて別途鳴らす。
   function applyStreakResult() {
     if (battleMode === 'free') return;
+    // 対人戦は連勝にもランキングにも含めない(勝ちの譲り合いの温床になるため)。
+    if (isOnline()) return;
     if (winner === 'player') {
       winStreak++;
     } else {
@@ -5050,6 +5318,34 @@
     ctx.restore();
   }
 
+  // オンライン対戦の状態表示。相手待ち・退出・バージョン不一致をここで知らせる。
+  function drawOnlineOverlay() {
+    if (!isOnline() || matchOver) return;
+    let title = null;
+    let sub = '';
+    if (online.versionMismatch) {
+      title = 'アプリを更新してください';
+      sub = '相手と通信のバージョンが違います';
+    } else if (online.peerLeft) {
+      title = '相手が退出しました';
+      sub = '画面をタップしてタイトルへ';
+    } else if (online.phase === 'waiting') {
+      title = '相手を待っています…';
+      sub = online.role === 'host' ? 'HOST' : 'GUEST';
+    }
+    if (!title) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,7,11,0.72)';
+    ctx.fillRect(0, VH * 0.36, VW, 96);
+    drawOutlinedText(title, VW / 2, VH * 0.36 + 44, {
+      font: `900 22px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    drawOutlinedText(sub, VW / 2, VH * 0.36 + 72, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
+    ctx.restore();
+  }
+
   function drawResultBanner() {
     if (!matchOver || matchEndPause > 0) return;
     const won = localWon();
@@ -5078,7 +5374,12 @@
       font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
     });
 
-    if (battleMode === 'free') {
+    if (isOnline()) {
+      // 対人戦は連勝にもランキングにも含めないので、連勝表示は出さない。
+      drawOutlinedText(won ? '対戦に勝利!' : '対戦に敗北', VW / 2, VH / 2 - 22, {
+        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+      });
+    } else if (battleMode === 'free') {
       drawOutlinedText(won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
         font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
       });
@@ -5099,21 +5400,28 @@
 
     ctx.save();
     ctx.textAlign = 'center';
-    const effShown = battleMode === 'free'
+    const effShown = (battleMode === 'free' || isOnline())
       ? currentEfficiency()
       : (won ? currentEfficiency() : lastRunEfficiency);
     drawOutlinedText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20, {
       font: `900 13px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
     });
 
-    if (!won && battleMode !== 'free') drawSubmitResult(VH / 2 + 56);
+    if (!won && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
 
+    // 対人戦の続行は両者の合意が要るので、いまは「退出」だけを出す(再戦はStage 3以降)。
+    if (!isOnline()) {
+      drawResultButton(
+        continueBtn,
+        battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
+        true
+      );
+    }
     drawResultButton(
-      continueBtn,
-      battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
-      true
+      resultTitleBtn,
+      isOnline() ? '退出してタイトルへ' : (keepsRunOnExit() ? '中断してタイトルへ' : 'タイトルへ戻る'),
+      isOnline()
     );
-    drawResultButton(resultTitleBtn, keepsRunOnExit() ? '中断してタイトルへ' : 'タイトルへ戻る', false);
     ctx.restore();
   }
 
@@ -5122,7 +5430,7 @@
   // 勝った直後だけは「つぎのバトルへ」と同じ状態を作ってから中断セーブする。
   // 敗北時は連勝が既に0でランキング送信も済んでおり、守るものが無いので従来どおり。
   function keepsRunOnExit() {
-    return matchOver && battleMode !== 'free' && localWon();
+    return matchOver && battleMode !== 'free' && !isOnline() && localWon();
   }
 
   function suspendRunToTitle() {
@@ -5386,9 +5694,9 @@
   function drawSpecialButton() {
     // 花火が飛んでいる間は、このボタンが手動起爆に切り替わる。
     const me = localUnit();
-    const detonatable = isLocalTurn() && !matchOver && !!localFireworkInFlight();
+    const detonatable = isLocalTurn() && !matchOver && !netInputLocked() && !!localFireworkInFlight();
     const ready = detonatable || isSpecialReady(me);
-    const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn;
+    const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
     const chargeRatio = detonatable ? 1 : me.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[me.character];
     ctx.save();
@@ -6028,7 +6336,7 @@
 
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
-    const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded;
+    const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && localUnit().grounded;
     const cx = FIRE_BTN.x, cy = FIRE_BTN.y, r = FIRE_BTN.r;
 
     // 引っ張り量から「パワー%」と「仰角」を算出して数値で見せる。
@@ -6269,7 +6577,7 @@
 
   function drawMoveButtons() {
     const me = localUnit();
-    const active = isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn;
+    const active = isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
     const size = BTN_R * 2;
     // 残り燃料を移動ボタン側にも出しておくと、動かす前に「あと何歩ぶんか」が判断できる
     const fuelRatio = me.fuelMax > 0 ? Math.max(0, me.fuel / me.fuelMax) : 0;
@@ -6423,6 +6731,7 @@
     drawSoundToggle();
     drawMenuButton();
     drawMatchEndReason();
+    drawOnlineOverlay();
     drawResultBanner();
     drawBossBanner();
     drawSpecialFlash();
@@ -6652,15 +6961,23 @@
       return;
     }
 
+    // 相手が消えた/通信バージョンが違うときは、どこをタップしてもタイトルへ抜けられるようにする。
+    if (isOnline() && (online.peerLeft || online.versionMismatch) && !matchOver) {
+      endOnline(false);
+      returnToTitleFromResult();
+      return;
+    }
+
     if (matchOver) {
       if (matchEndPause > 0) return; // 決着理由を見せている間は誤タップで飛ばさせない
       const shift = resultButtonShift();
       const b = continueBtn;
-      if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) {
+      if (!isOnline() && Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) {
         resetMatch(true);
         return;
       }
       if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) {
+        if (isOnline()) endOnline(true);
         if (keepsRunOnExit()) suspendRunToTitle();
         else returnToTitleFromResult();
       }
@@ -6685,15 +7002,16 @@
 
     // 発射後は入力を止めているが、花火の手動起爆だけは例外として受け付ける。
     // 信管を満了させるだけなので、炸裂そのものは通常どおり更新処理側で起きる。
-    const flyingFirework = isLocalTurn() && !matchOver ? localFireworkInFlight() : null;
+    const flyingFirework = isLocalTurn() && !matchOver && !netInputLocked() ? localFireworkInFlight() : null;
     if (flyingFirework && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
       flyingFirework.fireworkTimer = FIREWORK_FUSE_SEC;
+      if (isOnline()) netSend({ t: 'boom', unitId: flyingFirework.owner });
       playUiSound();
       return;
     }
 
     // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
-    if (isLocalTurn() && !awaitingResolve) {
+    if (isLocalTurn() && !awaitingResolve && !netInputLocked()) {
       const me = localUnit();
       if (me.moveLockTurns <= 0 && hitButton(p0, leftBtn)) {
         inputMode = 'moveL'; inputPointerId = e.pointerId; moveDir = -1;
@@ -6835,6 +7153,15 @@
           const me = localUnit();
           const def = CHARACTERS[me.character];
           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
+          // 相手には「誰がどこからどう撃ったか」だけを送り、演出は相手側で再生させる。
+          // 移動は送っていないので、撃つ直前の立ち位置をここに載せて合わせる。
+          if (isOnline()) {
+            netSend({
+              t: 'fire', unitId: me.id, x: me.x, y: me.y,
+              anchor: { x: aimState.anchor.x, y: aimState.anchor.y },
+              vx0, vy0, useSpecial: specialArmed
+            });
+          }
           launchShot(me, aimState.anchor, vx0, vy0, specialArmed);
           runStats.shots++;
           specialArmed = false;
@@ -7025,6 +7352,8 @@
   // ===== ゲームループ =====
   let lastTime = 0;
   function update(dt) {
+    // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
+    updateOnline(dt);
     if (gamePhase === 'select') {
       updateSelectWheel(dt);
       return;
@@ -7214,7 +7543,7 @@
 
     // 移動(この端末の手番のみ・燃料制・長押しボタン)
     const me = localUnit();
-    if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && moveDir !== 0 && me.grounded && me.fuel > 0) {
+    if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {
       const dist = Math.min(MOVE_SPEED * dt, me.fuel);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, me.x + moveDir * dist));
       nx = limitMoveByClimb(me, nx);
@@ -7254,7 +7583,9 @@
       turnSettle -= dt;
       if (turnSettle <= 0) {
         awaitingResolve = false;
+        const acted = activeUnit();
         endTurn();
+        netSyncTurn(acted); // 行動した側だけが、切り替わったあとの状態を権威として送る
       }
     } else {
       turnSettle = TURN_SETTLE_SEC;

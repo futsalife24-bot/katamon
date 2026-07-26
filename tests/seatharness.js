@@ -61,6 +61,25 @@ const HOOK = `
     setStreak: (n) => { winStreak = n; },
     isBoss: () => isBossMatch,
     pattern: () => currentPattern,
+    // --- オンライン対戦(ループバック)用 ---
+    setTransport: (fn) => { makeTransport = fn; },
+    beginOnline: (role) => beginOnline(role),
+    endOnline: (sendBye) => endOnline(sendBye),
+    onlineState: () => (online ? {
+      role: online.role, phase: online.phase, seat: online.seat,
+      queued: online.queue.length, peerLeft: online.peerLeft,
+      versionMismatch: online.versionMismatch, resultSent: online.resultSent
+    } : null),
+    inputLocked: () => netInputLocked(),
+    pending: () => !!pendingShot,
+    specialBtn: () => ({ ...specialBtn }),
+    specialReady: () => isSpecialReady(localUnit()),
+    charges: () => units.map(u => u.specialCharge),
+    fillCharges: () => { for (const u of units) u.specialCharge = SPECIAL_CHARGE_MAX; },
+    proto: () => PROTO_VERSION,
+    setPhase: (p) => { gamePhase = p; },
+    controls: () => units.map(u => u.id + ':' + u.control).join(','),
+    unitState: () => units.map(u => ({ id: u.id, hp: u.hp, x: Math.round(u.x * 100) / 100, ch: u.character })),
     canvas
   };
   const __panelLog = [];
