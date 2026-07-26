@@ -302,6 +302,25 @@ function check(name, value) {
     htmlText.includes('`不正な送信席です（${msg.t}/${msg.seat}）`'));
   check('log copy falls back when navigator.clipboard is unavailable',
     htmlText.includes("document.execCommand('copy')") && htmlText.includes('navigator.share({ title: \'カタモン 通信ログ\''));
+  // 実機:自分のターンに移動して落下死すると、撃っていないため localAction が無く、
+  // 送信側は自分で接続を切り、相手は35秒後にタイムアウトしていた。移動は通信していないので
+  // 相手はこの死を再現できない。「自分の負け」の宣言として必ず伝える必要がある。
+  const syncResultSrc = /function netSyncResult\(reason\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+  check('a result with no preceding shot still gets an action id instead of killing the sender',
+    !!syncResultSrc
+    && syncResultSrc[0].includes('} else if (isFirebasePlayer()) {')
+    && syncResultSrc[0].includes('actionId = secureNonce();')
+    && syncResultSrc[0].includes('actionUnitId = online.seat;'));
+  check('a peer conceding its own defeat is accepted even when the local sim disagrees',
+    htmlText.includes('const concedes = !!senderUnit && msg.winner !== senderUnit.team;')
+    && htmlText.includes('if (!concedes && (!online.remoteAction'));
+  // 降参は通すが、勝利の主張は通さない。concedes は「送信者の陣営 !== 勝者」でのみ真になる。
+  check('a peer cannot claim its own victory through the concession path', (() => {
+    const m = /const concedes = !!senderUnit && msg\.winner !== senderUnit\.team;/.exec(htmlText);
+    return !!m && !/msg\.winner === senderUnit\.team/.test(htmlText);
+  })());
+  check('a conceded result copies the declared HP so the loser is shown as defeated',
+    htmlText.includes('if (concedes) {') && htmlText.includes('for (const u of msg.units) {'));
   check('slot claim falls back to a plain PUT when the conditional PUT is denied',
     htmlText.includes('if (response.status !== 401) throw new Error')
     && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')

@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v27';
+  const BUILD_ID = 'v28';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3772,12 +3772,24 @@
           const playerAlive = teamAlive('player');
           const cpuAlive = teamAlive('cpu');
           const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : null;
-          if (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner) {
+          // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
+          // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
+          // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
+          const senderUnit = unitById(msg.seat);
+          const concedes = !!senderUnit && msg.winner !== senderUnit.team;
+          if (!concedes && (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
             rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
             break;
           }
           rememberFirebaseTerminal(msg);
           online.remoteAction = null;
+          // 敗北宣言はこちらで再現できていないので、決着時のHPを相手の申告で揃える。
+          if (concedes) {
+            for (const u of msg.units) {
+              const target = unitById(u.id);
+              if (target) target.hp = u.hp;
+            }
+          }
           logOnlineEvent({ type: 'result', ok: true, winner: msg.winner, reason: msg.reason });
           projectiles = [];
           awaitingResolve = false;
@@ -3867,12 +3879,20 @@
     let actionUnitId = null;
     if (online.kind === 'firebase') {
       const action = online.localAction;
-      if (!action || !FIREBASE_ACTION_ID_RE.test(action.actionId || '')) {
+      if (action && FIREBASE_ACTION_ID_RE.test(action.actionId || '')) {
+        actionId = action.actionId;
+        actionUnitId = action.unitId;
+      } else if (isFirebasePlayer()) {
+        // 撃たずに決着することがある(自分のターンに移動して落下死した場合など)。
+        // 移動は通信していないので相手はこの死を再現できない。行動IDをここで発番し、
+        // 「自分の負け」を宣言して必ず伝える。これが無いと送信側が自分で接続を切り、
+        // 相手は35秒後にタイムアウトするまで待たされていた。
+        actionId = secureNonce();
+        actionUnitId = online.seat;
+      } else {
         rejectFirebaseMessage('ローカル行動IDを確認できません');
         return;
       }
-      actionId = action.actionId;
-      actionUnitId = action.unitId;
     }
     online.resultSent = true;
     online.phase = online.kind === 'firebase' ? 'results' : 'ended';
