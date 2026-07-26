@@ -137,6 +137,10 @@
     border: 2px solid rgba(199,131,53,.7); border-radius: 4px; outline: none;
   }
   #onlineRoomInput:focus, #onlineCharacter:focus { border-color: #ffd24a; }
+  /* 除外文字は無言で消えるため、打つ前に理由が分かるよう常時出しておく */
+  #onlineRoomHint { margin-top: 5px; font-size: 11px; line-height: 1.5; color: #9fb0bd; }
+  #onlineRoomHint b { color: #ffd24a; font-weight: 900; letter-spacing: .08em; }
+  #onlineRoomInput[readonly] { opacity: .72; border-style: dashed; }
   #onlineLobbyButtons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
   #onlineLobbyButtons button {
     min-height: 45px; padding: 9px 6px; color: #fff5dc; font: 900 14px "Yu Gothic UI", sans-serif;
@@ -169,9 +173,10 @@
 <div id="onlineLobby" aria-live="polite">
   <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
     <div id="onlineLobbyTitle">ONLINE 1V1</div>
-    <div id="onlineLobbyNote">部屋を作るか、8文字の合言葉で参加しよう</div>
+    <div id="onlineLobbyNote">部屋を作ると合言葉が発行されます。相手の合言葉で参加もできます</div>
     <div id="onlineRoomCode"></div>
-    <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="例: A2BC3DEF">
+    <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の合言葉 8文字" aria-describedby="onlineRoomHint">
+    <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
     <select id="onlineCharacter" aria-label="使用モンスター"></select>
     <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
     <div id="onlineLobbyButtons">
@@ -3664,7 +3669,7 @@
     onlineLobbyBusy = false;
     onlineLobbyEl.classList.remove('busy');
     onlineLobbyEl.classList.add('open');
-    if (onlineRoomInput) onlineRoomInput.value = '';
+    if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
     if (onlineCopyBtn) onlineCopyBtn.style.display = 'none';
     onlineLobbyStatus('部屋を作るか、相手の合言葉を入力してください。');
@@ -7027,7 +7032,8 @@
     try {
       const { code, auth } = await createFirebaseRoom();
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
-      if (onlineRoomInput) onlineRoomInput.value = code;
+      // 発行後は自分で書き換えるものではないので、編集できない見た目にする
+      if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
       if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
       beginFirebaseOnline('host', code, auth, selectedOnlineCharacter());
       setOnlineLobbyBusy(false);
@@ -7038,12 +7044,14 @@
   if (onlineJoinButton) onlineJoinButton.addEventListener('click', async () => {
     if (onlineLobbyBusy || online) return;
     const code = normalizeRoomCode(onlineRoomInput && onlineRoomInput.value);
-    if (!isRoomCode(code)) { onlineLobbyStatus('合言葉は、紛らわしい文字を含まない8文字で入力してください。'); return; }
+    if (!isRoomCode(code)) { onlineLobbyStatus('合言葉は8文字です。I・O・1・0 は使われていないので、見間違いがないか確かめてください。'); return; }
     if (onlineRoomInput) onlineRoomInput.value = code;
     setOnlineLobbyBusy(true); onlineLobbyStatus('部屋に参加しています…');
     try {
       const { auth } = await claimFirebaseRoom(code);
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
+      // 入れた後だけ編集を止める。失敗時は打ち直せないと困るので触らない。
+      if (onlineRoomInput) onlineRoomInput.readOnly = true;
       if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
       beginFirebaseOnline('guest', code, auth, selectedOnlineCharacter());
       setOnlineLobbyBusy(false);
