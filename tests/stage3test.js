@@ -321,6 +321,26 @@ function check(name, value) {
   })());
   check('a conceded result copies the declared HP so the loser is shown as defeated',
     htmlText.includes('if (concedes) {') && htmlText.includes('for (const u of msg.units) {'));
+  // 移動の配信(2026-07-27)。移動を送っていなかったことが、燃料不一致・落下死が
+  // 伝わらないという切断の共通の根だった。移動は戦略なので相手にも見せる。
+  check('Firebase accepts a well-formed move packet',
+    h.validateFirebaseMessage(firebasePacket('move', { unitId: 'p1', x: 720, fuel: 40 })));
+  check('Firebase rejects a move packet with a bad payload',
+    !h.validateFirebaseMessage(firebasePacket('move', { unitId: 'p1', x: NaN, fuel: 40 }))
+    && !h.validateFirebaseMessage(firebasePacket('move', { unitId: 'p1', x: 720 }))
+    && !h.validateFirebaseMessage(firebasePacket('move', { unitId: 'x9', x: 720, fuel: 40 })));
+  check('move is bound to the sender seat like the other board-changing packets',
+    !!seatAllowsSrc && /msg\.t === 'move' \|\| msg\.t === 'fire'/.test(seatAllowsSrc[0]));
+  check('move is applied immediately instead of waiting behind cut-ins',
+    htmlText.includes("'ping', 'move']"));
+  check('move send rate is capped and skips sub-pixel jitter',
+    htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.12;') && htmlText.includes('const MOVE_SYNC_MIN_DELTA'));
+  check('the mover flushes its last position before firing',
+    htmlText.includes('if (moveSyncPending) sendMoveUpdate(me);'));
+  check('a remote unit walks to the received position instead of teleporting',
+    htmlText.includes('function updateRemoteWalk(dt)') && htmlText.includes('u.netWalkTargetX') && htmlText.includes('followGroundOrFall(u)'));
+  check('turn start clears stale walk targets and send state',
+    htmlText.includes('resetMoveSync();') && htmlText.includes('for (const u of units) u.netWalkTargetX = null;'));
   check('slot claim falls back to a plain PUT when the conditional PUT is denied',
     htmlText.includes('if (response.status !== 401) throw new Error')
     && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')
@@ -440,6 +460,17 @@ function check(name, value) {
     && !rules.rounds.$roundId.latestSnapshot['.write'].includes("child('s1')"));
   check('rules let only the host delete the room',
     rules['.write'].includes("data.exists() && !newData.exists() && data.child('hostUid').val() === auth.uid"));
+  // クライアントが送る種別をルールが1つでも知らないと、その送信で401になり、
+  // 送信キューが停止して対戦が即死する(move を足した時に実際に踏んだ)。
+  // 種別の追加漏れをここで落とす。
+  check('every client message type is whitelisted by the deployed rules', (() => {
+    const listed = /const FIREBASE_MESSAGE_TYPES = new Set\(\[([^\]]+)\]\)/.exec(htmlText);
+    if (!listed) return false;
+    const types = listed[1].split(',').map(x => x.trim().replace(/^'|'$/g, ''));
+    const missing = types.filter(t => !msg.t['.validate'].includes(`newData.val() === '${t}'`));
+    if (missing.length) console.error('    rules are missing: ' + missing.join(', '));
+    return missing.length === 0;
+  })());
   // クライアントの protocol と、ルールが受け付ける protocol は必ず一致させる。
   // ここがずれると本番で「部屋を作れません」から先へ一切進めなくなる。
   const clientProto = /const FIREBASE_PROTO_VERSION = (\d+);/.exec(htmlText);

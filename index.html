@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v28';
+  const BUILD_ID = 'v29';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3216,8 +3216,9 @@
 
   // 出会いと退出の合図は進行を書き換えないので、待たせずその場で処理する。
   // これをキューに積むと、弾が飛んだまま決着した局面で bye が永久に届かなくなる。
-  const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye', 'commit', 'reveal', 'ping']);
-  const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
+  // move は演出待ちに積まず即座に反映する。歩いている最中の位置なので、遅れて出しても意味がない。
+  const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye', 'commit', 'reveal', 'ping', 'move']);
+  const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'move', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
   function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
   const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']);
   function hasSafeTerrainSegments(segments) {
@@ -3321,6 +3322,7 @@
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
     if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'move') return (msg.unitId === 'p1' || msg.unitId === 'e1') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.fuel), 0, 10000) ? { ok: true } : { ok: false, reason: 'move.payload' };
     if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1' ? { ok: true } : { ok: false, reason: 'boom.unitId' };
     if (msg.t === 'result') {
       const unitOk = legacyV2 || ((msg.unitId === 'p1' || msg.unitId === 'e1') && msg.unitId === msg.seat);
@@ -3482,6 +3484,52 @@
   // 詰まりの保険。ここまで待たされたメッセージは、多少演出が切れても適用してしまう。
   const NET_QUEUE_MAX_HOLD = 5;
 
+  // ===== 移動の配信 =====
+  // 移動は立派な戦略なので相手にも見せる。以前は移動をまったく送っておらず、
+  // fire が運ぶ着弾直前の座標でしか相手の位置が分からなかった。そのせいで
+  // 「燃料が合わない」「撃たずに落下死しても伝わらない」という切断が続いた。
+  // 送信量は燃料が頭打ちにする。1ターンの移動距離は最大でも fuelMax(約138px)、
+  // MOVE_SPEED 95px/s なので最長1.45秒。この間隔なら1ターン十数通で収まる。
+  const MOVE_SYNC_INTERVAL_SEC = 0.12;
+  const MOVE_SYNC_MIN_DELTA = 1.5; // これ未満の移動は送らない(静止中の無駄打ちを防ぐ)
+  let moveSyncTimer = 0;
+  let moveSyncPending = false;  // 前回送信後に動いたか。停止時の最終送信に使う
+  let lastSentMoveX = null;
+
+  function resetMoveSync() {
+    moveSyncTimer = 0;
+    moveSyncPending = false;
+    lastSentMoveX = null;
+  }
+
+  function sendMoveUpdate(unit) {
+    moveSyncTimer = 0;
+    if (!isOnline() || !unit || unit.control !== 'local') { moveSyncPending = false; return; }
+    if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
+    lastSentMoveX = unit.x;
+    moveSyncPending = false;
+    netSend({ t: 'move', unitId: unit.id, x: unit.x, fuel: unit.fuel });
+  }
+
+  // 受信した位置へ、実際の歩行と同じ速さ・同じ地形追従で寄せる。
+  // 瞬間移動させず歩かせることで、崖際の駆け引きが相手にも伝わる。
+  function updateRemoteWalk(dt) {
+    for (const u of units) {
+      if (u.control !== 'remote' || u.netWalkTargetX == null) continue;
+      if (!u.grounded) continue; // 落下中は物理に任せる
+      const diff = u.netWalkTargetX - u.x;
+      if (Math.abs(diff) <= 0.5) { u.x = u.netWalkTargetX; u.netWalkTargetX = null; continue; }
+      // 遅延で溜まった分は少し速めに詰める。離れすぎている時だけ効く。
+      const speed = MOVE_SPEED * (Math.abs(diff) > 60 ? 2 : 1);
+      const step = Math.min(Math.abs(diff), speed * dt) * Math.sign(diff);
+      let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, u.x + step));
+      nx = limitMoveByClimb(u, nx);
+      if (Math.abs(nx - u.x) < 0.01) { u.netWalkTargetX = null; continue; } // 崖などで進めない
+      u.x = nx;
+      followGroundOrFall(u);
+    }
+  }
+
   function enqueueNetMessage(msg) {
     const item = { msg, held: 0 };
     if (!online) return;
@@ -3559,7 +3607,7 @@
     // 対戦者だけの合図。
     if (msg.t === 'commit' || msg.t === 'ready' || msg.t === 'reveal' || msg.t === 'rematchVote') return FIREBASE_PLAYER_SEATS.includes(msg.seat);
     // 盤面を動かすものは、対戦者かつ自分のユニットについてのみ。
-    if (msg.t === 'fire' || msg.t === 'boom' || msg.t === 'state' || msg.t === 'result') {
+    if (msg.t === 'move' || msg.t === 'fire' || msg.t === 'boom' || msg.t === 'state' || msg.t === 'result') {
       return FIREBASE_PLAYER_SEATS.includes(msg.seat) && msg.unitId === msg.seat;
     }
     return false;
@@ -3738,6 +3786,15 @@
         }
         launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial);
         awaitingResolve = true;
+        break;
+      }
+      case 'move': {
+        const u = unitById(msg.unitId);
+        if (!u || u.control !== 'remote') break;
+        // 目標だけ受け取り、そこまでは自分の端末で歩かせる(updateRemoteWalk)。
+        // 燃料は相手が権威なのでそのまま反映する。
+        u.netWalkTargetX = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, Number(msg.x)));
+        if (Number.isFinite(msg.fuel)) u.fuel = Math.max(0, Math.min(u.fuelMax, Number(msg.fuel)));
         break;
       }
       case 'boom': {
@@ -5466,6 +5523,8 @@
   }
 
   function startTurn() {
+    resetMoveSync();
+    for (const u of units) u.netWalkTargetX = null;
     // 風は全員が2巡するごとに切り替える(1vs1では従来どおり4ターンごと)
     if (turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
@@ -8658,6 +8717,8 @@
             online.localAction = { unitId: me.id, actionId };
           }
           if (isOnline()) {
+            // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
+            if (moveSyncPending) sendMoveUpdate(me);
             netSend({
               t: 'fire', unitId: me.id, x: me.x, y: me.y,
               anchor: { x: aimState.anchor.x, y: aimState.anchor.y },
@@ -9062,7 +9123,15 @@
       me.x = nx;
       me.fuel -= moved;
       followGroundOrFall(me);
+      // 移動中は一定間隔で位置を配信する。移動は立派な戦略なので相手にも見せる。
+      if (moved > 0) moveSyncPending = true;
+      moveSyncTimer += dt;
+      if (moveSyncTimer >= MOVE_SYNC_INTERVAL_SEC && moveSyncPending) sendMoveUpdate(me);
+    } else if (moveSyncPending) {
+      // ボタンを離した・燃料切れ・崖で止まった。最後の確定位置を必ず1回送る。
+      sendMoveUpdate(me);
     }
+    updateRemoteWalk(dt);
 
     // CPU移動→思考→発射
     const cpuActor = activeUnit();
