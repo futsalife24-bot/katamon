@@ -3235,7 +3235,7 @@
     if (msg.t === 'reveal') return CHARACTER_LIST.includes(msg.character) && /^[0-9a-f]{48}$/.test(msg.nonce || '') ? { ok: true } : { ok: false, reason: 'reveal.characterOrNonce' };
     if (msg.t === 'start') { const reason = snapshotValidationReason(msg.snap); return reason ? { ok: false, reason: `start.${reason}` } : { ok: true }; }
     if (msg.t === 'state') { const reason = snapshotValidationReason(msg.snap); return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionId' }; }
-    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, STAGE_H + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, STAGE_H + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
     if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1' ? { ok: true } : { ok: false, reason: 'boom.unitId' };
     if (msg.t === 'result') return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && (msg.winner === 'player' || msg.winner === 'cpu') && typeof msg.reason === 'string' && msg.reason.length <= 120 && Array.isArray(msg.units) && msg.units.length === 2 && msg.units.every(u => u && (u.id === 'p1' || u.id === 'e1') && isFiniteIn(Number(u.hp), 0, MAX_HP)) ? { ok: true } : { ok: false, reason: 'result.payload' };
     return { ok: true };
@@ -3401,7 +3401,22 @@
 
   // 進行を書き換えるメッセージは即座に適用しない。カットイン中や弾が飛んでいる最中に
   // 状態を差し替えると、演出が切れたり必殺の保留が二重発射になるため、いったんキューに積む。
+  // 受信処理が例外で落ちると、そのパケットだけが黙って消える。
+  // 実際、STAGE_H という未定義の名前を参照していたせいで fire だけが永久に届かず、
+  // 「相手の行動通知が届かない」という原因の分からない中断になっていた。
+  // 例外は握り潰さず、必ず画面に出して止める。
   function netReceive(msg) {
+    try {
+      netReceiveInner(msg);
+    } catch (err) {
+      const detail = err && err.message ? err.message : String(err);
+      if (online && online.kind === 'firebase') rejectFirebaseMessage(`受信処理でエラーが発生しました（${detail}）`);
+      else if (online) { online.protocolError = `受信処理でエラーが発生しました（${detail}）`; online.phase = 'ended'; }
+      throw err; // 開発中に気付けるよう、コンソールへは残す
+    }
+  }
+
+  function netReceiveInner(msg) {
     if (!online || !msg || msg.from === online.clientId) return; // 自分の送信は無視
     if (online.kind === 'firebase') {
       if (msg.t === 'start' || msg.t === 'state') msg = { ...msg, snap: normalizeFirebaseSnapshot(msg.snap) };
