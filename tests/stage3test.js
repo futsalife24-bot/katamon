@@ -145,6 +145,15 @@ function check(name, value) {
   // 未定義の識別子(STAGE_H)を参照していても素通りし、fire だけが永久に届かないバグを見逃した。
   // 正常な fire を1本通すこと。ここが本番で最初に流れるパケットそのものになる。
   const validFire = { v: 2, from: 'peer', t: 'fire', sentAt: Date.now(), actionId, unitId: 'e1', x: 1224, y: 512, anchor: { x: 1224, y: 512 }, vx0: -320, vy0: -460, useSpecial: false };
+  // 端末が古い版を掴んでいるのか本当に不具合なのかを切り分けるため、タイトルへ build 番号を出している。
+  // sw.js のキャッシュ版数とずれると、その表示が当てにならなくなる。
+  const readRepoFile = name => require('fs').readFileSync(require('path').join(__dirname, '..', name), 'utf8');
+  const swText = readRepoFile('sw.js');
+  const buildId = /const BUILD_ID = '([^']+)'/.exec(readRepoFile('index.html'));
+  const cacheId = /const CACHE_VERSION = 'katamon-pwa-([^']+)'/.exec(swText);
+  check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
+    `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
+
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
   check('Firebase fire diagnostic reports no reason for a normal packet', h.validateFirebaseMessageDetail(validFire).ok === true);
   // 座標の上下限そのものも踏む。片側でも未定義参照が残っていればここで落ちる。
