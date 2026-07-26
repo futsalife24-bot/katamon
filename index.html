@@ -228,7 +228,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v20';
+  const BUILD_ID = 'v21';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3328,27 +3328,39 @@
     if (msg.t === 'state' || msg.t === 'result') return !!flow && firebaseActionMatches(msg, flow.remoteAction);
     return true;
   }
-  function stateSnapshotMatchesBaseline(snap, baseline) {
-    if (!snap || !baseline || !Array.isArray(snap.units) || !Array.isArray(baseline.units)) return false;
-    if (snap.turnCount !== baseline.turnCount || snap.turnOrder[0] !== baseline.turnOrder[0] || snap.turnOrder[1] !== baseline.turnOrder[1]
-      || snap.units[0].maxHp !== baseline.units[0].maxHp || snap.units[1].maxHp !== baseline.units[1].maxHp
-      || snap.pattern !== baseline.pattern || snap.themeKey !== baseline.themeKey || snap.parallaxSeed !== baseline.parallaxSeed
-      || JSON.stringify(snap.segments) !== JSON.stringify(baseline.segments) || JSON.stringify(snap.bridge) !== JSON.stringify(baseline.bridge)) return false;
-    if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return false;
-    return snap.units.every((saved, i) => {
-      const local = baseline.units[i];
-      return Math.abs(saved.hp - local.hp) <= 5 && Math.abs(saved.x - local.x) <= 160 && Math.abs(saved.y - local.y) <= 160
-        && Math.abs(saved.fuel - local.fuel) <= 24 && Math.abs(saved.specialCharge - local.specialCharge) <= 1;
-    });
+  // 拒否理由を名指しできるようにする。可変dtの弾道差でどの項目が閾値を超えたのか
+  // 分からないと、「拒否された」以上のことが実機報告から分からず切り分けが進まない。
+  function stateSnapshotMismatchReason(snap, baseline) {
+    if (!snap || !baseline || !Array.isArray(snap.units) || !Array.isArray(baseline.units)) return 'shape';
+    if (snap.turnCount !== baseline.turnCount) return 'turnCount';
+    if (snap.turnOrder[0] !== baseline.turnOrder[0] || snap.turnOrder[1] !== baseline.turnOrder[1]) return 'turnOrder';
+    if (snap.units[0].maxHp !== baseline.units[0].maxHp || snap.units[1].maxHp !== baseline.units[1].maxHp) return 'maxHp';
+    if (snap.pattern !== baseline.pattern) return 'pattern';
+    if (snap.themeKey !== baseline.themeKey) return 'themeKey';
+    if (snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
+    if (JSON.stringify(snap.segments) !== JSON.stringify(baseline.segments)) return 'terrain.segments';
+    if (JSON.stringify(snap.bridge) !== JSON.stringify(baseline.bridge)) return 'terrain.bridge';
+    if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return 'craters';
+    for (let i = 0; i < snap.units.length; i++) {
+      const saved = snap.units[i], local = baseline.units[i];
+      if (Math.abs(saved.hp - local.hp) > 5) return `hp.${i}(${local.hp}->${saved.hp})`;
+      if (Math.abs(saved.x - local.x) > 160) return `x.${i}(${Math.round(local.x)}->${Math.round(saved.x)})`;
+      if (Math.abs(saved.y - local.y) > 160) return `y.${i}(${Math.round(local.y)}->${Math.round(saved.y)})`;
+      if (Math.abs(saved.fuel - local.fuel) > 24) return `fuel.${i}`;
+      if (Math.abs(saved.specialCharge - local.specialCharge) > 1) return `specialCharge.${i}`;
+    }
+    return '';
   }
-  function firebaseStateMatchesLocal(snap) {
+  function stateSnapshotMatchesBaseline(snap, baseline) { return stateSnapshotMismatchReason(snap, baseline) === ''; }
+  function firebaseStateMismatchReason(snap) {
     // state は相手端末の描画フレーム差を少し許容する一方、地形の差し替えや大幅なHP/座標改ざんは拒否する。
-    if (!snap || !Array.isArray(snap.units) || !online) return false;
+    if (!snap || !Array.isArray(snap.units) || !online) return 'precondition';
     const expectedP1 = online.role === 'host' ? online.selfCharacter : online.peerCharacter;
     const expectedE1 = online.role === 'host' ? online.peerCharacter : online.selfCharacter;
-    if (snap.units[0].character !== expectedP1 || snap.units[1].character !== expectedE1) return false;
-    return stateSnapshotMatchesBaseline(snap, buildSnapshot());
+    if (snap.units[0].character !== expectedP1 || snap.units[1].character !== expectedE1) return 'character';
+    return stateSnapshotMismatchReason(snap, buildSnapshot());
   }
+  function firebaseStateMatchesLocal(snap) { return firebaseStateMismatchReason(snap) === ''; }
   function rejectFirebaseMessage(reason) {
     if (!online) return;
     online.protocolError = reason;
@@ -3552,8 +3564,12 @@
         // ターン境界の権威。ここで完全に揃う。
         if (online.phase !== 'playing') break;
         if (online.kind === 'firebase') {
-          if (!online.remoteAction || !online.remoteAction.resolved || msg.snap.turnOrder[msg.snap.activeIndex] !== online.seat || !firebaseStateMatchesLocal(msg.snap)) {
-            rejectFirebaseMessage('相手の行動と一致しない状態更新です');
+          let mismatch = '';
+          if (!online.remoteAction || !online.remoteAction.resolved) mismatch = 'remoteAction';
+          else if (msg.snap.turnOrder[msg.snap.activeIndex] !== online.seat) mismatch = 'turnOrder.activeIndex';
+          else mismatch = firebaseStateMismatchReason(msg.snap);
+          if (mismatch) {
+            rejectFirebaseMessage(`相手の行動と一致しない状態更新です（${mismatch}）`);
             break;
           }
           rememberFirebaseTerminal(msg);

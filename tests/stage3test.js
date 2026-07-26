@@ -98,6 +98,17 @@ function check(name, value) {
   const grossState = JSON.parse(JSON.stringify(safeSnap));
   grossState.units[0].hp = Math.max(0, grossState.units[0].hp - 50);
   check('Firebase state rejects gross local-state divergence', !h.stateSnapshotMatchesBaseline(grossState, safeSnap));
+  // 実機で「相手の行動と一致しない状態更新です」とだけ出て原因が分からなかった件。
+  // どの項目で拒否したか名指しできないと、可変dtの弾道差で起きる正当な失敗と
+  // 実際のバグを実機報告だけから区別できない。
+  check('Mismatch reason names the exact diverging field', h.stateSnapshotMismatchReason(grossState, safeSnap) === 'hp.0(100->50)');
+  const closeState = JSON.parse(JSON.stringify(safeSnap));
+  closeState.units[0].hp = Math.max(0, closeState.units[0].hp - 4);
+  check('A 4 HP difference stays within the documented ±5 tolerance', h.stateSnapshotMismatchReason(closeState, safeSnap) === '');
+  const terrainDrift = JSON.parse(JSON.stringify(safeSnap));
+  terrainDrift.segments = terrainDrift.segments.slice();
+  terrainDrift.segments[0] = [[0, 4]];
+  check('Terrain divergence is reported by name, not folded into hp/x/y', h.stateSnapshotMismatchReason(terrainDrift, safeSnap) === 'terrain.segments');
   check('Firebase accepts old RTDB history with a finite server timestamp', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'ready', sentAt: Date.now() - 60 * 60 * 1000 }));
   check('Firebase heartbeat is a valid control packet without actionId', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'ping', sentAt: Date.now() }));
   const firstCommit = h.acceptPeerCommit(null, 'a'.repeat(64));
