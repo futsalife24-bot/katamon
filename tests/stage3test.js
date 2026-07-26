@@ -269,6 +269,32 @@ function check(name, value) {
   // if-match(条件付きPUT)がETag照合のため、その位置の読み取り権限を要求すること。
   // 着席前のゲストは部屋を読めないので必ず401になっていた。本番RTDBで、
   // 読み取り権を持つホストの if-match PUT は成功し、ゲストのそれだけが401になることを実測済み。
+  // 実機:観戦者が入ると対戦が「不正な送信席です」で切れた。観戦者も ping を送るのに
+  // 席判定の末尾が「対戦者の ping 以外は全部拒否」になっており、bye も同じ穴に落ちていた。
+  // 拒否は対戦を打ち切るので、FIREBASE_MESSAGE_TYPES の全種別が明示的に判定されている必要がある。
+  // 改行はチェックアウト設定でCRLFになることがある。行末に依存した判定はしない。
+  const seatAllowsSrc = /function firebasePacketSeatAllowed\(msg\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+  check('seat check no longer ends in a ping-only catch-all',
+    !!seatAllowsSrc && !/return msg\.t === 'ping' && FIREBASE_PLAYER_SEATS/.test(seatAllowsSrc[0]) && /return false;\s*\}$/.test(seatAllowsSrc[0]));
+  check('seat check lets any seat send the side-effect-free ping and bye',
+    !!seatAllowsSrc && /msg\.t === 'ping' \|\| msg\.t === 'bye'\) return true;/.test(seatAllowsSrc[0]));
+  check('every Firebase message type is decided explicitly by the seat check', (() => {
+    const listed = /const FIREBASE_MESSAGE_TYPES = new Set\(\[([^\]]+)\]\)/.exec(htmlText);
+    if (!listed || !seatAllowsSrc) return false;
+    const types = listed[1].split(',').map(x => x.trim().replace(/^'|'$/g, ''));
+    return types.every(t => seatAllowsSrc[0].includes("'" + t + "'"));
+  })());
+  // 観戦者のpingで対戦相手の切断を見逃さないこと。
+  check('peer liveness is refreshed only by player-seat traffic',
+    htmlText.includes('if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();'));
+  // 古いラウンドの正当なパケットで対戦を切らないこと(席判定より先に捨てる)。
+  check('stale-round packets are dropped before the seat check',
+    htmlText.indexOf('if (msg.roundId !== online.currentRoundId) return;') < htmlText.indexOf('if (!firebasePacketSeatAllowed(msg))'));
+  // 拒否理由に種別と席を載せる。実機報告のログだけで原因を名指しできるようにする。
+  check('seat rejections name the packet type and seat',
+    htmlText.includes('`不正な送信席です（${msg.t}/${msg.seat}）`'));
+  check('log copy falls back when navigator.clipboard is unavailable',
+    htmlText.includes("document.execCommand('copy')") && htmlText.includes('navigator.share({ title: \'カタモン 通信ログ\''));
   check('slot claim falls back to a plain PUT when the conditional PUT is denied',
     htmlText.includes('if (response.status !== 401) throw new Error')
     && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')

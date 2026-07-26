@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v25';
+  const BUILD_ID = 'v26';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3540,14 +3540,26 @@
     }
   }
 
+  // 席ごとに送ってよいメッセージ種別。ここで false になると対戦を打ち切るため、
+  // FIREBASE_MESSAGE_TYPES の全種別を必ず明示的に判定すること。
+  // 以前は末尾が「ping以外は全部false」の落とし穴になっており、bye と観戦者の ping が
+  // 「不正な送信席です」で対戦を切っていた。
   function firebasePacketSeatAllowed(msg) {
     if (!msg || !FIREBASE_SEATS.includes(msg.seat || '')) return false;
-    if (msg.t === 'lobbyState' || msg.t === 'settings' || msg.t === 'start') return msg.seat === 'p1';
-    if (msg.t === 'commit' || msg.t === 'ready' || msg.t === 'reveal' || msg.t === 'rematchVote') return FIREBASE_PLAYER_SEATS.includes(msg.seat);
+    // 進行に影響しない合図。観戦者も送るので席を問わず通す。
+    // ここを対戦者限定にしていたため、観戦者のpingが「不正な送信席です」で対戦を切っていた。
+    if (msg.t === 'ping' || msg.t === 'bye') return true;
+    // presence は入室の合図。ホストは自分の入室を告げないので、p1から来るのは異常。
     if (msg.t === 'presence') return msg.seat !== 'p1';
-    if (msg.t === 'fire' || msg.t === 'boom') return FIREBASE_PLAYER_SEATS.includes(msg.seat) && msg.unitId === msg.seat;
-    if (msg.t === 'state' || msg.t === 'result') return FIREBASE_PLAYER_SEATS.includes(msg.seat) && msg.unitId === msg.seat;
-    return msg.t === 'ping' && FIREBASE_PLAYER_SEATS.includes(msg.seat);
+    // ホストだけが部屋の状態を宣言できる。
+    if (msg.t === 'lobbyState' || msg.t === 'settings' || msg.t === 'start') return msg.seat === 'p1';
+    // 対戦者だけの合図。
+    if (msg.t === 'commit' || msg.t === 'ready' || msg.t === 'reveal' || msg.t === 'rematchVote') return FIREBASE_PLAYER_SEATS.includes(msg.seat);
+    // 盤面を動かすものは、対戦者かつ自分のユニットについてのみ。
+    if (msg.t === 'fire' || msg.t === 'boom' || msg.t === 'state' || msg.t === 'result') {
+      return FIREBASE_PLAYER_SEATS.includes(msg.seat) && msg.unitId === msg.seat;
+    }
+    return false;
   }
 
   function netReceiveInner(msg) {
@@ -3560,10 +3572,14 @@
         rejectFirebaseMessage(`不正な通信データを受信しました（${validation.reason}）`);
         return;
       }
-      if (!firebasePacketSeatAllowed(msg)) { rejectFirebaseMessage('不正な送信席です'); return; }
       // 常設ロビーではSSEに過去ラウンドの履歴も届く。現在ラウンド以外は絶対に適用しない。
+      // 席の判定より先に捨てる。古いラウンドの正当なパケットで対戦を切らないため。
       if (msg.roundId !== online.currentRoundId) return;
-      noteFirebasePeerMessage();
+      if (!firebasePacketSeatAllowed(msg)) { rejectFirebaseMessage(`不正な送信席です（${msg.t}/${msg.seat}）`); return; }
+      // 生存確認を戻せるのは対戦者の通信だけ。観戦者のpingで相手の切断を見逃さないため。
+      // 自分の送信は上で除外済みなので、対戦者から見ればこれは相手のパケットに等しい。
+      // 観戦者から見ればどちらかの対戦者が生きていればよいので、この判定で両方に合う。
+      if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();
       if (online.participantRole === 'spectator') {
         if (msg.t === 'start' || msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
         else if (msg.t === 'result') receiveFirebaseSpectatorResult(msg);
@@ -6635,10 +6651,30 @@
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
         onlineLogCopyStatus = 'コピーしました';
-      } else throw new Error('unsupported');
-    } catch (_) {
-      onlineLogCopyStatus = 'コピーできません。開発者ツールの localStorage.katamon_online_log_v1 を確認してください';
-    }
+        return;
+      }
+      throw new Error('unsupported');
+    } catch (_) { /* 下の手段へ落とす */ }
+    // navigator.clipboard は権限や文脈で失敗することがある(実機で発生)。
+    // 選択済みのテキストエリアを一時的に置き、旧APIでコピーし直す。
+    try {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+      document.body.appendChild(area);
+      area.select();
+      area.setSelectionRange(0, text.length);
+      const ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(area);
+      onlineLogCopyStatus = ok ? 'コピーしました' : 'コピーできません。共有ボタンをお試しください';
+      if (ok) return;
+    } catch (_) { /* 最後の手段へ */ }
+    // それも駄目なら共有シートに載せる。スマホではこれが一番通りやすい。
+    try {
+      if (navigator.share) { await navigator.share({ title: 'カタモン 通信ログ', text }); onlineLogCopyStatus = '共有しました'; return; }
+    } catch (_) { /* ユーザーが閉じただけの場合も含む */ }
+    onlineLogCopyStatus = 'コピーできません。localStorage の katamon_online_log_v1 を確認してください';
   }
   // オンライン対戦の状態表示。相手待ち・退出・バージョン不一致をここで知らせる。
   function drawOnlineOverlay() {
