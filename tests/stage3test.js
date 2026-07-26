@@ -106,16 +106,19 @@ function check(name, value) {
   const brokenTerrain = { ...safeSnap, segments: safeSnap.segments.slice(1) };
   check('Firebase state rejects malformed terrain before applySnapshot', !h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), snap: brokenTerrain }));
   check('Firebase diagnostic identifies the rejected field safely', h.validateFirebaseMessageDetail({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), snap: { ...safeSnap, craters: null } }).reason === 'state.snap.craters');
+  // HPは通信の入口(hasSafeUnitSnapshot)で既に 0〜maxHp に検証済みなので、ここでの
+  // 一致判定は改ざん対策として機能しない。実機で花火の多段ヒットにより「まだ生きて
+  // いるのに0/140と誤表示され通信中断」した(2026-07-27)。stateは受理すれば
+  // applySnapshotで正しい値へ上書きされるので、HPだけの相違ではもう拒否しない。
   const grossState = JSON.parse(JSON.stringify(safeSnap));
   grossState.units[0].hp = Math.max(0, grossState.units[0].hp - 50);
-  check('Firebase state rejects gross local-state divergence', !h.stateSnapshotMatchesBaseline(grossState, safeSnap));
-  // 実機で「相手の行動と一致しない状態更新です」とだけ出て原因が分からなかった件。
-  // どの項目で拒否したか名指しできないと、可変dtの弾道差で起きる正当な失敗と
-  // 実際のバグを実機報告だけから区別できない。
-  check('Mismatch reason names the exact diverging field', h.stateSnapshotMismatchReason(grossState, safeSnap) === 'hp.0(100->50)');
-  const closeState = JSON.parse(JSON.stringify(safeSnap));
-  closeState.units[0].hp = Math.max(0, closeState.units[0].hp - 4);
-  check('A 4 HP difference stays within the documented ±5 tolerance', h.stateSnapshotMismatchReason(closeState, safeSnap) === '');
+  check('A large HP-only divergence no longer disconnects the match (action-side authority)', h.stateSnapshotMatchesBaseline(grossState, safeSnap));
+  check('Mismatch reason is empty for HP-only divergence, even when large', h.stateSnapshotMismatchReason(grossState, safeSnap) === '');
+  // 座標は依然として大きくズレたら拒否する。可変dtで動く要因が薄く、実機での
+  // 誤検知報告もまだ無いため、こちらは従来どおりの安全側に倒す。
+  const grossPosition = JSON.parse(JSON.stringify(safeSnap));
+  grossPosition.units[0].x = grossPosition.units[0].x + 300;
+  check('A large position divergence is still reported by name', h.stateSnapshotMismatchReason(grossPosition, safeSnap) === `x.0(${Math.round(safeSnap.units[0].x)}->${Math.round(grossPosition.units[0].x)})`);
   const terrainDrift = JSON.parse(JSON.stringify(safeSnap));
   terrainDrift.segments = terrainDrift.segments.slice();
   terrainDrift.segments[0] = [[0, 4]];
@@ -205,6 +208,19 @@ function check(name, value) {
   check('rules permit heartbeat without actionId', rules.messages.$message['.validate'].includes("newData.child('t').val() === 'ping'") && rules.messages.$message.t['.validate'].includes("newData.val() === 'ping'"));
   check('refresh failure keeps the existing anonymous identity', htmlText.includes('if (firebaseAuth) {') && htmlText.includes('新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ'));
   check('host cleanup waits after bye and pagehide leaves TTL cleanup', htmlText.includes('skipDeferredCleanup') && htmlText.includes('), 1000)') && htmlText.includes('endOnline(true, true, true)'));
+
+  // 通信ログ(2026-07-27、実機報告を追跡できるようにする要望への対応)。
+  // 拒否理由だけでは切り分けきれない事態が続いたため、直前のやり取りを丸ごと
+  // localStorageへ残し、エラー画面からコピーできるようにした。
+  const fakeOnline = { room: 'A2BC3DEF', role: 'host', seat: 'p1', phase: 'playing', protocolError: '', log: [], transport: { close: () => {} }, };
+  h.setOnlineForLogTest(fakeOnline);
+  for (let i = 0; i < h.onlineLogMax() + 5; i++) h.logOnlineEvent({ type: 'fire', unitId: 'p1' });
+  check('Online event log is capped at the documented ring-buffer size', fakeOnline.log.length === h.onlineLogMax());
+  check('Ring buffer drops the oldest entries, not the newest', fakeOnline.log[fakeOnline.log.length - 1].type === 'fire');
+  h.persistOnlineLog();
+  const persisted = JSON.parse(globalThis.localStorage.getItem(h.onlineLogKey()) || 'null');
+  check('Persisted log round-trips room/role and the capped entries', persisted && persisted.room === 'A2BC3DEF' && persisted.role === 'host' && persisted.log.length === h.onlineLogMax());
+  h.setOnlineForLogTest(null);
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

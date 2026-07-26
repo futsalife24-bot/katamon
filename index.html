@@ -228,7 +228,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v22';
+  const BUILD_ID = 'v23';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3349,7 +3349,12 @@
     if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return 'craters';
     for (let i = 0; i < snap.units.length; i++) {
       const saved = snap.units[i], local = baseline.units[i];
-      if (Math.abs(saved.hp - local.hp) > 5) return `hp.${i}(${local.hp}->${saved.hp})`;
+      // HPは通信の入口(hasSafeUnitSnapshot)で既に 0〜maxHp に収まるよう検証済みで、
+      // ここでの一致判定は改ざん対策として機能していない。花火のような多段ヒットは
+      // フレームレートの差だけで数ポイント動き、実際に「まだ生きているのに0/140と誤表示され、
+      // 通信中断」という実害を起こした。stateは受理さえすれば applySnapshot で正しい値へ
+      // 上書きされるので、一致しなくても実害はない。「撃った側が原理的に不正できる」のは
+      // 引継書に明記された既知の許容事項であり、ここで縛っても防御にならない。
       if (Math.abs(saved.x - local.x) > 160) return `x.${i}(${Math.round(local.x)}->${Math.round(saved.x)})`;
       if (Math.abs(saved.y - local.y) > 160) return `y.${i}(${Math.round(local.y)}->${Math.round(saved.y)})`;
       if (Math.abs(saved.fuel - local.fuel) > 24) return `fuel.${i}`;
@@ -3367,10 +3372,26 @@
     return stateSnapshotMismatchReason(snap, buildSnapshot());
   }
   function firebaseStateMatchesLocal(snap) { return firebaseStateMismatchReason(snap) === ''; }
+  // 対戦ごとの通信ログ。実機で不具合が起きた時、スクショの1行だけでなく
+  // 直前のやり取りを丸ごと送ってもらえるようにする(ユーザー要望、2026-07-27)。
+  const ONLINE_LOG_KEY = 'katamon_online_log_v1';
+  const ONLINE_LOG_MAX = 40;
+  function logOnlineEvent(entry) {
+    if (!online || !online.log) return;
+    online.log.push({ t: Date.now(), turn: turnCount, ...entry });
+    if (online.log.length > ONLINE_LOG_MAX) online.log.shift();
+  }
+  function persistOnlineLog() {
+    if (!online || !online.log) return;
+    try { localStorage.setItem(ONLINE_LOG_KEY, JSON.stringify({ room: online.room, role: online.role, log: online.log })); }
+    catch (_) { /* 保存できなくても対戦は続行できる */ }
+  }
   function rejectFirebaseMessage(reason) {
     if (!online) return;
+    logOnlineEvent({ type: 'reject', reason });
     online.protocolError = reason;
     online.phase = 'ended';
+    persistOnlineLog();
     // 対戦開始前はCanvasのエラー表示が見えないので、ロビーにも理由を出す。
     if (!onlineLobby.classList.contains('hidden')) onlineLobbyStatus(reason);
     try { online.transport.close(); } catch (_) { /* noop */ }
@@ -3537,6 +3558,7 @@
       case 'fire': {
         const u = unitById(msg.unitId);
         if (!u || u.control !== 'remote') break;
+        logOnlineEvent({ type: 'fire', unitId: msg.unitId, actionId: msg.actionId });
         // 移動そのものは送っていないので、撃つ直前の立ち位置をここで合わせる。
         u.x = msg.x;
         u.y = msg.y;
@@ -3581,6 +3603,7 @@
           rememberFirebaseTerminal(msg);
           online.remoteAction = null;
         }
+        logOnlineEvent({ type: 'state', ok: true, units: msg.snap.units.map(u => ({ id: u.id, hp: u.hp })) });
         applySnapshot(msg.snap);
         setOnlineSeat(online.seat);
         break;
@@ -3596,6 +3619,7 @@
           }
           rememberFirebaseTerminal(msg);
           online.remoteAction = null;
+          logOnlineEvent({ type: 'result', ok: true, winner: msg.winner, reason: msg.reason });
           projectiles = [];
           awaitingResolve = false;
           matchOver = true;
@@ -3790,10 +3814,12 @@
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
       peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
-      peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() }
+      peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
+      log: []
     };
     transport.onMessage(netReceive);
     setOnlineSeat(online.seat);
+    onlineLogCopyStatus = '';
     clearSuspendedMatch(); hasSuspendedSave = false;
     battleMode = 'normal'; winStreak = 0; runStats = { damageDealt: 0, shots: 0 };
     onlineLobbyStatus('モンスターを確定しています…');
@@ -6250,6 +6276,21 @@
     ctx.restore();
   }
 
+  // 通信の途中経過を控えておき、拒否された時にまとめてコピーできるようにするボタン。
+  const onlineLogCopyBtn = { x: VW / 2, y: VH * 0.36 + 96, w: 220, h: 34 };
+  let onlineLogCopyStatus = '';
+  async function copyOnlineLog() {
+    if (!online || !online.log || !online.log.length) { onlineLogCopyStatus = 'ログがありません'; return; }
+    const text = JSON.stringify({ room: online.room, role: online.role, seat: online.seat, log: online.log });
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        onlineLogCopyStatus = 'コピーしました';
+      } else throw new Error('unsupported');
+    } catch (_) {
+      onlineLogCopyStatus = 'コピーできません。開発者ツールの localStorage.katamon_online_log_v1 を確認してください';
+    }
+  }
   // オンライン対戦の状態表示。相手待ち・退出・バージョン不一致をここで知らせる。
   function drawOnlineOverlay() {
     if (!isOnline() || matchOver) return;
@@ -6272,15 +6313,27 @@
       sub = online.peerCommitted ? '相手の公開を待っています' : '相手の選択を待っています';
     }
     if (!title) return;
+    const showLogButton = !!online.protocolError;
     ctx.save();
     ctx.fillStyle = 'rgba(4,7,11,0.72)';
-    ctx.fillRect(0, VH * 0.36, VW, 96);
+    ctx.fillRect(0, VH * 0.36, VW, showLogButton ? 140 : 96);
     drawOutlinedText(title, VW / 2, VH * 0.36 + 44, {
       font: `900 22px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
     });
     drawOutlinedText(sub, VW / 2, VH * 0.36 + 72, {
       font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
+    if (showLogButton) {
+      drawIronPlate(onlineLogCopyBtn.x, onlineLogCopyBtn.y, onlineLogCopyBtn.w, onlineLogCopyBtn.h, { cut: 8, lineWidth: 2 });
+      drawOutlinedText('通信ログをコピー', onlineLogCopyBtn.x, onlineLogCopyBtn.y + 4, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+      });
+      if (onlineLogCopyStatus) {
+        drawOutlinedText(onlineLogCopyStatus, VW / 2, onlineLogCopyBtn.y + 30, {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+        });
+      }
+    }
     ctx.restore();
   }
 
@@ -7975,8 +8028,15 @@
       return;
     }
 
+    // 通信エラーの画面だけは、ログコピー用のボタンを先に拾ってから「どこでもタイトルへ」にする。
+    if (isOnline() && online.protocolError && !matchOver) {
+      if (hitRect(p0, onlineLogCopyBtn)) { copyOnlineLog(); return; }
+      endOnline(false);
+      returnToTitleFromResult();
+      return;
+    }
     // 相手が消えた/通信バージョンが違うときは、どこをタップしてもタイトルへ抜けられるようにする。
-    if (isOnline() && (online.peerLeft || online.versionMismatch || online.protocolError) && !matchOver) {
+    if (isOnline() && (online.peerLeft || online.versionMismatch) && !matchOver) {
       endOnline(false);
       returnToTitleFromResult();
       return;
