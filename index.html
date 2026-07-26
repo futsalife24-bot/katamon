@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v24';
+  const BUILD_ID = 'v25';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3110,15 +3110,26 @@
     throw lastError || new Error('通信に失敗しました。');
   }
   // 非memberはroomを読む前に席を確保する。412だけは「他端末が先に取った空席」として次席へ進む。
+  // 席の確保。if-match(条件付きPUT)は「空席の時だけ書く」を1往復で実現できるが、
+  // ETag照合にその位置の読み取り権限を要求する。着席前のゲストは部屋を読めないため、
+  // ルールが席ノードの読み取りを開けていないと必ず401になる(実機で再現・確認済み)。
+  // 401の時は素のPUTで撃ち直す。ルール側も !data.exists() を要求しているので、
+  // 空席でなければサーバーが弾き、二人が同時に来ても片方しか通らない。
   async function firebaseClaimEmptySlot(path, auth, body) {
     const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+    const payload = JSON.stringify(body);
     const response = await fetch(url, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: payload
     });
     if (response.ok) return true;
-    if (response.status === 412) return false;
-    if (response.status === 401) throw new Error('認証が切れました。もう一度お試しください。');
-    throw new Error(`席の確保に失敗しました（HTTP ${response.status}）`);
+    if (response.status === 412) return false; // 既に埋まっている
+    if (response.status !== 401) throw new Error(`席の確保に失敗しました（HTTP ${response.status}）`);
+    const plain = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: payload });
+    if (plain.ok) return true;
+    // 素のPUTでも拒否された。埋まっているのか権限が無いのかはここでは区別できないので、
+    // 次の席へ進ませる。全席だめなら呼び出し側が「空き席がありません」を出す。
+    if (plain.status === 401) return false;
+    throw new Error(`席の確保に失敗しました（HTTP ${plain.status}）`);
   }
 
   function makeBroadcastTransport(room) {

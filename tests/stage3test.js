@@ -265,6 +265,14 @@ function check(name, value) {
     && htmlText.includes('async function firebaseClaimEmptySlot')
     && htmlText.includes('if (response.status === 412) return false;')
     && htmlText.includes('rooms/${code}/slots/${seat}`, auth, { method: \'DELETE\' }'));
+  // 実機で「合言葉で入室できない(認証が切れました)」が再現した。原因は
+  // if-match(条件付きPUT)がETag照合のため、その位置の読み取り権限を要求すること。
+  // 着席前のゲストは部屋を読めないので必ず401になっていた。本番RTDBで、
+  // 読み取り権を持つホストの if-match PUT は成功し、ゲストのそれだけが401になることを実測済み。
+  check('slot claim falls back to a plain PUT when the conditional PUT is denied',
+    htmlText.includes('if (response.status !== 401) throw new Error')
+    && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')
+    && htmlText.includes('if (plain.status === 401) return false;'));
   check('only the opposing player seat can supply commit/reveal data',
     htmlText.includes("if (msg.seat !== online.peerSeat) break;")
     && htmlText.includes("case 'commit':") && htmlText.includes("case 'reveal':"));
@@ -330,6 +338,8 @@ function check(name, value) {
     && seat['.write'].includes('!data.exists()'));
   check('rules forbid taking a second seat',
     seats.every(x => seat['.write'].includes("child('" + x + "').child('uid').val() !== auth.uid")));
+  check('slot nodes are readable so a not-yet-seated guest can run the conditional PUT',
+    typeof seat['.read'] === 'string' && seat['.read'].includes('auth != null') && seat['.read'].includes("child('expiresAt').val() > now"));
   check('rules pin a claimed seat to the caller and allow releasing only your own',
     seat.uid['.validate'].includes('newData.val() === auth.uid') && seat['.write'].includes("data.child('uid').val() === auth.uid"));
   check('rules let only p1 change settings, and only while in lobby',
