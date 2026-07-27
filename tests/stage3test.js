@@ -497,6 +497,13 @@ function check(name, value) {
     htmlText.includes('pendingStart: null, startVerifying: false,')
     && htmlText.includes('online.pendingStart = null; online.startVerifying = false;')
     && htmlText.includes("online.phase = 'playing';\n      online.startVerifying = false;"));
+  const firebaseBeginStart = htmlText.indexOf('function beginFirebaseOnline(');
+  const firebaseBeginEnd = htmlText.indexOf('// 準備完了は取り消せる。', firebaseBeginStart);
+  const firebaseBeginSrc = firebaseBeginStart >= 0 && firebaseBeginEnd > firebaseBeginStart
+    ? htmlText.slice(firebaseBeginStart, firebaseBeginEnd) : '';
+  check('entering an online room keeps an existing CPU suspended match',
+    firebaseBeginSrc.includes('hasSuspendedSave = !!loadSuspendedMatch();')
+    && !firebaseBeginSrc.includes('clearSuspendedMatch();'));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('players choose on the result screen, not in a popup that hides the outcome',
