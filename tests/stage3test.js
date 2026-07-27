@@ -286,8 +286,9 @@ function check(name, value) {
   h.setOnlineForLogTest({ kind: 'firebase', participantRole: 'spectator', phase: 'playing', transport: { close: () => {} } });
   check('spectator input remains locked even while the current round is playing', app.inputLocked() === true);
   h.setOnlineForLogTest(null);
-  check('lobby allocation blind-claims player then spectator seats without a pre-member room read',
-    htmlText.includes("for (const candidate of ['e1', 's1', 's2'])")
+  check('lobby allocation blind-claims the requested seats without a pre-member room read',
+    htmlText.includes("async function claimFirebaseRoom(code, seatOrder = ['e1', 's1', 's2'])")
+    && htmlText.includes('for (const candidate of seatOrder)')
     && htmlText.includes('firebaseClaimEmptySlot(`rooms/${code}/slots/${candidate}`, auth,')
     && htmlText.includes('// Rulesは非memberのreadを許可しない。e1→s1→s2を条件付きPUTで確保してから読む。'));
   check('Firebase slot claims use an atomic null_etag conditional PUT and release only a failed claimant seat',
@@ -453,6 +454,12 @@ function check(name, value) {
     && h.validateFirebaseMessage(firebasePacket('ready')));
   // 合言葉が大きい文字と入力欄の2箇所に出て場所を取っていた。入室後は1行だけにし、
   // コピーは文字の真横の小さなアイコンにする。
+  check('quick play uses one shared room while passcodes stay behind an explicit option',
+    htmlText.includes("const QUICK_MATCH_ROOM = 'KATAMN22';")
+    && htmlText.includes('async function joinQuickFirebaseRoom()')
+    && htmlText.includes('id="onlineQuick"')
+    && htmlText.includes('id="onlineCodeToggle"')
+    && htmlText.includes('#onlineLobby.code-entry:not(.in-room) #onlineRoomInput'));
   check('the room code is shown once, with a small copy icon beside it',
     htmlText.includes('<div id="onlineRoomCodeRow">')
     && htmlText.includes('#onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }')

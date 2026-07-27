@@ -132,6 +132,7 @@
   #onlineLobbyNote { color: #d39b4b; } #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; }
   #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 8px; }
   #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
+  #onlineLobby.in-room.quickplay #onlineRoomCodeRow { display: none; }
   #onlineRoomCode { color: #ffd24a; font: 900 28px/1 monospace; letter-spacing: .16em; }
   /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
   #onlineCopy {
@@ -142,6 +143,10 @@
   #onlineLobby.in-room #onlineCopy { display: flex; }
   #onlineCopy svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   /* 入室後は合言葉を1行だけ見せる。入力欄と入力時の注意書きは用済み。 */
+  #onlineRoomInput, #onlineRoomHint, #onlineCreate, #onlineJoin { display: none; }
+  #onlineLobby.code-entry:not(.in-room) #onlineRoomInput { display: block; }
+  #onlineLobby.code-entry:not(.in-room) #onlineRoomHint { display: block; }
+  #onlineLobby.code-entry:not(.in-room) #onlineCreate, #onlineLobby.code-entry:not(.in-room) #onlineJoin { display: block; }
   #onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }
   #onlineRoomInput, #onlineCharacter {
     width: 100%; box-sizing: border-box; padding: 11px 10px; color: #fff5dc; text-align: center;
@@ -158,7 +163,8 @@
     min-height: 45px; padding: 9px 6px; color: #fff5dc; font: 900 14px "Yu Gothic UI", sans-serif;
     border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
   }
-  #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
+  #onlineQuick, #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
+  #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
   #onlineRoomPanel { display: none; margin-top: 10px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); }
   /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
   #onlineCharacter { display: none; }
@@ -200,7 +206,7 @@
 <div id="onlineLobby" aria-live="polite">
   <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
     <div id="onlineLobbyTitle">ONLINE 1V1</div>
-    <div id="onlineLobbyNote">部屋を作ると合言葉が発行されます。相手の合言葉で参加もできます</div>
+    <div id="onlineLobbyNote">そのまま対戦相手を待てます。合言葉を使いたい時だけ設定を開いてください</div>
     <div id="onlineRoomCodeRow">
       <div id="onlineRoomCode"></div>
       <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
@@ -220,6 +226,8 @@
     </div>
     <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
     <div id="onlineLobbyButtons">
+      <button id="onlineQuick" type="button">すぐ対戦する</button>
+      <button id="onlineCodeToggle" type="button">合言葉を使う</button>
       <button id="onlineCreate" type="button">部屋を作る</button>
       <button id="onlineJoin" type="button">部屋に入る</button>
       <button id="onlineReady" type="button">準備完了</button>
@@ -272,7 +280,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v49';
+  const BUILD_ID = 'v50';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2964,6 +2972,8 @@
   const FIREBASE_PLAYER_SEATS = ['p1', 'e1'];
   const FIREBASE_ROUND_RE = /^[0-9a-f]{48}$/;
   const LOOPBACK_ROOM = 'katamon-loopback';
+  // 合言葉なしの簡単対戦用。満室・対戦中なら合言葉モードを使ってもらう。
+  const QUICK_MATCH_ROOM = 'KATAMN22';
   const NET_RETRY_SEC = 0.6; // 相手待ちの間、join/hello を撒き直す間隔
   const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const ROOM_CODE_LENGTH = 8;
@@ -4124,8 +4134,8 @@
     onlineLobbyEl.classList.add('open');
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
-    onlineLobbyEl.classList.remove('in-room', 'host', 'results');
-    onlineLobbyStatus('部屋を作るか、相手の合言葉を入力してください。');
+    onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry');
+    onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。合言葉が必要な時だけ設定を開いてください。');
   }
   function setOnlineLobbyBusy(busy) {
     onlineLobbyBusy = busy;
@@ -4158,11 +4168,11 @@
   }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && FIREBASE_PLAYER_SEATS.includes(online.seat)); }
-  async function createFirebaseRoom() {
+  async function createFirebaseRoom(requestedCode = null) {
     const auth = await ensureFirebaseAuth();
     const now = firebaseServerNow(auth);
-    for (let i = 0; i < 6; i++) {
-      const code = generateRoomCode();
+    for (let i = 0; i < (requestedCode ? 1 : 6); i++) {
+      const code = requestedCode || generateRoomCode();
       const roundId = firebaseRoundId();
       const room = {
         protocol: FIREBASE_PROTO_VERSION, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS,
@@ -4178,13 +4188,13 @@
     }
     throw new Error('部屋を作れませんでした。端末の日時・通信を確認してお試しください。');
   }
-  async function claimFirebaseRoom(code) {
+  async function claimFirebaseRoom(code, seatOrder = ['e1', 's1', 's2']) {
     const auth = await ensureFirebaseAuth();
     firebaseServerNow(auth); // オフセットが無い/不正なら入室前に止める。
     let seat = null;
     try {
       // Rulesは非memberのreadを許可しない。e1→s1→s2を条件付きPUTで確保してから読む。
-      for (const candidate of ['e1', 's1', 's2']) {
+      for (const candidate of seatOrder) {
         const claimed = await firebaseClaimEmptySlot(`rooms/${code}/slots/${candidate}`, auth, { uid: auth.uid, claimedAt: firebaseServerNow(auth) });
         if (claimed) { seat = candidate; break; }
       }
@@ -4199,6 +4209,24 @@
       throw err;
     }
   }
+  async function joinQuickFirebaseRoom() {
+    // 先に空きプレイヤー席を取りにいき、なければホストとして共通部屋を作る。
+    // 同時に押された場合も、作成に負けた側がもう一度参加を試すため二人で開始できる。
+    try {
+      return { ...(await claimFirebaseRoom(QUICK_MATCH_ROOM, ['e1'])), role: 'guest' };
+    } catch (_) {
+      try {
+        return { ...(await createFirebaseRoom(QUICK_MATCH_ROOM)), role: 'host' };
+      } catch (_) {
+        try {
+          return { ...(await claimFirebaseRoom(QUICK_MATCH_ROOM, ['e1'])), role: 'guest' };
+        } catch (_) {
+          throw new Error('ただいま簡単対戦は利用中です。合言葉を使って部屋を作ってください。');
+        }
+      }
+    }
+  }
+
   function scheduleFirebaseTokenRefresh() {
     if (!online || online.kind !== 'firebase') return;
     if (online.authRefreshTimer) clearTimeout(online.authRefreshTimer);
@@ -4254,6 +4282,7 @@
     hasSuspendedSave = !!loadSuspendedMatch();
     battleMode = 'normal'; winStreak = 0; runStats = { damageDealt: 0, shots: 0 };
     onlineLobbyEl && onlineLobbyEl.classList.add('in-room');
+    onlineLobbyEl && onlineLobbyEl.classList.toggle('quickplay', code === QUICK_MATCH_ROOM);
     onlineLobbyEl && onlineLobbyEl.classList.toggle('host', role === 'host');
     onlineLobbyStatus(online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。');
     scheduleFirebaseTokenRefresh();
@@ -7829,9 +7858,29 @@
       if (onlineRoomInput.value !== normalized) onlineRoomInput.value = normalized;
     });
   }
+  const onlineQuickButton = document.getElementById('onlineQuick');
+  const onlineCodeToggleButton = document.getElementById('onlineCodeToggle');
   const onlineCreateButton = document.getElementById('onlineCreate');
   const onlineJoinButton = document.getElementById('onlineJoin');
   const onlineCancelButton = document.getElementById('onlineCancel');
+  if (onlineCodeToggleButton) onlineCodeToggleButton.addEventListener('click', () => {
+    if (onlineLobbyBusy || online || !onlineLobbyEl) return;
+    onlineLobbyEl.classList.toggle('code-entry');
+    const usingCode = onlineLobbyEl.classList.contains('code-entry');
+    onlineCodeToggleButton.textContent = usingCode ? '合言葉を使わない' : '合言葉を使う';
+    onlineLobbyStatus(usingCode ? '部屋を作るか、相手の合言葉を入力してください。' : '「すぐ対戦する」で相手を待ちます。');
+  });
+  if (onlineQuickButton) onlineQuickButton.addEventListener('click', async () => {
+    if (onlineLobbyBusy || online) return;
+    setOnlineLobbyBusy(true); onlineLobbyStatus('対戦相手を探しています…');
+    try {
+      const { code, auth, room, seat, role } = await joinQuickFirebaseRoom();
+      beginFirebaseOnline(role, code, auth, selectedOnlineCharacter(), room, seat);
+      setOnlineLobbyBusy(false);
+    } catch (err) {
+      setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '簡単対戦を始められませんでした。');
+    }
+  });
   if (onlineCreateButton) onlineCreateButton.addEventListener('click', async () => {
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('匿名で接続し、部屋を作っています…');
