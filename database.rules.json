@@ -10,7 +10,10 @@
         "protocol": { ".validate": "newData.val() === 3" },
         "hostUid": { ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val() || data.parent().child('expiresAt').val() <= now)" },
         "createdAt": { ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val() || data.parent().child('expiresAt').val() <= now)" },
-        "expiresAt": { ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 7200000" },
+        "expiresAt": {
+          ".write": "auth != null && data.exists() && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now && newData.isNumber() && newData.val() > data.val()",
+          ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 7200000"
+        },
 
         "settings": {
           ".write": "auth != null && data.parent().child('slots').child('p1').child('uid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('round').child('status').val() === 'lobby'",

@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v60';
+  const BUILD_ID = 'v61';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3132,7 +3132,14 @@
   const NET_RETRY_SEC = 0.6; // 相手待ちの間、join/hello を撒き直す間隔
   const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const ROOM_CODE_LENGTH = 8;
-  const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
+  // 部屋の期限は短く取り、ホストが生きている間だけ延ばし続ける(Stage 4-2)。
+  // ホストが消えれば ROOM_TTL_MS で期限切れになり、「期限切れの部屋は誰でも上書き作成・削除
+  // できる」既存ルール(2026-07-27に本番9/9で検証済み)がそのまま発火する。乗っ取りの仕組みを
+  // 新設しないのがこの設計の要点。以前は2時間で、放置された簡単対戦がその間ずっと詰んでいた。
+  // 更新が丸ごと失敗し続けた時だけ対戦中でも部屋が切れるので、10分はその猶予でもある。
+  // ROOM_LEASE_RENEW_MS は ROOM_TTL_MS より十分に短く保つこと(stage3testで固定してある)。
+  const ROOM_TTL_MS = 10 * 60 * 1000;
+  const ROOM_LEASE_RENEW_MS = 60 * 1000;
   const FIREBASE = {
     apiKey: 'AIzaSyAoKk4qwhIlLeuMXfosRUpSgVqXiDjskDc',
     databaseURL: 'https://katamon-online-default-rtdb.asia-southeast1.firebasedatabase.app'
@@ -4461,6 +4468,26 @@
     }
   }
 
+  // 部屋の延命。ホストだけが送る。1回の失敗では何もしない(次の更新で取り戻せるし、
+  // 猶予は ROOM_TTL_MS ある)。ここで対戦を切ると、通信が一瞬ぐらついただけで試合が死ぬ。
+  async function renewFirebaseRoomLease() {
+    if (!isFirebaseHost()) return;
+    const leasing = online;
+    try {
+      const next = firebaseServerNow(leasing.auth) + ROOM_TTL_MS;
+      await firebaseRequest(`rooms/${leasing.room}/expiresAt`, leasing.auth, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next)
+      });
+    } catch (_) { /* 次の更新に任せる */ }
+  }
+  function scheduleFirebaseRoomLease() {
+    if (!isFirebaseHost()) return;
+    if (online.roomLeaseTimer) clearTimeout(online.roomLeaseTimer);
+    online.roomLeaseTimer = setTimeout(async () => {
+      await renewFirebaseRoomLease();
+      scheduleFirebaseRoomLease();
+    }, ROOM_LEASE_RENEW_MS);
+  }
   function scheduleFirebaseTokenRefresh() {
     if (!online || online.kind !== 'firebase') return;
     if (online.authRefreshTimer) clearTimeout(online.authRefreshTimer);
@@ -4522,6 +4549,7 @@
     onlineLobbyEl && onlineLobbyEl.classList.toggle('host', role === 'host');
     onlineLobbyStatus(online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。');
     scheduleFirebaseTokenRefresh();
+    scheduleFirebaseRoomLease();
     renderFirebaseLobby();
     if (seat !== 'p1') netSend({ t: 'presence', name: localPlayerName() });
     if (online.participantRole === 'spectator' && room && room.round && room.round.latestSnapshot) {
@@ -4918,6 +4946,7 @@
     const leaving = online;
     if (leaving.authRefreshTimer) clearTimeout(leaving.authRefreshTimer);
     if (leaving.authRetryTimer) clearTimeout(leaving.authRetryTimer);
+    if (leaving.roomLeaseTimer) clearTimeout(leaving.roomLeaseTimer);
     // v3 Firebaseは試合終了・ページ離脱で部屋を消さない。明示的なロビー退出だけが席/部屋を消す。
     if (sendBye && leaving.kind !== 'firebase') { netSend({ t: 'bye' }); netSend({ t: 'bye' }); }
     leaving.transport.close();
@@ -9375,7 +9404,13 @@
   document.addEventListener('visibilitychange', () => {
     resetFirebasePendingTerminalClocks();
     if (document.hidden) suspendAudioForHidden();
-    else resumeAudioAfterVisible();
+    else {
+      resumeAudioAfterVisible();
+      // 裏に居る間はタイマーが絞られるので、戻った時点で一度取り戻しておく。
+      // 期限切れは戻ってからでは間に合わない(部屋ごと消える)ため、ここは待たずに投げる。
+      renewFirebaseRoomLease();
+      scheduleFirebaseRoomLease();
+    }
   });
   // iOSなどvisibilitychangeが来ない経路(bfcache行き)の保険
   window.addEventListener('pagehide', () => {

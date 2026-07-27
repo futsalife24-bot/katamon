@@ -218,6 +218,12 @@ function check(name, value) {
   // 実機で2ターン目まで進んだ試合が切れた時に「開始できません」と出ていた
   check('a disconnect after the match started does not say it failed to start', h.onlineErrorTitle(true) === '対戦を中断しました');
   check('a failure before the match started still says it could not start', h.onlineErrorTitle(false) === 'オンライン対戦を開始できません');
+  // 部屋のリース(Stage 4-2)。更新間隔が期限に近づくと、通信が一度ぐらついただけで
+  // 対戦中の部屋が期限切れになり、試合が死ぬ。4回ぶんの猶予をここで固定しておく。
+  check('the room lease is renewed far more often than it expires', h.roomLeaseRenewMs() * 4 <= h.roomTtlMs());
+  // 期限を延ばしすぎると、放置された簡単対戦がまたその間ずっと詰む
+  check('the room lease stays short enough to free an abandoned room', h.roomTtlMs() <= 15 * 60 * 1000);
+  check('the room lease still fits the ceiling the rules enforce', h.roomTtlMs() <= 7200000);
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);
