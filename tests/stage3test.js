@@ -172,9 +172,13 @@ function check(name, value) {
   check('Firebase accepts old RTDB history with a finite server timestamp', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'ready', sentAt: Date.now() - 60 * 60 * 1000 }));
   check('Firebase heartbeat is a valid control packet without actionId', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'ping', sentAt: Date.now() }));
   const firstCommit = h.acceptPeerCommit(null, 'a'.repeat(64));
-  const repeatCommit = h.acceptPeerCommit(firstCommit.hash, 'a'.repeat(64));
-  const swappedCommit = h.acceptPeerCommit(firstCommit.hash, 'b'.repeat(64));
-  check('peer commit is fixed after its first value', firstCommit.accept && repeatCommit.duplicate && swappedCommit.error);
+  const repeatCommit = h.acceptPeerCommit(firstCommit.hash, 'a'.repeat(64), false);
+  // 準備完了を取り消してキャラを選び直せるようにしたので、公開前の差し替えは正当。
+  // commit-reveal の意味は「相手の選択を見た後に変えられない」ことなので何も漏れない。
+  const swappedBeforeReveal = h.acceptPeerCommit(firstCommit.hash, 'b'.repeat(64), false);
+  const swappedAfterReveal = h.acceptPeerCommit(firstCommit.hash, 'b'.repeat(64), true);
+  check('peer commit accepts a re-pick before reveal and rejects one after',
+    firstCommit.accept && repeatCommit.duplicate && swappedBeforeReveal.accept && swappedAfterReveal.error);
   check('peer reveal rejects duplicates', h.acceptPeerReveal(false) && !h.acceptPeerReveal(true));
   check('unsolicited Firebase state/result are rejected before a remote fire', !h.firebaseFlowAllows({ t: 'state', from: 'peer', actionId, sentAt: 2 }, { remoteAction: null }) && !h.firebaseFlowAllows({ t: 'result', from: 'peer', actionId, sentAt: 2 }, { remoteAction: null }));
   const queuedFire = h.firebaseFlowAllows({ t: 'fire', unitId: 'p1', from: 'peer', actionId, sentAt: 1 }, { activeId: 'p1', remoteUnitId: 'p1', remoteAction: null });
@@ -376,9 +380,24 @@ function check(name, value) {
   check('host start waits for both ready players, then enters the reveal gate',
     htmlText.includes("!online.selfReady || !online.peerReady || !online.peerCommitted")
     && htmlText.includes("status: 'revealing'") && htmlText.includes('maybeRevealCharacter()'));
-  check('locked settings stay disabled after either player has readied',
-    htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby' && !online.selfReady && !online.peerReady;")
+  // 相手が準備完了でもホストは設定を変えられる。変えられた側は準備完了を取り消して
+  // モンスターを選び直せるので、一方的に決められた条件で始まることはない。
+  check('the host can still change settings after the guest has readied',
+    htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
     && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
+  check('ready is a toggle that can be taken back while in the lobby',
+    htmlText.includes('function setSelfNotReady()')
+    && htmlText.includes("netSend({ t: 'ready', value: false });")
+    && htmlText.includes("onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';"));
+  check('taking back ready clears the commit so a new character can be picked',
+    htmlText.includes('online.selfCommit = null;') && htmlText.includes('online.selfRevealed = false;'));
+  check('an un-ready packet is understood, and the old payload-less form still means ready',
+    htmlText.includes('online.peerReady = msg.value !== false;')
+    && h.validateFirebaseMessage(firebasePacket('ready', { value: false }))
+    && h.validateFirebaseMessage(firebasePacket('ready')));
+  check('the character picker is hidden until you are actually in a room',
+    htmlText.includes('#onlineCharacter { display: none; }')
+    && htmlText.includes('#onlineLobby.in-room #onlineCharacter { display: block; }'));
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('online.rematchVotes.p1 && online.rematchVotes.e1')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')

@@ -149,6 +149,9 @@
   #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
   #onlineCopy { grid-column: span 2; display: none; }
   #onlineRoomPanel { display: none; margin-top: 10px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); }
+  /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
+  #onlineCharacter { display: none; }
+  #onlineLobby.in-room #onlineCharacter { display: block; }
   #onlineLobby.in-room #onlineRoomPanel { display: block; }
   #onlineLobby.in-room #onlineCreate, #onlineLobby.in-room #onlineJoin { display: none; }
   #onlineSlots { margin: 7px 0; font-size: 12px; line-height: 1.65; color: #e8edf2; white-space: pre-line; }
@@ -254,7 +257,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v31';
+  const BUILD_ID = 'v32';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3312,6 +3315,8 @@
     if (!Number.isFinite(msg.sentAt)) return { ok: false, reason: `${msg.t}.sentAt` };
     if (msg.t === 'lobbyState') return typeof msg.status === 'string' && msg.status.length <= 16 && (!msg.nextRoundId || FIREBASE_ROUND_RE.test(msg.nextRoundId)) && (msg.autoReady == null || typeof msg.autoReady === 'boolean') ? { ok: true } : { ok: false, reason: 'lobbyState.status' };
     if (msg.t === 'settings') return msg.settings && typeof msg.settings === 'object' ? { ok: true } : { ok: false, reason: 'settings.payload' };
+    // ready は準備完了の取り消しも運ぶ。value 省略は旧形式で「準備完了」の意味。
+    if (msg.t === 'ready') return msg.value == null || typeof msg.value === 'boolean' ? { ok: true } : { ok: false, reason: 'ready.value' };
     if (msg.t === 'rematchVote') return typeof msg.vote === 'boolean' ? { ok: true } : { ok: false, reason: 'rematchVote.vote' };
     if (msg.t === 'commit') return /^[0-9a-f]{64}$/.test(msg.hash || '') ? { ok: true } : { ok: false, reason: 'commit.hash' };
     if (msg.t === 'reveal') return CHARACTER_LIST.includes(msg.character) && /^[0-9a-f]{48}$/.test(msg.nonce || '') ? { ok: true } : { ok: false, reason: 'reveal.characterOrNonce' };
@@ -3333,9 +3338,13 @@
     return { ok: true };
   }
   function validateFirebaseMessage(msg) { return validateFirebaseMessageDetail(msg).ok; }
-  function acceptPeerCommit(currentHash, incomingHash) {
+  // 公開(reveal)前なら、相手が準備完了を取り消してキャラを選び直すことがある。
+  // commit-reveal の意味は「相手の選択を見た後に変えられない」ことなので、
+  // 公開前の差し替えは何も漏らさない。公開後の差し替えだけを不正として弾く。
+  function acceptPeerCommit(currentHash, incomingHash, revealed) {
     if (currentHash == null) return { accept: true, hash: incomingHash };
     if (currentHash === incomingHash) return { accept: false, duplicate: true };
+    if (!revealed) return { accept: true, hash: incomingHash };
     return { accept: false, error: '相手が選択内容を差し替えました' };
   }
   function acceptPeerReveal(alreadySeen) { return !alreadySeen; }
@@ -3774,7 +3783,8 @@
         // ここを待たないと、遅延の大きい回線でホストが先に撃ててしまう。
         if (online && online.kind === 'firebase') {
           if (msg.seat === online.peerSeat) {
-            online.peerReady = true;
+            // value を省いた旧形式は「準備完了」とみなす。
+            online.peerReady = msg.value !== false;
             // startを受けたe1のackで、p1も初めて入力解禁する。
             if (online.role === 'host' && online.phase === 'starting') online.phase = 'playing';
           }
@@ -3898,7 +3908,7 @@
         if (online.kind !== 'firebase' || online.phase === 'ended' || typeof msg.hash !== 'string') break;
         if (msg.seat !== online.peerSeat) break;
         {
-          const decision = acceptPeerCommit(online.peerCommit, msg.hash);
+          const decision = acceptPeerCommit(online.peerCommit, msg.hash, !!online.peerRevealSeen);
           if (decision.error) { rejectFirebaseMessage(decision.error); break; }
           if (decision.duplicate) break; // 同じpushの再送は無害に無視する
           online.peerCommit = decision.hash;
@@ -4149,8 +4159,11 @@
       applyFirebaseSpectatorSnapshot({ snap: normalizeFirebaseSnapshot(room.round.latestSnapshot) });
     }
   }
+  // 準備完了は取り消せる。ホストが設定を変えた後にキャラを選び直したくなるため。
+  // 取り消しても commit は送り直せる(公開前なので情報は漏れない)。
   async function commitOwnCharacter() {
-    if (!online || online.kind !== 'firebase' || online.selfCommit) return;
+    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') return;
+    if (online.selfReady) { setSelfNotReady(); return; }
     try {
       online.selfCharacter = selectedOnlineCharacter();
       online.selfNonce = secureNonce();
@@ -4158,13 +4171,23 @@
       if (!online || online.kind !== 'firebase') return;
       netSend({ t: 'commit', hash: online.selfCommit });
       online.selfReady = true;
-      netSend({ t: 'ready' });
-      onlineLobbyStatus('準備完了。ホストの開始を待っています…');
+      netSend({ t: 'ready', value: true });
+      onlineLobbyStatus('準備完了。取り消せばモンスターを選び直せます。');
       renderFirebaseLobby();
     } catch (err) {
       if (online) online.protocolError = '安全な確認処理に失敗しました';
       onlineLobbyStatus('この端末では安全な確認処理を使えません。');
     }
+  }
+
+  function setSelfNotReady() {
+    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby' || !online.selfReady) return;
+    online.selfReady = false;
+    online.selfCommit = null;
+    online.selfRevealed = false;
+    netSend({ t: 'ready', value: false });
+    onlineLobbyStatus('準備完了を取り消しました。モンスターを選び直せます。');
+    renderFirebaseLobby();
   }
   function maybeRevealCharacter() {
     if (!online || online.kind !== 'firebase' || !online.selfCommit || !online.peerCommitted || online.selfRevealed || online.phase !== 'revealing') return;
@@ -4242,13 +4265,17 @@
       const state = seat === 'p1' || seat === 'e1' ? (seat === online.seat && online.selfReady ? ' 準備完了' : seat === online.peerSeat && online.peerReady ? ' 準備完了' : '') : '';
       return `${firebaseSeatLabel(seat)}: ${occupied ? '参加中' : '空席'}${mine}${state}`;
     }).join('\n');
-    const canEdit = isFirebaseHost() && online.phase === 'lobby' && !online.selfReady && !online.peerReady;
+    // 相手が準備完了でもホストは設定を変えられる。変えられたら相手は準備完了を取り消して選び直せる。
+    const canEdit = isFirebaseHost() && online.phase === 'lobby';
     if (onlineTerrainEl) onlineTerrainEl.value = online.settings.terrain;
     if (onlineWindEl) onlineWindEl.value = online.settings.wind;
     if (onlineTurnsEl) onlineTurnsEl.value = String(online.settings.turnsPerPlayer);
     [onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });
     if (onlineCharacterEl) onlineCharacterEl.disabled = !isFirebasePlayer() || online.selfReady || online.phase !== 'lobby';
-    if (onlineReadyBtn) onlineReadyBtn.disabled = !isFirebasePlayer() || online.selfReady || online.phase !== 'lobby';
+    if (onlineReadyBtn) {
+      onlineReadyBtn.disabled = !isFirebasePlayer() || online.phase !== 'lobby';
+      onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';
+    }
     if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !online.selfReady || !online.peerReady || online.phase !== 'lobby';
     const hasResultVote = Object.prototype.hasOwnProperty.call(online.rematchVotes || {}, online.seat);
     if (onlineRematchBtn) onlineRematchBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
