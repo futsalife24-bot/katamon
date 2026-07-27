@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v38';
+  const BUILD_ID = 'v39';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -9327,12 +9327,17 @@
       if (turnSettle <= 0) {
         awaitingResolve = false;
         const acted = activeUnit();
-        endTurn();
+        // 誰かが倒れているのに決着が確定していない = 相手の決着通知を待っている状態。
+        // ここで手番を進めると、相手が落ちたのに「あなたのターン」が先に出てから
+        // 「落下…」が届き、自分が落ちたように見えてしまう(実機で指摘された)。
+        const waitingForPeerResult = isOnline() && !matchOver && units.some(u => u.hp <= 0);
+        if (!waitingForPeerResult) endTurn();
         if (isOnline() && online.kind === 'firebase' && acted.control === 'remote' && online.remoteAction && online.remoteAction.unitId === acted.id) {
           // state/resultは相手の発射をローカルで最後まで解決してからだけ受け入れる。
+          // 決着待ちでもここは必ず通す。通さないと result が対応づけられず弾かれる。
           online.remoteAction.resolved = true;
         }
-        netSyncTurn(acted); // 行動した側だけが、切り替わったあとの状態を権威として送る
+        if (!waitingForPeerResult) netSyncTurn(acted); // 行動した側だけが、切り替わったあとの状態を権威として送る
       }
     } else {
       turnSettle = TURN_SETTLE_SEC;

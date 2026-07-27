@@ -554,6 +554,22 @@ function check(name, value) {
   check('rules constrain the round id and status enum',
     rules.round.id['.validate'].includes('{48}')
     && ['lobby', 'revealing', 'playing', 'results'].every(x => rules.round.status['.validate'].includes("'" + x + "'")));
+  // 実機:再戦を押すとゲストが固まり、ホストに「認証の更新に失敗しました」が出た。
+  // 再戦は「新roundを作る → roomのポインタを新roundへ → 旧roundの購読者へ通知」の順で、
+  // 通知の時点でポインタは既に新roundを指しているため旧roundへの書き込みが401になっていた。
+  // 順番を逆にすると今度はゲストが新roundへ ready を書く時にポインタが古く401になる。
+  // ポインタを先に動かしたまま、ホストの lobbyState だけを例外として許すのが競合の無い形。
+  check('the host can announce the next round into the round it is leaving',
+    msg['.write'].includes("|| (newData.child('t').val() === 'lobbyState' && newData.child('seat').val() === 'p1')"));
+  check('every other packet is still confined to the current round',
+    msg['.write'].includes("root.child('rooms').child($room).child('round').child('id').val() === $roundId")
+    && msg['.validate'].includes("newData.child('roundId').val() === $roundId"));
+  // 相手が落ちたのに自分の手番表示が先に出ると、自分が落ちたように見える。
+  check('the turn does not advance while waiting for the peer to declare the result',
+    htmlText.includes('const waitingForPeerResult = isOnline() && !matchOver && units.some(u => u.hp <= 0);')
+    && htmlText.includes('if (!waitingForPeerResult) endTurn();'));
+  check('the remote action is still marked resolved while waiting, so the result correlates',
+    /waitingForPeerResult[\s\S]{0,400}online\.remoteAction\.resolved = true;/.test(htmlText));
   check('rules keep the per-round message log append-only', msg['.write'].includes('!data.exists()'));
   check('rules bind every packet to its sender, its claimed seat and the current round',
     msg['.write'].includes("child('from').val() === auth.uid")
