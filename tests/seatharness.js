@@ -162,7 +162,7 @@ function makeElement(tag) {
 const elements = new Map();
 const gameCanvas = makeCanvas();
 elements.set('game', gameCanvas);
-for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel']) {
+for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
 

@@ -301,6 +301,7 @@
   <source src="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 </audio>
 <audio id="stageBgm" preload="none"></audio>
+<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3?v=1"></audio>
 
 <script>
 (() => {
@@ -338,7 +339,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v56';
+  const BUILD_ID = 'v57';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -400,6 +401,7 @@
   const AUDIO_KEY = 'katamon_audio_v1';
   const TITLE_BGM_BASE_VOLUME = 0.34;
   const STAGE_BGM_BASE_VOLUME = 0.28;
+  const ROOM_BGM_BASE_VOLUME = 0.34; // まずタイトル曲と同じ値。実機で聴いて必要なら調整する。
   const STAGE_BGM_DUCK_RATIO = 0.39; // カットイン等で一時的に下げる割合
   const SFX_MASTER_BASE = 0.78;
   let soundOn = true;
@@ -441,16 +443,19 @@
     const bgmGain = volumeCurve(bgmVolume) * on;
     const sfxGain = volumeCurve(sfxVolume) * on;
     const duck = stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1;
-    if (titleBgmGain && stageBgmGain) {
+    if (titleBgmGain && stageBgmGain && roomBgmGain) {
       // WebAudio経由に切り替わっている場合(iOS等)は、GainNodeが最終音量を決める。
       // 要素側は素通し(1.0)に固定しないと、切替前の音量が残って二重に減衰してしまう。
       titleBgm.volume = 1;
       stageBgm.volume = 1;
+      roomBgm.volume = 1;
       titleBgmGain.gain.value = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgmGain.gain.value = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
+      roomBgmGain.gain.value = ROOM_BGM_BASE_VOLUME * bgmGain;
     } else {
       titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
+      roomBgm.volume = ROOM_BGM_BASE_VOLUME * bgmGain;
     }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
@@ -460,7 +465,8 @@
   // そのままだとBGMのスライダーだけ全く効かないため、判定して経路を切り替える。
   let titleBgmGain = null;
   let stageBgmGain = null;
-  let bgmSourceNodes = { title: null, stage: null };
+  let roomBgmGain = null;
+  let bgmSourceNodes = { title: null, stage: null, room: null };
   let mediaVolumeSupported = true;
   // iOS/iPadOSは volume を代入しても音量に反映されない。
   // 厄介なことにバージョンによっては「値は保持して読み戻せるが音は変わらない」ため、
@@ -490,7 +496,7 @@
   // BGMをWebAudioへ繋ぎ直す。ユーザー操作の中から呼ぶこと(iOSはAudioContextの作成/再開に操作が要る)。
   function ensureBgmGraph() {
     if (mediaVolumeSupported) return;            // 通常の端末は従来経路のまま触らない
-    if (titleBgmGain && stageBgmGain) {
+    if (titleBgmGain && stageBgmGain && roomBgmGain) {
       // 構築済みでも、復帰直後などにcontextが止まっていると無音になる。
       // WebAudio経由の時はBGMの生命線なので、操作のたびに起こしておく。
       if (audioCtx && audioCtx.state === 'suspended') {
@@ -503,6 +509,7 @@
       const ac = getAudioCtx();
       if (!titleBgmGain) { titleBgmGain = ac.createGain(); titleBgmGain.connect(ac.destination); }
       if (!stageBgmGain) { stageBgmGain = ac.createGain(); stageBgmGain.connect(ac.destination); }
+      if (!roomBgmGain) { roomBgmGain = ac.createGain(); roomBgmGain.connect(ac.destination); }
       // createMediaElementSourceは1要素につき1回しか呼べないので、個別に記録しておく
       if (!bgmSourceNodes.title) {
         bgmSourceNodes.title = ac.createMediaElementSource(titleBgm);
@@ -512,12 +519,17 @@
         bgmSourceNodes.stage = ac.createMediaElementSource(stageBgm);
         bgmSourceNodes.stage.connect(stageBgmGain);
       }
+      if (!bgmSourceNodes.room) {
+        bgmSourceNodes.room = ac.createMediaElementSource(roomBgm);
+        bgmSourceNodes.room.connect(roomBgmGain);
+      }
       applyAudioVolumes();
     } catch (err) {
       // 途中で失敗しても再生自体は続けたいので、以後は諦めて従来経路に任せる
       mediaVolumeSupported = true;
       titleBgmGain = null;
       stageBgmGain = null;
+      roomBgmGain = null;
     }
   }
 
@@ -612,7 +624,10 @@
   stageBgm.loop = true;
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
-  // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgmの両方が揃った時点)。
+  // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
+  const roomBgm = document.getElementById('roomBgm');
+  roomBgm.volume = ROOM_BGM_BASE_VOLUME;
+  // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgm/roomBgmが揃った時点)。
   detectMediaVolumeSupport();
   applyAudioVolumes();
   function playStageBgm(themeKey, restart = false) {
@@ -661,13 +676,37 @@
       applyAudioVolumes();
     }, duration);
   }
-  // ===== BGMディレクター(v56) =====
+  // playStageBgmと同じ流儀(自動再生拒否時はbgmRetryTargetへ積んで次のタップ操作で拾う)。
+  // ガードを二重に持つ理由: syncBgm以外の呼び出し元が万一混入しても、画面がルームでない
+  // 場面では絶対に鳴らないようにするため(既存のplayTitleBgm/playStageBgmと同じ防御)。
+  function playRoomBgm() {
+    if (!bgmAudible() || !roomScreenOpen()) return;
+    const result = roomBgm.play();
+    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = roomBgm; });
+  }
+  function stopRoomBgm(reset = true) {
+    roomBgm.pause();
+    if (reset && roomBgm.readyState > HTMLMediaElement.HAVE_NOTHING) roomBgm.currentTime = 0;
+  }
+  // ===== BGMディレクター(v57) =====
   // 遷移箇所は個別のplay/stopを呼ばず、必ずここ(syncBgm)を通す。
   // 同時に2曲が鳴る状態を構造的に不可能にするための一本化。
   // 画面の現在フェーズと可視性から「いま鳴るべきBGM」を判定する。
+  // ルーム画面(入口画面・ルーム画面・エラー時をまとめて含む)が開いているか。
+  // #onlineLobbyは全画面DOMのままCSSクラスで状態を表す構造(DESIGN_2026-07-27_ROOM_SCENE.md §0)
+  // なので、判定は'open'クラスの有無だけで足りる。
+  function roomScreenOpen() {
+    return !!(onlineLobbyEl && onlineLobbyEl.classList.contains('open'));
+  }
   function desiredBgm() {
     if (document.hidden) return 'none';
     if (!bgmAudible()) return 'none';
+    // ルーム画面が開いている時はbattle判定より優先する。決着後「ロビーへ戻る」で開くロビーは
+    // gamePhaseがbattleのままのため(Canvasの結果画面を隠さない設計。§1-3)。
+    // ただし双方「このまま再戦」の自動進行中(online.autoStartNextRound)は数秒で次戦へ進むので、
+    // ルーム曲を挟まずステージ曲を続ける。
+    if (roomScreenOpen() && !(online && online.autoStartNextRound)) return 'room';
     if (gamePhase === 'battle') return 'stage';
     return 'title'; // title/select/フリー設定/ランキングなど、戦闘以外は全部タイトル曲
   }
@@ -675,6 +714,7 @@
   // とみなす(既存のtitleBgmLoopTimer判定を流用。ここを'none'にすると毎回鳴らし直しかねない)。
   function currentBgmKind() {
     if (!stageBgm.paused) return 'stage';
+    if (!roomBgm.paused) return 'room';
     if (!titleBgm.paused || titleBgmLoopTimer !== null) return 'title';
     return 'none';
   }
@@ -690,8 +730,10 @@
     // 鳴っている方を止めてから目的の曲を鳴らす。無音への移行(ミュート/非表示)は
     // 復帰時に途中から続けられるよう currentTime をリセットしない。
     if (current === 'stage') stopStageBgm(desired !== 'none');
+    else if (current === 'room') stopRoomBgm(desired !== 'none');
     else if (current === 'title') stopTitleBgm(desired !== 'none');
     if (desired === 'stage') playStageBgm(currentThemeKey, restartStage);
+    else if (desired === 'room') playRoomBgm();
     else if (desired === 'title') startTitleBgm();
   }
 
@@ -4178,7 +4220,7 @@
   const onlineLeaveBtn = document.getElementById('onlineLeave');
   let onlineLobbyBusy = false;
   function onlineLobbyStatus(text) { if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = text; }
-  function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); }
+  function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); syncBgm(); }
   function populateOnlineCharacters() {
     if (!onlineCharacterEl || onlineCharacterEl.dataset.ready) return;
     for (const key of CHARACTER_LIST) {
@@ -4207,6 +4249,7 @@
     const codeToggle = document.getElementById('onlineCodeToggle');
     if (codeToggle) codeToggle.textContent = '合言葉を使う';
     onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。合言葉が必要な時だけ設定を開いてください。');
+    syncBgm();
   }
   function setOnlineLobbyBusy(busy) {
     onlineLobbyBusy = busy;
@@ -4606,7 +4649,7 @@
       if (online && online.kind === 'firebase') { online.roundResetting = false; renderFirebaseLobby(); }
     }
   }
-  function openFirebaseLobby() { if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room'); onlineLobbyEl.classList.remove('results'); } renderFirebaseLobby(); }
+  function openFirebaseLobby() { if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room'); onlineLobbyEl.classList.remove('results'); } renderFirebaseLobby(); syncBgm(); }
   // 決着した瞬間にロビーを開くと、勝敗の演出(余韻→決まり手→結果)が全部隠れて
   // 「何が起きたか分からないままロビーが出る」ことになる。演出が終わってから開く。
   function scheduleFirebaseResultsLobby() {
@@ -4625,6 +4668,9 @@
     if (!online || online.kind !== 'firebase') return;
     online.resultsLobbyPending = false;
     if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room', 'results'); }
+    // 観戦者はここでルーム画面が開く。同期しないと「ルーム曲のはずなのにステージ曲のまま、
+    // 次にsyncBgmが走った瞬間に突然切り替わる」という不確定状態が残る。開いた瞬間に確定させる。
+    syncBgm();
     // 準備フェーズの文言が残っていると、決着後の画面なのに「開始データを待っています」と出る。
     // 勝敗と決まり手はロビーにも出す。Canvasの結果表示はロビーに隠れて見えないため。
     const outcome = !matchOver ? '対戦が終わりました。'
@@ -4694,6 +4740,7 @@
     setLocalSeat('p1');
     if (onlineLobbyEl) onlineLobbyEl.classList.remove('in-room', 'host', 'results');
     closeOnlineLobby();
+    syncBgm();
   }
 
   // 開発用の入口はタイトルに着いてから開く。読み込み中に試合へ飛ばすと

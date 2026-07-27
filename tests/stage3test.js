@@ -288,17 +288,33 @@ function check(name, value) {
   check('leaving an online lobby routes back to the title BGM through the syncBgm director',
     firebaseLeaveSrc.includes("gamePhase = 'title'; syncBgm();")
     && !firebaseLeaveSrc.includes('stopStageBgm(') && !firebaseLeaveSrc.includes('startTitleBgm('));
-  // BGM再生/停止の一元化そのものを固定する。playStageBgm/stopStageBgm/startTitleBgm/stopTitleBgm
-  // は「関数定義」と「syncBgm内部からの呼び出し」だけに出現するはずで、遷移箇所が増えて
-  // 誰かが直接呼び出しを書き足すとこの出現回数が変わってテストが落ちる(v47の二重BGM再発防止)。
+  // BGM再生/停止の一元化そのものを固定する。playStageBgm/stopStageBgm/startTitleBgm/stopTitleBgm/
+  // playRoomBgm/stopRoomBgmは「関数定義」と「syncBgm内部からの呼び出し」だけに出現するはずで、
+  // 遷移箇所が増えて誰かが直接呼び出しを書き足すとこの出現回数が変わってテストが落ちる
+  // (v47の二重BGM再発防止。room曲もv57で同じ方式に乗せた)。
   const countOccurrences = (text, needle) => text.split(needle).length - 1;
   check('BGM play/stop calls stay centralized in syncBgm (definition + internal use only, no stray direct calls)',
     countOccurrences(htmlText, 'playStageBgm(') === 3   // 定義 + syncBgm内2箇所(同曲継続時の頭出し/曲切替時)
     && countOccurrences(htmlText, 'stopStageBgm(') === 2   // 定義 + syncBgm内1箇所
     && countOccurrences(htmlText, 'startTitleBgm(') === 2   // 定義 + syncBgm内1箇所
     && countOccurrences(htmlText, 'stopTitleBgm(') === 2   // 定義 + syncBgm内1箇所
+    && countOccurrences(htmlText, 'playRoomBgm(') === 2   // 定義 + syncBgm内1箇所
+    && countOccurrences(htmlText, 'stopRoomBgm(') === 2   // 定義 + syncBgm内1箇所
     && !htmlText.includes('refreshBgmPlayback')   // 旧関数は syncBgm に統合され消えている
     && htmlText.includes('function syncBgm(opts)'));
+  // ルーム曲の判定はbattle判定より先に評価されなければならない(決着後「ロビーへ戻る」で開く
+  // ロビーはgamePhaseがbattleのままのため。DESIGN_2026-07-27_ROOM_SCENE.md §3)。
+  // 加えて、双方「このまま再戦」の自動進行中(online.autoStartNextRound)はルーム曲を挟まない
+  // 除外条件が入っていることも固定する(入っていないとreveal中の数秒だけルーム曲が挟まる)。
+  const desiredBgmStart = htmlText.indexOf('function desiredBgm()');
+  const desiredBgmEnd = htmlText.indexOf('function currentBgmKind()', desiredBgmStart);
+  const desiredBgmSrc = desiredBgmStart >= 0 && desiredBgmEnd > desiredBgmStart
+    ? htmlText.slice(desiredBgmStart, desiredBgmEnd) : '';
+  const roomReturnIdx = desiredBgmSrc.indexOf("return 'room'");
+  const battleReturnIdx = desiredBgmSrc.indexOf("return 'stage'");
+  check("desiredBgm evaluates the room screen before the battle phase, and skips room BGM during autoStartNextRound",
+    roomReturnIdx >= 0 && battleReturnIdx >= 0 && roomReturnIdx < battleReturnIdx
+    && desiredBgmSrc.includes('online.autoStartNextRound'));
   const staleRoundOnline = {
     kind: 'firebase', clientId: 'self', currentRoundId: roundId, phase: 'lobby', participantRole: 'player',
     transport: { setRoundId: () => true, reconnect: () => true, close: () => {} }, rematchVotes: {}
