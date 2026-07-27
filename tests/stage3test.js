@@ -378,7 +378,8 @@ function check(name, value) {
   check('move is bound to the sender seat like the other board-changing packets',
     !!seatAllowsSrc && /msg\.t === 'move' \|\| msg\.t === 'fire'/.test(seatAllowsSrc[0]));
   check('move is applied immediately instead of waiting behind cut-ins',
-    htmlText.includes("'ping', 'move']"));
+    htmlText.includes("'ping', 'move']")
+    && htmlText.includes("|| msg.t === 'ping' || msg.t === 'move') {\n        applyNetMessage(msg);"));
   check('move send rate is capped and skips sub-pixel jitter',
     htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.12;') && htmlText.includes('const MOVE_SYNC_MIN_DELTA'));
   check('the mover flushes its last position before firing',
@@ -422,6 +423,9 @@ function check(name, value) {
     && htmlText.includes('online.resultsLobbyPending = true;')
     && htmlText.includes('if (matchOver && matchEndPause > 0) return;')
     && htmlText.includes('updateFirebaseResultsLobby();'));
+  check('victory and defeat sounds wait for the result screen instead of the finishing-move banner',
+    htmlText.includes('if (before > 0 && matchEndPause === 0) {')
+    && !htmlText.includes('if (before > MATCH_END_BANNER && matchEndPause <= MATCH_END_BANNER) {'));
   check('nothing opens the results lobby immediately on the decisive packet',
     !/beginMatchEnd\(msg\.reason\); openFirebaseResultsLobby\(\);/.test(htmlText)
     && (htmlText.match(/scheduleFirebaseResultsLobby\(\);/g) || []).length >= 4);
