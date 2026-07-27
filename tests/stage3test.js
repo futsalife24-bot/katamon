@@ -112,6 +112,20 @@ function check(name, value) {
   const missingBridgeSnapshot = JSON.parse(JSON.stringify(nullBridgeBaseline));
   delete missingBridgeSnapshot.bridge;
   check('Snapshot without a bridge key reproduces the RTDB-omitted-null shape', !('bridge' in missingBridgeSnapshot) && nullBridgeBaseline.bridge === null);
+  // 実機:大橋ステージで必ず terrain.bridge で切れた。RTDBを往復するとオブジェクトの
+  // キーがアルファベット順に並び替わって返るため、値が同じでも素の JSON.stringify では
+  // 文字列が一致しない。生成側は {startX,endX,y,style,seed}、受信側は {endX,seed,...}。
+  const bridgeSnap = JSON.parse(JSON.stringify(safeSnap));
+  bridgeSnap.bridge = { startX: 600, endX: 780, y: 420, style: 'timber', seed: 123.456 };
+  const bridgeReordered = JSON.parse(JSON.stringify(bridgeSnap));
+  // RTDBが返す形を再現する(キーをソートして詰め直す)
+  bridgeReordered.bridge = Object.fromEntries(Object.keys(bridgeSnap.bridge).sort().map(k => [k, bridgeSnap.bridge[k]]));
+  check('the RTDB key reordering is actually reproduced by this test',
+    JSON.stringify(bridgeReordered.bridge) !== JSON.stringify(bridgeSnap.bridge));
+  check('a bridge that only differs by RTDB key order is treated as identical',
+    h.stateSnapshotMismatchReason(bridgeReordered, bridgeSnap) === '');
+  check('a bridge whose values really differ is still reported',
+    h.stateSnapshotMismatchReason({ ...bridgeSnap, bridge: { ...bridgeSnap.bridge, endX: 900 } }, bridgeSnap) === 'terrain.bridge');
   const normalizedMissingBridge = h.normalizeFirebaseSnapshot(missingBridgeSnapshot);
   check('Firebase normalizes an RTDB-omitted bridge key back to null', normalizedMissingBridge.bridge === null);
   check('A normalized missing bridge now matches a local null-bridge baseline', h.stateSnapshotMismatchReason(normalizedMissingBridge, nullBridgeBaseline) === '');

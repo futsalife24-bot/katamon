@@ -254,7 +254,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v30';
+  const BUILD_ID = 'v31';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3426,8 +3426,12 @@
     if (snap.pattern !== baseline.pattern) return 'pattern';
     if (snap.themeKey !== baseline.themeKey) return 'themeKey';
     if (snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
-    if (JSON.stringify(snap.segments) !== JSON.stringify(baseline.segments)) return 'terrain.segments';
-    if (JSON.stringify(snap.bridge) !== JSON.stringify(baseline.bridge)) return 'terrain.bridge';
+    // RTDBを往復するとオブジェクトのキーがアルファベット順に並び替わって返る。
+    // 生成した側は {startX,endX,y,style,seed} の順、受け取った側は {endX,seed,...} の順になり、
+    // 素の JSON.stringify では値が同じでも文字列が一致せず、橋ステージで必ず切れていた。
+    // キーの並びに依存しない比較を使う。
+    if (stableFirebaseJson(snap.segments) !== stableFirebaseJson(baseline.segments)) return 'terrain.segments';
+    if (stableFirebaseJson(snap.bridge) !== stableFirebaseJson(baseline.bridge)) return 'terrain.bridge';
     if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return 'craters';
     for (let i = 0; i < snap.units.length; i++) {
       const saved = snap.units[i], local = baseline.units[i];
