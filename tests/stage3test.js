@@ -527,7 +527,7 @@ function check(name, value) {
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('the battle view-distance slider changes only the local camera and never sends a network message',
-    htmlText.includes("const CAMERA_SLIDER = { x: 60, y: 25, w: 110 };")
+    htmlText.includes("const CAMERA_SLIDER = { x: 60, y: CONTROL_PANEL_Y + 31, w: 110 };")
     && htmlText.includes('function setCameraZoomFromSlider(point)')
     && htmlText.includes("if (inputMode === 'cameraSlider') {")
     && htmlText.includes('drawCameraSlider();'));
