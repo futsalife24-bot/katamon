@@ -46,8 +46,18 @@ check('試合が始まっている', st0.gamePhase === 'battle', st0.gamePhase);
 kt.resetPanels();
 kt.render();
 const panels = kt.panels();
-check('左パネルが自席', panels.some(p => p.align === 'left' && p.id === SEAT), JSON.stringify(panels));
-check('右パネルが相手', panels.some(p => p.align === 'right' && p.id === foeSeat), JSON.stringify(panels));
+// 名前カードは「キャラが立っている側」に出す。自分のカードを必ず左に置いていたため、
+// ゲスト(e1)は名前が左・自キャラは右という食い違いを見ていた(2026-07-28の指摘)。
+const xOf = id => kt.unitState().find(u => u.id === id).x;
+const sideOf = id => (xOf(id) < xOf(id === SEAT ? foeSeat : SEAT) ? 'left' : 'right');
+const localPanel = panels.find(p => p.id === SEAT);
+const foePanel = panels.find(p => p.id === foeSeat);
+check('自分のカードは自キャラと同じ側', localPanel && localPanel.align === sideOf(SEAT),
+  `panel=${localPanel && localPanel.align} chara=${sideOf(SEAT)}`);
+check('相手のカードは相手キャラと同じ側', foePanel && foePanel.align === sideOf(foeSeat),
+  `panel=${foePanel && foePanel.align} chara=${sideOf(foeSeat)}`);
+check('カードは左右に1枚ずつ', panels.filter(p => p.align === 'left').length === 1 && panels.filter(p => p.align === 'right').length === 1,
+  JSON.stringify(panels));
 
 // ---- 4. 手番と入力の可否 ----
 // 先攻は turnOrder[0]=p1。席が e1 のときは「相手(CPU)の手番」から始まる。

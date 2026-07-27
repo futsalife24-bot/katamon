@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v62';
+  const BUILD_ID = 'v63';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5796,12 +5796,16 @@
     ctx.restore();
   }
 
-  // 直撃>至近>爆風減衰のダメージ計算(blastMulでキャラの爆風サイズを反映)
+  // 直撃>至近>爆風の3段。blastMulでキャラの爆風サイズを反映する。
+  // 以前は帯の中を距離で連続的に減衰させていたため、着弾位置がほんの少し違うだけで
+  // ダメージが1〜2変わり、オンラインでは同期のたびにHPの小さな修正が見えていた。
+  // 「どの帯に入ったか」だけで決まるようにすると、多少ズレても両端末の値が一致する。
+  // 値は従来の平均に寄せてある(至近は45->25の傾斜なので平均35、爆風は25->0で平均12)。
   function computeDamage(dist, blastMul, damageMul = 1) {
     const DIRECT = 20 * blastMul, CLOSE = 48 * blastMul, BLAST = 100 * blastMul;
     if (dist <= DIRECT) return Math.round(45 * damageMul);
-    if (dist <= CLOSE) return Math.round((45 - (dist - DIRECT) / (CLOSE - DIRECT) * 20) * damageMul);
-    if (dist <= BLAST) return Math.round((25 - (dist - CLOSE) / (BLAST - CLOSE) * 25) * damageMul);
+    if (dist <= CLOSE) return Math.round(35 * damageMul);
+    if (dist <= BLAST) return Math.round(12 * damageMul);
     return 0;
   }
 
@@ -6585,8 +6589,9 @@
     // 角のメニュー/音量ボタンと距離を取るため、名前カードは一段下に配置する。
     const cardY = 46;
     // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
-    const accent = align === 'left' ? UI.ally : UI.enemy;
-    // 左が自分の席・右が相手なので、手番の判定はユニットIDで直接引く。
+    // カードが左右どちらに出るかは席で決まるので、色は「置いた側」ではなく持ち主で引く。
+    const accent = u.id === localUnit().id ? UI.ally : UI.enemy;
+    // 手番の判定はユニットIDで直接引く。
     const isTurn = activeUnit().id === u.id;
 
     // 手番側のカードだけ縁を光らせ、今どちらの番かカードでも分かるようにする
@@ -8826,8 +8831,12 @@
     drawOffscreenIndicator();
     drawBattleHudBackdrop();
     drawWindMeter();
-    drawUnitPanel(localUnit(), 10, 'left');
-    drawUnitPanel(foeUnit(), VW - 10, 'right');
+    // 名前カードはキャラが実際に立っている側に置く。以前は自分のカードを必ず左に
+    // 置いていたため、ゲスト(e1)は「名前が左・自キャラは右」という食い違いを見ていた。
+    // 判定は位置ではなく席で行う。試合中に左右をすれ違ってもカードが飛ばないように。
+    const localOnLeft = localUnit().id === 'p1';
+    drawUnitPanel(localUnit(), localOnLeft ? 10 : VW - 10, localOnLeft ? 'left' : 'right');
+    drawUnitPanel(foeUnit(), localOnLeft ? VW - 10 : 10, localOnLeft ? 'right' : 'left');
     drawMinimap();
     drawTurnInfo();
     drawControlPanel();

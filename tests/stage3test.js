@@ -224,6 +224,13 @@ function check(name, value) {
   // 期限を延ばしすぎると、放置された簡単対戦がまたその間ずっと詰む
   check('the room lease stays short enough to free an abandoned room', h.roomTtlMs() <= 15 * 60 * 1000);
   check('the room lease still fits the ceiling the rules enforce', h.roomTtlMs() <= 7200000);
+  // ダメージは帯の中で一定。着弾が少しずれても両端末で同じ値になり、同期時のHP修正が出ない
+  const dmg = d => h.computeDamage(d, 1, 1);
+  check('damage is flat within the direct-hit band', dmg(1) === dmg(19) && dmg(19) === 45);
+  check('damage is flat within the close band', dmg(21) === dmg(47) && dmg(21) === 35);
+  check('damage is flat within the blast band', dmg(49) === dmg(99) && dmg(49) === 12);
+  check('damage is zero outside the blast radius', dmg(101) === 0);
+  check('damage still falls off with distance', dmg(1) > dmg(21) && dmg(21) > dmg(49));
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);
