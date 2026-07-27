@@ -74,6 +74,7 @@
                 "slots": { ".validate": "newData.hasChildren()" },
                 "vote": { ".validate": "newData.isBoolean()" },
                 "value": { ".validate": "newData.isBoolean()" },
+                "name": { ".validate": "newData.isString() && newData.val().length <= 12" },
                 "hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
                 "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko'" },
                 "nonce": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },

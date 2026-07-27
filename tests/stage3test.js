@@ -395,6 +395,29 @@ function check(name, value) {
     htmlText.includes('online.peerReady = msg.value !== false;')
     && h.validateFirebaseMessage(firebasePacket('ready', { value: false }))
     && h.validateFirebaseMessage(firebasePacket('ready')));
+  // 合言葉が大きい文字と入力欄の2箇所に出て場所を取っていた。入室後は1行だけにし、
+  // コピーは文字の真横の小さなアイコンにする。
+  check('the room code is shown once, with a small copy icon beside it',
+    htmlText.includes('<div id="onlineRoomCodeRow">')
+    && htmlText.includes('#onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }')
+    && htmlText.includes('#onlineLobby.in-room #onlineCopy { display: flex; }'));
+  check('the copy button no longer occupies a full row in the button grid',
+    !htmlText.includes('#onlineCopy { grid-column: span 2; display: none; }')
+    && !htmlText.includes(">合言葉をコピー / 共有</button>"));
+  check('copy visibility is left to CSS instead of inline styles that would fight it',
+    !htmlText.includes("onlineCopyBtn.style.display"));
+  // ルームにいるのが誰なのか分かるよう、ランキングと同じ表示名を出す。
+  check('the ranking name is broadcast with presence and lobbyState',
+    htmlText.includes("netSend({ t: 'presence', name: localPlayerName() })")
+    && htmlText.includes("settings: online.settings, name: localPlayerName() }"));
+  check('received names are remembered per seat and shown in the roster',
+    htmlText.includes('function rememberFirebaseName(msg)')
+    && htmlText.includes('function firebaseSeatName(seat)')
+    && htmlText.includes("const who = occupied ? (name || '参加中') : '空席';"));
+  check('a name is accepted when present and rejected when over the limit',
+    h.validateFirebaseMessage(firebasePacket('presence', { name: 'ふつサ' }))
+    && h.validateFirebaseMessage(firebasePacket('presence'))
+    && !h.validateFirebaseMessage(firebasePacket('presence', { name: 'あ'.repeat(13) })));
   check('the character picker is hidden until you are actually in a room',
     htmlText.includes('#onlineCharacter { display: none; }')
     && htmlText.includes('#onlineLobby.in-room #onlineCharacter { display: block; }'));

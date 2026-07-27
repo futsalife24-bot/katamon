@@ -130,7 +130,19 @@
   #onlineLobbyTitle { font-weight: 900; font-size: 20px; letter-spacing: .04em; }
   #onlineLobbyNote, #onlineLobbyStatus { margin-top: 7px; font-size: 12px; line-height: 1.55; }
   #onlineLobbyNote { color: #d39b4b; } #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; }
-  #onlineRoomCode { margin: 14px 0 8px; color: #ffd24a; font: 900 28px/1 monospace; letter-spacing: .16em; }
+  #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 8px; }
+  #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
+  #onlineRoomCode { color: #ffd24a; font: 900 28px/1 monospace; letter-spacing: .16em; }
+  /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
+  #onlineCopy {
+    flex: 0 0 auto; width: 34px; height: 34px; min-height: 0; padding: 0; display: none;
+    align-items: center; justify-content: center; border-radius: 6px; cursor: pointer;
+    color: #ffe2a1; border: 2px solid #c78335; background: linear-gradient(180deg,#37464d,#091116);
+  }
+  #onlineLobby.in-room #onlineCopy { display: flex; }
+  #onlineCopy svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* 入室後は合言葉を1行だけ見せる。入力欄と入力時の注意書きは用済み。 */
+  #onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }
   #onlineRoomInput, #onlineCharacter {
     width: 100%; box-sizing: border-box; padding: 11px 10px; color: #fff5dc; text-align: center;
     font: 700 17px "Yu Gothic UI", sans-serif; background: rgba(6,12,18,.92);
@@ -147,7 +159,6 @@
     border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
   }
   #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
-  #onlineCopy { grid-column: span 2; display: none; }
   #onlineRoomPanel { display: none; margin-top: 10px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); }
   /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
   #onlineCharacter { display: none; }
@@ -190,7 +201,12 @@
   <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
     <div id="onlineLobbyTitle">ONLINE 1V1</div>
     <div id="onlineLobbyNote">部屋を作ると合言葉が発行されます。相手の合言葉で参加もできます</div>
-    <div id="onlineRoomCode"></div>
+    <div id="onlineRoomCodeRow">
+      <div id="onlineRoomCode"></div>
+      <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+      </button>
+    </div>
     <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の合言葉 8文字" aria-describedby="onlineRoomHint">
     <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
     <select id="onlineCharacter" aria-label="使用モンスター"></select>
@@ -206,7 +222,6 @@
     <div id="onlineLobbyButtons">
       <button id="onlineCreate" type="button">部屋を作る</button>
       <button id="onlineJoin" type="button">部屋に入る</button>
-      <button id="onlineCopy" type="button">合言葉をコピー / 共有</button>
       <button id="onlineReady" type="button">準備完了</button>
       <button id="onlineStart" type="button">対戦開始</button>
       <button id="onlineRematch" type="button">このまま再戦</button>
@@ -257,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v32';
+  const BUILD_ID = 'v33';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3313,6 +3328,9 @@
     if (!types.has(msg.t)) return { ok: false, reason: 'packet.t' };
     if (!legacyV2 && (!FIREBASE_SEATS.includes(msg.seat || '') || !FIREBASE_ROUND_RE.test(msg.roundId || ''))) return { ok: false, reason: 'packet.seatOrRoundId' };
     if (!Number.isFinite(msg.sentAt)) return { ok: false, reason: `${msg.t}.sentAt` };
+    // name はランキングの表示名。未登録なら省略される。
+    if ((msg.t === 'lobbyState' || msg.t === 'presence') && msg.name != null
+        && (typeof msg.name !== 'string' || msg.name.length > MAX_PLAYER_NAME_LENGTH)) return { ok: false, reason: `${msg.t}.name` };
     if (msg.t === 'lobbyState') return typeof msg.status === 'string' && msg.status.length <= 16 && (!msg.nextRoundId || FIREBASE_ROUND_RE.test(msg.nextRoundId)) && (msg.autoReady == null || typeof msg.autoReady === 'boolean') ? { ok: true } : { ok: false, reason: 'lobbyState.status' };
     if (msg.t === 'settings') return msg.settings && typeof msg.settings === 'object' ? { ok: true } : { ok: false, reason: 'settings.payload' };
     // ready は準備完了の取り消しも運ぶ。value 省略は旧形式で「準備完了」の意味。
@@ -3748,6 +3766,7 @@
         }
         break;
       case 'presence':
+        rememberFirebaseName(msg);
         if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);
         break;
       case 'join':
@@ -4033,7 +4052,6 @@
     onlineLobbyEl.classList.add('open');
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
-    if (onlineCopyBtn) onlineCopyBtn.style.display = 'none';
     onlineLobbyEl.classList.remove('in-room', 'host', 'results');
     onlineLobbyStatus('部屋を作るか、相手の合言葉を入力してください。');
   }
@@ -4054,6 +4072,18 @@
   }
   function firebaseRoundId() { return secureNonce(); }
   function firebaseSeatLabel(seat) { return seat === 'p1' ? 'P1（ホスト）' : seat === 'e1' ? 'P2（対戦者）' : `${seat.toUpperCase()}（観戦）`; }
+  // ランキングと同じ名前をルームでも見せる。未登録なら何も出さない。
+  const MAX_PLAYER_NAME_LENGTH = 12; // gas/ranking.gs の MAX_NAME_LENGTH と揃える
+  function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
+  function rememberFirebaseName(msg) {
+    if (!online || !msg || !msg.seat || typeof msg.name !== 'string') return;
+    if (!online.seatNames) online.seatNames = {};
+    online.seatNames[msg.seat] = msg.name.slice(0, MAX_PLAYER_NAME_LENGTH);
+  }
+  function firebaseSeatName(seat) {
+    if (seat === online.seat) return localPlayerName();
+    return (online.seatNames && online.seatNames[seat]) || '';
+  }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && FIREBASE_PLAYER_SEATS.includes(online.seat)); }
   async function createFirebaseRoom() {
@@ -4154,7 +4184,7 @@
     onlineLobbyStatus(online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。');
     scheduleFirebaseTokenRefresh();
     renderFirebaseLobby();
-    if (seat !== 'p1') netSend({ t: 'presence' });
+    if (seat !== 'p1') netSend({ t: 'presence', name: localPlayerName() });
     if (online.participantRole === 'spectator' && room && room.round && room.round.latestSnapshot) {
       applyFirebaseSpectatorSnapshot({ snap: normalizeFirebaseSnapshot(room.round.latestSnapshot) });
     }
@@ -4263,7 +4293,9 @@
       const occupied = slots[seat] && slots[seat].uid;
       const mine = occupied === online.clientId ? ' あなた' : '';
       const state = seat === 'p1' || seat === 'e1' ? (seat === online.seat && online.selfReady ? ' 準備完了' : seat === online.peerSeat && online.peerReady ? ' 準備完了' : '') : '';
-      return `${firebaseSeatLabel(seat)}: ${occupied ? '参加中' : '空席'}${mine}${state}`;
+      const name = occupied ? firebaseSeatName(seat) : '';
+      const who = occupied ? (name || '参加中') : '空席';
+      return `${firebaseSeatLabel(seat)}: ${who}${mine}${state}`;
     }).join('\n');
     // 相手が準備完了でもホストは設定を変えられる。変えられたら相手は準備完了を取り消して選び直せる。
     const canEdit = isFirebaseHost() && online.phase === 'lobby';
@@ -4284,6 +4316,7 @@
   function applyFirebaseLobbyState(msg) {
     if (!online || online.kind !== 'firebase') return;
     if (msg.seat !== 'p1') return;
+    rememberFirebaseName(msg);
     if (msg.slots && typeof msg.slots === 'object') online.slots = msg.slots;
     if (msg.settings && typeof msg.settings === 'object') online.settings = normalizeLobbySettings(msg.settings);
     if (msg.status === 'revealing') { online.phase = 'revealing'; maybeRevealCharacter(); }
@@ -4309,7 +4342,7 @@
       if (!online || !room) return;
       online.slots = room.slots || online.slots;
       online.settings = normalizeLobbySettings(room.settings || online.settings);
-      if (broadcast && isFirebaseHost()) netSend({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
+      if (broadcast && isFirebaseHost()) netSend({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings, name: localPlayerName() });
       renderFirebaseLobby();
     } catch (_) { /* SSEは継続し、次のpresenceで再試行する */ }
   }
@@ -7653,7 +7686,6 @@
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       // 発行後は自分で書き換えるものではないので、編集できない見た目にする
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
-      if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
       beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat);
       setOnlineLobbyBusy(false);
     } catch (err) {
@@ -7671,7 +7703,6 @@
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       // 入れた後だけ編集を止める。失敗時は打ち直せないと困るので触らない。
       if (onlineRoomInput) onlineRoomInput.readOnly = true;
-      if (onlineCopyBtn) onlineCopyBtn.style.display = 'block';
       beginFirebaseOnline(seat === 'e1' ? 'guest' : 'spectator', code, auth, selectedOnlineCharacter(), room, seat);
       setOnlineLobbyBusy(false);
     } catch (err) {
