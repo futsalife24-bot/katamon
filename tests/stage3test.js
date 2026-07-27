@@ -382,6 +382,24 @@ function check(name, value) {
     && htmlText.includes("status: 'revealing'") && htmlText.includes('maybeRevealCharacter()'));
   // 相手が準備完了でもホストは設定を変えられる。変えられた側は準備完了を取り消して
   // モンスターを選び直せるので、一方的に決められた条件で始まることはない。
+  // canEdit(選択肢の有効/無効)だけ直して送信側のガードを直し忘れると、
+  // 「選べるのに送られない」状態になる。実機で地形も風も反映されなかった原因がこれ。
+  check('the settings sender uses the same gate as the enabled state',
+    htmlText.includes("if (!isFirebaseHost() || online.phase !== 'lobby') return;")
+    && !htmlText.includes("online.phase !== 'lobby' || online.selfReady || online.peerReady) return;"));
+  // rollWind がフリーモードしか見ておらず、ロビーで風を選んでもランダム風のままだった。
+  check('a fixed wind is resolved in one place for both free mode and the online lobby',
+    htmlText.includes('function activeFixedWind()')
+    && htmlText.includes("if (online && online.kind === 'firebase' && online.settings) {")
+    && htmlText.includes('const selected = activeFixedWind();')
+    && htmlText.includes('const freeWind = activeFixedWind();'));
+  check('rollWind no longer branches on free mode alone', (() => {
+    const src = /function rollWind\(\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+    return !!src && !src[0].includes("battleMode === 'free'") && src[0].includes('activeFixedWind()');
+  })());
+  // 決着後の画面に準備フェーズの文言が残っていた。
+  check('the results lobby replaces the stale reveal-phase status',
+    htmlText.includes("onlineLobbyStatus('対戦が終わりました。もう一度戦うか、ロビーへ戻るかを選んでください。');"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
     && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));

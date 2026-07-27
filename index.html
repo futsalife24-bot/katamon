@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v33';
+  const BUILD_ID = 'v34';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2134,10 +2134,25 @@
   let calmWind = false;
   let calmBattle = false;
 
-  function rollWind() {
+  // 固定風の指定を一箇所で解決する。フリーモードとオンラインのロビー設定の両方に効く。
+  // 以前は rollWind がフリーモードしか見ておらず、ロビーで風を選んでも
+  // 実際の対戦はランダム風のままだった。
+  function activeFixedWind() {
     if (battleMode === 'free') {
       const selected = WIND_OPTIONS[freeModeConfig.windIndex] || WIND_OPTIONS[0];
-      if (selected.key !== 'random') {
+      return selected && selected.key !== 'random' ? selected : null;
+    }
+    if (online && online.kind === 'firebase' && online.settings) {
+      const selected = WIND_OPTIONS.find(option => option.key === online.settings.wind);
+      return selected && selected.key !== 'random' ? selected : null;
+    }
+    return null;
+  }
+
+  function rollWind() {
+    {
+      const selected = activeFixedWind();
+      if (selected) {
         calmBattle = selected.key === 'calm';
         calmWind = selected.key === 'calm';
         wind.dir = selected.dir || 1;
@@ -4364,7 +4379,8 @@
     beginMatchEnd(msg.reason); openFirebaseResultsLobby();
   }
   async function updateFirebaseSettings() {
-    if (!isFirebaseHost() || online.phase !== 'lobby' || online.selfReady || online.peerReady) return;
+    // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
+    if (!isFirebaseHost() || online.phase !== 'lobby') return;
     const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, revision: (online.settings.revision || 0) + 1 });
     await firebaseRequest(`rooms/${online.room}/settings`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
     online.settings = settings; netSend({ t: 'settings', settings }); renderFirebaseLobby();
@@ -4416,7 +4432,12 @@
     }
   }
   function openFirebaseLobby() { if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room'); onlineLobbyEl.classList.remove('results'); } renderFirebaseLobby(); }
-  function openFirebaseResultsLobby() { if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room', 'results'); } renderFirebaseLobby(); }
+  function openFirebaseResultsLobby() {
+    if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room', 'results'); }
+    // 準備フェーズの文言が残っていると、決着後の画面なのに「開始データを待っています」と出る。
+    onlineLobbyStatus('対戦が終わりました。もう一度戦うか、ロビーへ戻るかを選んでください。');
+    renderFirebaseLobby();
+  }
   async function leaveFirebaseLobby() {
     if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。'); return; }
     if (!confirm('このロビーを退出しますか？')) return;
@@ -8839,11 +8860,8 @@
     // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
     isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
     const lobbySettings = battleMode === 'normal' && online && online.kind === 'firebase' ? online.settings : null;
-    const freeWind = battleMode === 'free' ? WIND_OPTIONS[freeModeConfig.windIndex]
-      : (lobbySettings ? WIND_OPTIONS.find(option => option.key === lobbySettings.wind) : null);
-    calmBattle = freeWind && freeWind.key !== 'random'
-      ? freeWind.key === 'calm'
-      : Math.random() < CALM_BATTLE_CHANCE;
+    const freeWind = activeFixedWind();
+    calmBattle = freeWind ? freeWind.key === 'calm' : Math.random() < CALM_BATTLE_CHANCE;
     calmWind = false;
     const freeTerrain = battleMode === 'free' ? FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex]
       : (lobbySettings ? FREE_TERRAIN_OPTIONS.find(option => option.key === lobbySettings.terrain) : null);
