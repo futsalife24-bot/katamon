@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v42';
+  const BUILD_ID = 'v43';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4216,7 +4216,7 @@
       seat, peerSeat: seat === 'p1' ? 'e1' : 'p1', participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
-      resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null,
+      resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
       peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
@@ -4340,6 +4340,7 @@
       logSeatAssignment('guestStart');
       battleMode = 'normal'; stopTitleBgm(); gamePhase = 'battle'; playStageBgm(currentThemeKey, true);
       online.phase = 'playing';
+      online.startVerifying = false;
       netSend({ t: 'ready' });
       closeOnlineLobby();
     } catch (_) { if (online) { online.startVerifying = false; online.protocolError = '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
@@ -4390,7 +4391,8 @@
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
-    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null;
+    // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
+    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
     online.autoStartNextRound = !!autoReady;
     if (autoReady && isFirebasePlayer()) commitOwnCharacter();

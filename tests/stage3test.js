@@ -493,6 +493,10 @@ function check(name, value) {
     htmlText.includes('if (online.transport.saveSnapshot) await online.transport.saveSnapshot(snap);')
     && htmlText.includes("const startSent = await netSend({ t: 'start', snap });")
     && htmlText.includes("if (startSent !== true) throw new Error('Match start could not be sent.');"));
+  check('a rematch clears the guest start-verification latch before accepting the next start',
+    htmlText.includes('pendingStart: null, startVerifying: false,')
+    && htmlText.includes('online.pendingStart = null; online.startVerifying = false;')
+    && htmlText.includes("online.phase = 'playing';\n      online.startVerifying = false;"));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('players choose on the result screen, not in a popup that hides the outcome',
