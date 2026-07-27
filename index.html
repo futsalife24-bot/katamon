@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v59';
+  const BUILD_ID = 'v60';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3638,7 +3638,8 @@
     const hidden = typeof document !== 'undefined' && document.hidden;
     for (const entry of online.pendingRemoteTerminals.values()) {
       if (advanceFirebasePendingVisibleTime(entry, now, hidden)) {
-        rejectFirebaseMessage('相手の行動通知が届かず接続を中断しました。');
+        // 見出し側で「中断しました/開始できません」を出し分けるので、ここは原因だけを述べる。
+        rejectFirebaseMessage('相手の行動通知が届きませんでした。');
         return;
       }
     }
@@ -3651,7 +3652,7 @@
     if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !online.peerLiveness) return;
     const liveness = advanceFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow(), typeof document !== 'undefined' && document.hidden);
     if (liveness.timedOut) {
-      rejectFirebaseMessage('相手との通信が途切れたため対戦を中断しました。');
+      rejectFirebaseMessage('相手との通信が途切れました。');
       return;
     }
     if (liveness.pingDue) {
@@ -3709,7 +3710,15 @@
       const stale = firebaseSeatIsStale(seat);
       if (!!online.seatStale[seat] !== stale) { online.seatStale[seat] = stale; changed = true; }
     }
-    if (changed) renderFirebaseLobby();
+    // 状態表示も合わせて直す。入室時の「接続しました。相手を待っています…」が残ると
+    // 席ボードの「応答なし」と食い違い、どちらが本当なのか分からなくなる。
+    if (changed) {
+      const staleSeats = FIREBASE_SEATS.filter(seat => online.seatStale[seat]);
+      if (staleSeats.length === 1) onlineLobbyStatus(`${firebaseSeatLabel(staleSeats[0])}の応答が途切れています。`);
+      else if (staleSeats.length) onlineLobbyStatus('応答が途切れている席があります。');
+      else onlineLobbyStatus('応答が戻りました。');
+      renderFirebaseLobby();
+    }
   }
   // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
   // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
@@ -7136,13 +7145,18 @@
     } catch (_) { /* ユーザーが閉じただけの場合も含む */ }
     onlineLogCopyStatus = 'コピーできません。localStorage の katamon_online_log_v1 を確認してください';
   }
+  function onlineErrorTitle(matchStarted) {
+    return matchStarted ? '対戦を中断しました' : 'オンライン対戦を開始できません';
+  }
   // オンライン対戦の状態表示。相手待ち・退出・バージョン不一致をここで知らせる。
   function drawOnlineOverlay() {
     if (!isOnline() || matchOver) return;
     let title = null;
     let sub = '';
     if (online.protocolError) {
-      title = 'オンライン対戦を開始できません';
+      // 開始前の失敗と対戦中の切断を同じ見出しにしていたため、2ターン目まで進んだ試合が
+      // 切れても「開始できません」と出ていた。中断された側には何が起きたのか分からない。
+      title = onlineErrorTitle(online.matchStarted);
       sub = online.protocolError;
     } else if (online.versionMismatch) {
       title = 'アプリを更新してください';
@@ -7161,7 +7175,7 @@
     const showLogButton = !!online.protocolError;
     ctx.save();
     ctx.fillStyle = 'rgba(4,7,11,0.72)';
-    ctx.fillRect(0, VH * 0.36, VW, showLogButton ? 140 : 96);
+    ctx.fillRect(0, VH * 0.36, VW, showLogButton ? 160 : 96);
     drawOutlinedText(title, VW / 2, VH * 0.36 + 44, {
       font: `900 22px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
     });
@@ -7178,6 +7192,11 @@
           font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
         });
       }
+      // 実際はどこをタップしてもタイトルへ戻れる(タップ処理側で先にログボタンを拾っている)。
+      // 案内が無いと「相手を待っています」のホイールと相まって詰まったように見える。
+      drawOutlinedText('画面をタップしてタイトルへ', VW / 2, onlineLogCopyBtn.y + 52, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      });
     }
     ctx.restore();
   }

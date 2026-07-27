@@ -215,6 +215,9 @@ function check(name, value) {
   check('a seat with no recorded sighting is never stale', !h.firebaseSeatStale(999999, undefined));
   const lobbyThresholds = [h.advanceFirebaseLobbyLiveness({ clockMs: 0, pingVisibleMs: 0, checkedAt: 0 }, 1, false)];
   check('lobby heartbeat never reports a timeout (display only)', lobbyThresholds.every(r => !('timedOut' in r)));
+  // 実機で2ターン目まで進んだ試合が切れた時に「開始できません」と出ていた
+  check('a disconnect after the match started does not say it failed to start', h.onlineErrorTitle(true) === '対戦を中断しました');
+  check('a failure before the match started still says it could not start', h.onlineErrorTitle(false) === 'オンライン対戦を開始できません');
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);
