@@ -281,8 +281,24 @@ function check(name, value) {
   const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
   const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart
     ? htmlText.slice(firebaseLeaveStart, firebaseLeaveEnd) : '';
-  check('leaving an online lobby stops the stage BGM before returning to the title',
-    firebaseLeaveSrc.includes('stopStageBgm();') && firebaseLeaveSrc.includes("gamePhase = 'title'; startTitleBgm();"));
+  // v56: BGMはディレクター(syncBgm)に一元化された。leaveFirebaseLobbyはgamePhaseをtitleへ
+  // 戻してからsyncBgm()を呼ぶだけになり、stopStageBgm/startTitleBgmを直接は呼ばない。
+  // 「ロビー退出でステージ曲が止まりタイトル曲へ戻る」という検査の意図はsyncBgm呼び出しの
+  // 有無と、直接呼び出しが残っていないことの両方で保つ。
+  check('leaving an online lobby routes back to the title BGM through the syncBgm director',
+    firebaseLeaveSrc.includes("gamePhase = 'title'; syncBgm();")
+    && !firebaseLeaveSrc.includes('stopStageBgm(') && !firebaseLeaveSrc.includes('startTitleBgm('));
+  // BGM再生/停止の一元化そのものを固定する。playStageBgm/stopStageBgm/startTitleBgm/stopTitleBgm
+  // は「関数定義」と「syncBgm内部からの呼び出し」だけに出現するはずで、遷移箇所が増えて
+  // 誰かが直接呼び出しを書き足すとこの出現回数が変わってテストが落ちる(v47の二重BGM再発防止)。
+  const countOccurrences = (text, needle) => text.split(needle).length - 1;
+  check('BGM play/stop calls stay centralized in syncBgm (definition + internal use only, no stray direct calls)',
+    countOccurrences(htmlText, 'playStageBgm(') === 3   // 定義 + syncBgm内2箇所(同曲継続時の頭出し/曲切替時)
+    && countOccurrences(htmlText, 'stopStageBgm(') === 2   // 定義 + syncBgm内1箇所
+    && countOccurrences(htmlText, 'startTitleBgm(') === 2   // 定義 + syncBgm内1箇所
+    && countOccurrences(htmlText, 'stopTitleBgm(') === 2   // 定義 + syncBgm内1箇所
+    && !htmlText.includes('refreshBgmPlayback')   // 旧関数は syncBgm に統合され消えている
+    && htmlText.includes('function syncBgm(opts)'));
   const staleRoundOnline = {
     kind: 'firebase', clientId: 'self', currentRoundId: roundId, phase: 'lobby', participantRole: 'player',
     transport: { setRoundId: () => true, reconnect: () => true, close: () => {} }, rematchVotes: {}

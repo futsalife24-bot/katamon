@@ -338,7 +338,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v55';
+  const BUILD_ID = 'v56';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -547,7 +547,10 @@
       if (titleBgm.readyState > HTMLMediaElement.HAVE_NOTHING) titleBgm.currentTime = 0;
     }
     const result = titleBgm.play();
-    return result && typeof result.then === 'function' ? result : Promise.resolve();
+    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+    // 呼び出し元のPromiseチェーンはそのまま返す。自動再生ブロックの再試行フラグは脇で拾うだけ。
+    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = titleBgm; });
+    return promise;
   }
   function startTitleBgm() {
     if (!bgmAudible() || (gamePhase !== 'title' && gamePhase !== 'select')) return;
@@ -633,7 +636,9 @@
     }
     if (restart && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
     const result = stageBgm.play();
-    if (result && typeof result.catch === 'function') result.catch(() => {});
+    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+    // 呼び出し元には何も返さない(従来どおり)。自動再生ブロックの再試行フラグだけ脇で拾う。
+    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = stageBgm; });
   }
   function stopStageBgm(reset = true) {
     if (stageBgmRestoreTimer !== null) {
@@ -656,65 +661,71 @@
       applyAudioVolumes();
     }, duration);
   }
-  // 音量やON/OFFを変えた直後に、今の画面にふさわしいBGMの再生/停止を合わせる。
-  function refreshBgmPlayback() {
-    if (!bgmAudible()) {
-      clearTitleBgmLoopTimer();
-      titleBgm.pause();
-      stageBgm.pause();
+  // ===== BGMディレクター(v56) =====
+  // 遷移箇所は個別のplay/stopを呼ばず、必ずここ(syncBgm)を通す。
+  // 同時に2曲が鳴る状態を構造的に不可能にするための一本化。
+  // 画面の現在フェーズと可視性から「いま鳴るべきBGM」を判定する。
+  function desiredBgm() {
+    if (document.hidden) return 'none';
+    if (!bgmAudible()) return 'none';
+    if (gamePhase === 'battle') return 'stage';
+    return 'title'; // title/select/フリー設定/ランキングなど、戦闘以外は全部タイトル曲
+  }
+  // いま実際に鳴っている(とみなす)側を返す。タイトル曲のループ待ちの無音区間も「鳴っている」
+  // とみなす(既存のtitleBgmLoopTimer判定を流用。ここを'none'にすると毎回鳴らし直しかねない)。
+  function currentBgmKind() {
+    if (!stageBgm.paused) return 'stage';
+    if (!titleBgm.paused || titleBgmLoopTimer !== null) return 'title';
+    return 'none';
+  }
+  // opts.restartStage === true の時だけステージ曲を頭から鳴らし直す(戦闘開始・再戦がこれに当たる)。
+  function syncBgm(opts) {
+    const restartStage = !!(opts && opts.restartStage);
+    const desired = desiredBgm();
+    const current = currentBgmKind();
+    if (desired === current) {
+      if (desired === 'stage' && restartStage) playStageBgm(currentThemeKey, true);
       return;
     }
-    if (gamePhase === 'battle') playStageBgm(currentThemeKey);
-    else if (gamePhase === 'title' || gamePhase === 'select') startTitleBgm();
+    // 鳴っている方を止めてから目的の曲を鳴らす。無音への移行(ミュート/非表示)は
+    // 復帰時に途中から続けられるよう currentTime をリセットしない。
+    if (current === 'stage') stopStageBgm(desired !== 'none');
+    else if (current === 'title') stopTitleBgm(desired !== 'none');
+    if (desired === 'stage') playStageBgm(currentThemeKey, restartStage);
+    else if (desired === 'title') startTitleBgm();
   }
 
   // ===== 画面を離れた時の停止/復帰 =====
   // スマホをスリープさせたりアプリを切り替えても、audio要素は再生を続けてしまう。
   // 描画ループ(rAF)は勝手に止まるのに音だけ鳴り続けるため、明示的に止める。
-  let bgmHiddenState = null;
+  // 「隠れる直前に何が鳴っていたか」をスナップショットして復元する方式はやめ、
+  // 復帰のたびに syncBgm() で「いまの正解」を再計算する
+  // (desiredBgm が document.hidden を見るので、隠れている間は自動的に'none'になる)。
+  let audioSuspendedForHidden = false;
   function suspendAudioForHidden() {
-    if (bgmHiddenState) return; // 二重呼び出し(visibilitychange と pagehide)を無視する
-    bgmHiddenState = {
-      // ループ待ちの無音区間で隠れた場合も「鳴っていた」とみなして復帰させる
-      title: !titleBgm.paused || titleBgmLoopTimer !== null,
-      stage: !stageBgm.paused
-    };
-    clearTitleBgmLoopTimer();
-    titleBgm.pause();
-    stageBgm.pause();
+    if (audioSuspendedForHidden) return; // 二重呼び出し(visibilitychange と pagehide)を無視する
+    audioSuspendedForHidden = true;
+    syncBgm();
     if (audioCtx && audioCtx.state === 'running') {
       const p = audioCtx.suspend();
       if (p && typeof p.catch === 'function') p.catch(() => {});
     }
   }
   function resumeAudioAfterVisible() {
-    const state = bgmHiddenState;
-    bgmHiddenState = null;
+    if (!audioSuspendedForHidden) return; // suspend済みでなければ何もしない(二重呼び出し対策)
+    audioSuspendedForHidden = false;
     if (audioCtx && audioCtx.state === 'suspended') {
       const p = audioCtx.resume();
       if (p && typeof p.catch === 'function') p.catch(() => {});
     }
-    if (!state || !bgmAudible()) return;
-    // 復帰時はフェーズ判定に頼らず、隠れる直前に鳴っていた方をそのまま鳴らし直す
-    // (フリーモード設定画面などフェーズ分岐に該当しない場面でも無音にならないように)
-    const target = state.stage ? stageBgm : state.title ? titleBgm : null;
-    if (!target) return;
-    const played = target.play();
-    if (played && typeof played.catch === 'function') {
-      // ロック解除直後などは自動再生が拒否されることがある。
-      // その場合は次のタップ(ユーザー操作)で鳴らし直す。
-      played.catch(() => { bgmRetryTarget = target; });
-    }
+    syncBgm();
   }
   // 自動再生を拒否された時の再開待ち。onPointerDownから拾う。
   let bgmRetryTarget = null;
   function retryBgmOnUserGesture() {
     if (!bgmRetryTarget) return;
-    const target = bgmRetryTarget;
     bgmRetryTarget = null;
-    if (!bgmAudible()) return;
-    const played = target.play();
-    if (played && typeof played.catch === 'function') played.catch(() => {});
+    syncBgm();
   }
   let audioCtx = null;
   let sfxCompressor = null;
@@ -2803,7 +2814,7 @@
     battleMode = 'normal';
     player.character = key;
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
-    stopTitleBgm();
+    // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
     gamePhase = 'battle';
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
@@ -2832,7 +2843,7 @@
     battleMode = 'free';
     player.character = CHARACTER_LIST[freeModeConfig.playerIndex];
     cpu.character = CHARACTER_LIST[freeModeConfig.cpuIndex];
-    stopTitleBgm();
+    // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
     gamePhase = 'battle';
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
@@ -3006,9 +3017,8 @@
     const data = loadSuspendedMatch();
     if (!data) return;
     applySnapshot(data);
-    stopTitleBgm();
     gamePhase = 'battle';
-    playStageBgm(currentThemeKey, true);
+    syncBgm({ restartStage: true });
 
     clearSuspendedMatch();
     hasSuspendedSave = false;
@@ -3928,9 +3938,8 @@
         applySnapshot(msg.snap);
         setOnlineSeat(online.seat);
         battleMode = 'normal';
-        stopTitleBgm();
         gamePhase = 'battle';
-        playStageBgm(currentThemeKey, true);
+        syncBgm({ restartStage: true });
         online.phase = 'playing';
         netSend({ t: 'ready' });
         break;
@@ -4420,7 +4429,8 @@
     try {
       player.character = online.selfCharacter;
       cpu.character = online.peerCharacter;
-      stopTitleBgm(); gamePhase = 'battle'; resetMatch(false);
+      // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
+      gamePhase = 'battle'; resetMatch(false);
       const first = await fairFirstPlayer(online.room, online.selfNonce, online.peerNonce);
       if (!online || online.kind !== 'firebase') return;
       activeIndex = first === 'p1' ? 0 : 1;
@@ -4455,7 +4465,7 @@
       applySnapshot(msg.snap);
       setOnlineSeat(online.seat);
       logSeatAssignment('guestStart');
-      battleMode = 'normal'; stopTitleBgm(); gamePhase = 'battle'; playStageBgm(currentThemeKey, true);
+      battleMode = 'normal'; gamePhase = 'battle'; syncBgm({ restartStage: true });
       online.phase = 'playing';
       online.startVerifying = false;
       netSend({ t: 'ready' });
@@ -4630,9 +4640,9 @@
     if (leaving.role === 'host') await firebaseRequest(`rooms/${leaving.room}`, leaving.auth, { method: 'DELETE' });
     else await firebaseRequest(`rooms/${leaving.room}/slots/${leaving.seat}`, leaving.auth, { method: 'DELETE' });
     endOnline(false, false);
-    // 結果ロビーからの退出も戦闘画面を経由しているため、ステージ曲を止めてからタイトル曲へ戻す。
-    stopStageBgm();
-    gamePhase = 'title'; startTitleBgm();
+    // 結果ロビーからの退出も戦闘画面を経由している。gamePhaseをtitleへ戻してからsyncBgmを呼べば
+    // ステージ曲を止めてタイトル曲へ戻す判断は director 側がやってくれる。
+    gamePhase = 'title'; syncBgm();
   }
 
   function beginOnline(role) {
@@ -4659,7 +4669,7 @@
       runStats = { damageDealt: 0, shots: 0 };
       player.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
       cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
-      stopTitleBgm();
+      // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
       gamePhase = 'battle';
       resetMatch(false);
     }
@@ -7061,7 +7071,6 @@
   }
 
   function returnToTitleFromResult() {
-    stopStageBgm();
     projectiles = [];
     aimState = null;
     moveDir = 0;
@@ -7074,7 +7083,7 @@
     winner = null;
     cutIn = null;
     gamePhase = 'title';
-    startTitleBgm();
+    syncBgm(); // ステージ曲を止めてタイトル曲へ戻す判断はdirector側に任せる
   }
 
   function exitOnlineFromMenu() {
@@ -7835,7 +7844,7 @@
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }
     if (online) endOnline(true);
     else closeOnlineLobby();
-    gamePhase = 'title'; startTitleBgm();
+    gamePhase = 'title'; syncBgm();
   });
 
   const soundBtn = { x: VW - 28, y: 20, r: 17 }; // 右上・CPUパネルと重ならない高さ
@@ -7869,7 +7878,7 @@
     if (key === 'bgm') bgmVolume = v; else sfxVolume = v;
     applyAudioVolumes();
     // BGMは音量0で止め、0から上げた時に鳴り直す必要がある
-    if (key === 'bgm') refreshBgmPlayback();
+    if (key === 'bgm') syncBgm();
   }
 
   function drawSoundToggle() {
@@ -8598,7 +8607,7 @@
       return;
     }
     ensureBgmGraph();
-    startTitleBgm();
+    syncBgm();
     retryBgmOnUserGesture();
 
     // 確認ダイアログが最優先。開いている間は他の入力を一切通さない。
@@ -8629,7 +8638,7 @@
       if (hitRect(p0, soundMasterBtn)) {
         soundOn = !soundOn;
         applyAudioVolumes();
-        refreshBgmPlayback();
+        syncBgm();
         saveAudioSettings();
         if (soundOn) playUiSound();
         return;
@@ -8759,10 +8768,9 @@
         }
         saveSuspendedMatch();
         menuOpen = false;
-        stopStageBgm();
         gamePhase = 'title';
         hasSuspendedSave = true;
-        startTitleBgm();
+        syncBgm(); // ステージ曲を止めてタイトル曲へ戻す判断はdirector側に任せる
         return;
       }
       return; // メニュー表示中は他の操作を無視
@@ -9098,7 +9106,10 @@
     menuOpen = false;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
-    if (gamePhase === 'battle') playStageBgm(currentThemeKey, true);
+    // 戦闘開始・再戦・連戦(ボス連勝)のすべてがここを通る。gamePhaseがbattle以外なら
+    // syncBgm内部のdesiredBgmが'stage'を返さないので、実質的に何もしない
+    // (例:suspendRunToTitleはresetMatch呼び出し前にgamePhaseをtitleへ戻して抑止している)。
+    if (gamePhase === 'battle') syncBgm({ restartStage: true });
   }
 
   window.addEventListener('keydown', (e) => {
