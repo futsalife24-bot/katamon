@@ -280,7 +280,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v52';
+  const BUILD_ID = 'v53';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2596,6 +2596,8 @@
   const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
   // ランキングは対戦モードではないので、2つのモードボタンより控えめな細い帯にする。
   const titleRankingBtn = { x: VW / 2, y: 856, w: 382, h: 42 };
+  const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };
+  let updateRequestInFlight = false;
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
   const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
@@ -4897,6 +4899,13 @@
     });
     drawOutlinedText('連勝記録', titleRankingBtn.x + 58, titleRankingBtn.y + 5, {
       font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+
+    drawIronPlate(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w, titleUpdateBtn.h, {
+      cut: 8, lineWidth: 1.5, rivets: false
+    });
+    drawOutlinedText(updateRequestInFlight ? '更新中...' : '最新版を取得', titleUpdateBtn.x, titleUpdateBtn.y + 4, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
 
     ctx.save();
@@ -8198,6 +8207,34 @@
     ctx.restore();
   }
 
+  // 端末に残った古いPWAキャッシュを捨て、ネットワークからゲーム本体を取り直す。
+  // URLにも毎回一意の値を付けるので、スマホブラウザの強いキャッシュもすり抜けられる。
+  async function forceGameUpdate() {
+    if (updateRequestInFlight) return;
+    updateRequestInFlight = true;
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          await registration.update();
+          if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter(key => key.startsWith('katamon-pwa-'))
+          .map(key => caches.delete(key)));
+      }
+    } catch (_) {
+      // 更新確認に失敗しても、下のキャッシュバスター付き再読み込みは実行する。
+    }
+    const latestUrl = new URL(location.href);
+    latestUrl.searchParams.set('v', BUILD_ID);
+    latestUrl.searchParams.set('refresh', Date.now().toString());
+    location.replace(latestUrl.href);
+  }
+
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
     const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && localUnit().grounded;
@@ -8747,6 +8784,9 @@
       } else if (hitRect(p0, titleFreeBtn)) {
         playUiSound();
         gamePhase = 'freeSetup';
+      } else if (hitRect(p0, titleUpdateBtn)) {
+        playUiSound();
+        forceGameUpdate();
       }
       return;
     }
@@ -9554,7 +9594,7 @@
   if ('serviceWorker' in navigator
       && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js?v=2', { updateViaCache: 'none' }).catch(() => {});
+      navigator.serviceWorker.register(`./sw.js?build=${BUILD_ID}`, { updateViaCache: 'none' }).catch(() => {});
     });
   }
 })();

@@ -268,6 +268,12 @@ function check(name, value) {
     loopbackExit && !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && closed === 2);
   const rulesText = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check('title offers an in-game force-update action that refreshes the worker and clears old app caches',
+    htmlText.includes("const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };")
+    && htmlText.includes('async function forceGameUpdate()')
+    && htmlText.includes('await registration.update();')
+    && htmlText.includes("key.startsWith('katamon-pwa-')")
+    && htmlText.includes("latestUrl.searchParams.set('refresh', Date.now().toString());"));
   const firebaseLeaveStart = htmlText.indexOf('async function leaveFirebaseLobby()');
   const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
   const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart
