@@ -266,9 +266,14 @@ function check(name, value) {
   app.exitOnlineFromMenu();
   check('the title button exits both loopback and a stuck Firebase match',
     loopbackExit && !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && closed === 2);
-
   const rulesText = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const firebaseLeaveStart = htmlText.indexOf('async function leaveFirebaseLobby()');
+  const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
+  const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart
+    ? htmlText.slice(firebaseLeaveStart, firebaseLeaveEnd) : '';
+  check('leaving an online lobby stops the stage BGM before returning to the title',
+    firebaseLeaveSrc.includes('stopStageBgm();') && firebaseLeaveSrc.includes("gamePhase = 'title'; startTitleBgm();"));
   const staleRoundOnline = {
     kind: 'firebase', clientId: 'self', currentRoundId: roundId, phase: 'lobby', participantRole: 'player',
     transport: { setRoundId: () => true, reconnect: () => true, close: () => {} }, rematchVotes: {}
