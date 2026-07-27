@@ -280,7 +280,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v50';
+  const BUILD_ID = 'v51';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4135,6 +4135,8 @@
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
     onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry');
+    const codeToggle = document.getElementById('onlineCodeToggle');
+    if (codeToggle) codeToggle.textContent = '合言葉を使う';
     onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。合言葉が必要な時だけ設定を開いてください。');
   }
   function setOnlineLobbyBusy(busy) {
