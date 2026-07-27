@@ -267,7 +267,10 @@ function check(name, value) {
   check('the title button exits both loopback and a stuck Firebase match',
     loopbackExit && !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && closed === 2);
   const rulesText = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
-  const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  // Windowsのcore.autocrlf=trueで取り出すと作業ツリーがCRLFになる。
+  // 以降の includes() は改行を含む文字列を直に比べるので、ここでLFへ揃えておく。
+  // (揃えないと、コードは正しいのにチェックアウトの仕方だけで落ちる)
+  const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   check('title offers an in-game force-update action that refreshes the worker and clears old app caches',
     htmlText.includes("const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };")
     && htmlText.includes('async function forceGameUpdate()')
