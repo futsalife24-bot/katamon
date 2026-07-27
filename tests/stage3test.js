@@ -341,6 +341,23 @@ function check(name, value) {
   // 実機:降参の result は対応する fire を持たないため保留に積まれ、15秒後に
   // 「相手の行動通知が届かず接続を中断しました。」で切れていた。applyNetMessage の
   // 降参処理まで届く前に握り潰されていたのが原因。
+  // 降参の決着が届くまでに関門が3つある。1つでも塞がっていると対戦が詰む。
+  // 実際、receiveFirebaseTerminal と case 'result' を直しても firebaseFlowAllows を
+  // 見落としており、実機で「不正な通信順序です（result.flow）」で切れた。
+  // 3箇所すべてが同じ判定関数を通ることを縛る。
+  check('all three gates for a conceding result consult the same helper', (() => {
+    const decl = (htmlText.match(/function firebaseResultConcedes\(msg\)/g) || []).length;
+    const uses = (htmlText.match(/firebaseResultConcedes\(msg\)/g) || []).length;
+    // 定義1 + 参照3(flow / terminal buffer / result 適用)
+    return decl === 1 && uses >= 4;
+  })());
+  check('the flow gate lets a conceding result through without a matching fire',
+    htmlText.includes('if (firebaseResultConcedes(msg)) return true;'));
+  // 関門を素通しにしたせいで「自分の勝ち」まで通るようになっていないこと。
+  check('the flow gate still demands an action match for a non-conceding terminal', (() => {
+    const src = /function firebaseFlowAllows\(msg, flow\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+    return !!src && src[0].includes("if (msg.t === 'state' || msg.t === 'result') return !!flow && firebaseActionMatches(msg, flow.remoteAction);");
+  })());
   check('a conceding result bypasses the pending-terminal buffer that waits for a fire',
     htmlText.includes('if (!online.remoteAction && firebaseResultConcedes(msg)) {'));
   // 同じ理由の拒否が毎フレーム走り、リングバッファが同じ行で埋まって履歴が消えた。

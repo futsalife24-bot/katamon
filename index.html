@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v34';
+  const BUILD_ID = 'v35';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3453,8 +3453,21 @@
       netSend({ t: 'ping' });
     }
   }
+  // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
+  // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
+  // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
+  function firebaseResultConcedes(msg) {
+    if (!msg || msg.t !== 'result') return false;
+    const senderUnit = unitById(msg.seat);
+    return !!senderUnit && msg.winner !== senderUnit.team;
+  }
+
   function firebaseFlowAllows(msg, flow) {
     if (msg.t === 'fire') return !!flow && flow.activeId === msg.unitId && flow.remoteUnitId === msg.unitId && !flow.remoteAction;
+    // 敗北宣言は対応する fire を持たないので、行動との対応づけを要求しない。
+    // 降参が通るには関門が3つ(この判定・receiveFirebaseTerminal・case 'result')あり、
+    // 1つでも塞がっていると decisive な決着が届かず対戦が詰む。必ず3箇所とも通すこと。
+    if (firebaseResultConcedes(msg)) return true;
     if (msg.t === 'state' || msg.t === 'result') return !!flow && firebaseActionMatches(msg, flow.remoteAction);
     return true;
   }
@@ -3595,15 +3608,6 @@
     online.completedRemoteActions.set(msg.actionId, { from: msg.from, t: msg.t });
     while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
   }
-  // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
-  // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
-  // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
-  function firebaseResultConcedes(msg) {
-    if (!msg || msg.t !== 'result') return false;
-    const senderUnit = unitById(msg.seat);
-    return !!senderUnit && msg.winner !== senderUnit.team;
-  }
-
   function receiveFirebaseTerminal(msg) {
     const completed = firebaseCompletedTerminalStatus(msg);
     if (completed === 'duplicate-result') return true;
