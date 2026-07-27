@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v61';
+  const BUILD_ID = 'v62';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4909,6 +4909,19 @@
     cleanup.catch(() => {});
   }
 
+  // 通信エラー・版不一致・相手の退出でタイトルへ抜ける経路は「終点」で、ここから再戦は無い。
+  // 明示的なロビー退出と同じように席/部屋を返す。返さないと round.status が playing のまま
+  // 部屋が残り、席の確保は status==='lobby' を条件にしているので誰も入れなくなる。
+  // 固定コードの簡単対戦がこれで期限切れまで使えなくなっていた(2026-07-28に実際に発生)。
+  // 結果画面(matchOver)からは呼ばない。あちらは再戦のために部屋を残す必要がある。
+  // 投げ捨てで送る。ここで待つとタイトルへ戻れなくなり、失敗しても部屋の期限が拾ってくれる。
+  function releaseFirebaseRoomOnFatalExit() {
+    if (!online || online.kind !== 'firebase') return;
+    const leaving = online;
+    const path = leaving.role === 'host' ? `rooms/${leaving.room}` : `rooms/${leaving.room}/slots/${leaving.seat}`;
+    firebaseRequest(path, leaving.auth, { method: 'DELETE' }).catch(() => {});
+  }
+
   function beginOnline(role) {
     const transport = makeTransport(LOOPBACK_ROOM);
     if (!transport) return false; // BroadcastChannelが無い環境では黙って諦める
@@ -5595,14 +5608,16 @@
 
     // 歯・外周リング・ボルトだけホイールと連動して回転させる。文字と中心ハブは正立のまま。
     // カード1枚(selectWheelPosition差分1.0)=歯1枚分(12枚)の角度なので、指を離して静止した時も歯のシルエットは必ず同じ位置に揃う。
-    const gearRotation = -selectWheelPosition * (Math.PI * 2 / 12);
+    // v55で導入した時に符号を逆に置いてしまい、カードの送り方向と歯の回転が反対を向いていた。
+    const gearRotation = selectWheelPosition * (Math.PI * 2 / 12);
     ctx.save();
     ctx.rotate(gearRotation);
     ctx.fillStyle = '#7c5426';
     for (let i = 0; i < 12; i++) {
       ctx.save();
       ctx.rotate((Math.PI * 2 * i) / 12);
-      selectRoundedRect(-6, -gearR - 10, 12, 19, 3);
+      // 歯は輪郭で「歯車」と分からせる部分なので、細いと単なる丸に見える。v62で一回り大きくした。
+      selectRoundedRect(-8, -gearR - 13, 16, 24, 4);
       ctx.fill();
       ctx.restore();
     }
@@ -9067,12 +9082,14 @@
     // 通信エラーの画面だけは、ログコピー用のボタンを先に拾ってから「どこでもタイトルへ」にする。
     if (isOnline() && online.protocolError && !matchOver) {
       if (hitRect(p0, onlineLogCopyBtn)) { copyOnlineLog(); return; }
+      releaseFirebaseRoomOnFatalExit();
       endOnline(false);
       returnToTitleFromResult();
       return;
     }
     // 相手が消えた/通信バージョンが違うときは、どこをタップしてもタイトルへ抜けられるようにする。
     if (isOnline() && (online.peerLeft || online.versionMismatch) && !matchOver) {
+      releaseFirebaseRoomOnFatalExit();
       endOnline(false);
       returnToTitleFromResult();
       return;
