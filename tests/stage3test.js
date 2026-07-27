@@ -277,7 +277,7 @@ function check(name, value) {
     && htmlText.includes('await registration.update();')
     && htmlText.includes("key.startsWith('katamon-pwa-')")
     && htmlText.includes("latestUrl.searchParams.set('refresh', Date.now().toString());"));
-  const firebaseLeaveStart = htmlText.indexOf('async function leaveFirebaseLobby()');
+  const firebaseLeaveStart = htmlText.indexOf('function leaveFirebaseLobby()');
   const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
   const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart
     ? htmlText.slice(firebaseLeaveStart, firebaseLeaveEnd) : '';
@@ -288,6 +288,22 @@ function check(name, value) {
   check('leaving an online lobby routes back to the title BGM through the syncBgm director',
     firebaseLeaveSrc.includes("gamePhase = 'title'; syncBgm();")
     && !firebaseLeaveSrc.includes('stopStageBgm(') && !firebaseLeaveSrc.includes('startTitleBgm('));
+  // R4(2026-07-27):通信不調でも必ず退出できるよう、ローカル遷移(endOnline/gamePhase/syncBgm)を
+  // 先に済ませてからFirebaseの削除を投げ捨てで送る(要件6)。await不通で退出できない旧実装の再発防止。
+  check('leaving a Firebase lobby runs the local transition before firing the (fire-and-forget) delete',
+    firebaseLeaveSrc.includes('endOnline(false, false);')
+    && firebaseLeaveSrc.indexOf('endOnline(false, false);') < firebaseLeaveSrc.indexOf('firebaseRequest(')
+    && firebaseLeaveSrc.includes('cleanup.catch(() => {});')
+    && !/await firebaseRequest/.test(firebaseLeaveSrc));
+  // ネイティブconfirm()はロビー退出を通信不調でなくても止めてしまう(ダイアログが出た端末依存の挙動)。
+  // 画面内の2択(「退出する」/「やめる」)に置き換え、5秒操作が無ければ自動で戻すことを固定する。
+  check('the native confirm() dialog is replaced by an in-screen two-choice confirm with an auto-revert timer',
+    !htmlText.includes("confirm('このロビーを退出しますか？')")
+    && htmlText.includes('function beginLeaveFirebaseLobbyConfirm()')
+    && htmlText.includes('function cancelLeaveFirebaseLobbyConfirm()')
+    && htmlText.includes("onlineLeaveConfirmTimer = setTimeout(cancelLeaveFirebaseLobbyConfirm, 5000);")
+    && htmlText.includes("onlineLobbyEl.classList.add('leave-confirm');")
+    && htmlText.includes("onlineLobbyEl.classList.remove('leave-confirm');"));
   // BGM再生/停止の一元化そのものを固定する。playStageBgm/stopStageBgm/startTitleBgm/stopTitleBgm/
   // playRoomBgm/stopRoomBgmは「関数定義」と「syncBgm内部からの呼び出し」だけに出現するはずで、
   // 遷移箇所が増えて誰かが直接呼び出しを書き足すとこの出現回数が変わってテストが落ちる
@@ -412,6 +428,12 @@ function check(name, value) {
     htmlText.includes('if (online.protocolError) return;'));
   check('an ended connection is not re-evaluated every frame',
     htmlText.includes("if (online.phase === 'ended' || online.protocolError) return;"));
+  // R4(2026-07-27):protocolErrorが立っている間、ルーム画面のステータス行を赤系にしてCanvas側の
+  // エラー表示と一貫させる。クラスの付け外しは既存のonlineLobbyStatus呼び出し経路に乗せ、
+  // 新しい呼び出し網は作らない(rejectFirebaseMessage等、既存の呼び出しがそのままトリガーになる)。
+  check('the room status line turns red while a protocol error is active, without adding a new call site',
+    htmlText.includes('#onlineLobby.error #onlineLobbyStatus { color: #f06060; }')
+    && htmlText.includes("onlineLobbyEl.classList.toggle('error', !!(online && online.protocolError));"));
   check('a conceded result copies the declared HP so the loser is shown as defeated',
     htmlText.includes('if (concedes) {') && htmlText.includes('for (const u of msg.units) {'));
   // 移動の配信(2026-07-27)。移動を送っていなかったことが、燃料不一致・落下死が
@@ -518,6 +540,35 @@ function check(name, value) {
     htmlText.includes('function rememberFirebaseName(msg)')
     && htmlText.includes('function firebaseSeatName(seat)')
     && htmlText.includes("const who = occupied ? (name || '参加中') : '空席';"));
+  // R4(2026-07-27):席ボードを1行=1テキストから行カード(DOM)へ組み直した。名前は相手端末の
+  // ユーザー入力なので、innerHTMLへの文字列連結は禁止し、createElement + textContent だけで組む。
+  const seatRowStart = htmlText.indexOf('function buildFirebaseSeatRow(seat, slots)');
+  const seatRowEnd = htmlText.indexOf('function renderFirebaseLobby()', seatRowStart);
+  const seatRowSrc = seatRowStart >= 0 && seatRowEnd > seatRowStart
+    ? htmlText.slice(seatRowStart, seatRowEnd) : '';
+  check('the seat board is assembled with createElement/textContent only, never innerHTML',
+    seatRowSrc.length > 0
+    && !seatRowSrc.includes('innerHTML')
+    && (seatRowSrc.match(/document\.createElement\('span'\)/g) || []).length >= 3
+    && (seatRowSrc.match(/\.textContent = /g) || []).length >= 3);
+  check('the seat board renders four seat rows by clearing and re-appending, not string concatenation',
+    htmlText.includes('while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);')
+    && htmlText.includes('FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));'));
+  check('each seat row marks occupied/empty with a filled/hollow dot and colors it by seat kind (brass for players, gray for spectators)',
+    seatRowSrc.includes("mark.textContent = occupied ? '●' : '○';")
+    && htmlText.includes('.onlineSeatRow.occupied.player .seatMark { color: #ffd24a; }')
+    && htmlText.includes('.onlineSeatRow.occupied.spectator .seatMark { color: #9fb0bd; }'));
+  check("the local player's own row gets a badge and a highlighted background",
+    seatRowSrc.includes("badge.textContent = 'あなた';")
+    && htmlText.includes('.onlineSeatRow.mine { background: rgba(255,210,74,.14); }'));
+  check('ready state is shown only for occupied player seats during the lobby phase',
+    seatRowSrc.includes("if (isPlayerSeat && occupied && online.phase === 'lobby') {")
+    && seatRowSrc.includes("state.textContent = ready ? '準備完了 ✓' : '選択中…';"));
+  // Stage 4境界の確認:ロビー中はupdateFirebasePeerLiveness()がphase!=='playing'で早期returnするため
+  // peerLivenessは対戦中しか進まない。ロビー中の心拍送信は無いので、応答なしバッジは作らない(R4は
+  // 在席/空席の●/○表示までに留める)。この境界を壊さず維持できていることを固定する。
+  check('peer liveness only advances during battle, so the lobby has no periodic heartbeat to base a stale badge on',
+    htmlText.includes("function updateFirebasePeerLiveness() {\n    if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !online.peerLiveness) return;"));
   check('a name is accepted when present and rejected when over the limit',
     h.validateFirebaseMessage(firebasePacket('presence', { name: 'ふつサ' }))
     && h.validateFirebaseMessage(firebasePacket('presence'))
@@ -691,8 +742,12 @@ function check(name, value) {
     rules.rounds.$roundId.latestSnapshot['.write'].includes("child('round').child('id').val() === $roundId")
     && rules.rounds.$roundId.latestSnapshot['.write'].includes("child('e1').child('uid').val() === auth.uid")
     && !rules.rounds.$roundId.latestSnapshot['.write'].includes("child('s1')"));
-  check('rules let only the host delete the room',
-    rules['.write'].includes("data.exists() && !newData.exists() && data.child('hostUid').val() === auth.uid"));
+  // 削除はホスト本人か、部屋が期限切れの時だけ(固定コードの簡単対戦部屋が
+  // 放置で永久に詰む欠陥の修正。2026-07-27にConsoleへ反映済み)。
+  // 「有効な部屋を他人が消せない」ことmust含めて固定する。
+  check('rules let the host, or anyone after expiry, delete the room — never a stranger while it lives',
+    rules['.write'].includes("data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)")
+    && rules['.write'].includes("(!data.exists() || data.child('expiresAt').val() <= now) && newData.exists()"));
   // クライアントが送る種別をルールが1つでも知らないと、その送信で401になり、
   // 送信キューが停止して対戦が即死する(move を足した時に実際に踏んだ)。
   // 種別の追加漏れをここで落とす。

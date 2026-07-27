@@ -160,6 +160,13 @@
   #onlineLeave { display: none; }
   #onlineLobby.in-room #onlineLeave { display: block; }
   #onlineLobby.in-room.results #onlineLeave { display: none; }
+  #onlineLeaveConfirm { display: none; flex: 0 0 auto; gap: 6px; }
+  #onlineLeaveConfirmYes, #onlineLeaveConfirmNo {
+    flex: 0 0 auto; min-height: 0; padding: 8px 10px; font: 900 12px "Yu Gothic UI", sans-serif;
+    border-radius: 4px; cursor: pointer; background: linear-gradient(180deg,#37464d,#091116);
+  }
+  #onlineLeaveConfirmYes { color: #ffe2a1; border: 2px solid #f06060; }
+  #onlineLeaveConfirmNo { color: #ffe2a1; border: 2px solid #c78335; }
   /* 本文:入口はエンブレム+案内、ルームは席・設定・キャラ選択。縦スクロールに逃がす。 */
   #onlineLobbyBody {
     flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -172,6 +179,8 @@
   #onlineLobbyNote { color: #d39b4b; margin-bottom: 10px; }
   #onlineLobby.in-room #onlineLobbyNote { display: none; }
   #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; margin-top: auto; padding-top: 10px; }
+  /* online.protocolErrorが立っている間、ステータス行を赤系にしてCanvas側のエラー表示と一貫させる。 */
+  #onlineLobby.error #onlineLobbyStatus { color: #f06060; }
   /* 入室後は合言葉を1行だけ見せる。入力欄と入力時の注意書きは用済み。 */
   #onlineRoomInput, #onlineRoomHint, #onlineCreate, #onlineJoin { display: none; }
   #onlineLobby.code-entry:not(.in-room) #onlineRoomInput { display: block; }
@@ -201,7 +210,28 @@
   #onlineLobby.in-room #onlineRoomPanel { display: block; }
   #onlineLobby.in-room #onlineCreate, #onlineLobby.in-room #onlineJoin { display: none; }
   #onlineRoomPanel { display: none; margin-top: 2px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); text-align: left; }
-  #onlineSlots { margin: 7px 0; font-size: 12px; line-height: 1.65; color: #e8edf2; white-space: pre-line; }
+  /* 席ボード:1席=1行カード。renderFirebaseLobby() が seat ごとに組み立てる(innerHTML不使用)。 */
+  #onlineSlots { margin: 7px 0; display: flex; flex-direction: column; gap: 4px; }
+  .onlineSeatRow {
+    display: flex; align-items: center; gap: 7px; padding: 6px 8px;
+    border-radius: 4px; background: rgba(255,255,255,.03);
+    font-size: 12px; line-height: 1.4; color: #e8edf2;
+  }
+  /* 自分の行だけ背景をわずかに明るくして強調する。 */
+  .onlineSeatRow.mine { background: rgba(255,210,74,.14); }
+  .onlineSeatRow .seatMark { flex: 0 0 auto; width: 13px; text-align: center; font-size: 13px; color: #4a5560; }
+  /* 在席の●は席の種別で色分け:対戦者=真鍮系、観戦=控えめなグレー。 */
+  .onlineSeatRow.occupied.player .seatMark { color: #ffd24a; }
+  .onlineSeatRow.occupied.spectator .seatMark { color: #9fb0bd; }
+  .onlineSeatRow .seatLabel { flex: 0 0 auto; min-width: 62px; font-weight: 900; color: #d39b4b; }
+  .onlineSeatRow .seatName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .onlineSeatRow .seatBadgeYou {
+    flex: 0 0 auto; font-size: 10px; font-weight: 900; color: #0b0d17;
+    background: #ffd24a; border-radius: 3px; padding: 1px 5px;
+  }
+  .onlineSeatRow .seatState { flex: 0 0 auto; font-size: 11px; font-weight: 900; }
+  .onlineSeatRow .seatState.ready { color: #ffd24a; }
+  .onlineSeatRow .seatState.picking { color: #9fb0bd; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
@@ -236,6 +266,12 @@
     #onlineLobbyEmblem { margin-bottom: 8px; }
     #onlineRoomCode { font-size: 19px; }
   }
+  /* 退出はネイティブconfirm()をやめ、画面内の2択に置き換える(要件6)。leave-confirm状態では
+     #onlineLeaveを隠し、代わりにこの2択を出す。5秒操作が無ければ自動で戻す。
+     #onlineLeaveの表示指定は上に2箇所あり(ヘッダ用・フッタボタン共通指定用)、同specificityの
+     カスケードで確実に上書きするため、スタイルシートの最後に置く。 */
+  #onlineLobby.leave-confirm #onlineLeave { display: none; }
+  #onlineLobby.leave-confirm #onlineLeaveConfirm { display: flex; }
 </style>
 </head>
 <body>
@@ -267,6 +303,10 @@
         </button>
       </div>
       <button id="onlineLeave" type="button">ロビーを退出</button>
+      <div id="onlineLeaveConfirm">
+        <button id="onlineLeaveConfirmYes" type="button">退出する</button>
+        <button id="onlineLeaveConfirmNo" type="button">やめる</button>
+      </div>
       <button id="onlineCancel" type="button">タイトルへ戻る</button>
     </div>
     <div id="onlineLobbyBody">
@@ -339,7 +379,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v57';
+  const BUILD_ID = 'v58';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4219,7 +4259,12 @@
   const onlineReturnLobbyBtn = document.getElementById('onlineReturnLobby');
   const onlineLeaveBtn = document.getElementById('onlineLeave');
   let onlineLobbyBusy = false;
-  function onlineLobbyStatus(text) { if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = text; }
+  // ステータス行の更新はここに一本化されている。protocolErrorの有無で赤帯クラスを付け外しし、
+  // 新しい呼び出し経路は作らない(rejectFirebaseMessage等の既存呼び出しに乗る)。
+  function onlineLobbyStatus(text) {
+    if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = text;
+    if (onlineLobbyEl) onlineLobbyEl.classList.toggle('error', !!(online && online.protocolError));
+  }
   function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); syncBgm(); }
   function populateOnlineCharacters() {
     if (!onlineCharacterEl || onlineCharacterEl.dataset.ready) return;
@@ -4246,6 +4291,7 @@
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
     onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry');
+    cancelLeaveFirebaseLobbyConfirm();
     const codeToggle = document.getElementById('onlineCodeToggle');
     if (codeToggle) codeToggle.textContent = '合言葉を使う';
     onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。合言葉が必要な時だけ設定を開いてください。');
@@ -4267,7 +4313,8 @@
     return { terrain, wind, turnsPerPlayer, revision: Math.max(1, Number(raw.revision) || 1) };
   }
   function firebaseRoundId() { return secureNonce(); }
-  function firebaseSeatLabel(seat) { return seat === 'p1' ? 'P1（ホスト）' : seat === 'e1' ? 'P2（対戦者）' : `${seat.toUpperCase()}（観戦）`; }
+  function firebaseSeatLabel(seat) { return seat === 'p1' ? 'P1 ホスト' : seat === 'e1' ? 'P2 対戦者' : `${seat.toUpperCase()} 観戦`; }
+  function firebaseSeatIsPlayer(seat) { return FIREBASE_PLAYER_SEATS.includes(seat); }
   // ランキングと同じ名前をルームでも見せる。未登録なら何も出さない。
   const MAX_PLAYER_NAME_LENGTH = 12; // gas/ranking.gs の MAX_NAME_LENGTH と揃える
   function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
@@ -4516,17 +4563,59 @@
     } catch (_) { if (online) { online.startVerifying = false; online.protocolError = '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
 
+  // 席1行分のDOM要素を組み立てる。名前は相手端末の入力なので、ここは
+  // document.createElement + textContent だけで組み、innerHTML への文字列連結はしない。
+  function buildFirebaseSeatRow(seat, slots) {
+    const occupied = !!(slots[seat] && slots[seat].uid);
+    const mine = seat === online.seat;
+    const isPlayerSeat = firebaseSeatIsPlayer(seat);
+    const row = document.createElement('div');
+    row.className = `onlineSeatRow ${occupied ? 'occupied' : 'empty'} ${isPlayerSeat ? 'player' : 'spectator'}${mine ? ' mine' : ''}`;
+
+    const mark = document.createElement('span');
+    mark.className = 'seatMark';
+    mark.textContent = occupied ? '●' : '○';
+    row.appendChild(mark);
+
+    const label = document.createElement('span');
+    label.className = 'seatLabel';
+    label.textContent = firebaseSeatLabel(seat);
+    row.appendChild(label);
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'seatName';
+    const name = occupied ? firebaseSeatName(seat) : '';
+    const who = occupied ? (name || '参加中') : '空席';
+    nameEl.textContent = who;
+    row.appendChild(nameEl);
+
+    if (mine) {
+      const badge = document.createElement('span');
+      badge.className = 'seatBadgeYou';
+      badge.textContent = 'あなた';
+      row.appendChild(badge);
+    }
+
+    // 準備状態はp1/e1のみ、ロビー中で在席している時だけ出す。判定は既存のselfReady/peerReadyのまま
+    // (peerSeatは対戦者同士でのみ相手を指す。観戦者からの見え方は元のテキスト版と同じ制約を引き継ぐ)。
+    if (isPlayerSeat && occupied && online.phase === 'lobby') {
+      const ready = seat === online.seat ? online.selfReady : (seat === online.peerSeat && !!online.peerReady);
+      const state = document.createElement('span');
+      state.className = 'seatState ' + (ready ? 'ready' : 'picking');
+      state.textContent = ready ? '準備完了 ✓' : '選択中…';
+      row.appendChild(state);
+    }
+    return row;
+  }
   function renderFirebaseLobby() {
     if (!online || online.kind !== 'firebase') return;
+    // 退出の画面内確認はロビー中しか出さない。開いたまま開始/決着でphaseが動いたら消しておく。
+    if (online.phase !== 'lobby') cancelLeaveFirebaseLobbyConfirm();
     const slots = online.slots || {};
-    if (onlineSlotsEl) onlineSlotsEl.textContent = FIREBASE_SEATS.map(seat => {
-      const occupied = slots[seat] && slots[seat].uid;
-      const mine = occupied === online.clientId ? ' あなた' : '';
-      const state = seat === 'p1' || seat === 'e1' ? (seat === online.seat && online.selfReady ? ' 準備完了' : seat === online.peerSeat && online.peerReady ? ' 準備完了' : '') : '';
-      const name = occupied ? firebaseSeatName(seat) : '';
-      const who = occupied ? (name || '参加中') : '空席';
-      return `${firebaseSeatLabel(seat)}: ${who}${mine}${state}`;
-    }).join('\n');
+    if (onlineSlotsEl) {
+      while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);
+      FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));
+    }
     // 相手が準備完了でもホストは設定を変えられる。変えられたら相手は準備完了を取り消して選び直せる。
     const canEdit = isFirebaseHost() && online.phase === 'lobby';
     if (onlineTerrainEl) onlineTerrainEl.value = online.settings.terrain;
@@ -4679,16 +4768,34 @@
     onlineLobbyStatus(`${outcome} もう一度戦うか、ロビーへ戻るかを選んでください。`);
     renderFirebaseLobby();
   }
-  async function leaveFirebaseLobby() {
+  // 退出はネイティブconfirm()をやめ、画面内の2択(「退出する」/「やめる」)に置き換えた(要件6)。
+  // ここは「ロビーを退出」タップで2択を出すだけ。5秒操作が無ければ自動でボタンへ戻す。
+  let onlineLeaveConfirmTimer = null;
+  function cancelLeaveFirebaseLobbyConfirm() {
+    if (onlineLeaveConfirmTimer) { clearTimeout(onlineLeaveConfirmTimer); onlineLeaveConfirmTimer = null; }
+    if (onlineLobbyEl) onlineLobbyEl.classList.remove('leave-confirm');
+  }
+  function beginLeaveFirebaseLobbyConfirm() {
     if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。'); return; }
-    if (!confirm('このロビーを退出しますか？')) return;
+    if (onlineLobbyEl) onlineLobbyEl.classList.add('leave-confirm');
+    if (onlineLeaveConfirmTimer) clearTimeout(onlineLeaveConfirmTimer);
+    onlineLeaveConfirmTimer = setTimeout(cancelLeaveFirebaseLobbyConfirm, 5000);
+  }
+  // 「退出する」の確定。通信不調でも必ずタイトルへ戻れることを優先し、ローカル遷移を先に済ませる。
+  // Firebaseへの削除は投げ捨てで送り、失敗しても無視する(部屋の残骸はTTL経過後に誰でも
+  // 上書きできるルールを反映済みなので実害は無い。DESIGN_2026-07-27_ROOM_SCENE.md §4)。
+  function leaveFirebaseLobby() {
+    cancelLeaveFirebaseLobbyConfirm();
+    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。'); return; }
     const leaving = online;
-    if (leaving.role === 'host') await firebaseRequest(`rooms/${leaving.room}`, leaving.auth, { method: 'DELETE' });
-    else await firebaseRequest(`rooms/${leaving.room}/slots/${leaving.seat}`, leaving.auth, { method: 'DELETE' });
     endOnline(false, false);
     // 結果ロビーからの退出も戦闘画面を経由している。gamePhaseをtitleへ戻してからsyncBgmを呼べば
     // ステージ曲を止めてタイトル曲へ戻す判断は director 側がやってくれる。
     gamePhase = 'title'; syncBgm();
+    const cleanup = leaving.role === 'host'
+      ? firebaseRequest(`rooms/${leaving.room}`, leaving.auth, { method: 'DELETE' })
+      : firebaseRequest(`rooms/${leaving.room}/slots/${leaving.seat}`, leaving.auth, { method: 'DELETE' });
+    cleanup.catch(() => {});
   }
 
   function beginOnline(role) {
@@ -4739,6 +4846,7 @@
     online = null;
     setLocalSeat('p1');
     if (onlineLobbyEl) onlineLobbyEl.classList.remove('in-room', 'host', 'results');
+    cancelLeaveFirebaseLobbyConfirm();
     closeOnlineLobby();
     syncBgm();
   }
@@ -7821,6 +7929,8 @@
   const onlineCreateButton = document.getElementById('onlineCreate');
   const onlineJoinButton = document.getElementById('onlineJoin');
   const onlineCancelButton = document.getElementById('onlineCancel');
+  const onlineLeaveConfirmYesButton = document.getElementById('onlineLeaveConfirmYes');
+  const onlineLeaveConfirmNoButton = document.getElementById('onlineLeaveConfirmNo');
   if (onlineCodeToggleButton) onlineCodeToggleButton.addEventListener('click', () => {
     if (onlineLobbyBusy || online || !onlineLobbyEl) return;
     onlineLobbyEl.classList.toggle('code-entry');
@@ -7885,7 +7995,9 @@
   if (onlineStartBtn) onlineStartBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseStart(); });
   if (onlineRematchBtn) onlineRematchBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseRematch(); });
   if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseReturnLobby(); });
-  if (onlineLeaveBtn) onlineLeaveBtn.addEventListener('click', () => { if (!onlineLobbyBusy) leaveFirebaseLobby(); });
+  if (onlineLeaveBtn) onlineLeaveBtn.addEventListener('click', () => { if (!onlineLobbyBusy) beginLeaveFirebaseLobbyConfirm(); });
+  if (onlineLeaveConfirmYesButton) onlineLeaveConfirmYesButton.addEventListener('click', () => { if (!onlineLobbyBusy) leaveFirebaseLobby(); });
+  if (onlineLeaveConfirmNoButton) onlineLeaveConfirmNoButton.addEventListener('click', () => { cancelLeaveFirebaseLobbyConfirm(); });
   [onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
   if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }
