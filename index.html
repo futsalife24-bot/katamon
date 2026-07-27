@@ -259,7 +259,7 @@
 <div id="onlineLobby" aria-live="polite">
   <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
     <div id="onlineLobbyHeader">
-      <div id="onlineLobbyTitle">ONLINE 1V1</div>
+      <div id="onlineLobbyTitle">ONLINE BATTLE</div>
       <div id="onlineRoomCodeRow">
         <div id="onlineRoomCode"></div>
         <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
@@ -338,7 +338,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v54';
+  const BUILD_ID = 'v55';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4851,55 +4851,22 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // 左の紋章板。通常戦は照準、フリーは工具ギアを模した簡易アイコン。
-    const badgeX = button.x - button.w / 2 + 43;
-    ctx.fillStyle = isFree ? '#873e22' : '#a35a1d';
-    ctx.beginPath();
-    ctx.arc(badgeX, button.y - 2, 24, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#f1b74d';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.strokeStyle = '#fff0b4';
-    ctx.lineWidth = 3;
-    if (isFree) {
-      ctx.beginPath();
-      ctx.arc(badgeX, button.y - 2, 9, 0, Math.PI * 2);
-      ctx.stroke();
-      for (let i = 0; i < 8; i++) {
-        const a = i * Math.PI / 4;
-        ctx.beginPath();
-        ctx.moveTo(badgeX + Math.cos(a) * 12, button.y - 2 + Math.sin(a) * 12);
-        ctx.lineTo(badgeX + Math.cos(a) * 18, button.y - 2 + Math.sin(a) * 18);
-        ctx.stroke();
-      }
-    } else {
-      ctx.beginPath();
-      ctx.arc(badgeX, button.y - 2, 12, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(badgeX - 18, button.y - 2);
-      ctx.lineTo(badgeX + 18, button.y - 2);
-      ctx.moveTo(badgeX, button.y - 20);
-      ctx.lineTo(badgeX, button.y + 16);
-      ctx.stroke();
-    }
-
     drawRivet(button.x - button.w / 2 + 15, button.y - button.h / 2 + 14);
     drawRivet(button.x + button.w / 2 - 15, button.y - button.h / 2 + 14);
     drawRivet(button.x - button.w / 2 + 15, button.y + button.h / 2 - 14);
     drawRivet(button.x + button.w / 2 - 15, button.y + button.h / 2 - 14);
 
+    // 紋章バッジを廃止したのでラベル・サブとも中央(button.x)基準へ。
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff6dc';
+    ctx.fillStyle = UI.parchment;
     ctx.strokeStyle = '#090b0d';
     ctx.lineWidth = 5;
-    ctx.font = '900 23px "Arial Black", Impact, "Yu Gothic UI", sans-serif';
-    ctx.strokeText(label, button.x + 25, button.y - 7);
-    ctx.fillText(label, button.x + 25, button.y - 7);
-    ctx.fillStyle = isFree ? '#ffc071' : '#d9e7ee';
-    ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
-    ctx.fillText(sub, button.x + 25, button.y + 18);
+    ctx.font = '900 23px ' + UI_FONT_HEAVY;
+    ctx.strokeText(label, button.x, button.y - 7);
+    ctx.fillText(label, button.x, button.y - 7);
+    ctx.fillStyle = UI.brassLabel;
+    ctx.font = 'bold 10px ' + UI_FONT;
+    ctx.fillText(sub, button.x, button.y + 18);
     ctx.restore();
   }
 
@@ -4939,14 +4906,26 @@
     }
     ctx.restore();
 
-    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', 'モンスターを選んで連勝へ挑め', 'normal');
-    drawTitleModeButton(titleOnlineBtn, 'ONLINE 1V1', '合言葉で友だちとリアルタイム対戦', 'online');
-    drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
-
-    ctx.fillStyle = 'rgba(255,225,169,0.62)';
+    // ボタン群の一番上に見出しを掲げる。文字幅を測って左右に真鍮ラインを添える(キャラ選択ヘッダと同じ色・太さ)。
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
-    ctx.fillText('SELECT A BATTLE MODE', VW / 2, 820);
+    const modeLabelText = 'SELECT A BATTLE MODE';
+    const modeLabelHalfW = ctx.measureText(modeLabelText).width / 2;
+    const modeLabelY = 566;
+    ctx.strokeStyle = 'rgba(255,210,74,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(VW / 2 - modeLabelHalfW - 84, modeLabelY);
+    ctx.lineTo(VW / 2 - modeLabelHalfW - 14, modeLabelY);
+    ctx.moveTo(VW / 2 + modeLabelHalfW + 14, modeLabelY);
+    ctx.lineTo(VW / 2 + modeLabelHalfW + 84, modeLabelY);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,225,169,0.62)';
+    ctx.fillText(modeLabelText, VW / 2, modeLabelY);
+
+    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', 'モンスターを選んで連勝へ挑め', 'normal');
+    drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
+    drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
     ctx.restore();
 
     drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
@@ -5152,7 +5131,7 @@
 
   function drawSelectStat(label, value, x, y, color) {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 8px sans-serif';
+    ctx.font = 'bold 8px ' + UI_FONT;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
     for (let i = 0; i < 5; i++) {
@@ -5192,14 +5171,16 @@
     ctx.shadowBlur = card.focused ? 28 : 16;
     ctx.shadowOffsetY = card.focused ? 0 : 7;
     selectRoundedRect(left, top, main.w, main.h, 18);
+    // ネオン紺地をやめて黒鉄プレート(UI.plateTop→Mid→Bottom)へ。キャラ色は右下角だけ弱く残すアクセント。
     const cardFill = ctx.createLinearGradient(left, top, left + main.w, top + main.h);
-    cardFill.addColorStop(0, 'rgba(13,23,40,0.99)');
-    cardFill.addColorStop(0.72, 'rgba(24,35,52,0.98)');
-    cardFill.addColorStop(1, `${def.color}42`);
+    cardFill.addColorStop(0, UI.plateTop);
+    cardFill.addColorStop(0.5, UI.plateMid);
+    cardFill.addColorStop(0.85, UI.plateBottom);
+    cardFill.addColorStop(1, `${def.color}2e`);
     ctx.fillStyle = cardFill;
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = def.color;
+    ctx.strokeStyle = card.focused ? UI.gold : UI.brass;
     ctx.lineWidth = card.focused ? 3 : 2;
     ctx.stroke();
 
@@ -5253,7 +5234,7 @@
     ctx.strokeStyle = `${def.color}aa`;
     ctx.stroke();
     ctx.fillStyle = def.color;
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = 'bold 9px ' + UI_FONT;
     ctx.textAlign = 'center';
     ctx.fillText(def.role, imageCx, imageBox.y + imageBox.h - 16);
 
@@ -5263,7 +5244,7 @@
     const contentW = contentRight - textX;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#fff';
-    ctx.font = `bold ${def.name.length >= 5 ? 16 : 20}px sans-serif`;
+    ctx.font = `900 ${def.name.length >= 5 ? 16 : 20}px ${UI_FONT_HEAVY}`;
     ctx.fillText(def.name, textX, top + 31);
 
     selectRoundedRect(contentRight - 68, top + 12, 64, 19, 10);
@@ -5277,7 +5258,7 @@
     ctx.fillText(def.roleEn, contentRight - 36, top + 25);
 
     ctx.fillStyle = 'rgba(255,255,255,0.76)';
-    ctx.font = '10px sans-serif';
+    ctx.font = '10px ' + UI_FONT;
     ctx.textAlign = 'left';
     wrapText(def.desc, textX, top + 53, contentW, 13);
 
@@ -5291,13 +5272,13 @@
     ctx.strokeStyle = 'rgba(255,210,74,0.46)';
     ctx.stroke();
     ctx.fillStyle = '#ffd24a';
-    ctx.font = 'bold 8px sans-serif';
+    ctx.font = 'bold 8px ' + UI_FONT;
     ctx.textAlign = 'left';
     ctx.fillText('SPECIAL', textX + 9, top + 141);
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = 'bold 12px ' + UI_FONT;
     ctx.fillText(def.special, textX + 9, top + 158);
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '8px sans-serif';
+    ctx.font = '8px ' + UI_FONT;
     ctx.fillText(def.specialDesc, textX + 9, top + 174);
 
     ctx.restore();
@@ -5332,6 +5313,12 @@
     // 長方形カードとは別物に見える、カタパルトの発射ギア。
     ctx.save();
     ctx.translate(sortie.x, sortie.y);
+
+    // 歯・外周リング・ボルトだけホイールと連動して回転させる。文字と中心ハブは正立のまま。
+    // カード1枚(selectWheelPosition差分1.0)=歯1枚分(12枚)の角度なので、指を離して静止した時も歯のシルエットは必ず同じ位置に揃う。
+    const gearRotation = -selectWheelPosition * (Math.PI * 2 / 12);
+    ctx.save();
+    ctx.rotate(gearRotation);
     ctx.fillStyle = '#7c5426';
     for (let i = 0; i < 12; i++) {
       ctx.save();
@@ -5356,14 +5343,6 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.arc(0, 0, 50, 0, Math.PI * 2);
-    ctx.fillStyle = '#13263a';
-    ctx.fill();
-    ctx.strokeStyle = '#7fadd0';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
     for (let i = 0; i < 6; i++) {
       const a = (Math.PI * 2 * i) / 6;
       ctx.beginPath();
@@ -5374,16 +5353,33 @@
       ctx.lineWidth = 1;
       ctx.stroke();
     }
+    ctx.restore();
 
-    ctx.fillStyle = '#fff3c5';
+    // 中心ハブ:旧ネオン配色(紺+水色)を廃し、黒鉄プレート+真鍮縁へ。回転しない。
+    ctx.beginPath();
+    ctx.arc(0, 0, 50, 0, Math.PI * 2);
+    const hubFill = ctx.createLinearGradient(0, -50, 0, 50);
+    hubFill.addColorStop(0, UI.plateMid);
+    hubFill.addColorStop(1, UI.plateBottom);
+    ctx.fillStyle = hubFill;
+    ctx.fill();
+    ctx.strokeStyle = UI.brassDark;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
     ctx.textAlign = 'center';
-    ctx.font = 'bold 25px sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = UI.ink;
+    ctx.lineWidth = 5;
+    ctx.font = '900 25px ' + UI_FONT_HEAVY;
+    ctx.strokeText('出撃', 0, -4);
+    ctx.fillStyle = UI.parchment;
     ctx.fillText('出撃', 0, -4);
-    ctx.fillStyle = '#f2bd57';
-    ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = UI.gold;
+    ctx.font = '900 9px ' + UI_FONT_HEAVY;
     ctx.fillText('LAUNCH', 0, 19);
     ctx.fillStyle = 'rgba(255,255,255,0.62)';
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = '900 9px ' + UI_FONT_HEAVY;
     ctx.fillText('TAP', 0, 37);
     ctx.restore();
     ctx.restore();
@@ -5395,8 +5391,8 @@
     ctx.fillRect(0, 0, VW, VH);
 
     const headerGlow = ctx.createRadialGradient(VW / 2, 78, 0, VW / 2, 78, 260);
-    headerGlow.addColorStop(0, 'rgba(79,195,247,0.15)');
-    headerGlow.addColorStop(1, 'rgba(79,195,247,0)');
+    headerGlow.addColorStop(0, 'rgba(255,210,74,0.10)');
+    headerGlow.addColorStop(1, 'rgba(255,210,74,0)');
     ctx.fillStyle = headerGlow;
     ctx.fillRect(0, 0, VW, 145);
 
@@ -5413,11 +5409,9 @@
     ctx.arc(VW / 2, 88, 3, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('モンスターを選択', VW / 2, 78);
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    drawOutlinedText('モンスターを選択', VW / 2, 78, { font: '900 24px ' + UI_FONT_HEAVY, color: UI.parchment });
+    ctx.fillStyle = 'rgba(255,245,220,0.62)';
     ctx.font = '11px sans-serif';
     ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 111);
 
@@ -5434,12 +5428,12 @@
     if (hasSuspendedSave) {
       const b = resumeBtn;
       selectRoundedRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 12);
-      ctx.fillStyle = 'rgba(27,45,78,0.96)';
+      ctx.fillStyle = 'rgba(18,24,29,0.96)';
       ctx.fill();
       ctx.strokeStyle = '#ffd24a';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = UI.parchment;
       ctx.font = 'bold 13px sans-serif';
       ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
     }
@@ -5449,12 +5443,12 @@
     const wheelCenterX = selectFocusedMainCard.x + SELECT_WHEEL_DEPTH_SHIFT_X;
     const wheelCenterY = SELECT_WHEEL_CENTER_Y - SELECT_WHEEL_DEPTH_LIFT_Y;
     const wheelHalo = ctx.createRadialGradient(wheelCenterX, wheelCenterY, 30, wheelCenterX, wheelCenterY, 340);
-    wheelHalo.addColorStop(0, 'rgba(79,195,247,0.12)');
+    wheelHalo.addColorStop(0, 'rgba(255,210,74,0.07)');
     wheelHalo.addColorStop(0.52, 'rgba(255,210,74,0.035)');
     wheelHalo.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = wheelHalo;
     ctx.fillRect(0, 118, VW, 720);
-    ctx.strokeStyle = 'rgba(79,195,247,0.16)';
+    ctx.strokeStyle = 'rgba(199,131,53,0.22)';
     ctx.lineWidth = 2;
     ctx.setLineDash([7, 13]);
     for (const lane of [-1, 1]) {
@@ -5485,167 +5479,6 @@
       const card = visibleCards[cardIndex];
       const def = CHARACTERS[card.key];
       drawWheelSelectCard(card, def);
-      continue;
-      if (card.focused) {
-        drawFocusedSelectCard(card, def);
-        continue;
-      }
-      ctx.save();
-      ctx.translate(card.x, card.y);
-      ctx.globalAlpha = card.alpha;
-      ctx.scale(card.scale * card.horizontalScale, card.scale * card.verticalScale);
-
-      ctx.shadowColor = card.focused ? `${def.color}aa` : 'rgba(0,0,0,0.65)';
-      ctx.shadowBlur = card.focused ? 28 : 18;
-      ctx.shadowOffsetY = card.focused ? 0 : 8;
-      selectRoundedRect(-card.w / 2, -card.h / 2, card.w, card.h, 17);
-      const cardFill = ctx.createLinearGradient(-card.w / 2, -card.h / 2, card.w / 2, card.h / 2);
-      cardFill.addColorStop(0, 'rgba(15,24,42,0.97)');
-      cardFill.addColorStop(0.68, 'rgba(26,35,52,0.94)');
-      cardFill.addColorStop(1, card.focused ? `${def.color}42` : `${def.color}22`);
-      ctx.fillStyle = cardFill;
-      ctx.fill();
-      ctx.shadowColor = 'transparent';
-
-      ctx.strokeStyle = def.color;
-      ctx.lineWidth = card.focused ? 3 : 2;
-      ctx.stroke();
-      selectRoundedRect(-card.w / 2 + 5, -card.h / 2 + 5, card.w - 10, card.h - 10, 13);
-      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      selectRoundedRect(-card.w / 2, -card.h / 2 + 18, 5, card.h - 36, 3);
-      ctx.fillStyle = def.color;
-      ctx.fill();
-
-      const imageBox = { x: -card.w / 2 + 14, y: -card.h / 2 + 14, w: 132, h: card.h - 28 };
-      selectRoundedRect(imageBox.x, imageBox.y, imageBox.w, imageBox.h, 13);
-      const imageGlow = ctx.createRadialGradient(imageBox.x + imageBox.w / 2, -10, 4, imageBox.x + imageBox.w / 2, -10, 80);
-      imageGlow.addColorStop(0, `${def.color}33`);
-      imageGlow.addColorStop(0.65, 'rgba(10,18,32,0.74)');
-      imageGlow.addColorStop(1, 'rgba(4,8,18,0.92)');
-      ctx.fillStyle = imageGlow;
-      ctx.fill();
-      ctx.strokeStyle = `${def.color}77`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.ellipse(imageBox.x + imageBox.w / 2, 39, 48, 8, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.38)';
-      ctx.fill();
-
-      const cImg = charImages[card.key];
-      const cReady = cImg && cImg.complete && cImg.naturalWidth > 0;
-      const imageCx = imageBox.x + imageBox.w / 2;
-      const imageCy = -7;
-      if (cReady) {
-        const imageScale = Math.min(118 / cImg.naturalWidth, 94 / cImg.naturalHeight);
-        const iw = cImg.naturalWidth * imageScale;
-        const ih = cImg.naturalHeight * imageScale;
-        // 選択画面では全キャラを右向きで統一。左向き素材だけここで反転する。
-        if (def.facesLeft) {
-          ctx.save();
-          ctx.translate(imageCx, imageCy);
-          ctx.scale(-1, 1);
-          ctx.drawImage(cImg, -iw / 2, -ih / 2, iw, ih);
-          ctx.restore();
-        } else {
-          ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
-        }
-      } else {
-        ctx.beginPath();
-        ctx.arc(imageCx, imageCy, 31, 0, Math.PI * 2);
-        ctx.fillStyle = def.color;
-        ctx.fill();
-      }
-
-      selectRoundedRect(imageCx - 44, 48, 88, 18, 9);
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fill();
-      ctx.strokeStyle = `${def.color}99`;
-      ctx.stroke();
-      ctx.fillStyle = def.color;
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(def.role, imageCx, 61);
-
-      const textX = -card.w / 2 + 160;
-      const contentRight = card.w / 2 - 14;
-      const contentW = contentRight - textX;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${def.name.length >= 5 ? 17 : 22}px sans-serif`;
-      ctx.fillText(def.name, textX, -48);
-
-      const roleX = contentRight - 122;
-      selectRoundedRect(roleX, -65, 70, 20, 10);
-      ctx.fillStyle = `${def.color}22`;
-      ctx.fill();
-      ctx.strokeStyle = `${def.color}99`;
-      ctx.stroke();
-      ctx.fillStyle = def.color;
-      ctx.font = 'bold 9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(def.roleEn, roleX + 35, -51);
-
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
-      ctx.font = 'bold 30px monospace';
-      ctx.fillText(String(card.order).padStart(2, '0'), contentRight, -45);
-
-      ctx.textAlign = 'left';
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
-      wrapText(def.desc, textX, -22, contentW, 14);
-
-      drawSelectStat('耐久', def.selectStats[0], textX, 16, def.color);
-      drawSelectStat('火力', def.selectStats[1], textX + 96, 16, def.color);
-      drawSelectStat('機動', def.selectStats[2], textX + 192, 16, def.color);
-
-      selectRoundedRect(textX, 40, contentW, 32, 9);
-      ctx.fillStyle = 'rgba(255,210,74,0.09)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,210,74,0.48)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 8px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('SPECIAL', textX + 10, 51);
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(def.special, textX + 10, 66);
-      ctx.fillStyle = 'rgba(255,255,255,0.60)';
-      ctx.font = '9px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(def.specialDesc, contentRight - 10, 65);
-
-      if (card.focused) {
-        ctx.textAlign = 'center';
-        selectRoundedRect(-55, -card.h / 2 - 13, 110, 22, 11);
-        ctx.fillStyle = def.color;
-        ctx.fill();
-        ctx.fillStyle = '#071019';
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText('●  READY  ●', 0, -card.h / 2 + 2);
-
-        ctx.strokeStyle = '#fff2ad';
-        ctx.lineWidth = 2;
-        const corner = 19;
-        const edgeX = card.w / 2 + 7;
-        const edgeY = card.h / 2 + 7;
-        for (const sx of [-1, 1]) {
-          for (const sy of [-1, 1]) {
-            ctx.beginPath();
-            ctx.moveTo(sx * (edgeX - corner), sy * edgeY);
-            ctx.lineTo(sx * edgeX, sy * edgeY);
-            ctx.lineTo(sx * edgeX, sy * (edgeY - corner));
-            ctx.stroke();
-          }
-        }
-      }
-      ctx.restore();
     }
     ctx.restore();
     drawFixedSelectSortieButton();
@@ -7984,9 +7817,9 @@
   if (onlineCopyBtn) onlineCopyBtn.addEventListener('click', async () => {
     const code = onlineRoomCodeEl && onlineRoomCodeEl.textContent;
     if (!isRoomCode(code)) return;
-    const text = `カタモン ONLINE 1V1 合言葉: ${code}`;
+    const text = `カタモン ONLINE BATTLE 合言葉: ${code}`;
     try {
-      if (navigator.share) await navigator.share({ title: 'カタモン ONLINE 1V1', text });
+      if (navigator.share) await navigator.share({ title: 'カタモン ONLINE BATTLE', text });
       else if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(code);
       else throw new Error('unsupported');
       onlineLobbyStatus('合言葉を共有しました。相手の参加を待っています…');
