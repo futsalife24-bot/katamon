@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v39';
+  const BUILD_ID = 'v40';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2053,6 +2053,16 @@
   }
   function setLocalSeat(id) { setSeat(id, 'cpu'); }   // CPU戦
   function setOnlineSeat(id) { setSeat(id, 'remote'); } // オンライン対戦
+  // 席とcontrolの割り当てを1行で残す。実機で「ターンバーはあなた、ダイヤルは相手」という
+  // 食い違いが出た。両者は localUnitId と control を別々に見ているため、ここがズレると起きる。
+  function logSeatAssignment(where) {
+    if (!online || online.kind !== 'firebase') return;
+    logOnlineEvent({
+      type: 'seats', where, seat: online.seat, localUnitId,
+      controls: units.map(u => `${u.id}:${u.control}`).join(','),
+      active: (activeUnit() || {}).id
+    });
+  }
 
   // オンライン対戦中かどうか。UI・連勝・中断まわりの分岐はすべてこれを見る。
   // 中身は §オンライン対戦 で作る。ここで宣言だけ先にしておくのは、
@@ -3236,6 +3246,7 @@
 
   function netSend(msg) {
     if (!online) return;
+    if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'out', t: msg.t, seat: online.seat });
     const packet = {
       v: online.kind === 'firebase' ? FIREBASE_PROTO_VERSION : PROTO_VERSION,
       from: online.clientId,
@@ -3520,6 +3531,8 @@
   // 直前のやり取りを丸ごと送ってもらえるようにする(ユーザー要望、2026-07-27)。
   const ONLINE_LOG_KEY = 'katamon_online_log_v1';
   const ONLINE_LOG_MAX = 80;
+  // 進行に効く種別だけ記録する。move と ping は毎ターン大量に出て枠を潰すので除く。
+  const ONLINE_LOG_SKIP = new Set(['move', 'ping', 'presence']);
   function logOnlineEvent(entry) {
     if (!online || !online.log) return;
     online.log.push({ t: Date.now(), turn: turnCount, ...entry });
@@ -3695,6 +3708,7 @@
       // 席の判定より先に捨てる。古いラウンドの正当なパケットで対戦を切らないため。
       if (msg.roundId !== online.currentRoundId) return;
       if (!firebasePacketSeatAllowed(msg)) { rejectFirebaseMessage(`不正な送信席です（${msg.t}/${msg.seat}）`); return; }
+      if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'in', t: msg.t, seat: msg.seat });
       // 生存確認を戻せるのは対戦者の通信だけ。観戦者のpingで相手の切断を見逃さないため。
       // 自分の送信は上で除外済みなので、対戦者から見ればこれは相手のパケットに等しい。
       // 観戦者から見ればどちらかの対戦者が生きていればよいので、この判定で両方に合う。
@@ -4279,6 +4293,9 @@
       const first = await fairFirstPlayer(online.room, online.selfNonce, online.peerNonce);
       if (!online || online.kind !== 'firebase') return;
       activeIndex = first === 'p1' ? 0 : 1;
+      // resetMatch はCPU戦の前提でユニットを組み直す。オンラインでは席を貼り直す必要がある。
+      setOnlineSeat(online.seat);
+      logSeatAssignment('hostStart');
       online.phase = 'starting';
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'playing' }) });
       const snap = buildSnapshot();
@@ -4303,6 +4320,7 @@
       }
       applySnapshot(msg.snap);
       setOnlineSeat(online.seat);
+      logSeatAssignment('guestStart');
       battleMode = 'normal'; stopTitleBgm(); gamePhase = 'battle'; playStageBgm(currentThemeKey, true);
       online.phase = 'playing';
       netSend({ t: 'ready' });
@@ -4349,6 +4367,7 @@
   }
   function resetLocalFirebaseRoundState(autoReady) {
     if (!online || online.kind !== 'firebase') return;
+    logSeatAssignment('roundReset');
     online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;
     online.selfCharacter = selectedOnlineCharacter();
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
@@ -8138,7 +8157,16 @@
       drawOutlinedText('PULL & RELEASE', cx, cy + 26, { font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(255,226,161,0.6)', lineWidth: 3 });
     } else {
       // 自分の手番でない理由が分かるようにしておく(以前は暗くなるだけだった)
-      const reason = matchOver ? '試合終了' : !localUnit().grounded ? '落下中' : awaitingResolve ? '着弾を待っています' : '相手の手番';
+      // 既定を「相手の手番」にしていたため、自分の手番でもカットイン中は
+      // ターンバーが「あなたのターン」なのにここが「相手の手番」になり矛盾して見えた。
+      // 無効な理由は自分の手番かどうかで分けて出す。
+      const reason = matchOver ? '試合終了'
+        : !localUnit().grounded ? '落下中'
+        : awaitingResolve ? '着弾を待っています'
+        : cutIn ? 'まもなく開始'
+        : netInputLocked() ? '相手を待っています'
+        : isLocalTurn() ? 'まもなく開始'
+        : '相手の手番';
       drawOutlinedText(reason, cx, cy + 5, { font: `900 15px ${UI_FONT_HEAVY}`, color: 'rgba(226,232,240,0.5)', lineWidth: 3.5 });
     }
   }
