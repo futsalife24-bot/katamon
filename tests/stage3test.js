@@ -480,13 +480,26 @@ function check(name, value) {
     && htmlText.includes("netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
     && htmlText.includes("online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;")
     && htmlText.includes('online.rematchVotes = {};'));
-  check('Firebase result opens the results lobby instead of directly exiting the room',
-    htmlText.includes("online.phase = 'results';") && htmlText.includes('openFirebaseResultsLobby()')
-    && htmlText.includes('id="onlineRematch"') && htmlText.includes('このまま再戦')
-    && htmlText.includes('id="onlineReturnLobby"') && htmlText.includes('ロビーへ戻る')
-    && htmlText.includes('#onlineLobby.in-room.results #onlineRematch { display: block; }')
-    && htmlText.includes('#onlineLobby.in-room.results #onlineReturnLobby { display: block; }')
-    && htmlText.includes("online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。')"));
+  // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
+  // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
+  check('players choose on the result screen, not in a popup that hides the outcome',
+    htmlText.includes('function firebaseResultChoiceVisible()')
+    && htmlText.includes("drawResultButton(continueBtn, 'このまま再戦'")
+    && htmlText.includes("drawResultButton(resultTitleBtn, 'ロビーへ戻る', false)"));
+  check('the results popup is skipped for players and kept for spectators',
+    htmlText.includes('if (isFirebasePlayer()) { renderFirebaseLobby(); return; }')
+    && htmlText.includes('openFirebaseResultsLobby();'));
+  // 描画とタップが別々の条件で分岐すると、押せないボタンや押せる透明領域ができる。
+  check('the result buttons are drawn and hit-tested through the same predicate',
+    (htmlText.match(/firebaseResultChoiceVisible\(\)/g) || []).length >= 3);
+  check('a player who already voted cannot vote again and is told to wait',
+    htmlText.includes('if (firebaseHasResultVote()) return;')
+    && htmlText.includes('相手の返事を待っています…'));
+  check('the result buttons trigger the rematch and return-to-lobby requests',
+    htmlText.includes('requestFirebaseRematch(); return;')
+    && htmlText.includes('requestFirebaseReturnLobby();'));
+  check('the lobby still offers the same two choices for spectators',
+    htmlText.includes('id="onlineRematch"') && htmlText.includes('id="onlineReturnLobby"'));
   // v3ルールの実行可能な検証。tests/V3_RULES_SPEC.md のチェックリストをここへ落とし込んだ。
   // クライアントがv3で、デプロイ済みルールがv2のままだと部屋の作成すら通らず、
   // オンライン対戦が全滅する。両者が必ず同じ版であることをここで縛る。

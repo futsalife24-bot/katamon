@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v36';
+  const BUILD_ID = 'v37';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4446,6 +4446,8 @@
     if (!online || online.kind !== 'firebase' || !online.resultsLobbyPending) return;
     if (matchOver && matchEndPause > 0) return; // 決まり手を見せている最中
     online.resultsLobbyPending = false;
+    // 対戦者は結果画面のボタンで選ぶ。ここでロビーを開くと勝敗が隠れてしまう。
+    if (isFirebasePlayer()) { renderFirebaseLobby(); return; }
     openFirebaseResultsLobby();
   }
   function openFirebaseResultsLobby() {
@@ -6931,6 +6933,17 @@
     ctx.restore();
   }
 
+  // 対人戦の結果画面に「このまま再戦 / ロビーへ戻る」を出してよい状態か。
+  // 観戦者は選べないので従来どおりロビーのポップアップに任せる。
+  function firebaseResultChoiceVisible() {
+    return !!(matchOver && isOnline() && online && online.kind === 'firebase'
+      && online.phase === 'results' && isFirebasePlayer());
+  }
+  function firebaseHasResultVote() {
+    return !!(online && online.rematchVotes
+      && Object.prototype.hasOwnProperty.call(online.rematchVotes, online.seat));
+  }
+
   function drawResultBanner() {
     if (!matchOver || matchEndPause > 0) return;
     const won = localWon();
@@ -6994,19 +7007,31 @@
 
     if (!won && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
 
-    // Firebase常設ロビーでは、結果はHTMLロビーの「このまま再戦 / ロビーへ戻る」で選ぶ。
-    if (!isOnline()) {
+    // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない。
+    // 対人戦の続行はこの結果画面で選ばせ、ロビーのポップアップは開かない。
+    if (firebaseResultChoiceVisible()) {
+      const voted = firebaseHasResultVote();
+      drawResultButton(continueBtn, 'このまま再戦', !voted);
+      drawResultButton(resultTitleBtn, 'ロビーへ戻る', false);
+      if (voted) {
+        drawOutlinedText('相手の返事を待っています…', VW / 2, resultTitleBtn.y + resultButtonShift() + 40, {
+          font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+        });
+      }
+    } else {
+      if (!isOnline()) {
+        drawResultButton(
+          continueBtn,
+          battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
+          true
+        );
+      }
       drawResultButton(
-        continueBtn,
-        battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
-        true
+        resultTitleBtn,
+        isOnline() ? '退出してタイトルへ' : (keepsRunOnExit() ? '中断してタイトルへ' : 'タイトルへ戻る'),
+        isOnline()
       );
     }
-    drawResultButton(
-      resultTitleBtn,
-      isOnline() && online && online.kind === 'firebase' ? '再戦かロビーへ' : (isOnline() ? '退出してタイトルへ' : (keepsRunOnExit() ? '中断してタイトルへ' : 'タイトルへ戻る')),
-      isOnline()
-    );
     ctx.restore();
   }
 
@@ -8652,12 +8677,17 @@
       if (matchEndPause > 0) return; // 決着理由を見せている間は誤タップで飛ばさせない
       const shift = resultButtonShift();
       const b = continueBtn;
+      if (firebaseResultChoiceVisible()) {
+        if (firebaseHasResultVote()) return; // 投票済み。相手の返事を待つ
+        if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) { requestFirebaseRematch(); return; }
+        if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) { requestFirebaseReturnLobby(); }
+        return;
+      }
       if (!isOnline() && Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) {
         resetMatch(true);
         return;
       }
       if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) {
-        if (isOnline() && online.kind === 'firebase') { openFirebaseResultsLobby(); return; }
         if (isOnline()) endOnline(true);
         if (keepsRunOnExit()) suspendRunToTitle();
         else returnToTitleFromResult();
