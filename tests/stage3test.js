@@ -415,8 +415,20 @@ function check(name, value) {
     return !!src && !src[0].includes("battleMode === 'free'") && src[0].includes('activeFixedWind()');
   })());
   // 決着後の画面に準備フェーズの文言が残っていた。
-  check('the results lobby replaces the stale reveal-phase status',
-    htmlText.includes("onlineLobbyStatus('対戦が終わりました。もう一度戦うか、ロビーへ戻るかを選んでください。');"));
+  // 決着した瞬間にロビーを開くと勝敗の演出が全部隠れ、実機で「双方とも勝敗が
+  // 表示されない」状態になった。演出が終わってから開き、勝敗もロビーに出す。
+  check('the results lobby waits for the match-end presentation to finish',
+    htmlText.includes('function scheduleFirebaseResultsLobby()')
+    && htmlText.includes('online.resultsLobbyPending = true;')
+    && htmlText.includes('if (matchOver && matchEndPause > 0) return;')
+    && htmlText.includes('updateFirebaseResultsLobby();'));
+  check('nothing opens the results lobby immediately on the decisive packet',
+    !/beginMatchEnd\(msg\.reason\); openFirebaseResultsLobby\(\);/.test(htmlText)
+    && (htmlText.match(/scheduleFirebaseResultsLobby\(\);/g) || []).length >= 4);
+  check('the results lobby states the outcome and the finishing move',
+    htmlText.includes('localWon() ? `勝利! （${matchEndReason')
+    && htmlText.includes('敗北… （${matchEndReason')
+    && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
     && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));

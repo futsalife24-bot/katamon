@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v35';
+  const BUILD_ID = 'v36';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3923,7 +3923,7 @@
           winner = msg.winner;
           beginMatchEnd(msg.reason);
           online.phase = 'results';
-          openFirebaseResultsLobby();
+          scheduleFirebaseResultsLobby();
           break;
         }
         for (const u of msg.units) {
@@ -3936,7 +3936,7 @@
         winner = msg.winner;
         beginMatchEnd(msg.reason);
         online.phase = online.kind === 'firebase' ? 'results' : 'ended';
-        if (online.kind === 'firebase') openFirebaseResultsLobby();
+        if (online.kind === 'firebase') scheduleFirebaseResultsLobby();
         break;
       case 'bye':
         online.peerLeft = true;
@@ -4026,7 +4026,7 @@
     // 決着は再送しても受信側がphaseで一度しか適用しない。1通落ちても片方だけ残さない。
     netSend(result);
     netSend(result);
-    if (online.kind === 'firebase') openFirebaseResultsLobby();
+    if (online.kind === 'firebase') scheduleFirebaseResultsLobby();
   }
 
   const onlineLobbyEl = document.getElementById('onlineLobby');
@@ -4380,7 +4380,7 @@
   function receiveFirebaseSpectatorResult(msg) {
     if (!online || online.kind !== 'firebase') return;
     matchOver = true; winner = msg.winner; projectiles = []; awaitingResolve = false; online.phase = 'results';
-    beginMatchEnd(msg.reason); openFirebaseResultsLobby();
+    beginMatchEnd(msg.reason); scheduleFirebaseResultsLobby();
   }
   async function updateFirebaseSettings() {
     // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
@@ -4436,10 +4436,28 @@
     }
   }
   function openFirebaseLobby() { if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room'); onlineLobbyEl.classList.remove('results'); } renderFirebaseLobby(); }
+  // 決着した瞬間にロビーを開くと、勝敗の演出(余韻→決まり手→結果)が全部隠れて
+  // 「何が起きたか分からないままロビーが出る」ことになる。演出が終わってから開く。
+  function scheduleFirebaseResultsLobby() {
+    if (!online || online.kind !== 'firebase') return;
+    online.resultsLobbyPending = true;
+  }
+  function updateFirebaseResultsLobby() {
+    if (!online || online.kind !== 'firebase' || !online.resultsLobbyPending) return;
+    if (matchOver && matchEndPause > 0) return; // 決まり手を見せている最中
+    online.resultsLobbyPending = false;
+    openFirebaseResultsLobby();
+  }
   function openFirebaseResultsLobby() {
+    if (!online || online.kind !== 'firebase') return;
+    online.resultsLobbyPending = false;
     if (onlineLobbyEl) { onlineLobbyEl.classList.add('open', 'in-room', 'results'); }
     // 準備フェーズの文言が残っていると、決着後の画面なのに「開始データを待っています」と出る。
-    onlineLobbyStatus('対戦が終わりました。もう一度戦うか、ロビーへ戻るかを選んでください。');
+    // 勝敗と決まり手はロビーにも出す。Canvasの結果表示はロビーに隠れて見えないため。
+    const outcome = !matchOver ? '対戦が終わりました。'
+      : online.participantRole === 'spectator' ? `決着:${matchEndReason || '撃破'}。`
+      : localWon() ? `勝利! （${matchEndReason || '撃破'}）` : `敗北… （${matchEndReason || '撃破'}）`;
+    onlineLobbyStatus(`${outcome} もう一度戦うか、ロビーへ戻るかを選んでください。`);
     renderFirebaseLobby();
   }
   async function leaveFirebaseLobby() {
@@ -4525,6 +4543,7 @@
   function updateOnline(dt) {
     startPendingLoopback();
     if (!online) return;
+    updateFirebaseResultsLobby();
     // 既に終わっている接続を毎フレーム再判定しない。保留中の通知は放棄する。
     if (online.phase === 'ended' || online.protocolError) return;
     updateFirebasePendingTerminals();
