@@ -106,6 +106,8 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
   }
 
   check('相手待ちから接続まで進む', connectedAtRound >= 0, 'つながらなかった');
+  // peer.js の固定シードが前提。素の乱数だと稀にホストの初弾でゲストが場外死し、
+  // ゲストが一度も撃たないまま正常決着してここだけが落ちる(詳細は tests/README.md)。
   check('両方が撃っている', sawHostFire && sawGuestFire, `host=${sawHostFire} guest=${sawGuestFire}`);
   check('試合が決着する', hostState.matchOver && guestState.matchOver,
     `host=${hostState.matchOver} guest=${guestState.matchOver} round=${round}`);

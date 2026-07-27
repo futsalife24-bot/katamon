@@ -1,12 +1,29 @@
 // ループバック対戦テストの「1タブぶん」。loopbacktest.js から fork される。
 // ゲーム本体をこのプロセスで1つだけ動かし、通信は親経由で相手プロセスへ中継する。
 // (harness は globalThis にゲームを展開するので、1プロセスに2インスタンスは置けない)
+const role = process.argv[3] === 'guest' ? 'guest' : 'host';
+
+// Math.random を固定シードのPRNGに差し替えてから本体を読み込む。
+// ループバック対戦はキャラ・地形・風をホストの Math.random で決めるため、
+// 素の乱数だと稀に「ホストの初弾でゲストが場外死→ターン1決着」の試合を引き、
+// ゲストが一度も撃たないまま正常決着して「両方が撃っている」だけが落ちる。
+// シードは KATAMON_TEST_SEED で差し替え可能(試合展開を変えて調べたい時用)。
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let x = Math.imul(t ^ (t >>> 15), t | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const seedBase = Number(process.env.KATAMON_TEST_SEED || 1);
+Math.random = mulberry32(seedBase * 2 + (role === 'guest' ? 1 : 0));
+
 const h = require('./seatharness.js');
 const kt = h.kt();
 const canvas = h.canvas;
 const win = globalThis.window;
-
-const role = process.argv[3] === 'guest' ? 'guest' : 'host';
 
 // 通信層の差し替え。BroadcastChannel の代わりに親プロセスへ投げる。
 let inbound = null;
