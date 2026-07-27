@@ -5,9 +5,14 @@ const role = process.argv[3] === 'guest' ? 'guest' : 'host';
 
 // Math.random を固定シードのPRNGに差し替えてから本体を読み込む。
 // ループバック対戦はキャラ・地形・風をホストの Math.random で決めるため、
-// 素の乱数だと稀に「ホストの初弾でゲストが場外死→ターン1決着」の試合を引き、
-// ゲストが一度も撃たないまま正常決着して「両方が撃っている」だけが落ちる。
-// シードは KATAMON_TEST_SEED で差し替え可能(試合展開を変えて調べたい時用)。
+// 素の乱数のままだと毎回まったく別の試合になり、「両方が撃っている」だけが
+// 稀に guest=false で落ちるフレークになっていた(ゲストが一度も撃たないまま
+// 試合が終わる引きがある)。シードを固定すると全ラウンドが再現可能になり、
+// 中継メッセージ数まで毎回一致する。
+// 注意: 落ちる引きそのものは素の乱数240セッションでも再現できておらず、
+// 「どの引きで起きるか」までは特定できていない。ここで固定しているのは
+// 「再現しない稀な引きを二度と踏まない」ためであって、原因の修正ではない。
+// シードは KATAMON_TEST_SEED で差し替え可能(off なら素の乱数に戻る)。
 function mulberry32(seed) {
   let t = seed >>> 0;
   return () => {
@@ -17,8 +22,12 @@ function mulberry32(seed) {
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
   };
 }
-const seedBase = Number(process.env.KATAMON_TEST_SEED || 1);
-Math.random = mulberry32(seedBase * 2 + (role === 'guest' ? 1 : 0));
+// KATAMON_TEST_SEED=off で素の Math.random に戻せる(フレーク再現の調査用)。
+const seedEnv = process.env.KATAMON_TEST_SEED;
+if (seedEnv !== 'off') {
+  const seedBase = Number(seedEnv || 1);
+  Math.random = mulberry32(seedBase * 2 + (role === 'guest' ? 1 : 0));
+}
 
 const h = require('./seatharness.js');
 const kt = h.kt();
@@ -72,6 +81,7 @@ function snapshotForCompare() {
     craters: kt.craters(),
     wind: kt.wind(),
     online: kt.onlineState(),
+    fireActive: kt.hud().fireActive,
     inputLocked: kt.inputLocked(),
     pending: kt.pending(),
     charges: kt.charges(),

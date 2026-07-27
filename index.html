@@ -232,6 +232,9 @@
   .onlineSeatRow .seatState { flex: 0 0 auto; font-size: 11px; font-weight: 900; }
   .onlineSeatRow .seatState.ready { color: #ffd24a; }
   .onlineSeatRow .seatState.picking { color: #9fb0bd; }
+  .onlineSeatRow .seatState.stale { color: #ff8a6a; }
+  /* 応答が途切れた席。名前を落として、居るのに動いていないことが一目で分かるようにする */
+  .onlineSeatRow.stale .seatMark, .onlineSeatRow.stale .seatName { opacity: .5; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
@@ -379,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v58';
+  const BUILD_ID = 'v59';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3581,6 +3584,10 @@
   const FIREBASE_PENDING_VISIBLE_TIMEOUT_MS = 15000;
   const FIREBASE_HEARTBEAT_VISIBLE_INTERVAL_MS = 10000;
   const FIREBASE_PEER_VISIBLE_TIMEOUT_MS = 35000;
+  // ロビーの心拍は対戦中(10s/35s)より緩い。ロビーは急ぐ必要が無く、pingの書き込みも減らしたいため。
+  // ここで切断は絶対にしない。表示だけ。切る判定は updateFirebasePeerLiveness の側だけが持つ。
+  const FIREBASE_LOBBY_HEARTBEAT_VISIBLE_INTERVAL_MS = 15000;
+  const FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS = 45000;
   function firebaseMonotonicNow() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
   function firebaseActionMatches(msg, action) {
     return !!action && FIREBASE_ACTION_ID_RE.test(msg.actionId || '')
@@ -3621,6 +3628,9 @@
     const now = firebaseMonotonicNow();
     for (const entry of online.pendingRemoteTerminals.values()) entry.checkedAt = now;
     if (online.peerLiveness) online.peerLiveness.checkedAt = now;
+    // 裏に回っている間はrAFが止まるので、復帰の1回目に背面時間がまとめて積まれる。
+    // checkedAtを今に寄せておかないと、戻った瞬間に全員が応答なしに見える。
+    if (online.lobbyLiveness) online.lobbyLiveness.checkedAt = now;
   }
   function updateFirebasePendingTerminals() {
     if (!online || online.kind !== 'firebase' || !online.pendingRemoteTerminals || !online.pendingRemoteTerminals.size) return;
@@ -3648,6 +3658,58 @@
       online.peerLiveness.pingVisibleMs = 0;
       netSend({ t: 'ping' });
     }
+  }
+  // --- ロビーの心拍(Stage 4-1) ---
+  // 対戦中の生存確認とは意図的に別系統にしてある。あちらは「切る」判定、こちらは「見せる」だけ。
+  // 1つの関数にまとめるとロビーの都合で対戦が切れる事故が起きるので、統合してはいけない。
+  // 時計はロビー滞在中の可視時間だけを積む。対戦中・結果表示中は止まったままでよく、
+  // 止めておくことで「長い試合から戻った直後に全員が応答なしに見える」のを防いでいる。
+  function advanceFirebaseLobbyLiveness(entry, now, hidden) {
+    const elapsed = Math.max(0, now - entry.checkedAt);
+    entry.checkedAt = now;
+    if (!hidden) {
+      entry.clockMs += elapsed;
+      entry.pingVisibleMs += elapsed;
+    }
+    return { pingDue: entry.pingVisibleMs >= FIREBASE_LOBBY_HEARTBEAT_VISIBLE_INTERVAL_MS, clockMs: entry.clockMs };
+  }
+  function firebaseSeatStale(clockMs, seenMs) {
+    if (!Number.isFinite(seenMs)) return false;
+    return clockMs - seenMs >= FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS;
+  }
+  function noteFirebaseSeatSeen(seat) {
+    if (!online || online.kind !== 'firebase' || !online.lobbyLiveness || !online.seatSeen) return;
+    if (!FIREBASE_SEATS.includes(seat)) return;
+    online.seatSeen[seat] = online.lobbyLiveness.clockMs;
+  }
+  // 自席は判定しない(自分が生きているのは自明)。空席も判定しない。
+  function firebaseSeatIsStale(seat) {
+    if (!online || online.kind !== 'firebase' || !online.lobbyLiveness || !online.seatSeen) return false;
+    if (seat === online.seat) return false;
+    if (!(online.slots && online.slots[seat] && online.slots[seat].uid)) return false;
+    return firebaseSeatStale(online.lobbyLiveness.clockMs, online.seatSeen[seat]);
+  }
+  function updateFirebaseLobbyLiveness() {
+    if (!online || online.kind !== 'firebase' || !online.lobbyLiveness || online.phase !== 'lobby') return;
+    const result = advanceFirebaseLobbyLiveness(online.lobbyLiveness, firebaseMonotonicNow(), typeof document !== 'undefined' && document.hidden);
+    // 在席が見えている席で未記録のものは、いま見た時刻を起点にする。
+    // これが無いと、入室直後や後から来た人がいきなり「応答なし」に見える。
+    for (const seat of FIREBASE_SEATS) {
+      const occupied = !!(online.slots && online.slots[seat] && online.slots[seat].uid);
+      if (occupied && !Number.isFinite(online.seatSeen[seat])) online.seatSeen[seat] = result.clockMs;
+      else if (!occupied && seat in online.seatSeen) delete online.seatSeen[seat];
+    }
+    if (result.pingDue) {
+      online.lobbyLiveness.pingVisibleMs = 0;
+      netSend({ t: 'ping' });
+    }
+    // 表示が変わった時だけ描き直す。毎フレーム席ボードを組み直さないため。
+    let changed = false;
+    for (const seat of FIREBASE_SEATS) {
+      const stale = firebaseSeatIsStale(seat);
+      if (!!online.seatStale[seat] !== stale) { online.seatStale[seat] = stale; changed = true; }
+    }
+    if (changed) renderFirebaseLobby();
   }
   // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
   // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
@@ -3898,6 +3960,8 @@
       // 自分の送信は上で除外済みなので、対戦者から見ればこれは相手のパケットに等しい。
       // 観戦者から見ればどちらかの対戦者が生きていればよいので、この判定で両方に合う。
       if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();
+      // ロビー表示用の在席記録は観戦者も含めて全席ぶん取る(上の対戦者限定の判定とは別物)。
+      noteFirebaseSeatSeen(msg.seat);
       if (online.participantRole === 'spectator') {
         if (msg.t === 'start' || msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
         else if (msg.t === 'result') receiveFirebaseSpectatorResult(msg);
@@ -4433,6 +4497,8 @@
       peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
+      lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
+      seatSeen: {}, seatStale: {},
       log: []
     };
     transport.onMessage(netReceive);
@@ -4569,8 +4635,9 @@
     const occupied = !!(slots[seat] && slots[seat].uid);
     const mine = seat === online.seat;
     const isPlayerSeat = firebaseSeatIsPlayer(seat);
+    const stale = occupied && firebaseSeatIsStale(seat);
     const row = document.createElement('div');
-    row.className = `onlineSeatRow ${occupied ? 'occupied' : 'empty'} ${isPlayerSeat ? 'player' : 'spectator'}${mine ? ' mine' : ''}`;
+    row.className = `onlineSeatRow ${occupied ? 'occupied' : 'empty'} ${isPlayerSeat ? 'player' : 'spectator'}${mine ? ' mine' : ''}${stale ? ' stale' : ''}`;
 
     const mark = document.createElement('span');
     mark.className = 'seatMark';
@@ -4598,7 +4665,14 @@
 
     // 準備状態はp1/e1のみ、ロビー中で在席している時だけ出す。判定は既存のselfReady/peerReadyのまま
     // (peerSeatは対戦者同士でのみ相手を指す。観戦者からの見え方は元のテキスト版と同じ制約を引き継ぐ)。
-    if (isPlayerSeat && occupied && online.phase === 'lobby') {
+    // 応答なしは準備状態より優先して出す。観戦席にも出す(誰が消えたのか分かるように)。
+    // ただし表示だけで、席は空けない。実際に空けられるようにするのはStage 4-2の領分。
+    if (stale) {
+      const state = document.createElement('span');
+      state.className = 'seatState stale';
+      state.textContent = '応答なし';
+      row.appendChild(state);
+    } else if (isPlayerSeat && occupied && online.phase === 'lobby') {
       const ready = seat === online.seat ? online.selfReady : (seat === online.peerSeat && !!online.peerReady);
       const state = document.createElement('span');
       state.className = 'seatState ' + (ready ? 'ready' : 'picking');
@@ -4879,6 +4953,8 @@
     updateFirebasePendingTerminals();
     if (!online || online.phase === 'ended') return;
     updateFirebasePeerLiveness();
+    if (!online || online.phase === 'ended') return;
+    updateFirebaseLobbyLiveness();
     if (!online || online.phase === 'ended') return;
     netDrainQueue(dt);
     if (online.phase !== 'waiting') return;

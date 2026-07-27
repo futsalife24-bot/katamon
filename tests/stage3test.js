@@ -202,6 +202,19 @@ function check(name, value) {
   const peerReset = h.advanceFirebasePeerLiveness(peerLiveness, 61000, false);
   const peerExpired = h.advanceFirebasePeerLiveness(peerLiveness, 95000, false);
   check('Firebase peer liveness pauses hidden, valid peer traffic resets it, then expires visibly', !peerPaused.timedOut && peerLiveness.peerVisibleMs === 35000 && peerReset.pingDue && !peerReset.timedOut && peerExpired.timedOut);
+  // --- ロビーの心拍(Stage 4-1)。対戦中の判定とは別系統で、切断は一切しない ---
+  const lobbyLiveness = { clockMs: 0, pingVisibleMs: 0, checkedAt: 1000 };
+  const lobbyHidden = h.advanceFirebaseLobbyLiveness(lobbyLiveness, 31000, true);
+  check('lobby heartbeat clock does not advance while hidden', !lobbyHidden.pingDue && lobbyLiveness.clockMs === 0);
+  const lobbyBeforePing = h.advanceFirebaseLobbyLiveness(lobbyLiveness, 45900, false);
+  const lobbyPing = h.advanceFirebaseLobbyLiveness(lobbyLiveness, 46100, false);
+  check('lobby heartbeat pings after 15s of visible time', !lobbyBeforePing.pingDue && lobbyPing.pingDue && lobbyLiveness.clockMs === 15100);
+  check('a seat heard from recently is not stale', !h.firebaseSeatStale(44000, 1000));
+  check('a seat silent for 45s of visible time is stale', h.firebaseSeatStale(46000, 1000));
+  // 未記録の席を stale 扱いすると、入室直後や後から来た人がいきなり応答なしに見える
+  check('a seat with no recorded sighting is never stale', !h.firebaseSeatStale(999999, undefined));
+  const lobbyThresholds = [h.advanceFirebaseLobbyLiveness({ clockMs: 0, pingVisibleMs: 0, checkedAt: 0 }, 1, false)];
+  check('lobby heartbeat never reports a timeout (display only)', lobbyThresholds.every(r => !('timedOut' in r)));
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);

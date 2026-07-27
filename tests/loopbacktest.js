@@ -51,12 +51,17 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
     }
     from.outbox.length = 0;
   };
+  // 配達は必ず送信順に行う。以前は末尾から splice していたため、同じラウンドに
+  // 配達可能になったメッセージが逆順で届いていた(fire の前に state が着く)。
+  // 遅延は「全体が遅れる」ものであって、並べ替えではない。
   const deliver = () => {
-    for (let i = inflight.length - 1; i >= 0; i--) {
-      if (inflight[i].dueRound > round) continue;
-      const { to, msg } = inflight.splice(i, 1)[0];
-      to.child.send({ kind: 'net', msg });
+    const remain = [];
+    for (const item of inflight) {
+      if (item.dueRound > round) { remain.push(item); continue; }
+      item.to.child.send({ kind: 'net', msg: item.msg });
     }
+    inflight.length = 0;
+    for (const item of remain) inflight.push(item);
   };
 
   await Promise.all([host.ask({ kind: 'boot' }, 'ready'), guest.ask({ kind: 'boot' }, 'ready')]);
@@ -106,8 +111,8 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
   }
 
   check('相手待ちから接続まで進む', connectedAtRound >= 0, 'つながらなかった');
-  // peer.js の固定シードが前提。素の乱数だと稀にホストの初弾でゲストが場外死し、
-  // ゲストが一度も撃たないまま正常決着してここだけが落ちる(詳細は tests/README.md)。
+  // peer.js の固定シードが前提。素の乱数だとゲストが一度も撃たないまま試合が
+  // 終わる引きを稀に踏み、ここだけが guest=false で落ちる(詳細は tests/README.md)。
   check('両方が撃っている', sawHostFire && sawGuestFire, `host=${sawHostFire} guest=${sawGuestFire}`);
   check('試合が決着する', hostState.matchOver && guestState.matchOver,
     `host=${hostState.matchOver} guest=${guestState.matchOver} round=${round}`);
