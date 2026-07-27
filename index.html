@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v37';
+  const BUILD_ID = 'v38';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3519,7 +3519,7 @@
   // 対戦ごとの通信ログ。実機で不具合が起きた時、スクショの1行だけでなく
   // 直前のやり取りを丸ごと送ってもらえるようにする(ユーザー要望、2026-07-27)。
   const ONLINE_LOG_KEY = 'katamon_online_log_v1';
-  const ONLINE_LOG_MAX = 40;
+  const ONLINE_LOG_MAX = 80;
   function logOnlineEvent(entry) {
     if (!online || !online.log) return;
     online.log.push({ t: Date.now(), turn: turnCount, ...entry });
@@ -4000,7 +4000,10 @@
 
   // 決着も行動側が決める。両者が独立に判定するとHPが1違うだけで勝敗が食い違う。
   function netSyncResult(reason) {
-    if (!isOnline() || online.resultSent) return;
+    // 送信側の記録。これが無いと「相手に何も届かなかった」時に、送っていないのか
+    // 送って弾かれたのかが実機ログから分からない(2026-07-27に実際に追えなくなった)。
+    if (!isOnline()) return;
+    if (online.resultSent) { logOnlineEvent({ type: 'sendResult', ok: false, why: 'alreadySent' }); return; }
     let actionId = null;
     let actionUnitId = null;
     if (online.kind === 'firebase') {
@@ -4016,12 +4019,14 @@
         actionId = secureNonce();
         actionUnitId = online.seat;
       } else {
+        logOnlineEvent({ type: 'sendResult', ok: false, why: 'noActionId' });
         rejectFirebaseMessage('ローカル行動IDを確認できません');
         return;
       }
     }
     online.resultSent = true;
     online.phase = online.kind === 'firebase' ? 'results' : 'ended';
+    logOnlineEvent({ type: 'sendResult', ok: true, winner, reason, seat: online.seat, hadAction: !!actionId });
     const result = { t: 'result', winner, reason, units: units.map(u => ({ id: u.id, hp: u.hp })), ...(actionId ? { actionId, unitId: actionUnitId } : {}) };
     // 決着は再送しても受信側がphaseで一度しか適用しない。1通落ちても片方だけ残さない。
     netSend(result);
@@ -5599,7 +5604,12 @@
     const playerAlive = teamAlive('player');
     const cpuAlive = teamAlive('cpu');
     if (playerAlive && cpuAlive) return;
-    if (!canDeclareMatchEnd()) return; // 相手からの result を待つ
+    if (!canDeclareMatchEnd()) {
+      // 自分の手番でない時の決着は相手が権威。待ちに入ったことを記録する。
+      logOnlineEvent({ type: 'matchEnd', declared: false, reason: reason || '撃破', active: activeUnit().id });
+      return;
+    }
+    logOnlineEvent({ type: 'matchEnd', declared: true, reason: reason || '撃破' });
     matchOver = true;
     winner = playerAlive ? 'player' : 'cpu'; // 相打ちはCPU勝ち扱い(引き分けは設けない)
     beginMatchEnd(reason || '撃破');
@@ -8874,6 +8884,7 @@
           if (isOnline()) {
             // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
             if (moveSyncPending) sendMoveUpdate(me);
+            logOnlineEvent({ type: 'sendFire', unitId: me.id, actionId });
             netSend({
               t: 'fire', unitId: me.id, x: me.x, y: me.y,
               anchor: { x: aimState.anchor.x, y: aimState.anchor.y },

@@ -613,6 +613,17 @@ function check(name, value) {
   const fakeOnline = { room: 'A2BC3DEF', role: 'host', seat: 'p1', phase: 'playing', protocolError: '', log: [], transport: { close: () => {} }, };
   h.setOnlineForLogTest(fakeOnline);
   for (let i = 0; i < h.onlineLogMax() + 5; i++) h.logOnlineEvent({ type: 'fire', unitId: 'p1' });
+  // 実機で「相手に決着が届かない」時、ログが受信だけを記録していたため、
+  // 送っていないのか送って弾かれたのかが分からず原因を追えなかった。送信側も残す。
+  check('the log records what we send, not only what we receive',
+    htmlText.includes("logOnlineEvent({ type: 'sendResult', ok: true")
+    && htmlText.includes("logOnlineEvent({ type: 'sendFire'"));
+  check('a result that is never sent leaves its reason in the log',
+    htmlText.includes("logOnlineEvent({ type: 'sendResult', ok: false, why: 'alreadySent' })")
+    && htmlText.includes("logOnlineEvent({ type: 'sendResult', ok: false, why: 'noActionId' })"));
+  check('declining to declare the match end is recorded too',
+    htmlText.includes("logOnlineEvent({ type: 'matchEnd', declared: false")
+    && htmlText.includes("logOnlineEvent({ type: 'matchEnd', declared: true"));
   check('Online event log is capped at the documented ring-buffer size', fakeOnline.log.length === h.onlineLogMax());
   check('Ring buffer drops the oldest entries, not the newest', fakeOnline.log[fakeOnline.log.length - 1].type === 'fire');
   h.persistOnlineLog();
