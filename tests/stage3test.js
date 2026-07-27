@@ -260,12 +260,12 @@ function check(name, value) {
   app.exitOnlineFromMenu();
   const loopbackExit = !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && sent >= 2 && closed === 1;
   h.setOnlineForLogTest({
-    kind: 'firebase', phase: 'results', participantRole: 'player', role: 'host', seat: 'p1', clientId: 'self',
-    slots: {}, settings: { terrain: 'grass', wind: 'calm', turns: 10 }, rematchVotes: {}, log: [], queue: [], transport: { close: () => { closed++; } }
+    kind: 'firebase', phase: 'starting', participantRole: 'player', role: 'host', seat: 'p1', clientId: 'self', room: 'A2BC3DEF', auth: { idToken: 'test' }, currentRoundId: roundId,
+    slots: {}, settings: { terrain: 'grass', wind: 'calm', turns: 10 }, rematchVotes: {}, log: [], queue: [], transport: { send: () => Promise.resolve(true), close: () => { closed++; } }
   });
   app.exitOnlineFromMenu();
-  check('menu exit closes loopback, while Firebase keeps the results lobby open',
-    loopbackExit && !!app.onlineState() && app.onlineState().phase === 'results' && !app.hasSave() && closed === 1);
+  check('the title button exits both loopback and a stuck Firebase match',
+    loopbackExit && !app.onlineState() && app.state().gamePhase === 'title' && !app.hasSave() && closed === 2);
 
   const rulesText = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
@@ -484,6 +484,15 @@ function check(name, value) {
     htmlText.includes("const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
     && htmlText.includes("if (announced !== true) throw new Error('Next round handoff could not be sent.');")
     && htmlText.includes('return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });'));
+  check('a rematch start bypasses stale physics and waits only for reveal verification',
+    htmlText.includes("if (msg.t === 'start') {\n        if (online.revealVerified) applyNetMessage(msg);")
+    && htmlText.includes("online.pendingStart = msg;")
+    && htmlText.includes("if (msg.t === 'fire' || msg.t === 'boom')")
+    && htmlText.includes("if (online.pendingStart) {\n        const pendingStart = online.pendingStart;"));
+  check('the host stores the start snapshot and start packet before leaving the lobby',
+    htmlText.includes('if (online.transport.saveSnapshot) await online.transport.saveSnapshot(snap);')
+    && htmlText.includes("const startSent = await netSend({ t: 'start', snap });")
+    && htmlText.includes("if (startSent !== true) throw new Error('Match start could not be sent.');"));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('players choose on the result screen, not in a popup that hides the outcome',

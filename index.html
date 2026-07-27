@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v41';
+  const BUILD_ID = 'v42';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3724,13 +3724,24 @@
         receiveFirebaseTerminal(msg);
         return;
       }
+      // start は前ラウンドの地形・死体・カットインが残っていても即時に扱う。
+      // 通常の演出FIFOへ入れると、grounded=false の死体が残った再戦だけ永久に詰まる。
+      // reveal のSHA-256確認が非同期で終わる前に届いた場合だけ、専用の1枠へ保留する。
+      if (msg.t === 'start') {
+        if (online.revealVerified) applyNetMessage(msg);
+        else {
+          online.pendingStart = msg;
+          logOnlineEvent({ type: 'startBuffered', reason: 'revealPending' });
+        }
+        return;
+      }
       // Firebase v3はここで必ず完結させる。v2の下流判定へ落とすと、v3を版不一致として
       // 切断してしまうため、ロビー制御は即時、試合演出はFIFOに分けてreturnする。
       if (msg.t === 'lobbyState' || msg.t === 'settings' || msg.t === 'ready' || msg.t === 'commit' || msg.t === 'reveal' || msg.t === 'rematchVote' || msg.t === 'presence' || msg.t === 'ping') {
         applyNetMessage(msg);
         return;
       }
-      if (msg.t === 'start' || msg.t === 'fire' || msg.t === 'boom') {
+      if (msg.t === 'fire' || msg.t === 'boom') {
         enqueueNetMessage(msg);
         return;
       }
@@ -4205,7 +4216,7 @@
       seat, peerSeat: seat === 'p1' ? 'e1' : 'p1', participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
-      resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false,
+      resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
       peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
@@ -4280,12 +4291,16 @@
       online.peerNonce = msg.nonce;
       online.revealVerified = true;
       onlineLobbyStatus('確認完了。開始データを待っています…');
+      if (online.pendingStart) {
+        const pendingStart = online.pendingStart;
+        online.pendingStart = null;
+        applyNetMessage(pendingStart);
+      }
       maybeStartFirebaseMatch();
     } catch (_) { if (online) { online.protocolError = '確認処理に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
   async function maybeStartFirebaseMatch() {
     if (!online || online.kind !== 'firebase' || online.role !== 'host' || !online.revealVerified || !online.selfRevealed || online.matchStarted) return;
-    online.matchStarted = true;
     try {
       player.character = online.selfCharacter;
       cpu.character = online.peerCharacter;
@@ -4299,8 +4314,10 @@
       online.phase = 'starting';
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'playing' }) });
       const snap = buildSnapshot();
-      if (online.transport.saveSnapshot) online.transport.saveSnapshot(snap).catch(() => {});
-      netSend({ t: 'start', snap });
+      if (online.transport.saveSnapshot) await online.transport.saveSnapshot(snap);
+      const startSent = await netSend({ t: 'start', snap });
+      if (startSent !== true) throw new Error('Match start could not be sent.');
+      online.matchStarted = true;
       closeOnlineLobby();
     } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
   }
@@ -4373,7 +4390,7 @@
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
-    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null;
+    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
     online.autoStartNextRound = !!autoReady;
     if (autoReady && isFirebasePlayer()) commitOwnCharacter();
@@ -7101,10 +7118,18 @@
 
   function exitOnlineFromMenu() {
     if (online && online.kind === 'firebase') {
+      const leaving = online;
       menuOpen = false;
-      onlineLobbyStatus(online.phase === 'results' ? '結果ロビーで「ロビーへ戻る」を選んでください。' : '退出はロビーに戻ってから行えます。');
-      if (online.phase === 'results') openFirebaseResultsLobby();
-      else if (online.phase === 'lobby') openFirebaseLobby();
+      // メニューに「オンライン対戦を退出します」と明記しているので、その場で退出させる。
+      // 通知とFirebaseの片付けは裏で続け、端末側は通信不調でも必ずタイトルへ戻す。
+      const bye = netSend({ t: 'bye' });
+      Promise.resolve(bye).catch(() => false).then(() => {
+        const path = leaving.role === 'host' ? `rooms/${leaving.room}` : `rooms/${leaving.room}/slots/${leaving.seat}`;
+        return firebaseRequest(path, leaving.auth, { method: 'DELETE' });
+      }).catch(() => {});
+      endOnline(false, false);
+      hasSuspendedSave = false;
+      returnToTitleFromResult();
       return;
     }
     // loopbackは従来どおり即時終了。
