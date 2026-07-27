@@ -519,6 +519,11 @@ function check(name, value) {
     && htmlText.includes("activeIndex = first === 'p1' ? 0 : 1;\n      focusCameraOn(activeUnit().x, true);"));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
+  check('the battle view-distance slider changes only the local camera and never sends a network message',
+    htmlText.includes("const CAMERA_SLIDER = { x: VW - 260, y: CONTROL_PANEL_Y + 31, w: 120 };")
+    && htmlText.includes('function setCameraZoomFromSlider(point)')
+    && htmlText.includes("if (inputMode === 'cameraSlider') {")
+    && htmlText.includes('drawCameraSlider();'));
   check('players choose on the result screen, not in a popup that hides the outcome',
     htmlText.includes('function firebaseResultChoiceVisible()')
     && htmlText.includes("drawResultButton(continueBtn, 'このまま再戦'")

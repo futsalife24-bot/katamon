@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v47';
+  const BUILD_ID = 'v48';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2455,9 +2455,25 @@
   const leftBtn = { x: 98, y: PANEL_CY + 64 };
   const rightBtn = { x: VW - 98, y: PANEL_CY + 64 };
   let moveDir = 0; // -1, 0, 1
-  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch' | 'volumeSlider'
+  let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch' | 'cameraSlider' | 'volumeSlider'
   let inputPointerId = null;
   let volumeDragKey = null; // 音量スライダーをドラッグ中の対象('bgm' | 'sfx')
+
+  // ===== 視点距離スライダー: ピンチ操作が難しい端末でも、自分の画面だけを確実に調整できる =====
+  const CAMERA_SLIDER = { x: VW - 260, y: CONTROL_PANEL_Y + 31, w: 120 };
+  function cameraSliderValue() {
+    return (cameraZoom - MIN_CAMERA_ZOOM) / (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM);
+  }
+  function isInCameraSlider(p) {
+    return p.x >= CAMERA_SLIDER.x - 16 && p.x <= CAMERA_SLIDER.x + CAMERA_SLIDER.w + 16
+      && Math.abs(p.y - CAMERA_SLIDER.y) <= 25;
+  }
+  function setCameraZoomFromSlider(point) {
+    const value = Math.max(0, Math.min(1, (point.x - CAMERA_SLIDER.x) / CAMERA_SLIDER.w));
+    cameraZoom = clampCameraZoom(MIN_CAMERA_ZOOM + (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM) * value);
+    cameraX = clampCameraX(cameraX);
+    cameraTargetX = null;
+  }
 
   // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
   const FIRE_BTN = { x: VW / 2, y: PANEL_CY, r: 117 };
@@ -8093,6 +8109,43 @@
     for (let x = 30; x < VW; x += 60) drawRivet(x, top + 1.5, 3.4);
   }
 
+  function drawCameraSlider() {
+    if (gamePhase !== 'battle') return;
+    const slider = CAMERA_SLIDER;
+    const value = cameraSliderValue();
+    const knobX = slider.x + slider.w * value;
+    const labelY = slider.y - 13;
+
+    ctx.save();
+    drawOutlinedText(`視点距離 ${Math.round(cameraZoom * 100)}%`, slider.x, labelY, {
+      align: 'left', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
+    drawOutlinedText('遠', slider.x - 14, slider.y + 4, {
+      font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(226,232,240,0.65)', lineWidth: 2.5
+    });
+    drawOutlinedText('近', slider.x + slider.w + 14, slider.y + 4, {
+      font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(226,232,240,0.65)', lineWidth: 2.5
+    });
+
+    ctx.fillStyle = 'rgba(2,7,12,0.78)';
+    ctx.fillRect(slider.x - 3, slider.y - 5, slider.w + 6, 10);
+    ctx.strokeStyle = 'rgba(255,226,161,0.34)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(slider.x - 3.5, slider.y - 5.5, slider.w + 7, 11);
+    ctx.fillStyle = 'rgba(103,207,239,0.78)';
+    ctx.fillRect(slider.x, slider.y - 2, slider.w * value, 4);
+    ctx.fillStyle = 'rgba(71,93,107,0.8)';
+    ctx.fillRect(slider.x + slider.w * value, slider.y - 2, slider.w * (1 - value), 4);
+    ctx.beginPath();
+    ctx.arc(knobX, slider.y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = '#d8eef4';
+    ctx.fill();
+    ctx.strokeStyle = UI.brass;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
     const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && localUnit().grounded;
@@ -8491,6 +8544,7 @@
     drawMinimap();
     drawTurnInfo();
     drawControlPanel();
+    drawCameraSlider();
     drawMoveButtons();
     drawFireButton();
     drawPullLine();
@@ -8772,6 +8826,15 @@
       return;
     }
 
+    // コントローラー右上のスライダーは常に自分の視点だけを変える。オンラインでも送信しない。
+    if (isInCameraSlider(p0)) {
+      inputMode = 'cameraSlider';
+      inputPointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      setCameraZoomFromSlider(p0);
+      return;
+    }
+
     // ミニマップはタップ/ドラッグした地点へ即座に視点移動する。
     if (isInMinimap(p0)) {
       moveCameraFromMinimap(p0, true);
@@ -8852,6 +8915,10 @@
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'volumeSlider') {
       if (volumeDragKey) setVolumeFromPoint(volumeDragKey, p);
+      return;
+    }
+    if (inputMode === 'cameraSlider') {
+      setCameraZoomFromSlider(p);
       return;
     }
     if (inputMode === 'selectWheel' && gamePhase === 'select') {
