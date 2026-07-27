@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v40';
+  const BUILD_ID = 'v41';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3222,14 +3222,14 @@
     });
     return {
       send: msg => {
-        if (closed || sendQueue.isPoisoned()) return;
+        if (closed || sendQueue.isPoisoned()) return Promise.resolve(false);
         // 固定push ID + 固定sentAtでPUTする。応答喪失時は同じパスを再試行し、412なら保存済み本文を照合する。
         const key = firebasePushId();
         let sentAt;
         try { sentAt = firebaseServerNow(auth); }
-        catch (err) { if (onFatal) onFatal(err); return; }
+        catch (err) { if (onFatal) onFatal(err); return Promise.resolve(false); }
         const body = { ...msg, sentAt };
-        sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
+        return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
       },
       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
       reconnect: () => { if (closed) return false; try { if (source) source.close(); } catch (_) { /* noop */ } return connect(); },
@@ -3245,7 +3245,7 @@
   const netSim = { delayMs: 0, lossRate: 0 };
 
   function netSend(msg) {
-    if (!online) return;
+    if (!online) return Promise.resolve(false);
     if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'out', t: msg.t, seat: online.seat });
     const packet = {
       v: online.kind === 'firebase' ? FIREBASE_PROTO_VERSION : PROTO_VERSION,
@@ -3254,8 +3254,8 @@
       ...msg
     };
     if (netSim.lossRate > 0 && Math.random() < netSim.lossRate) return; // 落とす
-    if (netSim.delayMs > 0) setTimeout(() => { if (online) online.transport.send(packet); }, netSim.delayMs);
-    else online.transport.send(packet);
+    if (netSim.delayMs > 0) return new Promise(resolve => setTimeout(() => resolve(online ? online.transport.send(packet) : false), netSim.delayMs));
+    return online.transport.send(packet);
   }
 
   // 出会いと退出の合図は進行を書き換えないので、待たせずその場で処理する。
@@ -4447,7 +4447,8 @@
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: nextId, status: 'lobby', players: { p1: online.clientId, e1: online.slots.e1 && online.slots.e1.uid || null } }) });
       if (!online || online.kind !== 'firebase' || online.currentRoundId !== leavingRoundId) return;
       // transportを切り替える直前、旧roundの購読者へ新roundIdを通知する。
-      netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true });
+      const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true });
+      if (announced !== true) throw new Error('Next round handoff could not be sent.');
       online.currentRoundId = nextId; online.transport.setRoundId(nextId); online.transport.reconnect(); resetLocalFirebaseRoundState(autoReady === true);
       openFirebaseLobby();
     } catch (_) {

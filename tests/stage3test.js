@@ -480,6 +480,10 @@ function check(name, value) {
     && htmlText.includes("netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
     && htmlText.includes("online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;")
     && htmlText.includes('online.rematchVotes = {};'));
+  check('the host waits until the old-round handoff is stored before switching rounds',
+    htmlText.includes("const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
+    && htmlText.includes("if (announced !== true) throw new Error('Next round handoff could not be sent.');")
+    && htmlText.includes('return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });'));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('players choose on the result screen, not in a popup that hides the outcome',
