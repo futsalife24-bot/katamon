@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v63';
+  const BUILD_ID = 'v64';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5426,8 +5426,11 @@
     ctx.font = 'bold 8px ' + UI_FONT;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
+    // 目盛りの中の隙間(3px)より群と群の間(64-62=2px)の方が狭く、隣の項目とつながって
+    // 「耐久と火力で1本の10段メーター」に見えていた。群を詰めて間を空け、
+    // 群の間(12px)が中の隙間(3px)より明らかに広くなるようにする(2026-07-28)。
     for (let i = 0; i < 5; i++) {
-      selectRoundedRect(x + i * 13, y + 6, 10, 4, 2);
+      selectRoundedRect(x + i * 11, y + 6, 8, 4, 2);
       ctx.fillStyle = i < value ? color : 'rgba(255,255,255,0.13)';
       ctx.fill();
     }
@@ -5579,28 +5582,10 @@
   function drawFixedSelectSortieButton() {
     const sortie = selectSortieBtn;
     const gearR = 66;
-    const cardRight = selectFocusedMainCard.x + selectFocusedMainCard.w / 2;
     ctx.save();
 
-    // カード右端へ届く発射レバー。先端位置は常に固定。
-    ctx.beginPath();
-    ctx.moveTo(sortie.x - 38, sortie.y - 23);
-    ctx.lineTo(cardRight, sortie.y);
-    ctx.lineTo(sortie.x - 38, sortie.y + 23);
-    ctx.lineTo(sortie.x - 38, sortie.y + 11);
-    ctx.lineTo(sortie.x - 4, sortie.y + 11);
-    ctx.lineTo(sortie.x - 4, sortie.y - 11);
-    ctx.lineTo(sortie.x - 38, sortie.y - 11);
-    ctx.closePath();
-    const leverFill = ctx.createLinearGradient(cardRight, sortie.y, sortie.x, sortie.y);
-    leverFill.addColorStop(0, '#ffe39a');
-    leverFill.addColorStop(0.45, '#c78a2e');
-    leverFill.addColorStop(1, '#64421d');
-    ctx.fillStyle = leverFill;
-    ctx.fill();
-    ctx.strokeStyle = '#fff2bd';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // カードへ伸びる発射レバー(三角の矢印)は削除した。ギア単体で押せると分かるうえ、
+    // カード側を指す矢印がかえって邪魔だったため(2026-07-28)。
 
     // 長方形カードとは別物に見える、カタパルトの発射ギア。
     ctx.save();
