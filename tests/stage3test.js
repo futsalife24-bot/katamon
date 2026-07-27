@@ -504,6 +504,10 @@ function check(name, value) {
   check('entering an online room keeps an existing CPU suspended match',
     firebaseBeginSrc.includes('hasSuspendedSave = !!loadSuspendedMatch();')
     && !firebaseBeginSrc.includes('clearSuspendedMatch();'));
+  check('online snapshots keep each camera local and focus the acting unit',
+    htmlText.includes("if (isOnline()) {\n      // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。")
+    && htmlText.includes('focusCameraOn(activeUnit().x, true);')
+    && htmlText.includes("activeIndex = first === 'p1' ? 0 : 1;\n      focusCameraOn(activeUnit().x, true);"));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('players choose on the result screen, not in a popup that hides the outcome',

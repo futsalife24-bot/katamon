@@ -272,7 +272,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v44';
+  const BUILD_ID = 'v45';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2906,9 +2906,15 @@
     confirmDialog = null;
     cutIn = null;
     menuOpen = false;
-    cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
-    cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(localUnit().x));
-    cameraTargetX = null;
+    if (isOnline()) {
+      // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。
+      // 開始時・ターン境界では、左右の席に関係なく行動キャラを映す。
+      focusCameraOn(activeUnit().x, true);
+    } else {
+      cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
+      cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(localUnit().x));
+      cameraTargetX = null;
+    }
   }
 
   function resumeSuspendedMatch() {
@@ -4310,6 +4316,7 @@
       const first = await fairFirstPlayer(online.room, online.selfNonce, online.peerNonce);
       if (!online || online.kind !== 'firebase') return;
       activeIndex = first === 'p1' ? 0 : 1;
+      focusCameraOn(activeUnit().x, true);
       // resetMatch はCPU戦の前提でユニットを組み直す。オンラインでは席を貼り直す必要がある。
       setOnlineSeat(online.seat);
       logSeatAssignment('hostStart');
