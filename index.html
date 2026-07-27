@@ -114,34 +114,64 @@
     cursor: pointer;
   }
   #nameButtons #nameOk { border-color: #ffd24a; color: #ffe2a1; }
-  /* Firebase対戦ロビー。Canvas外に置くことで、スマホのIME・共有・コピーを素直に使える。 */
+  /* Firebase対戦ロビー。Canvas外の全画面DOMスクリーンとして重ねることで、スマホのIME・共有・コピーを素直に使える。 */
   #onlineLobby {
-    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-    z-index: 24; padding: 16px; background: rgba(2, 5, 10, 0.86);
+    position: fixed; inset: 0; display: none; z-index: 24;
+    background: #0b0d17;
     font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
   }
-  #onlineLobby.open { display: flex; }
+  #onlineLobby.open { display: flex; justify-content: center; }
   #onlineLobbyBox {
-    width: min(390px, 100%); box-sizing: border-box; padding: 22px 20px 18px;
-    color: #fff5dc; text-align: center; border: 2px solid #c78335; border-radius: 8px;
-    background: linear-gradient(180deg, #37464d, #16252b 54%, #091116);
-    box-shadow: 0 16px 52px rgba(0,0,0,.68);
+    width: 100%; max-width: 540px; height: 100%; box-sizing: border-box;
+    display: flex; flex-direction: column; color: #fff5dc;
+    background: linear-gradient(180deg, #37464d, #16252b 46%, #070b0d);
+    border-left: 2px solid rgba(199,131,53,.55); border-right: 2px solid rgba(199,131,53,.55);
+    box-shadow: 0 0 60px rgba(0,0,0,.5);
+    overflow: hidden;
   }
-  #onlineLobbyTitle { font-weight: 900; font-size: 20px; letter-spacing: .04em; }
-  #onlineLobbyNote, #onlineLobbyStatus { margin-top: 7px; font-size: 12px; line-height: 1.55; }
-  #onlineLobbyNote { color: #d39b4b; } #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; }
-  #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 8px; }
+  /* ヘッダ:入口はタイトル+閉じる、ルームは合言葉+共有/退出。状態でどちらの組が見えるかが変わる。 */
+  #onlineLobbyHeader {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: max(14px, env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 2px solid #c78335;
+    background: linear-gradient(180deg, rgba(55,70,77,.94), rgba(9,17,22,.6));
+  }
+  #onlineLobbyTitle { font-weight: 900; font-size: 19px; letter-spacing: .04em; }
+  #onlineLobby.in-room #onlineLobbyTitle { display: none; }
+  #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 8px; }
   #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
   #onlineLobby.in-room.quickplay #onlineRoomCodeRow { display: none; }
-  #onlineRoomCode { color: #ffd24a; font: 900 28px/1 monospace; letter-spacing: .16em; }
+  #onlineRoomCode { color: #ffd24a; font: 900 22px/1 monospace; letter-spacing: .14em; }
   /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
   #onlineCopy {
-    flex: 0 0 auto; width: 34px; height: 34px; min-height: 0; padding: 0; display: none;
+    flex: 0 0 auto; width: 32px; height: 32px; min-height: 0; padding: 0; display: none;
     align-items: center; justify-content: center; border-radius: 6px; cursor: pointer;
     color: #ffe2a1; border: 2px solid #c78335; background: linear-gradient(180deg,#37464d,#091116);
   }
   #onlineLobby.in-room #onlineCopy { display: flex; }
-  #onlineCopy svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #onlineCopy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* 閉じる(入口)/退出(ルーム)はヘッダ右上に小さく置く。誤タップ圏外。 */
+  #onlineCancel, #onlineLeave {
+    flex: 0 0 auto; min-height: 0; padding: 8px 12px; font: 900 12px "Yu Gothic UI", sans-serif;
+    color: #ffe2a1; border: 2px solid #c78335; border-radius: 4px; cursor: pointer;
+    background: linear-gradient(180deg,#37464d,#091116);
+  }
+  #onlineLobby.in-room #onlineCancel { display: none; }
+  #onlineLeave { display: none; }
+  #onlineLobby.in-room #onlineLeave { display: block; }
+  #onlineLobby.in-room.results #onlineLeave { display: none; }
+  /* 本文:入口はエンブレム+案内、ルームは席・設定・キャラ選択。縦スクロールに逃がす。 */
+  #onlineLobbyBody {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: flex; flex-direction: column; align-items: stretch;
+    padding: 18px 18px 8px; text-align: center;
+  }
+  #onlineLobbyEmblem { width: min(140px, 32vh); height: auto; margin: 4px auto 14px; display: block; opacity: .92; filter: drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
+  #onlineLobby.in-room #onlineLobbyEmblem { display: none; }
+  #onlineLobbyNote, #onlineLobbyStatus { font-size: 12px; line-height: 1.55; }
+  #onlineLobbyNote { color: #d39b4b; margin-bottom: 10px; }
+  #onlineLobby.in-room #onlineLobbyNote { display: none; }
+  #onlineLobbyStatus { min-height: 2.9em; color: #e8edf2; margin-top: auto; padding-top: 10px; }
   /* 入室後は合言葉を1行だけ見せる。入力欄と入力時の注意書きは用済み。 */
   #onlineRoomInput, #onlineRoomHint, #onlineCreate, #onlineJoin { display: none; }
   #onlineLobby.code-entry:not(.in-room) #onlineRoomInput { display: block; }
@@ -151,38 +181,61 @@
   #onlineRoomInput, #onlineCharacter {
     width: 100%; box-sizing: border-box; padding: 11px 10px; color: #fff5dc; text-align: center;
     font: 700 17px "Yu Gothic UI", sans-serif; background: rgba(6,12,18,.92);
-    border: 2px solid rgba(199,131,53,.7); border-radius: 4px; outline: none;
+    border: 2px solid rgba(199,131,53,.7); border-radius: 4px; outline: none; margin-top: 4px;
   }
   #onlineRoomInput:focus, #onlineCharacter:focus { border-color: #ffd24a; }
   /* 除外文字は無言で消えるため、打つ前に理由が分かるよう常時出しておく */
-  #onlineRoomHint { margin-top: 5px; font-size: 11px; line-height: 1.5; color: #9fb0bd; }
+  #onlineRoomHint { margin: 5px 0 4px; font-size: 11px; line-height: 1.5; color: #9fb0bd; }
   #onlineRoomHint b { color: #ffd24a; font-weight: 900; letter-spacing: .08em; }
   #onlineRoomInput[readonly] { opacity: .72; border-style: dashed; }
-  #onlineLobbyButtons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
-  #onlineLobbyButtons button {
-    min-height: 45px; padding: 9px 6px; color: #fff5dc; font: 900 14px "Yu Gothic UI", sans-serif;
-    border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
+  /* フッタ外へ移したので #onlineLobbyButtons button の装飾が届かない。ここで単体に持たせる。
+     合言葉モードでは実質の主ボタンなので、金色のアクセントも付ける。 */
+  #onlineCreate, #onlineJoin {
+    width: 100%; box-sizing: border-box; margin-top: 8px; min-height: 45px; padding: 10px 6px;
+    color: #ffe2a1; font: 900 15px "Yu Gothic UI", sans-serif; cursor: pointer;
+    border: 2px solid #ffd24a; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116);
   }
-  #onlineQuick, #onlineCreate, #onlineJoin { border-color: #ffd24a !important; color: #ffe2a1 !important; }
-  #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
-  #onlineRoomPanel { display: none; margin-top: 10px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); }
   /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
   #onlineCharacter { display: none; }
   #onlineLobby.in-room #onlineCharacter { display: block; }
   #onlineLobby.in-room #onlineRoomPanel { display: block; }
   #onlineLobby.in-room #onlineCreate, #onlineLobby.in-room #onlineJoin { display: none; }
+  #onlineRoomPanel { display: none; margin-top: 2px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); text-align: left; }
   #onlineSlots { margin: 7px 0; font-size: 12px; line-height: 1.65; color: #e8edf2; white-space: pre-line; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
+  /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
+  #onlineLobbyButtons {
+    flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
+    padding: 10px 16px max(14px, env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(199,131,53,.35);
+    background: linear-gradient(180deg, rgba(9,17,22,.35), rgba(9,17,22,.9));
+  }
+  #onlineLobbyButtons button {
+    width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 6px;
+    color: #fff5dc; font: 900 15px "Yu Gothic UI", sans-serif;
+    border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
+  }
   #onlineReady, #onlineStart, #onlineRematch, #onlineReturnLobby, #onlineLeave { display: none; }
   #onlineLobby.in-room #onlineReady, #onlineLobby.in-room #onlineLeave { display: block; }
   #onlineLobby.in-room.host #onlineStart { display: block; }
   #onlineLobby.in-room.results #onlineRematch { display: block; }
   #onlineLobby.in-room.results #onlineReturnLobby { display: block; }
-  #onlineLobby.in-room #onlineCancel { display: none; }
   #onlineLobby.in-room.results #onlineReady, #onlineLobby.in-room.results #onlineStart, #onlineLobby.in-room.results #onlineLeave { display: none; }
+  #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
+  #onlineQuick, #onlineReady, #onlineStart { border-color: #ffd24a !important; color: #ffe2a1 !important; }
+  #onlineQuick, #onlineReady { min-height: 54px; font-size: 16px; }
+  #onlineCodeToggle {
+    border: none !important; background: none !important; min-height: 0 !important; padding: 4px !important;
+    color: #d39b4b !important; font: 700 12px "Yu Gothic UI", sans-serif !important; letter-spacing: .04em; text-decoration: underline;
+  }
   #onlineLobby.busy button { opacity: .56; pointer-events: none; }
-  @media (max-height: 660px) { #onlineLobbyBox { padding: 15px; } #onlineLobbyTitle { font-size: 18px; } #onlineRoomCode { margin: 9px 0; } }
+  @media (max-height: 660px) {
+    #onlineLobbyHeader { padding-top: 10px; padding-bottom: 8px; }
+    #onlineLobbyTitle { font-size: 17px; }
+    #onlineLobbyEmblem { margin-bottom: 8px; }
+    #onlineRoomCode { font-size: 19px; }
+  }
 </style>
 </head>
 <body>
@@ -202,40 +255,45 @@
     </div>
   </div>
 </div>
-<!-- 実対戦はIME/クリップボード/共有を使うため、タイトルCanvasの上にHTMLロビーを重ねる。 -->
+<!-- 実対戦はIME/クリップボード/共有を使うため、タイトルCanvasの上に全画面のHTMLロビーを重ねる。 -->
 <div id="onlineLobby" aria-live="polite">
   <div id="onlineLobbyBox" role="dialog" aria-modal="true" aria-labelledby="onlineLobbyTitle">
-    <div id="onlineLobbyTitle">ONLINE 1V1</div>
-    <div id="onlineLobbyNote">そのまま対戦相手を待てます。合言葉を使いたい時だけ設定を開いてください</div>
-    <div id="onlineRoomCodeRow">
-      <div id="onlineRoomCode"></div>
-      <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
-      </button>
-    </div>
-    <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の合言葉 8文字" aria-describedby="onlineRoomHint">
-    <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
-    <select id="onlineCharacter" aria-label="使用モンスター"></select>
-    <div id="onlineRoomPanel">
-      <div id="onlineSlots"></div>
-      <div id="onlineSettings">
-        <select id="onlineTerrain" aria-label="地形"></select>
-        <select id="onlineWind" aria-label="風"></select>
-        <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
+    <div id="onlineLobbyHeader">
+      <div id="onlineLobbyTitle">ONLINE 1V1</div>
+      <div id="onlineRoomCodeRow">
+        <div id="onlineRoomCode"></div>
+        <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+        </button>
       </div>
-    </div>
-    <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
-    <div id="onlineLobbyButtons">
-      <button id="onlineQuick" type="button">すぐ対戦する</button>
-      <button id="onlineCodeToggle" type="button">合言葉を使う</button>
-      <button id="onlineCreate" type="button">部屋を作る</button>
-      <button id="onlineJoin" type="button">部屋に入る</button>
-      <button id="onlineReady" type="button">準備完了</button>
-      <button id="onlineStart" type="button">対戦開始</button>
-      <button id="onlineRematch" type="button">このまま再戦</button>
-      <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
       <button id="onlineLeave" type="button">ロビーを退出</button>
       <button id="onlineCancel" type="button">タイトルへ戻る</button>
+    </div>
+    <div id="onlineLobbyBody">
+      <img id="onlineLobbyEmblem" src="assets/loading-emblem.png" alt="" aria-hidden="true">
+      <div id="onlineLobbyNote">そのまま対戦相手を待てます。合言葉を使いたい時だけ設定を開いてください</div>
+      <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の合言葉 8文字" aria-describedby="onlineRoomHint">
+      <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
+      <button id="onlineCreate" type="button">部屋を作る</button>
+      <button id="onlineJoin" type="button">部屋に入る</button>
+      <div id="onlineRoomPanel">
+        <div id="onlineSlots"></div>
+        <div id="onlineSettings">
+          <select id="onlineTerrain" aria-label="地形"></select>
+          <select id="onlineWind" aria-label="風"></select>
+          <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
+        </div>
+      </div>
+      <select id="onlineCharacter" aria-label="使用モンスター"></select>
+      <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
+    </div>
+    <div id="onlineLobbyButtons">
+      <button id="onlineStart" type="button">対戦開始</button>
+      <button id="onlineReady" type="button">準備完了</button>
+      <button id="onlineRematch" type="button">このまま再戦</button>
+      <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
+      <button id="onlineQuick" type="button">すぐ対戦する</button>
+      <button id="onlineCodeToggle" type="button">合言葉を使う</button>
     </div>
   </div>
 </div>
@@ -280,7 +338,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v53';
+  const BUILD_ID = 'v54';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
