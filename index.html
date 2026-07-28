@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v65';
+  const BUILD_ID = 'v66';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5781,16 +5781,21 @@
     ctx.restore();
   }
 
-  // 直撃>至近>爆風の3段。blastMulでキャラの爆風サイズを反映する。
-  // 以前は帯の中を距離で連続的に減衰させていたため、着弾位置がほんの少し違うだけで
-  // ダメージが1〜2変わり、オンラインでは同期のたびにHPの小さな修正が見えていた。
-  // 「どの帯に入ったか」だけで決まるようにすると、多少ズレても両端末の値が一致する。
-  // 値は従来の平均に寄せてある(至近は45->25の傾斜なので平均35、爆風は25->0で平均12)。
+  // 直撃>至近>爆風減衰のダメージ計算(blastMulでキャラの爆風サイズを反映)
+  //
+  // v63で「帯ごとの固定値」にしたが、これは公平性を壊すので v66 で戻した。
+  // 直撃の境界は20px、キャラ中心から足元までは16px。足元に撃つと距離は16〜25pxに
+  // 散らばって境界をまたぐため、固定値だとそこが10ダメージの崖になる。立ち位置と
+  // 地面の傾きでどちら側に落ちるかが決まるので、片方は毎回45・もう片方は毎回35という
+  // 差が出た(2026-07-28、恐竜同士の対戦で実測)。傾斜なら同じ状況で45と42程度に収まる。
+  //
+  // オンラインで同期のたびにHPの小修正が見えるのは、この傾斜が原因ではあるが、
+  // 帯で潰すのは副作用が大きすぎる。直すなら撃った側のダメージ値を正として配る。
   function computeDamage(dist, blastMul, damageMul = 1) {
     const DIRECT = 20 * blastMul, CLOSE = 48 * blastMul, BLAST = 100 * blastMul;
     if (dist <= DIRECT) return Math.round(45 * damageMul);
-    if (dist <= CLOSE) return Math.round(35 * damageMul);
-    if (dist <= BLAST) return Math.round(12 * damageMul);
+    if (dist <= CLOSE) return Math.round((45 - (dist - DIRECT) / (CLOSE - DIRECT) * 20) * damageMul);
+    if (dist <= BLAST) return Math.round((25 - (dist - CLOSE) / (BLAST - CLOSE) * 25) * damageMul);
     return 0;
   }
 

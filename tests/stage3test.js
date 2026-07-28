@@ -224,13 +224,19 @@ function check(name, value) {
   // 期限を延ばしすぎると、放置された簡単対戦がまたその間ずっと詰む
   check('the room lease stays short enough to free an abandoned room', h.roomTtlMs() <= 15 * 60 * 1000);
   check('the room lease still fits the ceiling the rules enforce', h.roomTtlMs() <= 7200000);
-  // ダメージは帯の中で一定。着弾が少しずれても両端末で同じ値になり、同期時のHP修正が出ない
+  // ダメージは距離に対してなだらかであること。v63で帯ごとの固定値にしたところ、
+  // 足元撃ち(中心から16〜25px)がちょうど直撃境界の20pxをまたぎ、立ち位置次第で
+  // 毎回45と毎回35に分かれて対戦が不公平になった(2026-07-28に実測)。
   const dmg = d => h.computeDamage(d, 1, 1);
-  check('damage is flat within the direct-hit band', dmg(1) === dmg(19) && dmg(19) === 45);
-  check('damage is flat within the close band', dmg(21) === dmg(47) && dmg(21) === 35);
-  check('damage is flat within the blast band', dmg(49) === dmg(99) && dmg(49) === 12);
+  let worstStep = 0;
+  for (let d = 1; d <= 100; d++) worstStep = Math.max(worstStep, Math.abs(dmg(d) - dmg(d - 1)));
+  check('damage never jumps by a cliff between neighbouring distances', worstStep <= 3, `worst=${worstStep}`);
+  // 足元撃ちが起きる帯。ここが割れると同じ状況の撃ち合いで差がつく
+  check('a shot at your own feet does not swing wildly', Math.abs(dmg(16) - dmg(25)) <= 4,
+    `${dmg(16)} vs ${dmg(25)}`);
+  check('a direct hit is still the maximum', dmg(0) === 45 && dmg(0) >= dmg(21));
+  check('damage still falls off with distance', dmg(1) > dmg(30) && dmg(30) > dmg(60));
   check('damage is zero outside the blast radius', dmg(101) === 0);
-  check('damage still falls off with distance', dmg(1) > dmg(21) && dmg(21) > dmg(49));
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);
