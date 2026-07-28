@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v64';
+  const BUILD_ID = 'v65';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6017,6 +6017,20 @@
     return { dir, distance: self.fuelMax * willingness };
   }
 
+  // CPUが自分から場外へ歩き込まないための足元確認。
+  // limitMoveByClimb が止めるのは急な「上り」だけで、下りと足場の切れ目は素通りする。
+  // 闘技場(tieredBasin)は中央が奈落なので、寄る判断をした瞬間にCPUが落ちて自滅していた。
+  // プレイヤーには適用しない。自分の意思で降りる・落ちるのは操作の自由なので奪わない。
+  function cpuStepIsSafe(u, toX) {
+    const feetY = u.y + UNIT_RADIUS;
+    const ground = walkableGroundYAt(toX, feetY);
+    if (ground === null) return false;
+    // 落下扱いになる段差で、かつ落ちた先が死線に届くなら踏み込ませない。
+    // 生き残れる高さの段差は今までどおり降りる(降りること自体は正当な選択なので)。
+    // 接地すると足元(u.y + UNIT_RADIUS)がちょうど地面のYになるので、地面のYを死線と直接比べる。
+    return !(ground - feetY > FALL_TRIGGER && ground >= DEAD_LINE_Y);
+  }
+
   function cpuAutoTurn() {
     if (matchOver || projectiles.length) return;
     const self = activeUnit();
@@ -9732,12 +9746,17 @@
           const dist = Math.min(MOVE_SPEED * dt, cpuActor.fuel, cpuMoveRemaining);
           let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpuActor.x + cpuMoveDir * dist));
           nx = limitMoveByClimb(cpuActor, nx);
-          const moved = Math.abs(nx - cpuActor.x);
-          cpuActor.x = nx;
-          cpuActor.fuel -= moved;
-          cpuMoveRemaining -= moved;
-          followGroundOrFall(cpuActor);
-          if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
+          // 場外へ落ちる一歩は踏まない。踏みかけたらそこで移動を打ち切って狙いに移る。
+          if (!cpuStepIsSafe(cpuActor, nx)) {
+            cpuPhase = 'aim';
+          } else {
+            const moved = Math.abs(nx - cpuActor.x);
+            cpuActor.x = nx;
+            cpuActor.fuel -= moved;
+            cpuMoveRemaining -= moved;
+            followGroundOrFall(cpuActor);
+            if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
+          }
         } else {
           cpuPhase = 'aim';
         }

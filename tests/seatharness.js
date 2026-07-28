@@ -32,6 +32,10 @@ const HOOK = `
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
     setTerrain: (pattern) => { newTerrain(pattern); },
+    cpuStepIsSafe: (u, toX) => cpuStepIsSafe(u, toX),
+    stageW: () => STAGE_W,
+    deadLineY: () => DEAD_LINE_Y,
+    groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,

@@ -127,6 +127,18 @@ check('フリーモードも例外なく決着', !freeThrew && kt.state().matchO
   freeThrew ? freeThrew.message : JSON.stringify(kt.state()));
 check('フリーモードは連勝を積まない', kt.streak() === 0, String(kt.streak()));
 
+// ---- 闘技場でCPUが自分から奈落へ歩き込まないこと(2026-07-28の指摘) ----
+// limitMoveByClimb が止めるのは急な上りだけで、下りと足場の切れ目は素通りしていた。
+kt.setTerrain('tieredBasin');
+const cpuUnit = kt.units.find(u => u.id === 'e1');
+const midX = kt.stageW() / 2;
+const abyssGround = kt.groundYAt(midX, cpuUnit.y + 18);
+// 中央が本当に奈落(着地点が死線に届く)であることを先に確かめる。前提が崩れたら検査の意味が無い。
+check('闘技場の中央は死線に届く奈落', abyssGround !== null && abyssGround >= kt.deadLineY(),
+  `ground=${abyssGround} deadLine=${kt.deadLineY()}`);
+check('CPUは奈落へ踏み込まない', kt.cpuStepIsSafe(cpuUnit, midX) === false);
+check('CPUは自分の足元へは動ける', kt.cpuStepIsSafe(cpuUnit, cpuUnit.x) === true);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
