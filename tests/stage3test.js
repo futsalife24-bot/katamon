@@ -237,6 +237,27 @@ function check(name, value) {
   check('a direct hit is still the maximum', dmg(0) === 45 && dmg(0) >= dmg(21));
   check('damage still falls off with distance', dmg(1) > dmg(30) && dmg(30) > dmg(60));
   check('damage is zero outside the blast radius', dmg(101) === 0);
+  // 相手の弾の被弾は、こちらの見積もりではなく届いた権威ある値を出す。
+  // 見積もりを先に出していたため、実機で数字が後から10動いていた(2026-07-28)。
+  h.setOnlineForLogTest({ kind: 'firebase', log: [], pendingRemoteDamage: null });
+  h.clearDamageTexts();
+  h.setHp('p1', 100);
+  h.noteRemoteDamageBaseline();   // 炸裂の直前(相手の弾)
+  h.setHp('p1', 65);              // こちらの見積もりで35減らした
+  h.setHp('p1', 55);              // 権威ある値が届いて45まで減った
+  h.flushRemoteDamageText();
+  check('the popup shows the authoritative damage, not the local guess',
+    h.damageTexts().join(',') === '-45', h.damageTexts().join(','));
+  // 二重に出さないこと。state の後に result が続いても数字は1回だけ
+  h.clearDamageTexts();
+  h.flushRemoteDamageText();
+  check('the popup is not emitted twice for one action', h.damageTexts().length === 0);
+  // 権威ある値が「減っていない」なら何も出さない(0ダメージのポップを出さない)
+  h.noteRemoteDamageBaseline();
+  h.flushRemoteDamageText();
+  check('no popup when the authoritative value took nothing off', h.damageTexts().length === 0);
+  h.setOnlineForLogTest(null);
+  h.clearDamageTexts();
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);

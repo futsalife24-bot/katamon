@@ -91,6 +91,11 @@ const HOOK = `
       receiveFirebaseForTest: msg => netReceiveInner(msg),
       // 通信ログ(2026-07-27、実機報告の追跡用)。stage3()の内側に置き、既存の h.stage3() 経由で使えるようにする。
       setOnlineForLogTest: (obj) => { online = obj; },
+      noteRemoteDamageBaseline: () => noteRemoteDamageBaseline(),
+      flushRemoteDamageText: () => flushRemoteDamageText(),
+      damageTexts: () => floatTexts.map(t => t.text),
+      clearDamageTexts: () => { floatTexts.length = 0; },
+      setHp: (id, hp) => { unitById(id).hp = hp; },
       logOnlineEvent: (e) => logOnlineEvent(e),
       persistOnlineLog: () => persistOnlineLog(),
       onlineLogKey: () => ONLINE_LOG_KEY,

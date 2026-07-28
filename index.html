@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v66';
+  const BUILD_ID = 'v67';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4124,6 +4124,9 @@
       case 'fire': {
         const u = unitById(msg.unitId);
         if (!u || u.control !== 'remote') break;
+        // 前の行動の記録が権威ある値を受け取れずに残っていることがある。次の炸裂が
+        // 古い基準を使わないよう、行動の頭で捨てる。
+        online.pendingRemoteDamage = null;
         logOnlineEvent({ type: 'fire', unitId: msg.unitId, actionId: msg.actionId });
         // 移動そのものは送っていないので、撃つ直前の立ち位置をここで合わせる。
         u.x = msg.x;
@@ -4181,6 +4184,7 @@
         logOnlineEvent({ type: 'state', ok: true, units: msg.snap.units.map(u => ({ id: u.id, hp: u.hp })) });
         applySnapshot(msg.snap);
         setOnlineSeat(online.seat);
+        flushRemoteDamageText();
         break;
       case 'result':
         if (online.phase !== 'playing') break;
@@ -4206,6 +4210,8 @@
             }
           }
           logOnlineEvent({ type: 'result', ok: true, winner: msg.winner, reason: msg.reason });
+          // 決着打も同じ扱い。ここで出さないと、とどめの一撃だけ数字が出ない。
+          flushRemoteDamageText();
           projectiles = [];
           awaitingResolve = false;
           matchOver = true;
@@ -4219,6 +4225,7 @@
           const target = unitById(u.id);
           if (target) target.hp = u.hp;
         }
+        flushRemoteDamageText();
         projectiles = [];
         awaitingResolve = false;
         matchOver = true;
@@ -4531,7 +4538,7 @@
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
       peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
-      localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(),
+      localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       seatSeen: {}, seatStale: {},
@@ -4762,7 +4769,7 @@
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
-    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false;
+    online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
     online.autoStartNextRound = !!autoReady;
     if (autoReady && isFirebasePlayer()) commitOwnCharacter();
@@ -5819,8 +5826,35 @@
     checkMatchEnd();
   }
 
+  // 相手の弾による被弾では、こちらで見積もった数字をポップさせない。
+  // 撃った側の値が正として直後に届き、HPはそちらで上書きされるため、先に自前の数字を
+  // 見せると表示が後から動く(実機で10動いた。2026-07-28)。ズレの原因は弾道の再現差で、
+  // フレームレートを揃えても消えない。数字を出す場所を1つに絞るのが確実な直し方。
+  // 記録はその行動の最初の炸裂だけ。必殺の拡散弾のように何度も炸裂しても、
+  // 合計を1回の差分としてまとめて出したいため。
+  function noteRemoteDamageBaseline() {
+    if (!online || online.pendingRemoteDamage) return;
+    const baseline = {};
+    for (const u of units) baseline[u.id] = u.hp;
+    online.pendingRemoteDamage = baseline;
+  }
+  // 権威ある値が届いた後に、その差分だけをポップさせる。
+  function flushRemoteDamageText() {
+    if (!online || !online.pendingRemoteDamage) return;
+    const before = online.pendingRemoteDamage;
+    online.pendingRemoteDamage = null;
+    for (const u of units) {
+      const prev = before[u.id];
+      if (!Number.isFinite(prev)) continue;
+      const dealt = Math.round(prev - u.hp);
+      if (dealt > 0) spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, dealt);
+    }
+  }
+
   function explodeAt(x, y, blastMul, owner, damageMul = 1) {
     blastMul = blastMul || 1;
+    const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
+    if (remoteShot) noteRemoteDamageBaseline();
     carveCrater(x, y, 44 * blastMul);
     spawnExplosion(x, y, blastMul);
     triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
@@ -5833,7 +5867,7 @@
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
         const actualDamage = Math.max(1, Math.round(dmg * takenMul));
         u.hp = Math.max(0, u.hp - actualDamage);
-        spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
+        if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
         creditDamage(owner, u, actualDamage);
       }
     }
