@@ -139,6 +139,19 @@ check('闘技場の中央は死線に届く奈落', abyssGround !== null && abys
 check('CPUは奈落へ踏み込まない', kt.cpuStepIsSafe(cpuUnit, midX) === false);
 check('CPUは自分の足元へは動ける', kt.cpuStepIsSafe(cpuUnit, cpuUnit.x) === true);
 
+// ---- 闘技場の外壁が、一番引いた視点でも上端まで届くこと ----
+// 地形は y=0 からしか描けないので、視点を引くと y<0 の領域が画面に入り、そこで壁が
+// 途切れて空が覗いていた。延長の高さが足りているかを式で固定しておく。
+const zoom = kt.minCameraZoom();
+const panelY = kt.controlPanelY();
+const needed = (panelY + (0 - panelY) * zoom) / zoom; // 画面上端に見える世界座標の空白
+check('外壁の延長は一番引いた視点でも足りる', kt.arenaWallExtension() >= needed,
+  `延長=${kt.arenaWallExtension()} 必要=${Math.ceil(needed)}`);
+// 描画は目で見るしかないが、闘技場で例外を投げないことだけは自動で押さえられる。
+let arenaDrawThrew = null;
+try { kt.render(); } catch (e) { arenaDrawThrew = e; }
+check('闘技場を描画しても落ちない', !arenaDrawThrew, arenaDrawThrew && arenaDrawThrew.message);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

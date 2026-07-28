@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v69';
+  const BUILD_ID = 'v70';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6357,7 +6357,52 @@
     ctx.restore();
   }
 
+  // 闘技場の外壁を画面の上端まで伸ばす(Codex引き継ぎ書§6 #11)。
+  // 地形は y=0〜VH のキャンバスにしか描けないが、視点を引くと y<0 の領域が画面に入り、
+  // そこで壁が途切れて空が覗いていた(視点78%なら画面の上から約145pxぶん)。
+  // ここで足すのは絵だけ。solidGrid には触らないので当たり判定は一切変わらない。
+  // 一番引いた視点(MIN_CAMERA_ZOOM = VW/STAGE_W = 0.375)で必要なのは世界座標で1100px。
+  // 余白を持たせて1400にしてある。ここを削ると、引いた時だけ上端に空が覗く。
+  const ARENA_WALL_SKY_EXTENSION = 1400;
+  function drawArenaWallExtension() {
+    if (currentPattern !== 'tieredBasin') return;
+    const wallW = STAGE_W * ARENA_WALL_RATIO;
+    const walls = [0, STAGE_W - wallW];
+    const top = -ARENA_WALL_SKY_EXTENSION;
+    ctx.save();
+    for (const x of walls) {
+      // 上へ行くほど暗くし、天井の闇へ溶かす。y=0 で地形側の壁と同じ明るさに合わせる。
+      const grad = ctx.createLinearGradient(0, top, 0, 0);
+      grad.addColorStop(0, '#12161d');
+      grad.addColorStop(1, '#2b303a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, top, wallW, ARENA_WALL_SKY_EXTENSION);
+    }
+    // 石組みの継ぎ目を、地形側と同じ30px間隔・同じ位相のまま上へ続ける。
+    // ここがずれると、y=0 の境目に横一本の筋が見えてしまう。
+    ctx.strokeStyle = 'rgba(8,10,14,0.62)';
+    ctx.lineWidth = 2;
+    for (let y = 16 - 30; y > top; y -= 30) {
+      const offset = (Math.floor(y / 30) % 2) * 24;
+      for (const x of walls) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + wallW, y);
+        ctx.stroke();
+        for (let vx = x + ((offset % 48) + 48) % 48; vx < x + wallW; vx += 48) {
+          ctx.beginPath();
+          ctx.moveTo(vx, y);
+          ctx.lineTo(vx, y + 30);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
   function drawTerrain() {
+    // 外壁の延長は地形より先に敷く。地形の縁取りや鉄柵が上に乗る順序を崩さないため。
+    drawArenaWallExtension();
     // 地形マスク(ピクセル単位で穴があいた実体)をそのまま描画
     ctx.drawImage(terrainCanvas, 0, 0);
     // 地形マスクから生成した全周の境界線。浮島・縦崖・爆破穴も実際の形どおりに縁取る。
@@ -8255,10 +8300,26 @@
     ctx.lineWidth = 2.2;
     ctx.stroke();
     ctx.restore();
-    drawOutlinedText(muted ? '✕' : '♪', soundBtn.x, soundBtn.y + 6, {
+    // 記号は常に音符。以前はミュート時だけ「✕」に差し替えていたので、押すたびに
+    // 別のボタンへ化けて見えた。ON/OFFは色と明るさで示す(Codex引き継ぎ書§6 #10)。
+    // 消音中は落とした灰色、鳴っている時は真鍮の明るい色。
+    drawOutlinedText('♪', soundBtn.x, soundBtn.y + 6, {
       font: `900 16px ${UI_FONT_HEAVY}`,
-      color: muted ? 'rgba(226,232,240,0.62)' : UI.brassLight, lineWidth: 3
+      color: muted ? 'rgba(226,232,240,0.42)' : UI.brassLight, lineWidth: 3
     });
+    // 色だけでは分かりにくい環境のために、消音中は音符へ細い斜線を1本重ねる。
+    // 記号そのものは置き換えないので、同じボタンだと分かる。
+    if (muted) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(226,232,240,0.72)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(soundBtn.x - 8, soundBtn.y + 8);
+      ctx.lineTo(soundBtn.x + 8, soundBtn.y - 8);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // 段階式インジケーター1本ぶん
