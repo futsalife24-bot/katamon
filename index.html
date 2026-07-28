@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v70';
+  const BUILD_ID = 'v71';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1487,8 +1487,22 @@
 
   // 弾の直撃判定用:列の最上段ではなく、その座標そのものに地面があるかを正確に見る
   // (浮島の下の空間などで「列の最上段=島の上」を基準にすると何もない場所で爆発してしまうため)
+  // 闘技場の外壁は画面上端まで絵で伸ばしてある(drawArenaWallExtension)。弾がそこを
+  // すり抜けると、見えている壁を通り抜けたように見える。絵と同じ範囲を弾に対して塞ぐ。
+  // 地形キャンバスは y=0 から下にしか無いので**ここは削れない**。上端より上は
+  // 壊れない岩盤、という割り切り(2026-07-29にユーザーと合意)。
+  // 定数はファイル後方で定義しているが、呼ばれるのは初期化後なので参照できる。
+  function arenaWallSolidAbove(x, y) {
+    if (currentPattern !== 'tieredBasin') return false;
+    if (y >= 0 || y < -ARENA_WALL_SKY_EXTENSION) return false;
+    const wallW = STAGE_W * ARENA_WALL_RATIO;
+    return x < wallW || x >= STAGE_W - wallW;
+  }
   function isSolidAt(x, y) {
-    if (y < 0 || y >= VH) return false;
+    // 上端より上は元から早期returnしていた経路。ここに壁の判定を1つ足すだけなので、
+    // 通常の飛行中や地上付近では比較が1つも増えない。
+    if (y < 0) return arenaWallSolidAbove(x, y);
+    if (y >= VH) return false;
     const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
     const r = Math.min(ROWS - 1, Math.max(0, Math.floor(y / ROW_H)));
     return solidGrid[r * TERRAIN_COLS + c] === 1;

@@ -147,6 +147,19 @@ const panelY = kt.controlPanelY();
 const needed = (panelY + (0 - panelY) * zoom) / zoom; // 画面上端に見える世界座標の空白
 check('外壁の延長は一番引いた視点でも足りる', kt.arenaWallExtension() >= needed,
   `延長=${kt.arenaWallExtension()} 必要=${Math.ceil(needed)}`);
+// 外壁の絵と弾の判定は同じ範囲でなければならない。ずれると「見えている壁を弾がすり抜ける」か
+// 「何も無い所で爆発する」のどちらかになる。絵の側の定数から判定を引き当てて確かめる。
+const wallW = kt.stageW() * kt.arenaWallRatio();
+const ext = kt.arenaWallExtension();
+check('上端より上でも外壁は弾を止める(左)', kt.isSolidAt(wallW / 2, -200) === true);
+check('上端より上でも外壁は弾を止める(右)', kt.isSolidAt(kt.stageW() - wallW / 2, -200) === true);
+check('壁の内側は上空を素通しにする', kt.isSolidAt(kt.stageW() / 2, -200) === false);
+check('壁のすぐ内側は塞がない', kt.isSolidAt(wallW + 4, -200) === false);
+check('絵の高さを越えた先は素通し', kt.isSolidAt(wallW / 2, -(ext + 50)) === false);
+// 闘技場だけの仕掛け。ここを間違えると全ステージの上空に見えない壁ができる。
+kt.setTerrain('rolling');
+check('闘技場以外は上空に壁を作らない', kt.isSolidAt(wallW / 2, -200) === false);
+kt.setTerrain('tieredBasin');
 // 描画は目で見るしかないが、闘技場で例外を投げないことだけは自動で押さえられる。
 let arenaDrawThrew = null;
 try { kt.render(); } catch (e) { arenaDrawThrew = e; }
