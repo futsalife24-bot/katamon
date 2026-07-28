@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v67';
+  const BUILD_ID = 'v68';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4888,13 +4888,21 @@
   }
   // 退出はネイティブconfirm()をやめ、画面内の2択(「退出する」/「やめる」)に置き換えた(要件6)。
   // ここは「ロビーを退出」タップで2択を出すだけ。5秒操作が無ければ自動でボタンへ戻す。
+  // ルーム画面から退出してよい状態か。以前は phase==='lobby' 以外を一律で断っていたため、
+  // キャラ確認の検証で止まると(phase==='revealing')退出も再戦もできず完全に詰んでいた。
+  // 実機で発生(2026-07-28)。行き止まりを作らないことを、ここでは厳密さより優先する。
+  // 対戦中(playing)だけは断る。あちらの退出はメニュー側が扱うため。
+  function canLeaveFirebaseLobby(phase, hasError) {
+    if (hasError) return true; // 止まっている時こそ逃げ道が要る
+    return phase !== 'playing';
+  }
   let onlineLeaveConfirmTimer = null;
   function cancelLeaveFirebaseLobbyConfirm() {
     if (onlineLeaveConfirmTimer) { clearTimeout(onlineLeaveConfirmTimer); onlineLeaveConfirmTimer = null; }
     if (onlineLobbyEl) onlineLobbyEl.classList.remove('leave-confirm');
   }
   function beginLeaveFirebaseLobbyConfirm() {
-    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。'); return; }
+    if (!online || online.kind !== 'firebase' || !canLeaveFirebaseLobby(online.phase, !!online.protocolError)) { onlineLobbyStatus('対戦中はメニューから退出してください。'); return; }
     if (onlineLobbyEl) onlineLobbyEl.classList.add('leave-confirm');
     if (onlineLeaveConfirmTimer) clearTimeout(onlineLeaveConfirmTimer);
     onlineLeaveConfirmTimer = setTimeout(cancelLeaveFirebaseLobbyConfirm, 5000);
@@ -4904,7 +4912,7 @@
   // 上書きできるルールを反映済みなので実害は無い。DESIGN_2026-07-27_ROOM_SCENE.md §4)。
   function leaveFirebaseLobby() {
     cancelLeaveFirebaseLobbyConfirm();
-    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') { onlineLobbyStatus('退出はロビーでのみ行えます。'); return; }
+    if (!online || online.kind !== 'firebase' || !canLeaveFirebaseLobby(online.phase, !!online.protocolError)) { onlineLobbyStatus('対戦中はメニューから退出してください。'); return; }
     const leaving = online;
     endOnline(false, false);
     // 結果ロビーからの退出も戦闘画面を経由している。gamePhaseをtitleへ戻してからsyncBgmを呼べば

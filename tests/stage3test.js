@@ -258,6 +258,13 @@ function check(name, value) {
   check('no popup when the authoritative value took nothing off', h.damageTexts().length === 0);
   h.setOnlineForLogTest(null);
   h.clearDamageTexts();
+  // 行き止まりを作らない。キャラ確認の検証で止まると phase は 'revealing' のままで、
+  // 以前はそこから退出も再戦もできず完全に詰んでいた(2026-07-28に実機で発生)。
+  check('you can leave while the character check is still verifying', h.canLeaveFirebaseLobby('revealing', false));
+  check('you can leave once something has gone wrong', h.canLeaveFirebaseLobby('revealing', true));
+  check('you can still leave from the lobby and the result screen',
+    h.canLeaveFirebaseLobby('lobby', false) && h.canLeaveFirebaseLobby('results', false));
+  check('leaving mid-match is left to the menu', !h.canLeaveFirebaseLobby('playing', false));
   const serialWrites = [];
   const healthyQueue = h.createSerialSendQueue(async item => { serialWrites.push(item); }, () => {});
   const serialResults = await Promise.all([healthyQueue.send('fire'), healthyQueue.send('state')]);
