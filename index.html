@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v72';
+  const BUILD_ID = 'v73';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5154,60 +5154,87 @@
     return 'モンスターを選んで連勝へ挑め';
   }
 
-  // 中断データの告知。CPU BATTLE のボタン枠から吹き出しが出ている形にする。
-  // ボタンの周りは詰まっていて(上下とも12px、左右の余白は79pxで文字が入らない)、
-  // 置けるのはロゴとモードラベルの間の帯だけ。そこへ本体を置き、尻尾をボタンへ伸ばす。
-  // 数値を触るならこの4つ。SAVE_BUBBLE_BOTTOM を下げすぎるとモードラベルに被る。
-  const SAVE_BUBBLE_TEXT = '▶ 中断した対戦が残っています';
-  const SAVE_BUBBLE_BOTTOM = 512;   // 吹き出し本体の下端
-  const SAVE_BUBBLE_H = 40;
-  const SAVE_BUBBLE_TAIL_X = 400;   // 尻尾がボタンへ刺さる位置
+  // 中断データの告知。**あえて世界観から浮かせる**のが狙い。
+  // 最初は他のUIと同じ黒鉄+真鍮で作ったが、背景に完全に溶けて気づけなかった(実機で確認)。
+  // マンガの吹き出しに寄せ、白地に黒縁の楕円+尻尾にしてある。ここだけ浮いて見えるのは
+  // 意図した結果なので、「他と揃っていない」という理由で直さないこと。
+  //
+  // 置けるのはロゴとモードラベルの間の帯だけ(ボタンの上下は12px、左右の余白は79pxで
+  // 文字が入らない)。尻尾は CPU BATTLE の文字へ向けて左下へ伸ばす。
+  // 数値を触るならこの4つ。SAVE_BUBBLE_CY を下げすぎるとモードラベルに被る。
+  const SAVE_BUBBLE_TEXT = '中断データあり';
+  const SAVE_BUBBLE_CY = 488;       // 楕円の中心の高さ
+  const SAVE_BUBBLE_RY = 26;        // 楕円の縦半径
+  const SAVE_BUBBLE_TAIL_INSET = 26; // 尻尾の先が CPU BATTLE の文字へ寄る量
   // 位置とサイズは描画と検査で同じものを使う。画面外へ出ていないか、ボタンやロゴに
-  // 被っていないかは、目で見られない代わりに regression 側で数値として押さえている。
+  // 被っていないかは、目で見られない代わりに resulttest 側で数値として押さえている。
   function suspendedSaveBubbleRect(textW) {
     // 右端をボタンの右端に合わせ、幅は左の余白(18px)を割らない範囲までしか広げない。
     // 幅だけを VW 基準で丸めると、文言が長い時に左へはみ出す(検査で捕まえた)。
     const right = Math.min(VW - 18, titleVsCpuBtn.x + titleVsCpuBtn.w / 2);
-    const w = Math.min(textW + 30, right - 18);
-    return { x: right - w, y: SAVE_BUBBLE_BOTTOM - SAVE_BUBBLE_H, w, h: SAVE_BUBBLE_H };
+    const w = Math.min(textW + 48, right - 18);
+    return { x: right - w, y: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, w, h: SAVE_BUBBLE_RY * 2 };
   }
   function drawSuspendedSaveBubble() {
     if (!hasSuspendedSave) return;
     ctx.save();
-    ctx.font = 'bold 13px ' + UI_FONT;
+    ctx.font = '900 16px ' + UI_FONT;
     const box = suspendedSaveBubbleRect(ctx.measureText(SAVE_BUBBLE_TEXT).width);
-    const left = box.x, w = box.w, top = box.y;
-    const cy = top + SAVE_BUBBLE_H / 2;
+    const rx = box.w / 2;
+    const cx = box.x + rx;
+    const cy = SAVE_BUBBLE_CY;
+    const INK = '#14100b';
+    const PAPER = '#fdf8ec';
 
-    // 尻尾。本体の下端からボタンの上端へ。先に描いて本体で付け根を隠す。
+    // 尻尾の先は CPU BATTLE の文字へ向ける。ボタンの上端で止め、枠の中へは入れない
+    // (文字に被ると読めなくなる)。
+    const tipX = titleVsCpuBtn.x + SAVE_BUBBLE_TAIL_INSET;
+    const tipY = titleVsCpuBtn.y - titleVsCpuBtn.h / 2 - 1;
+    // 付け根は楕円の左下。角度で取るので、楕円の大きさを変えても付け根がずれない。
+    const mouth = [0.60 * Math.PI, 0.86 * Math.PI].map(t => ({
+      x: cx + rx * Math.cos(t), y: cy + SAVE_BUBBLE_RY * Math.sin(t)
+    }));
+
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 4;
+
+    // 尻尾 → 楕円 の順に描き、最後に付け根の縁だけを塗りつぶして継ぎ目を消す。
     ctx.beginPath();
-    ctx.moveTo(SAVE_BUBBLE_TAIL_X - 13, SAVE_BUBBLE_BOTTOM - 6);
-    ctx.lineTo(SAVE_BUBBLE_TAIL_X + 9, SAVE_BUBBLE_BOTTOM - 6);
-    ctx.lineTo(SAVE_BUBBLE_TAIL_X + 16, titleVsCpuBtn.y - titleVsCpuBtn.h / 2 - 1);
+    ctx.moveTo(mouth[0].x, mouth[0].y);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(mouth[1].x, mouth[1].y);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(24,17,10,0.96)';
+    ctx.fillStyle = PAPER;
     ctx.fill();
-    ctx.strokeStyle = '#ffd76a';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // 本体。角丸の板に真鍮の縁。
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(left, top, w, SAVE_BUBBLE_H, 12);
-    else ctx.rect(left, top, w, SAVE_BUBBLE_H);
-    ctx.fillStyle = 'rgba(24,17,10,0.96)';
+    ctx.ellipse(cx, cy, rx, SAVE_BUBBLE_RY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = PAPER;
     ctx.fill();
-    ctx.shadowColor = 'rgba(255,210,74,0.55)';
-    ctx.shadowBlur = 12;
-    ctx.strokeStyle = '#ffd76a';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
     ctx.stroke();
     ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
+
+    // 付け根に残る楕円の縁を、内側から紙の色で埋めて繋げる。
+    ctx.beginPath();
+    ctx.moveTo(mouth[0].x, mouth[0].y);
+    ctx.lineTo(mouth[1].x, mouth[1].y);
+    ctx.lineTo(cx, cy);
+    ctx.closePath();
+    ctx.fillStyle = PAPER;
+    ctx.fill();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffe2a1';
-    ctx.fillText(SAVE_BUBBLE_TEXT, left + w / 2, cy + 1);
+    ctx.fillStyle = INK;
+    ctx.fillText(SAVE_BUBBLE_TEXT, cx, cy + 1);
     ctx.restore();
   }
   function drawTitleModeButton(button, label, sub, kind, highlight = false) {

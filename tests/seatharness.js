@@ -72,6 +72,7 @@ const HOOK = `
     titleCpuButtonSub: () => titleCpuButtonSub(),
     saveBubbleText: () => SAVE_BUBBLE_TEXT,
     saveBubbleRect: (textW) => suspendedSaveBubbleRect(textW),
+    saveBubbleTailTip: () => ({ x: titleVsCpuBtn.x + SAVE_BUBBLE_TAIL_INSET, y: titleVsCpuBtn.y - titleVsCpuBtn.h / 2 - 1 }),
     titleCpuBtn: () => ({ ...titleVsCpuBtn }),
     viewW: () => VW,
     setHasSave: (v) => { hasSuspendedSave = !!v; },

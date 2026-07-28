@@ -120,6 +120,17 @@ check('告知は吹き出しが担い、説明文は通常のまま', !kt.titleC
   kt.titleCpuButtonSub());
 check('吹き出しの文面が中断を知らせている', kt.saveBubbleText().includes('中断'), kt.saveBubbleText());
 
+// 尻尾は CPU BATTLE の文字へ向ける。ボタンの外や端を指すと、何の告知か分からなくなる。
+{
+  const tip = kt.saveBubbleTailTip();
+  const btn = kt.titleCpuBtn();
+  check('尻尾の先がCPUボタンの横幅に収まる',
+    tip.x > btn.x - btn.w / 2 && tip.x < btn.x + btn.w / 2, `x=${tip.x}`);
+  check('尻尾の先が文字の近く(中央寄り)を指す',
+    Math.abs(tip.x - btn.x) < btn.w / 4, `中央からの差=${Math.abs(tip.x - btn.x)}`);
+  check('尻尾はボタン枠の中へ入らない', tip.y <= btn.y - btn.h / 2, `y=${tip.y}`);
+}
+
 // 目で見られないぶん、置き場所は数値で押さえる。
 // 幅は文字量で変わるので、想定より広い場合と狭い場合の両方で確かめる。
 const cpuBtn = kt.titleCpuBtn();
