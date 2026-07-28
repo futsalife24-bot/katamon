@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v71';
+  const BUILD_ID = 'v72';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5148,7 +5148,13 @@
     ctx.restore();
   }
 
-  function drawTitleModeButton(button, label, sub, kind) {
+  // タイトルの CPU BATTLE に出す説明文。中断データがある時は、それを知らせる方を優先する。
+  // 以前はキャラ選択まで進まないと再開ボタンが見えず、中断した対戦があること自体に
+  // 気づけなかった(Codex引き継ぎ書§6 #7)。
+  function titleCpuButtonSub(hasSave) {
+    return hasSave ? '▶ 中断した対戦が残っています' : 'モンスターを選んで連勝へ挑め';
+  }
+  function drawTitleModeButton(button, label, sub, kind, highlight = false) {
     const isFree = kind === 'free';
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.82)';
@@ -5179,9 +5185,21 @@
     }
     ctx.fillStyle = steel;
     ctx.fill();
-    ctx.strokeStyle = isFree ? '#e28b37' : '#e6aa3b';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    // 中断データがある時だけ縁を明るくして光らせる。色を変えるのではなく光らせるだけなので、
+    // ボタンの見た目の系統は崩れない。
+    if (highlight) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,210,74,0.85)';
+      ctx.shadowBlur = 16;
+      ctx.strokeStyle = '#ffd76a';
+      ctx.lineWidth = 3.4;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = isFree ? '#e28b37' : '#e6aa3b';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
 
     drawRivet(button.x - button.w / 2 + 15, button.y - button.h / 2 + 14);
     drawRivet(button.x + button.w / 2 - 15, button.y - button.h / 2 + 14);
@@ -5196,8 +5214,9 @@
     ctx.font = '900 23px ' + UI_FONT_HEAVY;
     ctx.strokeText(label, button.x, button.y - 7);
     ctx.fillText(label, button.x, button.y - 7);
-    ctx.fillStyle = UI.brassLabel;
-    ctx.font = 'bold 10px ' + UI_FONT;
+    // 案内文は、通常の説明より一段明るくして拾わせる。
+    ctx.fillStyle = highlight ? '#ffe2a1' : UI.brassLabel;
+    ctx.font = (highlight ? 'bold 11px ' : 'bold 10px ') + UI_FONT;
     ctx.fillText(sub, button.x, button.y + 18);
     ctx.restore();
   }
@@ -5255,7 +5274,9 @@
     ctx.fillStyle = 'rgba(255,225,169,0.62)';
     ctx.fillText(modeLabelText, VW / 2, modeLabelY);
 
-    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', 'モンスターを選んで連勝へ挑め', 'normal');
+    // 再開そのものはキャラ選択画面のボタンに任せる。タイトルから直接再開させると、
+    // 押し間違いで意図せず中断データを消費してしまうため、ここでは知らせるだけ。
+    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(hasSuspendedSave), 'normal', hasSuspendedSave);
     drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
     drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
     ctx.restore();

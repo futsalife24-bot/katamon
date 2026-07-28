@@ -69,6 +69,8 @@ const HOOK = `
     keepsRunOnExit: () => keepsRunOnExit(),
     endPause: () => matchEndPause,
     hasSave: () => hasSuspendedSave,
+    titleCpuButtonSub: (v) => titleCpuButtonSub(v),
+    setHasSave: (v) => { hasSuspendedSave = !!v; },
     setStreak: (n) => { winStreak = n; },
     isBoss: () => isBossMatch,
     pattern: () => currentPattern,

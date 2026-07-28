@@ -113,6 +113,22 @@ tapTitleButton();
 check('フリーモードでもタイトルへ戻る', kt.state().gamePhase === 'title', kt.state().gamePhase);
 check('フリーモードでは中断セーブを作らない', kt.load() === null);
 
+// ---- タイトルの CPU BATTLE が中断データを知らせること(Codex引き継ぎ書§6 #7) ----
+// 以前はキャラ選択まで進まないと再開ボタンが見えず、中断した対戦があること自体に
+// 気づけなかった。案内を落とすと元の状態に戻るので、ここで固定しておく。
+check('中断データがあるとタイトルで知らせる', kt.titleCpuButtonSub(true).includes('中断'),
+  kt.titleCpuButtonSub(true));
+check('中断データが無ければ通常の説明のまま', !kt.titleCpuButtonSub(false).includes('中断'),
+  kt.titleCpuButtonSub(false));
+// 光らせる側は新しい描画経路なので、実際にタイトルを描かせて例外が出ないことも見る。
+kt.setPhase('title');
+let titleDrawThrew = null;
+for (const hasSave of [true, false]) {
+  kt.setHasSave(hasSave);
+  try { kt.render(); } catch (e) { titleDrawThrew = `hasSave=${hasSave}: ${e.message}`; }
+}
+check('中断データの有無どちらでもタイトルを描画できる', !titleDrawThrew, titleDrawThrew);
+
 console.log('\n=== result screen ===');
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
