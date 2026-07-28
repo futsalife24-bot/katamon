@@ -116,10 +116,22 @@ check('フリーモードでは中断セーブを作らない', kt.load() === nu
 // ---- タイトルの CPU BATTLE が中断データを知らせること(Codex引き継ぎ書§6 #7) ----
 // 以前はキャラ選択まで進まないと再開ボタンが見えず、中断した対戦があること自体に
 // 気づけなかった。案内を落とすと元の状態に戻るので、ここで固定しておく。
-check('中断データがあるとタイトルで知らせる', kt.titleCpuButtonSub(true).includes('中断'),
-  kt.titleCpuButtonSub(true));
-check('中断データが無ければ通常の説明のまま', !kt.titleCpuButtonSub(false).includes('中断'),
-  kt.titleCpuButtonSub(false));
+check('告知は吹き出しが担い、説明文は通常のまま', !kt.titleCpuButtonSub().includes('中断'),
+  kt.titleCpuButtonSub());
+check('吹き出しの文面が中断を知らせている', kt.saveBubbleText().includes('中断'), kt.saveBubbleText());
+
+// 目で見られないぶん、置き場所は数値で押さえる。
+// 幅は文字量で変わるので、想定より広い場合と狭い場合の両方で確かめる。
+const cpuBtn = kt.titleCpuBtn();
+for (const textW of [120, 220, 320, 460]) {
+  const box = kt.saveBubbleRect(textW);
+  check(`吹き出しが画面内に収まる(文字幅${textW})`, box.x >= 0 && box.x + box.w <= kt.viewW(),
+    `x=${box.x} w=${box.w} VW=${kt.viewW()}`);
+  check(`吹き出しがCPUボタンに被らない(文字幅${textW})`, box.y + box.h <= cpuBtn.y - cpuBtn.h / 2,
+    `下端=${box.y + box.h} ボタン上端=${cpuBtn.y - cpuBtn.h / 2}`);
+  check(`吹き出しがロゴに被らない(文字幅${textW})`, box.y >= 445,
+    `上端=${box.y}`);
+}
 // 光らせる側は新しい描画経路なので、実際にタイトルを描かせて例外が出ないことも見る。
 kt.setPhase('title');
 let titleDrawThrew = null;

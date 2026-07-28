@@ -5148,11 +5148,67 @@
     ctx.restore();
   }
 
-  // タイトルの CPU BATTLE に出す説明文。中断データがある時は、それを知らせる方を優先する。
-  // 以前はキャラ選択まで進まないと再開ボタンが見えず、中断した対戦があること自体に
-  // 気づけなかった(Codex引き継ぎ書§6 #7)。
-  function titleCpuButtonSub(hasSave) {
-    return hasSave ? '▶ 中断した対戦が残っています' : 'モンスターを選んで連勝へ挑め';
+  // タイトルの CPU BATTLE の説明文。告知は吹き出し(drawSuspendedSaveBubble)が担うので、
+  // ここは常に通常の説明のまま。両方に出すと同じことを二度言うことになる。
+  function titleCpuButtonSub() {
+    return 'モンスターを選んで連勝へ挑め';
+  }
+
+  // 中断データの告知。CPU BATTLE のボタン枠から吹き出しが出ている形にする。
+  // ボタンの周りは詰まっていて(上下とも12px、左右の余白は79pxで文字が入らない)、
+  // 置けるのはロゴとモードラベルの間の帯だけ。そこへ本体を置き、尻尾をボタンへ伸ばす。
+  // 数値を触るならこの4つ。SAVE_BUBBLE_BOTTOM を下げすぎるとモードラベルに被る。
+  const SAVE_BUBBLE_TEXT = '▶ 中断した対戦が残っています';
+  const SAVE_BUBBLE_BOTTOM = 512;   // 吹き出し本体の下端
+  const SAVE_BUBBLE_H = 40;
+  const SAVE_BUBBLE_TAIL_X = 400;   // 尻尾がボタンへ刺さる位置
+  // 位置とサイズは描画と検査で同じものを使う。画面外へ出ていないか、ボタンやロゴに
+  // 被っていないかは、目で見られない代わりに regression 側で数値として押さえている。
+  function suspendedSaveBubbleRect(textW) {
+    // 右端をボタンの右端に合わせ、幅は左の余白(18px)を割らない範囲までしか広げない。
+    // 幅だけを VW 基準で丸めると、文言が長い時に左へはみ出す(検査で捕まえた)。
+    const right = Math.min(VW - 18, titleVsCpuBtn.x + titleVsCpuBtn.w / 2);
+    const w = Math.min(textW + 30, right - 18);
+    return { x: right - w, y: SAVE_BUBBLE_BOTTOM - SAVE_BUBBLE_H, w, h: SAVE_BUBBLE_H };
+  }
+  function drawSuspendedSaveBubble() {
+    if (!hasSuspendedSave) return;
+    ctx.save();
+    ctx.font = 'bold 13px ' + UI_FONT;
+    const box = suspendedSaveBubbleRect(ctx.measureText(SAVE_BUBBLE_TEXT).width);
+    const left = box.x, w = box.w, top = box.y;
+    const cy = top + SAVE_BUBBLE_H / 2;
+
+    // 尻尾。本体の下端からボタンの上端へ。先に描いて本体で付け根を隠す。
+    ctx.beginPath();
+    ctx.moveTo(SAVE_BUBBLE_TAIL_X - 13, SAVE_BUBBLE_BOTTOM - 6);
+    ctx.lineTo(SAVE_BUBBLE_TAIL_X + 9, SAVE_BUBBLE_BOTTOM - 6);
+    ctx.lineTo(SAVE_BUBBLE_TAIL_X + 16, titleVsCpuBtn.y - titleVsCpuBtn.h / 2 - 1);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(24,17,10,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = '#ffd76a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 本体。角丸の板に真鍮の縁。
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(left, top, w, SAVE_BUBBLE_H, 12);
+    else ctx.rect(left, top, w, SAVE_BUBBLE_H);
+    ctx.fillStyle = 'rgba(24,17,10,0.96)';
+    ctx.fill();
+    ctx.shadowColor = 'rgba(255,210,74,0.55)';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#ffd76a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffe2a1';
+    ctx.fillText(SAVE_BUBBLE_TEXT, left + w / 2, cy + 1);
+    ctx.restore();
   }
   function drawTitleModeButton(button, label, sub, kind, highlight = false) {
     const isFree = kind === 'free';
@@ -5276,9 +5332,11 @@
 
     // 再開そのものはキャラ選択画面のボタンに任せる。タイトルから直接再開させると、
     // 押し間違いで意図せず中断データを消費してしまうため、ここでは知らせるだけ。
-    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(hasSuspendedSave), 'normal', hasSuspendedSave);
+    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
     drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
     drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
+    // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
+    drawSuspendedSaveBubble();
     ctx.restore();
 
     drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
