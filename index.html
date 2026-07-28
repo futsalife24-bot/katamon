@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v68';
+  const BUILD_ID = 'v69';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3580,10 +3580,19 @@
   // 公開(reveal)前なら、相手が準備完了を取り消してキャラを選び直すことがある。
   // commit-reveal の意味は「相手の選択を見た後に変えられない」ことなので、
   // 公開前の差し替えは何も漏らさない。公開後の差し替えだけを不正として弾く。
-  function acceptPeerCommit(currentHash, incomingHash, revealed) {
-    if (currentHash == null) return { accept: true, hash: incomingHash };
+  // 相手のコミットを採用してよいか。
+  // 「まだ公開前なら新しいもので上書きしてよい」だけで判断していたため、古いコミットが
+  // 後から届くと最新を上書きし、続く公開が一致しなくなっていた(2026-07-28に実機で発生し、
+  // 配送順のシミュレーションで再現)。相手が準備完了を押し直した時にだけ起きる。
+  // 送信時刻で古いものを落とす。比較するのは同じ送信者のコミット同士なので、
+  // 端末間の時計のズレは関係ない。落とす方向にしか効かないので、なりすましの余地は増えない。
+  function acceptPeerCommit(currentHash, incomingHash, revealed, currentAt, incomingAt) {
+    if (currentHash == null) return { accept: true, hash: incomingHash, at: incomingAt };
     if (currentHash === incomingHash) return { accept: false, duplicate: true };
-    if (!revealed) return { accept: true, hash: incomingHash };
+    if (Number.isFinite(currentAt) && Number.isFinite(incomingAt) && incomingAt <= currentAt) {
+      return { accept: false, stale: true };
+    }
+    if (!revealed) return { accept: true, hash: incomingHash, at: incomingAt };
     return { accept: false, error: '相手が選択内容を差し替えました' };
   }
   function acceptPeerReveal(alreadySeen) { return !alreadySeen; }
@@ -4242,10 +4251,12 @@
         if (online.kind !== 'firebase' || online.phase === 'ended' || typeof msg.hash !== 'string') break;
         if (msg.seat !== online.peerSeat) break;
         {
-          const decision = acceptPeerCommit(online.peerCommit, msg.hash, !!online.peerRevealSeen);
+          const decision = acceptPeerCommit(online.peerCommit, msg.hash, !!online.peerRevealSeen, online.peerCommitAt, msg.sentAt);
           if (decision.error) { rejectFirebaseMessage(decision.error); break; }
           if (decision.duplicate) break; // 同じpushの再送は無害に無視する
+          if (decision.stale) break;     // 押し直しの古いコミットが後から届いただけ
           online.peerCommit = decision.hash;
+          online.peerCommitAt = decision.at;
         }
         online.peerCommitted = true;
         onlineLobbyStatus('相手がモンスターを確定しました。確認中…');
@@ -4537,7 +4548,7 @@
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
-      peerCommit: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
+      peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
@@ -4766,7 +4777,7 @@
     online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;
     online.selfCharacter = selectedOnlineCharacter();
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
-    online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false;
+    online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false; online.peerCommitAt = null;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
     online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
