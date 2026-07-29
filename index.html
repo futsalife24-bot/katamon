@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v77';
+  const BUILD_ID = 'v78';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1472,6 +1472,8 @@
     }
     rescanColumnsFromGrid(colFrom, colTo);
     if (refreshRim) rebuildTerrainRim();
+    // ミニマップの地形は地形が変わった時だけ描き直す。毎フレームの全グリッド走査を避ける。
+    minimapTerrainDirty = true;
   }
 
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
@@ -1889,6 +1891,7 @@
     craterHistory = [];
     buildTerrainMask(r.segments);
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
+    minimapTerrainDirty = true;
     startOnIsland = r.startOnIsland;
     updateDebug();
   }
@@ -1906,6 +1909,7 @@
     rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
     for (const cr of craters) carveCraterInternal(cr.x, cr.y, cr.r, false);
     rebuildTerrainRim();
+    minimapTerrainDirty = true;
     craterHistory = craters.slice();
     startOnIsland = wasStartOnIsland;
     updateDebug();
@@ -7722,6 +7726,14 @@
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
   const MINIMAP = { x: 13, y: 120, w: VW - 26, h: 56 };
+  const MINIMAP_PAD = 4;
+  // 地形は爆発・生成・中断復元の時しか変わらない。ここへ地形部分を焼いておけば、
+  // 通常の1フレームでは巨大なsolidGridを走査せず、完成画像を1回貼るだけで済む。
+  const minimapTerrainCanvas = document.createElement('canvas');
+  minimapTerrainCanvas.width = MINIMAP.w - MINIMAP_PAD * 2;
+  minimapTerrainCanvas.height = MINIMAP.h - MINIMAP_PAD * 2;
+  const minimapTerrainCtx = minimapTerrainCanvas.getContext('2d');
+  let minimapTerrainDirty = true;
   function isInMinimap(p) {
     return p.x >= MINIMAP.x && p.x <= MINIMAP.x + MINIMAP.w
       && p.y >= MINIMAP.y && p.y <= MINIMAP.y + MINIMAP.h;
@@ -7752,10 +7764,72 @@
     cameraX = centerCameraOn(ratio * STAGE_W);
     cameraTargetX = null;
   }
-  // 世界全体を圧縮する縦長ミニマップ。STAGE_Wだけを参照するため、将来の横長ステージにも追従する。
+  function rebuildMinimapTerrain() {
+    const innerW = minimapTerrainCanvas.width;
+    const innerH = minimapTerrainCanvas.height;
+    const mapWorldTop = 260;
+    const mapWorldBottom = Math.max(CONTROL_PANEL_Y + 8, GROUND_MAX_Y + 44);
+    const mapWorldH = mapWorldBottom - mapWorldTop;
+    const toMapX = x => (Math.max(0, Math.min(STAGE_W, x)) / STAGE_W) * innerW;
+    const toMapY = y => Math.max(0, Math.min(1, (y - mapWorldTop) / mapWorldH)) * innerH;
+    const startRow = Math.max(0, Math.floor(mapWorldTop / ROW_H));
+    const endRow = Math.min(ROWS - 1, Math.ceil(mapWorldBottom / ROW_H));
+    const mapCtx = minimapTerrainCtx;
+
+    mapCtx.clearRect(0, 0, innerW, innerH);
+    const terrainFill = mapCtx.createLinearGradient(0, 0, 0, innerH);
+    terrainFill.addColorStop(0, 'rgba(235,243,255,0.30)');
+    terrainFill.addColorStop(1, 'rgba(78,116,155,0.54)');
+    mapCtx.fillStyle = terrainFill;
+    mapCtx.beginPath();
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const x0 = c / TERRAIN_COLS * innerW;
+      const x1 = (c + 1) / TERRAIN_COLS * innerW;
+      let runStart = -1;
+      for (let r = startRow; r <= endRow + 1; r++) {
+        const solid = r <= endRow && solidGrid[r * TERRAIN_COLS + c] === 1;
+        if (solid && runStart < 0) runStart = r;
+        if (!solid && runStart >= 0) {
+          const y0 = toMapY(runStart * ROW_H);
+          const y1 = toMapY(r * ROW_H);
+          mapCtx.rect(x0, y0, Math.max(1, x1 - x0 + 0.25), Math.max(1, y1 - y0));
+          runStart = -1;
+        }
+      }
+    }
+    mapCtx.fill();
+
+    // 各地形塊の上面と下面を細く縁取りし、浮島であることを判別しやすくする。
+    mapCtx.beginPath();
+    for (let c = 0; c < TERRAIN_COLS; c++) {
+      const x0 = c / TERRAIN_COLS * innerW;
+      const x1 = (c + 1) / TERRAIN_COLS * innerW;
+      for (let r = startRow; r <= endRow; r++) {
+        if (solidGrid[r * TERRAIN_COLS + c] !== 1) continue;
+        const aboveSolid = r > startRow && solidGrid[(r - 1) * TERRAIN_COLS + c] === 1;
+        const belowSolid = r < endRow && solidGrid[(r + 1) * TERRAIN_COLS + c] === 1;
+        if (!aboveSolid) {
+          const y = toMapY(r * ROW_H);
+          mapCtx.moveTo(x0, y);
+          mapCtx.lineTo(x1, y);
+        }
+        if (!belowSolid) {
+          const y = toMapY((r + 1) * ROW_H);
+          mapCtx.moveTo(x0, y);
+          mapCtx.lineTo(x1, y);
+        }
+      }
+    }
+    mapCtx.strokeStyle = 'rgba(255,255,255,0.82)';
+    mapCtx.lineWidth = 1;
+    mapCtx.stroke();
+    minimapTerrainDirty = false;
+  }
+
+  // 世界全体を圧縮する縦長ミニマップ。地形画像だけをキャッシュし、動く物だけを毎フレーム重ねる。
   function drawMinimap() {
     const map = MINIMAP;
-    const pad = 4;
+    const pad = MINIMAP_PAD;
     const innerX = map.x + pad;
     const innerY = map.y + pad;
     const innerW = map.w - pad * 2;
@@ -7779,55 +7853,8 @@
     ctx.rect(innerX, innerY, innerW, innerH);
     ctx.clip();
 
-    // solidGridの実際の塊を圧縮して描き、浮島の下や爆破穴を空洞のまま残す。
-    const startRow = Math.max(0, Math.floor(mapWorldTop / ROW_H));
-    const endRow = Math.min(ROWS - 1, Math.ceil(mapWorldBottom / ROW_H));
-    const terrainFill = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
-    terrainFill.addColorStop(0, 'rgba(235,243,255,0.30)');
-    terrainFill.addColorStop(1, 'rgba(78,116,155,0.54)');
-    ctx.fillStyle = terrainFill;
-    ctx.beginPath();
-    for (let c = 0; c < TERRAIN_COLS; c++) {
-      const x0 = innerX + c / TERRAIN_COLS * innerW;
-      const x1 = innerX + (c + 1) / TERRAIN_COLS * innerW;
-      let runStart = -1;
-      for (let r = startRow; r <= endRow + 1; r++) {
-        const solid = r <= endRow && solidGrid[r * TERRAIN_COLS + c] === 1;
-        if (solid && runStart < 0) runStart = r;
-        if (!solid && runStart >= 0) {
-          const y0 = toMapY(runStart * ROW_H);
-          const y1 = toMapY(r * ROW_H);
-          ctx.rect(x0, y0, Math.max(1, x1 - x0 + 0.25), Math.max(1, y1 - y0));
-          runStart = -1;
-        }
-      }
-    }
-    ctx.fill();
-
-    // 各地形塊の上面と下面を細く縁取りし、浮島であることを判別しやすくする。
-    ctx.beginPath();
-    for (let c = 0; c < TERRAIN_COLS; c++) {
-      const x0 = innerX + c / TERRAIN_COLS * innerW;
-      const x1 = innerX + (c + 1) / TERRAIN_COLS * innerW;
-      for (let r = startRow; r <= endRow; r++) {
-        if (solidGrid[r * TERRAIN_COLS + c] !== 1) continue;
-        const aboveSolid = r > startRow && solidGrid[(r - 1) * TERRAIN_COLS + c] === 1;
-        const belowSolid = r < endRow && solidGrid[(r + 1) * TERRAIN_COLS + c] === 1;
-        if (!aboveSolid) {
-          const y = toMapY(r * ROW_H);
-          ctx.moveTo(x0, y);
-          ctx.lineTo(x1, y);
-        }
-        if (!belowSolid) {
-          const y = toMapY((r + 1) * ROW_H);
-          ctx.moveTo(x0, y);
-          ctx.lineTo(x1, y);
-        }
-      }
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.82)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    if (minimapTerrainDirty) rebuildMinimapTerrain();
+    ctx.drawImage(minimapTerrainCanvas, innerX, innerY);
 
     // 鎖は省き、実際に砲弾判定を持つ先端障害物だけをミニマップへ表示する。
     if (currentPattern === 'tieredBasin') {
