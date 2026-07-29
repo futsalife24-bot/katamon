@@ -73,6 +73,7 @@ const HOOK = `
     saveBubbleText: () => SAVE_BUBBLE_TEXT,
     saveBubbleRect: (textW) => suspendedSaveBubbleRect(textW),
     saveBubbleTail: (box) => suspendedSaveBubbleTail(box),
+    modeLabelY: () => TITLE_MODE_LABEL_Y,
     titleCpuBtn: () => ({ ...titleVsCpuBtn }),
     viewW: () => VW,
     setHasSave: (v) => { hasSuspendedSave = !!v; },
