@@ -113,6 +113,48 @@ tapTitleButton();
 check('フリーモードでもタイトルへ戻る', kt.state().gamePhase === 'title', kt.state().gamePhase);
 check('フリーモードでは中断セーブを作らない', kt.load() === null);
 
+// ---- 中断データがある時に新しく出撃しようとしたら、消す前に確認すること ----
+// selectCharacterAndStart() は入口で clearSuspendedMatch() を呼ぶので、素通しすると
+// 押した瞬間に消えて戻せない(2026-07-29の要望)。
+{
+  kt.setPhase('select');
+  // 中断データを作ってから、新規出撃を試みる
+  kt.startBattle(kt.chars()[0]);
+  kt.forceWinner('player');
+  kt.save();
+  kt.setHasSave(true);
+  const started = kt.requestNewMatch(kt.chars()[1]);
+  check('中断データがある時は、すぐには始めない', started === false);
+  check('確認待ちの状態になる', kt.pendingNewMatch() === kt.chars()[1], String(kt.pendingNewMatch()));
+  check('確認中はまだ中断データが残っている', kt.load() !== null);
+
+  kt.resolveNewMatchConfirm('cancel');
+  check('やめるを選んだら中断データは残る', kt.load() !== null);
+  check('やめるを選んだら確認待ちも解ける', kt.pendingNewMatch() === null);
+
+  kt.setHasSave(true);
+  kt.requestNewMatch(kt.chars()[1]);
+  kt.resolveNewMatchConfirm('start');
+  check('消して出撃を選んで初めて中断データが消える', kt.load() === null);
+
+  // 中断データが無ければ、確認を挟まずそのまま始まる
+  kt.setHasSave(false);
+  check('中断データが無ければ確認を挟まない', kt.requestNewMatch(kt.chars()[2]) === true);
+  check('その時は確認待ちにならない', kt.pendingNewMatch() === null);
+}
+{
+  // 3つのボタンが重ならず、画面に収まっていること
+  const b = kt.newMatchBtns();
+  const rows = [b.resume, b.start, b.cancel];
+  for (const r of rows) {
+    check(`確認ボタンが画面に収まる(y=${r.y})`,
+      r.x - r.w / 2 >= 0 && r.x + r.w / 2 <= kt.viewW() && r.y - r.h / 2 >= 0, JSON.stringify(r));
+  }
+  check('確認ボタンどうしが重ならない',
+    rows[0].y + rows[0].h / 2 < rows[1].y - rows[1].h / 2
+    && rows[1].y + rows[1].h / 2 < rows[2].y - rows[2].h / 2);
+}
+
 // ---- タイトルの CPU BATTLE が中断データを知らせること(Codex引き継ぎ書§6 #7) ----
 // 以前はキャラ選択まで進まないと再開ボタンが見えず、中断した対戦があること自体に
 // 気づけなかった。案内を落とすと元の状態に戻るので、ここで固定しておく。

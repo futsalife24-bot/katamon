@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v75';
+  const BUILD_ID = 'v76';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2896,10 +2896,35 @@
     if (Math.abs(delta) < 0.001) selectWheelPosition = targetIndex;
   }
   const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
+  // 中断データがある状態で新しく出撃しようとした時の確認。
+  // selectCharacterAndStart() は入口で clearSuspendedMatch() を呼ぶので、押した瞬間に
+  // 中断データは消えて復元できない。画面上端の再開ボタンは気づかれにくいという指摘も
+  // あったので、ここで「再開」も選べるようにしてある(2026-07-29)。
+  let pendingNewMatchKey = null;
+  // 出撃の入口。中断データがある間は必ずここで一度止める。
+  // 戻り値は「そのまま試合を始めたか」。呼び出し側の分岐を減らすために返している。
+  function requestNewMatch(key) {
+    if (hasSuspendedSave) { pendingNewMatchKey = key; return false; }
+    selectCharacterAndStart(key);
+    return true;
+  }
+  // 確認の結末。'resume' | 'start' | 'cancel'。判定をここへ切り出しておかないと、
+  // 「やめるを押しても中断データが残ること」を検査から確かめられない。
+  function resolveNewMatchConfirm(action) {
+    const key = pendingNewMatchKey;
+    pendingNewMatchKey = null;
+    if (!key) return;
+    if (action === 'resume') resumeSuspendedMatch();
+    else if (action === 'start') selectCharacterAndStart(key);
+  }
+  const newMatchResumeBtn = { x: VW / 2, y: 420, w: 380, h: 46 };
+  const newMatchStartBtn = { x: VW / 2, y: 478, w: 380, h: 46 };
+  const newMatchCancelBtn = { x: VW / 2, y: 536, w: 380, h: 42 };
   const selectBackBtn = { x: 62, y: 32, w: 104, h: 34 };
 
   // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
   function leaveSelectToTitle() {
+    pendingNewMatchKey = null;
     selectWheelDragging = false;
     selectWheelVelocity = 0;
     inputMode = null;
@@ -2908,6 +2933,7 @@
   }
 
   function selectCharacterAndStart(key) {
+    pendingNewMatchKey = null;
     clearSuspendedMatch();
     hasSuspendedSave = false;
     battleMode = 'normal';
@@ -3113,6 +3139,7 @@
   }
 
   function resumeSuspendedMatch() {
+    pendingNewMatchKey = null;
     const data = loadSuspendedMatch();
     if (!data) return;
     applySnapshot(data);
@@ -5917,6 +5944,38 @@
       ctx.font = '10px sans-serif';
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 16);
     }
+    ctx.restore();
+    drawNewMatchConfirm();
+  }
+
+  // 中断データを消す前の確認。ここは吹き出しと違って世界観に合わせる(黒鉄+真鍮)。
+  // 目立たせたいのは「消える」という事実であって、パネルそのものではないため。
+  function drawNewMatchConfirm() {
+    if (!pendingNewMatchKey) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,5,8,0.82)';
+    ctx.fillRect(0, 0, VW, VH);
+
+    drawIronPlate(VW / 2, 452, 440, 300, { cut: 16, lineWidth: 3, rivets: true, rivetInset: 16, rivetRadius: 4 });
+
+    drawOutlinedText('中断した対戦が消えます', VW / 2, 348, {
+      font: `900 20px ${UI_FONT_HEAVY}`, color: '#ff9b6a', lineWidth: 5
+    });
+    ctx.textAlign = 'center';
+    ctx.fillStyle = UI.parchment;
+    ctx.font = 'bold 12px ' + UI_FONT;
+    ctx.fillText('新しく出撃すると、途中だった対戦は', VW / 2, 380);
+    ctx.fillText('元に戻せません。', VW / 2, 398);
+
+    const label = (btn, text, color) => {
+      drawIronPlate(btn.x, btn.y, btn.w, btn.h, { cut: 10, lineWidth: 2, edge: color, glow: null });
+      drawOutlinedText(text, btn.x, btn.y + 5, {
+        font: `900 14px ${UI_FONT_HEAVY}`, color, lineWidth: 3
+      });
+    };
+    label(newMatchResumeBtn, '中断した対戦を再開する', '#ffd24a');
+    label(newMatchStartBtn, '消して新しく出撃する', '#ff9b6a');
+    label(newMatchCancelBtn, 'やめる', '#c9d3dd');
     ctx.restore();
   }
 
@@ -9275,6 +9334,15 @@
       return;
     }
     if (gamePhase === 'select') {
+      // 確認中は他の操作をすべて飲み込む。裏のホイールが回ると、何を確認しているのか
+      // 分からなくなるため。枠の外を叩いた時は取り消し扱い。
+      if (pendingNewMatchKey) {
+        playUiSound();
+        if (hitRect(p0, newMatchResumeBtn)) resolveNewMatchConfirm('resume');
+        else if (hitRect(p0, newMatchStartBtn)) resolveNewMatchConfirm('start');
+        else resolveNewMatchConfirm('cancel');
+        return;
+      }
       if (hitRect(p0, selectBackBtn)) {
         playUiSound();
         leaveSelectToTitle();
@@ -9506,7 +9574,9 @@
               inputMode = null;
               inputPointerId = null;
               selectWheelTapKey = null;
-              selectCharacterAndStart(tappedCard.key);
+              // 中断データがある時は、消える前に一度止める。selectCharacterAndStart() は
+              // 入口で clearSuspendedMatch() を呼ぶので、ここを通すともう戻せない。
+              requestNewMatch(tappedCard.key);
               return;
             }
           } else {

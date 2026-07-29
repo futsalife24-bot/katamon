@@ -131,6 +131,10 @@ check('フリーモードは連勝を積まない', kt.streak() === 0, String(kt
 // limitMoveByClimb が止めるのは急な上りだけで、下りと足場の切れ目は素通りしていた。
 kt.setTerrain('tieredBasin');
 const cpuUnit = kt.units.find(u => u.id === 'e1');
+// setTerrain は地形を作り直すだけでユニットの位置を直さない。前の試合がどこで終わったかで
+// ユニットが新しい地形にめり込み、「自分の足元」の判定が null になって落ちることがあった
+// (2026-07-29に実際にフレークとして発生)。棚の上へ置き直してから見る。
+kt.placeOnGround('e1', kt.stageW() * 0.85);
 const midX = kt.stageW() / 2;
 const abyssGround = kt.groundYAt(midX, cpuUnit.y + 18);
 // 中央が本当に奈落(着地点が死線に届く)であることを先に確かめる。前提が崩れたら検査の意味が無い。
