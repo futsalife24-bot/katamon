@@ -153,6 +153,24 @@ check('フリーモードでは中断セーブを作らない', kt.load() === nu
   check('確認ボタンどうしが重ならない',
     rows[0].y + rows[0].h / 2 < rows[1].y - rows[1].h / 2
     && rows[1].y + rows[1].h / 2 < rows[2].y - rows[2].h / 2);
+  // 1つ目のボタンの上端が本文の最終行へ被り、「元に戻せません。」が半分隠れていた
+  // (2026-07-29に実機で発覚)。文字は12pxなので、下端までの余裕を見て8px空ける。
+  const textY = kt.newMatchTextY();
+  const lastLine = textY.body[textY.body.length - 1];
+  check('本文がボタンに隠れない', rows[0].y - rows[0].h / 2 > lastLine + 8,
+    `ボタン上端=${rows[0].y - rows[0].h / 2} 本文最終行=${lastLine}`);
+  check('本文が見出しより下にある', textY.body[0] > textY.title,
+    `見出し=${textY.title} 本文=${textY.body[0]}`);
+  // 中身がパネルからはみ出さないこと。ボタンを下げていくと、まずここが破れる。
+  const panel = kt.newMatchPanel();
+  const top = panel.y - panel.h / 2, bottom = panel.y + panel.h / 2;
+  check('見出しがパネルの中にある', textY.title > top, `見出し=${textY.title} 上端=${top}`);
+  for (const r of rows) {
+    check(`確認ボタンがパネルの中にある(y=${r.y})`,
+      r.y - r.h / 2 > top && r.y + r.h / 2 < bottom
+      && r.x - r.w / 2 > panel.x - panel.w / 2 && r.x + r.w / 2 < panel.x + panel.w / 2,
+      `ボタン=${r.y - r.h / 2}〜${r.y + r.h / 2} パネル=${top}〜${bottom}`);
+  }
 }
 
 // ---- タイトルの CPU BATTLE が中断データを知らせること(Codex引き継ぎ書§6 #7) ----

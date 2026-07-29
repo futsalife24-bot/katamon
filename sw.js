@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v76';
+const CACHE_VERSION = 'katamon-pwa-v77';
 const APP_SHELL = [
   './',
   './index.html',

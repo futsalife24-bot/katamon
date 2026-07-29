@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v76';
+  const BUILD_ID = 'v77';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2917,9 +2917,15 @@
     if (action === 'resume') resumeSuspendedMatch();
     else if (action === 'start') selectCharacterAndStart(key);
   }
-  const newMatchResumeBtn = { x: VW / 2, y: 420, w: 380, h: 46 };
-  const newMatchStartBtn = { x: VW / 2, y: 478, w: 380, h: 46 };
-  const newMatchCancelBtn = { x: VW / 2, y: 536, w: 380, h: 42 };
+  // 本文とボタンの縦位置。ボタンの上端が本文の下へ来るように保つこと。
+  // 以前は1つ目のボタンの上端(397)と本文2行目(398)が1px差で重なり、
+  // 「元に戻せません。」が半分隠れていた(実機で発覚)。関係は検査で固定してある。
+  const NEW_MATCH_PANEL = { x: VW / 2, y: 452, w: 440, h: 300 };
+  const NEW_MATCH_TITLE_Y = 348;
+  const NEW_MATCH_BODY_Y = [380, 398];
+  const newMatchResumeBtn = { x: VW / 2, y: 434, w: 380, h: 46 };
+  const newMatchStartBtn = { x: VW / 2, y: 492, w: 380, h: 46 };
+  const newMatchCancelBtn = { x: VW / 2, y: 550, w: 380, h: 42 };
   const selectBackBtn = { x: 62, y: 32, w: 104, h: 34 };
 
   // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
@@ -5956,16 +5962,16 @@
     ctx.fillStyle = 'rgba(3,5,8,0.82)';
     ctx.fillRect(0, 0, VW, VH);
 
-    drawIronPlate(VW / 2, 452, 440, 300, { cut: 16, lineWidth: 3, rivets: true, rivetInset: 16, rivetRadius: 4 });
+    drawIronPlate(NEW_MATCH_PANEL.x, NEW_MATCH_PANEL.y, NEW_MATCH_PANEL.w, NEW_MATCH_PANEL.h, { cut: 16, lineWidth: 3, rivets: true, rivetInset: 16, rivetRadius: 4 });
 
-    drawOutlinedText('中断した対戦が消えます', VW / 2, 348, {
+    drawOutlinedText('中断した対戦が消えます', VW / 2, NEW_MATCH_TITLE_Y, {
       font: `900 20px ${UI_FONT_HEAVY}`, color: '#ff9b6a', lineWidth: 5
     });
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.parchment;
     ctx.font = 'bold 12px ' + UI_FONT;
-    ctx.fillText('新しく出撃すると、途中だった対戦は', VW / 2, 380);
-    ctx.fillText('元に戻せません。', VW / 2, 398);
+    ctx.fillText('新しく出撃すると、途中だった対戦は', VW / 2, NEW_MATCH_BODY_Y[0]);
+    ctx.fillText('元に戻せません。', VW / 2, NEW_MATCH_BODY_Y[1]);
 
     const label = (btn, text, color) => {
       drawIronPlate(btn.x, btn.y, btn.w, btn.h, { cut: 10, lineWidth: 2, edge: color, glow: null });

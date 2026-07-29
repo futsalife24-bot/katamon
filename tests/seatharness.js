@@ -82,6 +82,8 @@ const HOOK = `
     resolveNewMatchConfirm: (a) => resolveNewMatchConfirm(a),
     pendingNewMatch: () => pendingNewMatchKey,
     newMatchBtns: () => ({ resume: { ...newMatchResumeBtn }, start: { ...newMatchStartBtn }, cancel: { ...newMatchCancelBtn } }),
+    newMatchTextY: () => ({ title: NEW_MATCH_TITLE_Y, body: NEW_MATCH_BODY_Y.slice() }),
+    newMatchPanel: () => ({ ...NEW_MATCH_PANEL }),
     setStreak: (n) => { winStreak = n; },
     isBoss: () => isBossMatch,
     pattern: () => currentPattern,
