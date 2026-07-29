@@ -26,6 +26,11 @@ function down(x, y) { const id = pid++; canvas.__fire('pointerdown', { pointerId
 function move(id, x, y) { canvas.__fire('pointermove', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
 function up(id, x, y) { win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
 
+const selectWheelCards = kt.selectWheelCards();
+check('キャラ選択は手前の最大7枚だけを描画する',
+  selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
+  JSON.stringify(selectWheelCards));
+
 // 自席の手番が来たら適当に撃つ、を繰り返して試合を終わりまで進める。
 // 描画も毎フレーム呼んで、HUD側で例外が出ないことも同時に見る。
 function playMatch(maxFrames) {

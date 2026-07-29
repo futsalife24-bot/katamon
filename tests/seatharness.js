@@ -43,6 +43,10 @@ const HOOK = `
     deadLineY: () => DEAD_LINE_Y,
     groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
+    selectWheelCards: () => {
+      const cards = getRenderedSelectCards();
+      return { total: CHARACTER_LIST.length, rendered: cards.length, focused: cards.some(card => card.focused) };
+    },
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
       moveActive: isLocalTurn() && localUnit().moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn,

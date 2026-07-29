@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v78';
+  const BUILD_ID = 'v79';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2807,6 +2807,9 @@
   const SELECT_WHEEL_CENTER_Y = 454;
   const SELECT_WHEEL_RADIUS_Y = 328;
   const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
+  // 奥側のカードは重なって実質見えない。描画だけを手前7枚に限定して、
+  // キャラを増やしても選択画面の負荷がほぼ一定になるようにする。
+  const SELECT_WHEEL_MAX_RENDERED_CARDS = 7;
   const SELECT_WHEEL_DRAG_STEP = 150;
   const SELECT_WHEEL_DEPTH_SHIFT_X = 89;
   const SELECT_WHEEL_DEPTH_LIFT_Y = 18;
@@ -2866,8 +2869,17 @@
     }).sort((a, b) => a.depth - b.depth);
   }
 
+  // ホイール上の位置計算は全キャラに対して保つ。描く・タップできるのは、
+  // 実際に手前へ出て見えるカードだけ。先に奥→手前の順へ戻すことで重なり順も維持する。
+  function getRenderedSelectCards() {
+    return getVisibleSelectCards()
+      .sort((a, b) => b.depth - a.depth)
+      .slice(0, SELECT_WHEEL_MAX_RENDERED_CARDS)
+      .sort((a, b) => a.depth - b.depth);
+  }
+
   function getSelectCardAtPoint(point) {
-    const cards = getVisibleSelectCards().slice().sort((a, b) => b.depth - a.depth);
+    const cards = getRenderedSelectCards().slice().sort((a, b) => b.depth - a.depth);
     const focusedCard = cards.find(card => card.focused);
     if (focusedCard && (hitRect(point, selectFocusedMainCard) || hitRect(point, selectSortieBtn))) return focusedCard;
     for (const card of cards) {
@@ -5929,7 +5941,7 @@
     ctx.beginPath();
     ctx.rect(0, 124, VW, 708);
     ctx.clip();
-    const visibleCards = getVisibleSelectCards();
+    const visibleCards = getRenderedSelectCards();
     for (let cardIndex = 0; cardIndex < visibleCards.length; cardIndex++) {
       const card = visibleCards[cardIndex];
       const def = CHARACTERS[card.key];
