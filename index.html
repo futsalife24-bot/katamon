@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v73';
+  const BUILD_ID = 'v74';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5163,9 +5163,12 @@
   // 文字が入らない)。尻尾は CPU BATTLE の文字へ向けて左下へ伸ばす。
   // 数値を触るならこの4つ。SAVE_BUBBLE_CY を下げすぎるとモードラベルに被る。
   const SAVE_BUBBLE_TEXT = '中断データあり';
-  const SAVE_BUBBLE_CY = 488;       // 楕円の中心の高さ
-  const SAVE_BUBBLE_RY = 26;        // 楕円の縦半径
-  const SAVE_BUBBLE_TAIL_INSET = 26; // 尻尾の先が CPU BATTLE の文字へ寄る量
+  const SAVE_BUBBLE_CY = 488;         // 楕円の中心の高さ
+  const SAVE_BUBBLE_RY = 26;          // 楕円の縦半径
+  const SAVE_BUBBLE_TAIL_AT = 0.42 * Math.PI;   // 尻尾が出る位置(楕円上の角度。0.5πが真下、それ未満で右寄り)
+  const SAVE_BUBBLE_TAIL_SPREAD = 0.09 * Math.PI; // 付け根の広さ
+  const SAVE_BUBBLE_TAIL_LEN = 40;    // 尻尾の長さ
+  const SAVE_BUBBLE_TAIL_DIR = { x: -0.452, y: 0.892 }; // 伸びる向き(左下・CPU BATTLEの文字side)
   // 位置とサイズは描画と検査で同じものを使う。画面外へ出ていないか、ボタンやロゴに
   // 被っていないかは、目で見られない代わりに resulttest 側で数値として押さえている。
   function suspendedSaveBubbleRect(textW) {
@@ -5175,35 +5178,41 @@
     const w = Math.min(textW + 48, right - 18);
     return { x: right - w, y: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, w, h: SAVE_BUBBLE_RY * 2 };
   }
+  // 尻尾の付け根と先端。楕円上の角度で取るので、大きさを変えても付け根がずれない。
+  function suspendedSaveBubbleTail(box) {
+    const rx = box.w / 2;
+    const cx = box.x + rx;
+    const cy = SAVE_BUBBLE_CY;
+    const at = [SAVE_BUBBLE_TAIL_AT - SAVE_BUBBLE_TAIL_SPREAD, SAVE_BUBBLE_TAIL_AT + SAVE_BUBBLE_TAIL_SPREAD];
+    const mouth = at.map(t => ({ x: cx + rx * Math.cos(t), y: cy + SAVE_BUBBLE_RY * Math.sin(t) }));
+    const base = { x: (mouth[0].x + mouth[1].x) / 2, y: (mouth[0].y + mouth[1].y) / 2 };
+    return {
+      cx, cy, rx, at, base,
+      tip: {
+        x: base.x + SAVE_BUBBLE_TAIL_DIR.x * SAVE_BUBBLE_TAIL_LEN,
+        y: base.y + SAVE_BUBBLE_TAIL_DIR.y * SAVE_BUBBLE_TAIL_LEN
+      }
+    };
+  }
   function drawSuspendedSaveBubble() {
     if (!hasSuspendedSave) return;
     ctx.save();
     ctx.font = '900 16px ' + UI_FONT;
     const box = suspendedSaveBubbleRect(ctx.measureText(SAVE_BUBBLE_TEXT).width);
-    const rx = box.w / 2;
-    const cx = box.x + rx;
-    const cy = SAVE_BUBBLE_CY;
-    const INK = '#14100b';
-    const PAPER = '#fdf8ec';
-
-    // 尻尾の先は CPU BATTLE の文字へ向ける。ボタンの上端で止め、枠の中へは入れない
-    // (文字に被ると読めなくなる)。
-    const tipX = titleVsCpuBtn.x + SAVE_BUBBLE_TAIL_INSET;
-    const tipY = titleVsCpuBtn.y - titleVsCpuBtn.h / 2 - 1;
-    // 付け根は楕円の左下。角度で取るので、楕円の大きさを変えても付け根がずれない。
-    const mouth = [0.60 * Math.PI, 0.86 * Math.PI].map(t => ({
-      x: cx + rx * Math.cos(t), y: cy + SAVE_BUBBLE_RY * Math.sin(t)
-    }));
+    const t = suspendedSaveBubbleTail(box);
+    const INK = '#7a4412';
+    const PAPER = '#ffdfb4';
 
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 4;
 
-    // 尻尾 → 楕円 の順に描き、最後に付け根の縁だけを塗りつぶして継ぎ目を消す。
+    // 楕円と尻尾を**1本の輪郭**として描く。別々に描いて後から塗りで隠す方式だと、
+    // 付け根に楕円の縁が線として残る(実機で確認)。口の角度ぶんだけ弧を欠かし、
+    // そこから先端へ直線でつないで閉じれば、継ぎ目そのものが存在しなくなる。
     ctx.beginPath();
-    ctx.moveTo(mouth[0].x, mouth[0].y);
-    ctx.lineTo(tipX, tipY);
-    ctx.lineTo(mouth[1].x, mouth[1].y);
+    ctx.ellipse(t.cx, t.cy, t.rx, SAVE_BUBBLE_RY, 0, t.at[1], t.at[0] + Math.PI * 2, false);
+    ctx.lineTo(t.tip.x, t.tip.y);
     ctx.closePath();
     ctx.fillStyle = PAPER;
     ctx.fill();
@@ -5211,30 +5220,13 @@
     ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
     ctx.stroke();
-
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, SAVE_BUBBLE_RY, 0, 0, Math.PI * 2);
-    ctx.fillStyle = PAPER;
-    ctx.fill();
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 3;
-    ctx.stroke();
     ctx.shadowColor = 'transparent';
     ctx.shadowOffsetY = 0;
 
-    // 付け根に残る楕円の縁を、内側から紙の色で埋めて繋げる。
-    ctx.beginPath();
-    ctx.moveTo(mouth[0].x, mouth[0].y);
-    ctx.lineTo(mouth[1].x, mouth[1].y);
-    ctx.lineTo(cx, cy);
-    ctx.closePath();
-    ctx.fillStyle = PAPER;
-    ctx.fill();
-
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = INK;
-    ctx.fillText(SAVE_BUBBLE_TEXT, cx, cy + 1);
+    ctx.fillStyle = '#4a2708';
+    ctx.fillText(SAVE_BUBBLE_TEXT, t.cx, t.cy + 1);
     ctx.restore();
   }
   function drawTitleModeButton(button, label, sub, kind, highlight = false) {

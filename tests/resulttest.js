@@ -120,15 +120,21 @@ check('告知は吹き出しが担い、説明文は通常のまま', !kt.titleC
   kt.titleCpuButtonSub());
 check('吹き出しの文面が中断を知らせている', kt.saveBubbleText().includes('中断'), kt.saveBubbleText());
 
-// 尻尾は CPU BATTLE の文字へ向ける。ボタンの外や端を指すと、何の告知か分からなくなる。
+// 尻尾は短い出っ張り。CPU BATTLE の側(左下)へ向くが、ボタンまでは届かせない。
 {
-  const tip = kt.saveBubbleTailTip();
   const btn = kt.titleCpuBtn();
-  check('尻尾の先がCPUボタンの横幅に収まる',
-    tip.x > btn.x - btn.w / 2 && tip.x < btn.x + btn.w / 2, `x=${tip.x}`);
-  check('尻尾の先が文字の近く(中央寄り)を指す',
-    Math.abs(tip.x - btn.x) < btn.w / 4, `中央からの差=${Math.abs(tip.x - btn.x)}`);
-  check('尻尾はボタン枠の中へ入らない', tip.y <= btn.y - btn.h / 2, `y=${tip.y}`);
+  const box = kt.saveBubbleRect(120);
+  const t = kt.saveBubbleTail(box);
+  check('尻尾は吹き出しより下へ出る', t.tip.y > box.y + box.h, `先端y=${t.tip.y} 下端=${box.y + box.h}`);
+  check('尻尾はボタンに届かない(短い出っ張り)', t.tip.y < btn.y - btn.h / 2,
+    `先端y=${t.tip.y} ボタン上端=${btn.y - btn.h / 2}`);
+  // 見るのは先端の絶対位置ではなく伸びる向き。付け根が右寄りなので、左下へ伸びても
+  // 先端は中心より右に来る。ここを中心と比べると、正しい向きなのに落ちる。
+  check('尻尾はCPU BATTLEの側(左下)へ伸びる', t.tip.x < t.base.x && t.tip.y > t.base.y,
+    `付け根=(${t.base.x.toFixed(0)},${t.base.y.toFixed(0)}) 先端=(${t.tip.x.toFixed(0)},${t.tip.y.toFixed(0)})`);
+  // 付け根が真下より右にあること。ここが左へ回ると、尻尾が吹き出しの下を横切る形になる。
+  check('付け根は吹き出しの中央よりやや右', (t.at[0] + t.at[1]) / 2 < Math.PI / 2,
+    `角度=${((t.at[0] + t.at[1]) / 2 / Math.PI).toFixed(2)}π`);
 }
 
 // 目で見られないぶん、置き場所は数値で押さえる。
