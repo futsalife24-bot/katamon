@@ -31,6 +31,24 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+check('死神がキャラ選択に追加されている', kt.chars().includes('shinigami'), kt.chars().join(','));
+const deathGate = kt.deathGate();
+check('デスゲートは棚を抜き切らない固定射程',
+  deathGate.range === 260 && deathGate.radius === 17 && deathGate.stride === 14,
+  JSON.stringify(deathGate));
+kt.startBattle('shinigami');
+const cratersBeforeDeathGate = kt.craters();
+// 地形パターンごとに「誰も立っていない、DEAD LINEより上の地面」を探して印の着弾点にする。
+kt.fireDeathGateForTest(kt.deathGateTestX());
+const hpBeforeDeathGate = kt.units.map(u => u.hp);
+for (let i = 0; i < 900 && kt.projectiles().length; i++) kt.step(1 / 60);
+check('デスゲートは一定間隔で縦穴を削る',
+  kt.craters() - cratersBeforeDeathGate === Math.ceil(deathGate.range / deathGate.stride),
+  `craters=${kt.craters() - cratersBeforeDeathGate}`);
+check('デスゲート自体は直接ダメージを与えない',
+  JSON.stringify(kt.units.map(u => u.hp)) === JSON.stringify(hpBeforeDeathGate),
+  `${hpBeforeDeathGate} -> ${kt.units.map(u => u.hp)}`);
+
 // 自席の手番が来たら適当に撃つ、を繰り返して試合を終わりまで進める。
 // 描画も毎フレーム呼んで、HUD側で例外が出ないことも同時に見る。
 function playMatch(maxFrames) {

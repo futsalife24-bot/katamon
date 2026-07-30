@@ -43,6 +43,23 @@ const HOOK = `
     deadLineY: () => DEAD_LINE_Y,
     groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
+    deathGate: () => ({ range: DEATH_GATE_RANGE, radius: DEATH_GATE_CARVE_RADIUS, stride: DEATH_GATE_CARVE_STRIDE }),
+    deathGateTestX: () => {
+      for (let x = Math.round(STAGE_W * 0.2); x <= Math.round(STAGE_W * 0.8); x += 12) {
+        const y = groundYAt(x);
+        // surfaceY が FLOOR_Y でなければ、その列には着弾できる地面がある。
+        if (y >= DEAD_LINE_Y) continue;
+        // 鎌の幅(約34px)とユニット判定より十分離しつつ、谷が広い地形でも候補を確保する。
+        if (units.every(u => Math.abs(u.x - x) > 80)) return x;
+      }
+      return STAGE_W / 2;
+    },
+    fireDeathGateForTest: (x) => {
+      const u = localUnit();
+      const targetX = Number.isFinite(x) ? x : STAGE_W / 2;
+      applyCharacter(u, 'shinigami');
+      launchShot(u, { x: targetX, y: Math.max(0, groundYAt(targetX) - 84) }, 0, 320, true, true);
+    },
     selectWheelCards: () => {
       const cards = getRenderedSelectCards();
       return { total: CHARACTER_LIST.length, rendered: cards.length, focused: cards.some(card => card.focused) };

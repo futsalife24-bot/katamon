@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v79';
+  const BUILD_ID = 'v80';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2021,6 +2021,13 @@
       selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし移動を1手封じる',
       maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
       color: '#ffe14d', special: '猫だまし爆弾', facesLeft: true
+    },
+    shinigami: {
+      key: 'shinigami', name: '死神', role: '地形工作型', roleEn: 'TERRAIN',
+      desc: '大鎌の呪いで足場を断つ技巧派。必殺は地面を縦に削り、相手を死線へ誘う。',
+      selectStats: [3, 2, 4], specialDesc: '着弾地点の真下から縦穴を削る冥府の鎌',
+      maxHp: 92, blastMul: 0.9, windMul: 0.82, fuelMul: 1.1, velScaleMul: 1.02, specialVelocityMul: 1.0, tBias: 0.95,
+      color: '#b87cff', special: 'デスゲート'
     }
   };
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
@@ -2029,11 +2036,12 @@
     tori: [0.54, 0.48, 0.36], barugerukan: [0.45, 0.42, 0.40], nisenmono: [0.42, 0.40, 0.44],
     burumutan: [0.62, 0.60, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
     mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
-    jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34]
+    jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34],
+    shinigami: [0.50, 0.38, 0.42]
   };
   const DEFAULT_FACE = [0.5, 0.3, 0.42];
 
-  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko'];
+  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'];
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
@@ -2395,9 +2403,12 @@
       lightning: !!opts.lightning,
       firework: !!opts.firework,
       fireworkShard: !!opts.fireworkShard,
+      deathGateMarker: !!opts.deathGateMarker,
+      deathGateScythe: !!opts.deathGateScythe,
       fireworkTimer: 0,
       travelDistance: 0,
       shardBlasts: 0,          // 拡散弾が起こし終えた爆発の回数
+      deathGateCarves: 0,
       maxDistance: opts.maxDistance || 0,
       hitTargets: []
     });
@@ -2467,6 +2478,35 @@
     return null;
   }
 
+  // ===== デスゲート(死神の必殺) =====
+  // 印は通常弾と同じく狙った地点へ飛ぶ。ただし爆発・ダメージは起こさず、
+  // DEAD LINE から鎌を立ち上げるためのX座標だけを決める。
+  // 闘技場の棚を丸ごと消さないよう、射程は固定で短めにしている。
+  const DEATH_GATE_RANGE = 260;
+  const DEATH_GATE_SPEED = 620;
+  const DEATH_GATE_CARVE_RADIUS = 17;
+  const DEATH_GATE_CARVE_STRIDE = 14;
+
+  function spawnDeathGate(p, impactX, impactY) {
+    // 着弾位置には印だけを残す。ここではHP・地形を一切変えない。
+    spawnExplosion(impactX, impactY, 0.24);
+    playCrackleSound(0.45);
+    fireProjectile(p.owner, { x: impactX, y: DEAD_LINE_Y + 10 }, 0, -DEATH_GATE_SPEED, {
+      windMul: 0,
+      gravityMul: 0,
+      pierce: true,
+      ignoreObstacles: true,
+      deathGateScythe: true,
+      maxDistance: DEATH_GATE_RANGE
+    });
+  }
+
+  // 1フレーム内に何個も削っても地形の縁は呼び出し側で一度しか組み直さない。
+  function carveDeathGate(p, x, y) {
+    carveCraterInternal(x, y, DEATH_GATE_CARVE_RADIUS, false);
+    craterHistory.push({ x, y, r: DEATH_GATE_CARVE_RADIUS });
+  }
+
   // キャラ性能+必殺ショットを反映して発射する共通口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred) {
@@ -2483,7 +2523,15 @@
       return;
     }
 
-    if (activateSpecial && def.key === 'medama') {
+    if (activateSpecial && def.key === 'shinigami') {
+      // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
+      // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
+      fireProjectile(owner, anchor, vx0, vy0, {
+        windMul: def.windMul,
+        deathGateMarker: true,
+        noTerrain: true
+      });
+    } else if (activateSpecial && def.key === 'medama') {
       // 目玉の必殺: 地形を削らず、着弾点から電磁波を放って移動を封じる。
       fireProjectile(owner, anchor, vx0, vy0, {
         blastMul: def.blastMul,
@@ -7093,7 +7141,51 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
 
-      if (p.fireworkShard) {
+      if (p.deathGateMarker) {
+        const pulse = 0.72 + Math.sin(simTimeMs * 0.018) * 0.22;
+        ctx.rotate(simTimeMs * 0.004);
+        ctx.shadowColor = '#a955ff';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = `rgba(174,92,255,${pulse})`;
+        ctx.beginPath();
+        ctx.moveTo(0, -10); ctx.lineTo(10, 0); ctx.lineTo(0, 10); ctx.lineTo(-10, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#f2dcff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.deathGateScythe) {
+        // 飛翔方向へ伸びる紫の鎌。地面に触れても止まらず、射程まで縦穴を刻む。
+        ctx.shadowColor = '#9c4dff';
+        ctx.shadowBlur = 18;
+        const trail = ctx.createLinearGradient(-28, 0, 14, 0);
+        trail.addColorStop(0, 'rgba(111,47,235,0)');
+        trail.addColorStop(0.5, '#a55cff');
+        trail.addColorStop(1, '#f2dcff');
+        ctx.strokeStyle = trail;
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-28, 0);
+        ctx.lineTo(12, 0);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#e9d8ff';
+        ctx.beginPath();
+        ctx.moveTo(14, 0);
+        ctx.quadraticCurveTo(4, -15, -8, -11);
+        ctx.quadraticCurveTo(1, -4, 6, 0);
+        ctx.quadraticCurveTo(1, 4, -8, 11);
+        ctx.quadraticCurveTo(4, 15, 14, 0);
+        ctx.fill();
+        ctx.strokeStyle = '#51306e';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else if (p.fireworkShard) {
         ctx.shadowColor = '#ff9d42';
         ctx.shadowBlur = 12;
         const spark = ctx.createLinearGradient(-24, 0, 10, 0);
@@ -9996,17 +10088,39 @@
         }
       }
 
+      if (p.deathGateScythe) {
+        const stepX = p.vx * dt;
+        const stepY = p.vy * dt;
+        const stepLen = Math.hypot(stepX, stepY);
+        p.travelDistance += stepLen;
+        // 掘削位置はフレーム数ではなく進んだ距離で決める。端末性能で穴の形が変わらない。
+        const carvedLimit = Math.min(p.travelDistance, p.maxDistance);
+        while (p.deathGateCarves * DEATH_GATE_CARVE_STRIDE < carvedLimit) {
+          const distance = Math.min((p.deathGateCarves + 1) * DEATH_GATE_CARVE_STRIDE, p.maxDistance);
+          const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
+          carveDeathGate(p, p.x - stepX * back, p.y - stepY * back);
+          p.deathGateCarves++;
+          trailDirty = true;
+        }
+        if (p.travelDistance >= p.maxDistance) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
       const fireworkDue = p.firework && !p.fireworkShard && p.fireworkTimer >= FIREWORK_FUSE_SEC;
 
       let hit = false;
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
       // 拡散弾は素通りさせ、ダメージは進行中の爆発だけに任せる(二重取りの防止)。
-      if (!p.fireworkShard) {
+      if (!p.fireworkShard && !p.deathGateScythe) {
         for (const u of units) {
           if (u.id === p.owner) continue;
           const a = unitAnchor(u);
           if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
-            if (p.emp) {
+            if (p.deathGateMarker) {
+              spawnDeathGate(p, p.x, p.y);
+            } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
             } else if (p.firework) {
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
@@ -10027,7 +10141,9 @@
       // 地形グリッドには入れないため、落下中のキャラが空中障害物へ着地することはない。
       const obstacleHit = (p.fireworkShard || p.ignoreObstacles) ? null : hitArenaObstacle(p.x, p.y, p.radius);
       if (obstacleHit) {
-        if (p.emp) {
+        if (p.deathGateMarker) {
+          spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
         } else if (p.firework) {
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
@@ -10047,7 +10163,8 @@
       }
 
       if (!p.pierce && isSolidAt(p.x, p.y)) {
-        if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
+        if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
+        else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
         else if (p.firework) {
           explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
           spawnFireworkBurst(p);
