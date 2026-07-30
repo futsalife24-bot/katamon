@@ -43,7 +43,8 @@ const HOOK = `
     deadLineY: () => DEAD_LINE_Y,
     groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
-    deathGate: () => ({ range: DEATH_GATE_RANGE, radius: DEATH_GATE_CARVE_RADIUS, stride: DEATH_GATE_CARVE_STRIDE }),
+    deathGate: () => ({ range: DEATH_GATE_RANGE, radius: DEATH_GATE_CARVE_RADIUS, stride: DEATH_GATE_CARVE_STRIDE, startDepth: DEATH_GATE_START_DEPTH }),
+    character: key => ({ ...CHARACTERS[key] }),
     deathGateTestX: () => {
       for (let x = Math.round(STAGE_W * 0.2); x <= Math.round(STAGE_W * 0.8); x += 12) {
         const y = groundYAt(x);

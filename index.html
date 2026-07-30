@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v80';
+  const BUILD_ID = 'v81';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2027,7 +2027,7 @@
       desc: '大鎌の呪いで足場を断つ技巧派。必殺は地面を縦に削り、相手を死線へ誘う。',
       selectStats: [3, 2, 4], specialDesc: '着弾地点の真下から縦穴を削る冥府の鎌',
       maxHp: 92, blastMul: 0.9, windMul: 0.82, fuelMul: 1.1, velScaleMul: 1.02, specialVelocityMul: 1.0, tBias: 0.95,
-      color: '#b87cff', special: 'デスゲート'
+      color: '#b87cff', special: 'デスゲート', facesLeft: true, spriteScale: 1.35
     }
   };
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
@@ -2486,12 +2486,14 @@
   const DEATH_GATE_SPEED = 620;
   const DEATH_GATE_CARVE_RADIUS = 17;
   const DEATH_GATE_CARVE_STRIDE = 14;
+  // 最初の削りから DEAD LINE を確実に抜けるよう、少し下から鎌を出す。
+  const DEATH_GATE_START_DEPTH = 34;
 
   function spawnDeathGate(p, impactX, impactY) {
     // 着弾位置には印だけを残す。ここではHP・地形を一切変えない。
     spawnExplosion(impactX, impactY, 0.24);
     playCrackleSound(0.45);
-    fireProjectile(p.owner, { x: impactX, y: DEAD_LINE_Y + 10 }, 0, -DEATH_GATE_SPEED, {
+    fireProjectile(p.owner, { x: impactX, y: DEAD_LINE_Y + DEATH_GATE_START_DEPTH }, 0, -DEATH_GATE_SPEED, {
       windMul: 0,
       gravityMul: 0,
       pierce: true,
@@ -6790,7 +6792,8 @@
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
-    const h = SPRITE_SIZE;
+    const spriteScale = CHARACTERS[u.character]?.spriteScale || 1;
+    const h = SPRITE_SIZE * spriteScale;
     const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
     const imgTopAbs = a.y + UNIT_RADIUS - h;
 

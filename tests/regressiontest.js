@@ -33,9 +33,13 @@ check('キャラ選択は手前の最大7枚だけを描画する',
 
 check('死神がキャラ選択に追加されている', kt.chars().includes('shinigami'), kt.chars().join(','));
 const deathGate = kt.deathGate();
-check('デスゲートは棚を抜き切らない固定射程',
-  deathGate.range === 260 && deathGate.radius === 17 && deathGate.stride === 14,
+check('デスゲートはDEAD LINEの下から固定射程',
+  deathGate.range === 260 && deathGate.radius === 17 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
+const shinigami = kt.character('shinigami');
+check('死神は両陣営とも敵の方を向き、戦闘中だけ大きく表示する',
+  shinigami.facesLeft === true && shinigami.spriteScale === 1.35,
+  JSON.stringify(shinigami));
 kt.startBattle('shinigami');
 const cratersBeforeDeathGate = kt.craters();
 // 地形パターンごとに「誰も立っていない、DEAD LINEより上の地面」を探して印の着弾点にする。
