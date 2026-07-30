@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v82';
+  const BUILD_ID = 'v83';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2487,6 +2487,8 @@
   // 死線側を広く、上端を細く削って逆三角形の裂け目にする。
   const DEATH_GATE_CARVE_RADIUS_BOTTOM = 26;
   const DEATH_GATE_CARVE_RADIUS_TOP = 8;
+  // 下側はゆるく、上側で絞る。直線ではなく丸みのある輪郭になる。
+  const DEATH_GATE_CARVE_CURVE_POWER = 3;
   const DEATH_GATE_CARVE_STRIDE = 14;
   // 最初の削りから DEAD LINE を確実に抜けるよう、少し下から鎌を出す。
   const DEATH_GATE_START_DEPTH = 34;
@@ -2511,7 +2513,8 @@
     const span = Math.max(1, maxDistance - DEATH_GATE_CARVE_STRIDE);
     const progress = Math.min(1, Math.max(0, (distance - DEATH_GATE_CARVE_STRIDE) / span));
     return DEATH_GATE_CARVE_RADIUS_BOTTOM
-      + (DEATH_GATE_CARVE_RADIUS_TOP - DEATH_GATE_CARVE_RADIUS_BOTTOM) * progress;
+      + (DEATH_GATE_CARVE_RADIUS_TOP - DEATH_GATE_CARVE_RADIUS_BOTTOM)
+        * progress ** DEATH_GATE_CARVE_CURVE_POWER;
   }
 
   function carveDeathGate(p, x, y, distance) {
