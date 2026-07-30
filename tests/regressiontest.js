@@ -34,7 +34,7 @@ check('キャラ選択は手前の最大7枚だけを描画する',
 check('死神がキャラ選択に追加されている', kt.chars().includes('shinigami'), kt.chars().join(','));
 const deathGate = kt.deathGate();
 check('デスゲートはDEAD LINEの下から固定射程',
-  deathGate.range === 260 && deathGate.radius === 17 && deathGate.stride === 14 && deathGate.startDepth === 34,
+  deathGate.range === 260 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
 check('死神は両陣営とも敵の方を向き、戦闘中だけ大きく表示する',
@@ -49,6 +49,13 @@ for (let i = 0; i < 900 && kt.projectiles().length; i++) kt.step(1 / 60);
 check('デスゲートは一定間隔で縦穴を削る',
   kt.craters() - cratersBeforeDeathGate === Math.ceil(deathGate.range / deathGate.stride),
   `craters=${kt.craters() - cratersBeforeDeathGate}`);
+const deathGateCraters = kt.craterHistory().slice(cratersBeforeDeathGate);
+check('デスゲートはDEAD LINE側が太く、上へ行くほど細い逆三角形に削る',
+  deathGateCraters.length > 1
+    && deathGateCraters[0].r === deathGate.bottomRadius
+    && deathGateCraters[deathGateCraters.length - 1].r === deathGate.topRadius
+    && deathGateCraters.every((crater, index) => index === 0 || crater.r < deathGateCraters[index - 1].r),
+  JSON.stringify(deathGateCraters.map(crater => crater.r)));
 check('デスゲート自体は直接ダメージを与えない',
   JSON.stringify(kt.units.map(u => u.hp)) === JSON.stringify(hpBeforeDeathGate),
   `${hpBeforeDeathGate} -> ${kt.units.map(u => u.hp)}`);

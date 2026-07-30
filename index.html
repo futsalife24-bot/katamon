@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v81';
+  const BUILD_ID = 'v82';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2484,7 +2484,9 @@
   // 闘技場の棚を丸ごと消さないよう、射程は固定で短めにしている。
   const DEATH_GATE_RANGE = 260;
   const DEATH_GATE_SPEED = 620;
-  const DEATH_GATE_CARVE_RADIUS = 17;
+  // 死線側を広く、上端を細く削って逆三角形の裂け目にする。
+  const DEATH_GATE_CARVE_RADIUS_BOTTOM = 26;
+  const DEATH_GATE_CARVE_RADIUS_TOP = 8;
   const DEATH_GATE_CARVE_STRIDE = 14;
   // 最初の削りから DEAD LINE を確実に抜けるよう、少し下から鎌を出す。
   const DEATH_GATE_START_DEPTH = 34;
@@ -2504,9 +2506,18 @@
   }
 
   // 1フレーム内に何個も削っても地形の縁は呼び出し側で一度しか組み直さない。
-  function carveDeathGate(p, x, y) {
-    carveCraterInternal(x, y, DEATH_GATE_CARVE_RADIUS, false);
-    craterHistory.push({ x, y, r: DEATH_GATE_CARVE_RADIUS });
+  function deathGateCarveRadius(distance, maxDistance) {
+    // 最初の削りを底辺、最後の削りを頂点に固定する。距離基準なので端末性能に左右されない。
+    const span = Math.max(1, maxDistance - DEATH_GATE_CARVE_STRIDE);
+    const progress = Math.min(1, Math.max(0, (distance - DEATH_GATE_CARVE_STRIDE) / span));
+    return DEATH_GATE_CARVE_RADIUS_BOTTOM
+      + (DEATH_GATE_CARVE_RADIUS_TOP - DEATH_GATE_CARVE_RADIUS_BOTTOM) * progress;
+  }
+
+  function carveDeathGate(p, x, y, distance) {
+    const radius = deathGateCarveRadius(distance, p.maxDistance);
+    carveCraterInternal(x, y, radius, false);
+    craterHistory.push({ x, y, r: radius });
   }
 
   // キャラ性能+必殺ショットを反映して発射する共通口。
@@ -10101,7 +10112,7 @@
         while (p.deathGateCarves * DEATH_GATE_CARVE_STRIDE < carvedLimit) {
           const distance = Math.min((p.deathGateCarves + 1) * DEATH_GATE_CARVE_STRIDE, p.maxDistance);
           const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
-          carveDeathGate(p, p.x - stepX * back, p.y - stepY * back);
+          carveDeathGate(p, p.x - stepX * back, p.y - stepY * back, distance);
           p.deathGateCarves++;
           trailDirty = true;
         }
