@@ -758,6 +758,9 @@ function check(name, value) {
   check('rules constrain the round id and status enum',
     rules.round.id['.validate'].includes('{48}')
     && ['lobby', 'revealing', 'playing', 'results'].every(x => rules.round.status['.validate'].includes("'" + x + "'")));
+  check('rules allow the shinigami character reveal',
+    msg['.validate'].includes("newData.child('t').val() === 'reveal'")
+    && msg.character['.validate'].includes("newData.val() === 'shinigami'"));
   // 実機:再戦を押すとゲストが固まり、ホストに「認証の更新に失敗しました」が出た。
   // 再戦は「新roundを作る → roomのポインタを新roundへ → 旧roundの購読者へ通知」の順で、
   // 通知の時点でポインタは既に新roundを指しているため旧roundへの書き込みが401になっていた。

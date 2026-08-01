@@ -79,7 +79,7 @@
                 "value": { ".validate": "newData.isBoolean()" },
                 "name": { ".validate": "newData.isString() && newData.val().length <= 12" },
                 "hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
-                "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko'" },
+                "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko' || newData.val() === 'shinigami'" },
                 "nonce": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
                 "snap": { ".validate": "newData.hasChildren(['units','turnOrder','activeIndex','turnCount','wind'])" },
                 "unitId": { ".validate": "(newData.val() === 'p1' || newData.val() === 'e1') && newData.val() === newData.parent().child('seat').val()" },
