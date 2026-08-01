@@ -34,7 +34,7 @@ check('キャラ選択は手前の最大7枚だけを描画する',
 check('死神がキャラ選択に追加されている', kt.chars().includes('shinigami'), kt.chars().join(','));
 const deathGate = kt.deathGate();
 check('デスゲートはDEAD LINEの下から固定射程',
-  deathGate.range === 260 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.curvePower === 3 && deathGate.stride === 14 && deathGate.startDepth === 34,
+  deathGate.range === 260 && deathGate.speed === 310 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.curvePower === 3 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
 check('死神は両陣営とも敵の方を向き、戦闘中だけ大きく表示する',
