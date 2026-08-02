@@ -360,6 +360,54 @@ check('素材の向きが違う組み合わせでも両方が相手を向く',
   kt.facesLeftInWorld('p1') === false && kt.facesLeftInWorld('e1') === true,
   `${rightFacing}(p1)=${kt.facesLeftInWorld('p1')} / ${leftFacing}(e1)=${kt.facesLeftInWorld('e1')}`);
 
+// ===== Issue #3: 花火(スモエルの必殺)は弧の頂点で開く =====
+// 以前は飛行中に必殺ボタンを押して起爆していた。合図の通信が届くまでに弾が進むため、
+// 端末ごとに違う場所で開き、削れ方もダメージも食い違っていた。
+// 炸裂の時刻と位置を発射時に数式で確定させたので、通信も刻みも結果に影響しない。
+// 本体の爆発半径は 44*1.15=50.6px、拡散弾は 22/15/9.7px。25pxを境に区別できる。
+const MAIN_BLAST_MIN_R = 25;
+function craterRadii(craterString) {
+  return craterString ? craterString.split('|').map(s => Number(s.split(',')[2])) : [];
+}
+
+kt.startBattle('sumoeru');
+kt.disableCpuForTest();
+kt.setTerrain('rolling');
+kt.setCharactersForTest('sumoeru', 'sumoeru');
+kt.fillCharges();
+kt.placeOnGround('p1', Math.round(kt.stageW() * 0.25));
+kt.placeOnGround('e1', Math.round(kt.stageW() * 0.75));
+const fireworkSnap = kt.snapshot();
+
+// 上へ大きく撃つ → 頂点で空中炸裂する(本体の爆発は起きず、拡散弾だけ)
+const upShot = () => kt.fireForTest(300, -520, { unitId: 'p1', useSpecial: true });
+const fw60 = runShotWithStep(1 / 60, fireworkSnap, upShot, 6);
+const fw120 = runShotWithStep(1 / 120, fireworkSnap, upShot, 6);
+const fw30 = runShotWithStep(1 / 30, fireworkSnap, upShot, 6);
+check('花火が炸裂して地形を削っている', craterRadii(fw60.craters).length > 0,
+  `craters=${craterRadii(fw60.craters).length}`);
+check('上へ撃った花火は空中で開く(本体の爆発が起きない)',
+  craterRadii(fw60.craters).every(r => r < MAIN_BLAST_MIN_R),
+  `半径=${craterRadii(fw60.craters).join(',')}`);
+check('花火の炸裂位置が60fpsと120fpsで完全一致する', fw60.craters === fw120.craters,
+  `60=${fw60.craters.slice(0, 90)} / 120=${fw120.craters.slice(0, 90)}`);
+check('花火の炸裂位置が60fpsと30fpsで完全一致する', fw60.craters === fw30.craters,
+  `60=${fw60.craters.slice(0, 90)} / 30=${fw30.craters.slice(0, 90)}`);
+
+// 下へ撃つ → 頂点が無いので空中では開かず、着弾して開く(本体の爆発あり)
+const downShot = () => kt.fireForTest(300, 260, { unitId: 'p1', useSpecial: true });
+const fwDown = runShotWithStep(1 / 60, fireworkSnap, downShot, 6);
+check('下へ撃った花火は着弾して開く(本体の爆発が起きる)',
+  craterRadii(fwDown.craters).some(r => r >= MAIN_BLAST_MIN_R),
+  `半径=${craterRadii(fwDown.craters).join(',')}`);
+
+// ほぼ水平 → 頂点が自分の拡散弾の届く範囲(180px)に入るので空中では開かない
+const flatShot = () => kt.fireForTest(200, -100, { unitId: 'p1', useSpecial: true });
+const fwFlat = runShotWithStep(1 / 60, fireworkSnap, flatShot, 6);
+check('頂点が近すぎる水平撃ちは空中で開かない(自爆しない)',
+  craterRadii(fwFlat.craters).some(r => r >= MAIN_BLAST_MIN_R),
+  `半径=${craterRadii(fwFlat.craters).join(',')}`);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
