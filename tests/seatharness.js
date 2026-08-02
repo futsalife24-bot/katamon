@@ -61,6 +61,14 @@ const HOOK = `
       applyCharacter(u, 'shinigami');
       launchShot(u, { x: targetX, y: Math.max(0, groundYAt(targetX) - 84) }, 0, 320, true, true);
     },
+    // 固定刻み検証用。狙いをUIから作らず、初速をそのまま与えて撃つ。
+    fireForTest: (vx0, vy0, opts = {}) => {
+      const u = localUnit();
+      launchShot(u, { ...unitAnchor(u) }, vx0, vy0, !!opts.useSpecial, false, !!opts.useJump);
+    },
+    physicsDt: () => PHYSICS_DT,
+    unitRadius: () => UNIT_RADIUS,
+    resetPhysicsClock: () => resetPhysicsClock(),
     selectWheelCards: () => {
       const cards = getRenderedSelectCards();
       return { total: CHARACTER_LIST.length, rendered: cards.length, focused: cards.some(card => card.focused) };
