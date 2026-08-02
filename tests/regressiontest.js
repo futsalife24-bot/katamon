@@ -204,6 +204,65 @@ let arenaDrawThrew = null;
 try { kt.render(); } catch (e) { arenaDrawThrew = e; }
 check('闘技場を描画しても落ちない', !arenaDrawThrew, arenaDrawThrew && arenaDrawThrew.message);
 
+// ===== Issue #9: 物理を固定刻みで回すので、描画フレーム間隔が違っても結果が一致する =====
+// 実機で「片方だけ床が抜けて落下死」「片方だけ上空の壁に当たる」が起き、対戦が中断した。
+// 原因は gameLoop が実フレーム間隔をそのまま物理へ渡していたこと。
+// ここでは同じ状態から同じ初速で撃ち、刻みだけを変えて結果を突き合わせる。
+// 経過させる「シミュレーション時間の合計」は必ず揃える(フレーム数ではなく秒で揃える)。
+function runShotWithStep(dt, snap, fire, seconds = 5) {
+  kt.apply(JSON.parse(JSON.stringify(snap)));
+  kt.resetPhysicsClock();
+  fire();
+  const frames = Math.round(seconds / dt);
+  for (let i = 0; i < frames; i++) kt.step(dt);
+  return {
+    craters: kt.craterHistory().map(c => `${c.x.toFixed(9)},${c.y.toFixed(9)},${c.r.toFixed(9)}`).join('|'),
+    units: kt.units.map(u => `${u.id}:${u.x.toFixed(9)},${u.y.toFixed(9)},${u.hp}`).join('|')
+  };
+}
+
+check('固定刻みは全端末共通の値', kt.physicsDt() === 1 / 120, String(kt.physicsDt()));
+
+kt.setTerrain('rolling');
+kt.placeOnGround('p1', Math.round(kt.stageW() * 0.3));
+kt.placeOnGround('e1', Math.round(kt.stageW() * 0.7));
+const shotSnap = kt.snapshot();
+const plainShot = () => kt.fireForTest(420, -320);
+const shot60 = runShotWithStep(1 / 60, shotSnap, plainShot);
+const shot120 = runShotWithStep(1 / 120, shotSnap, plainShot);
+const shot30 = runShotWithStep(1 / 30, shotSnap, plainShot);
+check('通常弾が地形を削っている(比較対象として成立している)',
+  shot60.craters.length > 0, `craters=${shot60.craters.length}`);
+check('60fpsと120fpsでクレーターが完全一致する',
+  shot60.craters === shot120.craters, `60=${shot60.craters} / 120=${shot120.craters}`);
+check('60fpsと30fpsでクレーターが完全一致する',
+  shot60.craters === shot30.craters, `60=${shot60.craters} / 30=${shot30.craters}`);
+check('刻みが違ってもキャラの最終状態が一致する',
+  shot60.units === shot120.units && shot60.units === shot30.units,
+  `60=${shot60.units} / 120=${shot120.units} / 30=${shot30.units}`);
+
+// 闘技場の外壁は画面上端より上まで当たり判定を持つ。跳躍も内部的には砲弾なので
+// そこへ当たるが、以前は着地面を取れず y=-16(画面天井)へ貼り付いたまま固まっていた。
+kt.setTerrain('tieredBasin');
+kt.placeOnGround('p1', Math.round(kt.stageW() * 0.2));
+kt.placeOnGround('e1', Math.round(kt.stageW() * 0.8));
+const jumpSnap = kt.snapshot();
+const wallJump = () => kt.fireForTest(-260, -900, { useJump: true });
+const jump60 = runShotWithStep(1 / 60, jumpSnap, wallJump);
+const jump120 = runShotWithStep(1 / 120, jumpSnap, wallJump);
+check('上空の壁へ跳躍しても刻みによらず同じ結果になる',
+  jump60.units === jump120.units, `60=${jump60.units} / 120=${jump120.units}`);
+runShotWithStep(1 / 60, jumpSnap, wallJump);
+const jumper = kt.unitById('p1');
+check('跳躍後に画面天井へ貼り付かない', jumper.y > 0, `y=${jumper.y}`);
+// 以前は衝突直前の座標をそのまま使っていたため、壁の境界(x=136.8)のすぐ外側で止まり、
+// キャラ半径ぶん外壁へめり込んでいた。境界の内側1pxずれるだけで壁の上へ乗って
+// 画面天井に固まるため、半径ぶんの余裕を必ず空ける。
+const arenaWallX = kt.stageW() * kt.arenaWallRatio();
+check('跳躍後に闘技場の外壁へめり込まない',
+  jumper.x - kt.unitRadius() >= arenaWallX && jumper.x + kt.unitRadius() <= kt.stageW() - arenaWallX,
+  `x=${jumper.x} wall=${arenaWallX} r=${kt.unitRadius()}`);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v91';
+  const BUILD_ID = 'v92';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1872,11 +1872,27 @@
     }
   }
 
+  // 物理判定で使う距離。Math.hypot はエンジンごとに最終桁が変わり得るが、
+  // Math.sqrt は IEEE-754 で正しく丸めることが保証されているため、端末が違っても
+  // 必ず同じ値になる。しきい値の比較は平方根を取らず二乗のまま行う(Issue #9)。
+  function simDistance(ax, ay, bx, by) {
+    const dx = ax - bx, dy = ay - by;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // 闘技場の外壁より内側へ寄せる。壁の中や壁の上へキャラを置かないための共通処理。
+  function clampInsideArenaWall(x) {
+    if (currentPattern !== 'tieredBasin') return x;
+    const wallW = STAGE_W * ARENA_WALL_RATIO;
+    const margin = UNIT_RADIUS + 4;
+    return Math.min(STAGE_W - wallW - margin, Math.max(wallW + margin, x));
+  }
+
   function arenaObstaclePosition(obstacle, nowMs = simTimeMs) {
-    return {
-      x: obstacle.x + Math.sin(nowMs * 0.00072 + obstacle.phase) * obstacle.sway,
-      y: obstacle.y
-    };
+    // Math.sin もエンジンごとに最終桁が変わり得る。ここは砲弾の衝突判定に使う位置なので、
+    // 1/64px 単位へ丸めて端末差が当たり外れを変えないようにする(Issue #9)。
+    const sway = Math.round(Math.sin(nowMs * 0.00072 + obstacle.phase) * obstacle.sway * 64) / 64;
+    return { x: obstacle.x + sway, y: obstacle.y };
   }
 
   function hitArenaObstacle(x, y, radius = 0) {
@@ -1884,7 +1900,8 @@
     const now = simTimeMs;
     for (const obstacle of arenaObstacles) {
       const p = arenaObstaclePosition(obstacle, now);
-      if (Math.hypot(x - p.x, y - p.y) <= obstacle.radius + radius) {
+      const dx = x - p.x, dy = y - p.y, reach = obstacle.radius + radius;
+      if (dx * dx + dy * dy <= reach * reach) {
         return { obstacle, x: p.x, y: p.y };
       }
     }
@@ -2474,12 +2491,15 @@
       u.vy = 0;
     } else {
       // 壁面衝突ならめり込んだ現在位置を使わず、衝突前の位置へ戻してから落下させる。
-      if (terrainHit && Number.isFinite(p.prevX) && Number.isFinite(p.prevY)) {
-        u.x = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, p.prevX));
-        u.y = Math.max(-UNIT_RADIUS, p.prevY);
-      } else {
-        u.y = Math.max(-UNIT_RADIUS, y - UNIT_RADIUS);
-      }
+      // 闘技場の外壁は画面上端より1400px上まで当たり判定を持つ(ARENA_WALL_SKY_EXTENSION)。
+      // 跳躍も内部的には砲弾なのでそこへ当たるが、その領域は地形キャンバスの外で
+      // 着地面を取れない。以前は下限 -UNIT_RADIUS で丸めていたため、壁の上端に
+      // 乗ったまま画面天井で固まっていた(実機で y=-16 として再現・Issue #9)。
+      // 壁の内側へ押し戻し、必ず見える高さから落とす。
+      const backX = terrainHit && Number.isFinite(p.prevX) ? p.prevX : u.x;
+      const backY = terrainHit && Number.isFinite(p.prevY) ? p.prevY : y - UNIT_RADIUS;
+      u.x = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, clampInsideArenaWall(backX)));
+      u.y = Math.max(0, backY);
       u.grounded = false;
       u.vy = 0;
       u.fallStartY = u.y;
@@ -2535,7 +2555,7 @@
       const budget = FIREWORK_BURST_DAMAGE_CAP - dealt;
       if (budget <= 0) continue;
       const a = unitAnchor(u);
-      const raw = computeDamage(Math.hypot(a.x - x, a.y - y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
+      const raw = computeDamage(simDistance(a.x, a.y, x, y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
       const dmg = Math.min(budget, Math.max(1, Math.round(raw * takenMul)));
@@ -3239,6 +3259,8 @@
     }
 
     loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
+    // 途中まで溜まった物理の刻みは持ち越さない。ターン境界の状態から始め直す(Issue #9)。
+    resetPhysicsClock();
     // 旧セーブには無いので0から。障害物の揺れが少しずれるだけで実害はない。
     simTimeMs = Number.isFinite(data.simTimeMs) ? data.simTimeMs : 0;
 
@@ -6193,7 +6215,7 @@
     const ownerTeam = teamOfOwner(owner);
     for (const u of units) {
       if (u.team === ownerTeam) continue; // 味方は巻き込まない
-      const dist = Math.hypot(u.x - x, u.y - y);
+      const dist = simDistance(u.x, u.y, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
       const damage = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
@@ -6242,7 +6264,7 @@
     playExplosionSound(blastMul);
     for (const u of units) {
       const a = unitAnchor(u);
-      const dist = Math.hypot(a.x - x, a.y - y);
+      const dist = simDistance(a.x, a.y, x, y);
       const dmg = computeDamage(dist, blastMul, damageMul);
       if (dmg > 0) {
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
@@ -10218,6 +10240,29 @@
 
   // ===== ゲームループ =====
   let lastTime = 0;
+
+  // ===== 固定刻みの物理(Issue #9) =====
+  // 描画フレーム間隔をそのまま物理へ渡すと、端末のリフレッシュレートが違うだけで
+  // 弾が別の場所を通る。その差が「DEAD LINEは1pxで即死」「壁に当たるか否か」という
+  // 全か無かの判定を通って、勝敗の食い違いや座標364pxのズレになった(実機で再現)。
+  // ここに載せてよいのは「両端末で完全に一致しなければならない計算」だけ。
+  // カメラ・演出・入力・CPU思考は従来どおり描画フレーム基準のままにする。
+  const PHYSICS_DT = 1 / 120;      // 秒。全端末共通の刻み
+  const MAX_PHYSICS_SUBSTEPS = 8;  // 1フレームで進める上限(gameLoop側のdt上限0.033で実質4)
+  let physicsAccumulator = 0;
+  // 進める刻み数だけを先に確定する。余りは破棄せず次フレームへ繰り越す
+  // (破棄すると端末ごとに進行量が変わり、固定刻みにした意味がなくなる)。
+  function takePhysicsSteps(frameDt) {
+    physicsAccumulator += frameDt;
+    let steps = 0;
+    while (physicsAccumulator >= PHYSICS_DT && steps < MAX_PHYSICS_SUBSTEPS) {
+      physicsAccumulator -= PHYSICS_DT;
+      steps++;
+    }
+    return steps;
+  }
+  function resetPhysicsClock() { physicsAccumulator = 0; }
+
   function update(dt) {
     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
     updateOnline(dt);
@@ -10228,9 +10273,12 @@
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
+    // 物理を何刻み進めるかを先に確定する。実際の弾と落下の計算は、
+    // カットイン判定の後で同じ回数だけ回す(カットイン中は従来どおり進めない)。
+    const physicsSteps = takePhysicsSteps(dt);
     // 対戦内の経過時間。壁時計ではなくこれを使うことで、障害物の揺れが
     // 「端末をいつ起動したか」に左右されなくなる(中断再開でも位相が続く)。
-    simTimeMs += dt * 1000;
+    simTimeMs += physicsSteps * PHYSICS_DT * 1000;
 
     // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
     if (projectiles.length) {
@@ -10306,6 +10354,20 @@
       return; // カットイン表示中はターン進行・移動・CPU思考を止める
     }
 
+    // 弾と落下だけを固定刻みで進める。ここが両端末で一致していないと、
+    // 地形の削れ方も落下の可否も食い違い、対戦が中断する。
+    for (let step = 0; step < physicsSteps; step++) {
+      stepWorldPhysics(PHYSICS_DT);
+      if (matchOver) break;
+    }
+
+    if (matchOver) return;
+    updateAfterPhysics(dt);
+  }
+
+  // 弾と落下。必ず固定刻み(PHYSICS_DT)で呼ぶこと。ここへ描画フレームのdtを
+  // 渡すと Issue #9 の不具合がそのまま戻る。
+  function stepWorldPhysics(dt) {
     // 弾の物理(花火の本体弾と、地形を細く削る8方向の拡散弾に対応)
     let trailDirty = false;
     for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -10325,7 +10387,7 @@
       if (p.fireworkShard) {
         const stepX = p.vx * dt;
         const stepY = p.vy * dt;
-        const stepLen = Math.hypot(stepX, stepY);
+        const stepLen = Math.sqrt(stepX * stepX + stepY * stepY);
         p.travelDistance += stepLen;
         // 爆発の位置はフレーム数ではなく「進んだ距離」で決める。毎フレーム基準だと
         // 削れ方も craterHistory の長さもフレームレート次第で変わってしまう。
@@ -10346,7 +10408,7 @@
       if (p.deathGateScythe) {
         const stepX = p.vx * dt;
         const stepY = p.vy * dt;
-        const stepLen = Math.hypot(stepX, stepY);
+        const stepLen = Math.sqrt(stepX * stepX + stepY * stepY);
         p.travelDistance += stepLen;
         // 掘削位置はフレーム数ではなく進んだ距離で決める。端末性能で穴の形が変わらない。
         const carvedLimit = Math.min(p.travelDistance, p.maxDistance);
@@ -10372,7 +10434,8 @@
         for (const u of units) {
           if (u.id === p.owner) continue;
           const a = unitAnchor(u);
-          if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
+          const hitDx = a.x - p.x, hitDy = a.y - p.y, hitReach = UNIT_HIT_RADIUS + p.radius;
+          if (hitDx * hitDx + hitDy * hitDy <= hitReach * hitReach) {
             if (p.jump) {
               teleportOwnerToImpact(p, p.x, p.y);
             } else if (p.deathGateMarker) {
@@ -10443,9 +10506,11 @@
 
     // 落下物理(常時判定)
     for (const u of units) updateFalling(dt, u);
+  }
 
-    if (matchOver) return;
-
+  // 入力・CPU思考・ターン進行。端末ごとに差が出ても実害がない処理なので、
+  // 描画フレーム基準のままでよい(移動結果は move/fire パケットで座標を送る)。
+  function updateAfterPhysics(dt) {
     // 移動(この端末の手番のみ・燃料制・長押しボタン)
     const me = localUnit();
     if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {
