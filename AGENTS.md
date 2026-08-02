@@ -4,6 +4,8 @@
 
 - ローカルの正本は `C:\Users\futsa\OneDrive\デスクトップ\カタモン` とする。
 - GitHubの正本は `https://github.com/futsalife24-bot/katamon` の `master` ブランチとする。
+- 作業開始時に `CURRENT_WORK_STATE.md` を読み、現行仕様・残タスク・未確認事項を把握する。
+- 日付入りの古いHANDOFFと現在地が食い違う場合は `CURRENT_WORK_STATE.md` を優先する。
 - 今後の開発・テスト・文書更新・Git操作は、原則として上記ローカルフォルダから行う。
 - 旧作業場所 `C:\Users\futsa\OneDrive\デスクトップ\業務効率化\カタモン` は移行元バックアップとして扱い、更新しない。
 - 旧作業場所の削除は、ユーザーの明示確認を得てから行う。
