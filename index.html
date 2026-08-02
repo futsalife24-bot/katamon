@@ -354,6 +354,11 @@
   const VW = 540;
   const VH = 960;
 
+  // 下部コントローラパネルの境界と死線。地形の生成側(GROUND_MAX_Y/TERRAIN_BOTTOM_Y)が
+  // 参照するため、パネル描画の定義より前に置く。値の意味は変えていない。
+  const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
+  const DEAD_LINE_Y = CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
+
   // ===== UI意匠トークン(真鍮×黒鉄) =====
   // タイトル/フリーモード画面で確立した「重厚な鉄板に真鍮の縁と鋲」の意匠を、
   // 戦闘画面のHUD・コントローラでも共通で使うための定義。
@@ -382,7 +387,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v92';
+  const BUILD_ID = 'v93';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -985,9 +990,16 @@
   const COL_W = STAGE_W / TERRAIN_COLS;
   const ROW_H = 4; // 縦方向の判定グリッド刻み
   const ROWS = Math.ceil(VH / ROW_H);
-  const GROUND_MIN_Y = 380;   // 地形が取りうる最も高い(浅い)位置
-  const GROUND_MAX_Y = 600;   // 地形が取りうる最も低い(深い)位置(下部コントローラパネルとの間に余白を確保)
-  const FLOOR_Y = VH;         // 画面下端(この高さ=地面なし/場外扱い)
+  const GROUND_MIN_Y = 300;   // 地形が取りうる最も高い(浅い)位置
+  const GROUND_MAX_Y = 516;   // 地形が取りうる最も低い(深い)位置
+  const FLOOR_Y = VH;         // 「その列に地面が無い」ことを表す番兵。実在の地形の底ではない
+  // 地形の底。DEAD LINEより下には地面を置かない。こうすると「床が抜けたか」が
+  // 目で見て分かるようになり、見えない数pxの差で生死が反転しなくなる。
+  // 闘技場(tieredBasin)は元からこの作りで、外壁の底625・棚の底387/468/549はすべてこの上。
+  // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。通常弾の最大クレーター半径は
+  // 59.4px(44*1.35)なので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
+  // (「地形大破壊」という技の役割どおりの挙動として意図的に許容する)。
+  const TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
 
   // ===== ステージの見た目テーマ(空・地形・草・遠景の配色セット。試合ごとにランダムで選ぶ) =====
   const THEMES = {
@@ -1400,7 +1412,7 @@
   function buildTerrainMask(segments, refreshRim = true) {
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
-    const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, FLOOR_Y);
+    const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, TERRAIN_BOTTOM_Y);
     if (currentPattern === 'tieredBasin') {
       grad.addColorStop(0, '#4c535d');
       grad.addColorStop(0.35, '#2c323b');
@@ -1609,9 +1621,9 @@
       const edgeDistance = Math.min(i, len - 1 - i);
       const thinBlend = smoothstep(edgeDistance, 0, shoulder);
       const organicDepth = baseDepth * (0.95 + Math.sin(i * 0.52 + phase) * 0.05);
-      const fullDepth = FLOOR_Y - hm[c];
+      const fullDepth = TERRAIN_BOTTOM_Y - hm[c];
       const depth = fullDepth + (organicDepth - fullDepth) * thinBlend;
-      segments[c] = [[hm[c], Math.min(FLOOR_Y, hm[c] + depth)]];
+      segments[c] = [[hm[c], Math.min(TERRAIN_BOTTOM_Y, hm[c] + depth)]];
     }
   }
 
@@ -1713,7 +1725,7 @@
 
     // 各列の中身(地面の実区間リスト)。基本は地表〜床までの単一の塊
     const segments = [];
-    for (let c = 0; c < TERRAIN_COLS; c++) segments.push([[hm[c], FLOOR_Y]]);
+    for (let c = 0; c < TERRAIN_COLS; c++) segments.push([[hm[c], TERRAIN_BOTTOM_Y]]);
 
     const midStart = 14, midEnd = TERRAIN_COLS - 14;
     let bridge = null;
@@ -2794,8 +2806,7 @@
   }
 
   // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
-  const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
-  const DEAD_LINE_Y = CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
+  // CONTROL_PANEL_Y と DEAD_LINE_Y はファイル冒頭で定義済み(地形生成が参照するため)。
   const PANEL_CY = CONTROL_PANEL_Y + (VH - CONTROL_PANEL_Y) / 2;
 
   // ===== 移動(長押しボタン)。発射ジョイスティックの左右斜め下に配置 =====

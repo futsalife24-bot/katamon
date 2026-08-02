@@ -62,12 +62,17 @@ const HOOK = `
       launchShot(u, { x: targetX, y: Math.max(0, groundYAt(targetX) - 84) }, 0, 320, true, true);
     },
     // 固定刻み検証用。狙いをUIから作らず、初速をそのまま与えて撃つ。
+    // unitId を省くと自席から撃つが、席によって位置が変わるので検証では明示すること。
     fireForTest: (vx0, vy0, opts = {}) => {
-      const u = localUnit();
+      const u = opts.unitId ? unitById(opts.unitId) : localUnit();
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, !!opts.useSpecial, false, !!opts.useJump);
     },
     physicsDt: () => PHYSICS_DT,
     unitRadius: () => UNIT_RADIUS,
+    terrainBottomY: () => TERRAIN_BOTTOM_Y,
+    groundBand: () => ({ min: GROUND_MIN_Y, max: GROUND_MAX_Y }),
+    // CPUは照準に乱数を混ぜるので、決定性の検証中は行動させない。
+    disableCpuForTest: () => { for (const u of units) u.control = 'local'; },
     resetPhysicsClock: () => resetPhysicsClock(),
     selectWheelCards: () => {
       const cards = getRenderedSelectCards();
