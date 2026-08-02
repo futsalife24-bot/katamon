@@ -223,11 +223,15 @@ function runShotWithStep(dt, snap, fire, seconds = 5) {
 
 check('固定刻みは全端末共通の値', kt.physicsDt() === 1 / 120, String(kt.physicsDt()));
 
+// CPUの照準には乱数が入る。撃つ側を固定し、測定中は誰もCPU行動しないようにしないと、
+// 「刻みの違い」ではなく「乱数の違い」を見てしまう。席によって自分の位置も変わるため、
+// 発射するユニットも明示する。
+kt.disableCpuForTest();
 kt.setTerrain('rolling');
 kt.placeOnGround('p1', Math.round(kt.stageW() * 0.3));
 kt.placeOnGround('e1', Math.round(kt.stageW() * 0.7));
 const shotSnap = kt.snapshot();
-const plainShot = () => kt.fireForTest(420, -320);
+const plainShot = () => kt.fireForTest(420, -320, { unitId: 'p1' });
 const shot60 = runShotWithStep(1 / 60, shotSnap, plainShot);
 const shot120 = runShotWithStep(1 / 120, shotSnap, plainShot);
 const shot30 = runShotWithStep(1 / 30, shotSnap, plainShot);
@@ -247,7 +251,7 @@ kt.setTerrain('tieredBasin');
 kt.placeOnGround('p1', Math.round(kt.stageW() * 0.2));
 kt.placeOnGround('e1', Math.round(kt.stageW() * 0.8));
 const jumpSnap = kt.snapshot();
-const wallJump = () => kt.fireForTest(-260, -900, { useJump: true });
+const wallJump = () => kt.fireForTest(-260, -900, { unitId: 'p1', useJump: true });
 const jump60 = runShotWithStep(1 / 60, jumpSnap, wallJump);
 const jump120 = runShotWithStep(1 / 120, jumpSnap, wallJump);
 check('上空の壁へ跳躍しても刻みによらず同じ結果になる',
@@ -262,6 +266,63 @@ const arenaWallX = kt.stageW() * kt.arenaWallRatio();
 check('跳躍後に闘技場の外壁へめり込まない',
   jumper.x - kt.unitRadius() >= arenaWallX && jumper.x + kt.unitRadius() <= kt.stageW() - arenaWallX,
   `x=${jumper.x} wall=${arenaWallX} r=${kt.unitRadius()}`);
+
+// ===== Issue #10: 地形はDEAD LINEより上で完結させる =====
+// 以前は地形の底が画面下端(960)まで続いていたため、「あと数pxで死ぬ床」と
+// 「まだ安全な床」が見た目で区別できず、実機で生死の食い違いが起きた。
+// 底をDEAD LINEで止めると、床が抜けたかどうかが穴として目に見えるようになる。
+const deadLine = kt.deadLineY();
+check('地形の底はDEAD LINEと一致する', kt.terrainBottomY() === deadLine,
+  `bottom=${kt.terrainBottomY()} deadLine=${deadLine}`);
+
+const band = kt.groundBand();
+// 通常弾の最大クレーター半径は 44 * 1.35 = 59.4px。最も低い地形でも、これより
+// 床が厚くなければ1発で穴が空いて事故死になる。定数を動かした時にここで気づける。
+check('最も低い地形でも通常弾の最大クレーターより床が厚い',
+  deadLine - band.max > 44 * 1.35,
+  `厚み=${deadLine - band.max} 必要=${44 * 1.35}`);
+check('高低差の幅を確保している', band.max - band.min >= 200, `幅=${band.max - band.min}`);
+
+for (const pattern of ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']) {
+  kt.setTerrain(pattern);
+  const segs = kt.snapshot().segments;
+  let lowest = -Infinity;
+  for (const col of segs) {
+    if (!col) continue;
+    for (const seg of col) lowest = Math.max(lowest, seg[1]);
+  }
+  check(`${pattern}: 地形がDEAD LINEより下へはみ出さない`, lowest <= deadLine, `最下端=${lowest}`);
+}
+
+// 谷の最深部で、通常弾1発では床が抜けないことを実際に撃って確かめる。
+kt.setTerrain('valley');
+const valleySegs = kt.snapshot().segments;
+const colW = kt.stageW() / valleySegs.length;
+let deepestX = kt.stageW() / 2, deepestTop = -Infinity;
+for (let c = 0; c < valleySegs.length; c++) {
+  const col = valleySegs[c];
+  if (!col || !col.length) continue;
+  if (col[0][0] > deepestTop) { deepestTop = col[0][0]; deepestX = (c + 0.5) * colW; }
+}
+kt.placeOnGround('p1', Math.round(deepestX));
+kt.placeOnGround('e1', Math.round(kt.stageW() * 0.9));
+const lowUnit = kt.unitById('p1');
+const cratersBeforeLowShot = kt.craters();
+kt.fireForTest(60, -200, { unitId: 'p1' });
+for (let i = 0; i < 400; i++) kt.step(1 / 60);
+check('谷の最深部で実際に着弾している', kt.craters() > cratersBeforeLowShot,
+  `craters=${kt.craters() - cratersBeforeLowShot}`);
+// 着弾したまさにその位置で、DEAD LINEのすぐ上に地面が残っているかを見る。
+// 床が薄すぎるとクレーターが底まで届いて列ごと空になり、ここがfalseになる。
+const lowShotCrater = kt.craterHistory()[kt.craters() - 1];
+check('最も低い地形でも通常弾1発では床が抜けない',
+  kt.isSolidAt(lowShotCrater.x, deadLine - 6),
+  `crater=(${lowShotCrater.x.toFixed(1)},${lowShotCrater.y.toFixed(1)},r=${lowShotCrater.r}) 地表=${deepestTop} deadLine=${deadLine}`);
+// 至近弾なのでダメージで倒れることはある。ここで見たいのは「床を突き抜けて
+// 落ちていないこと」だけなので、HPではなく高さで判定する。
+check('撃たれた側が床を突き抜けて落ちていない',
+  lowUnit.y + kt.unitRadius() < deadLine,
+  `y=${lowUnit.y} deadLine=${deadLine}`);
 
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
