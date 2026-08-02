@@ -294,35 +294,71 @@ for (const pattern of ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley'
   check(`${pattern}: 地形がDEAD LINEより下へはみ出さない`, lowest <= deadLine, `最下端=${lowest}`);
 }
 
-// 谷の最深部で、通常弾1発では床が抜けないことを実際に撃って確かめる。
+// 最も低い「底まである地面」に、通常弾の最大クレーターを直接開けても床が残ること。
+// 弾を撃って確かめると着弾点が風と乱数で動き、薄床ゾーン(意図的に貫通する弱点)へ
+// 当たった時に結果がぶれる。ここは地形と掘削だけを見たいので直接掘る。
 kt.setTerrain('valley');
 const valleySegs = kt.snapshot().segments;
 const colW = kt.stageW() / valleySegs.length;
-let deepestX = kt.stageW() / 2, deepestTop = -Infinity;
+let deepestX = null, deepestTop = -Infinity;
 for (let c = 0; c < valleySegs.length; c++) {
   const col = valleySegs[c];
   if (!col || !col.length) continue;
-  if (col[0][0] > deepestTop) { deepestTop = col[0][0]; deepestX = (c + 0.5) * colW; }
+  const ground = col[col.length - 1];
+  if (ground[1] < kt.terrainBottomY() - 0.5) continue; // 薄床ゾーンは対象外
+  if (ground[0] > deepestTop) { deepestTop = ground[0]; deepestX = (c + 0.5) * colW; }
 }
-kt.placeOnGround('p1', Math.round(deepestX));
-kt.placeOnGround('e1', Math.round(kt.stageW() * 0.9));
-const lowUnit = kt.unitById('p1');
-const cratersBeforeLowShot = kt.craters();
-kt.fireForTest(60, -200, { unitId: 'p1' });
-for (let i = 0; i < 400; i++) kt.step(1 / 60);
-check('谷の最深部で実際に着弾している', kt.craters() > cratersBeforeLowShot,
-  `craters=${kt.craters() - cratersBeforeLowShot}`);
-// 着弾したまさにその位置で、DEAD LINEのすぐ上に地面が残っているかを見る。
-// 床が薄すぎるとクレーターが底まで届いて列ごと空になり、ここがfalseになる。
-const lowShotCrater = kt.craterHistory()[kt.craters() - 1];
+check('底まである通常の地面が生成されている', deepestX !== null, `最深地表=${deepestTop}`);
+const maxNormalBlast = 44 * 1.35; // 通常弾の最大クレーター半径
+kt.carveForTest(deepestX, deepestTop, maxNormalBlast);
 check('最も低い地形でも通常弾1発では床が抜けない',
-  kt.isSolidAt(lowShotCrater.x, deadLine - 6),
-  `crater=(${lowShotCrater.x.toFixed(1)},${lowShotCrater.y.toFixed(1)},r=${lowShotCrater.r}) 地表=${deepestTop} deadLine=${deadLine}`);
-// 至近弾なのでダメージで倒れることはある。ここで見たいのは「床を突き抜けて
-// 落ちていないこと」だけなので、HPではなく高さで判定する。
-check('撃たれた側が床を突き抜けて落ちていない',
-  lowUnit.y + kt.unitRadius() < deadLine,
-  `y=${lowUnit.y} deadLine=${deadLine}`);
+  kt.isSolidAt(deepestX, deadLine - 6),
+  `x=${deepestX && deepestX.toFixed(1)} 地表=${deepestTop} 半径=${maxNormalBlast} deadLine=${deadLine}`);
+check('掘った直後の地表はクレーターぶん下がっている',
+  kt.groundYAt(deepestX, deepestTop - 40) > deepestTop,
+  `掘削後の地表=${kt.groundYAt(deepestX, deepestTop - 40)} 元=${deepestTop}`);
+
+// ===== Issue #13: 元画像が左向きのキャラが相手に背を向けない =====
+// facingLeft は「画像を左右反転するか」であって「世界で左を向いているか」ではない。
+// v91で向きの再判定を足した際にこの変換が抜け、facesLeftの7体が背を向けて撃っていた。
+// 全キャラを左右どちらに置いても相手を向くことを、実際に向きを更新させて確かめる。
+// 直前のテストで倒れた状態が残っていると、決着後は向きの再判定が走らない。
+// 必ず新しい試合から始める。
+kt.startBattle('kyoryu');
+kt.disableCpuForTest();
+kt.setTerrain('rolling');
+let facingNg = [];
+let facesLeftChecked = 0;
+for (const key of kt.chars()) {
+  if (kt.character(key).facesLeft) facesLeftChecked++;
+  for (const [p1x, e1x] of [[300, 1100], [1100, 300]]) {
+    kt.setCharactersForTest(key, key);
+    kt.placeOnGround('p1', p1x);
+    kt.placeOnGround('e1', e1x);
+    kt.step(1 / 60);
+    for (const u of kt.units) {
+      const foe = kt.units.find(o => o.id !== u.id);
+      const shouldFaceLeft = foe.x < u.x;
+      if (kt.facesLeftInWorld(u.id) !== shouldFaceLeft) {
+        facingNg.push(`${key}/${u.id}@${Math.round(u.x)}`);
+      }
+    }
+  }
+}
+check('左向き素材のキャラが検査対象に含まれている', facesLeftChecked > 0, `該当=${facesLeftChecked}体`);
+check('全キャラが左右どちらに居ても相手の方を向く', facingNg.length === 0,
+  `ズレ=${facingNg.slice(0, 8).join(', ')}${facingNg.length > 8 ? ` ほか${facingNg.length - 8}件` : ''}`);
+
+// 素材の向きが違う組み合わせでも、両方が正しく向くこと。
+const rightFacing = kt.chars().find(k => !kt.character(k).facesLeft);
+const leftFacing = kt.chars().find(k => kt.character(k).facesLeft);
+kt.setCharactersForTest(rightFacing, leftFacing);
+kt.placeOnGround('p1', 300);
+kt.placeOnGround('e1', 1100);
+kt.step(1 / 60);
+check('素材の向きが違う組み合わせでも両方が相手を向く',
+  kt.facesLeftInWorld('p1') === false && kt.facesLeftInWorld('e1') === true,
+  `${rightFacing}(p1)=${kt.facesLeftInWorld('p1')} / ${leftFacing}(e1)=${kt.facesLeftInWorld('e1')}`);
 
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));

@@ -387,7 +387,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v93';
+  const BUILD_ID = 'v94';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2337,9 +2337,22 @@
     return best;
   }
 
+  // u.facingLeft は「画像を左右反転するか」を表すフラグであって、「世界で左を向いているか」
+  // ではない。元画像が左向きのキャラ(facesLeft)は反転すると右を向くため、この2つは意味が
+  // 逆になる。v91で向きの再判定を足した際にこの変換が抜け、facesLeftの7体が相手に背を
+  // 向けたまま撃つ状態になっていた(2026-08-02に実機で発覚)。
+  // 変換は必ずこの2つの関数を通すこと。式を各所へ直接書くと同じ食い違いが再発する。
+  function spriteFlipForFacing(u, faceLeftInWorld) {
+    return faceLeftInWorld !== !!CHARACTERS[u.character]?.facesLeft;
+  }
+  function unitFacesLeftInWorld(u) {
+    // 未設定なら初期配置どおり(プレイヤーは右、CPUは左を向く)として扱う。
+    if (u.facingLeft == null) return u.team === 'cpu';
+    return u.facingLeft !== !!CHARACTERS[u.character]?.facesLeft;
+  }
   function faceUnitTowardOpponent(u) {
     const foe = nearestEnemy(u);
-    if (foe) u.facingLeft = foe.x < u.x;
+    if (foe) u.facingLeft = spriteFlipForFacing(u, foe.x < u.x);
   }
   function faceAllUnitsTowardOpponents() {
     for (const u of units) faceUnitTowardOpponent(u);
@@ -6942,10 +6955,8 @@
     const isBossUnit = isBossMatch && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
-    const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
-    // プレイヤーは右、CPUは左を向く。左向き素材だけ反転ルールを入れ替える。
-    const defaultFacingLeft = (u.team === 'cpu') !== sourceFacesLeft;
-    const facingLeft = u.facingLeft == null ? defaultFacingLeft : !!u.facingLeft;
+    // 向きと反転の変換は共通関数だけを通す(直接式を書くと向き判定側と食い違う)。
+    const facingLeft = spriteFlipForFacing(u, unitFacesLeftInWorld(u));
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
@@ -7293,9 +7304,8 @@
     if (!u) return;
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
-    const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
-    const defaultFacingLeft = (u.team === 'cpu') !== sourceFacesLeft;
-    const facingLeft = u.facingLeft == null ? defaultFacingLeft : !!u.facingLeft;
+    // 跳躍中のキャラ画像。地上の描画と同じ変換を使う。
+    const facingLeft = spriteFlipForFacing(u, unitFacesLeftInWorld(u));
     const spriteScale = CHARACTERS[u.character]?.spriteScale || 1;
     const h = SPRITE_SIZE * spriteScale;
     const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
