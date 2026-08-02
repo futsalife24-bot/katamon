@@ -655,6 +655,17 @@ function check(name, value) {
     htmlText.includes("const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
     && htmlText.includes("if (announced !== true) throw new Error('Next round handoff could not be sent.');")
     && htmlText.includes('return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });'));
+  // 花火は飛行中に起爆パケットを送らない。炸裂の時刻と位置は発射時に数式で確定する。
+  // ここが破れると、通信の遅れがそのまま炸裂位置のズレとして戻る(Issue #3)。
+  check('the firework bursts from launch data and sends no mid-flight detonation packet',
+    !htmlText.includes("netSend({ t: 'boom'")
+    && htmlText.includes('function fireworkApexBurst(')
+    && htmlText.includes('p.apexBurst && p.fireworkTimer >= p.apexBurst.t')
+    && htmlText.includes('p.x = p.apexBurst.x;'));
+  // 更新前の端末から届く boom は受理して無視する。拒否すると対戦が中断してしまう。
+  check('an incoming boom from an older client is accepted and ignored',
+    htmlText.includes("if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1'")
+    && htmlText.includes("case 'boom':"));
   check('a rematch start bypasses stale physics and waits only for reveal verification',
     htmlText.includes("if (msg.t === 'start') {\n        if (online.revealVerified) applyNetMessage(msg);")
     && htmlText.includes("online.pendingStart = msg;")

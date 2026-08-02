@@ -46,7 +46,12 @@ function playUntil(wantWin, tries = 40, afterStart) {
     kt.startBattle();
     if (afterStart) afterStart(); // startBattle は winStreak を0に戻すので、その後に仕込む
     if (!playToEnd()) continue;
-    if ((kt.state().winner === 'player') === wantWin) return true;
+    const winner = kt.state().winner;
+    // 引き分けは勝ちでも負けでもない。v91で引き分けが入って以降、
+    // 「winner !== 'player' なら敗北」とみなすと引き分けを敗北として拾い、
+    // 敗北時の検査(中断セーブを作らない等)が落ちることがあった。
+    if (winner === 'draw') continue;
+    if ((winner === 'player') === wantWin) return true;
   }
   return false;
 }

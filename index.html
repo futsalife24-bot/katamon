@@ -387,7 +387,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v94';
+  const BUILD_ID = 'v95';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2451,12 +2451,19 @@
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
     opts = opts || {};
+    const windMul = opts.windMul != null ? opts.windMul : 1;
+    const gravityMul = opts.gravityMul != null ? opts.gravityMul : 1;
     projectiles.push({
       x: anchor.x, y: anchor.y, vx, vy, owner, radius: 5,
       originX: anchor.x, originY: anchor.y,   // 電撃ビームを発射点から伸ばすのに使う
       blastMul: opts.blastMul || 1,
-      windMul: opts.windMul != null ? opts.windMul : 1,
-      gravityMul: opts.gravityMul != null ? opts.gravityMul : 1,
+      windMul,
+      gravityMul,
+      // 花火は「いつ・どこで開くか」を発射時に確定させる。飛行中の通信も、
+      // フレームごとの積み上げも使わないので両端末で必ず一致する。
+      apexBurst: opts.firework && !opts.fireworkShard
+        ? fireworkApexBurst(anchor, vx, vy, wind.dir * wind.strength * WIND_ACCEL_MAX * windMul, GRAVITY * gravityMul)
+        : null,
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
       pierce: !!opts.pierce,
       emp: !!opts.emp,
@@ -2542,16 +2549,32 @@
   }
 
   // ===== 花火(スモエルの必殺)=====
-  const FIREWORK_FUSE_SEC = 3;                      // 着弾も手動起爆もされなかった時の自動炸裂
   const FIREWORK_SHARD_BLASTS = [0.5, 0.34, 0.22];  // 拡散弾が進みながら起こす爆発。大→中→小
   const FIREWORK_SHARD_RANGE = 180;                 // 拡散弾が進む距離
   const FIREWORK_SHARD_DAMAGE_MUL = 0.18;           // 拡散弾1発ぶんのダメージは小さく
   const FIREWORK_BURST_DAMAGE_CAP = 22;             // 1炸裂でユニット1体が拡散弾から受ける合計上限
   let fireworkBurstDamage = null;
 
+  // 花火の空中炸裂点。発射条件だけから数式で求めるので、端末のフレームレートにも
+  // 通信の遅れにも左右されず、両端末で必ず同じ場所になる(風は飛行中変わらない)。
+  // 上へ撃った時だけ弧の頂点で開く。頂点が近すぎる(自分の拡散弾が届く範囲)場合と、
+  // 水平・下向きに撃った場合は空中で開かず、従来どおり着弾して開く。
+  function fireworkApexBurst(anchor, vx0, vy0, windAccel, gravity) {
+    if (!(vy0 < 0) || !(gravity > 0)) return null;
+    const t = -vy0 / gravity;
+    const x = anchor.x + vx0 * t + 0.5 * windAccel * t * t;
+    const y = anchor.y + vy0 * t + 0.5 * gravity * t * t;
+    const dx = x - anchor.x, dy = y - anchor.y;
+    if (dx * dx + dy * dy < FIREWORK_SHARD_RANGE * FIREWORK_SHARD_RANGE) return null;
+    return { t, x, y };
+  }
+
   function spawnFireworkBurst(p) {
     const speed = 360;
-    const baseAngle = Math.atan2(p.vy, p.vx);
+    // 8方向は弾の進行方向ではなく世界の絶対角を基準にする。進行方向基準だと
+    // 速度のわずかな差で扇の向きが変わり、端末ごとに削れ方がずれる。
+    // 打ち上げ花火は飛んできた向きに関係なく丸く開くので、見た目もこちらが自然。
+    const baseAngle = 0;
     // 24発ぶんの爆発が素通しで合算されると即死するので、炸裂ごとに被ダメージ上限を持たせる。
     fireworkBurstDamage = {};
     for (const u of units) fireworkBurstDamage[u.id] = 0;
@@ -2590,14 +2613,6 @@
       creditDamage(p.owner, u, dmg);
     }
     checkMatchEnd();
-  }
-
-  // この端末が手動で起爆できる、飛行中の花火本体を返す。
-  function localFireworkInFlight() {
-    for (const p of projectiles) {
-      if (p.firework && !p.fireworkShard && p.owner === localUnitId) return p;
-    }
-    return null;
   }
 
   // ===== デスゲート(死神の必殺) =====
@@ -4444,13 +4459,10 @@
         faceAllUnitsTowardOpponents();
         break;
       }
-      case 'boom': {
-        // 花火の手動起爆。信管を満了させるだけで、炸裂は通常の更新処理で起きる。
-        for (const p of projectiles) {
-          if (p.firework && !p.fireworkShard && p.owner === msg.unitId) p.fireworkTimer = FIREWORK_FUSE_SEC;
-        }
+      case 'boom':
+        // 手動起爆は廃止した(炸裂点は発射時に確定する)。更新前の端末から届くことが
+        // あるので、受け取っても何もしない。検証と再送の除外だけ従来どおり通す。
         break;
-      }
       case 'state':
         // ターン境界の権威。ここで完全に揃う。
         if (online.phase !== 'playing') break;
@@ -7217,6 +7229,24 @@
       ctx.arc(px, py, 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // 花火は弧の頂点で開く。どこで開くかがそのまま狙う場所なので、撃つ前に見せる。
+    // 印が出ない時は空中で開かず、着弾して開く(頂点が近すぎる/水平・下向きに撃った)。
+    // 実際の炸裂と同じ関数で求めるので、表示と結果がずれることはない。
+    if (specialArmed && isSpecialReady(me) && def.key === 'sumoeru') {
+      const burst = fireworkApexBurst(anchor, vx0, vy0, windAccel, gravity);
+      if (burst) {
+        ctx.strokeStyle = 'rgba(255,214,120,0.95)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(burst.x, burst.y, 11, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(burst.x, burst.y, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,214,120,0.95)';
+        ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
@@ -8277,12 +8307,10 @@
   }
 
   function drawSpecialButton() {
-    // 花火が飛んでいる間は、このボタンが手動起爆に切り替わる。
     const me = localUnit();
-    const detonatable = isLocalTurn() && !matchOver && !netInputLocked() && !!localFireworkInFlight();
-    const ready = detonatable || isSpecialReady(me);
+    const ready = isSpecialReady(me);
     const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
-    const chargeRatio = detonatable ? 1 : me.specialCharge / SPECIAL_CHARGE_MAX;
+    const chargeRatio = me.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[me.character];
     ctx.save();
     // 台座の影
@@ -8296,7 +8324,7 @@
       specialBtn.x - specialBtn.r * 0.35, specialBtn.y - specialBtn.r * 0.4, specialBtn.r * 0.1,
       specialBtn.x, specialBtn.y, specialBtn.r
     );
-    if (specialArmed || detonatable) {
+    if (specialArmed) {
       sBody.addColorStop(0, '#ffb45e'); sBody.addColorStop(0.55, '#e0642a'); sBody.addColorStop(1, '#7a2410');
     } else if (ready) {
       sBody.addColorStop(0, '#574a26'); sBody.addColorStop(0.6, '#332c17'); sBody.addColorStop(1, '#15120a');
@@ -8309,8 +8337,8 @@
     ctx.fill();
 
     // 真鍮の外輪(溜まりきると発光)
-    if (ready) { ctx.shadowColor = (specialArmed || detonatable) ? '#ffd08a' : UI.gold; ctx.shadowBlur = 14; }
-    ctx.strokeStyle = (specialArmed || detonatable) ? '#fff2d0' : ready ? UI.gold : 'rgba(126,116,99,0.5)';
+    if (ready) { ctx.shadowColor = specialArmed ? '#ffd08a' : UI.gold; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = specialArmed ? '#fff2d0' : ready ? UI.gold : 'rgba(126,116,99,0.5)';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(specialBtn.x, specialBtn.y, specialBtn.r - 2, 0, Math.PI * 2);
@@ -8337,15 +8365,15 @@
 
     ctx.save();
     ctx.textBaseline = 'middle';
-    drawOutlinedText(detonatable ? '起爆' : '必殺', specialBtn.x, specialBtn.y - 12, {
+    drawOutlinedText('必殺', specialBtn.x, specialBtn.y - 12, {
       font: `900 13px ${UI_FONT_HEAVY}`,
       color: ready ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 3.5
     });
-    drawOutlinedText(detonatable ? 'BOOM' : def.special, specialBtn.x, specialBtn.y + 2, {
+    drawOutlinedText(def.special, specialBtn.x, specialBtn.y + 2, {
       font: `900 8px ${UI_FONT_HEAVY}`,
       color: ready ? UI.brassLight : 'rgba(226,232,240,0.5)', lineWidth: 3
     });
-    drawOutlinedText(detonatable ? 'TAP' : ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
+    drawOutlinedText(ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
       font: `900 11px ${UI_FONT_HEAVY}`,
       color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
     });
@@ -9873,16 +9901,6 @@
       if (beginPinchIfPossible()) return;
     }
 
-    // 発射後は入力を止めているが、花火の手動起爆だけは例外として受け付ける。
-    // 信管を満了させるだけなので、炸裂そのものは通常どおり更新処理側で起きる。
-    const flyingFirework = isLocalTurn() && !matchOver && !netInputLocked() ? localFireworkInFlight() : null;
-    if (flyingFirework && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
-      flyingFirework.fireworkTimer = FIREWORK_FUSE_SEC;
-      if (isOnline()) netSend({ t: 'boom', unitId: flyingFirework.owner });
-      playUiSound();
-      return;
-    }
-
     // 移動ボタン・必殺ボタン・発射ボタンは自分のターンでのみ
     if (isLocalTurn() && !awaitingResolve && !netInputLocked()) {
       const me = localUnit();
@@ -10446,7 +10464,8 @@
         }
       }
 
-      const fireworkDue = p.firework && !p.fireworkShard && p.fireworkTimer >= FIREWORK_FUSE_SEC;
+      // 空中炸裂は発射時に確定した頂点の時刻で起こす。
+      const fireworkDue = p.firework && !p.fireworkShard && p.apexBurst && p.fireworkTimer >= p.apexBurst.t;
 
       let hit = false;
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
@@ -10502,6 +10521,10 @@
       }
 
       if (fireworkDue) {
+        // 刻みの都合で頂点を数px通り過ぎていることがある。炸裂位置は必ず
+        // 発射時に確定した頂点そのものへ合わせる。
+        p.x = p.apexBurst.x;
+        p.y = p.apexBurst.y;
         spawnFireworkBurst(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
