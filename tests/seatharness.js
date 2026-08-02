@@ -73,6 +73,13 @@ const HOOK = `
     groundBand: () => ({ min: GROUND_MIN_Y, max: GROUND_MAX_Y }),
     // CPUは照準に乱数を混ぜるので、決定性の検証中は行動させない。
     disableCpuForTest: () => { for (const u of units) u.control = 'local'; },
+    setCharactersForTest: (p1Key, e1Key) => {
+      applyCharacter(unitById('p1'), p1Key);
+      applyCharacter(unitById('e1'), e1Key || p1Key);
+    },
+    // 素材の向きを加味した「世界で左を向いているか」。描画が使う式と同じもの。
+    facesLeftInWorld: (id) => unitFacesLeftInWorld(unitById(id)),
+    carveForTest: (x, y, r) => carveCrater(x, y, r),
     resetPhysicsClock: () => resetPhysicsClock(),
     selectWheelCards: () => {
       const cards = getRenderedSelectCards();
