@@ -328,7 +328,7 @@
         </div>
       </div>
       <select id="onlineCharacter" aria-label="使用モンスター"></select>
-      <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・FREEモードは遊べます。</div>
+      <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・演習は遊べます。</div>
     </div>
     <div id="onlineLobbyButtons">
       <button id="onlineStart" type="button">対戦開始</button>
@@ -382,7 +382,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v84';
+  const BUILD_ID = 'v91';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -398,7 +398,19 @@
   const MIN_CAMERA_ZOOM = VW / STAGE_W;
   const DEFAULT_CAMERA_ZOOM = 0.78;
   const MAX_CAMERA_ZOOM = 1;
-  let cameraZoom = DEFAULT_CAMERA_ZOOM;
+  const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';
+  function loadCameraZoom() {
+    try {
+      const value = Number(localStorage.getItem(CAMERA_ZOOM_KEY));
+      return Number.isFinite(value) ? clampCameraZoom(value) : DEFAULT_CAMERA_ZOOM;
+    } catch (err) {
+      return DEFAULT_CAMERA_ZOOM;
+    }
+  }
+  function saveCameraZoom() {
+    try { localStorage.setItem(CAMERA_ZOOM_KEY, String(cameraZoom)); } catch (err) { /* 保存できなくても視点操作は続行可能 */ }
+  }
+  let cameraZoom = loadCameraZoom();
   let cameraX = 0;
   let cameraTargetX = null;
   function clampCameraZoom(zoom) {
@@ -2198,14 +2210,14 @@
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#4fc3f7', label: 'YOU',
     id: 'p1', team: 'player', control: 'local',
-    character: null, specialCharge: 0, moveLockTurns: 0
+    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
   };
   const cpu = {
     x: STAGE_W * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ff6b6b', label: 'CPU',
     id: 'e1', team: 'cpu', control: 'cpu',
-    character: null, specialCharge: 0, moveLockTurns: 0
+    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
   };
   const units = [player, cpu];
 
@@ -2226,7 +2238,8 @@
     return units[1] || me;
   }
   // 「勝ったのはこの端末の陣営か」。winner は陣営名なので席を見て判定する。
-  function localWon() { return winner != null && winner === localUnit().team; }
+  function localWon() { return winner != null && winner !== 'draw' && winner === localUnit().team; }
+  function isDraw() { return winner === 'draw'; }
   // 手番の呼び名。席から見て自分／CPU／(将来の)リモート相手を出し分ける。
   function turnOwnerLabel(u) {
     if (!u) return '';
@@ -2295,6 +2308,14 @@
     return best;
   }
 
+  function faceUnitTowardOpponent(u) {
+    const foe = nearestEnemy(u);
+    if (foe) u.facingLeft = foe.x < u.x;
+  }
+  function faceAllUnitsTowardOpponents() {
+    for (const u of units) faceUnitTowardOpponent(u);
+  }
+
   // 与ダメ効率に積むのは「プレイヤー陣営が敵陣営へ与えた分」だけ。自爆や味方誤爆は数えない。
   function creditDamage(owner, target, amount) {
     if (teamOfOwner(owner) === 'player' && target.team !== 'player') runStats.damageDealt += amount;
@@ -2310,6 +2331,7 @@
     u.color = def.color;
     u.label = def.name;
     u.moveLockTurns = 0;
+    u.facingLeft = null;
   }
 
   function unitAnchor(u) {
@@ -2402,6 +2424,7 @@
       ignoreObstacles: !!opts.ignoreObstacles,
       lightning: !!opts.lightning,
       firework: !!opts.firework,
+      jump: opts.jump != null ? !!opts.jump : !!(unitById(owner) && unitById(owner).jumpShot),
       fireworkShard: !!opts.fireworkShard,
       deathGateMarker: !!opts.deathGateMarker,
       deathGateScythe: !!opts.deathGateScythe,
@@ -2412,6 +2435,60 @@
       maxDistance: opts.maxDistance || 0,
       hitTargets: []
     });
+  }
+
+  // 跳躍の着地点は「弾が当たった場所の下」だけを足場にする。
+  // 垂直壁の途中へ当たった場合は、壁の最上面へ吸い上げず、その場から落下させる。
+  function jumpLandingSurfaceYAt(x, impactY, p, terrainHit) {
+    const surface = walkableGroundYAt(x, impactY + UNIT_RADIUS);
+    if (surface === null) return null;
+    // 地形衝突は「上から地表を横切った」時だけ着地扱いにする。
+    // 横から垂直壁へ当たった場合、列の最上面を拾って壁に張り付くのを防ぐ。
+    if (terrainHit) {
+      const prevY = Number.isFinite(p.prevY) ? p.prevY : impactY - p.vy * 0.016;
+      if (!(p.vy > 0 && prevY <= surface + UNIT_RADIUS * 0.5 && impactY >= surface - UNIT_RADIUS * 0.5)) return null;
+    }
+    // 着弾点が地表よりかなり下なら、地面ではなく縦壁の側面に当たっている。
+    if (impactY > surface + UNIT_RADIUS * 0.75) return null;
+    // 左右の地表が取れない、または歩いて登れない急斜面なら張り付かせない。
+    const sample = 12;
+    const left = walkableGroundYAt(Math.max(0, x - sample), surface + UNIT_RADIUS);
+    const right = walkableGroundYAt(Math.min(STAGE_W - 1, x + sample), surface + UNIT_RADIUS);
+    if (left === null || right === null) return null;
+    const slope = Math.atan2(right - left, sample * 2);
+    if (Math.abs(slope) >= MAX_CLIMB_ANGLE) return null;
+    return surface;
+  }
+
+  function teleportOwnerToImpact(p, x, y, terrainHit = false) {
+    if (!p.jump) return;
+    p.jump = false;
+    const u = unitById(p.owner);
+    if (!u || u.hp <= 0) return;
+    u.x = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, x));
+    faceAllUnitsTowardOpponents();
+    const surface = jumpLandingSurfaceYAt(u.x, y, p, terrainHit);
+    if (surface !== null) {
+      u.y = surface - UNIT_RADIUS;
+      u.grounded = true;
+      u.vy = 0;
+    } else {
+      // 壁面衝突ならめり込んだ現在位置を使わず、衝突前の位置へ戻してから落下させる。
+      if (terrainHit && Number.isFinite(p.prevX) && Number.isFinite(p.prevY)) {
+        u.x = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, p.prevX));
+        u.y = Math.max(-UNIT_RADIUS, p.prevY);
+      } else {
+        u.y = Math.max(-UNIT_RADIUS, y - UNIT_RADIUS);
+      }
+      u.grounded = false;
+      u.vy = 0;
+      u.fallStartY = u.y;
+    }
+    // 発動した手番の終了時に1段階減るため、次の自分の手番を丸ごと封印する。
+    u.moveLockTurns = Math.max(u.moveLockTurns || 0, 2);
+    if (u.id === localUnitId) focusCameraOn(u.x, true);
+    faceUnitTowardOpponent(u);
+    pushFloatText(u.x, u.y - UNIT_RADIUS - 12, '跳躍!', '#8ee7ff', 20);
   }
 
   function rotateVec(vx, vy, deg) {
@@ -2525,17 +2602,23 @@
 
   // キャラ性能+必殺ショットを反映して発射する共通口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
-  function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred) {
+  function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
     const def = CHARACTERS[unit.character];
     const owner = unit.id;
+    // 発射直前に両者の現在位置を基準に向きを確定する。
+    faceAllUnitsTowardOpponents();
     // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
+    const activateJump = deferred ? !!useJump : (!!useJump && unit.jumpAvailable !== false && unit.moveLockTurns <= 0);
+
+    if (activateJump && !deferred) unit.jumpAvailable = false;
+    unit.jumpShot = activateJump;
 
     if (activateSpecial && !deferred) {
       unit.specialCharge = 0;
       triggerSpecialFlash(`必殺: ${def.special}!!`, def);
       playSpecialSound();
-      pendingShot = { timer: SPECIAL_FLASH_DURATION, fire: () => launchShot(unit, anchor, vx0, vy0, true, true) };
+      pendingShot = { timer: SPECIAL_FLASH_DURATION, fire: () => launchShot(unit, anchor, vx0, vy0, true, true, activateJump) };
       return;
     }
 
@@ -2657,6 +2740,7 @@
     }
 
     // チャージ消費・カットイン・必殺音は保留に入る前に済ませてある。
+    unit.jumpShot = false;
     if (!activateSpecial) playLaunchSound();
   }
 
@@ -2716,6 +2800,7 @@
   function setCameraZoomFromSlider(point) {
     const value = Math.max(0, Math.min(1, (point.x - CAMERA_SLIDER.x) / CAMERA_SLIDER.w));
     cameraZoom = clampCameraZoom(MIN_CAMERA_ZOOM + (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM) * value);
+    saveCameraZoom();
     cameraX = clampCameraX(cameraX);
     cameraTargetX = null;
   }
@@ -2734,12 +2819,16 @@
 
   // ===== 必殺ショット(4段階リチャージ・右移動ボタンの上に配置) =====
   const specialBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 66, r: 46 };
+  const jumpBtn = { x: 92, y: CONTROL_PANEL_Y + 100, r: 34 };
   let specialArmed = false;
+  let jumpArmed = false;
 
   // ===== メニュー(一時停止・タイトルに戻る) =====
   const menuBtn = { x: 26, y: 20, r: 17 };
   const menuResumeBtn = { x: VW / 2, y: VH / 2 - 24, w: 260, h: 50 };
+  const menuRestartBtn = { x: VW / 2, y: VH / 2 + 42, w: 260, h: 50 };
   const menuSuspendBtn = { x: VW / 2, y: VH / 2 + 42, w: 260, h: 50 };
+  const menuSuspendFreeBtn = { x: VW / 2, y: VH / 2 + 108, w: 260, h: 50 };
   let menuOpen = false;
   function canOpenMenu() {
     return gamePhase === 'battle' && !awaitingResolve && !cutIn && !matchOver;
@@ -3070,7 +3159,9 @@
     return {
       id: u.id, team: u.team, control: u.control, character: u.character,
       hp: u.hp, maxHp: u.maxHp, fuel: u.fuel, fuelMax: u.fuelMax,
-      x: u.x, y: u.y, specialCharge: u.specialCharge, moveLockTurns: u.moveLockTurns
+      x: u.x, y: u.y, specialCharge: u.specialCharge, moveLockTurns: u.moveLockTurns,
+      jumpAvailable: u.jumpAvailable !== false,
+      facingLeft: u.facingLeft == null ? null : !!u.facingLeft
     };
   }
 
@@ -3167,6 +3258,8 @@
       u.specialCharge = Number.isFinite(saved.specialCharge)
         ? Math.max(0, Math.min(SPECIAL_CHARGE_MAX, saved.specialCharge))
         : (saved.specialUsed ? 0 : SPECIAL_CHARGE_MAX);
+      u.jumpAvailable = saved.jumpAvailable !== false;
+      u.facingLeft = typeof saved.facingLeft === 'boolean' ? saved.facingLeft : null;
       const savedY = Number.isFinite(saved.y) ? saved.y : groundYAt(u.x) - UNIT_RADIUS;
       const nearbyGround = walkableGroundYAt(u.x, savedY + UNIT_RADIUS);
       u.y = (nearbyGround === null ? groundYAt(u.x) : nearbyGround) - UNIT_RADIUS;
@@ -3174,6 +3267,8 @@
       u.grounded = true;
       u.fallStartY = u.y;
     }
+    // 跳躍後の向きは相手の座標が揃った後に再計算し、通信順で一瞬反転するのを防ぐ。
+    for (const u of units) faceUnitTowardOpponent(u);
 
     projectiles = [];
     aimState = null;
@@ -3183,6 +3278,7 @@
     activeTouchPoints.clear();
     pinchState = null;
     specialArmed = false;
+    jumpArmed = false;
     matchOver = false;
     matchEndPause = 0;
     matchEndReason = '';
@@ -3607,7 +3703,9 @@
       && isFiniteIn(unit.hp, 0, 200) && isFiniteIn(unit.maxHp, 1, 200) && unit.hp <= unit.maxHp
       && isFiniteIn(unit.fuel, 0, 10000) && isFiniteIn(unit.fuelMax, 0, 10000) && unit.fuel <= unit.fuelMax
       && isFiniteIn(unit.x, UNIT_RADIUS, STAGE_W - UNIT_RADIUS) && isFiniteIn(unit.y, -UNIT_RADIUS, VH)
-      && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 2);
+      && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 2)
+      && (unit.jumpAvailable == null || typeof unit.jumpAvailable === 'boolean')
+      && (unit.facingLeft == null || typeof unit.facingLeft === 'boolean');
   }
   function snapshotValidationReason(snap) {
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
@@ -3692,14 +3790,14 @@
       const unitOk = legacyV2 || ((msg.unitId === 'p1' || msg.unitId === 'e1') && msg.unitId === msg.seat);
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
-    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
     if (msg.t === 'move') return (msg.unitId === 'p1' || msg.unitId === 'e1') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.fuel), 0, 10000) ? { ok: true } : { ok: false, reason: 'move.payload' };
     if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1' ? { ok: true } : { ok: false, reason: 'boom.unitId' };
     if (msg.t === 'result') {
       const unitOk = legacyV2 || ((msg.unitId === 'p1' || msg.unitId === 'e1') && msg.unitId === msg.seat);
       // result は snapshot と同じHP上限を使う。選択キャラには最大HP 140 がいるため、
       // 初期値用の MAX_HP (100) で絞ると、生存側の正しい決着通知まで拒否してしまう。
-      return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk && (msg.winner === 'player' || msg.winner === 'cpu') && typeof msg.reason === 'string' && msg.reason.length <= 120 && Array.isArray(msg.units) && msg.units.length === 2 && msg.units.every(u => u && (u.id === 'p1' || u.id === 'e1') && isFiniteIn(Number(u.hp), 0, 200)) ? { ok: true } : { ok: false, reason: 'result.payload' };
+      return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk && (msg.winner === 'player' || msg.winner === 'cpu' || msg.winner === 'draw') && typeof msg.reason === 'string' && msg.reason.length <= 120 && Array.isArray(msg.units) && msg.units.length === 2 && msg.units.every(u => u && (u.id === 'p1' || u.id === 'e1') && isFiniteIn(Number(u.hp), 0, 200)) ? { ok: true } : { ok: false, reason: 'result.payload' };
     }
     return { ok: true };
   }
@@ -3869,7 +3967,7 @@
   function firebaseResultConcedes(msg) {
     if (!msg || msg.t !== 'result') return false;
     const senderUnit = unitById(msg.seat);
-    return !!senderUnit && msg.winner !== senderUnit.team;
+    return !!senderUnit && (msg.winner === 'player' || msg.winner === 'cpu') && msg.winner !== senderUnit.team;
   }
 
   function firebaseFlowAllows(msg, flow) {
@@ -3913,6 +4011,7 @@
       // (実機で fuel.0 として再現)。HPと同じく通信の入口で 0〜fuelMax に検証済みで、
       // state を受理すれば applySnapshot が正しい値へ上書きするため実害もない。
       if (Math.abs(saved.specialCharge - local.specialCharge) > 1) return `specialCharge.${i}`;
+      if ((saved.jumpAvailable !== false) !== local.jumpAvailable) return `jumpAvailable.${i}`;
     }
     return '';
   }
@@ -3992,14 +4091,16 @@
       if (u.control !== 'remote' || u.netWalkTargetX == null) continue;
       if (!u.grounded) continue; // 落下中は物理に任せる
       const diff = u.netWalkTargetX - u.x;
-      if (Math.abs(diff) <= 0.5) { u.x = u.netWalkTargetX; u.netWalkTargetX = null; continue; }
+      if (Math.abs(diff) <= 0.5) { u.x = u.netWalkTargetX; u.netWalkTargetX = null; faceAllUnitsTowardOpponents(); continue; }
       // 遅延で溜まった分は少し速めに詰める。離れすぎている時だけ効く。
       const speed = MOVE_SPEED * (Math.abs(diff) > 60 ? 2 : 1);
       const step = Math.min(Math.abs(diff), speed * dt) * Math.sign(diff);
+      faceUnitTowardOpponent(u);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, u.x + step));
       nx = limitMoveByClimb(u, nx);
       if (Math.abs(nx - u.x) < 0.01) { u.netWalkTargetX = null; continue; } // 崖などで進めない
       u.x = nx;
+      faceAllUnitsTowardOpponents();
       followGroundOrFall(u);
     }
   }
@@ -4267,6 +4368,7 @@
         // 移動そのものは送っていないので、撃つ直前の立ち位置をここで合わせる。
         u.x = msg.x;
         u.y = msg.y;
+        faceAllUnitsTowardOpponents();
         // state/result を受けるまでの紐付けを先に確立する。非アクティブタブでSSEだけが
         // 先行しても、後続パケットを正しい行動へ結び付けられる。
         if (online.kind === 'firebase') {
@@ -4282,7 +4384,7 @@
             enqueueNetMessage(buffered);
           }
         }
-        launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial);
+        launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial, false, msg.useJump);
         awaitingResolve = true;
         break;
       }
@@ -4293,6 +4395,7 @@
         // 燃料は相手が権威なのでそのまま反映する。
         u.netWalkTargetX = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, Number(msg.x)));
         if (Number.isFinite(msg.fuel)) u.fuel = Math.max(0, Math.min(u.fuelMax, Number(msg.fuel)));
+        faceAllUnitsTowardOpponents();
         break;
       }
       case 'boom': {
@@ -4327,7 +4430,7 @@
         if (online.kind === 'firebase') {
           const playerAlive = teamAlive('player');
           const cpuAlive = teamAlive('cpu');
-          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : null;
+          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : !playerAlive && !cpuAlive ? 'draw' : null;
           // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
           // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
           // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
@@ -5020,6 +5123,7 @@
     // 勝敗と決まり手はロビーにも出す。Canvasの結果表示はロビーに隠れて見えないため。
     const outcome = !matchOver ? '対戦が終わりました。'
       : online.participantRole === 'spectator' ? `決着:${matchEndReason || '撃破'}。`
+      : isDraw() ? `引き分け（${matchEndReason || '相討ち'}）`
       : localWon() ? `勝利! （${matchEndReason || '撃破'}）` : `敗北… （${matchEndReason || '撃破'}）`;
     onlineLobbyStatus(`${outcome} もう一度戦うか、ロビーへ戻るかを選んでください。`);
     renderFirebaseLobby();
@@ -5467,7 +5571,7 @@
     // 押し間違いで意図せず中断データを消費してしまうため、ここでは知らせるだけ。
     drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
     drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
-    drawTitleModeButton(titleFreeBtn, 'FREE MODE', '対戦条件を組み上げて演習', 'free');
+    drawTitleModeButton(titleFreeBtn, '演習', '対戦条件を組み上げて開始', 'free');
     // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
     drawSuspendedSaveBubble();
     ctx.restore();
@@ -5586,8 +5690,8 @@
     ctx.strokeStyle = '#160d08';
     ctx.lineWidth = 7;
     ctx.font = '900 38px "Arial Black", Impact, sans-serif';
-    ctx.strokeText('FREE MODE', VW / 2, 78);
-    ctx.fillText('FREE MODE', VW / 2, 78);
+    ctx.strokeText('演習', VW / 2, 78);
+    ctx.fillText('演習', VW / 2, 78);
     ctx.fillStyle = '#fff0cd';
     ctx.font = 'bold 12px "Yu Gothic UI", sans-serif';
     ctx.fillText('演習条件を選択せよ', VW / 2, 105);
@@ -6206,12 +6310,13 @@
       logOnlineEvent({ type: 'matchEnd', declared: false, reason: reason || '撃破', active: activeUnit().id });
       return;
     }
-    logOnlineEvent({ type: 'matchEnd', declared: true, reason: reason || '撃破' });
     matchOver = true;
-    winner = playerAlive ? 'player' : 'cpu'; // 相打ちはCPU勝ち扱い(引き分けは設けない)
-    beginMatchEnd(reason || '撃破');
+    winner = playerAlive ? 'player' : cpuAlive ? 'cpu' : 'draw';
+    const resultReason = isDraw() ? '相討ち' : (reason || '撃破');
+    logOnlineEvent({ type: 'matchEnd', declared: true, reason: resultReason, winner });
+    beginMatchEnd(resultReason);
     applyStreakResult();
-    netSyncResult(reason || '撃破');
+    netSyncResult(resultReason);
   }
 
   // 陣営の残存率。2vs2ではチーム合計で比べる。
@@ -6231,7 +6336,9 @@
     // ここでの activeUnit() はまだ「最後に動いた側」を指している)。
     if (!canDeclareMatchEnd()) return;
     matchOver = true;
-    winner = teamHpRatio('player') > teamHpRatio('cpu') ? 'player' : 'cpu'; // 同率は引き分けなし・CPU勝ち扱い
+    const playerRatio = teamHpRatio('player');
+    const cpuRatio = teamHpRatio('cpu');
+    winner = playerRatio > cpuRatio ? 'player' : playerRatio < cpuRatio ? 'cpu' : 'draw';
     beginMatchEnd('時間切れ');
     applyStreakResult();
     netSyncResult('時間切れ');
@@ -6245,6 +6352,7 @@
     if (battleMode === 'free') return;
     // 対人戦は連勝にもランキングにも含めない(勝ちの譲り合いの温床になるため)。
     if (isOnline()) return;
+    if (isDraw()) return;
     if (winner === 'player') {
       winStreak++;
     } else {
@@ -6796,13 +6904,15 @@
   }
 
   function drawUnit(u) {
+    if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
     const isBossUnit = isBossMatch && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
     const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
     // プレイヤーは右、CPUは左を向く。左向き素材だけ反転ルールを入れ替える。
-    const facingLeft = (u.team === 'cpu') !== sourceFacesLeft;
+    const defaultFacingLeft = (u.team === 'cpu') !== sourceFacesLeft;
+    const facingLeft = u.facingLeft == null ? defaultFacingLeft : !!u.facingLeft;
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
@@ -7145,11 +7255,60 @@
     ctx.restore();
   }
 
+  function drawJumpProjectile(p) {
+    const u = unitById(p.owner);
+    if (!u) return;
+    const img = u.character ? charImages[u.character] : null;
+    const imgReady = img && img.complete && img.naturalWidth > 0;
+    const sourceFacesLeft = !!CHARACTERS[u.character]?.facesLeft;
+    const defaultFacingLeft = (u.team === 'cpu') !== sourceFacesLeft;
+    const facingLeft = u.facingLeft == null ? defaultFacingLeft : !!u.facingLeft;
+    const spriteScale = CHARACTERS[u.character]?.spriteScale || 1;
+    const h = SPRITE_SIZE * spriteScale;
+    const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
+    const angle = Math.atan2(p.vy, p.vx);
+    ctx.save();
+    // 本体は立ち姿のまま、弾道方向へ光の尾だけを伸ばす。
+    ctx.translate(p.x, p.y);
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.strokeStyle = 'rgba(142,231,255,0.78)';
+    ctx.shadowColor = '#8ee7ff';
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-42, 0);
+    ctx.lineTo(-12, 0);
+    ctx.stroke();
+    ctx.restore();
+    ctx.shadowColor = '#8ee7ff';
+    ctx.shadowBlur = 18;
+    ctx.globalAlpha = 0.98;
+    if (imgReady) {
+      if (facingLeft) ctx.scale(-1, 1);
+      ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+    } else {
+      ctx.fillStyle = '#8ee7ff';
+      ctx.beginPath();
+      ctx.arc(0, 0, UNIT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawProjectile() {
     for (const b of lightningBeams) {
       drawLightningPath(b.x0, b.y0, b.x1, b.y1, Math.max(0, b.life / b.maxLife) * 0.9, 0);
     }
     for (const p of projectiles) {
+      if (p.jump) {
+        drawJumpProjectile(p);
+        continue;
+      }
       if (p.lightning) {
         drawLightningPath(p.originX, p.originY, p.x, p.y, 1, 4.6);
         continue;
@@ -7339,7 +7498,8 @@
   const MATCH_END_LABELS = {
     '撃破': { sub: 'KNOCKOUT', color: '#ff9d42' },
     '落下': { sub: 'RING OUT', color: '#59c9ff' },
-    '時間切れ': { sub: 'TIME UP', color: '#ffd24a' }
+    '時間切れ': { sub: 'TIME UP', color: '#ffd24a' },
+    '相討ち': { sub: 'DRAW', color: '#d6b8ff' }
   };
 
   // 収まらない名前は末尾を「…」に詰める。詰めないと右隣のキャラ名に重なる。
@@ -7669,8 +7829,9 @@
   function drawResultBanner() {
     if (!matchOver || matchEndPause > 0) return;
     const won = localWon();
+    const draw = isDraw();
     const bandY = VH / 2 - 130;
-    const bandH = (won ? 280 : 330) + resultButtonShift();
+    const bandH = (won || draw ? 280 : 330) + resultButtonShift();
     ctx.save();
     // 石版のような帯(上下を真鍮で締める)
     const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
@@ -7682,7 +7843,7 @@
     for (const ry of [bandY, bandY + bandH - 4]) {
       const rail = ctx.createLinearGradient(0, ry, 0, ry + 4);
       rail.addColorStop(0, '#3a2510');
-      rail.addColorStop(0.45, won ? '#f0c274' : '#b98a6a');
+      rail.addColorStop(0.45, won ? '#f0c274' : draw ? '#bda8e6' : '#b98a6a');
       rail.addColorStop(1, '#241608');
       ctx.fillStyle = rail;
       ctx.fillRect(0, ry, VW, 4);
@@ -7690,17 +7851,21 @@
     ctx.restore();
 
     const foeName = foeUnit().control === 'cpu' ? 'CPU' : '相手';
-    drawOutlinedText(won ? `${foeName}を撃破!` : 'あなたの負け...', VW / 2, VH / 2 - 70, {
+    drawOutlinedText(draw ? '相討ち!' : won ? `${foeName}を撃破!` : 'あなたの負け...', VW / 2, VH / 2 - 70, {
       font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
     });
 
     if (isOnline()) {
       // 対人戦は連勝にもランキングにも含めないので、連勝表示は出さない。
-      drawOutlinedText(won ? '対戦に勝利!' : '対戦に敗北', VW / 2, VH / 2 - 22, {
+      drawOutlinedText(draw ? '引き分け' : won ? '対戦に勝利!' : '対戦に敗北', VW / 2, VH / 2 - 22, {
         font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
       });
     } else if (battleMode === 'free') {
-      drawOutlinedText(won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
+      drawOutlinedText(draw ? '演習引き分け' : won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
+        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+      });
+    } else if (draw) {
+      drawOutlinedText('連勝維持', VW / 2, VH / 2 - 22, {
         font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
       });
     } else if (won) {
@@ -7727,7 +7892,7 @@
       font: `900 13px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
     });
 
-    if (!won && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
+    if (!won && !draw && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
 
     // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない。
     // 対人戦の続行はこの結果画面で選ばせ、ロビーのポップアップは開かない。
@@ -7744,7 +7909,7 @@
       if (!isOnline()) {
         drawResultButton(
           continueBtn,
-          battleMode === 'free' ? '同じ条件でもう一戦' : (won ? 'つぎのバトルへ' : 'もう一度挑戦'),
+          battleMode === 'free' ? '同じ条件でもう一戦' : (won || draw ? 'つぎのバトルへ' : 'もう一度挑戦'),
           true
         );
       }
@@ -7762,7 +7927,7 @@
   // 勝った直後だけは「つぎのバトルへ」と同じ状態を作ってから中断セーブする。
   // 敗北時は連勝が既に0でランキング送信も済んでおり、守るものが無いので従来どおり。
   function keepsRunOnExit() {
-    return matchOver && battleMode !== 'free' && !isOnline() && localWon();
+    return matchOver && battleMode !== 'free' && !isOnline() && (localWon() || isDraw());
   }
 
   function suspendRunToTitle() {
@@ -7840,7 +8005,7 @@
       `${turnLabel}　TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}${lockLabel}`,
       20, 108, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
     );
-    drawOutlinedText(battleMode === 'free' ? 'FREE' : `${winStreak}連勝`, VW - 20, 108, {
+    drawOutlinedText(battleMode === 'free' ? '演習' : `${winStreak}連勝`, VW - 20, 108, {
       align: 'right', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
     });
   }
@@ -8140,6 +8305,54 @@
     drawOutlinedText(detonatable ? 'TAP' : ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
       font: `900 11px ${UI_FONT_HEAVY}`,
       color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
+    });
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+
+  function drawJumpButton() {
+    const me = localUnit();
+    const available = me.jumpAvailable !== false && me.moveLockTurns <= 0;
+    const active = available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
+    const color = jumpArmed ? '#8ee7ff' : available ? UI.gold : 'rgba(126,116,99,0.5)';
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(jumpBtn.x, jumpBtn.y + 3, jumpBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fill();
+    const body = ctx.createRadialGradient(
+      jumpBtn.x - jumpBtn.r * 0.35, jumpBtn.y - jumpBtn.r * 0.4, jumpBtn.r * 0.1,
+      jumpBtn.x, jumpBtn.y, jumpBtn.r
+    );
+    if (jumpArmed) {
+      body.addColorStop(0, '#b7f4ff'); body.addColorStop(0.55, '#328fb0'); body.addColorStop(1, '#123d5a');
+    } else if (available) {
+      body.addColorStop(0, '#3c4a50'); body.addColorStop(0.6, '#1d2830'); body.addColorStop(1, '#0d141a');
+    } else {
+      body.addColorStop(0, '#252b30'); body.addColorStop(0.6, '#171c20'); body.addColorStop(1, '#0b0e11');
+    }
+    ctx.beginPath();
+    ctx.arc(jumpBtn.x, jumpBtn.y, jumpBtn.r, 0, Math.PI * 2);
+    ctx.fillStyle = body;
+    ctx.fill();
+    if (active || jumpArmed) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(jumpBtn.x, jumpBtn.y, jumpBtn.r - 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    drawOutlinedText('跳躍', jumpBtn.x, jumpBtn.y - 12, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: active || jumpArmed ? UI.parchment : 'rgba(226,232,240,0.45)', lineWidth: 3.5
+    });
+    drawOutlinedText('JUMP', jumpBtn.x, jumpBtn.y + 2, {
+      font: `900 8px ${UI_FONT_HEAVY}`, color: active || jumpArmed ? '#b8f3ff' : 'rgba(226,232,240,0.35)', lineWidth: 3
+    });
+    drawOutlinedText(jumpArmed ? 'READY' : me.moveLockTurns > 0 ? '封印' : available ? '1回' : '済', jumpBtn.x, jumpBtn.y + 17, {
+      font: `900 10px ${UI_FONT_HEAVY}`, color: active || jumpArmed ? '#8ee7ff' : 'rgba(226,232,240,0.45)', lineWidth: 3
     });
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
@@ -9095,10 +9308,12 @@
     }
     ctx.restore();
 
+    const exitButton = battleMode === 'free' ? menuSuspendFreeBtn : menuSuspendBtn;
     const items = [
-      [menuResumeBtn, 'ゲームに戻る', ''],
-      [menuSuspendBtn, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']
+      [menuResumeBtn, 'ゲームに戻る', '']
     ];
+    if (battleMode === 'free') items.push([menuRestartBtn, 'リスタート', '演習を最初からやり直します']);
+    items.push([exitButton, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']);
     for (const [b, label, sub] of items) {
       drawIronPlate(b.x, b.y, b.w, b.h, {
         cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
@@ -9285,6 +9500,7 @@
     drawTurnInfo();
     drawControlPanel();
     drawCameraSlider();
+    drawJumpButton();
     drawMoveButtons();
     drawFireButton();
     drawPullLine();
@@ -9521,7 +9737,17 @@
 
     if (menuOpen) {
       if (hitRect(p0, menuResumeBtn)) { menuOpen = false; return; }
-      if (hitRect(p0, menuSuspendBtn)) {
+      if (battleMode === 'free' && hitRect(p0, menuRestartBtn)) {
+        playUiSound();
+        menuOpen = false;
+        gamePhase = 'battle';
+        winStreak = 0;
+        runStats = { damageDealt: 0, shots: 0 };
+        resetMatch(false);
+        return;
+      }
+      const exitButton = battleMode === 'free' ? menuSuspendFreeBtn : menuSuspendBtn;
+      if (hitRect(p0, exitButton)) {
         if (isOnline()) {
           exitOnlineFromMenu();
           return;
@@ -9627,6 +9853,11 @@
         canvas.setPointerCapture(e.pointerId);
         return;
       }
+      if (me.jumpAvailable !== false && me.moveLockTurns <= 0 && Math.hypot(p0.x - jumpBtn.x, p0.y - jumpBtn.y) <= jumpBtn.r + 10) {
+        jumpArmed = !jumpArmed;
+        if (jumpArmed) pushFloatText(me.x, me.y - UNIT_RADIUS - 28, '着地後 移動不能 1ターン', '#8ee7ff', 16);
+        return;
+      }
       if (isSpecialReady(me) && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
         specialArmed = !specialArmed;
         return;
@@ -9660,6 +9891,7 @@
         const distance = Math.max(12, Math.hypot(b.x - a.x, b.y - a.y));
         const midpointX = (a.x + b.x) / 2;
         cameraZoom = clampCameraZoom(pinchState.startZoom * distance / pinchState.startDistance);
+        saveCameraZoom();
         cameraX = clampCameraX(pinchState.anchorWorldX - midpointX / cameraZoom);
         cameraTargetX = null;
       }
@@ -9777,12 +10009,14 @@
             netSend({
               t: 'fire', unitId: me.id, x: me.x, y: me.y,
               anchor: { x: aimState.anchor.x, y: aimState.anchor.y },
-              vx0, vy0, useSpecial: specialArmed, ...(actionId ? { actionId } : {})
+              vx0, vy0, useSpecial: specialArmed, useJump: jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0,
+              ...(actionId ? { actionId } : {})
             });
           }
-          launchShot(me, aimState.anchor, vx0, vy0, specialArmed);
+          launchShot(me, aimState.anchor, vx0, vy0, specialArmed, false, jumpArmed);
           runStats.shots++;
           specialArmed = false;
+          jumpArmed = false;
           awaitingResolve = true;
         }
       }
@@ -9853,6 +10087,7 @@
     turnCount = 0;
     turnOrder = units.map(u => u.id);
     activeIndex = 0;
+    for (const u of units) { u.jumpAvailable = true; u.jumpShot = false; }
     cpuMoveDir = 0;
     cpuMoveRemaining = 0;
     cpuPhase = 'aim';
@@ -9865,7 +10100,6 @@
     pendingShot = null;
     confirmDialog = null;
     cutIn = null;
-    cameraZoom = DEFAULT_CAMERA_ZOOM;
     focusCameraOn(localUnit().x, true);
     menuOpen = false;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
@@ -10076,6 +10310,10 @@
     let trailDirty = false;
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
+      const prevX = p.x;
+      const prevY = p.y;
+      p.prevX = prevX;
+      p.prevY = prevY;
       const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * p.windMul;
       p.vx += windAccel * dt;
       // gravityMulは0(無重力の電撃)を取り得るので、||でのフォールバックは使えない。
@@ -10135,7 +10373,9 @@
           if (u.id === p.owner) continue;
           const a = unitAnchor(u);
           if (Math.hypot(a.x - p.x, a.y - p.y) <= UNIT_HIT_RADIUS + p.radius) {
-            if (p.deathGateMarker) {
+            if (p.jump) {
+              teleportOwnerToImpact(p, p.x, p.y);
+            } else if (p.deathGateMarker) {
               spawnDeathGate(p, p.x, p.y);
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
@@ -10146,7 +10386,8 @@
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
             }
             if (p.lightning) spawnLightningRemnant(p);
-            projectiles.splice(i, 1);
+        teleportOwnerToImpact(p, p.x, p.y);
+        projectiles.splice(i, 1);
             hit = true;
             break;
           }
@@ -10158,7 +10399,9 @@
       // 地形グリッドには入れないため、落下中のキャラが空中障害物へ着地することはない。
       const obstacleHit = (p.fireworkShard || p.ignoreObstacles) ? null : hitArenaObstacle(p.x, p.y, p.radius);
       if (obstacleHit) {
-        if (p.deathGateMarker) {
+        if (p.jump) {
+          teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.deathGateMarker) {
           spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
@@ -10169,24 +10412,28 @@
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
         }
         triggerShake(2.5, 0.1);
+        teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
         projectiles.splice(i, 1);
         continue;
       }
 
       if (fireworkDue) {
         spawnFireworkBurst(p);
+        teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
         continue;
       }
 
       if (!p.pierce && isSolidAt(p.x, p.y)) {
-        if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
+        if (p.jump) teleportOwnerToImpact(p, p.x, p.y, true);
+        else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
         else if (p.firework) {
           explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
           spawnFireworkBurst(p);
         } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
         if (p.lightning) spawnLightningRemnant(p);
+        teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
       } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > VH + 60) {
         projectiles.splice(i, 1); // 画面外(誤爆なしで消滅)
@@ -10203,10 +10450,12 @@
     const me = localUnit();
     if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {
       const dist = Math.min(MOVE_SPEED * dt, me.fuel);
+      faceUnitTowardOpponent(me);
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, me.x + moveDir * dist));
       nx = limitMoveByClimb(me, nx);
       const moved = Math.abs(nx - me.x);
       me.x = nx;
+      faceAllUnitsTowardOpponents();
       me.fuel -= moved;
       followGroundOrFall(me);
       // 移動中は一定間隔で位置を配信する。移動は立派な戦略なので相手にも見せる。
@@ -10218,6 +10467,8 @@
       sendMoveUpdate(me);
     }
     updateRemoteWalk(dt);
+    // 移動完了後にも両者を再判定し、片方だけ古い向きが残らないようにする。
+    faceAllUnitsTowardOpponents();
 
     // CPU移動→思考→発射
     const cpuActor = activeUnit();
@@ -10225,6 +10476,7 @@
       if (cpuPhase === 'move') {
         if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpuActor.fuel > 0) {
           const dist = Math.min(MOVE_SPEED * dt, cpuActor.fuel, cpuMoveRemaining);
+          faceUnitTowardOpponent(cpuActor);
           let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, cpuActor.x + cpuMoveDir * dist));
           nx = limitMoveByClimb(cpuActor, nx);
           // 場外へ落ちる一歩は踏まない。踏みかけたらそこで移動を打ち切って狙いに移る。
@@ -10233,6 +10485,7 @@
           } else {
             const moved = Math.abs(nx - cpuActor.x);
             cpuActor.x = nx;
+            faceAllUnitsTowardOpponents();
             cpuActor.fuel -= moved;
             cpuMoveRemaining -= moved;
             followGroundOrFall(cpuActor);

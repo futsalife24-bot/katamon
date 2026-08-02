@@ -282,7 +282,7 @@ function check(name, value) {
   // 上の否定テストはどれも && の短絡で早期に false になるため、実際の座標判定まで到達しない。
   // 未定義の識別子(STAGE_H)を参照していても素通りし、fire だけが永久に届かないバグを見逃した。
   // 正常な fire を1本通すこと。ここが本番で最初に流れるパケットそのものになる。
-  const validFire = { v: 2, from: 'peer', t: 'fire', sentAt: Date.now(), actionId, unitId: 'e1', x: 1224, y: 512, anchor: { x: 1224, y: 512 }, vx0: -320, vy0: -460, useSpecial: false };
+  const validFire = { v: 2, from: 'peer', t: 'fire', sentAt: Date.now(), actionId, unitId: 'e1', x: 1224, y: 512, anchor: { x: 1224, y: 512 }, vx0: -320, vy0: -460, useSpecial: false, useJump: false };
   const validV3Fire = { ...validFire, v: 3, seat: 'e1', roundId };
   // 端末が古い版を掴んでいるのか本当に不具合なのかを切り分けるため、タイトルへ build 番号を出している。
   // sw.js のキャッシュ版数とずれると、その表示が当てにならなくなる。
@@ -686,6 +686,13 @@ function check(name, value) {
     && htmlText.includes('function setCameraZoomFromSlider(point)')
     && htmlText.includes("if (inputMode === 'cameraSlider') {")
     && htmlText.includes('drawCameraSlider();'));
+  const resetMatchSrc = htmlText.match(/function resetMatch\(carrySpecialCharge\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  check('the battle view distance is remembered instead of resetting on a new turn or rematch',
+    htmlText.includes("const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';")
+    && htmlText.includes('function loadCameraZoom()')
+    && htmlText.includes('function saveCameraZoom()')
+    && htmlText.includes('let cameraZoom = loadCameraZoom();')
+    && !resetMatchSrc.includes('cameraZoom = DEFAULT_CAMERA_ZOOM;'));
   check('players choose on the result screen, not in a popup that hides the outcome',
     htmlText.includes('function firebaseResultChoiceVisible()')
     && htmlText.includes("drawResultButton(continueBtn, 'このまま再戦'")
@@ -794,7 +801,7 @@ function check(name, value) {
     msg['.write'].includes("newData.child('t').val() !== 'settings'") && msg['.write'].includes("newData.child('seat').val() === 'p1'"));
   check('rules retain actionId and payload limits for fire/state/result',
     msg.$other['.validate'] === false && msg.actionId['.validate'].includes('{48}')
-    && msg['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','actionId'])")
+    && msg['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','useJump','actionId'])")
     && msg['.validate'].includes("'state' && newData.hasChildren(['snap','actionId','unitId'])")
     && msg['.validate'].includes("'result' && newData.hasChildren(['winner','reason','units','actionId','unitId'])"));
   check('rules force unitId to match the sender seat',

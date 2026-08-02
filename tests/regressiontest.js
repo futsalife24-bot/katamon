@@ -90,7 +90,7 @@ let played;
 try { played = playMatch(60000); } catch (e) { threw = e; }
 check('1試合を通して例外が出ない', !threw, threw && (threw.message + '\n' + threw.stack.split('\n')[1]));
 check('試合が決着する', kt.state().matchOver === true, JSON.stringify(kt.state()));
-check('winner が陣営名', ['player', 'cpu'].includes(kt.state().winner), String(kt.state().winner));
+check('winner が陣営名または引き分け', ['player', 'cpu', 'draw'].includes(kt.state().winner), String(kt.state().winner));
 check('自分も撃っている', played && played.myShots > 0, played && String(played.myShots));
 // 連勝は「席」ではなく「プレイヤー陣営」の記録。席を e1 に移しても team 基準のままなのが正。
 // (オンライン対人戦は連勝・ランキングに含めない方針なので、Stage 3 では別途この経路を通さない)
