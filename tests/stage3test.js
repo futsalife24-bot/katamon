@@ -293,6 +293,33 @@ function check(name, value) {
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
 
+  // 音源はURL末尾の ?v=N がキャッシュの鍵になる。同じURLのまま中身を差し替えると、
+  // ブラウザは保存済みの古い曲を鳴らし続ける。v98で bonus-bgm-2 をCeltic版へ替えた際に
+  // ?v=1 のままだったため、2曲目に旧Hard Rock版が鳴る不具合が実機で出た。
+  // 中身のハッシュとURLを一緒に固定し、片方だけ変えたらここで気づけるようにする。
+  // 音源を差し替える時は、このハッシュと index.html の ?v=N を必ず両方更新すること。
+  const crypto = require('crypto');
+  const fileHash = name => crypto.createHash('md5')
+    .update(require('fs').readFileSync(require('path').join(__dirname, '..', name)))
+    .digest('hex').slice(0, 12);
+  const htmlForAudio = readRepoFile('index.html');
+  const BONUS_TRACK_PINS = [
+    { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
+    { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },
+    { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3?v=1' },
+    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3?v=1' }
+  ];
+  const pinNg = [];
+  for (const pin of BONUS_TRACK_PINS) {
+    const actual = fileHash(pin.file);
+    if (actual !== pin.hash) pinNg.push(`${pin.file} の中身が変わっている(${actual})のに ?v= が据え置き`);
+    if (!htmlForAudio.includes(`'${pin.url}'`)) pinNg.push(`${pin.url} が index.html に無い`);
+  }
+  check('bonus BGM files and their cache-busting URLs stay in sync',
+    pinNg.length === 0, pinNg.join(' / '));
+  const bonusUrls = (htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3\?v=\d+/g) || []);
+  check('every bonus BGM URL is unique', new Set(bonusUrls).size === bonusUrls.length, bonusUrls.join(', '));
+
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
   check('Firebase v3 fire keeps the v2 payload checks behind the required round envelope',
     h.validateFirebaseMessage(validV3Fire)

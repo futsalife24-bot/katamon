@@ -105,8 +105,11 @@ check('風は決着後も有効値', Number.isFinite(kt.wind().strength) && Math
 
 // ---- 2. 中断→再開のラウンドトリップ ----
 kt.startBattle();
-// 地形を削ってから保存しないと、破壊状態の復元を確かめられない
-for (let i = 0; i < 900 && !kt.state().matchOver; i++) {
+// 地形を削ってから保存しないと、破壊状態の復元を確かめられない。
+// 弾が画面外へ飛ぶとクレーターができないので、フレーム数を固定にすると、まれに
+// 1つも削れないまま抜けて次の検査が落ちる(30回に1回程度で再現)。
+// 従来どおり900フレームは回したうえで、まだ削れていなければ削れるまで撃ち続ける。
+for (let i = 0; i < 5000 && !kt.state().matchOver && (i < 900 || kt.craters() === 0); i++) {
   const hud = kt.hud();
   if (hud.fireActive) {
     const fb = kt.fireBtn();

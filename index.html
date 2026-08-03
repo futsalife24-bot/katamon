@@ -389,7 +389,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v98';
+  const BUILD_ID = 'v99';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -711,8 +711,12 @@
   // 再生時のピークはいずれも0.35前後で、歪む(1.0)までは十分な余裕がある。
   const BONUS_BGM_TRACKS = [
     null,
+    // URL末尾の ?v=N はキャッシュの鍵。同じURLのまま中身を差し替えると、ブラウザは
+    // 保存済みの古い曲を鳴らし続ける。実際にv98で bonus-bgm-2 をCeltic版へ差し替えた際、
+    // ?v=1 のままだったため2曲目に旧Hard Rock版が鳴っていた。
+    // ファイルの中身を入れ替えたら必ずここの番号も上げること。
     { src: 'assets/bonus-bgm-1.mp3?v=1', volume: 0.53 },
-    { src: 'assets/bonus-bgm-2.mp3?v=1', volume: 0.56 },
+    { src: 'assets/bonus-bgm-2.mp3?v=2', volume: 0.56 },
     { src: 'assets/bonus-bgm-3.mp3?v=1', volume: 0.45 },
     { src: 'assets/bonus-bgm-4.mp3?v=1', volume: 0.54 }
   ];
