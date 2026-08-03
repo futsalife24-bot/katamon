@@ -120,6 +120,7 @@ const HOOK = `
     modeLabelY: () => TITLE_MODE_LABEL_Y,
     titleCpuBtn: () => ({ ...titleVsCpuBtn }),
     viewW: () => VW,
+    viewH: () => VH,
     setHasSave: (v) => { hasSuspendedSave = !!v; },
     requestNewMatch: (k) => requestNewMatch(k),
     resolveNewMatchConfirm: (a) => resolveNewMatchConfirm(a),
@@ -165,6 +166,14 @@ const HOOK = `
       onlineLogMax: () => ONLINE_LOG_MAX
     }),
     setPhase: (p) => { gamePhase = p; },
+    // おまけ曲(タイトルの「おまけ」ボタン)
+    bonusBtn: () => ({ ...titleBonusBtn }),
+    titleBtnRects: () => ({
+      cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn }, free: { ...titleFreeBtn },
+      bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
+    }),
+    bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
+    syncBgm: () => syncBgm(),
     controls: () => units.map(u => u.id + ':' + u.control).join(','),
     unitState: () => units.map(u => ({ id: u.id, hp: u.hp, x: Math.round(u.x * 100) / 100, ch: u.character, g: u.grounded })),
     canvas
@@ -235,7 +244,7 @@ function makeElement(tag) {
 const elements = new Map();
 const gameCanvas = makeCanvas();
 elements.set('game', gameCanvas);
-for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel']) {
+for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
 

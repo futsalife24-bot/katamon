@@ -429,6 +429,50 @@ check('頂点が近すぎる水平撃ちは空中で開かない(自爆しない
   craterRadii(fwFlat.craters).some(r => r >= MAIN_BLAST_MIN_R),
   `半径=${craterRadii(fwFlat.craters).join(',')}`);
 
+// ===== タイトルの「おまけ」ボタン =====
+// 押すたび 1曲目 → 2曲目 → 停止 を繰り返す。BGMの切り替えは syncBgm へ一本化して
+// あるので、ここでも「いま鳴るべき曲(desired)」が正しく変わることで確認する。
+const btns = kt.titleBtnRects();
+function rectsOverlap(a, b) {
+  return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
+}
+const otherTitleBtns = [btns.cpu, btns.online, btns.free, btns.ranking, btns.update];
+check('おまけボタンが他のタイトルボタンと重ならない',
+  otherTitleBtns.every(b => !rectsOverlap(btns.bonus, b)),
+  JSON.stringify(btns.bonus));
+check('おまけボタンが画面内に収まっている',
+  btns.bonus.y - btns.bonus.h / 2 > 0 && btns.bonus.y + btns.bonus.h / 2 < kt.viewH(),
+  JSON.stringify(btns.bonus));
+
+kt.setPhase('title');
+const bonusBtn = kt.bonusBtn();
+function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
+
+check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
+tapBonus();
+check('1回押すと1曲目を選ぶ', kt.bgm().bonusTrack === 1, String(kt.bgm().bonusTrack));
+check('1曲目を選ぶと鳴らすべき曲がおまけになる', kt.bgm().desired === 'bonus', kt.bgm().desired);
+tapBonus();
+check('2回押すと2曲目を選ぶ', kt.bgm().bonusTrack === 2, String(kt.bgm().bonusTrack));
+check('2曲目でも鳴らすべき曲はおまけのまま', kt.bgm().desired === 'bonus', kt.bgm().desired);
+tapBonus();
+check('3回押すと停止してタイトル曲へ戻る',
+  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
+  `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+
+// 対戦へ移ったら選択ごと解除する。次にタイトルへ戻った時に勝手に鳴り出さないため。
+tapBonus();
+check('対戦前はおまけ曲を選んでいる', kt.bgm().bonusTrack === 1, String(kt.bgm().bonusTrack));
+kt.setPhase('battle');
+kt.syncBgm();
+check('対戦へ移るとおまけ曲の選択が解除される', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
+check('対戦中はステージ曲が鳴るべき曲になる', kt.bgm().desired === 'stage', kt.bgm().desired);
+kt.setPhase('title');
+kt.syncBgm();
+check('タイトルへ戻ってもおまけ曲は鳴り出さない',
+  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
+  `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

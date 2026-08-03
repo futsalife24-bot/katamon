@@ -345,6 +345,8 @@
 </audio>
 <audio id="stageBgm" preload="none"></audio>
 <audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3?v=1"></audio>
+<!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
+<audio id="bonusBgm" preload="none" loop></audio>
 
 <script>
 (() => {
@@ -387,7 +389,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v96';
+  const BUILD_ID = 'v97';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -462,6 +464,7 @@
   const TITLE_BGM_BASE_VOLUME = 0.34;
   const STAGE_BGM_BASE_VOLUME = 0.28;
   const ROOM_BGM_BASE_VOLUME = 0.34; // まずタイトル曲と同じ値。実機で聴いて必要なら調整する。
+  const BONUS_BGM_BASE_VOLUME = 0.34; // おまけ曲。タイトル曲と同じ基準にする。
   const STAGE_BGM_DUCK_RATIO = 0.39; // カットイン等で一時的に下げる割合
   const SFX_MASTER_BASE = 0.78;
   let soundOn = true;
@@ -503,19 +506,22 @@
     const bgmGain = volumeCurve(bgmVolume) * on;
     const sfxGain = volumeCurve(sfxVolume) * on;
     const duck = stageBgmDucked ? STAGE_BGM_DUCK_RATIO : 1;
-    if (titleBgmGain && stageBgmGain && roomBgmGain) {
+    if (titleBgmGain && stageBgmGain && roomBgmGain && bonusBgmGain) {
       // WebAudio経由に切り替わっている場合(iOS等)は、GainNodeが最終音量を決める。
       // 要素側は素通し(1.0)に固定しないと、切替前の音量が残って二重に減衰してしまう。
       titleBgm.volume = 1;
       stageBgm.volume = 1;
       roomBgm.volume = 1;
+      bonusBgm.volume = 1;
       titleBgmGain.gain.value = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgmGain.gain.value = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
       roomBgmGain.gain.value = ROOM_BGM_BASE_VOLUME * bgmGain;
+      bonusBgmGain.gain.value = BONUS_BGM_BASE_VOLUME * bgmGain;
     } else {
       titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
       roomBgm.volume = ROOM_BGM_BASE_VOLUME * bgmGain;
+      bonusBgm.volume = BONUS_BGM_BASE_VOLUME * bgmGain;
     }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
@@ -526,7 +532,8 @@
   let titleBgmGain = null;
   let stageBgmGain = null;
   let roomBgmGain = null;
-  let bgmSourceNodes = { title: null, stage: null, room: null };
+  let bonusBgmGain = null;
+  let bgmSourceNodes = { title: null, stage: null, room: null, bonus: null };
   let mediaVolumeSupported = true;
   // iOS/iPadOSは volume を代入しても音量に反映されない。
   // 厄介なことにバージョンによっては「値は保持して読み戻せるが音は変わらない」ため、
@@ -556,7 +563,7 @@
   // BGMをWebAudioへ繋ぎ直す。ユーザー操作の中から呼ぶこと(iOSはAudioContextの作成/再開に操作が要る)。
   function ensureBgmGraph() {
     if (mediaVolumeSupported) return;            // 通常の端末は従来経路のまま触らない
-    if (titleBgmGain && stageBgmGain && roomBgmGain) {
+    if (titleBgmGain && stageBgmGain && roomBgmGain && bonusBgmGain) {
       // 構築済みでも、復帰直後などにcontextが止まっていると無音になる。
       // WebAudio経由の時はBGMの生命線なので、操作のたびに起こしておく。
       if (audioCtx && audioCtx.state === 'suspended') {
@@ -570,6 +577,7 @@
       if (!titleBgmGain) { titleBgmGain = ac.createGain(); titleBgmGain.connect(ac.destination); }
       if (!stageBgmGain) { stageBgmGain = ac.createGain(); stageBgmGain.connect(ac.destination); }
       if (!roomBgmGain) { roomBgmGain = ac.createGain(); roomBgmGain.connect(ac.destination); }
+      if (!bonusBgmGain) { bonusBgmGain = ac.createGain(); bonusBgmGain.connect(ac.destination); }
       // createMediaElementSourceは1要素につき1回しか呼べないので、個別に記録しておく
       if (!bgmSourceNodes.title) {
         bgmSourceNodes.title = ac.createMediaElementSource(titleBgm);
@@ -583,6 +591,10 @@
         bgmSourceNodes.room = ac.createMediaElementSource(roomBgm);
         bgmSourceNodes.room.connect(roomBgmGain);
       }
+      if (!bgmSourceNodes.bonus) {
+        bgmSourceNodes.bonus = ac.createMediaElementSource(bonusBgm);
+        bgmSourceNodes.bonus.connect(bonusBgmGain);
+      }
       applyAudioVolumes();
     } catch (err) {
       // 途中で失敗しても再生自体は続けたいので、以後は諦めて従来経路に任せる
@@ -590,6 +602,7 @@
       titleBgmGain = null;
       stageBgmGain = null;
       roomBgmGain = null;
+      bonusBgmGain = null;
     }
   }
 
@@ -687,7 +700,14 @@
   // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
   const roomBgm = document.getElementById('roomBgm');
   roomBgm.volume = ROOM_BGM_BASE_VOLUME;
-  // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgm/roomBgmが揃った時点)。
+  // タイトルの「おまけ」ボタンで鳴らす曲。押すたびに 1曲目 → 2曲目 → 停止 と切り替える。
+  // srcは押されるまで入れない。タイトル表示のために数MBを先読みさせないため。
+  const bonusBgm = document.getElementById('bonusBgm');
+  bonusBgm.volume = BONUS_BGM_BASE_VOLUME;
+  const BONUS_BGM_SOURCES = [null, 'assets/bonus-bgm-1.mp3?v=1', 'assets/bonus-bgm-2.mp3?v=1'];
+  let bonusBgmTrack = 0;        // 0=止まっている / 1,2=その曲を選んでいる
+  let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
+  // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgm/roomBgm/bonusBgmが揃った時点)。
   detectMediaVolumeSupport();
   applyAudioVolumes();
   function playStageBgm(themeKey, restart = false) {
@@ -749,6 +769,25 @@
     roomBgm.pause();
     if (reset && roomBgm.readyState > HTMLMediaElement.HAVE_NOTHING) roomBgm.currentTime = 0;
   }
+  // おまけ曲。ループはloop属性任せ。曲を切り替える時だけsrcを差し替える。
+  function playBonusBgm() {
+    if (!bgmAudible() || !bonusBgmTrack) return;
+    const src = BONUS_BGM_SOURCES[bonusBgmTrack];
+    if (!src) return;
+    if (bonusBgmLoadedTrack !== bonusBgmTrack) {
+      bonusBgm.pause();
+      bonusBgm.src = src;   // ここで初めてダウンロードが始まる
+      bonusBgmLoadedTrack = bonusBgmTrack;
+      bonusBgm.load();
+    }
+    const result = bonusBgm.play();
+    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = bonusBgm; });
+  }
+  function stopBonusBgm(reset = true) {
+    bonusBgm.pause();
+    if (reset && bonusBgm.readyState > HTMLMediaElement.HAVE_NOTHING) bonusBgm.currentTime = 0;
+  }
   // ===== BGMディレクター(v57) =====
   // 遷移箇所は個別のplay/stopを呼ばず、必ずここ(syncBgm)を通す。
   // 同時に2曲が鳴る状態を構造的に不可能にするための一本化。
@@ -768,6 +807,8 @@
     // ルーム曲を挟まずステージ曲を続ける。
     if (roomScreenOpen() && !(online && online.autoStartNextRound)) return 'room';
     if (gamePhase === 'battle') return 'stage';
+    // おまけ曲を選んでいる間はタイトル曲の代わりに鳴らす。
+    if (bonusBgmTrack) return 'bonus';
     return 'title'; // title/select/フリー設定/ランキングなど、戦闘以外は全部タイトル曲
   }
   // いま実際に鳴っている(とみなす)側を返す。タイトル曲のループ待ちの無音区間も「鳴っている」
@@ -775,25 +816,34 @@
   function currentBgmKind() {
     if (!stageBgm.paused) return 'stage';
     if (!roomBgm.paused) return 'room';
+    if (!bonusBgm.paused) return 'bonus';
     if (!titleBgm.paused || titleBgmLoopTimer !== null) return 'title';
     return 'none';
   }
   // opts.restartStage === true の時だけステージ曲を頭から鳴らし直す(戦闘開始・再戦がこれに当たる)。
   function syncBgm(opts) {
     const restartStage = !!(opts && opts.restartStage);
+    // おまけ曲はタイトル周辺だけの機能。対戦やルームへ移ったら選択ごと解除して、
+    // 次にタイトルへ戻った時に勝手に鳴り出さないようにする。
+    // 非表示・ミュートでは解除しない(復帰したら続きから鳴らしたいため)。
+    if (bonusBgmTrack && (gamePhase === 'battle' || roomScreenOpen())) bonusBgmTrack = 0;
     const desired = desiredBgm();
     const current = currentBgmKind();
     if (desired === current) {
       if (desired === 'stage' && restartStage) playStageBgm(currentThemeKey, true);
+      // 同じ「おまけ」でも曲が変わっていれば差し替える(1曲目→2曲目)。
+      if (desired === 'bonus' && bonusBgmLoadedTrack !== bonusBgmTrack) playBonusBgm();
       return;
     }
     // 鳴っている方を止めてから目的の曲を鳴らす。無音への移行(ミュート/非表示)は
     // 復帰時に途中から続けられるよう currentTime をリセットしない。
     if (current === 'stage') stopStageBgm(desired !== 'none');
     else if (current === 'room') stopRoomBgm(desired !== 'none');
+    else if (current === 'bonus') stopBonusBgm(desired !== 'none');
     else if (current === 'title') stopTitleBgm(desired !== 'none');
     if (desired === 'stage') playStageBgm(currentThemeKey, restartStage);
     else if (desired === 'room') playRoomBgm();
+    else if (desired === 'bonus') playBonusBgm();
     else if (desired === 'title') startTitleBgm();
   }
 
@@ -2978,6 +3028,8 @@
   let battleMode = 'normal'; // 'normal' | 'free'
   const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
   const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
+  // おまけ曲の再生ボタン。演習(下端789)とRANKING(上端835)の隙間へ収める。
+  const titleBonusBtn = { x: VW / 2, y: 812, w: 382, h: 36 };
   // ランキングは対戦モードではないので、2つのモードボタンより控えめな細い帯にする。
   const titleRankingBtn = { x: VW / 2, y: 856, w: 382, h: 42 };
   const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };
@@ -5633,6 +5685,16 @@
     // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
     drawSuspendedSaveBubble();
     ctx.restore();
+
+    drawIronPlate(titleBonusBtn.x, titleBonusBtn.y, titleBonusBtn.w, titleBonusBtn.h, {
+      cut: 9, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 2.6
+    });
+    drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
+      font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
+    });
+    drawOutlinedText(bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
+    });
 
     drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
       cut: 10, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 3
@@ -9715,6 +9777,13 @@
       } else if (hitRect(p0, titleOnlineBtn)) {
         playUiSound();
         openOnlineLobby();
+      } else if (hitRect(p0, titleBonusBtn)) {
+        playUiSound();
+        // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
+        ensureBgmGraph();
+        // 押すたび 1曲目 → 2曲目 → 停止(タイトル曲へ戻る) を繰り返す。
+        bonusBgmTrack = (bonusBgmTrack + 1) % BONUS_BGM_SOURCES.length;
+        syncBgm();
       } else if (hitRect(p0, titleRankingBtn)) {
         playUiSound();
         gamePhase = 'ranking';
