@@ -389,7 +389,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v97';
+  const BUILD_ID = 'v98';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -464,7 +464,8 @@
   const TITLE_BGM_BASE_VOLUME = 0.34;
   const STAGE_BGM_BASE_VOLUME = 0.28;
   const ROOM_BGM_BASE_VOLUME = 0.34; // まずタイトル曲と同じ値。実機で聴いて必要なら調整する。
-  const BONUS_BGM_BASE_VOLUME = 0.34; // おまけ曲。タイトル曲と同じ基準にする。
+  // おまけ曲の既定音量。曲ごとの実測値からBONUS_BGM_TRACKS側で個別に上書きする。
+  const BONUS_BGM_BASE_VOLUME = 0.52;
   const STAGE_BGM_DUCK_RATIO = 0.39; // カットイン等で一時的に下げる割合
   const SFX_MASTER_BASE = 0.78;
   let soundOn = true;
@@ -516,12 +517,12 @@
       titleBgmGain.gain.value = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgmGain.gain.value = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
       roomBgmGain.gain.value = ROOM_BGM_BASE_VOLUME * bgmGain;
-      bonusBgmGain.gain.value = BONUS_BGM_BASE_VOLUME * bgmGain;
+      bonusBgmGain.gain.value = bonusBgmBaseVolume() * bgmGain;
     } else {
       titleBgm.volume = TITLE_BGM_BASE_VOLUME * bgmGain;
       stageBgm.volume = STAGE_BGM_BASE_VOLUME * bgmGain * duck;
       roomBgm.volume = ROOM_BGM_BASE_VOLUME * bgmGain;
-      bonusBgm.volume = BONUS_BGM_BASE_VOLUME * bgmGain;
+      bonusBgm.volume = bonusBgmBaseVolume() * bgmGain;
     }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
@@ -704,9 +705,23 @@
   // srcは押されるまで入れない。タイトル表示のために数MBを先読みさせないため。
   const bonusBgm = document.getElementById('bonusBgm');
   bonusBgm.volume = BONUS_BGM_BASE_VOLUME;
-  const BONUS_BGM_SOURCES = [null, 'assets/bonus-bgm-1.mp3?v=1', 'assets/bonus-bgm-2.mp3?v=1'];
-  let bonusBgmTrack = 0;        // 0=止まっている / 1,2=その曲を選んでいる
+  // 曲ごとに録音レベルが違う(実測で-16.8〜-18.7dBFS)ので、体感音量が揃うよう個別に
+  // 基準音量を持たせる。水準はタイトル曲より約2dB大きいところに合わせた。
+  // 聴かせるための機能なので、背景として流すタイトル曲より少し前へ出す。
+  // 再生時のピークはいずれも0.35前後で、歪む(1.0)までは十分な余裕がある。
+  const BONUS_BGM_TRACKS = [
+    null,
+    { src: 'assets/bonus-bgm-1.mp3?v=1', volume: 0.53 },
+    { src: 'assets/bonus-bgm-2.mp3?v=1', volume: 0.56 },
+    { src: 'assets/bonus-bgm-3.mp3?v=1', volume: 0.45 },
+    { src: 'assets/bonus-bgm-4.mp3?v=1', volume: 0.54 }
+  ];
+  let bonusBgmTrack = 0;        // 0=止まっている / 1〜4=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
+  function bonusBgmBaseVolume() {
+    const track = BONUS_BGM_TRACKS[bonusBgmTrack];
+    return track ? track.volume : BONUS_BGM_BASE_VOLUME;
+  }
   // 保存済みの音量設定をここで初回反映する(titleBgm/stageBgm/roomBgm/bonusBgmが揃った時点)。
   detectMediaVolumeSupport();
   applyAudioVolumes();
@@ -772,14 +787,15 @@
   // おまけ曲。ループはloop属性任せ。曲を切り替える時だけsrcを差し替える。
   function playBonusBgm() {
     if (!bgmAudible() || !bonusBgmTrack) return;
-    const src = BONUS_BGM_SOURCES[bonusBgmTrack];
-    if (!src) return;
+    const track = BONUS_BGM_TRACKS[bonusBgmTrack];
+    if (!track) return;
     if (bonusBgmLoadedTrack !== bonusBgmTrack) {
       bonusBgm.pause();
-      bonusBgm.src = src;   // ここで初めてダウンロードが始まる
+      bonusBgm.src = track.src;   // ここで初めてダウンロードが始まる
       bonusBgmLoadedTrack = bonusBgmTrack;
       bonusBgm.load();
     }
+    applyAudioVolumes();  // 曲ごとの基準音量へ切り替える
     const result = bonusBgm.play();
     const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
     promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = bonusBgm; });
@@ -9782,7 +9798,7 @@
         // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
         ensureBgmGraph();
         // 押すたび 1曲目 → 2曲目 → 停止(タイトル曲へ戻る) を繰り返す。
-        bonusBgmTrack = (bonusBgmTrack + 1) % BONUS_BGM_SOURCES.length;
+        bonusBgmTrack = (bonusBgmTrack + 1) % BONUS_BGM_TRACKS.length;
         syncBgm();
       } else if (hitRect(p0, titleRankingBtn)) {
         playUiSound();

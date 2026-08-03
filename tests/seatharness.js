@@ -173,6 +173,9 @@ const HOOK = `
       bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
     }),
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
+    bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
+    bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),
+    titleBgmBaseVolume: () => TITLE_BGM_BASE_VOLUME,
     syncBgm: () => syncBgm(),
     controls: () => units.map(u => u.id + ':' + u.control).join(','),
     unitState: () => units.map(u => ({ id: u.id, hp: u.hp, x: Math.round(u.x * 100) / 100, ch: u.character, g: u.grounded })),
