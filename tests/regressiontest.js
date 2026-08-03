@@ -37,8 +37,11 @@ check('デスゲートはDEAD LINEの下から固定射程',
   deathGate.range === 260 && deathGate.speed === 310 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.curvePower === 3 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
-check('死神は両陣営とも敵の方を向き、戦闘中だけ大きく表示する',
-  shinigami.facesLeft === true && shinigami.spriteScale === 1.35,
+// facesLeft は「元画像がどちら向きか」であって「敵を向くか」ではない。敵の方を向くことは
+// 後段の向き検査(全キャラ・左右両配置)で確認している。ここは画像を差し替えた時に
+// 設定の追随漏れへ気づくための固定。2026-08-03に右向きの絵へ差し替えたため false。
+check('死神は右向きの元画像で、戦闘中だけ大きく表示する',
+  !shinigami.facesLeft && shinigami.spriteScale === 1.35,
   JSON.stringify(shinigami));
 kt.startBattle('shinigami');
 const cratersBeforeDeathGate = kt.craters();
@@ -346,6 +349,16 @@ for (const key of kt.chars()) {
   }
 }
 check('左向き素材のキャラが検査対象に含まれている', facesLeftChecked > 0, `該当=${facesLeftChecked}体`);
+
+// 「どのキャラの元画像が左向きか」を固定しておく。ここが絵と食い違うとそのキャラだけ
+// 相手に背を向ける。絵と設定が合っているかは自動では判定できない(人の目でしか分からない)
+// ので、せめて設定が意図せず変わったことに気づけるようにする。
+// 画像を差し替えた時は、実機で向きを確認したうえでこの一覧も更新すること。
+const EXPECTED_LEFT_FACING = ['sumoeru', 'doRednote', 'akuma', 'kishi', 'neko'];
+const actualLeftFacing = kt.chars().filter(k => kt.character(k).facesLeft);
+check('左向き素材として登録されているキャラの一覧が変わっていない',
+  actualLeftFacing.join(',') === EXPECTED_LEFT_FACING.join(','),
+  `実際=[${actualLeftFacing.join(',')}] 期待=[${EXPECTED_LEFT_FACING.join(',')}]`);
 check('全キャラが左右どちらに居ても相手の方を向く', facingNg.length === 0,
   `ズレ=${facingNg.slice(0, 8).join(', ')}${facingNg.length > 8 ? ` ほか${facingNg.length - 8}件` : ''}`);
 
@@ -372,23 +385,31 @@ function craterRadii(craterString) {
 
 kt.startBattle('sumoeru');
 kt.disableCpuForTest();
-kt.setTerrain('rolling');
-kt.setCharactersForTest('sumoeru', 'sumoeru');
-kt.fillCharges();
-kt.placeOnGround('p1', Math.round(kt.stageW() * 0.25));
-kt.placeOnGround('e1', Math.round(kt.stageW() * 0.75));
-const fireworkSnap = kt.snapshot();
 
 // 上へ大きく撃つ → 頂点で空中炸裂する(本体の爆発は起きず、拡散弾だけ)
 const upShot = () => kt.fireForTest(300, -520, { unitId: 'p1', useSpecial: true });
+// 地形はランダムで、上空に浮島が生成されると頂点へ届く前に着弾してしまう。
+// 空が開けている地形を引くまで作り直す。空中炸裂しない実装では何度作り直しても
+// 条件を満たせないので、この用意が失敗すること自体で退行を検知できる。
+let fireworkSnap = null;
+for (let attempt = 0; attempt < 20 && !fireworkSnap; attempt++) {
+  kt.setTerrain('rolling');
+  kt.setCharactersForTest('sumoeru', 'sumoeru');
+  kt.fillCharges();
+  kt.placeOnGround('p1', Math.round(kt.stageW() * 0.25));
+  kt.placeOnGround('e1', Math.round(kt.stageW() * 0.75));
+  const probe = kt.snapshot();
+  const radii = craterRadii(runShotWithStep(1 / 60, probe, upShot, 6).craters);
+  if (radii.length > 0 && radii.every(r => r < MAIN_BLAST_MIN_R)) fireworkSnap = probe;
+}
+check('上へ撃った花火は空中で開く(本体の爆発が起きない)', fireworkSnap !== null,
+  '20回地形を作り直しても空中炸裂しなかった');
+if (!fireworkSnap) fireworkSnap = kt.snapshot();
 const fw60 = runShotWithStep(1 / 60, fireworkSnap, upShot, 6);
 const fw120 = runShotWithStep(1 / 120, fireworkSnap, upShot, 6);
 const fw30 = runShotWithStep(1 / 30, fireworkSnap, upShot, 6);
 check('花火が炸裂して地形を削っている', craterRadii(fw60.craters).length > 0,
   `craters=${craterRadii(fw60.craters).length}`);
-check('上へ撃った花火は空中で開く(本体の爆発が起きない)',
-  craterRadii(fw60.craters).every(r => r < MAIN_BLAST_MIN_R),
-  `半径=${craterRadii(fw60.craters).join(',')}`);
 check('花火の炸裂位置が60fpsと120fpsで完全一致する', fw60.craters === fw120.craters,
   `60=${fw60.craters.slice(0, 90)} / 120=${fw120.craters.slice(0, 90)}`);
 check('花火の炸裂位置が60fpsと30fpsで完全一致する', fw60.craters === fw30.craters,
