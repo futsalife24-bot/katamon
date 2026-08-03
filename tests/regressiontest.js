@@ -448,17 +448,30 @@ kt.setPhase('title');
 const bonusBtn = kt.bonusBtn();
 function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
 
+const bonusTrackCount = kt.bonusTrackCount();
+check('おまけ曲が4曲登録されている', bonusTrackCount === 4, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
+// 曲数ぶん押すと1曲ずつ進み、最後にもう一度押すと停止してタイトル曲へ戻る。
+let cycleNg = [];
+for (let n = 1; n <= bonusTrackCount; n++) {
+  tapBonus();
+  if (kt.bgm().bonusTrack !== n) cycleNg.push(`${n}回目=${kt.bgm().bonusTrack}`);
+  if (kt.bgm().desired !== 'bonus') cycleNg.push(`${n}回目のdesired=${kt.bgm().desired}`);
+}
+check('押すたびに1曲ずつ進み、どの曲でもおまけ曲が鳴るべき曲になる',
+  cycleNg.length === 0, cycleNg.join(', '));
 tapBonus();
-check('1回押すと1曲目を選ぶ', kt.bgm().bonusTrack === 1, String(kt.bgm().bonusTrack));
-check('1曲目を選ぶと鳴らすべき曲がおまけになる', kt.bgm().desired === 'bonus', kt.bgm().desired);
-tapBonus();
-check('2回押すと2曲目を選ぶ', kt.bgm().bonusTrack === 2, String(kt.bgm().bonusTrack));
-check('2曲目でも鳴らすべき曲はおまけのまま', kt.bgm().desired === 'bonus', kt.bgm().desired);
-tapBonus();
-check('3回押すと停止してタイトル曲へ戻る',
+check('最後まで進めてもう一度押すと停止してタイトル曲へ戻る',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+// 曲ごとに録音レベルが違うので、体感音量を揃えるための基準音量を個別に持つ。
+const trackVolumes = kt.bonusTrackVolumes();
+check('全曲に基準音量が設定されている',
+  trackVolumes.length === bonusTrackCount && trackVolumes.every(v => v > 0 && v <= 1),
+  JSON.stringify(trackVolumes));
+check('おまけ曲はタイトル曲より大きい音量に設定されている',
+  trackVolumes.every(v => v > kt.titleBgmBaseVolume()),
+  `おまけ=${JSON.stringify(trackVolumes)} タイトル=${kt.titleBgmBaseVolume()}`);
 
 // 対戦へ移ったら選択ごと解除する。次にタイトルへ戻った時に勝手に鳴り出さないため。
 tapBonus();
