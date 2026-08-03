@@ -179,12 +179,37 @@ const HOOK = `
     syncBgm: () => syncBgm(),
     controls: () => units.map(u => u.id + ':' + u.control).join(','),
     unitState: () => units.map(u => ({ id: u.id, hp: u.hp, x: Math.round(u.x * 100) / 100, ch: u.character, g: u.grounded })),
+    // ---- 2vs2(Issue #20) ----
+    matchFormat: () => matchFormat,
+    is2v2: () => is2v2(),
+    formatOptions: () => FORMAT_OPTIONS.map(o => o.key),
+    freeRows: () => JSON.parse(JSON.stringify(freeRows)),
+    freeConfig: () => ({ ...freeModeConfig }),
+    setFreeFormat: (key) => {
+      freeModeConfig.formatIndex = Math.max(0, FORMAT_OPTIONS.findIndex(o => o.key === key));
+    },
+    changeFreeOption: (kind, dir) => changeFreeOption(kind, dir),
+    startFreeMatch: () => startFreeMatch(),
+    unitPanelLayout: () => unitPanelLayout().map(s => ({ id: s.unit.id, align: s.align, cardY: s.cardY, h: s.h })),
+    hudBottom: () => 116 + hudShift(),
+    minimapTop: () => minimapTop(),
+    turnBarTop: () => 94 + hudShift(),
+    cpuPickTarget: (id) => { const t = cpuPickTarget(unitById(id)); return t ? t.id : null; },
+    cpuFriendlyFireRadius: () => CPU_FRIENDLY_FIRE_RADIUS,
+    emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, unitById(ownerId), turns || 1),
+    saveSuspendedForTest: () => saveSuspendedMatch(),
+    loadSuspendedForTest: () => loadSuspendedMatch(),
+    applySnapshotForTest: (data) => applySnapshot(data),
+    buildSnapshotForTest: () => JSON.parse(JSON.stringify(buildSnapshot())),
     canvas
   };
   const __panelLog = [];
   { // drawUnitPanel を包んで「左右どちらにどのユニットが出たか」を記録する
     const orig = drawUnitPanel;
-    drawUnitPanel = function (u, edgeX, align) { __panelLog.push({ id: u.id, align }); return orig.apply(this, arguments); };
+    drawUnitPanel = function (u, edgeX, align, cardY, h) {
+      __panelLog.push({ id: u.id, align, edgeX, cardY, h });
+      return orig.apply(this, arguments);
+    };
   }
 `;
 const tail = '\n})();';

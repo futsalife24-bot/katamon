@@ -389,7 +389,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v99';
+  const BUILD_ID = 'v100';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2318,7 +2318,32 @@
     id: 'e1', team: 'cpu', control: 'cpu',
     character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
   };
+  // 2vs2の3人目・4人目。1vs1の間は units へ入れないので、既存の進行に一切影響しない。
+  const ally2 = {
+    x: STAGE_W * 0.3, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
+    color: '#8fd8ff', label: 'ALLY',
+    id: 'p2', team: 'player', control: 'cpu',
+    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+  };
+  const foe2 = {
+    x: STAGE_W * 0.7, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
+    color: '#ffa07a', label: 'CPU2',
+    id: 'e2', team: 'cpu', control: 'cpu',
+    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+  };
   const units = [player, cpu];
+  // '1v1' | '2v2'。units の中身を差し替えるだけで、進行ロジックには手を入れない。
+  // 手番は units の並びから作る(resetMatch の turnOrder)。味方と敵が交互になる順で入れる。
+  let matchFormat = '1v1';
+  function is2v2() { return matchFormat === '2v2'; }
+  function setMatchFormat(format) {
+    matchFormat = format === '2v2' ? '2v2' : '1v1';
+    units.length = 0;
+    if (matchFormat === '2v2') units.push(player, cpu, ally2, foe2);
+    else units.push(player, cpu);
+  }
 
   function unitById(id) {
     for (const u of units) if (u.id === id) return u;
@@ -2331,10 +2356,20 @@
   // 逆に「プレイヤー陣営」の話(キャラ選択・連勝・ランキング)は team で判断すること。
   let localUnitId = 'p1';
   function localUnit() { return unitById(localUnitId) || units[0]; }
+  // 「代表して1体だけ見せたい」場面(画面外インジケータ・結果画面・高低差表示)で使う敵。
+  // 2vs2では倒れた敵を指し続けないよう、生きている敵のうち一番近い方を選ぶ。
   function foeUnit() {
     const me = localUnit();
-    for (const u of units) if (u.team !== me.team) return u;
-    return units[1] || me;
+    let best = null;
+    let bestDist = Infinity;
+    for (const u of units) {
+      if (u.team === me.team) continue;
+      if (!best) best = u; // 全滅していても null を返さないための保険
+      if (u.hp <= 0) continue;
+      const d = Math.abs(u.x - me.x);
+      if (bestDist === Infinity || d < bestDist) { bestDist = d; best = u; }
+    }
+    return best || me;
   }
   // 「勝ったのはこの端末の陣営か」。winner は陣営名なので席を見て判定する。
   function localWon() { return winner != null && winner !== 'draw' && winner === localUnit().team; }
@@ -2449,6 +2484,30 @@
   function unitAnchor(u) {
     // キャラの中心(発射基点/爆風判定の基点)
     return { x: u.x, y: u.y };
+  }
+
+  // 開始位置の足場探し。狙った場所に地面が無ければ、そこから外側→内側の順に近い足場を探す。
+  // 闘技場マップは中央が奈落なので、2vs2の内側2体(p2/e2)を比率どおりに置くと開幕で落ちて即死する
+  // (実際に4体中2体が0秒で死んだ)。1vs1は今までどおり比率の場所がそのまま足場なので、
+  // 探索は1回目で当たり、開始位置は1pxも変わらない。
+  const SPAWN_SEARCH_RANGE = 280; // これ以上離すと陣営の左右が入れ替わりかねない
+  const SPAWN_MIN_GAP = 44;       // 味方同士が重なって出ないための最低間隔
+  function spawnXNear(desiredX, placed) {
+    const outward = desiredX < STAGE_W / 2 ? -1 : 1; // 奈落は中央側にあるので、まず外へ逃がす
+    const ok = x => {
+      if (x < UNIT_RADIUS || x > STAGE_W - UNIT_RADIUS) return false;
+      if (groundYAt(x) >= DEAD_LINE_Y) return false; // 地面が無い/死線より下の足場
+      for (const other of placed) if (Math.abs(other.x - x) < SPAWN_MIN_GAP) return false;
+      return true;
+    };
+    if (ok(desiredX)) return desiredX;
+    for (let offset = COL_W; offset <= SPAWN_SEARCH_RANGE; offset += COL_W) {
+      const first = desiredX + offset * outward;
+      if (ok(first)) return first;
+      const second = desiredX - offset * outward;
+      if (ok(second)) return second;
+    }
+    return desiredX; // どこにも足場が無い地形。従来どおり比率の位置へ置く
   }
 
   function initUnitOnGround(u) {
@@ -3074,20 +3133,29 @@
     { key: 'calm', name: '無風', sub: '風の影響なし', dir: 1, strength: 0 },
     { key: 'right', name: '右向き →', sub: '固定風・強さ60%', dir: 1, strength: 0.6 }
   ];
+  const FORMAT_OPTIONS = [
+    { key: '1v1', name: '1 vs 1', sub: '自分 vs CPU の一騎打ち' },
+    { key: '2v2', name: '2 vs 2', sub: '自分＋味方CPU vs 敵CPU2体' }
+  ];
   const freeModeConfig = {
     playerIndex: 0,
     cpuIndex: 1,
     terrainIndex: FREE_TERRAIN_OPTIONS.findIndex(option => option.key === 'tieredBasin'),
-    windIndex: 0
+    windIndex: 0,
+    formatIndex: 0
   };
+  // キャラの2行は画像があるので高いまま。地形/風/対戦方式は文字だけなので、
+  // 余っていた上下の余白を詰めて対戦方式の行ぶんの場所を作る(下のボタンはほぼ据え置き)。
   const freeRows = {
     player: { y: 220, h: 102 },
     cpu: { y: 344, h: 102 },
-    terrain: { y: 474, h: 86 },
-    wind: { y: 580, h: 86 }
+    terrain: { y: 452, h: 60 },
+    wind: { y: 540, h: 60 },
+    format: { y: 628, h: 52 }
   };
-  const freeStartBtn = { x: VW / 2, y: 712, w: 350, h: 64 };
-  const freeBackBtn = { x: VW / 2, y: 794, w: 210, h: 42 };
+  const freeStartBtn = { x: VW / 2, y: 716, w: 350, h: 64 };
+  const freeBackBtn = { x: VW / 2, y: 796, w: 210, h: 42 };
+  const FREE_HINT_Y = 846;
   const SELECT_WHEEL_CENTER_Y = 454;
   const SELECT_WHEEL_RADIUS_Y = 328;
   const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
@@ -3243,6 +3311,7 @@
     clearSuspendedMatch();
     hasSuspendedSave = false;
     battleMode = 'normal';
+    setMatchFormat('1v1'); // 通常のCPU戦は従来どおり1vs1
     player.character = key;
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
     // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
@@ -3261,7 +3330,8 @@
       player: CHARACTER_LIST.length,
       cpu: CHARACTER_LIST.length,
       terrain: FREE_TERRAIN_OPTIONS.length,
-      wind: WIND_OPTIONS.length
+      wind: WIND_OPTIONS.length,
+      format: FORMAT_OPTIONS.length
     };
     const property = `${kind}Index`;
     freeModeConfig[property] = wrapOptionIndex(freeModeConfig[property] + direction, lengths[kind]);
@@ -3272,8 +3342,15 @@
     clearSuspendedMatch();
     hasSuspendedSave = false;
     battleMode = 'free';
+    const format = (FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0]).key;
+    setMatchFormat(format);
     player.character = CHARACTER_LIST[freeModeConfig.playerIndex];
     cpu.character = CHARACTER_LIST[freeModeConfig.cpuIndex];
+    if (is2v2()) {
+      // 味方CPUと2体目の敵は選べないのでランダム。演習のたびに顔ぶれが変わる。
+      ally2.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+      foe2.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+    }
     // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
     gamePhase = 'battle';
     winStreak = 0;
@@ -3312,6 +3389,7 @@
       themeKey: currentThemeKey,
       parallaxSeed,
       simTimeMs, // 再開時に闘技場の障害物の揺れが飛ばないよう位相も持ち越す
+      matchFormat,
       units: units.map(serializeUnit),
       turnOrder: turnOrder.slice(),
       activeIndex, turnCount,
@@ -3331,6 +3409,7 @@
     ];
     data.turnOrder = ['p1', 'e1'];
     data.activeIndex = data.currentTurn === 'cpu' ? 1 : 0;
+    data.matchFormat = '1v1';
     data.v = SNAPSHOT_VERSION;
     return data;
   }
@@ -3348,8 +3427,12 @@
       const data = migrateSnapshot(JSON.parse(raw));
       // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
       if (!data || !Array.isArray(data.segments) || data.segments.length !== TERRAIN_COLS) return null;
-      // 人数が今のモデルと違うセーブは復元しない(2vs2導入時の食い違い対策)
-      if (!Array.isArray(data.units) || data.units.length !== units.length) return null;
+      // 人数が保存時の対戦形式と食い違うセーブは復元しない。
+      // タイトルへ戻ると units は1vs1へ戻るので、現在の units.length ではなく
+      // セーブ自身が名乗る形式と突き合わせる(そうしないと2vs2の中断が必ず捨てられる)。
+      const savedFormat = data.matchFormat === '2v2' ? '2v2' : '1v1';
+      const expectedCount = savedFormat === '2v2' ? 4 : 2;
+      if (!Array.isArray(data.units) || data.units.length !== expectedCount) return null;
       return data;
     } catch (err) { return null; }
   }
@@ -3362,11 +3445,15 @@
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
   function applySnapshot(data) {
     battleMode = data.battleMode === 'free' ? 'free' : 'normal';
+    // 人数を先に合わせる。units の中身を作り替えるので、以降のループより必ず前に置く。
+    // 旧セーブやv99以前のオンライン相手は matchFormat を持たないので1vs1として扱う。
+    setMatchFormat(data.matchFormat === '2v2' ? '2v2' : '1v1');
     if (data.freeModeConfig) {
       freeModeConfig.playerIndex = wrapOptionIndex(Number(data.freeModeConfig.playerIndex) || 0, CHARACTER_LIST.length);
       freeModeConfig.cpuIndex = wrapOptionIndex(Number(data.freeModeConfig.cpuIndex) || 0, CHARACTER_LIST.length);
       freeModeConfig.terrainIndex = wrapOptionIndex(Number(data.freeModeConfig.terrainIndex) || 0, FREE_TERRAIN_OPTIONS.length);
       freeModeConfig.windIndex = wrapOptionIndex(Number(data.freeModeConfig.windIndex) || 0, WIND_OPTIONS.length);
+      freeModeConfig.formatIndex = wrapOptionIndex(Number(data.freeModeConfig.formatIndex) || 0, FORMAT_OPTIONS.length);
     }
 
     loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
@@ -5781,10 +5868,35 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
+    // 背の低い行はラベルを「枠の上端」に置くと左右の矢印に潜り込んで文字が欠ける
+    // (STAGE FORM が「TAGE FORM」に見える状態を実際に作ってしまった)。
+    // そこで低い行は、ラベルを矢印の右へ逃がした専用の詰めたレイアウトで描く。
+    const compact = row.h < 80;
+    const labelX = compact ? 148 : 60;
+    const labelY = compact ? row.y - 12 : row.y - row.h / 2 + 20;
+
     ctx.textAlign = 'left';
     ctx.fillStyle = '#d39b4b';
     ctx.font = '900 10px "Arial Black", "Yu Gothic UI", sans-serif';
-    ctx.fillText(label, 60, row.y - row.h / 2 + 20);
+    ctx.fillText(label, labelX, labelY);
+
+    if (compact) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff5dc';
+      ctx.strokeStyle = '#070a0c';
+      ctx.lineWidth = 4;
+      ctx.font = '900 18px "Arial Black", "Yu Gothic UI", sans-serif';
+      ctx.strokeText(value, VW / 2, row.y + 6);
+      ctx.fillText(value, VW / 2, row.y + 6);
+      ctx.fillStyle = 'rgba(220,232,231,0.72)';
+      ctx.font = '10px "Yu Gothic UI", sans-serif';
+      ctx.fillText(sub, VW / 2, row.y + 21);
+      // 矢印は当たり判定の中心(row.y + 7)に合わせる。ここがずれると押した所と反応がずれる。
+      drawFreeArrow(48, row.y + 7, -1);
+      drawFreeArrow(VW - 48, row.y + 7, 1);
+      ctx.restore();
+      return;
+    }
 
     if (imageKey) {
       const img = charImages[imageKey];
@@ -5844,6 +5956,8 @@
     drawFreeRow(freeRows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     drawFreeRow(freeRows.terrain, 'STAGE FORM', terrain.name, terrain.sub, 'terrain');
     drawFreeRow(freeRows.wind, 'WIND SETTING', windOption.name, windOption.sub, 'wind');
+    const formatOption = FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0];
+    drawFreeRow(freeRows.format, 'MATCH FORMAT', formatOption.name, formatOption.sub, 'format');
 
     drawTitleModeButton(freeStartBtn, 'START BATTLE', 'この条件で演習開始', 'normal');
 
@@ -5859,7 +5973,7 @@
 
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
     ctx.font = '10px "Yu Gothic UI", sans-serif';
-    ctx.fillText('左右の矢印で条件を切り替え', VW / 2, 842);
+    ctx.fillText('左右の矢印で条件を切り替え', VW / 2, FREE_HINT_Y);
     ctx.restore();
   }
 
@@ -6330,9 +6444,10 @@
   function emitEmp(x, y, radius, owner, turns) {
     spawnEmpPulse(x, y, radius);
     triggerShake(2.5, 0.16);
-    const ownerTeam = teamOfOwner(owner);
+    // 通常の爆発(explodeAt)は昔から撃った本人も味方も巻き込む。電磁波だけが
+    // 敵専用だったため、2vs2で「味方に当たる/当たらない」が技ごとに変わってしまう。
+    // 判定の例外をなくし、当たった者は陣営に関係なく食らう形へ統一する。
     for (const u of units) {
-      if (u.team === ownerTeam) continue; // 味方は巻き込まない
       const dist = simDistance(u.x, u.y, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
@@ -6490,6 +6605,8 @@
   // 勝敗音は着弾と同時だと早すぎるので、決まり手の宣告に合わせて別途鳴らす。
   function applyStreakResult() {
     if (battleMode === 'free') return;
+    // 2vs2は味方CPUの働きで勝敗が変わるので、腕前の指標にならない。連勝もランキングも数えない。
+    if (is2v2()) return;
     // 対人戦は連勝にもランキングにも含めない(勝ちの譲り合いの温床になるため)。
     if (isOnline()) return;
     if (isDraw()) return;
@@ -6563,7 +6680,8 @@
     if (self.moveLockTurns > 0) return { dir: 0, distance: 0 };
     if (tier.name === 'low') return { dir: 0, distance: 0 }; // 1〜3連勝は動かない
 
-    const foe = nearestEnemy(self);
+    // 撃つ相手と寄る相手は同じでないと、間合いを詰めてから別の敵を撃つことになる。
+    const foe = cpuPickTarget(self);
     if (!foe) return { dir: 0, distance: 0 };
     const dist = Math.abs(foe.x - self.x);
     const NEAR = 150;  // 近すぎ(自爆や反撃のリスク)→離れる
@@ -6595,10 +6713,40 @@
     return !(ground - feetY > FALL_TRIGGER && ground >= DEAD_LINE_Y);
   }
 
+  // 味方を巻き込みそうな敵は狙わない。爆風はおよそ44px、必殺で広がる分を見込んで
+  // このくらい離れていれば「撃っても味方には届かない」と判断する。
+  const CPU_FRIENDLY_FIRE_RADIUS = 90;
+
+  // CPUが狙う敵を選ぶ。1vs1では味方が居ないので nearestEnemy と完全に同じ結果になる。
+  function cpuPickTarget(self) {
+    const enemies = units.filter(u => u.team !== self.team && u.hp > 0);
+    if (!enemies.length) return null;
+    const allies = units.filter(u => u.team === self.team && u.id !== self.id && u.hp > 0);
+    // 敵ごとに「一番近い味方までの距離」を測る。遠いほど撃ちやすい。
+    const clearanceOf = foe => {
+      let min = Infinity;
+      for (const a of allies) min = Math.min(min, Math.abs(a.x - foe.x));
+      return min;
+    };
+    const safe = enemies.filter(foe => clearanceOf(foe) > CPU_FRIENDLY_FIRE_RADIUS);
+    const pool = safe.length ? safe : enemies;
+    let best = pool[0];
+    for (const foe of pool) {
+      if (safe.length) {
+        // 巻き込まない相手が居るなら、その中で一番近い敵を殴る。
+        if (Math.abs(foe.x - self.x) < Math.abs(best.x - self.x)) best = foe;
+      } else if (clearanceOf(foe) > clearanceOf(best)) {
+        // 全員が味方の近くなら、せめて一番味方から遠い敵を選ぶ。
+        best = foe;
+      }
+    }
+    return best;
+  }
+
   function cpuAutoTurn() {
     if (matchOver || projectiles.length) return;
     const self = activeUnit();
-    const foe = nearestEnemy(self);
+    const foe = cpuPickTarget(self);
     if (!foe) return;
     const anchor = unitAnchor(self);
     const target = unitAnchor(foe);
@@ -7122,7 +7270,7 @@
 
   function drawBattleHudBackdrop() {
     ctx.save();
-    const hudBottom = 116;
+    const hudBottom = 116 + hudShift();
     const bg = ctx.createLinearGradient(0, 0, 0, hudBottom);
     bg.addColorStop(0, 'rgba(28,34,39,0.97)');
     bg.addColorStop(0.06, 'rgba(16,21,26,0.96)');
@@ -7191,15 +7339,33 @@
 
   // ===== プレイヤー/CPUのHP・燃料ゲージ(WINDの左右)。燃料はターン開始で満タンに戻るので
   // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
-  function drawUnitPanel(u, edgeX, align) {
+  // 名前カードの寸法。2vs2は4枚を上下2段に積むので、1枚あたりを低くする。
+  // 上端はメニュー/音量ボタンを避けて46から、下端はHUD背景の真鍮レール(112)まで。
+  const PANEL_1V1 = { h: 40, rows: [46] };
+  const PANEL_2V2 = { h: 34, rows: [46, 82] };
+  // 2vs2はカードが2段になるので、その下に続くターン帯・ミニマップ・HUD背景を丸ごと下げる。
+  // 世界はHUDの下に全画面で描かれているため、下げても隠れるのは空だけで戦場は狭くならない。
+  const HUD_EXTRA_2V2 = 34;
+  function hudShift() { return is2v2() ? HUD_EXTRA_2V2 : 0; }
+  function minimapTop() { return MINIMAP.y + hudShift(); }
+
+  function drawUnitPanel(u, edgeX, align, cardY, h) {
     const w = 168;
-    const h = 40;
     const barX = align === 'left' ? edgeX : edgeX - w;
-    // 角のメニュー/音量ボタンと距離を取るため、名前カードは一段下に配置する。
-    const cardY = 46;
+    // 低いカードは中身を詰めないと枠から溢れる。1vs1の見た目は一切変えない。
+    const compact = h < 38;
+    const tabY = compact ? cardY + 6 : cardY + 9;
+    const tabH = compact ? 18 : 22;
+    const labelY = compact ? cardY + 11 : cardY + 14;
+    const hpBarY = compact ? cardY + 14 : cardY + 18;
+    const hpBarH = compact ? 7 : 9;
+    const fuelBarY = compact ? cardY + 23 : cardY + 30;
+    const fuelBarH = compact ? 4 : 5;
     // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
     // カードが左右どちらに出るかは席で決まるので、色は「置いた側」ではなく持ち主で引く。
-    const accent = u.id === localUnit().id ? UI.ally : UI.enemy;
+    // 2vs2では味方CPUも自分と同じ青にしたいので、判定はIDではなく陣営で行う
+    // (1vs1は2体しか居ないので、この変更で色は変わらない)。
+    const accent = u.team === localUnit().team ? UI.ally : UI.enemy;
     // 手番の判定はユニットIDで直接引く。
     const isTurn = activeUnit().id === u.id;
 
@@ -7214,13 +7380,13 @@
     ctx.save();
     // 陣営色のタブ
     ctx.fillStyle = accent;
-    ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, cardY + 9, 3, 22);
+    ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, tabY, 3, tabH);
     ctx.restore();
 
-    drawOutlinedText(u.label, barX + 10, cardY + 14, {
-      align: 'left', font: `900 12px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
+    drawOutlinedText(u.label, barX + 10, labelY, {
+      align: 'left', font: `900 ${compact ? 11 : 12}px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
     });
-    drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 10, cardY + 14, {
+    drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 10, labelY, {
       align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
 
@@ -7230,29 +7396,55 @@
     ctx.save();
     // HPゲージ(黒い溝に嵌った真鍮枠のバー)
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(innerX, cardY + 18, innerW, 9);
+    ctx.fillRect(innerX, hpBarY, innerW, hpBarH);
     const hpColor = hpRatio > 0.5 ? UI.hpHigh : hpRatio > 0.25 ? UI.hpMid : UI.hpLow;
-    const hpGrad = ctx.createLinearGradient(0, cardY + 18, 0, cardY + 27);
+    const hpGrad = ctx.createLinearGradient(0, hpBarY, 0, hpBarY + hpBarH);
     hpGrad.addColorStop(0, '#ffffff55');
     hpGrad.addColorStop(0.35, hpColor);
     hpGrad.addColorStop(1, '#00000055');
     ctx.fillStyle = hpColor;
-    ctx.fillRect(innerX, cardY + 18, innerW * hpRatio, 9);
+    ctx.fillRect(innerX, hpBarY, innerW * hpRatio, hpBarH);
     ctx.fillStyle = hpGrad;
-    ctx.fillRect(innerX, cardY + 18, innerW * hpRatio, 9);
+    ctx.fillRect(innerX, hpBarY, innerW * hpRatio, hpBarH);
     ctx.strokeStyle = 'rgba(255,226,161,0.55)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(innerX + 0.5, cardY + 18.5, innerW - 1, 8);
+    ctx.strokeRect(innerX + 0.5, hpBarY + 0.5, innerW - 1, hpBarH - 1);
 
     // 燃料ゲージ
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(innerX, cardY + 30, innerW, 5);
+    ctx.fillRect(innerX, fuelBarY, innerW, fuelBarH);
     const fuelRatio = Math.max(0, u.fuel / u.fuelMax);
     ctx.fillStyle = UI.fuel;
-    ctx.fillRect(innerX, cardY + 30, innerW * fuelRatio, 5);
+    ctx.fillRect(innerX, fuelBarY, innerW * fuelRatio, fuelBarH);
     ctx.strokeStyle = 'rgba(255,226,161,0.3)';
-    ctx.strokeRect(innerX + 0.5, cardY + 30.5, innerW - 1, 4);
+    ctx.strokeRect(innerX + 0.5, fuelBarY + 0.5, innerW - 1, fuelBarH - 1);
     ctx.restore();
+  }
+
+  // 名前カードの並べ方。左右は「陣営」で決め、席が右(e1)なら左右を入れ替える。
+  // 2vs2は同じ陣営を縦に積むので、「左列=自陣営／右列=敵陣営」の読み方が1vs1と揃う。
+  function unitPanelLayout() {
+    const me = localUnit();
+    const localOnLeft = me.id === 'p1';
+    const mine = [me, ...units.filter(u => u.team === me.team && u.id !== me.id)];
+    const theirs = units.filter(u => u.team !== me.team);
+    const preset = is2v2() ? PANEL_2V2 : PANEL_1V1;
+    const slots = [];
+    const push = (list, align) => {
+      const edgeX = align === 'left' ? 10 : VW - 10;
+      for (let i = 0; i < list.length && i < preset.rows.length; i++) {
+        slots.push({ unit: list[i], edgeX, align, cardY: preset.rows[i], h: preset.h });
+      }
+    };
+    push(mine, localOnLeft ? 'left' : 'right');
+    push(theirs, localOnLeft ? 'right' : 'left');
+    return slots;
+  }
+
+  function drawUnitPanels() {
+    for (const slot of unitPanelLayout()) {
+      drawUnitPanel(slot.unit, slot.edgeX, slot.align, slot.cardY, slot.h);
+    }
   }
 
   // 引っ張り線(スクリーン座標。カメラの影響を受けないUIレイヤー)
@@ -7339,7 +7531,8 @@
     if (sx >= -UNIT_RADIUS && sx <= VW + UNIT_RADIUS) return;
     const onRight = sx > VW;
     const ix = onRight ? VW - 16 : 16;
-    const iy = Math.max(180, Math.min(CONTROL_PANEL_Y - 30, worldToScreenY(foe.y)));
+    // 上限はミニマップの下端。2vs2でミニマップが下がると、この線も一緒に下がる。
+    const iy = Math.max(minimapTop() + MINIMAP.h + 4, Math.min(CONTROL_PANEL_Y - 30, worldToScreenY(foe.y)));
     ctx.save();
     ctx.fillStyle = 'rgba(255,107,107,0.9)';
     ctx.beginPath();
@@ -8137,10 +8330,11 @@
     // 帯の左右はHPパネルの並び(左=自分の席)に合わせるので、陣営ではなく席で見る。
     const isPlayer = isLocalTurn();
     const accent = isPlayer ? UI.ally : UI.enemy;
+    const barY = 94 + hudShift();
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(8, 94, VW - 16, 19, 5) : ctx.rect(8, 94, VW - 16, 19);
-    const bar = ctx.createLinearGradient(0, 94, 0, 113);
+    ctx.roundRect ? ctx.roundRect(8, barY, VW - 16, 19, 5) : ctx.rect(8, barY, VW - 16, 19);
+    const bar = ctx.createLinearGradient(0, barY, 0, barY + 19);
     bar.addColorStop(0, isPlayer ? 'rgba(30,62,86,0.92)' : 'rgba(92,36,42,0.92)');
     bar.addColorStop(1, isPlayer ? 'rgba(12,26,38,0.92)' : 'rgba(44,16,20,0.92)');
     ctx.fillStyle = bar;
@@ -8150,7 +8344,7 @@
     ctx.stroke();
     // 手番側を示す色帯
     ctx.fillStyle = accent;
-    ctx.fillRect(isPlayer ? 9 : VW - 15, 97, 6, 13);
+    ctx.fillRect(isPlayer ? 9 : VW - 15, barY + 3, 6, 13);
     ctx.restore();
 
     const actingUnit = activeUnit();
@@ -8158,9 +8352,9 @@
     const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
     drawOutlinedText(
       `${turnLabel}　TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}${lockLabel}`,
-      20, 108, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
+      20, barY + 14, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
     );
-    drawOutlinedText(battleMode === 'free' ? '演習' : `${winStreak}連勝`, VW - 20, 108, {
+    drawOutlinedText(battleMode === 'free' ? '演習' : `${winStreak}連勝`, VW - 20, barY + 14, {
       align: 'right', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
     });
   }
@@ -8177,12 +8371,12 @@
   let minimapTerrainDirty = true;
   function isInMinimap(p) {
     return p.x >= MINIMAP.x && p.x <= MINIMAP.x + MINIMAP.w
-      && p.y >= MINIMAP.y && p.y <= MINIMAP.y + MINIMAP.h;
+      && p.y >= minimapTop() && p.y <= minimapTop() + MINIMAP.h;
   }
   function moveCameraFromMinimap(point, snapToMarker = false) {
     const pad = 4;
     const innerX = MINIMAP.x + pad;
-    const innerY = MINIMAP.y + pad;
+    const innerY = minimapTop() + pad;
     const innerW = MINIMAP.w - pad * 2;
     const innerH = MINIMAP.h - pad * 2;
     const mapWorldTop = 260;
@@ -8269,7 +8463,7 @@
 
   // 世界全体を圧縮する縦長ミニマップ。地形画像だけをキャッシュし、動く物だけを毎フレーム重ねる。
   function drawMinimap() {
-    const map = MINIMAP;
+    const map = { ...MINIMAP, y: minimapTop() }; // 2vs2は名前カード2段ぶん下へ
     const pad = MINIMAP_PAD;
     const innerX = map.x + pad;
     const innerY = map.y + pad;
@@ -8332,8 +8526,16 @@
       ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(label, x, Math.max(innerY + 8, y - 6));
     };
-    drawUnitMark(localUnit(), '#4fc3f7', 'P');
-    drawUnitMark(foeUnit(), '#ff6b6b', 'E');
+    // 2vs2でも全員の位置が分かるよう、席の陣営で色を分けて全ユニットを打つ。
+    // 自分の席は大文字P、味方CPUは小文字p…と字で区別する(色だけだと重なると読めない)。
+    const myTeam = localUnit().team;
+    let foeIndex = 0;
+    for (const u of units) {
+      if (u.hp <= 0) continue;
+      const mine = u.team === myTeam;
+      const label = mine ? (u.id === localUnit().id ? 'P' : 'p') : (foeIndex++ === 0 ? 'E' : 'e');
+      drawUnitMark(u, mine ? '#4fc3f7' : '#ff6b6b', label);
+    }
     ctx.restore();
 
     const heightGap = Math.round(Math.abs(localUnit().y - foeUnit().y));
@@ -9646,9 +9848,7 @@
     // 名前カードはキャラが実際に立っている側に置く。以前は自分のカードを必ず左に
     // 置いていたため、ゲスト(e1)は「名前が左・自キャラは右」という食い違いを見ていた。
     // 判定は位置ではなく席で行う。試合中に左右をすれ違ってもカードが飛ばないように。
-    const localOnLeft = localUnit().id === 'p1';
-    drawUnitPanel(localUnit(), localOnLeft ? 10 : VW - 10, localOnLeft ? 'left' : 'right');
-    drawUnitPanel(foeUnit(), localOnLeft ? VW - 10 : 10, localOnLeft ? 'right' : 'left');
+    drawUnitPanels();
     drawMinimap();
     drawTurnInfo();
     drawControlPanel();
@@ -10192,8 +10392,9 @@
   window.addEventListener('pointercancel', onPointerUp);
 
   function resetMatch(carrySpecialCharge) {
-    const playerCharge = carrySpecialCharge ? player.specialCharge : 0;
-    const cpuCharge = carrySpecialCharge ? cpu.specialCharge : 0;
+    // 必殺チャージの持ち越しは人数ぶん保持する(1vs1でも2vs2でも同じ扱い)。
+    const carriedCharge = {};
+    for (const u of units) carriedCharge[u.id] = carrySpecialCharge ? u.specialCharge : 0;
     // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
     isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
     const lobbySettings = battleMode === 'normal' && online && online.kind === 'firebase' ? online.settings : null;
@@ -10207,14 +10408,19 @@
       : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined);
     newTerrain(selectedTerrain);
     simTimeMs = 0;
-    applyCharacter(player, player.character);
-    applyCharacter(cpu, cpu.character);
+    for (const u of units) applyCharacter(u, u.character);
     // 闘技場マップは外壁の天辺ではなく、左右から内側へ伸びる上段棚を開始位置にする。
     const mortarShelfStart = currentPattern === 'tieredBasin';
-    player.x = STAGE_W * (mortarShelfStart ? 0.18 : 0.15);
-    cpu.x = STAGE_W * (mortarShelfStart ? 0.82 : 0.85);
-    initUnitOnGround(player);
-    initUnitOnGround(cpu);
+    // 陣営ごとに外側から内側へ並べ、2vs2でも左右対称にする。
+    const spawnRatio = mortarShelfStart
+      ? { p1: 0.18, p2: 0.32, e1: 0.82, e2: 0.68 }
+      : { p1: 0.15, p2: 0.30, e1: 0.85, e2: 0.70 };
+    const placed = [];
+    for (const u of units) {
+      u.x = spawnXNear(STAGE_W * (spawnRatio[u.id] != null ? spawnRatio[u.id] : 0.5), placed);
+      initUnitOnGround(u);
+      placed.push(u);
+    }
     projectiles = [];
     aimState = null;
     moveDir = 0;
@@ -10223,8 +10429,7 @@
     activeTouchPoints.clear();
     pinchState = null;
     specialArmed = false;
-    player.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, playerCharge));
-    cpu.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, cpuCharge));
+    for (const u of units) u.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, carriedCharge[u.id] || 0));
     matchOver = false;
     matchEndPause = 0;
     matchEndReason = '';

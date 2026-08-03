@@ -489,6 +489,206 @@ check('タイトルへ戻ってもおまけ曲は鳴り出さない',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
 
+// ===== Issue #20: 2vs2(CPU4体) =====
+// 「1vs1を壊さないこと」が最優先なので、まず1vs1側の不変を押さえてから2vs2を見る。
+kt.setPhase('title');
+// 前段の決定性テストが disableCpuForTest() で全員を local にしているので座り直す。
+// 演習(オフライン)は常にp1の席なので、これが本来の状態。
+kt.setLocalSeat('p1');
+kt.setFreeFormat('1v1');
+kt.startFreeMatch();
+check('演習の既定は1vs1で、参加は2体のまま',
+  kt.matchFormat() === '1v1' && kt.units.length === 2 && !kt.is2v2(),
+  `${kt.matchFormat()} 人数=${kt.units.length}`);
+const panels1v1 = (() => { kt.resetPanels(); kt.render(); return kt.panels(); })();
+check('1vs1の名前カードは従来どおり2枚・高さ40・上端46',
+  panels1v1.length === 2 && panels1v1.every(p => p.h === 40 && p.cardY === 46),
+  JSON.stringify(panels1v1));
+check('1vs1のターン帯・ミニマップ・HUD下端は従来の位置のまま',
+  kt.turnBarTop() === 94 && kt.minimapTop() === 120 && kt.hudBottom() === 116,
+  `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
+const spawn1v1 = kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000);
+
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+check('2vs2を選ぶと4体で試合が始まる',
+  kt.matchFormat() === '2v2' && kt.units.length === 4 && kt.is2v2(),
+  `${kt.matchFormat()} 人数=${kt.units.length}`);
+check('4体の陣営と操作者が正しい(自分だけが操作、残り3体はCPU)',
+  kt.units.map(u => `${u.id}:${u.team}:${u.control}`).join(',')
+    === 'p1:player:local,e1:cpu:cpu,p2:player:cpu,e2:cpu:cpu',
+  kt.units.map(u => `${u.id}:${u.team}:${u.control}`).join(','));
+// 手番は「自分→敵→味方→敵」の交互。同じ陣営が2連続で撃たないことがこの並びの意味。
+check('手番は陣営が交互に回る', kt.state().turnOrder.join(',') === 'p1,e1,p2,e2',
+  kt.state().turnOrder.join(','));
+
+// 開幕即死の再発防止。実装中に闘技場マップで内側2体が0秒で落ちて死んだ。
+let spawnDeaths = 0;
+const spawnSeen = [];
+for (let r = 0; r < 40; r++) {
+  kt.startFreeMatch();
+  for (const u of kt.units) {
+    if (u.y + kt.unitRadius() >= kt.deadLineY()) spawnDeaths++;
+    if (u.hp <= 0) spawnDeaths++;
+  }
+  spawnSeen.push(kt.units.map(u => Math.round(u.x)).join('/'));
+}
+check('2vs2の開始位置は4体とも足場の上(死線より下に湧かない)',
+  spawnDeaths === 0, `${spawnDeaths}件 例=${spawnSeen[0]}`);
+check('2vs2でも味方同士は重ならない',
+  kt.units.every(a => kt.units.every(b => a.id === b.id || Math.abs(a.x - b.x) >= 44)),
+  kt.units.map(u => Math.round(u.x)).join('/'));
+// 陣営ごとに左右へ分かれていること(左=自陣営、右=敵陣営)。
+check('2vs2は自陣営が左半分、敵陣営が右半分に並ぶ',
+  kt.units.filter(u => u.team === 'player').every(u => u.x < kt.stageW() / 2)
+  && kt.units.filter(u => u.team === 'cpu').every(u => u.x > kt.stageW() / 2),
+  kt.units.map(u => `${u.id}@${Math.round(u.x)}`).join(' '));
+
+// HUD。4枚が上下2段に収まり、ミニマップやHUD背景の下端を割らないこと。
+kt.resetPanels();
+kt.render();
+const panels2v2 = kt.panels();
+check('2vs2の名前カードは4枚', panels2v2.length === 4, JSON.stringify(panels2v2));
+check('自陣営2枚は左列、敵陣営2枚は右列に積まれる',
+  panels2v2.filter(p => p.align === 'left').map(p => p.id).join(',') === 'p1,p2'
+  && panels2v2.filter(p => p.align === 'right').map(p => p.id).join(',') === 'e1,e2',
+  JSON.stringify(panels2v2.map(p => `${p.id}:${p.align}`)));
+check('4枚とも上下段のどちらかに置かれ、同じ段に重ならない',
+  new Set(panels2v2.filter(p => p.align === 'left').map(p => p.cardY)).size === 2
+  && new Set(panels2v2.filter(p => p.align === 'right').map(p => p.cardY)).size === 2,
+  JSON.stringify(panels2v2.map(p => p.cardY)));
+const lowestPanelBottom = Math.max(...panels2v2.map(p => p.cardY + p.h));
+check('名前カードはHUD背景の下端より内側に収まる',
+  lowestPanelBottom <= kt.hudBottom(), `最下端=${lowestPanelBottom} HUD下端=${kt.hudBottom()}`);
+// 実機で2段目のカードがターン帯に潜り込み、燃料ゲージが読めなくなっていた。
+check('名前カードはターン帯に重ならない',
+  lowestPanelBottom <= kt.turnBarTop(), `最下端=${lowestPanelBottom} ターン帯上端=${kt.turnBarTop()}`);
+check('名前カードはミニマップに重ならない',
+  lowestPanelBottom <= kt.minimapTop(), `最下端=${lowestPanelBottom} ミニマップ上端=${kt.minimapTop()}`);
+check('2vs2はターン帯とミニマップがカード2段ぶん下がる',
+  kt.turnBarTop() === 128 && kt.minimapTop() === 154 && kt.hudBottom() === 150,
+  `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
+
+// 4体ぶんのHPが実際に読み取れること(パネルに出る値がユニットのHPと一致する)。
+kt.units[2].hp = 33;
+kt.units[3].hp = 7;
+check('4体それぞれのHPがカードに割り当てられている',
+  kt.unitPanelLayout().map(s => s.id).sort().join(',') === 'e1,e2,p1,p2',
+  JSON.stringify(kt.unitPanelLayout()));
+
+// 味方誤爆の統一。電磁波だけが敵専用だったのをやめ、当たった者は陣営に関係なく食らう。
+kt.startFreeMatch();
+const empAlly = kt.unitById('p2');
+const empHpBefore = empAlly.hp;
+kt.emitEmpForTest(empAlly.x, empAlly.y, 120, 'p1', 1);
+check('電磁波は味方にも当たる(誤爆の扱いを通常の爆発と統一)',
+  empAlly.hp < empHpBefore && empAlly.moveLockTurns > 0,
+  `hp ${empHpBefore}→${empAlly.hp} lock=${empAlly.moveLockTurns}`);
+
+// CPUの標的選び。味方の近くに居る敵は狙わない。
+kt.startFreeMatch();
+const cpuSelf = kt.unitById('e1');
+const cpuAlly = kt.unitById('e2');
+const target1 = kt.unitById('p1');
+const target2 = kt.unitById('p2');
+cpuSelf.x = 1200; cpuAlly.x = 300; target1.x = 320; target2.x = 700;
+check('味方のすぐ隣に居る敵は狙わず、離れている敵を狙う',
+  kt.cpuPickTarget('e1') === 'p2', String(kt.cpuPickTarget('e1')));
+cpuAlly.x = 1150; // 味方を自陣へ引き上げると、素直に一番近い敵を狙う
+check('味方が離れていれば一番近い敵を狙う',
+  kt.cpuPickTarget('e1') === 'p2', String(kt.cpuPickTarget('e1')));
+target2.x = 1300; target1.x = 320; cpuAlly.x = 300;
+check('倒れた敵は狙わない', (() => { target2.hp = 0; return kt.cpuPickTarget('e1') === 'p1'; })(),
+  String(kt.cpuPickTarget('e1')));
+
+// 1vs1では味方が居ないので、標的選びは従来の「一番近い敵」と完全に一致する。
+kt.setFreeFormat('1v1');
+kt.startFreeMatch();
+check('1vs1の標的選びは従来どおり唯一の敵', kt.cpuPickTarget('p1') === 'e1', String(kt.cpuPickTarget('p1')));
+check('1vs1の開始位置は2vs2導入後も変わらない',
+  kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000).join(',') === spawn1v1.join(','),
+  `${kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000).join(',')} / 期待=${spawn1v1.join(',')}`);
+
+// 全員CPUなら無人で決着まで進む。死体に手番が渡って止まらないことの確認でもある。
+kt.setFreeFormat('2v2');
+let finished = 0;
+let stuckAt = '';
+for (let r = 0; r < 5; r++) {
+  kt.startFreeMatch();
+  for (const u of kt.units) u.control = 'cpu';
+  let i = 0;
+  for (; i < 300000 && !kt.state().matchOver; i++) kt.step(1 / 60);
+  if (kt.state().matchOver) finished++;
+  else stuckAt = `turn=${kt.state().turnCount} active=${kt.state().turnOrder[kt.state().activeIndex]}`;
+}
+check('2vs2は5戦とも決着まで進む(倒れたユニットで手番が止まらない)',
+  finished === 5, `${finished}/5 ${stuckAt}`);
+
+// 中断セーブ。人数の食い違うセーブを捨てる一方で、2vs2の中断は復元できること。
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+const snap2v2 = kt.buildSnapshotForTest();
+check('中断データは対戦形式と4体ぶんのユニットを持つ',
+  snap2v2.matchFormat === '2v2' && snap2v2.units.length === 4,
+  `${snap2v2.matchFormat} 人数=${snap2v2.units.length}`);
+kt.setFreeFormat('1v1');
+kt.startFreeMatch(); // 人数を2に戻してから2vs2のセーブを流し込む
+kt.applySnapshotForTest(snap2v2);
+check('2vs2の中断データを読み込むと4体へ戻る',
+  kt.units.length === 4 && kt.matchFormat() === '2v2',
+  `${kt.matchFormat()} 人数=${kt.units.length}`);
+// 形式を名乗らない旧セーブ(v99以前・オンラインの相手)は1vs1として扱う。
+kt.applySnapshotForTest({ ...snap2v2, matchFormat: undefined, units: snap2v2.units.slice(0, 2) });
+check('形式を持たない旧データは1vs1として読む',
+  kt.units.length === 2 && kt.matchFormat() === '1v1',
+  `${kt.matchFormat()} 人数=${kt.units.length}`);
+
+// 連勝・ランキングは2vs2を数えない(味方CPUの働きで勝敗が変わるため)。
+kt.setFreeFormat('2v2');
+check('演習に対戦方式の行が増えている',
+  !!kt.freeRows().format && kt.formatOptions().join(',') === '1v1,2v2',
+  JSON.stringify(kt.freeRows().format) + ' ' + kt.formatOptions().join(','));
+const fr = kt.freeRows();
+check('対戦方式の行は開始ボタンと重ならない',
+  fr.format.y + fr.format.h / 2 < 716 - 64 / 2 && fr.format.y - fr.format.h / 2 > fr.wind.y + fr.wind.h / 2,
+  JSON.stringify(fr));
+// 行ごとの当たり判定(中心 row.y+7、高さ row.h)が上下の行と食い合わないこと。
+const rowBands = Object.entries(fr)
+  .map(([k, r]) => ({ k, top: r.y + 7 - r.h / 2, bottom: r.y + 7 + r.h / 2 }))
+  .sort((a, b) => a.top - b.top);
+check('演習の各行の当たり判定が重なっていない',
+  rowBands.every((b, i) => i === 0 || rowBands[i - 1].bottom <= b.top),
+  JSON.stringify(rowBands));
+
+// 実際に左右の矢印を押して対戦方式が切り替わること。
+kt.setPhase('freeSetup');
+kt.setFreeFormat('1v1');
+const arrowY = fr.format.y + 7;
+up(down(500, arrowY), 500, arrowY); // 右矢印
+check('演習画面の右矢印で1vs1→2vs2へ切り替わる',
+  kt.formatOptions()[kt.freeConfig().formatIndex] === '2v2',
+  kt.formatOptions()[kt.freeConfig().formatIndex]);
+up(down(40, arrowY), 40, arrowY);  // 左矢印
+check('演習画面の左矢印で2vs2→1vs1へ戻る',
+  kt.formatOptions()[kt.freeConfig().formatIndex] === '1v1',
+  kt.formatOptions()[kt.freeConfig().formatIndex]);
+kt.setPhase('title');
+
+// 名前カードは「キャラが実際に立っている側」に置く決まり(e1陣営は画面右に湧く)。
+// 席がe1なら自陣営のカードも右列へ移る。オンライン2vs2(段C)へ進む前の土台の確認。
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+kt.setLocalSeat('e1');
+const panelsE1 = kt.unitPanelLayout();
+check('席がe1なら自陣営(e1/e2)が右列、相手陣営(p1/p2)が左列になる',
+  panelsE1.filter(p => p.align === 'right').map(p => p.id).join(',') === 'e1,e2'
+  && panelsE1.filter(p => p.align === 'left').map(p => p.id).join(',') === 'p1,p2',
+  JSON.stringify(panelsE1));
+check('席がe1でも4枚とも上下2段に収まる',
+  panelsE1.length === 4 && Math.max(...panelsE1.map(p => p.cardY + p.h)) <= kt.hudBottom(),
+  JSON.stringify(panelsE1));
+kt.setLocalSeat('p1');
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
