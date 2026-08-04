@@ -265,6 +265,28 @@ for (const phase of ['title', 'select', 'ranking', 'freeSetup']) {
 }
 kt.setPhase('title');
 
+// 崩れ方は「近い石は吹き飛び、遠い石は支えを失って落ちる」の2段構え。
+// 全部を放射状に飛ばすと爆発にしか見えず、壁が崩れたようにならない(実機で指摘)。
+check('近い石と遠い石で崩れ方を分けている',
+  html.includes('const WALL_BLAST_RANGE')
+  && html.includes('const WALL_GRAVITY')
+  && /const blast = Math\.pow\(1 - Math\.min\(1, distance \/ WALL_BLAST_RANGE\), 2\);/.test(html)
+  && /cy \+= vy \* local \+ 0\.5 \* WALL_GRAVITY \* local \* local;/.test(html));
+// 着弾点より上の石は下の支えを失う。穴が上へ広がる形になる。
+check('着弾点より上の石は支えを失って落ちる',
+  html.includes('const unsupported = piece.cy < breakState.y ? 90 : 0;'));
+// 手前へ来るのは爆風に巻かれた石だけ。遠い石まで拡大すると全部が飛んできて爆発に見える。
+check('手前へ来るのは爆風に巻かれた石だけ',
+  html.includes('scale = 1 + blast * 2.8 * local;'));
+// 真っ直ぐ縮むだけだと「飛んでいる」ように見えない。
+check('砲弾は山なりに飛ぶ',
+  html.includes('const WALL_ARC')
+  && html.includes('Math.sin(travel * Math.PI) * WALL_ARC'));
+// 角の欠けは切り抜かずに描く。実際に削ると継ぎ目に穴が開き奥のタイトルが透ける。
+check('石の欠けで継ぎ目に穴を開けていない',
+  /角の欠け。\*\*切り抜かずに描く。\*\*/.test(html)
+  && html.includes("pieces.push({ kind: 'stone', x, y: row * bh, w: bw, h: bh,"));
+
 check('演出中は入力を受け付けない',
   html.includes("if (gamePhase === 'loading' || gamePhase === 'breaking') return;"));
 // 読み込み中も毎フレーム回る。破片ごとのグラデーションは作り直さず持たせる。
