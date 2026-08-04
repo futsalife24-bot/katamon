@@ -483,7 +483,8 @@ function check(name, value) {
     !!syncResultSrc
     && syncResultSrc[0].includes('} else if (isFirebasePlayer()) {')
     && syncResultSrc[0].includes('actionId = secureNonce();')
-    && syncResultSrc[0].includes('actionUnitId = online.seat;'));
+    // 席名とユニット名は2vs2で一致しない(s1→p2 / s2→e2)。必ず対応表を通して名乗る。
+    && syncResultSrc[0].includes('actionUnitId = firebaseSeatUnitId(online.seat);'));
   check('a peer conceding its own defeat is accepted even when the local sim disagrees',
     htmlText.includes('function firebaseResultConcedes(msg)')
     && htmlText.includes('const concedes = firebaseResultConcedes(msg);')
@@ -694,7 +695,7 @@ function check(name, value) {
     && htmlText.includes('p.x = p.apexBurst.x;'));
   // 更新前の端末から届く boom は受理して無視する。拒否すると対戦が中断してしまう。
   check('an incoming boom from an older client is accepted and ignored',
-    htmlText.includes("if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1'")
+    htmlText.includes("if (msg.t === 'boom') return isFirebaseUnitId(msg.unitId)")
     && htmlText.includes("case 'boom':"));
   check('a rematch start bypasses stale physics and waits only for reveal verification',
     htmlText.includes("if (msg.t === 'start') {\n        if (online.revealVerified) applyNetMessage(msg);")
@@ -1268,6 +1269,61 @@ function check(name, value) {
     htmlText.includes("online.selfReady = false; online.peerReady = false; online.seatReady = {};"));
   check('the host announces the roster for whichever seats are actually taken',
     /const players = \{ p1: online\.clientId \};[\s\S]{0,260}firebasePlayerSeats\(\)[\s\S]{0,200}players\[seat\] = online\.slots\[seat\]\.uid;/.test(htmlText));
+
+  // ===== Issue #26 段C: 4人ぶんの通信データ =====
+  // 人数と並びは対戦方式で1通りに決まる。ここを緩めて好きな並びを送れるようにすると、
+  // 「席とユニットの対応」というなりすまし防止の要を、通信データ側から崩せてしまう。
+  function snapshotFor2v2(base) {
+    const snap = JSON.parse(JSON.stringify(base));
+    snap.matchFormat = '2v2';
+    snap.units = ['p1', 'e1', 'p2', 'e2'].map((id, i) => ({ ...JSON.parse(JSON.stringify(base.units[i % 2])), id }));
+    snap.turnOrder = ['p1', 'e1', 'p2', 'e2'];
+    return snap;
+  }
+  const snap2v2 = snapshotFor2v2(safeSnap);
+  const startOf = snap => ({ v: 2, from: 'peer', t: 'start', sentAt: Date.now(), snap });
+  check('a four-unit snapshot is accepted when it names the 2vs2 format',
+    h.validateFirebaseMessage(startOf(snap2v2)));
+  check('the same four units are rejected while the snapshot still calls itself 1vs1',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: '1v1' })).reason === 'start.snap.units'
+    && h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: undefined })).reason === 'start.snap.units');
+  check('an unknown match format is rejected instead of being guessed at',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: '3v3' })).reason === 'start.snap.matchFormat');
+  check('2vs2 fixes the turn order to p1 e1 p2 e2, so seats cannot be shuffled',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, turnOrder: ['p1', 'p2', 'e1', 'e2'] })).reason === 'start.snap.turn'
+    && h.validateFirebaseMessageDetail(startOf({ ...snap2v2, units: [snap2v2.units[0], snap2v2.units[2], snap2v2.units[1], snap2v2.units[3]] })).reason === 'start.snap.units');
+  check('all four units are compared, not just the first two',
+    h.stateSnapshotMismatchReason(snap2v2, snap2v2) === ''
+    && h.stateSnapshotMismatchReason(snap2v2, safeSnap) === 'shape'
+    && (() => {
+      const drift = snapshotFor2v2(safeSnap);
+      drift.units[3].x += 400;
+      return h.stateSnapshotMismatchReason(drift, snap2v2) === `x.3(${Math.round(snap2v2.units[3].x)}->${Math.round(drift.units[3].x)})`;
+    })());
+  // 盤面を動かすパケットは p2 / e2 も名乗れる。知らないIDは従来どおり捨てる。
+  const roundId2 = roundId;
+  const packetFor = (seat, unitId, extra) => ({ v: 3, from: 'peer', seat, roundId: roundId2, sentAt: Date.now(), actionId, unitId, ...extra });
+  const fireBody = { x: 720, y: 512, anchor: { x: 720, y: 512 }, vx0: 100, vy0: -200, useSpecial: false, useJump: false };
+  check('fire, move and boom accept the two 2vs2 units and still reject unknown ids',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'fire', ...fireBody }))
+    && h.validateFirebaseMessage(packetFor('s2', 'e2', { t: 'move', x: 720, fuel: 40 }))
+    && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'boom' }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'fire', ...fireBody }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'boom' })));
+  const roster2v2 = snap2v2.units.map(u => ({ id: u.id, hp: u.hp }));
+  check('a result carries all four units in 2vs2 and keeps the fixed order',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2 }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: [roster2v2[0], roster2v2[2], roster2v2[1], roster2v2[3]] }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2.slice(0, 3) })));
+  // 席とユニットの対応は、通信データの検証と席の門の両方で同じ表を使う。
+  h.setOnlineForLogTest(lobbyWith('2v2'));
+  check('s1 may only ever act as p2, in both the payload check and the seat gate',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
+    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
+  h.setOnlineForLogTest(null);
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

@@ -3926,6 +3926,10 @@
   const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'move', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
   function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
   const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']);
+  // スナップショットに入るユニットの並び。setMatchFormat が units を作る順と必ず同じにする。
+  // 2vs2は味方と敵が交互(p1→e1→p2→e2)で、この並びがそのまま手番の順になる。
+  const SNAPSHOT_UNIT_IDS_1V1 = ['p1', 'e1'];
+  const SNAPSHOT_UNIT_IDS_2V2 = ['p1', 'e1', 'p2', 'e2'];
   function hasSafeTerrainSegments(segments) {
     // buildTerrainMask は全列を前提に segments[c] を反復する。形と上限をここで固定する。
     return Array.isArray(segments) && segments.length === TERRAIN_COLS && segments.every(column =>
@@ -3960,8 +3964,13 @@
     if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, STAGE_W + 600) && isFiniteIn(cr.y, -600, VH + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
     if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
     if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
-    if (!Array.isArray(snap.units) || snap.units.length !== 2 || !hasSafeUnitSnapshot(snap.units[0], 'p1') || !hasSafeUnitSnapshot(snap.units[1], 'e1')) return 'snap.units';
-    if (!Array.isArray(snap.turnOrder) || snap.turnOrder.length !== 2 || snap.turnOrder[0] !== 'p1' || snap.turnOrder[1] !== 'e1' || !isFiniteIn(snap.activeIndex, 0, 1) || !isFiniteIn(snap.turnCount, 0, 10000)) return 'snap.turn';
+    // 人数と並びは対戦方式で決まる。ここを緩めて「好きな並びを送れる」ようにすると
+    // 席とユニットの対応(なりすまし防止の要)が通信データ側から崩せてしまうので、
+    // 形式ごとに1通りだけを認める。形式を持たない相手(v102以前)は1vs1として読む。
+    if (snap.matchFormat != null && snap.matchFormat !== '1v1' && snap.matchFormat !== '2v2') return 'snap.matchFormat';
+    const unitIds = snap.matchFormat === '2v2' ? SNAPSHOT_UNIT_IDS_2V2 : SNAPSHOT_UNIT_IDS_1V1;
+    if (!Array.isArray(snap.units) || snap.units.length !== unitIds.length || !unitIds.every((id, i) => hasSafeUnitSnapshot(snap.units[i], id))) return 'snap.units';
+    if (!Array.isArray(snap.turnOrder) || snap.turnOrder.length !== unitIds.length || !unitIds.every((id, i) => snap.turnOrder[i] === id) || !isFiniteIn(snap.activeIndex, 0, unitIds.length - 1) || !isFiniteIn(snap.turnCount, 0, 10000)) return 'snap.turn';
     if (!snap.wind || typeof snap.wind !== 'object' || !isFiniteIn(snap.wind.dir, -1, 1) || !isFiniteIn(snap.wind.strength, 0, 2) || typeof snap.wind.calmWind !== 'boolean' || typeof snap.wind.calmBattle !== 'boolean') return 'snap.wind';
     if (!isFiniteIn(snap.winStreak, 0, 100000) || !snap.runStats || typeof snap.runStats !== 'object' || !isFiniteIn(snap.runStats.damageDealt, 0, 1000000) || !isFiniteIn(snap.runStats.shots, 0, 1000000) || typeof snap.isBossMatch !== 'boolean') return 'snap.stats';
     if (!snap.camera || typeof snap.camera !== 'object' || !isFiniteIn(snap.camera.x, 0, STAGE_W) || !isFiniteIn(snap.camera.zoom, 0.1, 8)) return 'snap.camera';
@@ -4030,17 +4039,20 @@
     if (msg.t === 'start') { const reason = snapshotValidationReason(msg.snap); return reason ? { ok: false, reason: `start.${reason}` } : { ok: true }; }
     if (msg.t === 'state') {
       const reason = snapshotValidationReason(msg.snap);
-      const unitOk = legacyV2 || ((msg.unitId === 'p1' || msg.unitId === 'e1') && msg.unitId === msg.seat);
+      const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
-    if (msg.t === 'fire') return (msg.unitId === 'p1' || msg.unitId === 'e1') && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
-    if (msg.t === 'move') return (msg.unitId === 'p1' || msg.unitId === 'e1') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.fuel), 0, 10000) ? { ok: true } : { ok: false, reason: 'move.payload' };
-    if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1' ? { ok: true } : { ok: false, reason: 'boom.unitId' };
+    if (msg.t === 'fire') return isFirebaseUnitId(msg.unitId) && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'move') return isFirebaseUnitId(msg.unitId) && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.fuel), 0, 10000) ? { ok: true } : { ok: false, reason: 'move.payload' };
+    if (msg.t === 'boom') return isFirebaseUnitId(msg.unitId) ? { ok: true } : { ok: false, reason: 'boom.unitId' };
     if (msg.t === 'result') {
-      const unitOk = legacyV2 || ((msg.unitId === 'p1' || msg.unitId === 'e1') && msg.unitId === msg.seat);
+      const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
       // result は snapshot と同じHP上限を使う。選択キャラには最大HP 140 がいるため、
       // 初期値用の MAX_HP (100) で絞ると、生存側の正しい決着通知まで拒否してしまう。
-      return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk && (msg.winner === 'player' || msg.winner === 'cpu' || msg.winner === 'draw') && typeof msg.reason === 'string' && msg.reason.length <= 120 && Array.isArray(msg.units) && msg.units.length === 2 && msg.units.every(u => u && (u.id === 'p1' || u.id === 'e1') && isFiniteIn(Number(u.hp), 0, 200)) ? { ok: true } : { ok: false, reason: 'result.payload' };
+      // 人数は対戦方式で決まる(1vs1は2体、2vs2は4体)。どちらも並びは固定。
+      const rosterIds = Array.isArray(msg.units) && msg.units.length === SNAPSHOT_UNIT_IDS_2V2.length ? SNAPSHOT_UNIT_IDS_2V2 : SNAPSHOT_UNIT_IDS_1V1;
+      const rosterOk = Array.isArray(msg.units) && msg.units.length === rosterIds.length && msg.units.every((u, i) => u && u.id === rosterIds[i] && isFiniteIn(Number(u.hp), 0, 200));
+      return FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk && (msg.winner === 'player' || msg.winner === 'cpu' || msg.winner === 'draw') && typeof msg.reason === 'string' && msg.reason.length <= 120 && rosterOk ? { ok: true } : { ok: false, reason: 'result.payload' };
     }
     return { ok: true };
   }
@@ -4209,7 +4221,8 @@
   // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
   function firebaseResultConcedes(msg) {
     if (!msg || msg.t !== 'result') return false;
-    const senderUnit = unitById(msg.seat);
+    // 送信者の陣営は「席→ユニット」の対応で引く。2vs2では席名とユニット名が一致しない。
+    const senderUnit = FIREBASE_SEATS.includes(msg.seat) ? unitById(firebaseSeatUnitId(msg.seat)) : null;
     return !!senderUnit && (msg.winner === 'player' || msg.winner === 'cpu') && msg.winner !== senderUnit.team;
   }
 
@@ -4227,8 +4240,10 @@
   function stateSnapshotMismatchReason(snap, baseline) {
     if (!snap || !baseline || !Array.isArray(snap.units) || !Array.isArray(baseline.units)) return 'shape';
     if (snap.turnCount !== baseline.turnCount) return 'turnCount';
-    if (snap.turnOrder[0] !== baseline.turnOrder[0] || snap.turnOrder[1] !== baseline.turnOrder[1]) return 'turnOrder';
-    if (snap.units[0].maxHp !== baseline.units[0].maxHp || snap.units[1].maxHp !== baseline.units[1].maxHp) return 'maxHp';
+    // 2vs2は4体。人数が食い違うのは対戦方式そのものがずれている時なので、まとめてshapeで弾く。
+    if (snap.units.length !== baseline.units.length || !Array.isArray(snap.turnOrder) || !Array.isArray(baseline.turnOrder) || snap.turnOrder.length !== baseline.turnOrder.length) return 'shape';
+    if (snap.turnOrder.some((id, i) => id !== baseline.turnOrder[i])) return 'turnOrder';
+    if (snap.units.some((u, i) => u.maxHp !== baseline.units[i].maxHp)) return 'maxHp';
     if (snap.pattern !== baseline.pattern) return 'pattern';
     if (snap.themeKey !== baseline.themeKey) return 'themeKey';
     if (snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
@@ -4259,12 +4274,20 @@
     return '';
   }
   function stateSnapshotMatchesBaseline(snap, baseline) { return stateSnapshotMismatchReason(snap, baseline) === ''; }
+  // 試合中に想定されるキャラの表(ユニットID→キャラ)。1vs1は席から一意に決まるが、
+  // 2vs2は空席のCPUのキャラをホストが決めるので、開始データを検証した時点で作って持つ。
+  // 表が無い間は従来どおり自分と相手の2つから組み立て、1vs1の経路を変えない。
+  function expectedFirebaseUnitCharacters() {
+    if (online && online.unitCharacters) return online.unitCharacters;
+    const hostChar = online.role === 'host' ? online.selfCharacter : online.peerCharacter;
+    const guestChar = online.role === 'host' ? online.peerCharacter : online.selfCharacter;
+    return { p1: hostChar, e1: guestChar };
+  }
   function firebaseStateMismatchReason(snap) {
     // state は相手端末の描画フレーム差を少し許容する一方、地形の差し替えや大幅な座標改ざんは拒否する。HPはaction-side authorityのため入口範囲だけ検証する。
     if (!snap || !Array.isArray(snap.units) || !online) return 'precondition';
-    const expectedP1 = online.role === 'host' ? online.selfCharacter : online.peerCharacter;
-    const expectedE1 = online.role === 'host' ? online.peerCharacter : online.selfCharacter;
-    if (snap.units[0].character !== expectedP1 || snap.units[1].character !== expectedE1) return 'character';
+    const expected = expectedFirebaseUnitCharacters();
+    if (!snap.units.every(u => u && expected[u.id] === u.character)) return 'character';
     return stateSnapshotMismatchReason(snap, buildSnapshot());
   }
   function firebaseStateMatchesLocal(snap) { return firebaseStateMismatchReason(snap) === ''; }
@@ -4433,9 +4456,33 @@
     // 盤面を動かすものは、対戦者かつ自分のユニットについてのみ。
     // 席とユニットの対応は固定(p1→p1 / e1→e1 / s1→p2 / s2→e2)。ルール側も同じ表で縛っている。
     if (msg.t === 'move' || msg.t === 'fire' || msg.t === 'boom' || msg.t === 'state' || msg.t === 'result') {
-      return firebasePlayerSeats().includes(msg.seat) && msg.unitId === firebaseSeatUnitId(msg.seat);
+      return firebasePlayerSeats().includes(msg.seat) && firebaseActionUnitAllowed(msg);
     }
     return false;
+  }
+  // 通信で名指しできるユニット。ここに無いIDは受け取った時点で捨てる。
+  function isFirebaseUnitId(id) { return SNAPSHOT_UNIT_IDS_2V2.includes(id); }
+  // 2vs2で誰も座っていない席のキャラはCPUが動かす(決定3)。乱数の同期という
+  // 新しい壊れどころを作らないため、ホストの端末が1台で決めて結果を配る(Issue #26)。
+  // database.rules.json の unitId の例外と同じ条件をここにも置く。片方だけ広げると、
+  // 「ルールは通すのにクライアントが切る(またはその逆)」という食い違いになる。
+  function firebaseHostActsForEmptySeat(seat, unitId) {
+    if (seat !== 'p1' || !firebaseLobbyIs2v2()) return false;
+    const owner = FIREBASE_SEATS.find(s => FIREBASE_SEAT_UNIT[s] === unitId);
+    return !!owner && owner !== 'p1' && !firebaseSeatOccupied(owner);
+  }
+  // ターンの受け渡しの確認。1vs1は「相手が撃ち終わったら次は自分」で必ず決まる。
+  // 2vs2は次が自分とは限らない(味方や敵のもう1体へ渡る)ので、確かめるのは
+  // 「撃った本人に手番が残っていないこと」だけにする。
+  function firebaseStateTurnHandoffOk(msg) {
+    const nextUnitId = msg.snap.turnOrder[msg.snap.activeIndex];
+    if (!firebaseLobbyIs2v2()) return nextUnitId === firebaseSeatUnitId(online.seat);
+    return nextUnitId !== msg.unitId;
+  }
+  // 盤面を動かすパケットの unitId が、その席のものとして正しいか。
+  function firebaseActionUnitAllowed(msg) {
+    if (!msg || !isFirebaseUnitId(msg.unitId)) return false;
+    return msg.unitId === firebaseSeatUnitId(msg.seat) || firebaseHostActsForEmptySeat(msg.seat, msg.unitId);
   }
 
   function netReceiveInner(msg) {
@@ -4656,7 +4703,7 @@
         if (online.kind === 'firebase') {
           let mismatch = '';
           if (!online.remoteAction || !online.remoteAction.resolved) mismatch = 'remoteAction';
-          else if (msg.snap.turnOrder[msg.snap.activeIndex] !== online.seat) mismatch = 'turnOrder.activeIndex';
+          else if (!firebaseStateTurnHandoffOk(msg)) mismatch = 'turnOrder.activeIndex';
           else mismatch = firebaseStateMismatchReason(msg.snap);
           if (mismatch) {
             rejectFirebaseMessage(`相手の行動と一致しない状態更新です（${mismatch}）`);
@@ -4799,7 +4846,7 @@
         // 「自分の負け」を宣言して必ず伝える。これが無いと送信側が自分で接続を切り、
         // 相手は35秒後にタイムアウトするまで待たされていた。
         actionId = secureNonce();
-        actionUnitId = online.seat;
+        actionUnitId = firebaseSeatUnitId(online.seat);
       } else {
         logOnlineEvent({ type: 'sendResult', ok: false, why: 'noActionId' });
         rejectFirebaseMessage('ローカル行動IDを確認できません');
