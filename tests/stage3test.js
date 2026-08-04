@@ -607,9 +607,10 @@ function check(name, value) {
     && h.validateFirebaseMessage(firebasePacket('ready')));
   // 合言葉が大きい文字と入力欄の2箇所に出て場所を取っていた。入室後は1行だけにし、
   // コピーは文字の真横の小さなアイコンにする。
-  check('quick play uses one shared room while passcodes stay behind an explicit option',
-    htmlText.includes("const QUICK_MATCH_ROOM = 'KATAMN22';")
-    && htmlText.includes('async function joinQuickFirebaseRoom()')
+  // v101までは「すぐ対戦」が KATAMN22 の1部屋だけで、3人目は必ず弾かれていた(Issue #23)。
+  check('quick play matchmaking replaced the single shared room, and passcodes stay behind an explicit option',
+    !htmlText.includes("const QUICK_MATCH_ROOM = 'KATAMN22';")
+    && htmlText.includes("async function joinQuickFirebaseRoom(format = '1v1')")
     && htmlText.includes('id="onlineQuick"')
     && htmlText.includes('id="onlineCodeToggle"')
     && htmlText.includes('#onlineLobby.code-entry:not(.in-room) #onlineRoomInput'));
@@ -1018,6 +1019,128 @@ function check(name, value) {
   try { app.render(); } catch (e) { titleThrew = e; }
   check('the title still draws with the notice on screen', !titleThrew, titleThrew && titleThrew.message);
   check('leaving online clears the heartbeat timer', htmlText.includes('if (leaving.seatHeartbeatTimer) clearTimeout(leaving.seatHeartbeatTimer);'));
+
+  // ===== Issue #23: すぐ対戦を複数部屋のマッチメイキングにする =====
+  // 部屋は原理的に探せない(ルートは読めず、部屋の中は席を持つ人だけ)。
+  // 「空いて待っている部屋の合言葉」だけを open へ出し、そこから探しにいく。
+
+  // ---- ルール側 ----
+  const openRule = JSON.parse(rulesText).rules.open;
+  check('rules add a readable index of waiting rooms without opening the rooms themselves',
+    !!openRule && openRule['.read'] === 'auth != null'
+    && rules['.read'].includes("child('uid').val() === auth.uid"));
+  // open ごと欠けている場合でも、以降を落とさず個別のFAILとして出す
+  // (ルールが古いまま公開されると全部が壊れるので、どれが欠けているか見えたほうがよい)。
+  const openSeat = (openRule && openRule.$room) || { '.write': '', '.validate': '', format: {}, $other: {} };
+  check('only the player actually sitting in p1 of that room can list it',
+    openSeat['.write'].includes("newData.child('hostUid').val() === auth.uid")
+    && openSeat['.write'].includes("root.child('rooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid"));
+  check('a listing can be withdrawn by its host, or by anyone once it has expired',
+    openSeat['.write'].includes("data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)"));
+  check('the index entry is shape-checked and cannot be parked far in the future',
+    openSeat['.validate'].includes("hasChildren(['format','hostUid','createdAt','expiresAt'])")
+    && openSeat['.validate'].includes("newData.child('expiresAt').val() > now")
+    && openSeat['.validate'].includes('now + 3600000')
+    && openSeat.$other['.validate'] === false);
+  check('the index only accepts the two match formats',
+    openSeat.format['.validate'] === "newData.val() === '1v1' || newData.val() === '2v2'"
+    && h.openMatchFormats().join(',') === '1v1,2v2');
+  check('the room code shape is enforced on the index too',
+    openSeat['.write'].includes('$room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/)'));
+  check('listing a room requires that room to still be alive',
+    openSeat['.write'].includes("root.child('rooms').child($room).child('expiresAt').val() > now"));
+  // 既存の部屋のルールに触っていないこと(触ると入室・対戦が丸ごと壊れる)
+  check('the rooms rules are untouched by the matchmaking change',
+    rules.slots.$seat['.write'].includes("$seat.matches(/^(e1|s1|s2)$/)")
+    && msg['.write'].includes("child('from').val() === auth.uid"));
+
+  // ---- 候補の選び方 ----
+  const NOW = 1000000;
+  const A = 'AAAA2345', B = 'BBBB2345', C = 'CCCC2345', D = 'DDDD2345';
+  const alive = (extra = {}) => ({ format: '1v1', hostUid: 'other', createdAt: 500, expiresAt: NOW + 1000, ...extra });
+  check('a waiting room of the right format is a candidate',
+    h.pickOpenCandidates({ [A]: alive() }, 'me', '1v1', NOW).map(r => r.code).join() === A);
+  check('an expired listing is never offered',
+    h.pickOpenCandidates({ [A]: alive({ expiresAt: NOW - 1 }) }, 'me', '1v1', NOW).length === 0);
+  check('a different match format is not offered',
+    h.pickOpenCandidates({ [A]: alive({ format: '2v2' }) }, 'me', '1v1', NOW).length === 0);
+  check('you are never sent into the room you are hosting yourself',
+    h.pickOpenCandidates({ [A]: alive({ hostUid: 'me' }) }, 'me', '1v1', NOW).length === 0);
+  check('a malformed room code or entry is ignored rather than throwing',
+    h.pickOpenCandidates({ 'not-a-code': alive(), [B]: null, [C]: 'oops', [D]: alive() }, 'me', '1v1', NOW)
+      .map(r => r.code).join() === D);
+  // 待たせている時間が長い人から拾う。並びが安定しないと、同時に押した2人が同じ順で
+  // 同じ部屋を狙い、片方が必ず競り負ける形になる。
+  check('the longest-waiting room is offered first',
+    h.pickOpenCandidates(
+      { [A]: alive({ createdAt: 900 }), [B]: alive({ createdAt: 100 }), [C]: alive({ createdAt: 500 }) },
+      'me', '1v1', NOW).map(r => r.code).join() === [B, C, A].join());
+  const many = {};
+  // 合言葉に使える文字だけで作る(I・O・1・0 は見間違い防止のため使われていない)
+  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  for (let i = 0; i < h.openMaxCandidates() + 8; i++) {
+    many['ZZ' + CODE_CHARS[i % 32] + CODE_CHARS[(i * 7) % 32] + '2345'] = alive({ createdAt: i });
+  }
+  check('the number of rooms tried in one press is capped',
+    h.pickOpenCandidates(many, 'me', '1v1', NOW).length === h.openMaxCandidates());
+  check('an unknown format falls back to 1v1 rather than matching nothing',
+    h.normalizeOpenFormat('3v3') === '1v1' && h.normalizeOpenFormat('2v2') === '2v2');
+  check('the listing expiry matches the room lease, so a waiting room is not dropped early',
+    h.openIndexTtlMs() === h.roomTtlMs() && h.roomLeaseRenewMs() < h.openIndexTtlMs());
+
+  // ---- 待ち状態の出入り ----
+  function quickHost({ phase = 'lobby', slots = { p1: { uid: 'uid-p1' } }, waiting = true, listed = true } = {}) {
+    return {
+      kind: 'firebase', role: 'host', phase, seat: 'p1', room: A, auth: { uid: 'uid-p1' },
+      slots, quickWaiting: waiting, quickListed: listed, quickFormat: '1v1',
+      lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: 0 }, seatSeen: {}, seatStale: {}, log: []
+    };
+  }
+  let host = quickHost();
+  h.setOnlineForLogTest(host);
+  h.syncQuickMatchListing();
+  check('an empty room keeps waiting and stays listed', host.quickWaiting && host.quickListed);
+  host.slots = { p1: { uid: 'uid-p1' }, e1: { uid: 'uid-e1' } };
+  h.syncQuickMatchListing();
+  check('the room stops waiting and is withdrawn once someone sits down',
+    !host.quickWaiting && !host.quickListed);
+  // 観戦席に誰か入っただけでも「相手が来た」扱いにする(4人戦で席が埋まるのは段B)。
+  host = quickHost({ slots: { p1: { uid: 'uid-p1' }, s1: { uid: 'uid-s1' } } });
+  h.setOnlineForLogTest(host);
+  h.syncQuickMatchListing();
+  check('any occupied seat, spectator included, ends the wait', !host.quickWaiting);
+  host = quickHost({ phase: 'playing' });
+  h.setOnlineForLogTest(host);
+  h.syncQuickMatchListing();
+  check('a room that already left the lobby is not advertised as waiting', !host.quickWaiting);
+  // ゲストは案内を取り下げられない(ルールがホスト本人か期限切れしか許さない)。
+  const guest = quickHost();
+  guest.role = 'guest'; guest.seat = 'e1';
+  h.setOnlineForLogTest(guest);
+  h.syncQuickMatchListing();
+  check('a guest never touches the listing', guest.quickWaiting && guest.quickListed);
+  h.setOnlineForLogTest(null);
+
+  // ---- 逃げ道と後片付け ----
+  // v101までは全員が同じ固定合言葉だったので隠していた。今は部屋ごとに違うので、
+  // 待っている間こそ見せる(呼びたい相手へ直接伝えられる)。
+  check('the passcode stays visible while waiting, so a friend can be invited straight in',
+    !htmlText.includes('#onlineLobby.in-room.quickplay #onlineRoomCodeRow { display: none; }')
+    && htmlText.includes('#onlineLobby.in-room #onlineRoomCodeRow { display: flex; }')
+    && /onlineQuickButton[\s\S]{0,600}onlineRoomCodeEl\.textContent = code;/.test(htmlText));
+  check('waiting never starts the match on its own; the CPU fallback is a button',
+    htmlText.includes('id="onlineQuickCpu"')
+    && htmlText.includes('#onlineLobby.in-room.quickplay #onlineQuickCpu { display: block; }')
+    && /onlineQuickCpuButton[\s\S]{0,400}selectCharacterAndStart\(character\)/.test(htmlText));
+  check('the listing is withdrawn from the single place every exit path goes through',
+    /function endOnline[\s\S]{0,600}if \(leaving\.kind === 'firebase' && leaving\.quickListed\) unpublishOpenRoom\(leaving\.room, leaving\.auth\);/.test(htmlText));
+  check('a room still waiting is re-listed alongside the room lease, so it does not expire out of the index',
+    /renewFirebaseRoomLease[\s\S]{0,900}leasing\.quickWaiting && leasing\.quickListed[\s\S]{0,120}publishOpenRoom/.test(htmlText));
+  check('failing to publish still leaves a usable room rather than aborting the match',
+    /catch \(_\) \{[\s\S]{0,220}quickListed: false/.test(htmlText));
+  check('the host learns someone arrived through the existing presence path',
+    htmlText.includes("if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);")
+    && /refreshFirebaseRoster[\s\S]{0,400}syncQuickMatchListing\(\);/.test(htmlText));
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

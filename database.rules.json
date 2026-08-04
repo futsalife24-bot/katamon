@@ -2,6 +2,18 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "open": {
+      ".read": "auth != null",
+      "$room": {
+        ".write": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && ((newData.exists() && newData.child('hostUid').val() === auth.uid && root.child('rooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid && root.child('rooms').child($room).child('expiresAt').val() > now) || (data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['format','hostUid','createdAt','expiresAt']) && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 3600000)",
+        "format": { ".validate": "newData.val() === '1v1' || newData.val() === '2v2'" },
+        "hostUid": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "expiresAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
     "rooms": {
       "$room": {
         ".read": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && data.child('expiresAt').isNumber() && data.child('expiresAt').val() > now && (data.child('slots').child('p1').child('uid').val() === auth.uid || data.child('slots').child('e1').child('uid').val() === auth.uid || data.child('slots').child('s1').child('uid').val() === auth.uid || data.child('slots').child('s2').child('uid').val() === auth.uid)",
