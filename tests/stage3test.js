@@ -320,6 +320,44 @@ function check(name, value) {
   const bonusUrls = (htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3\?v=\d+/g) || []);
   check('every bonus BGM URL is unique', new Set(bonusUrls).size === bonusUrls.length, bonusUrls.join(', '));
 
+  // キャラ画像も同じ理由で版が要る。URLが同じままだと Service Worker もブラウザも
+  // 古い絵を持ち続け、中身を入れ替えても表に出ない(v115で実際に出なかった)。
+  // 画像を差し替えたらこの表のハッシュと CHARACTER_ASSET_VERSION の両方を更新すること。
+  const CHARACTER_ASSET_PINS = [
+    { key: 'kyoryu', file: 'assets/kyoryu.png', hash: 'd7e8126f2075' },
+    { key: 'medama', file: 'assets/medama.png', hash: 'f1d5608f8625' },
+    { key: 'iwa', file: 'assets/iwa.png', hash: '283307e2478f' },
+    { key: 'tori', file: 'assets/tori.png', hash: 'b4f372180210' },
+    { key: 'barugerukan', file: 'assets/barugerukan.png', hash: 'bb3c27616491' },
+    { key: 'nisenmono', file: 'assets/nisenmono.png', hash: 'ff4991ae8756', version: 2 },
+    { key: 'burumutan', file: 'assets/burumutan.png', hash: '5e739accbd3a' },
+    { key: 'sumoeru', file: 'assets/sumoeru.png', hash: 'ce3bb11b1a64' },
+    { key: 'doRednote', file: 'assets/do-rednote.png', hash: '6219b95e512f' },
+    { key: 'mocchario', file: 'assets/mocchario.png', hash: '228b1ea240b7' },
+    { key: 'mecha', file: 'assets/mecha.png', hash: '086923d116e6' },
+    { key: 'akuma', file: 'assets/akuma.png', hash: 'a70b4d0c56fd' },
+    { key: 'jinba', file: 'assets/jinba.png', hash: 'ccefcac9ced5' },
+    { key: 'kishi', file: 'assets/kishi.png', hash: '54142e9e8e56' },
+    { key: 'neko', file: 'assets/neko.png', hash: '1de7bdc6727e' },
+    { key: 'shinigami', file: 'assets/shinigami.png', hash: '806d572ce13d' }
+  ];
+  const versionMapSrc = /const CHARACTER_ASSET_VERSION = \{([^}]*)\}/.exec(htmlForAudio);
+  const declaredVersions = {};
+  for (const [, k, v] of (versionMapSrc ? versionMapSrc[1] : '').matchAll(/(\w+):\s*(\d+)/g)) declaredVersions[k] = Number(v);
+  const charNg = [];
+  for (const pin of CHARACTER_ASSET_PINS) {
+    if (fileHash(pin.file) !== pin.hash) {
+      charNg.push(`${pin.file} の中身が変わっている(${fileHash(pin.file)})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+    }
+    if (declaredVersions[pin.key] !== pin.version) {
+      charNg.push(`${pin.key} の版が食い違う(宣言=${declaredVersions[pin.key]} 期待=${pin.version})`);
+    }
+  }
+  check('character images and their cache-busting versions stay in sync', charNg.length === 0, charNg.join(' / '));
+  check('the character image URL actually carries the version',
+    htmlForAudio.includes('const assetVersion = CHARACTER_ASSET_VERSION[key];')
+    && htmlForAudio.includes('.png${assetVersion ? `?v=${assetVersion}` : \'\'}`'));
+
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
   check('Firebase v3 fire keeps the v2 payload checks behind the required round envelope',
     h.validateFirebaseMessage(validV3Fire)

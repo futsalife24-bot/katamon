@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v115';
+  const BUILD_ID = 'v116';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2202,6 +2202,8 @@
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
+  // キャラ画像のキャッシュ版数。差し替えたキャラだけ載せる(未記載は版なし=初版)。
+  const CHARACTER_ASSET_VERSION = { nisenmono: 2 };
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
@@ -2210,7 +2212,13 @@
     img.fetchPriority = 'high';
     img.onload = () => { characterImagesReady++; };
     img.onerror = () => { characterImagesFailed++; };
-    img.src = `assets/${CHARACTERS[key].asset || key}.png`;
+    // **画像を差し替えたら、ここの版を必ず上げること。** URLが同じままだと
+    // Service Workerもブラウザも古い絵を持ち続け、中身を入れ替えても表に出ない
+    // (v115でニセンモノを差し替えた時に実際に出なかった)。
+    // 差し替えたキャラだけ上げる。全部を一括で上げると、変えていない15体ぶん
+    // (約2.5MB)まで配り直すことになる。BGMが `?v=` を持っているのと同じ考え方。
+    const assetVersion = CHARACTER_ASSET_VERSION[key];
+    img.src = `assets/${CHARACTERS[key].asset || key}.png${assetVersion ? `?v=${assetVersion}` : ''}`;
     charImages[key] = img;
   }
   function areCoreImagesReady() {
