@@ -5035,8 +5035,13 @@
     // 試合開始時は start のスナップショットが同じ形式を持ってくるので、ここで作り替えても食い違わない。
     if (online.phase === 'lobby') setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
     const role = firebaseSeatIsPlayer(online.seat) ? 'player' : 'spectator';
-    if (role === online.participantRole) return;
+    // 役割が同じでも、人数が変わった時と空席(=CPUの担当)が変わった時は貼り直す。
+    // 1vs1から2vs2へ切り替えた瞬間、増えた p2/e2 は宣言時の control='cpu' のまま
+    // units へ入る。貼り直さないと、ホストでない端末までCPUを動かそうとする。
+    const assignment = `${role}:${matchFormat}:${firebaseCpuSeats().join(',')}`;
+    if (assignment === online.seatAssignment) return;
     online.participantRole = role;
+    online.seatAssignment = assignment;
     if (role === 'player') setOnlineSeat(online.seat);
     else setOnlineSeat('p1'); // 観戦へ戻る時は操作権を持たない席へ寄せる
   }
@@ -5363,6 +5368,7 @@
       // 既存の経路を変えずに済ませるために残してある。
       seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {},
       startAcks: {}, // 開始データを受け取ったと返してきた席
+      seatAssignment: '', // 席とcontrolを最後に貼った時の条件。変わった時だけ貼り直す
       // 試合中に想定されるキャラ(ユニットID→キャラ)。開始データを確定した時点で作る。
       unitCharacters: null,
       // すぐ対戦で自分が待っている間だけ立つ。相手が座ったら降ろし、一覧からも取り下げる。

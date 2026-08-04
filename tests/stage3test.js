@@ -1217,6 +1217,19 @@ function check(name, value) {
     late.participantRole === 'player');
   check('and that player is put in charge of p2, not of the seat name',
     h.localUnitId() === 'p2');
+  // e1 の人は1vs1でも2vs2でも「対戦者」のままなので役割が変わらない。ここで席を
+  // 貼り直さないと、増えた p2/e2 は宣言時の control='cpu' のまま units へ入り、
+  // ホストでない端末までCPUを動かし始める。
+  {
+    const e1Guest = lobbyWith('1v1', 'e1');
+    h.setOnlineForLogTest(e1Guest);
+    h.syncFirebaseParticipantRole();
+    const before = app.controls();
+    e1Guest.settings = h.normalizeLobbySettings({ ...e1Guest.settings, format: '2v2' });
+    h.syncFirebaseParticipantRole();
+    check('switching a room to 2vs2 re-seats a guest whose role did not change',
+      before === 'p1:remote,e1:local' && app.controls() === 'p1:remote,e1:local,p2:remote,e2:remote');
+  }
   h.setOnlineForLogTest(null);
   check('the lobby settings carry the match format, defaulting to 1vs1 for older peers',
     h.normalizeLobbySettings({}).format === '1v1'
