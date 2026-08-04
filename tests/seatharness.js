@@ -163,7 +163,28 @@ const HOOK = `
       logOnlineEvent: (e) => logOnlineEvent(e),
       persistOnlineLog: () => persistOnlineLog(),
       onlineLogKey: () => ONLINE_LOG_KEY,
-      onlineLogMax: () => ONLINE_LOG_MAX
+      onlineLogMax: () => ONLINE_LOG_MAX,
+      // ---- 席のゴースト対策(Issue #7) ----
+      seatHeartbeatMs: () => FIREBASE_SEAT_HEARTBEAT_MS,
+      seatStaleReleaseMs: () => FIREBASE_SEAT_STALE_RELEASE_MS,
+      lobbySeatStaleVisibleMs: () => FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS,
+      canReleaseFirebaseSeat: (seat) => canReleaseFirebaseSeat(seat),
+      ownFirebaseSeatIsLost: () => ownFirebaseSeatIsLost(),
+      firebaseSeatIsStale: (seat) => firebaseSeatIsStale(seat),
+      firebaseSeatHeartbeatTarget: () => firebaseSeatHeartbeatTarget(),
+      // 席ボードを実際に組み立てて、出来上がったDOMを覗く。
+      renderLobbySeats: () => {
+        renderFirebaseLobby();
+        return (onlineSlotsEl ? onlineSlotsEl.children : []).map(row => ({
+          cls: row.className,
+          parts: row.children.map(c => c.tagName + ':' + c.className + ':' + c.textContent)
+        }));
+      },
+      showTitleNotice: (text) => showTitleNotice(text),
+      titleNotice: () => activeTitleNotice(),
+      titleNoticeBand: () => ({ top: TITLE_NOTICE_Y - TITLE_NOTICE_H / 2, bottom: TITLE_NOTICE_Y + TITLE_NOTICE_H / 2 }),
+      saveBubbleBand: () => ({ top: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, bottom: SAVE_BUBBLE_CY + SAVE_BUBBLE_RY }),
+      titleModeLabelY: () => TITLE_MODE_LABEL_Y
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)
@@ -262,17 +283,24 @@ function makeElement(tag) {
     dispatchEvent: (ev) => { for (const fn of (listeners.get(ev.type) || [])) fn(ev); return true; },
     __fire: (type, ev) => { for (const fn of (listeners.get(type) || [])) fn(Object.assign({ type, preventDefault: noop, stopPropagation: noop }, ev)); },
     setPointerCapture: noop, releasePointerCapture: noop, focus: noop, blur: noop, click: noop,
-    appendChild: (c) => c, removeChild: noop, setAttribute: noop, getAttribute: () => null,
+    // 子を実際に覚えておく。ロビーの席ボードのように「組み立てたDOMを検査したい」
+    // テストのために必要。firstChild/removeChild も本物と同じ意味で動かさないと、
+    // renderFirebaseLobby の「全部消してから作り直す」ループが空回りする。
+    appendChild: (c) => { el.children.push(c); return c; },
+    removeChild: (c) => { const i = el.children.indexOf(c); if (i >= 0) el.children.splice(i, 1); return c; },
+    setAttribute: noop, getAttribute: () => null,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 540, height: 960, right: 540, bottom: 960, x: 0, y: 0 }),
     play: () => Promise.resolve(), pause: noop, load: noop
   };
+  Object.defineProperty(el, 'firstChild', { get: () => el.children[0] || null });
   return el;
 }
 
 const elements = new Map();
 const gameCanvas = makeCanvas();
 elements.set('game', gameCanvas);
-for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel']) {
+// onlineSlots はロビーの席ボード。組み立てたDOMを検査したいので実体を持たせる。
+for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel', 'onlineSlots']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
 
