@@ -201,7 +201,11 @@ const HOOK = `
       firebaseSeatLabel: (seat) => firebaseSeatLabel(seat),
       firebaseLobbyIs2v2: () => firebaseLobbyIs2v2(),
       syncFirebaseParticipantRole: () => syncFirebaseParticipantRole(),
-      localUnitId: () => localUnitId
+      localUnitId: () => localUnitId,
+      allFirebasePlayersReady: () => allFirebasePlayersReady(),
+      firebaseOccupiedPlayerSeats: () => firebaseOccupiedPlayerSeats(),
+      firebaseCpuSeats: () => firebaseCpuSeats(),
+      firebaseSeatReady: (seat) => firebaseSeatReady(seat)
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)

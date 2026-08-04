@@ -596,7 +596,7 @@ function check(name, value) {
     && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
-    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
+    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
     && htmlText.includes("netSend({ t: 'ready', value: false });")
@@ -1212,6 +1212,50 @@ function check(name, value) {
   check('only the host can still change the settings, format included',
     rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
     && rules.settings['.write'].includes("child('status').val() === 'lobby'"));
+
+  // ---- 4人ぶんの準備完了と、空席をCPUが埋めること（決定3） ----
+  function seated(...seats) {
+    const slots = {};
+    for (const seat of ['p1', 'e1', 's1', 's2']) slots[seat] = seats.includes(seat) ? { uid: 'uid-' + seat } : null;
+    return slots;
+  }
+  function readyLobby(format, occupied, readySeats) {
+    const o = lobbyWith(format, 'p1');
+    o.slots = seated(...occupied);
+    o.selfReady = readySeats.includes('p1');
+    o.seatReady = {};
+    for (const seat of readySeats) o.seatReady[seat] = true;
+    return o;
+  }
+  h.setOnlineForLogTest(readyLobby('2v2', ['p1', 'e1', 's1', 's2'], ['p1', 'e1', 's1']));
+  check('a 2vs2 room is not startable while one of the four is still choosing',
+    !h.allFirebasePlayersReady());
+  h.setOnlineForLogTest(readyLobby('2v2', ['p1', 'e1', 's1', 's2'], ['p1', 'e1', 's1', 's2']));
+  check('a full 2vs2 room starts once all four are ready', h.allFirebasePlayersReady());
+  // 空席は待たない。CPUが埋めるので、来ない人をいつまでも待たされない(決定3)。
+  const short = readyLobby('2v2', ['p1', 'e1'], ['p1', 'e1']);
+  h.setOnlineForLogTest(short);
+  check('an empty seat never blocks the start; it is filled by a CPU',
+    h.allFirebasePlayersReady() && h.firebaseCpuSeats().join() === 's1,s2'
+    && h.firebaseOccupiedPlayerSeats().join() === 'p1,e1');
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1'], ['p1']));
+  check('1vs1 still waits for the one opponent', !h.allFirebasePlayersReady());
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1'], ['p1', 'e1']));
+  check('1vs1 starts when both are ready', h.allFirebasePlayersReady());
+  // 1vs1で観戦者が座っていても、対戦者の準備完了には関係しない。
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1', 's1'], ['p1', 'e1']));
+  check('a spectator in a 1vs1 room is not counted as a player who must ready up',
+    h.allFirebasePlayersReady() && h.firebaseOccupiedPlayerSeats().join() === 'p1,e1');
+  h.setOnlineForLogTest(null);
+  check('the empty seats are labelled as CPU in the lobby, not left looking vacant',
+    htmlText.includes("state.textContent = 'CPUが担当';"));
+  check('the start button follows the same all-ready rule the host code uses',
+    htmlText.includes("onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';")
+    && htmlText.includes("if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;"));
+  check('a rematch clears every seat’s ready state, not just the two 1vs1 ones',
+    htmlText.includes("online.selfReady = false; online.peerReady = false; online.seatReady = {};"));
+  check('the host announces the roster for whichever seats are actually taken',
+    /const players = \{ p1: online\.clientId \};[\s\S]{0,260}firebasePlayerSeats\(\)[\s\S]{0,200}players\[seat\] = online\.slots\[seat\]\.uid;/.test(htmlText));
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

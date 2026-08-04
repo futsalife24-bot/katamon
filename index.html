@@ -234,6 +234,7 @@
   .onlineSeatRow .seatState.ready { color: #ffd24a; }
   .onlineSeatRow .seatState.picking { color: #9fb0bd; }
   .onlineSeatRow .seatState.stale { color: #ff8a6a; }
+  .onlineSeatRow .seatState.cpu { color: #8fb6c8; }
   /* 応答が途切れた席。名前を落として、居るのに動いていないことが一目で分かるようにする */
   .onlineSeatRow.stale .seatMark, .onlineSeatRow.stale .seatName { opacity: .5; }
   /* ホストだけに出る「この席を空ける」。押し間違いが効かないよう、他の要素と間を空ける */
@@ -242,7 +243,7 @@
     background: #6d2320; border: 1px solid #e08a72; border-radius: 3px; padding: 3px 7px; cursor: pointer;
   }
   .onlineSeatRow .seatReleaseBtn:active { background: #8c2e2a; }
-  #onlineSettings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 7px; }
+  #onlineSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
   #onlineLobbyButtons {
@@ -335,6 +336,7 @@
           <select id="onlineTerrain" aria-label="地形"></select>
           <select id="onlineWind" aria-label="風"></select>
           <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
+          <select id="onlineFormat" aria-label="対戦方式"><option value="1v1" selected>1 vs 1</option><option value="2v2">2 vs 2</option></select>
         </div>
       </div>
       <select id="onlineCharacter" aria-label="使用モンスター"></select>
@@ -4588,8 +4590,12 @@
         // ゲストが試合を受け取ってから、はじめてホストの操作を解禁する。
         // ここを待たないと、遅延の大きい回線でホストが先に撃ててしまう。
         if (online && online.kind === 'firebase') {
+          // value を省いた旧形式は「準備完了」とみなす。
+          // 2vs2は4人ぶん要るので席ごとに覚える。1vs1の peerReady は従来どおり残す
+          // (開始条件や表示が peerReady を見ている箇所を変えずに済ませるため)。
+          if (!online.seatReady) online.seatReady = {};
+          online.seatReady[msg.seat] = msg.value !== false;
           if (msg.seat === online.peerSeat) {
-            // value を省いた旧形式は「準備完了」とみなす。
             online.peerReady = msg.value !== false;
             // startを受けたe1のackで、p1も初めて入力解禁する。
             if (online.role === 'host' && online.phase === 'starting') online.phase = 'playing';
@@ -4820,6 +4826,7 @@
   const onlineTerrainEl = document.getElementById('onlineTerrain');
   const onlineWindEl = document.getElementById('onlineWind');
   const onlineTurnsEl = document.getElementById('onlineTurns');
+  const onlineFormatEl = document.getElementById('onlineFormat');
   const onlineReadyBtn = document.getElementById('onlineReady');
   const onlineStartBtn = document.getElementById('onlineStart');
   const onlineRematchBtn = document.getElementById('onlineRematch');
@@ -4900,6 +4907,30 @@
   function firebaseSeatIsPlayer(seat) { return firebasePlayerSeats().includes(seat); }
   // 対戦方式はホストから後から届く。2vs2だと分かった時点で、s1/s2に座っている人は
   // 観戦者ではなく対戦者になる。席そのものは動かないので、役割だけを付け直す。
+  // その席に人が座っているか。空いている席は決定3のとおりCPUが埋めるので、
+  // 「全員が準備完了か」の判定からは外す(空席をいつまでも待たない)。
+  function firebaseSeatOccupied(seat) {
+    return !!(online && online.slots && online.slots[seat] && online.slots[seat].uid);
+  }
+  function firebaseOccupiedPlayerSeats() {
+    return firebasePlayerSeats().filter(firebaseSeatOccupied);
+  }
+  // CPUが埋める席。人が座っていない対戦者席がそのままCPUになる。
+  function firebaseCpuSeats() {
+    return firebasePlayerSeats().filter(seat => !firebaseSeatOccupied(seat));
+  }
+  function firebaseSeatReady(seat) {
+    if (!online) return false;
+    if (seat === online.seat) return !!online.selfReady;
+    return !!(online.seatReady && online.seatReady[seat]);
+  }
+  // 人が座っている対戦者席が全部そろって準備完了か。空席はCPUなので待たない。
+  function allFirebasePlayersReady() {
+    const seats = firebaseOccupiedPlayerSeats();
+    if (!seats.length) return false;
+    return seats.every(firebaseSeatReady);
+  }
+
   function syncFirebaseParticipantRole() {
     if (!online || online.kind !== 'firebase') return;
     // 先に人数を合わせる。2vs2の席(s1→p2 / s2→e2)は、ユニットが4体ある状態でないと
@@ -5230,6 +5261,7 @@
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       seatSeen: {}, seatStale: {},
+      seatReady: {}, // 席ごとの準備完了。2vs2は4人ぶん要る
       // すぐ対戦で自分が待っている間だけ立つ。相手が座ったら降ろし、一覧からも取り下げる。
       quickWaiting: !!(quick && quick.quickWaiting),
       quickListed: !!(quick && quick.quickListed),
@@ -5404,8 +5436,7 @@
       row.appendChild(badge);
     }
 
-    // 準備状態はp1/e1のみ、ロビー中で在席している時だけ出す。判定は既存のselfReady/peerReadyのまま
-    // (peerSeatは対戦者同士でのみ相手を指す。観戦者からの見え方は元のテキスト版と同じ制約を引き継ぐ)。
+    // 準備状態は対戦者席だけ、ロビー中に出す。2vs2では4席ぶん要るので席ごとに覚えた値を見る。
     // 応答なしは準備状態より優先して出す。観戦席にも出す(誰が消えたのか分かるように)。
     // 空けられるのはホストだけ。しかもロビー中の「応答なし」の席に限る(Issue #7)。
     if (stale) {
@@ -5422,10 +5453,16 @@
         row.appendChild(release);
       }
     } else if (isPlayerSeat && occupied && online.phase === 'lobby') {
-      const ready = seat === online.seat ? online.selfReady : (seat === online.peerSeat && !!online.peerReady);
+      const ready = firebaseSeatReady(seat);
       const state = document.createElement('span');
       state.className = 'seatState ' + (ready ? 'ready' : 'picking');
       state.textContent = ready ? '準備完了 ✓' : '選択中…';
+      row.appendChild(state);
+    } else if (isPlayerSeat && !occupied && online.phase === 'lobby') {
+      // 空いたままの対戦者席はCPUが埋める(決定3)。待たされていると思わせないよう明示する。
+      const state = document.createElement('span');
+      state.className = 'seatState cpu';
+      state.textContent = 'CPUが担当';
       row.appendChild(state);
     }
     return row;
@@ -5444,13 +5481,15 @@
     if (onlineTerrainEl) onlineTerrainEl.value = online.settings.terrain;
     if (onlineWindEl) onlineWindEl.value = online.settings.wind;
     if (onlineTurnsEl) onlineTurnsEl.value = String(online.settings.turnsPerPlayer);
-    [onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });
+    if (onlineFormatEl) onlineFormatEl.value = online.settings.format;
+    [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });
     if (onlineCharacterEl) onlineCharacterEl.disabled = !isFirebasePlayer() || online.selfReady || online.phase !== 'lobby';
     if (onlineReadyBtn) {
       onlineReadyBtn.disabled = !isFirebasePlayer() || online.phase !== 'lobby';
       onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';
     }
-    if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !online.selfReady || !online.peerReady || online.phase !== 'lobby';
+    // 人が座っている対戦者席が全部そろって準備完了なら押せる。空席はCPUなので待たない。
+    if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';
     const hasResultVote = Object.prototype.hasOwnProperty.call(online.rematchVotes || {}, online.seat);
     if (onlineRematchBtn) onlineRematchBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
     if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
@@ -5473,7 +5512,7 @@
   function resetLocalFirebaseRoundState(autoReady) {
     if (!online || online.kind !== 'firebase') return;
     logSeatAssignment('roundReset');
-    online.phase = 'lobby'; online.selfReady = false; online.peerReady = false;
+    online.phase = 'lobby'; online.selfReady = false; online.peerReady = false; online.seatReady = {};
     online.selfCharacter = selectedOnlineCharacter();
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false; online.peerCommitAt = null;
@@ -5518,16 +5557,22 @@
   async function updateFirebaseSettings() {
     // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
     if (!isFirebaseHost() || online.phase !== 'lobby') return;
-    const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, revision: (online.settings.revision || 0) + 1 });
+    const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, revision: (online.settings.revision || 0) + 1 });
     await firebaseRequest(`rooms/${online.room}/settings`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
-    online.settings = settings; netSend({ t: 'settings', settings }); renderFirebaseLobby();
+    online.settings = settings; syncFirebaseParticipantRole(); netSend({ t: 'settings', settings }); renderFirebaseLobby();
   }
   async function requestFirebaseStart() {
-    if (!isFirebaseHost() || online.phase !== 'lobby' || !online.selfReady || !online.peerReady || !online.peerCommitted) return;
+    if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;
+    // 1vs1は従来どおり相手のコミットも待つ。2vs2の公開手順は段Cで4人ぶんへ広げる。
+    if (!firebaseLobbyIs2v2() && !online.peerCommitted) return;
     try {
       await refreshFirebaseRoster(false);
-      const players = { p1: online.clientId, e1: online.slots.e1 && online.slots.e1.uid || null };
-      if (!players.e1) { onlineLobbyStatus('対戦者の入室を確認できません。'); return; }
+      const players = { p1: online.clientId };
+      for (const seat of firebasePlayerSeats()) {
+        if (seat !== 'p1' && firebaseSeatOccupied(seat)) players[seat] = online.slots[seat].uid;
+      }
+      // 1vs1は相手が居ないと始まらない。2vs2は空席をCPUが埋めるので人数は問わない。
+      if (!firebaseLobbyIs2v2() && !players.e1) { onlineLobbyStatus('対戦者の入室を確認できません。'); return; }
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'revealing', players }) });
       online.phase = 'revealing'; netSend({ t: 'lobbyState', status: 'revealing', slots: online.slots, settings: online.settings }); maybeRevealCharacter(); renderFirebaseLobby();
     } catch (_) { onlineLobbyStatus('開始状態を更新できませんでした。'); }
