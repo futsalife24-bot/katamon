@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v117';
+  const BUILD_ID = 'v118';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2288,6 +2288,20 @@
   // ===== ユニット =====
   const UNIT_RADIUS = 16;      // 接地・アンカー計算用の半径
   const UNIT_HIT_RADIUS = 30;  // 弾の直撃判定用(見た目のスプライトサイズに合わせて大きめ)
+  // 直撃の円をキャラの体へ上げる量。u.y は足元から UNIT_RADIUS しか上にないので、
+  // そのまま中心にすると円が足元に寄り、**見えている上半分に当たらない**(実機で指摘)。
+  // スプライトは高さ78pxで下端が足元なので、絵の中心は u.y から約23px上になる。
+  //
+  // **絵の高さから計算してはいけない。** 画像の読み込みに失敗した端末だけ中心が変わり、
+  // オンラインで当たり外れが食い違う。ここは全端末で同じ固定値にすること。
+  //
+  // 上げるのは直撃の円だけ。**発射基点と爆風の基準(unitAnchor)は動かさない。**
+  // 動かすと足元へ撃った時の距離が変わり、ダメージが全キャラぶん変わってしまう。
+  const UNIT_HIT_RISE = 23;
+  // 直撃判定の中心。可視化もここを使う(見えている輪と実際の判定を必ず一致させる)。
+  function unitHitCenter(u) {
+    return { x: u.x, y: u.y - UNIT_HIT_RISE };
+  }
   const MAX_HP = 100;
   const FUEL_MAX = 102; // 全キャラの基本移動可能距離を従来の2倍にする
   const MOVE_SPEED = 95; // px/s
@@ -8280,8 +8294,9 @@
   // 当たり判定の可視化。**判定は全キャラ共通の円**で、中心はキャラの中心、
   // 半径は UNIT_HIT_RADIUS。絵の形も大きさも違うので、どこに当たるのかは絵からは読めない。
   // 主張しすぎない明るさにすること。ここが濃いと盤面がうるさくなって弾道が見えなくなる。
-  function drawUnitHitCircle(u, a) {
+  function drawUnitHitCircle(u) {
     if (u.hp <= 0) return;
+    const a = unitHitCenter(u);
     const active = activeUnit() === u;
     const tint = u.team === 'player' ? '120,190,255' : '255,150,120';
     // ゆっくり明滅させる。止まった輪より「判定がそこにある」ことが伝わる。
@@ -8309,7 +8324,7 @@
     if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
     // 絵より先に描く。上に重ねるとキャラが霞む。
-    drawUnitHitCircle(u, a);
+    drawUnitHitCircle(u);
     const isBossUnit = isBossMatch && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
@@ -11895,7 +11910,7 @@
       if (!p.fireworkShard && !p.deathGateScythe) {
         for (const u of units) {
           if (u.id === p.owner) continue;
-          const a = unitAnchor(u);
+          const a = unitHitCenter(u);
           const hitDx = a.x - p.x, hitDy = a.y - p.y, hitReach = UNIT_HIT_RADIUS + p.radius;
           if (hitDx * hitDx + hitDy * hitDy <= hitReach * hitReach) {
             if (p.jump) {

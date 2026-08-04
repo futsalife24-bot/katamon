@@ -53,11 +53,25 @@ const shinigami = kt.character('shinigami');
     && (html.match(/SPRITE_SIZE \* unitSpriteScale\(u\.character\)/g) || []).length === 2);
   // 判定は全キャラ共通の円。絵の大きさを揃えても、どこに当たるかは絵からは読めない。
   check('当たり判定を円で可視化している',
-    html.includes('function drawUnitHitCircle(u, a)')
+    html.includes('function drawUnitHitCircle(u)')
     && html.includes('ctx.arc(a.x, a.y, UNIT_HIT_RADIUS, 0, Math.PI * 2);')
-    && html.includes('drawUnitHitCircle(u, a);'));
+    && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
-    /drawUnitHitCircle\(u, a\);[\s\S]{0,1200}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+    /drawUnitHitCircle\(u\);[\s\S]{0,1200}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+  // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
+  // 中心にすると見えている上半分に当たらない(実機で指摘)。
+  check('直撃の円をキャラの体へ上げている',
+    html.includes('const UNIT_HIT_RISE = 23;')
+    && html.includes('return { x: u.x, y: u.y - UNIT_HIT_RISE };'));
+  // 見えている輪と実際の判定が同じ中心を使うこと。別々だと嘘の表示になる。
+  check('見えている輪と実際の判定が同じ中心を使う',
+    // 呼び出しは2か所(可視化と直撃判定)。定義側は数えない。
+    (html.match(/const a = unitHitCenter\(u\);/g) || []).length === 2);
+  // 上げるのは直撃の円だけ。発射基点と爆風の基準を動かすと、足元へ撃った時の距離が
+  // 変わってダメージが全キャラぶん変わる。
+  check('発射基点と爆風の基準は動かしていない',
+    html.includes('function unitAnchor(u) {')
+    && /function unitAnchor\(u\) \{[\s\S]{0,200}return \{ x: u\.x, y: u\.y \};/.test(html));
 }
 check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
