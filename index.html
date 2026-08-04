@@ -264,9 +264,6 @@
   #onlineLobby.in-room.results #onlineReturnLobby { display: block; }
   #onlineLobby.in-room.results #onlineReady, #onlineLobby.in-room.results #onlineStart, #onlineLobby.in-room.results #onlineLeave { display: none; }
   #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
-  /* 「CPUで始める」は、すぐ対戦で相手を待っている間だけ出す。自動では始めない(決定15) */
-  #onlineQuickCpu { display: none; }
-  #onlineLobby.in-room.quickplay #onlineQuickCpu { display: block; }
   #onlineQuick, #onlineReady, #onlineStart { border-color: #ffd24a !important; color: #ffe2a1 !important; }
   #onlineQuick, #onlineReady { min-height: 54px; font-size: 16px; }
   #onlineCodeToggle {
@@ -348,7 +345,6 @@
       <button id="onlineRematch" type="button">このまま再戦</button>
       <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
       <button id="onlineQuick" type="button">すぐ対戦する</button>
-      <button id="onlineQuickCpu" type="button">CPUで始める</button>
       <button id="onlineCodeToggle" type="button">合言葉を使う</button>
     </div>
   </div>
@@ -402,7 +398,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v107';
+  const BUILD_ID = 'v108';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3752,9 +3748,24 @@
       throw new Error(err && err.message === 'token-time-invalid' ? '認証の時刻情報を確認できません。端末の日時と通信を確認してもう一度お試しください。' : 'オンライン対戦に接続できません。通信設定を確認してもう一度お試しください。');
     }
   }
+  function firebaseRequestUrl(path, auth) {
+    return `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+  }
   async function firebaseRequest(path, auth, options = {}) {
-    const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
-    const response = await fetch(url, options);
+    let response = await fetch(firebaseRequestUrl(path, auth), options);
+    // 401は「鍵の期限切れ」と「ルールに弾かれた」の両方で返り、見分けが付かない。
+    // まず期限切れの方を潰す。鍵を取り直して**本当に新しくなった時だけ**1回だけ送り直す。
+    // 鍵が変わらなければ期限切れではないので、そのまま従来どおり失敗させる
+    // (ルール拒否のたびに鍵を取り直しに行かないよう、force はしない)。
+    // これが無いと、鍵の更新に一度失敗しただけで以降の書き込みが全部落ち続け、
+    // 再戦の準備すら作れなくなる(実機で再戦できずロビーに取り残された)。
+    if (response.status === 401) {
+      const before = auth.idToken;
+      const renewed = await ensureFirebaseAuth().catch(() => null);
+      if (renewed && renewed.idToken && renewed.idToken !== before) {
+        response = await fetch(firebaseRequestUrl(path, auth), options);
+      }
+    }
     if (!response.ok) throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
     return response.status === 204 ? null : response.json();
   }
@@ -5405,7 +5416,7 @@
     onlineLobbyEl && onlineLobbyEl.classList.toggle('quickplay', !!online.quickWaiting);
     onlineLobbyEl && onlineLobbyEl.classList.toggle('host', role === 'host');
     onlineLobbyStatus(online.quickWaiting
-      ? '対戦相手を探しています… 上の合言葉を伝えれば直接呼べます。「CPUで始める」も選べます。'
+      ? '対戦相手を探しています… 上の合言葉を伝えれば直接呼べます。'
       : (online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。'));
     scheduleFirebaseTokenRefresh();
     scheduleFirebaseRoomLease();
@@ -9672,14 +9683,6 @@
     }
   });
   // 相手が来ない時の逃げ道。待ち続けるか、ここでCPU戦へ移るかは人が決める(決定15)。
-  const onlineQuickCpuButton = document.getElementById('onlineQuickCpu');
-  if (onlineQuickCpuButton) onlineQuickCpuButton.addEventListener('click', () => {
-    if (!online || online.kind !== 'firebase' || !online.quickWaiting) return;
-    const character = selectedOnlineCharacter();
-    endOnline(false, true); // 部屋と案内をたたんでからCPU戦へ移る
-    closeOnlineLobby();
-    selectCharacterAndStart(character);
-  });
   if (onlineCreateButton) onlineCreateButton.addEventListener('click', async () => {
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('匿名で接続し、部屋を作っています…');

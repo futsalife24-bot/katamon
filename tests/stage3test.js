@@ -1157,10 +1157,14 @@ function check(name, value) {
     !htmlText.includes('#onlineLobby.in-room.quickplay #onlineRoomCodeRow { display: none; }')
     && htmlText.includes('#onlineLobby.in-room #onlineRoomCodeRow { display: flex; }')
     && /onlineQuickButton[\s\S]{0,600}onlineRoomCodeEl\.textContent = code;/.test(htmlText));
-  check('waiting never starts the match on its own; the CPU fallback is a button',
-    htmlText.includes('id="onlineQuickCpu"')
-    && htmlText.includes('#onlineLobby.in-room.quickplay #onlineQuickCpu { display: block; }')
-    && /onlineQuickCpuButton[\s\S]{0,400}selectCharacterAndStart\(character\)/.test(htmlText));
+  // 決定15を改定(2026-08-04・ユーザー判断)。「CPUで始める」は廃止した。
+  // 1vs1でCPUと戦いたいならタイトルの CPU BATTLE がある。2vs2は対戦開始を押せば
+  // 空席がそのままCPUになるので、部屋の中に別口の入り口を置くと導線が二重になる。
+  // 自動では始めない(人が対戦開始を押す)という決定15の芯は変わっていない。
+  check('the room has no second way to start; the host just presses start and empty seats become CPUs',
+    !htmlText.includes('onlineQuickCpu')
+    && !htmlText.includes('CPUで始める')
+    && htmlText.includes("onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';"));
   check('the listing is withdrawn from the single place every exit path goes through',
     /function endOnline[\s\S]{0,600}if \(leaving\.kind === 'firebase' && leaving\.quickListed\) unpublishOpenRoom\(leaving\.room, leaving\.auth\);/.test(htmlText));
   check('a room still waiting is re-listed alongside the room lease, so it does not expire out of the index',
@@ -1519,6 +1523,15 @@ function check(name, value) {
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',
     /function maybeRevealCharacter\(\)[\s\S]{0,700}maybeStartFirebaseMatch\(\);/.test(htmlText));
+  // 実機で「再戦できない」。認証の更新に一度失敗すると、以降の書き込みが全部401で
+  // 落ち続け、再戦の準備すら作れなくなっていた。401は「鍵の期限切れ」と「ルール拒否」の
+  // 両方で返るので、鍵を取り直して本当に新しくなった時だけ送り直す。
+  check('an expired key is renewed and the write is sent once more, instead of failing for good',
+    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await fetch\(firebaseRequestUrl\(path, auth\), options\);/.test(htmlText));
+  check('a rules rejection is not mistaken for an expired key, so it never loops on the token endpoint',
+    // force しない = 期限内なら同じ鍵が返る = 送り直さずそのまま失敗する
+    /async function firebaseRequest\([\s\S]{0,900}ensureFirebaseAuth\(\)\.catch/.test(htmlText)
+    && !/async function firebaseRequest\([\s\S]{0,900}ensureFirebaseAuth\(true\)/.test(htmlText));
   // 実機で「再戦に時間がかかる」。再戦の自動開始が「誰かのready/commitを受け取った時」
   // しか走らず、相手がCPUだけの部屋では誰も送ってこないので毎回手で押す必要があった。
   // v105の「1人だと試合が始まらない」と同じ、受信経路にしか合図が無かった取りこぼし。
