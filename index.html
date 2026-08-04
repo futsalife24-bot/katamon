@@ -4545,7 +4545,7 @@
       // 通常の演出FIFOへ入れると、grounded=false の死体が残った再戦だけ永久に詰まる。
       // reveal のSHA-256確認が非同期で終わる前に届いた場合だけ、専用の1枠へ保留する。
       if (msg.t === 'start') {
-        if (online.revealVerified) applyNetMessage(msg);
+        if (firebaseRevealsReady()) applyNetMessage(msg);
         else {
           online.pendingStart = msg;
           logOnlineEvent({ type: 'startBuffered', reason: 'revealPending' });
@@ -4623,7 +4623,7 @@
           online.rematchVotes[msg.seat] = !!msg.vote;
           renderFirebaseLobby();
           if (isFirebaseHost() && msg.vote === false) { resetFirebaseRound(false); break; }
-          if (isFirebaseHost() && online.rematchVotes.p1 && online.rematchVotes.e1) resetFirebaseRound(true);
+          if (isFirebaseHost() && allFirebaseRematchVotesIn()) resetFirebaseRound(true);
         }
         break;
       case 'presence':
@@ -4644,7 +4644,7 @@
         if (online && online.kind === 'firebase' && online.participantRole === 'spectator') { applyFirebaseSpectatorSnapshot(msg); break; }
         if (online.role !== 'guest') break;
         if (online.kind === 'firebase' && (online.phase === 'playing' || online.phase === 'ended')) break; // SSE再送/リプレイは無害に捨てる
-        if (online.kind === 'firebase' && !online.revealVerified) {
+        if (online.kind === 'firebase' && !firebaseRevealsReady()) {
           online.protocolError = 'キャラクター確認が完了していません';
           break;
         }
@@ -4795,23 +4795,26 @@
         break;
       case 'commit':
         if (online.kind !== 'firebase' || online.phase === 'ended' || typeof msg.hash !== 'string') break;
-        if (msg.seat !== online.peerSeat) break;
+        // 2vs2は3人ぶん届く。席ごとに覚え、相手の席ぶんは従来の peer* にも写す。
+        if (msg.seat === online.seat || !firebaseSeatIsPlayer(msg.seat)) break;
         {
-          const decision = acceptPeerCommit(online.peerCommit, msg.hash, !!online.peerRevealSeen, online.peerCommitAt, msg.sentAt);
+          const decision = acceptPeerCommit(online.seatCommit[msg.seat], msg.hash, !!online.seatRevealSeen[msg.seat], online.seatCommitAt[msg.seat], msg.sentAt);
           if (decision.error) { rejectFirebaseMessage(decision.error); break; }
           if (decision.duplicate) break; // 同じpushの再送は無害に無視する
           if (decision.stale) break;     // 押し直しの古いコミットが後から届いただけ
-          online.peerCommit = decision.hash;
-          online.peerCommitAt = decision.at;
+          online.seatCommit[msg.seat] = decision.hash;
+          online.seatCommitAt[msg.seat] = decision.at;
+          if (msg.seat === online.peerSeat) { online.peerCommit = decision.hash; online.peerCommitAt = decision.at; online.peerCommitted = true; }
         }
-        online.peerCommitted = true;
-        onlineLobbyStatus('相手がモンスターを確定しました。確認中…');
+        onlineLobbyStatus(firebaseLobbyIs2v2()
+          ? `${firebaseSeatLabel(msg.seat)}がモンスターを確定しました。`
+          : '相手がモンスターを確定しました。確認中…');
         maybeRevealCharacter();
         maybeAutoStartFirebaseRound();
         break;
       case 'reveal':
         if (online.kind !== 'firebase' || online.phase === 'ended') break;
-        if (msg.seat !== online.peerSeat) break;
+        if (msg.seat === online.seat || !firebaseSeatIsPlayer(msg.seat)) break;
         verifyPeerReveal(msg);
         break;
       case 'ping':
@@ -5353,6 +5356,11 @@
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       seatSeen: {}, seatStale: {},
       seatReady: {}, // 席ごとの準備完了。2vs2は4人ぶん要る
+      // 伏せ合いも席ごとに持つ。1vs1の peer* はこの表の「相手の席」ぶんを写したもので、
+      // 既存の経路を変えずに済ませるために残してある。
+      seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {},
+      // 試合中に想定されるキャラ(ユニットID→キャラ)。開始データを確定した時点で作る。
+      unitCharacters: null,
       // すぐ対戦で自分が待っている間だけ立つ。相手が座ったら降ろし、一覧からも取り下げる。
       quickWaiting: !!(quick && quick.quickWaiting),
       quickListed: !!(quick && quick.quickListed),
@@ -5413,28 +5421,65 @@
     onlineLobbyStatus('準備完了を取り消しました。モンスターを選び直せます。');
     renderFirebaseLobby();
   }
+  // 席ごとの伏せ合いの進み具合。人が座っていない席は決定3のとおりCPUが埋めるので、
+  // コミットも公開も無い。待つのは「人が座っている対戦者席」だけ。
+  function firebaseSeatCommitted(seat) {
+    if (!online) return false;
+    if (seat === online.seat) return !!online.selfCommit;
+    return !!(online.seatCommit && online.seatCommit[seat]);
+  }
+  function firebaseSeatRevealVerified(seat) {
+    if (!online) return false;
+    if (seat === online.seat) return !!online.selfRevealed;
+    return !!(online.seatVerified && online.seatVerified[seat]);
+  }
+  function allFirebasePlayersCommitted() {
+    const seats = firebaseOccupiedPlayerSeats();
+    return seats.length > 0 && seats.every(firebaseSeatCommitted);
+  }
+  // 再戦は全員が押す(決定11)。押すのは人が座っている席だけで、空席のCPUは数えない。
+  function allFirebaseRematchVotesIn() {
+    const seats = firebaseOccupiedPlayerSeats();
+    return seats.length > 0 && seats.every(seat => online.rematchVotes[seat] === true);
+  }
+  function allFirebaseRevealsVerified() {
+    const seats = firebaseOccupiedPlayerSeats();
+    return seats.length > 0 && seats.every(firebaseSeatRevealVerified);
+  }
+  // 1vs1は従来どおり「相手のコミットが届いたか」だけを見る。ここを2vs2の判定へ
+  // 一本化すると、席が埋まる前の状態まで巻き込んで既存の経路が変わる。
+  function firebasePeersCommitted() { return firebaseLobbyIs2v2() ? allFirebasePlayersCommitted() : !!online.peerCommitted; }
   function maybeRevealCharacter() {
-    if (!online || online.kind !== 'firebase' || !online.selfCommit || !online.peerCommitted || online.selfRevealed || online.phase !== 'revealing') return;
+    if (!online || online.kind !== 'firebase' || !online.selfCommit || !firebasePeersCommitted() || online.selfRevealed || online.phase !== 'revealing') return;
     online.selfRevealed = true;
     netSend({ t: 'reveal', character: online.selfCharacter, nonce: online.selfNonce });
     onlineLobbyStatus('相手のモンスターを検証しています…');
   }
   async function verifyPeerReveal(msg) {
     if (!online || online.kind !== 'firebase') return;
-    if (!acceptPeerReveal(online.peerRevealSeen)) { rejectFirebaseMessage('相手が選択内容を重複公開しました'); return; }
-    online.peerRevealSeen = true;
+    const seat = msg.seat;
+    if (!acceptPeerReveal(online.seatRevealSeen[seat])) { rejectFirebaseMessage('相手が選択内容を重複公開しました'); return; }
+    online.seatRevealSeen[seat] = true;
+    if (seat === online.peerSeat) online.peerRevealSeen = true;
     if (!CHARACTER_LIST.includes(msg.character) || typeof msg.nonce !== 'string' || msg.nonce.length < 24) {
       online.protocolError = '相手の選択データが不正です'; onlineLobbyStatus(online.protocolError); return;
     }
     try {
       const expected = await commitPayload(msg.character, msg.nonce);
-      if (!online || expected !== online.peerCommit) {
+      if (!online || expected !== online.seatCommit[seat]) {
         if (online) { online.protocolError = 'キャラクター確認が一致しません'; onlineLobbyStatus(online.protocolError); }
         return;
       }
-      online.peerCharacter = msg.character;
-      online.peerNonce = msg.nonce;
-      online.revealVerified = true;
+      online.seatCharacter[seat] = msg.character;
+      online.seatNonce[seat] = msg.nonce;
+      online.seatVerified[seat] = true;
+      if (seat === online.peerSeat) {
+        online.peerCharacter = msg.character;
+        online.peerNonce = msg.nonce;
+        online.revealVerified = true;
+      }
+      // 2vs2はまだ公開していない席が残っていることがある。全員そろうまで開始へ進まない。
+      if (firebaseLobbyIs2v2() && !allFirebaseRevealsVerified()) { onlineLobbyStatus('ほかの人のモンスターを待っています…'); return; }
       onlineLobbyStatus('確認完了。開始データを待っています…');
       if (online.pendingStart) {
         const pendingStart = online.pendingStart;
@@ -5444,16 +5489,64 @@
       maybeStartFirebaseMatch();
     } catch (_) { if (online) { online.protocolError = '確認処理に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
+  // 先攻の抽選。1vs1は従来どおりホストとゲストの nonce 2つで決める。
+  // 2vs2は席順に並べた nonce をまとめて混ぜる。空席のCPUは nonce を持たないので空文字を
+  // 置き、全員が同じ材料から同じ答えを出せるようにする(誰も後出しで有利にできない)。
+  async function firebaseFirstUnitIndex() {
+    if (!firebaseLobbyIs2v2()) {
+      const hostNonce = online.role === 'host' ? online.selfNonce : online.peerNonce;
+      const guestNonce = online.role === 'host' ? online.peerNonce : online.selfNonce;
+      return (await fairFirstPlayer(online.room, hostNonce, guestNonce)) === 'p1' ? 0 : 1;
+    }
+    const nonces = firebasePlayerSeats().map(seat => (seat === online.seat ? online.selfNonce : online.seatNonce[seat]) || '');
+    const digest = await sha256Hex(`${online.room}:${nonces.join(':')}`);
+    return parseInt(digest.slice(-1), 16) & 1;
+  }
+  // 公開がそろったか。1vs1は従来どおり相手ひとりぶんだけを見る。
+  function firebaseRevealsReady() { return firebaseLobbyIs2v2() ? allFirebaseRevealsVerified() : !!online.revealVerified; }
+  // ホストの開始データが、伏せ合いで確定したキャラと一致しているか。
+  // 人が座っている席は公開済みのキャラと一致しなければならない。空席のCPUは
+  // ホストが決めるので、ここでは「知らないキャラでないこと」だけを確かめる。
+  function firebaseStartCharactersMatch(snap) {
+    const units = Array.isArray(snap && snap.units) ? snap.units : [];
+    if (units.length !== firebasePlayerSeats().length) return false;
+    return firebasePlayerSeats().every(seat => {
+      const entry = units.find(u => u && u.id === firebaseSeatUnitId(seat));
+      if (!entry || !CHARACTER_LIST.includes(entry.character)) return false;
+      if (seat === online.seat) return entry.character === online.selfCharacter;
+      if (!firebaseSeatOccupied(seat)) return true;
+      return entry.character === online.seatCharacter[seat];
+    });
+  }
+  function rememberFirebaseStartCharacters(snap) {
+    const table = {};
+    for (const u of snap.units) table[u.id] = u.character;
+    online.unitCharacters = table;
+  }
+  // 誰も座っていない席のキャラはホストが決める。伏せ合いの相手が居ないので、
+  // ここだけは commit-reveal を通さず、開始データ(start のスナップショット)で配る。
+  function assignFirebaseMatchCharacters() {
+    const table = {};
+    for (const seat of firebasePlayerSeats()) {
+      const unit = unitById(firebaseSeatUnitId(seat));
+      if (!unit) continue;
+      table[unit.id] = seat === online.seat ? online.selfCharacter
+        : (firebaseSeatOccupied(seat) ? online.seatCharacter[seat] : CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)]);
+      unit.character = table[unit.id];
+    }
+    online.unitCharacters = table;
+  }
   async function maybeStartFirebaseMatch() {
-    if (!online || online.kind !== 'firebase' || online.role !== 'host' || !online.revealVerified || !online.selfRevealed || online.matchStarted) return;
+    if (!online || online.kind !== 'firebase' || online.role !== 'host' || !firebaseRevealsReady() || !online.selfRevealed || online.matchStarted) return;
     try {
-      player.character = online.selfCharacter;
-      cpu.character = online.peerCharacter;
+      // 人数を先に合わせる。2vs2の p2/e2 はユニットが4体ある状態でないと存在しない。
+      setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
+      assignFirebaseMatchCharacters();
       // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
       gamePhase = 'battle'; resetMatch(false);
-      const first = await fairFirstPlayer(online.room, online.selfNonce, online.peerNonce);
+      const firstIndex = await firebaseFirstUnitIndex();
       if (!online || online.kind !== 'firebase') return;
-      activeIndex = first === 'p1' ? 0 : 1;
+      activeIndex = firstIndex;
       focusCameraOn(activeUnit().x, true);
       // resetMatch はCPU戦の前提でユニットを組み直す。オンラインでは席を貼り直す必要がある。
       setOnlineSeat(online.seat);
@@ -5469,19 +5562,18 @@
     } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
   }
   async function applyFirebaseStart(msg) {
-    if (!online || online.kind !== 'firebase' || online.participantRole !== 'player' || online.role === 'host' || online.phase === 'playing' || online.startVerifying || !online.revealVerified) return;
+    if (!online || online.kind !== 'firebase' || online.participantRole !== 'player' || online.role === 'host' || online.phase === 'playing' || online.startVerifying || !firebaseRevealsReady()) return;
     online.startVerifying = true;
     try {
-      // ゲスト側も同じnonce列から先攻を再計算し、ホストのスナップショットを検証する。
-      const first = await fairFirstPlayer(online.room, online.peerNonce, online.selfNonce);
-      const chars = Array.isArray(msg.snap && msg.snap.units) ? msg.snap.units : [];
-      const hostChar = chars.find(u => u && u.id === 'p1');
-      const guestChar = chars.find(u => u && u.id === 'e1');
-      if (!online || online.kind !== 'firebase' || !msg.snap || Number(msg.snap.activeIndex) !== (first === 'p1' ? 0 : 1)
-          || !hostChar || !guestChar || hostChar.character !== online.peerCharacter || guestChar.character !== online.selfCharacter) {
+      // ゲスト側も同じ材料から先攻を再計算し、ホストのスナップショットを検証する。
+      const firstIndex = await firebaseFirstUnitIndex();
+      const mismatch = !online || online.kind !== 'firebase' || !msg.snap || Number(msg.snap.activeIndex) !== firstIndex
+        || !firebaseStartCharactersMatch(msg.snap);
+      if (mismatch) {
         if (online) { online.startVerifying = false; online.protocolError = '先攻確認が一致しません'; onlineLobbyStatus(online.protocolError); }
         return;
       }
+      rememberFirebaseStartCharacters(msg.snap);
       applySnapshot(msg.snap);
       setOnlineSeat(online.seat);
       logSeatAssignment('guestStart');
@@ -5608,6 +5700,10 @@
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false; online.peerCommitAt = null;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
+    // 席ごとの伏せ合いも全部捨てる。1件でも前のラウンドのものが残ると、
+    // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
+    online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
+    online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
     online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
@@ -5629,7 +5725,9 @@
     } catch (_) { /* SSEは継続し、次のpresenceで再試行する */ }
   }
   function maybeAutoStartFirebaseRound() {
-    if (!isFirebaseHost() || !online.autoStartNextRound || online.phase !== 'lobby' || !online.selfReady || !online.peerReady || !online.peerCommitted) return;
+    if (!isFirebaseHost() || !online.autoStartNextRound || online.phase !== 'lobby' || !online.selfReady) return;
+    // 2vs2は人が座っている席ぶんだけそろえばよい。空席はCPUが埋めるので待たない。
+    if (!allFirebasePlayersReady() || !firebasePeersCommitted()) return;
     online.autoStartNextRound = false;
     requestFirebaseStart();
   }
@@ -5654,8 +5752,8 @@
   }
   async function requestFirebaseStart() {
     if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;
-    // 1vs1は従来どおり相手のコミットも待つ。2vs2の公開手順は段Cで4人ぶんへ広げる。
-    if (!firebaseLobbyIs2v2() && !online.peerCommitted) return;
+    // 人が座っている対戦者席ぶんの伏せ合いがそろってから開始する。
+    if (!firebasePeersCommitted()) return;
     try {
       await refreshFirebaseRoster(false);
       const players = { p1: online.clientId };
@@ -5671,7 +5769,7 @@
   async function requestFirebaseRematch() {
     if (!isFirebasePlayer() || online.phase !== 'results') return;
     online.rematchVotes[online.seat] = true; netSend({ t: 'rematchVote', vote: true }); renderFirebaseLobby();
-    if (isFirebaseHost() && online.rematchVotes.p1 && online.rematchVotes.e1) await resetFirebaseRound(true);
+    if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);
   }
   async function requestFirebaseReturnLobby() {
     if (!isFirebasePlayer() || online.phase !== 'results') return;
@@ -5689,7 +5787,13 @@
       // 先に新round実体とroomのポインタを確定する。失敗時は誰も不存在roundへ切り替えない。
       // RTDBが空roundを消さないよう、次roundにも必ず具体値のcreatedAtを保存する。
       await firebaseRequest(`rooms/${online.room}/rounds/${nextId}`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ createdAt: firebaseServerNow(online.auth), latestSnapshot: null, messages: {} }) });
-      await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: nextId, status: 'lobby', players: { p1: online.clientId, e1: online.slots.e1 && online.slots.e1.uid || null } }) });
+      // 次ラウンドの名簿も、実際に座っている席ぶんを載せる。2vs2で s1/s2 を落とすと、
+      // その席の人は次のラウンドで一切書き込めなくなる。
+      const nextPlayers = { p1: online.clientId, e1: (online.slots.e1 && online.slots.e1.uid) || null };
+      for (const seat of firebasePlayerSeats()) {
+        if (seat !== 'p1' && seat !== 'e1') nextPlayers[seat] = (online.slots[seat] && online.slots[seat].uid) || null;
+      }
+      await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: nextId, status: 'lobby', players: nextPlayers }) });
       if (!online || online.kind !== 'firebase' || online.currentRoundId !== leavingRoundId) return;
       // transportを切り替える直前、旧roundの購読者へ新roundIdを通知する。
       const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true });
@@ -8567,7 +8671,7 @@
       sub = online.role === 'host' ? 'HOST' : 'GUEST';
     } else if (online.phase === 'selecting') {
       title = 'モンスターを確認しています…';
-      sub = online.peerCommitted ? '相手の公開を待っています' : '相手の選択を待っています';
+      sub = firebasePeersCommitted() ? '相手の公開を待っています' : '相手の選択を待っています';
     }
     if (!title) return;
     const showLogButton = !!online.protocolError;

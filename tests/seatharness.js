@@ -211,7 +211,16 @@ const HOOK = `
       netControlsUnit: (id) => netControlsUnit(unitById(id)),
       unitSeatIsCpu: (id) => unitSeatIsCpu(unitById(id)),
       turnOwnerLabel: (id) => turnOwnerLabel(unitById(id)),
-      setMatchFormat: (format) => setMatchFormat(format)
+      setMatchFormat: (format) => setMatchFormat(format),
+      // 4人ぶんの伏せ合いと再戦(Issue #26 段C)
+      firebaseSeatCommitted: (seat) => firebaseSeatCommitted(seat),
+      firebaseSeatRevealVerified: (seat) => firebaseSeatRevealVerified(seat),
+      allFirebasePlayersCommitted: () => allFirebasePlayersCommitted(),
+      allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
+      allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
+      firebasePeersCommitted: () => firebasePeersCommitted(),
+      firebaseRevealsReady: () => firebaseRevealsReady(),
+      firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap)
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)
