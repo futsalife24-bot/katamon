@@ -434,7 +434,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v109';
+  const BUILD_ID = 'v110';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3174,7 +3174,7 @@
   }
 
   // ===== タイトル・キャラクター選択画面 =====
-  let gamePhase = 'loading'; // 'loading' | 'press' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
+  let gamePhase = 'loading'; // 'loading' | 'press' | 'breaking' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
   let battleMode = 'normal'; // 'normal' | 'free'
   const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
   const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
@@ -6604,10 +6604,257 @@
     ctx.restore();
   }
 
+  // ===== 起動演出:砦の壁を砲弾で撃ち抜いてタイトルへ出る =====
+  // 読み込み中はこの壁を背景に出し、TAP TO START の**タップした場所**へ砲弾を撃ち込む。
+  // 砲弾は手前から奥へ縮みながら飛び、破片は逆に手前へ拡大して画面外へ抜ける。
+  // すれ違うことで「壁の向こうへ出た」という視線移動になり、そのままタイトルへ着地する。
+  //
+  // 尺を足しているわけではない。タップ後はBGMの再生開始を最大1.5秒待つ作りで、
+  // そこは今まで「STARTING BGM...」と出るだけの無音の間だった。そこへ入れている。
+  //
+  // **出るのは起動時の1回だけ。** 'press' からしか 'breaking' へ入らないので、
+  // 対戦を終えてタイトルへ戻る時は従来どおり直接表示になる(毎回壊れたら必ず飽きる)。
+  const WALL_IMPACT_SEC = 0.45;   // 砲弾が壁へ届くまで
+  const WALL_BREAK_SEC = 1.3;     // 演出全体
+  const WALL_SHOCK_SPEED = 2400;  // 崩れが外側へ広がる速さ(px/秒)
+  const WALL_CLEAR_SEC = 0.26;    // 最後にすべて消しきる時間
+  let wallBreak = null;           // { x, y, t, banged }
+  let wallPieces = null;          // 壁の破片。毎フレーム作り直すと形が踊るので一度だけ組む
+  // 石ごとの色や傾きを固定するための擬似乱数。Math.randomだと毎フレーム別の壁になる。
+  function wallNoise(index, salt) {
+    const n = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function buildWallPieces() {
+    const pieces = [];
+    const bw = VW / 6;
+    const bh = VH / 12;
+    // 石積み。段ごとに半個ずらす(いわゆる馬目地)。真っ直ぐ並べると壁に見えない。
+    for (let row = 0; row < 12; row++) {
+      const offset = (row % 2) ? -bw / 2 : 0;
+      for (let x = offset; x < VW; x += bw) {
+        // 隙間を空けない。空けると継ぎ目から奥のタイトルが透けて壁に見えなくなる。
+        // 目地は石ごとの縁取りで表現する。
+        pieces.push({ kind: 'stone', x, y: row * bh, w: bw, h: bh,
+          tone: wallNoise(pieces.length, 1), seed: wallNoise(pieces.length, 2) });
+      }
+    }
+    // 横木と鋲。石だけだと単調で、タイトルの世界観(石と木と鉄)から外れる。
+    // 1本の梁のままだと崩れずに残ってしまうので、最初から柱ごとに割っておく。
+    for (const beamY of [VH * 0.2, VH * 0.615]) {
+      for (let x = 0; x < VW; x += bw) {
+        pieces.push({ kind: 'beam', x, y: beamY, w: bw, h: 34,
+          tone: wallNoise(pieces.length, 3), seed: wallNoise(pieces.length, 4) });
+      }
+    }
+    // 垂れ幕。左右で色を変える(タイトル背景に合わせて紫と朱)。
+    pieces.push({ kind: 'banner', x: VW * 0.11, y: VH * 0.245, w: 76, h: 268, tone: 0, seed: wallNoise(900, 5) });
+    pieces.push({ kind: 'banner', x: VW * 0.73, y: VH * 0.285, w: 76, h: 244, tone: 1, seed: wallNoise(901, 5) });
+    for (const piece of pieces) { piece.cx = piece.x + piece.w / 2; piece.cy = piece.y + piece.h / 2; }
+    return pieces;
+  }
+  // 破片1つを原点中心で描く。呼ぶ側が位置・拡大・回転を持つ。
+  function drawWallPiece(piece) {
+    const w = piece.w, h = piece.h;
+    if (piece.kind === 'banner') {
+      const purple = piece.tone === 0;
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, -h / 2);
+      ctx.lineTo(w / 2, -h / 2);
+      ctx.lineTo(w / 2, h / 2 - 22);
+      ctx.lineTo(0, h / 2);
+      ctx.lineTo(-w / 2, h / 2 - 22);
+      ctx.closePath();
+      if (!piece.grad) {
+        piece.grad = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+        piece.grad.addColorStop(0, purple ? '#2c1436' : '#4a1a10');
+        piece.grad.addColorStop(0.45, purple ? '#57306e' : '#8c3a20');
+        piece.grad.addColorStop(1, purple ? '#24102c' : '#3d150c');
+      }
+      ctx.fillStyle = piece.grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(199,131,53,.55)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,210,74,.22)';
+      ctx.fillRect(-w * 0.14, -h / 2 + 12, w * 0.28, h - 46);
+      return;
+    }
+    if (piece.kind === 'beam') {
+      if (!piece.grad) {
+        piece.grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+        piece.grad.addColorStop(0, '#4e2c15');
+        piece.grad.addColorStop(0.42, '#331c0e');
+        piece.grad.addColorStop(1, '#150b06');
+      }
+      ctx.fillStyle = piece.grad;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      // 木目。無地だと板チョコに見える。
+      ctx.strokeStyle = 'rgba(0,0,0,.32)';
+      ctx.lineWidth = 1;
+      for (let g = 0; g < 3; g++) {
+        const gy = -h / 2 + h * (0.24 + g * 0.26 + piece.seed * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(-w / 2 + 3, gy);
+        ctx.lineTo(w / 2 - 3, gy + (piece.seed - 0.5) * 4);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#0d0704';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      drawRivet(-w / 2 + 13, 0, 5);
+      drawRivet(w / 2 - 13, 0, 5);
+      return;
+    }
+    // 石。継ぎ目は縁取りで作り、面取りとざらつきで厚みを出す。
+    if (!piece.grad) {
+      const base = 34 + Math.round(piece.tone * 22);
+      piece.grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+      piece.grad.addColorStop(0, `rgb(${base + 21},${base + 19},${base + 16})`);
+      piece.grad.addColorStop(0.5, `rgb(${base},${base - 2},${base - 5})`);
+      piece.grad.addColorStop(1, `rgb(${base - 15},${base - 17},${base - 19})`);
+    }
+    ctx.fillStyle = piece.grad;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    // 面取り。上と左を明るく、下と右を落とす。これだけで平板が石になる。
+    ctx.fillStyle = 'rgba(255,244,224,.10)';
+    ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 3);
+    ctx.fillRect(-w / 2 + 2, -h / 2 + 2, 3, h - 4);
+    ctx.fillStyle = 'rgba(0,0,0,.34)';
+    ctx.fillRect(-w / 2 + 2, h / 2 - 5, w - 4, 3);
+    ctx.fillRect(w / 2 - 5, -h / 2 + 2, 3, h - 4);
+    // ざらつきと欠け。規則的な模様にならないよう seed で位置と数を散らす。
+    ctx.fillStyle = 'rgba(0,0,0,.24)';
+    for (let n = 0; n < 3; n++) {
+      const nx = -w / 2 + 10 + wallNoise(piece.seed * 900 + n, 7) * (w - 24);
+      const ny = -h / 2 + 10 + wallNoise(piece.seed * 900 + n, 8) * (h - 22);
+      ctx.fillRect(nx, ny, 5 + wallNoise(piece.seed * 900 + n, 9) * 9, 3);
+    }
+    // 目地。石どうしの境目はここだけで作る。
+    ctx.strokeStyle = 'rgba(9,8,7,.9)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+  }
+  function drawFortressWall(breakState) {
+    if (!wallPieces) wallPieces = buildWallPieces();
+    const shatter = breakState ? breakState.t - WALL_IMPACT_SEC : -1;
+    // 終わり際は残っている破片を必ず消しきる。距離の遠い石は飛びきる前に演出が終わるため、
+    // これが無いとタイトルへ切り替わった瞬間に瓦礫がパッと消える。
+    const clearing = breakState
+      ? Math.max(0, Math.min(1, (WALL_BREAK_SEC - breakState.t) / WALL_CLEAR_SEC)) : 1;
+    for (const piece of wallPieces) {
+      let cx = piece.cx, cy = piece.cy, scale = 1, rot = 0, alpha = clearing;
+      if (shatter > 0) {
+        const dx = piece.cx - breakState.x;
+        const dy = piece.cy - breakState.y;
+        const distance = Math.hypot(dx, dy);
+        // 着弾点から外へ、輪のように順番に崩れる。全部を同時に飛ばすと爆散に見える。
+        const local = shatter - distance / WALL_SHOCK_SPEED;
+        if (local > 0) {
+          const near = 1 - Math.min(1, distance / 620);
+          const angle = distance < 1 ? piece.seed * Math.PI * 2 : Math.atan2(dy, dx);
+          const speed = 430 + 620 * near;
+          cx += Math.cos(angle) * speed * local;
+          cy += Math.sin(angle) * speed * local + 170 * local * local;
+          // 手前へ抜けてくる=拡大。砲弾が奥へ縮むのと逆向きにすることで奥行きが出る。
+          scale = 1 + local * (2.4 + 2.4 * near);
+          rot = (piece.seed - 0.5) * 7 * local;
+          alpha = clearing * Math.max(0, 1 - Math.max(0, scale - 1.9) / 1.5);
+        }
+      }
+      if (alpha <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(cx, cy);
+      if (scale !== 1) ctx.scale(scale, scale);
+      if (rot) ctx.rotate(rot);
+      drawWallPiece(piece);
+      ctx.restore();
+    }
+  }
+  function drawWallCannonball(breakState) {
+    const progress = breakState.t / WALL_IMPACT_SEC;
+    if (progress >= 1) return;
+    const startX = VW / 2, startY = VH + 40, startScale = 2.9;
+    for (let ghost = 4; ghost >= 0; ghost--) {
+      const u = progress - ghost * 0.055;
+      if (u <= 0) continue;
+      // 位置は手前ほど速く、大きさは指数で縮める。等速で縮めると奥行きが出ない。
+      const travel = Math.pow(u, 0.62);
+      const x = startX + (breakState.x - startX) * travel;
+      const y = startY + (breakState.y - startY) * travel - Math.sin(travel * Math.PI) * 42;
+      const radius = 26 * startScale * Math.pow(0.075, u);
+      ctx.save();
+      ctx.globalAlpha = ghost === 0 ? 1 : 0.5 / ghost;
+      const iron = ctx.createRadialGradient(x - radius * 0.4, y - radius * 0.45, radius * 0.15, x, y, radius);
+      iron.addColorStop(0, '#9aa6b0');
+      iron.addColorStop(0.45, '#404a54');
+      iron.addColorStop(1, '#0d1114');
+      ctx.fillStyle = iron;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      if (ghost === 0) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = '#ffb347';
+        ctx.beginPath();
+        ctx.arc(x, y + radius * 0.35, radius * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  function drawWallImpactFlash(breakState) {
+    const since = breakState.t - WALL_IMPACT_SEC;
+    if (since < 0 || since > 0.32) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - since / 0.32) * 0.9;
+    const flash = ctx.createRadialGradient(breakState.x, breakState.y, 0, breakState.x, breakState.y, 460);
+    flash.addColorStop(0, 'rgba(255,246,214,.95)');
+    flash.addColorStop(0.28, 'rgba(255,178,71,.55)');
+    flash.addColorStop(1, 'rgba(255,140,40,0)');
+    ctx.fillStyle = flash;
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.restore();
+  }
+  function beginWallBreak(point) {
+    // 端をタップされても破壊が画面外へ寄らないよう、少しだけ内側へ寄せる。
+    // 寄せすぎると「タップした場所が当たる」感触が消えるので、この幅に留める。
+    wallPieces = wallPieces || buildWallPieces();
+    wallBreak = {
+      x: Math.max(VW * 0.15, Math.min(VW * 0.85, point.x)),
+      y: Math.max(VH * 0.18, Math.min(VH * 0.8, point.y)),
+      t: 0, banged: false
+    };
+    gamePhase = 'breaking';
+  }
+  function updateWallBreak(dt) {
+    if (!wallBreak) return;
+    wallBreak.t += dt;
+    if (!wallBreak.banged && wallBreak.t >= WALL_IMPACT_SEC) {
+      wallBreak.banged = true;
+      triggerShake(9, 0.32);
+      playExplosionSound(1.6);
+    }
+    if (wallBreak.t >= WALL_BREAK_SEC) {
+      wallBreak = null;
+      gamePhase = 'title';
+    }
+  }
+
   function drawLoadingScreen() {
     ctx.save();
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, VW, VH);
+    drawFortressWall(null);
+    // 壁の上に直接文字を置くと読めない。中央だけ暗く落として文字の居場所を作る。
+    const veil = ctx.createLinearGradient(0, VH * 0.28, 0, VH * 0.78);
+    veil.addColorStop(0, 'rgba(6,8,10,0)');
+    veil.addColorStop(0.4, 'rgba(6,8,10,.82)');
+    veil.addColorStop(0.72, 'rgba(6,8,10,.82)');
+    veil.addColorStop(1, 'rgba(6,8,10,0)');
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, VH * 0.28, VW, VH * 0.5);
 
     const angle = (Date.now() % 3600) / 3600 * Math.PI * 2;
     const spinnerY = VH / 2 - 100;
@@ -10439,6 +10686,22 @@
       ctx.restore();
       return;
     }
+    if (gamePhase === 'breaking' && wallBreak) {
+      // 奥に描くのは本物のタイトル画面。TAP TO START が出る時点でロゴも背景も
+      // 読み込み済みなので、フェードでごまかす必要がない。
+      drawSky();
+      drawParallax();
+      ctx.save();
+      applyWorldCamera();
+      drawTerrain();
+      ctx.restore();
+      drawTitleScreen();
+      drawFortressWall(wallBreak);
+      drawWallCannonball(wallBreak);
+      drawWallImpactFlash(wallBreak);
+      ctx.restore();
+      return;
+    }
     if (gamePhase === 'select') {
       drawCharacterSelect();
       drawSoundToggle();
@@ -10556,7 +10819,7 @@
     e.preventDefault();
     if (cutIn) return; // カットイン中は入力を受け付けない
     const p0 = canvasPointFromEvent(e);
-    if (gamePhase === 'loading') return;
+    if (gamePhase === 'loading' || gamePhase === 'breaking') return;
     if (gamePhase === 'press') {
       // 指を離した瞬間を、スマホで確実な音声再生トリガーとして使う。
       inputMode = 'start';
@@ -10931,8 +11194,12 @@
       inputPointerId = null;
       if (e.type === 'pointerup' && gamePhase === 'press') {
         // このユーザー操作の中で直接play()を呼ぶ。音源待ちが止まっても安全弁でタイトルへ進む。
+        const aim = canvasPointFromEvent(e);
         enterTitleFromTap();
         playUiSound();
+        // 砲弾を撃ち込むのは enterTitleFromTap の後。先に切り替えると
+        // finishTitleStart の 'press' 判定と噛み合わなくなる。
+        beginWallBreak(aim);
       }
       return;
     }
@@ -11220,6 +11487,7 @@
   function update(dt) {
     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
     updateOnline(dt);
+    if (gamePhase === 'breaking') { updateWallBreak(dt); return; }
     if (gamePhase === 'select') {
       updateSelectWheel(dt);
       return;
