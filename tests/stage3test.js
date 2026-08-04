@@ -1419,6 +1419,44 @@ function check(name, value) {
     htmlText.includes('} else if (moveSyncPending && isLocalTurn()) {')
     && htmlText.includes('if (moveSyncPending && netControlsUnit(cpuActor)) {'));
 
+  // ---- 部屋の見た目(実機で「どれを押すのか毎回探す」と指摘) ----
+  // ここは見た目なので最終判断は実機。テストは「一度直した区別が黙って消えないこと」を守る。
+  //
+  // いちばん効いたのは詳細度。一括指定が `#onlineLobbyButtons button`(id+要素)なので、
+  // `#onlineStart` 単体で書くと負ける。実際に負けていて、実測では全ボタンが
+  // 376x48px・15px の完全に同じ見た目のままだった。必ず #onlineLobbyButtons から書く。
+  const lobbyButtonCss = /#onlineLobbyButtons #onlineStart,\s*\n\s*#onlineLobbyButtons #onlineRematch,\s*\n\s*#onlineLobbyButtons #onlineQuick \{([^}]*)\}/.exec(htmlText);
+  const readyCss = /#onlineLobbyButtons #onlineReady \{([^}]*)\}/.exec(htmlText);
+  const returnCss = /#onlineLobbyButtons #onlineReturnLobby \{([^}]*)\}/.exec(htmlText);
+  check('the primary, secondary and quiet buttons are each written so they win over the shared rule',
+    !!lobbyButtonCss && !!readyCss && !!returnCss);
+  check('the three ranks really differ in height, not only in colour',
+    !!lobbyButtonCss && lobbyButtonCss[1].includes('min-height: 64px')
+    && !!readyCss && readyCss[1].includes('min-height: 52px')
+    && !!returnCss && returnCss[1].includes('min-height: 40px'));
+  check('only the main action is filled in; the rest stay outlines',
+    !!lobbyButtonCss && lobbyButtonCss[1].includes('background: linear-gradient(180deg, #ffdf95')
+    && !!readyCss && !readyCss[1].includes('background:')
+    && !!returnCss && !returnCss[1].includes('background:'));
+  check('the quiet button is also narrower, so it never lines up with the main one',
+    !!returnCss && returnCss[1].includes('width: 74%'));
+  check('a button that cannot be pressed no longer looks the same as one that can',
+    htmlText.includes('#onlineLobbyButtons button:disabled { opacity: .32;'));
+  // 「準備完了」と「準備完了を取り消す」は文字だけの違いだった。色でも分かるようにする。
+  check('the ready toggle shows its state in the styling, not only in the label',
+    htmlText.includes("onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);")
+    && htmlText.includes('#onlineLobbyButtons #onlineReady.is-ready'));
+  // 英数字の羅列だけでは何なのか分からない、という指摘。見出しを1つ添える。
+  check('the room code says what it is',
+    htmlText.includes('<span id="onlineRoomCodeLabel">部屋ID</span>')
+    && htmlText.includes('#onlineRoomCodeLabel {')
+    && htmlText.includes('placeholder="相手の部屋ID 8文字"')
+    && !htmlText.includes('>合言葉を使う</button>'));
+  // タイトルの CPU BATTLE と ONLINE BATTLE が同じ鋼色で、文字を読むまで見分けが付かなかった。
+  // 位置と大きさは変えていない(タイトルの配置は別のテストが固定している)。
+  check('the title tells its two battle buttons apart by colour, without moving them',
+    /kind === 'online'[\s\S]{0,300}steel\.addColorStop\(0, '#6a5a3a'\)/.test(htmlText));
+
   // ---- 4人ぶんの伏せ合い(Issue #26 段C) ----
   // 実際の受信経路(netReceiveInner)へ commit / reveal を流し、席ごとに覚えられるか見る。
   // 自分は s1 のゲストにしておく。ホストにすると検証の成功がそのまま試合開始へ進んでしまう。
