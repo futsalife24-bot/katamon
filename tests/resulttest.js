@@ -274,7 +274,11 @@ check('近い石と遠い石で崩れ方を分けている',
   && /cy \+= vy \* local \+ 0\.5 \* WALL_GRAVITY \* local \* local;/.test(html));
 // 着弾点より上の石は下の支えを失う。穴が上へ広がる形になる。
 check('着弾点より上の石は支えを失って落ちる',
-  html.includes('const unsupported = piece.cy < breakState.y ? 90 : 0;'));
+  /const unsupported = piece\.cy < breakState\.y \? (\d+) : (\d+);/.test(html)
+  && (() => {
+    const [, above, below] = /const unsupported = piece\.cy < breakState\.y \? (\d+) : (\d+);/.exec(html);
+    return Number(above) > Number(below);   // 上の石のほうが強く落ちる
+  })());
 // 手前へ来るのは爆風に巻かれた石だけ。遠い石まで拡大すると全部が飛んできて爆発に見える。
 check('手前へ来るのは爆風に巻かれた石だけ',
   html.includes('scale = 1 + blast * 2.8 * local;'));
@@ -290,7 +294,20 @@ check('石の欠けで継ぎ目に穴を開けていない',
 // 壁は生成画像。破片ごとに画像から切り出して貼るので、崩れ方はそのまま効く。
 check('壁の絵を破片ごとに切り出して貼っている',
   html.includes("wallImage.src = 'assets/wall.jpg';")
-  && html.includes('ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, -w / 2, -h / 2, w, h);'));
+  && html.includes('ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, piece.bx, piece.by, w, h);'));
+// 格子のまま切ると「賽の目にスライスされた」ようにしか見えない(実機で指摘)。
+// 頂点を先に散らしてから四隅で破片を作る。隣は同じ頂点を共有するので隙間が出ない。
+check('破片の形が不揃いになっている',
+  html.includes('const jx = edge ? 0 : (wallNoise(row * 97 + col, 41) - 0.5) * bw * 0.72;')
+  && html.includes('ctx.clip();')
+  && /画面の縁の頂点は動かさない/.test(html));
+// 近いほど細かく砕ける。全部同じ大きさだと、どこに当たったのか分からない。
+check('着弾のそばだけさらに細かく割る',
+  html.includes('WALL_BLAST_RANGE * 0.62')
+  && html.includes('const top = mid(tl, tr), right = mid(tr, br), bottom = mid(br, bl), left = mid(bl, tl);'));
+// 着弾点が決まってからでないと「近いほど細かく」が作れない。
+check('着弾点が決まってから破片を組む',
+  /wallPieces = buildWallPieces\(wallBreak\);/.test(html));
 // 壁の絵は読み込み画面の背景そのもの。コア画像の待ち合わせに入れると
 // 「壁の絵を読み終わるまで読み込み画面が出せない」という順序の矛盾になる。
 const coreReadySrc = /function areCoreImagesReady\(\)[\s\S]*?\n  \}/.exec(html);

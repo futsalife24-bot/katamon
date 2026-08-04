@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v113';
+  const BUILD_ID = 'v114';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6617,11 +6617,11 @@
   // 対戦を終えてタイトルへ戻る時は従来どおり直接表示になる(毎回壊れたら必ず飽きる)。
   const WALL_IMPACT_SEC = 0.5;    // 砲弾が壁へ届くまで
   const WALL_BREAK_SEC = 1.5;     // 演出全体
-  const WALL_SHOCK_SPEED = 1800;  // 崩れが外側へ広がる速さ(px/秒)
+  const WALL_SHOCK_SPEED = 2600;  // 崩れが外側へ広がる速さ(px/秒)
   const WALL_CLEAR_SEC = 0.3;     // 最後にすべて消しきる時間
   const WALL_ARC = 168;           // 砲弾の山なりの高さ
   const WALL_BLAST_RANGE = 330;   // 爆風が石を吹き飛ばす範囲。外側は崩れ落ちるだけ
-  const WALL_GRAVITY = 2600;      // 崩れた石が落ちる加速度
+  const WALL_GRAVITY = 3400;      // 崩れた石が落ちる加速度
   let wallBreak = null;           // { x, y, t, banged }
   let wallPieces = null;          // 壁の破片。毎フレーム作り直すと形が踊るので一度だけ組む
   let wallPiecesUseArt = false;   // いまの破片が絵から切り出したものか、手で描いたものか
@@ -6644,24 +6644,64 @@
     const n = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
     return n - Math.floor(n);
   }
-  function buildWallPieces() {
+  function buildWallPieces(impact) {
     const pieces = [];
     wallPiecesUseArt = wallArtReady();
     if (wallPiecesUseArt) {
-      // 絵から切り出す。割り方は**絵に描かれている石の大きさに近づける**。
-      // 大きすぎると1枚の板が割れたように、細かすぎると砂のように見える。
-      const cols = 8, rows = 16;
+      // **格子のまま切ると「賽の目にスライスされた」ようにしか見えない**(実機で指摘)。
+      // 格子の頂点を先に散らしてから、その四隅で破片を作る。隣り合う破片は
+      // ずらした同じ頂点を共有するので、隙間も重なりも出ないまま形だけが不揃いになる。
+      const cols = 7, rows = 13;
       const bw = VW / cols, bh = VH / rows;
+      const vertex = [];
+      for (let row = 0; row <= rows; row++) {
+        vertex[row] = [];
+        for (let col = 0; col <= cols; col++) {
+          // 画面の縁の頂点は動かさない。動かすと外周に隙間が空いて奥が透ける。
+          const edge = row === 0 || col === 0 || row === rows || col === cols;
+          const jx = edge ? 0 : (wallNoise(row * 97 + col, 41) - 0.5) * bw * 0.72;
+          const jy = edge ? 0 : (wallNoise(row * 97 + col, 42) - 0.5) * bh * 0.72;
+          vertex[row][col] = { x: col * bw + jx, y: row * bh + jy };
+        }
+      }
       const map = wallArtMapping();
+      const addFragment = (corners) => {
+        let cx = 0, cy = 0;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const corner of corners) {
+          cx += corner.x / corners.length;
+          cy += corner.y / corners.length;
+          minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
+          minY = Math.min(minY, corner.y); maxY = Math.max(maxY, corner.y);
+        }
+        pieces.push({
+          kind: 'art', cx, cy, x: minX, y: minY, w: maxX - minX, h: maxY - minY,
+          local: corners.map(corner => ({ x: corner.x - cx, y: corner.y - cy })),
+          bx: minX - cx, by: minY - cy,
+          sx: (minX - map.offX) / map.scale, sy: (minY - map.offY) / map.scale,
+          sw: (maxX - minX) / map.scale, sh: (maxY - minY) / map.scale,
+          tone: wallNoise(pieces.length, 1), seed: wallNoise(pieces.length, 2)
+        });
+      };
+      const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
-          const x = col * bw, y = row * bh;
-          pieces.push({
-            kind: 'art', x, y, w: bw, h: bh,
-            sx: (x - map.offX) / map.scale, sy: (y - map.offY) / map.scale,
-            sw: bw / map.scale, sh: bh / map.scale,
-            tone: wallNoise(pieces.length, 1), seed: wallNoise(pieces.length, 2)
-          });
+          const tl = vertex[row][col], tr = vertex[row][col + 1];
+          const br = vertex[row + 1][col + 1], bl = vertex[row + 1][col];
+          // 着弾のすぐそばだけ、さらに4つへ割る。**近いほど細かく砕ける**のが自然で、
+          // 全部を同じ大きさにすると、どこが当たったのか分からなくなる。
+          // 割るのは辺の中点なので、割らない隣の破片との境目に隙間はできない。
+          const centerX = (tl.x + tr.x + br.x + bl.x) / 4;
+          const centerY = (tl.y + tr.y + br.y + bl.y) / 4;
+          const shattered = impact
+            && Math.hypot(centerX - impact.x, centerY - impact.y) < WALL_BLAST_RANGE * 0.62;
+          if (!shattered) { addFragment([tl, tr, br, bl]); continue; }
+          const top = mid(tl, tr), right = mid(tr, br), bottom = mid(br, bl), left = mid(bl, tl);
+          const core = { x: centerX, y: centerY };
+          addFragment([tl, top, core, left]);
+          addFragment([top, tr, right, core]);
+          addFragment([core, right, br, bottom]);
+          addFragment([left, core, bottom, bl]);
         }
       }
     } else {
@@ -6690,14 +6730,22 @@
     pieces.push({ kind: 'banner', x: VW * 0.11, y: VH * 0.245, w: 76, h: 268, tone: 0, seed: wallNoise(900, 5) });
     pieces.push({ kind: 'banner', x: VW * 0.73, y: VH * 0.285, w: 76, h: 244, tone: 1, seed: wallNoise(901, 5) });
     }
-    for (const piece of pieces) { piece.cx = piece.x + piece.w / 2; piece.cy = piece.y + piece.h / 2; }
+    for (const piece of pieces) {
+      if (piece.cx === undefined) { piece.cx = piece.x + piece.w / 2; piece.cy = piece.y + piece.h / 2; }
+    }
     return pieces;
   }
   // 破片1つを原点中心で描く。呼ぶ側が位置・拡大・回転を持つ。
   function drawWallPiece(piece) {
     const w = piece.w, h = piece.h;
     if (piece.kind === 'art') {
-      ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, -w / 2, -h / 2, w, h);
+      // 不揃いな多角形で切り抜いてから絵を貼る。矩形のまま貼ると賽の目になる。
+      ctx.beginPath();
+      ctx.moveTo(piece.local[0].x, piece.local[0].y);
+      for (let n = 1; n < piece.local.length; n++) ctx.lineTo(piece.local[n].x, piece.local[n].y);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, piece.bx, piece.by, w, h);
       return;
     }
     if (piece.kind === 'banner') {
@@ -6883,9 +6931,10 @@
           // 全部を放射状に飛ばすと爆発にしか見えず、壁が崩れたようにならない。
           const blast = Math.pow(1 - Math.min(1, distance / WALL_BLAST_RANGE), 2);
           const angle = distance < 1 ? piece.seed * Math.PI * 2 : Math.atan2(dy, dx);
-          // 着弾点より上の石は下の支えを失う。落ちる向きに寄せて、穴が上へ広がる形にする。
-          const unsupported = piece.cy < breakState.y ? 90 : 0;
-          const vx = Math.cos(angle) * (120 + 760 * blast);
+          // 着弾点より上の石は下の支えを失う。落ちる向きに強く寄せて、穴が上へ広がる形にする。
+          // 下側にも少し効かせる。壁全体が沈まないと、穴だけ空いて周りが残ったままになる。
+          const unsupported = piece.cy < breakState.y ? 210 : 70;
+          const vx = Math.cos(angle) * (170 + 820 * blast);
           const vy = Math.sin(angle) * (70 + 640 * blast) + unsupported;
           cx += vx * local;
           cy += vy * local + 0.5 * WALL_GRAVITY * local * local;
@@ -6954,12 +7003,13 @@
   function beginWallBreak(point) {
     // 端をタップされても破壊が画面外へ寄らないよう、少しだけ内側へ寄せる。
     // 寄せすぎると「タップした場所が当たる」感触が消えるので、この幅に留める。
-    wallPieces = wallPieces || buildWallPieces();
     wallBreak = {
       x: Math.max(VW * 0.15, Math.min(VW * 0.85, point.x)),
       y: Math.max(VH * 0.18, Math.min(VH * 0.8, point.y)),
       t: 0, banged: false
     };
+    // 着弾点が決まってから組み直す。近いほど細かく砕くので、場所が要る。
+    wallPieces = buildWallPieces(wallBreak);
     gamePhase = 'breaking';
   }
   function updateWallBreak(dt) {
