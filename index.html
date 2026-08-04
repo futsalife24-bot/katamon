@@ -14,6 +14,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="preload" as="image" href="assets/loading-emblem.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/kyoryu.png">
 <link rel="preload" as="image" href="assets/medama.png">
@@ -434,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v112';
+  const BUILD_ID = 'v113';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6623,6 +6624,21 @@
   const WALL_GRAVITY = 2600;      // 崩れた石が落ちる加速度
   let wallBreak = null;           // { x, y, t, banged }
   let wallPieces = null;          // 壁の破片。毎フレーム作り直すと形が踊るので一度だけ組む
+  let wallPiecesUseArt = false;   // いまの破片が絵から切り出したものか、手で描いたものか
+  // 壁の絵。**コア画像の待ち合わせ(areCoreImagesReady)には入れない。**
+  // 入れると「壁の絵を読み終わるまで読み込み画面が出せない」という順序の矛盾になる。
+  // 届くまでは手続き的な壁を出し、届いた時点で組み直して差し替える。
+  let wallImageReady = false;
+  const wallImage = new Image();
+  wallImage.fetchPriority = 'high';
+  wallImage.onload = () => { wallImageReady = true; wallPieces = null; };
+  wallImage.src = 'assets/wall.jpg';
+  function wallArtReady() { return wallImageReady && wallImage.naturalWidth > 0; }
+  // 画面いっぱいに覆う(cover)ための、画面座標→画像座標の対応。
+  function wallArtMapping() {
+    const scale = Math.max(VW / wallImage.naturalWidth, VH / wallImage.naturalHeight);
+    return { scale, offX: (VW - wallImage.naturalWidth * scale) / 2, offY: (VH - wallImage.naturalHeight * scale) / 2 };
+  }
   // 石ごとの色や傾きを固定するための擬似乱数。Math.randomだと毎フレーム別の壁になる。
   function wallNoise(index, salt) {
     const n = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
@@ -6630,6 +6646,25 @@
   }
   function buildWallPieces() {
     const pieces = [];
+    wallPiecesUseArt = wallArtReady();
+    if (wallPiecesUseArt) {
+      // 絵から切り出す。割り方は**絵に描かれている石の大きさに近づける**。
+      // 大きすぎると1枚の板が割れたように、細かすぎると砂のように見える。
+      const cols = 8, rows = 16;
+      const bw = VW / cols, bh = VH / rows;
+      const map = wallArtMapping();
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = col * bw, y = row * bh;
+          pieces.push({
+            kind: 'art', x, y, w: bw, h: bh,
+            sx: (x - map.offX) / map.scale, sy: (y - map.offY) / map.scale,
+            sw: bw / map.scale, sh: bh / map.scale,
+            tone: wallNoise(pieces.length, 1), seed: wallNoise(pieces.length, 2)
+          });
+        }
+      }
+    } else {
     const bw = VW / 6;
     const bh = VH / 12;
     // 石積み。段ごとに半個ずらす(いわゆる馬目地)。真っ直ぐ並べると壁に見えない。
@@ -6650,15 +6685,21 @@
           tone: wallNoise(pieces.length, 3), seed: wallNoise(pieces.length, 4) });
       }
     }
-    // 垂れ幕。左右で色を変える(タイトル背景に合わせて紫と朱)。
+    // 垂れ幕は**代役の壁のときだけ**出す。手で描いた石は単調なので布で変化を付ける意味があるが、
+    // 絵の壁に重ねるとそこだけ質が落ちて浮く(実際に浮いた)。絵は単体で壁として完成している。
     pieces.push({ kind: 'banner', x: VW * 0.11, y: VH * 0.245, w: 76, h: 268, tone: 0, seed: wallNoise(900, 5) });
     pieces.push({ kind: 'banner', x: VW * 0.73, y: VH * 0.285, w: 76, h: 244, tone: 1, seed: wallNoise(901, 5) });
+    }
     for (const piece of pieces) { piece.cx = piece.x + piece.w / 2; piece.cy = piece.y + piece.h / 2; }
     return pieces;
   }
   // 破片1つを原点中心で描く。呼ぶ側が位置・拡大・回転を持つ。
   function drawWallPiece(piece) {
     const w = piece.w, h = piece.h;
+    if (piece.kind === 'art') {
+      ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, -w / 2, -h / 2, w, h);
+      return;
+    }
     if (piece.kind === 'banner') {
       const purple = piece.tone === 0;
       // 裾は裂けさせる。きれいな三角のままだと新品の旗に見えてしまう。
@@ -6815,7 +6856,15 @@
     ctx.strokeRect(-w / 2, -h / 2, w, h);
   }
   function drawFortressWall(breakState) {
-    if (!wallPieces) wallPieces = buildWallPieces();
+    // 絵が後から届いたら組み直す。崩れている最中に入れ替えると破片が飛ぶので、その時はしない。
+    if (!wallPieces || (!breakState && wallPiecesUseArt !== wallArtReady())) wallPieces = buildWallPieces();
+    // 崩していない間は1枚で描く。128枚を毎フレーム貼る意味がない(読み込み中はずっと出ている)。
+    if (!breakState && wallPiecesUseArt) {
+      const map = wallArtMapping();
+      ctx.drawImage(wallImage, map.offX, map.offY,
+        wallImage.naturalWidth * map.scale, wallImage.naturalHeight * map.scale);
+      return;
+    }
     const shatter = breakState ? breakState.t - WALL_IMPACT_SEC : -1;
     // 終わり際は残っている破片を必ず消しきる。距離の遠い石は飛びきる前に演出が終わるため、
     // これが無いとタイトルへ切り替わった瞬間に瓦礫がパッと消える。

@@ -287,6 +287,28 @@ check('石の欠けで継ぎ目に穴を開けていない',
   /角の欠け。\*\*切り抜かずに描く。\*\*/.test(html)
   && html.includes("pieces.push({ kind: 'stone', x, y: row * bh, w: bw, h: bh,"));
 
+// 壁は生成画像。破片ごとに画像から切り出して貼るので、崩れ方はそのまま効く。
+check('壁の絵を破片ごとに切り出して貼っている',
+  html.includes("wallImage.src = 'assets/wall.jpg';")
+  && html.includes('ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, -w / 2, -h / 2, w, h);'));
+// 壁の絵は読み込み画面の背景そのもの。コア画像の待ち合わせに入れると
+// 「壁の絵を読み終わるまで読み込み画面が出せない」という順序の矛盾になる。
+const coreReadySrc = /function areCoreImagesReady\(\)[\s\S]*?\n  \}/.exec(html);
+check('壁の絵は読み込み画面の待ち合わせに入れない',
+  !!coreReadySrc && !/wall/i.test(coreReadySrc[0]));
+check('絵が届くまでは手続き的な壁を出す',
+  html.includes('wallPiecesUseArt = wallArtReady();')
+  && /if \(!wallPieces \|\| \(!breakState && wallPiecesUseArt !== wallArtReady\(\)\)\) wallPieces = buildWallPieces\(\);/.test(html));
+// 崩している最中に絵が届いて組み直すと、破片が一斉に元の位置へ戻ってしまう。
+check('崩れている最中は組み直さない',
+  html.includes('!breakState && wallPiecesUseArt !== wallArtReady()'));
+// 読み込み中はずっと出ている。128枚を毎フレーム貼る意味がない。
+check('崩していない間は1枚で描く',
+  /if \(!breakState && wallPiecesUseArt\) \{[\s\S]{0,300}ctx\.drawImage\(wallImage, map\.offX, map\.offY,/.test(html));
+check('壁の絵を先読みし、オフラインでも出せるようにしている',
+  html.includes('<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">')
+  && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/wall.jpg'"));
+
 check('演出中は入力を受け付けない',
   html.includes("if (gamePhase === 'loading' || gamePhase === 'breaking') return;"));
 // 読み込み中も毎フレーム回る。破片ごとのグラデーションは作り直さず持たせる。
