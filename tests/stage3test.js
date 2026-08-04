@@ -824,7 +824,8 @@ function check(name, value) {
     && msg['.validate'].includes("newData.child('roundId').val() === $roundId"));
   // 相手が落ちたのに自分の手番表示が先に出ると、自分が落ちたように見える。
   check('the turn does not advance while waiting for the peer to declare the result',
-    htmlText.includes('const waitingForPeerResult = isOnline() && !matchOver && units.some(u => u.hp <= 0);')
+    // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと手番が二度と進まない。
+    htmlText.includes("const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));")
     && htmlText.includes('if (!waitingForPeerResult) endTurn();'));
   check('the remote action is still marked resolved while waiting, so the result correlates',
     /waitingForPeerResult[\s\S]{0,400}online\.remoteAction\.resolved = true;/.test(htmlText));
@@ -1456,6 +1457,22 @@ function check(name, value) {
     check('a rematch needs every seated player, and does not wait for the CPU seats',
       !h.allFirebaseRematchVotesIn() && (() => { o.rematchVotes.s1 = true; return h.allFirebaseRematchVotesIn(); })());
   }
+  // ---- 決着と再戦(Issue #26 段C) ----
+  // ホストは全員が開始データを受け取るまで撃てない。1人でも取りこぼしたまま撃つと、
+  // その人だけ違う盤面から始まってしまう。
+  {
+    const o = revealingLobby(['p1', 'e1', 's1']);
+    o.role = 'host'; o.seat = 'p1'; o.peerSeat = 'e1'; o.clientId = 'uid-p1';
+    o.phase = 'starting'; o.startAcks = {}; o.matchStarted = true;
+    h.setOnlineForLogTest(o);
+    h.receiveFirebaseForTest({ v: 3, from: 'uid-e1', seat: 'e1', roundId, t: 'ready', sentAt: Date.now() });
+    const afterOne = o.phase;
+    h.receiveFirebaseForTest({ v: 3, from: 'uid-s1', seat: 's1', roundId, t: 'ready', sentAt: Date.now() });
+    check('the host stays locked until every seated player has the start data',
+      afterOne === 'starting' && o.phase === 'playing');
+  }
+  check('a host with nobody else seated unlocks itself, instead of waiting for an ack that never comes',
+    htmlText.includes('if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat)) online.phase = \'playing\';'));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 

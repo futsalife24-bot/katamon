@@ -4666,10 +4666,13 @@
           // (開始条件や表示が peerReady を見ている箇所を変えずに済ませるため)。
           if (!online.seatReady) online.seatReady = {};
           online.seatReady[msg.seat] = msg.value !== false;
-          if (msg.seat === online.peerSeat) {
-            online.peerReady = msg.value !== false;
-            // startを受けたe1のackで、p1も初めて入力解禁する。
-            if (online.role === 'host' && online.phase === 'starting') online.phase = 'playing';
+          if (msg.seat === online.peerSeat) online.peerReady = msg.value !== false;
+          // startを受け取った側のackで、ホストも初めて入力解禁する。2vs2では
+          // 座っている人ぜんぶが受け取るまで待つ。1人でも取りこぼしたまま撃つと、
+          // その人だけ違う盤面から始まってしまう。空席のCPUはackを返さないので数えない。
+          if (online.role === 'host' && online.phase === 'starting') {
+            online.startAcks[msg.seat] = true;
+            if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat || online.startAcks[seat])) online.phase = 'playing';
           }
           renderFirebaseLobby();
           maybeAutoStartFirebaseRound();
@@ -5359,6 +5362,7 @@
       // 伏せ合いも席ごとに持つ。1vs1の peer* はこの表の「相手の席」ぶんを写したもので、
       // 既存の経路を変えずに済ませるために残してある。
       seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {},
+      startAcks: {}, // 開始データを受け取ったと返してきた席
       // 試合中に想定されるキャラ(ユニットID→キャラ)。開始データを確定した時点で作る。
       unitCharacters: null,
       // すぐ対戦で自分が待っている間だけ立つ。相手が座ったら降ろし、一覧からも取り下げる。
@@ -5558,6 +5562,9 @@
       const startSent = await netSend({ t: 'start', snap });
       if (startSent !== true) throw new Error('Match start could not be sent.');
       online.matchStarted = true;
+      // ほかに人が座っていなければ、開始データを受け取ったと返してくる相手が居ない。
+      // 待っても永久に来ないので、その場で入力を解禁する(2vs2をCPU3体と遊ぶ場合)。
+      if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat)) online.phase = 'playing';
       closeOnlineLobby();
     } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
   }
@@ -5704,6 +5711,7 @@
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
+    online.startAcks = {};
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
     online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
@@ -11460,7 +11468,9 @@
         // 誰かが倒れているのに決着が確定していない = 相手の決着通知を待っている状態。
         // ここで手番を進めると、相手が落ちたのに「あなたのターン」が先に出てから
         // 「落下…」が届き、自分が落ちたように見えてしまう(実機で指摘された)。
-        const waitingForPeerResult = isOnline() && !matchOver && units.some(u => u.hp <= 0);
+        // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと、そこから手番が
+        // 一切進まなくなる。決着に届いているか(陣営の全滅)で判断する。
+        const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));
         if (!waitingForPeerResult) endTurn();
         if (isOnline() && online.kind === 'firebase' && acted.control === 'remote' && online.remoteAction && online.remoteAction.unitId === acted.id) {
           // state/resultは相手の発射をローカルで最後まで解決してからだけ受け入れる。
