@@ -175,6 +175,7 @@ const HOOK = `
       seatHeartbeatMs: () => FIREBASE_SEAT_HEARTBEAT_MS,
       seatStaleReleaseMs: () => FIREBASE_SEAT_STALE_RELEASE_MS,
       lobbySeatStaleVisibleMs: () => FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS,
+      firebaseSeatHeartbeatAllowsRelease: (serverNow, seenAt) => firebaseSeatHeartbeatAllowsRelease(serverNow, seenAt),
       canReleaseFirebaseSeat: (seat) => canReleaseFirebaseSeat(seat),
       ownFirebaseSeatIsLost: () => ownFirebaseSeatIsLost(),
       firebaseSeatIsStale: (seat) => firebaseSeatIsStale(seat),
