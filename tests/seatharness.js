@@ -220,7 +220,9 @@ const HOOK = `
       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
       firebasePeersCommitted: () => firebasePeersCommitted(),
       firebaseRevealsReady: () => firebaseRevealsReady(),
-      firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap)
+      firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap),
+      firebaseHasSeatedOpponent: () => firebaseHasSeatedOpponent(),
+      updateFirebasePeerLiveness: () => updateFirebasePeerLiveness()
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)
