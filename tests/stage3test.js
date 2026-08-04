@@ -1519,6 +1519,12 @@ function check(name, value) {
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',
     /function maybeRevealCharacter\(\)[\s\S]{0,700}maybeStartFirebaseMatch\(\);/.test(htmlText));
+  // 実機で「再戦に時間がかかる」。再戦の自動開始が「誰かのready/commitを受け取った時」
+  // しか走らず、相手がCPUだけの部屋では誰も送ってこないので毎回手で押す必要があった。
+  // v105の「1人だと試合が始まらない」と同じ、受信経路にしか合図が無かった取りこぼし。
+  check('a lone host’s rematch starts on its own, without an incoming packet to trigger it',
+    /async function commitOwnCharacter\(\)[\s\S]{0,900}maybeAutoStartFirebaseRound\(\);/.test(htmlText)
+    && (htmlText.match(/maybeAutoStartFirebaseRound\(\);/g) || []).length === 3);
   // 実機で「4手番ぶん遊べたのに35秒で中断」。生存確認は「相手のパケットが届かなければ
   // 切る」作りだが、相手がCPUだけの部屋では永久に何も届かない。待つ相手が居るかを先に見る。
   {
