@@ -402,7 +402,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v105';
+  const BUILD_ID = 'v106';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4168,8 +4168,21 @@
     if (!online || online.kind !== 'firebase' || !online.peerLiveness) return;
     resetFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow());
   }
+  // 人が座っている対戦者席が自分だけなら、通信が途切れる相手がそもそも居ない。
+  // 2vs2をCPU3体と遊ぶ場合がこれで、何も届かないまま35秒で必ず切られていた。
+  // 試合中に席へ座ることはできない(ルールがロビー中の確保しか許さない)ので、
+  // ここが一度falseになった試合は最後までfalseのまま。
+  function firebaseHasSeatedOpponent() {
+    return firebaseOccupiedPlayerSeats().some(seat => seat !== online.seat);
+  }
   function updateFirebasePeerLiveness() {
     if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !online.peerLiveness) return;
+    if (!firebaseHasSeatedOpponent()) {
+      // 時計は今へ寄せて止めておく。進めたままにすると、相手が居る状態へ戻った瞬間に
+      // 溜まっていた時間が一気に積まれて、その場で切れてしまう。
+      online.peerLiveness.checkedAt = firebaseMonotonicNow();
+      return;
+    }
     const liveness = advanceFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow(), typeof document !== 'undefined' && document.hidden);
     if (liveness.timedOut) {
       rejectFirebaseMessage('相手との通信が途切れました。');
@@ -4341,7 +4354,9 @@
     online.phase = 'ended';
     persistOnlineLog();
     // 対戦開始前はCanvasのエラー表示が見えないので、ロビーにも理由を出す。
-    if (!onlineLobby.classList.contains('hidden')) onlineLobbyStatus(reason);
+    // 要素はidから暗黙に生えるグローバル(window.onlineLobby)ではなく、明示した定数で参照する。
+    // 暗黙のグローバルはブラウザ以外では存在せず、ここが例外を投げると中断理由が出せなくなる。
+    if (onlineLobbyEl && !onlineLobbyEl.classList.contains('hidden')) onlineLobbyStatus(reason);
     try { online.transport.close(); } catch (_) { /* noop */ }
   }
   // 詰まりの保険。ここまで待たされたメッセージは、多少演出が切れても適用してしまう。

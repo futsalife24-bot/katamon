@@ -1519,6 +1519,29 @@ function check(name, value) {
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',
     /function maybeRevealCharacter\(\)[\s\S]{0,700}maybeStartFirebaseMatch\(\);/.test(htmlText));
+  // 実機で「4手番ぶん遊べたのに35秒で中断」。生存確認は「相手のパケットが届かなければ
+  // 切る」作りだが、相手がCPUだけの部屋では永久に何も届かない。待つ相手が居るかを先に見る。
+  {
+    function playingLobby(occupied) {
+      const o = revealingLobby(occupied);
+      o.role = 'host'; o.seat = 'p1'; o.peerSeat = 'e1'; o.clientId = 'uid-p1';
+      o.phase = 'playing'; o.protocolError = '';
+      // すでに時間切れの手前まで積んだ状態から始める。1フレーム進めば必ず判定に届く。
+      o.peerLiveness = { peerVisibleMs: 10 * 60 * 1000, pingVisibleMs: 0, checkedAt: 0 };
+      o.transport = { close: () => {} };
+      return o;
+    }
+    const alone = playingLobby(['p1']);
+    h.setOnlineForLogTest(alone);
+    h.updateFirebasePeerLiveness();
+    check('a room where every opponent is a CPU is never cut off for silence',
+      !h.firebaseHasSeatedOpponent() && alone.protocolError === '' && alone.phase === 'playing');
+    const withPeer = playingLobby(['p1', 'e1']);
+    h.setOnlineForLogTest(withPeer);
+    h.updateFirebasePeerLiveness();
+    check('a real opponent going silent still cuts the match off',
+      h.firebaseHasSeatedOpponent() && withPeer.protocolError === '相手との通信が途切れました。');
+  }
   // 1vs1の空席はCPUが埋めない(相手が来ないと開始できない)。出すと誤解させる。
   {
     const cpuBadgeLobby = seatedLobby('2v2', 'p1', ['p1']);
