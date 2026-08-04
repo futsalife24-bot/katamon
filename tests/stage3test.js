@@ -1339,6 +1339,29 @@ function check(name, value) {
     && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
     && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
     && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
+  // ホストは空席のキャラだけを動かせる。人が座っている席へは手を出せない。
+  // ルール側の例外(!slots.$seat.exists())とまったく同じ条件をクライアントでも見る。
+  {
+    const hostLobby = lobbyWith('2v2');
+    hostLobby.slots = seated('p1', 'e1');
+    h.setOnlineForLogTest(hostLobby);
+    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: snap2v2 });
+    check('the host may act for the empty seats and for nobody else’s',
+      h.validateFirebaseMessage(hostActs('p2')) && h.firebasePacketSeatAllowed(hostActs('p2'))
+      && h.validateFirebaseMessage(hostActs('e2')) && h.firebasePacketSeatAllowed(hostActs('e2'))
+      && !h.validateFirebaseMessage(hostActs('e1')) && !h.firebasePacketSeatAllowed(hostActs('e1')));
+    hostLobby.slots = seated('p1', 'e1', 's1', 's2');
+    check('once someone sits down, the host loses the right to move that unit',
+      !h.validateFirebaseMessage(hostActs('p2')) && !h.firebasePacketSeatAllowed(hostActs('p2'))
+      && !h.firebasePacketSeatAllowed(hostActs('e2')));
+    // 1vs1の部屋では例外そのものが無い。ホストは自分のキャラしか動かせない。
+    const hostSolo = lobbyWith('1v1');
+    hostSolo.slots = seated('p1');
+    h.setOnlineForLogTest(hostSolo);
+    check('a 1vs1 host never gains the empty-seat exception',
+      !h.firebasePacketSeatAllowed({ ...packetFor('p1', 'e1', { t: 'state', snap: safeSnap }) })
+      && h.firebasePacketSeatAllowed({ ...packetFor('p1', 'p1', { t: 'state', snap: safeSnap }) }));
+  }
   h.setOnlineForLogTest(null);
 
   // ---- 手番の受け渡し(Issue #26 段C) ----
