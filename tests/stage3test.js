@@ -544,8 +544,9 @@ function check(name, value) {
     && htmlText.includes("|| msg.t === 'ping' || msg.t === 'move') {\n        applyNetMessage(msg);"));
   check('move send rate is capped and skips sub-pixel jitter',
     htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.12;') && htmlText.includes('const MOVE_SYNC_MIN_DELTA'));
+  // 撃つ側は人でも空席のCPUでも netSendFire を通る。最後の位置はそこで必ず1回送る。
   check('the mover flushes its last position before firing',
-    htmlText.includes('if (moveSyncPending) sendMoveUpdate(me);'));
+    htmlText.includes('if (moveSyncPending) sendMoveUpdate(unit);'));
   check('a remote unit walks to the received position instead of teleporting',
     htmlText.includes('function updateRemoteWalk(dt)') && htmlText.includes('u.netWalkTargetX') && htmlText.includes('followGroundOrFall(u)'));
   check('turn start clears stale walk targets and send state',
@@ -1324,6 +1325,57 @@ function check(name, value) {
     && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
     && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
   h.setOnlineForLogTest(null);
+
+  // ---- 手番の受け渡し(Issue #26 段C) ----
+  // 空席のCPUは、ホストの端末だけが動かして結果を配る。ほかの端末は受け取る側なので
+  // remote のまま置く。両方が動かすと、乱数の混ざった照準が端末ごとに別の結果になる。
+  function seatedLobby(format, seat, occupied) {
+    const o = lobbyWith(format, seat);
+    o.slots = seated(...occupied);
+    return o;
+  }
+  h.setMatchFormat('2v2');
+  h.setOnlineForLogTest(seatedLobby('2v2', 'p1', ['p1', 'e1']));
+  h.setOnlineSeat('p1');
+  check('the host takes charge of the empty seats as CPUs, and of nobody else’s',
+    app.controls() === 'p1:local,e1:remote,p2:cpu,e2:cpu');
+  h.setOnlineForLogTest(seatedLobby('2v2', 's1', ['p1', 'e1', 's1']));
+  h.setOnlineSeat('s1');
+  check('a guest sits in its own unit and waits for every other one, CPU seats included',
+    app.controls() === 'p1:remote,e1:remote,p2:local,e2:remote');
+  check('only the device that drives a unit announces its moves and shots',
+    h.netControlsUnit('p2') && !h.netControlsUnit('e2') && !h.netControlsUnit('p1'));
+  h.setOnlineForLogTest(seatedLobby('2v2', 'p1', ['p1', 'e1', 's1', 's2']));
+  h.setOnlineSeat('p1');
+  check('a full room leaves the host in charge of one unit only',
+    app.controls() === 'p1:local,e1:remote,p2:remote,e2:remote');
+  // 呼び名は全員に同じものを出す。ホスト以外では control が remote に見えるため、
+  // control だけで判断すると同じキャラが「CPU」と「相手」に分かれて表示される。
+  h.setOnlineForLogTest(seatedLobby('2v2', 's1', ['p1', 's1']));
+  h.setOnlineSeat('s1');
+  check('an empty seat is called a CPU on every device, not just on the host',
+    h.unitSeatIsCpu('e1') && h.unitSeatIsCpu('e2') && !h.unitSeatIsCpu('p1')
+    && h.turnOwnerLabel('e1') === 'CPUのターン' && h.turnOwnerLabel('p1') === '相手のターン'
+    && h.turnOwnerLabel('p2') === 'あなたのターン');
+  h.setOnlineForLogTest(null);
+  h.setMatchFormat('1v1');
+  h.setOnlineSeat('e1');
+  check('1vs1 seating is unchanged: one local unit and one remote unit',
+    app.controls() === 'p1:remote,e1:local');
+  h.setMatchFormat('1v1');
+  // 発射の配信は1か所に集約する。人とCPUで別々に組み立てると、片方だけ
+  // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
+  check('the human shot and the CPU shot are announced through the same one place',
+    (htmlText.match(/netSendFire\(/g) || []).length === 3
+    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, specialArmed,')
+    && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
+    && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
+  check('the turn-end authority and the result declaration follow the same rule',
+    htmlText.includes('if (!netControlsUnit(actedUnit)) return;')
+    && htmlText.includes('return !isOnline() || netControlsUnit(activeUnit());'));
+  check('a CPU turn no longer flushes the local unit’s position as if it had moved',
+    htmlText.includes('} else if (moveSyncPending && isLocalTurn()) {')
+    && htmlText.includes('if (moveSyncPending && netControlsUnit(cpuActor)) {'));
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

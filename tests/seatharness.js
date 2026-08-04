@@ -205,7 +205,13 @@ const HOOK = `
       allFirebasePlayersReady: () => allFirebasePlayersReady(),
       firebaseOccupiedPlayerSeats: () => firebaseOccupiedPlayerSeats(),
       firebaseCpuSeats: () => firebaseCpuSeats(),
-      firebaseSeatReady: (seat) => firebaseSeatReady(seat)
+      firebaseSeatReady: (seat) => firebaseSeatReady(seat),
+      // ---- 段C: 手番の受け渡し(Issue #26) ----
+      setOnlineSeat: (seat) => setOnlineSeat(seat),
+      netControlsUnit: (id) => netControlsUnit(unitById(id)),
+      unitSeatIsCpu: (id) => unitSeatIsCpu(unitById(id)),
+      turnOwnerLabel: (id) => turnOwnerLabel(unitById(id)),
+      setMatchFormat: (format) => setMatchFormat(format)
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)

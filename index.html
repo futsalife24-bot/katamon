@@ -2391,7 +2391,14 @@
   function turnOwnerLabel(u) {
     if (!u) return '';
     if (u.id === localUnitId) return 'あなたのターン';
-    return u.control === 'cpu' ? 'CPUのターン' : '相手のターン';
+    // 空席のCPUはホストの端末だけが control='cpu' で持つ。ほかの端末では remote に
+    // 見えるので、席が空いているかどうかで呼び名を決める(全員に同じ表示を出す)。
+    return (u.control === 'cpu' || unitSeatIsCpu(u)) ? 'CPUのターン' : '相手のターン';
+  }
+  // そのユニットの席に人が座っていないか。2vs2の空席＝CPUの担当(決定3)。
+  function unitSeatIsCpu(u) {
+    if (!u || !online || online.kind !== 'firebase' || !firebaseLobbyIs2v2()) return false;
+    return firebaseCpuSeats().some(seat => firebaseSeatUnitId(seat) === u.id);
   }
   // 席を移すと操作権も一緒に動く。相手をAIにするか相手端末にするかで control が変わる。
   function setSeat(id, foeControl) {
@@ -2402,7 +2409,24 @@
   function setLocalSeat(id) { setSeat(id, 'cpu'); }   // CPU戦
   // オンライン対戦。渡すのは「席」で、動かすのはその席に結ばれたユニット。
   // 1vs1では席名とユニット名が一致するので、これまでと同じ動きになる。
-  function setOnlineSeat(seat) { setSeat(firebaseSeatUnitId(seat), 'remote'); }
+  function setOnlineSeat(seat) {
+    setSeat(firebaseSeatUnitId(seat), 'remote');
+    // 2vs2で誰も座っていない席はCPUが埋める(決定3)。動かすのはホストの端末だけで、
+    // ほかの端末はその結果を受け取る側なので remote のまま置く。CPUの照準には乱数が
+    // 混ざるため、各端末で同じ結果を再現させる道は取らない(Issue #26)。
+    if (!isFirebaseHost() || !firebaseLobbyIs2v2()) return;
+    for (const emptySeat of firebaseCpuSeats()) {
+      const u = unitById(firebaseSeatUnitId(emptySeat));
+      if (u && u.control !== 'local') u.control = 'cpu';
+    }
+  }
+  // この端末がそのユニットの行動を決めて配る側か。自分の席のキャラに加え、
+  // 2vs2の空席のCPUはホストが動かす。通信の送信側はすべてここを通す。
+  function netControlsUnit(u) {
+    if (!u) return false;
+    if (u.control === 'local') return true;
+    return u.control === 'cpu' && isFirebaseHost();
+  }
   // 席とcontrolの割り当てを1行で残す。実機で「ターンバーはあなた、ダイヤルは相手」という
   // 食い違いが出た。両者は localUnitId と control を別々に見ているため、ここがズレると起きる。
   function logSeatAssignment(where) {
@@ -4343,7 +4367,7 @@
 
   function sendMoveUpdate(unit) {
     moveSyncTimer = 0;
-    if (!isOnline() || !unit || unit.control !== 'local') { moveSyncPending = false; return; }
+    if (!isOnline() || !netControlsUnit(unit)) { moveSyncPending = false; return; }
     if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
     lastSentMoveX = unit.x;
     moveSyncPending = false;
@@ -4808,10 +4832,30 @@
     netSend({ t: 'start', snap });
   }
 
+  // 発射の配信。人が撃った時も、2vs2で空席のCPUをホストが撃たせた時も必ずここを通す。
+  // 相手には「誰がどこからどう撃ったか」だけを送り、演出は受け取った側で再生させる。
+  function netSendFire(unit, anchor, vx0, vy0, useSpecial, useJump) {
+    if (!isOnline() || !netControlsUnit(unit)) return;
+    let actionId = null;
+    if (online.kind === 'firebase') {
+      actionId = secureNonce();
+      online.localAction = { unitId: unit.id, actionId };
+    }
+    // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
+    if (moveSyncPending) sendMoveUpdate(unit);
+    logOnlineEvent({ type: 'sendFire', unitId: unit.id, actionId });
+    netSend({
+      t: 'fire', unitId: unit.id, x: unit.x, y: unit.y,
+      anchor: { x: anchor.x, y: anchor.y },
+      vx0, vy0, useSpecial: !!useSpecial, useJump: !!useJump,
+      ...(actionId ? { actionId } : {})
+    });
+  }
+
   // ターンの切れ目に、行動した側が権威として状態を送る。
   function netSyncTurn(actedUnit) {
     if (!isOnline() || online.phase !== 'playing') return;
-    if (!actedUnit || actedUnit.control !== 'local') return;
+    if (!netControlsUnit(actedUnit)) return;
     if (online.kind === 'firebase') {
       const action = online.localAction;
       if (!action || action.unitId !== actedUnit.id || !FIREBASE_ACTION_ID_RE.test(action.actionId || '')) {
@@ -6939,7 +6983,9 @@
   // オンライン対戦では、決着を宣言していいのは「その手番を持っていた側」だけ。
   // 両者が独立に判定すると、演出のズレでHPが1違うだけで勝敗が食い違う。
   function canDeclareMatchEnd() {
-    return !isOnline() || isLocalTurn();
+    // 決着を宣言できるのは、いま動いているキャラを配信している端末だけ。
+    // 2vs2では空席のCPUもホストが配信しているので、その手番の決着もホストが宣言する。
+    return !isOnline() || netControlsUnit(activeUnit());
   }
 
   function checkMatchEnd(reason) {
@@ -7150,6 +7196,9 @@
     const jitter = tier.jitter;
     const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
     const vy = vy0 * (1 + (Math.random() * 2 - 1) * jitter);
+    // 2vs2で空席を埋めているCPUは、ホストの端末が動かして結果を配る(Issue #26)。
+    // 狙いに乱数が混ざるので、各端末で撃ち直させず、この1台の弾道をそのまま配る。
+    netSendFire(self, anchor, vx, vy, useSpecial, false);
     launchShot(self, anchor, vx, vy, useSpecial);
     awaitingResolve = true;
   }
@@ -10745,24 +10794,7 @@
           const me = localUnit();
           const def = CHARACTERS[me.character];
           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
-          // 相手には「誰がどこからどう撃ったか」だけを送り、演出は相手側で再生させる。
-          // 移動は送っていないので、撃つ直前の立ち位置をここに載せて合わせる。
-          let actionId = null;
-          if (isOnline() && online.kind === 'firebase') {
-            actionId = secureNonce();
-            online.localAction = { unitId: me.id, actionId };
-          }
-          if (isOnline()) {
-            // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
-            if (moveSyncPending) sendMoveUpdate(me);
-            logOnlineEvent({ type: 'sendFire', unitId: me.id, actionId });
-            netSend({
-              t: 'fire', unitId: me.id, x: me.x, y: me.y,
-              anchor: { x: aimState.anchor.x, y: aimState.anchor.y },
-              vx0, vy0, useSpecial: specialArmed, useJump: jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0,
-              ...(actionId ? { actionId } : {})
-            });
-          }
+          netSendFire(me, aimState.anchor, vx0, vy0, specialArmed, jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0);
           launchShot(me, aimState.anchor, vx0, vy0, specialArmed, false, jumpArmed);
           runStats.shots++;
           specialArmed = false;
@@ -11265,8 +11297,10 @@
       if (moved > 0) moveSyncPending = true;
       moveSyncTimer += dt;
       if (moveSyncTimer >= MOVE_SYNC_INTERVAL_SEC && moveSyncPending) sendMoveUpdate(me);
-    } else if (moveSyncPending) {
+    } else if (moveSyncPending && isLocalTurn()) {
       // ボタンを離した・燃料切れ・崖で止まった。最後の確定位置を必ず1回送る。
+      // 自分の手番の時だけ。2vs2ではCPUの手番にも保留が立つので、ここで送ると
+      // 動いていない自分のキャラの位置を、相手の移動として配ってしまう。
       sendMoveUpdate(me);
     }
     updateRemoteWalk(dt);
@@ -11292,10 +11326,18 @@
             cpuActor.fuel -= moved;
             cpuMoveRemaining -= moved;
             followGroundOrFall(cpuActor);
+            if (moved > 0) moveSyncPending = true;
             if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
           }
         } else {
           cpuPhase = 'aim';
+        }
+        // 2vs2で空席を埋めているCPUの移動も、人と同じ間隔で配ってやる。
+        // 受け取った端末は updateRemoteWalk で同じ速さで歩かせるので、
+        // 発射の瞬間に立ち位置が飛ぶのではなく、歩いて詰めたことが伝わる。
+        if (moveSyncPending && netControlsUnit(cpuActor)) {
+          moveSyncTimer += dt;
+          if (cpuPhase !== 'move' || moveSyncTimer >= MOVE_SYNC_INTERVAL_SEC) sendMoveUpdate(cpuActor);
         }
       } else {
         cpuThinkTimer -= dt;
