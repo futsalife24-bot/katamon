@@ -1509,6 +1509,27 @@ function check(name, value) {
   }
   check('a host with nobody else seated unlocks itself, instead of waiting for an ack that never comes',
     htmlText.includes('if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat)) online.phase = \'playing\';'));
+
+  // ---- v104の実機で見つかった3件 ----
+  // 対戦方式のドロップダウンだけ change が繋がっておらず、2vs2を選んでも一切送られて
+  // いなかった。次の描画で `1 vs 1` へ戻るだけで、席の名前も1vs1のままだった。
+  check('the match-format dropdown actually sends the change, like the other settings',
+    htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener(\'change\''));
+  // ほかに人が座っていない2vs2(1人＋CPU3体)では、検証する相手の公開が届かない。
+  // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
+  check('a lone host still starts the match, without waiting for a reveal that never arrives',
+    /function maybeRevealCharacter\(\)[\s\S]{0,700}maybeStartFirebaseMatch\(\);/.test(htmlText));
+  // 1vs1の空席はCPUが埋めない(相手が来ないと開始できない)。出すと誤解させる。
+  {
+    const cpuBadgeLobby = seatedLobby('2v2', 'p1', ['p1']);
+    h.setOnlineForLogTest(cpuBadgeLobby);
+    const twoVsTwo = h.renderLobbySeats().map(r => r.parts.join('|')).join('\n');
+    cpuBadgeLobby.settings = h.normalizeLobbySettings({ ...cpuBadgeLobby.settings, format: '1v1' });
+    const oneVsOne = h.renderLobbySeats().map(r => r.parts.join('|')).join('\n');
+    check('the CPU badge appears only where a CPU really takes over',
+      (twoVsTwo.match(/CPUが担当/g) || []).length === 3
+      && !oneVsOne.includes('CPUが担当'));
+  }
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 
