@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v112';
+const CACHE_VERSION = 'katamon-pwa-v113';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,7 +9,8 @@ const APP_SHELL = [
   './assets/icon-512.png',
   './assets/icon-maskable-512.png',
   './assets/loading-emblem.png',
-  './assets/title-logo.png'
+  './assets/title-logo.png',
+  './assets/wall.jpg'
 ];
 
 self.addEventListener('install', event => {
