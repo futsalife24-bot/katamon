@@ -903,6 +903,122 @@ function check(name, value) {
   check('Persisted log round-trips room/role and the capped entries', persisted && persisted.room === 'A2BC3DEF' && persisted.role === 'host' && persisted.log.length === h.onlineLogMax());
   h.setOnlineForLogTest(null);
 
+  // ===== Issue #7: 退出済み・切断済みの席を安全に空ける =====
+  // 従来は「席を消せるのは本人だけ」だったため、ブラウザを強制終了された席は誰にも
+  // 消せず、ホストが居る限り部屋の期限も切れないので永久に残った。
+  // 生存印(seenAt)を足し、それが途切れた席だけをホストが空けられるようにする。
+
+  // ---- ルール側 ----
+  const seatRule = seat['.write'];
+  check('rules declare seenAt so the heartbeat is not rejected by the unknown-child guard',
+    !!seat.seenAt && seat.seenAt['.validate'].includes('newData.isNumber()'));
+  check('rules let the seat holder refresh only seenAt, keeping uid and claimedAt pinned',
+    seatRule.includes("data.exists() && newData.exists() && data.child('uid').val() === auth.uid")
+    && seatRule.includes("newData.child('uid').val() === data.child('uid').val()")
+    && seatRule.includes("newData.child('claimedAt').val() === data.child('claimedAt').val()"));
+  check('rules let p1 release a seat only when its heartbeat has gone stale',
+    seatRule.includes("child('slots').child('p1').child('uid').val() === auth.uid && data.child('seenAt').isNumber() && data.child('seenAt').val() < now - 90000"));
+  check('rules keep the host release gated to the lobby, so nobody is evicted mid-match',
+    // 空ける分岐は必ず status==='lobby' と同じ括弧の中に居る。
+    /\(root\.child\('rooms'\)\.child\(\$room\)\.child\('round'\)\.child\('status'\)\.val\(\) === 'lobby' && data\.exists\(\) && !newData\.exists\(\) && root\.child\('rooms'\)\.child\(\$room\)\.child\('slots'\)\.child\('p1'\)/.test(seatRule));
+  check('rules still let a seat holder release their own seat, and nobody else do it blindly',
+    seatRule.includes("data.exists() && !newData.exists() && data.child('uid').val() === auth.uid")
+    // uid一致でも生存印が新しくてもない「無条件の削除」は一つも無い
+    && !/!newData\.exists\(\)\)(?!.*seenAt)/.test(seatRule.split('||').filter(x => x.includes('!newData.exists()') && !x.includes("data.child('uid').val() === auth.uid") && !x.includes('seenAt')).join('')));
+  check('the release window in the rules is far wider than the heartbeat interval',
+    h.seatStaleReleaseMs() >= h.seatHeartbeatMs() * 4 && seatRule.includes(String(h.seatStaleReleaseMs())));
+  check('the client only offers the button after its own no-response display has fired',
+    h.lobbySeatStaleVisibleMs() < h.seatStaleReleaseMs());
+  check('the seat claim carries a heartbeat from the very first write',
+    htmlText.includes("claimedAt: firebaseServerNow(auth), seenAt: { '.sv': 'timestamp' }"));
+  check('the heartbeat writes a server timestamp, not a client clock',
+    /slots\/\$\{seat\}\/seenAt`[\s\S]{0,220}'\.sv': 'timestamp'/.test(htmlText));
+
+  // ---- クライアント側: 誰の席をいつ空けられるか ----
+  function fakeLobby({ role = 'host', phase = 'lobby', seat = 'p1', clockMs = 200000, seen = {} } = {}) {
+    return {
+      kind: 'firebase', role, phase, seat, room: 'A2BC3DEF', auth: { uid: 'uid-p1' },
+      slots: { p1: { uid: 'uid-p1' }, e1: { uid: 'uid-e1' }, s1: null, s2: { uid: 'uid-s2' } },
+      lobbyLiveness: { clockMs, pingVisibleMs: 0, checkedAt: 0 },
+      seatSeen: seen, seatStale: {}, log: []
+    };
+  }
+  const STALE = 200000 - h.lobbySeatStaleVisibleMs() - 1000; // 十分に古い
+  const FRESH = 200000 - 1000;                               // ついさっき見えた
+
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH } }));
+  check('the host can release a seat that stopped responding', h.canReleaseFirebaseSeat('e1'));
+  check('the host cannot release a seat that is still responding', !h.canReleaseFirebaseSeat('s2'));
+  check('the host cannot release an empty seat', !h.canReleaseFirebaseSeat('s1'));
+  check('nobody can release the host seat itself', !h.canReleaseFirebaseSeat('p1'));
+
+  h.setOnlineForLogTest(fakeLobby({ role: 'guest', seat: 'e1', seen: { s2: STALE } }));
+  check('a guest is never offered the release button', !h.canReleaseFirebaseSeat('s2'));
+
+  h.setOnlineForLogTest(fakeLobby({ phase: 'playing', seen: { e1: STALE } }));
+  check('no seat can be released while a match is running', !h.canReleaseFirebaseSeat('e1'));
+
+  h.setOnlineForLogTest(fakeLobby({ phase: 'results', seen: { e1: STALE } }));
+  check('no seat can be released on the results screen either', !h.canReleaseFirebaseSeat('e1'));
+
+  // 二重タブ・画面ロック・短い回線断は「見えている時間」でしか進まないので、
+  // 裏に回っている間に応答なしへ倒れない。既存の可視時間計測をそのまま使う。
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: 200000 - h.lobbySeatStaleVisibleMs() + 1000 } }));
+  check('a seat just short of the no-response threshold is left alone', !h.canReleaseFirebaseSeat('e1'));
+
+  // ---- クライアント側: 空けられた本人が気づく ----
+  const lost = fakeLobby({ role: 'guest', seat: 'e1' });
+  lost.auth = { uid: 'uid-e1' };
+  h.setOnlineForLogTest(lost);
+  check('holding your own seat is not treated as being evicted', !h.ownFirebaseSeatIsLost());
+  lost.slots = { ...lost.slots, e1: null };
+  check('a removed seat is detected as an eviction', h.ownFirebaseSeatIsLost());
+  lost.slots = { ...lost.slots, e1: { uid: 'someone-else' } };
+  check('a seat re-taken by someone else is detected as an eviction', h.ownFirebaseSeatIsLost());
+  check('the evicted player is sent back to the title with the reason kept on screen',
+    htmlText.includes('showTitleNotice(reason)') && htmlText.includes('returnToTitleFromResult();')
+    && htmlText.includes("応答が途切れたため、ホストに席を空けられました。"));
+  check('the evicted player does not try to delete a seat that is no longer theirs',
+    /noticeOwnFirebaseSeatLost[\s\S]{0,600}endOnline\(false, false\)/.test(htmlText));
+
+  // ---- ハートビートを打つ席 ----
+  h.setOnlineForLogTest(fakeLobby({ seat: 'p1' }));
+  check('the host does not heartbeat: the rules never let p1 write to its own slot, and a dead host is collected by the room TTL',
+    h.firebaseSeatHeartbeatTarget() === null);
+  h.setOnlineForLogTest(fakeLobby({ role: 'guest', seat: 's2' }));
+  check('spectator seats heartbeat too, so a ghost spectator can also be cleared',
+    h.firebaseSeatHeartbeatTarget() === 's2');
+  // ---- 席ボードに実際にボタンが出るか ----
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH } }));
+  const hostRows = h.renderLobbySeats();
+  const rowText = hostRows.map(r => r.parts.join('|')).join('\n');
+  check('the no-response seat shows a release button to the host',
+    /seatReleaseBtn:この席を空ける/.test(rowText), rowText);
+  check('exactly one release button is drawn: only the seat that stopped responding',
+    (rowText.match(/seatReleaseBtn/g) || []).length === 1, rowText);
+  h.setOnlineForLogTest(fakeLobby({ role: 'guest', seat: 'e1', seen: { s2: STALE } }));
+  const guestRows = h.renderLobbySeats();
+  check('a guest sees the no-response mark but never a release button',
+    guestRows.some(r => r.parts.join('|').includes('応答なし'))
+    && !guestRows.some(r => r.parts.join('|').includes('seatReleaseBtn')));
+
+  // ---- タイトルへ持ち越す理由の帯 ----
+  h.setOnlineForLogTest(null);
+  h.showTitleNotice('応答が途切れたため、ホストに席を空けられました。もう一度入り直してください。');
+  check('the eviction reason survives the trip back to the title', h.titleNotice().includes('席を空けられました'));
+  // 中断データを持ったままオンラインで席を空けられると、帯と吹き出しが同時に出る。
+  const noticeBand = h.titleNoticeBand();
+  const bubbleBand = h.saveBubbleBand();
+  check('the title notice does not sit on top of the suspended-save bubble',
+    noticeBand.bottom <= bubbleBand.top, JSON.stringify({ noticeBand, bubbleBand }));
+  check('the title notice stays clear of the battle-mode label below it',
+    noticeBand.bottom < h.titleModeLabelY(), JSON.stringify(noticeBand));
+  app.setPhase('title');
+  let titleThrew = null;
+  try { app.render(); } catch (e) { titleThrew = e; }
+  check('the title still draws with the notice on screen', !titleThrew, titleThrew && titleThrew.message);
+  check('leaving online clears the heartbeat timer', htmlText.includes('if (leaving.seatHeartbeatTimer) clearTimeout(leaving.seatHeartbeatTimer);'));
+
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;
 })().catch(err => { console.error(err); process.exitCode = 1; });

@@ -235,6 +235,12 @@
   .onlineSeatRow .seatState.stale { color: #ff8a6a; }
   /* 応答が途切れた席。名前を落として、居るのに動いていないことが一目で分かるようにする */
   .onlineSeatRow.stale .seatMark, .onlineSeatRow.stale .seatName { opacity: .5; }
+  /* ホストだけに出る「この席を空ける」。押し間違いが効かないよう、他の要素と間を空ける */
+  .onlineSeatRow .seatReleaseBtn {
+    flex: 0 0 auto; margin-left: 6px; font-size: 10px; font-weight: 900; color: #ffe2d6;
+    background: #6d2320; border: 1px solid #e08a72; border-radius: 3px; padding: 3px 7px; cursor: pointer;
+  }
+  .onlineSeatRow .seatReleaseBtn:active { background: #8c2e2a; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
@@ -389,7 +395,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v100';
+  const BUILD_ID = 'v101';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4901,7 +4907,9 @@
     try {
       // Rulesは非memberのreadを許可しない。e1→s1→s2を条件付きPUTで確保してから読む。
       for (const candidate of seatOrder) {
-        const claimed = await firebaseClaimEmptySlot(`rooms/${code}/slots/${candidate}`, auth, { uid: auth.uid, claimedAt: firebaseServerNow(auth) });
+        // seenAt は席を取った瞬間から入れておく。空のまま置くと、ホストは
+        // 「生存印が無い＝空けてよいか判断できない」席を抱えることになる。
+        const claimed = await firebaseClaimEmptySlot(`rooms/${code}/slots/${candidate}`, auth, { uid: auth.uid, claimedAt: firebaseServerNow(auth), seenAt: { '.sv': 'timestamp' } });
         if (claimed) { seat = candidate; break; }
       }
       if (!seat) throw new Error('空き席がありません');
@@ -4953,6 +4961,102 @@
       scheduleFirebaseRoomLease();
     }, ROOM_LEASE_RENEW_MS);
   }
+  // ===== 席の生存印(Issue #7) =====
+  // 座っている本人が自分の席へ「今も居る」という時刻を書き続ける。ホストはこれが
+  // 途切れた席だけを空けられる。ルール側でも同じ条件を見ているので、こちらのバグで
+  // 生きている席を消すことはできない。
+  // p1は対象外。ルールが p1 の席への書き込みを一切許していないうえ、ホストが落ちた場合は
+  // 部屋の期限切れ(ROOM_TTL_MS)が部屋ごと片付けるので、生存印を持たせる意味がない。
+  const FIREBASE_SEAT_HEARTBEAT_MS = 20000;
+  // ルール側で「これだけ古い生存印なら空けてよい」とする幅。書き込み間隔の4倍以上を取り、
+  // 裏に回ったタブの間引き(Chromeは最長1分程度)で生きている席が空けられないようにする。
+  const FIREBASE_SEAT_STALE_RELEASE_MS = 90000;
+  function firebaseSeatHeartbeatTarget() {
+    if (!online || online.kind !== 'firebase' || !online.seat || online.seat === 'p1') return null;
+    return online.seat;
+  }
+  async function sendFirebaseSeatHeartbeat() {
+    const seat = firebaseSeatHeartbeatTarget();
+    if (!seat) return;
+    const beating = online;
+    try {
+      await firebaseRequest(`rooms/${beating.room}/slots/${seat}/seenAt`, beating.auth, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ '.sv': 'timestamp' })
+      });
+    } catch (_) {
+      // 書けないのは「席を空けられた」か「一時的な通信不良」のどちらか。
+      // ここでは切らず、名簿を読み直して自席が残っているかで判断する。
+      if (online === beating) checkOwnFirebaseSeatLost();
+    }
+  }
+  function scheduleFirebaseSeatHeartbeat() {
+    if (!firebaseSeatHeartbeatTarget()) return;
+    if (online.seatHeartbeatTimer) clearTimeout(online.seatHeartbeatTimer);
+    online.seatHeartbeatTimer = setTimeout(async () => {
+      await sendFirebaseSeatHeartbeat();
+      scheduleFirebaseSeatHeartbeat();
+    }, FIREBASE_SEAT_HEARTBEAT_MS);
+  }
+  // 自席が他人のものになっている/消えている＝ホストに空けられた。
+  // 名簿は lobbyState でも降ってくるので、そちらからも呼ぶ。
+  async function checkOwnFirebaseSeatLost() {
+    if (!online || online.kind !== 'firebase' || !online.seat || online.seatLostHandled) return;
+    const checking = online;
+    try {
+      const room = await firebaseRequest(`rooms/${checking.room}`, checking.auth);
+      if (online !== checking || !room) return;
+      online.slots = room.slots || online.slots;
+    } catch (_) {
+      // 部屋ごと読めないのは席の問題ではない(期限切れ・通信不良)。ここでは何もしない。
+      return;
+    }
+    noticeOwnFirebaseSeatLost();
+  }
+  function ownFirebaseSeatIsLost() {
+    if (!online || online.kind !== 'firebase' || !online.seat) return false;
+    const mine = online.slots && online.slots[online.seat];
+    return !mine || mine.uid !== online.auth.uid;
+  }
+  function noticeOwnFirebaseSeatLost() {
+    if (!online || !ownFirebaseSeatIsLost() || online.seatLostHandled) return;
+    online.seatLostHandled = true;
+    const reason = '応答が途切れたため、ホストに席を空けられました。もう一度入り直してください。';
+    logOnlineEvent({ type: 'seatLost', seat: online.seat });
+    onlineLobbyStatus(reason);
+    // 席はもう自分のものではないので、返しに行かない(消しに行っても権限が無い)。
+    endOnline(false, false);
+    showTitleNotice(reason);
+    returnToTitleFromResult();
+  }
+
+  // ホストが「応答なし」の席を空ける。押せるのはロビー中のホストだけ。
+  // 自動では空けない(画面を消していただけの人を締め出さないため)。最終判断は人がする。
+  function canReleaseFirebaseSeat(seat) {
+    if (!isFirebaseHost() || online.phase !== 'lobby') return false;
+    if (seat === 'p1' || !FIREBASE_SEATS.includes(seat)) return false;
+    if (!(online.slots && online.slots[seat] && online.slots[seat].uid)) return false;
+    return firebaseSeatIsStale(seat);
+  }
+  async function releaseStaleFirebaseSeat(seat) {
+    if (!canReleaseFirebaseSeat(seat)) return;
+    const acting = online;
+    onlineLobbyStatus(`${firebaseSeatLabel(seat)}を空けています…`);
+    try {
+      await firebaseRequest(`rooms/${acting.room}/slots/${seat}`, acting.auth, { method: 'DELETE' });
+    } catch (_) {
+      // ルール側は生存印が90秒以上古い席しか消させない。断られたのは相手が生きている印。
+      if (online === acting) onlineLobbyStatus(`${firebaseSeatLabel(seat)}はまだ応答があるため空けられません。`);
+      return;
+    }
+    if (online !== acting) return;
+    logOnlineEvent({ type: 'seatReleased', seat });
+    if (online.seatSeen) delete online.seatSeen[seat];
+    if (online.seatStale) delete online.seatStale[seat];
+    // 空けた結果を全員へ配る。空けられた本人がまだ生きていれば、これで気づいて退出する。
+    await refreshFirebaseRoster(true);
+    if (online === acting) onlineLobbyStatus(`${firebaseSeatLabel(seat)}を空けました。`);
+  }
+
   function scheduleFirebaseTokenRefresh() {
     if (!online || online.kind !== 'firebase') return;
     if (online.authRefreshTimer) clearTimeout(online.authRefreshTimer);
@@ -5015,6 +5119,7 @@
     onlineLobbyStatus(online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。');
     scheduleFirebaseTokenRefresh();
     scheduleFirebaseRoomLease();
+    scheduleFirebaseSeatHeartbeat();
     renderFirebaseLobby();
     if (seat !== 'p1') netSend({ t: 'presence', name: localPlayerName() });
     if (online.participantRole === 'spectator' && room && room.round && room.round.latestSnapshot) {
@@ -5168,12 +5273,20 @@
     // 準備状態はp1/e1のみ、ロビー中で在席している時だけ出す。判定は既存のselfReady/peerReadyのまま
     // (peerSeatは対戦者同士でのみ相手を指す。観戦者からの見え方は元のテキスト版と同じ制約を引き継ぐ)。
     // 応答なしは準備状態より優先して出す。観戦席にも出す(誰が消えたのか分かるように)。
-    // ただし表示だけで、席は空けない。実際に空けられるようにするのはStage 4-2の領分。
+    // 空けられるのはホストだけ。しかもロビー中の「応答なし」の席に限る(Issue #7)。
     if (stale) {
       const state = document.createElement('span');
       state.className = 'seatState stale';
       state.textContent = '応答なし';
       row.appendChild(state);
+      if (canReleaseFirebaseSeat(seat)) {
+        const release = document.createElement('button');
+        release.type = 'button';
+        release.className = 'seatReleaseBtn';
+        release.textContent = 'この席を空ける';
+        release.addEventListener('click', () => { releaseStaleFirebaseSeat(seat); });
+        row.appendChild(release);
+      }
     } else if (isPlayerSeat && occupied && online.phase === 'lobby') {
       const ready = seat === online.seat ? online.selfReady : (seat === online.peerSeat && !!online.peerReady);
       const state = document.createElement('span');
@@ -5212,7 +5325,12 @@
     if (!online || online.kind !== 'firebase') return;
     if (msg.seat !== 'p1') return;
     rememberFirebaseName(msg);
-    if (msg.slots && typeof msg.slots === 'object') online.slots = msg.slots;
+    if (msg.slots && typeof msg.slots === 'object') {
+      online.slots = msg.slots;
+      // ホストが席を空けた直後にこの名簿が届く。自席が消えていたら、その場で気づく。
+      noticeOwnFirebaseSeatLost();
+      if (!online) return;
+    }
     if (msg.settings && typeof msg.settings === 'object') online.settings = normalizeLobbySettings(msg.settings);
     if (msg.status === 'revealing') { online.phase = 'revealing'; maybeRevealCharacter(); }
     else if (msg.status === 'lobby') { if (msg.nextRoundId) { online.currentRoundId = msg.nextRoundId; online.transport.setRoundId(msg.nextRoundId); online.transport.reconnect(); } resetLocalFirebaseRoundState(msg.autoReady === true); openFirebaseLobby(); }
@@ -5434,6 +5552,7 @@
     if (leaving.authRefreshTimer) clearTimeout(leaving.authRefreshTimer);
     if (leaving.authRetryTimer) clearTimeout(leaving.authRetryTimer);
     if (leaving.roomLeaseTimer) clearTimeout(leaving.roomLeaseTimer);
+    if (leaving.seatHeartbeatTimer) clearTimeout(leaving.seatHeartbeatTimer);
     // v3 Firebaseは試合終了・ページ離脱で部屋を消さない。明示的なロビー退出だけが席/部屋を消す。
     if (sendBye && leaving.kind !== 'firebase') { netSend({ t: 'bye' }); netSend({ t: 'bye' }); }
     leaving.transport.close();
@@ -5597,6 +5716,41 @@
   // 文字が入らない)。尻尾は CPU BATTLE の文字へ向けて左下へ伸ばす。
   // 数値を触るならこの4つ。SAVE_BUBBLE_CY を下げすぎるとモードラベルに被る。
   const SAVE_BUBBLE_TEXT = '中断データあり';
+  // タイトルへ戻された理由を、戻った先で読めるように持ち越す帯。
+  // ロビーの赤帯は退出と同時に消えてしまうので、それだけだと何が起きたのか分からない。
+  const TITLE_NOTICE_MS = 15000;
+  // ロゴ(〜445)のすぐ下。中断データの吹き出し(SAVE_BUBBLE_CY=522の上下26px)と
+  // 重ねないこと。中断データを持ったままオンラインで席を空けられると両方出る。
+  const TITLE_NOTICE_Y = 468;
+  const TITLE_NOTICE_H = 36;
+  let titleNotice = '';
+  let titleNoticeUntil = 0;
+  function showTitleNotice(text) {
+    titleNotice = text || '';
+    titleNoticeUntil = Date.now() + TITLE_NOTICE_MS;
+  }
+  function activeTitleNotice() {
+    if (!titleNotice || Date.now() > titleNoticeUntil) return '';
+    return titleNotice;
+  }
+  function drawTitleNotice() {
+    const text = activeTitleNotice();
+    if (!text) return;
+    ctx.save();
+    ctx.font = `900 12px ${UI_FONT_HEAVY}`;
+    const w = Math.min(VW - 40, ctx.measureText(text).width + 36);
+    angularPlatePath(VW / 2, TITLE_NOTICE_Y, w, TITLE_NOTICE_H, 8);
+    ctx.fillStyle = 'rgba(78,22,22,0.94)';
+    ctx.fill();
+    ctx.strokeStyle = '#e08a72';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    drawOutlinedText(text, VW / 2, TITLE_NOTICE_Y + 5, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: '#ffe2d6', lineWidth: 3
+    });
+    ctx.restore();
+  }
+
   const TITLE_MODE_LABEL_Y = 566;     // SELECT A BATTLE MODE の帯。吹き出しはこれに被らせない
   const SAVE_BUBBLE_CY = 522;         // 楕円の中心の高さ
   const SAVE_BUBBLE_RY = 26;          // 楕円の縦半径
@@ -5791,6 +5945,7 @@
     drawTitleModeButton(titleFreeBtn, '演習', '対戦条件を組み上げて開始', 'free');
     // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
     drawSuspendedSaveBubble();
+    drawTitleNotice();
     ctx.restore();
 
     drawIronPlate(titleBonusBtn.x, titleBonusBtn.y, titleBonusBtn.w, titleBonusBtn.h, {
