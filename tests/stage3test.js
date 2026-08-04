@@ -855,6 +855,18 @@ function check(name, value) {
     && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 'e1' && newData.val() === 'e1'")
     && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's1' && newData.val() === 'p2'")
     && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's2' && newData.val() === 'e2'"));
+  // 2vs2で空席をCPUが埋める時、そのCPUを動かす端末が必要になる(決定3)。
+  // ホストに限り、誰も座っていない席のキャラを動かせる。座っている席へは手を出せない。
+  check('the host may act for a seat nobody is sitting in, so CPU teammates can play',
+    ['e1:e1', 'p2:s1', 'e2:s2'].every(pair => {
+      const [unit, seat] = pair.split(':');
+      return msg.unitId['.validate'].includes(`newData.parent().child('seat').val() === 'p1' && newData.val() === '${unit}' && !root.child('rooms').child($room).child('slots').child('${seat}').exists()`);
+    }));
+  check('the host still cannot act for a seat somebody is sitting in',
+    // 例外はすべて !...exists() 付き。無条件にホストが他人のキャラを動かせる分岐は無い
+    msg.unitId['.validate'].split('||')
+      .filter(x => x.includes("val() === 'p1' &&") && !x.includes("newData.val() === 'p1'"))
+      .every(x => x.includes('.exists()')));
   check('the round roster can name all four seats',
     ['p1', 'e1', 's1', 's2'].every(x => rules.round.players[x] && rules.round.players[x]['.validate'].includes('isString'))
     && rules.round.players.$other['.validate'] === false);
