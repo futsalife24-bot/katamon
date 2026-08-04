@@ -193,7 +193,34 @@ const HOOK = `
       openMatchFormats: () => OPEN_MATCH_FORMATS.slice(),
       openMaxCandidates: () => OPEN_INDEX_MAX_CANDIDATES,
       syncQuickMatchListing: () => syncQuickMatchListing(),
-      legacyQuickRoom: () => LEGACY_QUICK_MATCH_ROOM
+      legacyQuickRoom: () => LEGACY_QUICK_MATCH_ROOM,
+      // ---- 4人の席(Issue #25) ----
+      firebaseSeatUnitId: (seat) => firebaseSeatUnitId(seat),
+      firebaseSeatTeam: (seat) => FIREBASE_SEAT_TEAM[seat] || null,
+      firebasePlayerSeats: () => firebasePlayerSeats(),
+      firebaseSeatLabel: (seat) => firebaseSeatLabel(seat),
+      firebaseLobbyIs2v2: () => firebaseLobbyIs2v2(),
+      syncFirebaseParticipantRole: () => syncFirebaseParticipantRole(),
+      localUnitId: () => localUnitId,
+      allFirebasePlayersReady: () => allFirebasePlayersReady(),
+      firebaseOccupiedPlayerSeats: () => firebaseOccupiedPlayerSeats(),
+      firebaseCpuSeats: () => firebaseCpuSeats(),
+      firebaseSeatReady: (seat) => firebaseSeatReady(seat),
+      // ---- 段C: 手番の受け渡し(Issue #26) ----
+      setOnlineSeat: (seat) => setOnlineSeat(seat),
+      netControlsUnit: (id) => netControlsUnit(unitById(id)),
+      unitSeatIsCpu: (id) => unitSeatIsCpu(unitById(id)),
+      turnOwnerLabel: (id) => turnOwnerLabel(unitById(id)),
+      setMatchFormat: (format) => setMatchFormat(format),
+      // 4人ぶんの伏せ合いと再戦(Issue #26 段C)
+      firebaseSeatCommitted: (seat) => firebaseSeatCommitted(seat),
+      firebaseSeatRevealVerified: (seat) => firebaseSeatRevealVerified(seat),
+      allFirebasePlayersCommitted: () => allFirebasePlayersCommitted(),
+      allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
+      allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
+      firebasePeersCommitted: () => firebasePeersCommitted(),
+      firebaseRevealsReady: () => firebaseRevealsReady(),
+      firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap)
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)

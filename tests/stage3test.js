@@ -463,8 +463,10 @@ function check(name, value) {
     return types.every(t => seatAllowsSrc[0].includes("'" + t + "'"));
   })());
   // 観戦者のpingで対戦相手の切断を見逃さないこと。
-  check('peer liveness is refreshed only by player-seat traffic',
-    htmlText.includes('if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();'));
+  // 2vs2では s1/s2 も対戦者なので、対戦者席の判定は対戦方式ごとに変わる(Issue #25)。
+  check('peer liveness is refreshed only by player-seat traffic, for whichever seats are players',
+    htmlText.includes('if (firebasePlayerSeats().includes(msg.seat)) noteFirebasePeerMessage();')
+    && htmlText.includes("function firebasePlayerSeats() { return firebaseLobbyIs2v2() ? FIREBASE_SEATS.slice() : FIREBASE_PLAYER_SEATS.slice(); }"));
   // 古いラウンドの正当なパケットで対戦を切らないこと(席判定より先に捨てる)。
   check('stale-round packets are dropped before the seat check',
     htmlText.indexOf('if (msg.roundId !== online.currentRoundId) return;') < htmlText.indexOf('if (!firebasePacketSeatAllowed(msg))'));
@@ -481,7 +483,8 @@ function check(name, value) {
     !!syncResultSrc
     && syncResultSrc[0].includes('} else if (isFirebasePlayer()) {')
     && syncResultSrc[0].includes('actionId = secureNonce();')
-    && syncResultSrc[0].includes('actionUnitId = online.seat;'));
+    // 席名とユニット名は2vs2で一致しない(s1→p2 / s2→e2)。必ず対応表を通して名乗る。
+    && syncResultSrc[0].includes('actionUnitId = firebaseSeatUnitId(online.seat);'));
   check('a peer conceding its own defeat is accepted even when the local sim disagrees',
     htmlText.includes('function firebaseResultConcedes(msg)')
     && htmlText.includes('const concedes = firebaseResultConcedes(msg);')
@@ -541,8 +544,9 @@ function check(name, value) {
     && htmlText.includes("|| msg.t === 'ping' || msg.t === 'move') {\n        applyNetMessage(msg);"));
   check('move send rate is capped and skips sub-pixel jitter',
     htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.12;') && htmlText.includes('const MOVE_SYNC_MIN_DELTA'));
+  // 撃つ側は人でも空席のCPUでも netSendFire を通る。最後の位置はそこで必ず1回送る。
   check('the mover flushes its last position before firing',
-    htmlText.includes('if (moveSyncPending) sendMoveUpdate(me);'));
+    htmlText.includes('if (moveSyncPending) sendMoveUpdate(unit);'));
   check('a remote unit walks to the received position instead of teleporting',
     htmlText.includes('function updateRemoteWalk(dt)') && htmlText.includes('u.netWalkTargetX') && htmlText.includes('followGroundOrFall(u)'));
   check('turn start clears stale walk targets and send state',
@@ -551,11 +555,12 @@ function check(name, value) {
     htmlText.includes('if (response.status !== 401) throw new Error')
     && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')
     && htmlText.includes('if (plain.status === 401) return false;'));
-  check('only the opposing player seat can supply commit/reveal data',
-    htmlText.includes("if (msg.seat !== online.peerSeat) break;")
+  // 2vs2では相手が3人になる。自分以外の対戦者席から届いたものだけを受け取る。
+  check('only the other player seats can supply commit/reveal data',
+    (htmlText.match(/if \(msg\.seat === online\.seat \|\| !firebaseSeatIsPlayer\(msg\.seat\)\) break;/g) || []).length === 2
     && htmlText.includes("case 'commit':") && htmlText.includes("case 'reveal':"));
-  check('host start waits for both ready players, then enters the reveal gate',
-    htmlText.includes("!online.selfReady || !online.peerReady || !online.peerCommitted")
+  check('host start waits for every seated player, then enters the reveal gate',
+    htmlText.includes('if (!allFirebasePlayersReady() || !firebasePeersCommitted()) return;')
     && htmlText.includes("status: 'revealing'") && htmlText.includes('maybeRevealCharacter()'));
   // 相手が準備完了でもホストは設定を変えられる。変えられた側は準備完了を取り消して
   // モンスターを選び直せるので、一方的に決められた条件で始まることはない。
@@ -594,7 +599,7 @@ function check(name, value) {
     && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
-    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
+    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
     && htmlText.includes("netSend({ t: 'ready', value: false });")
@@ -668,7 +673,7 @@ function check(name, value) {
     htmlText.includes('#onlineCharacter { display: none; }')
     && htmlText.includes('#onlineLobby.in-room #onlineCharacter { display: block; }'));
   check('both rematch votes reset a new round with automatic readiness',
-    htmlText.includes('online.rematchVotes.p1 && online.rematchVotes.e1')
+    htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')
     && htmlText.includes('resetLocalFirebaseRoundState(autoReady === true)')
     && htmlText.includes('if (autoReady && isFirebasePlayer()) commitOwnCharacter();'));
@@ -692,10 +697,10 @@ function check(name, value) {
     && htmlText.includes('p.x = p.apexBurst.x;'));
   // 更新前の端末から届く boom は受理して無視する。拒否すると対戦が中断してしまう。
   check('an incoming boom from an older client is accepted and ignored',
-    htmlText.includes("if (msg.t === 'boom') return msg.unitId === 'p1' || msg.unitId === 'e1'")
+    htmlText.includes("if (msg.t === 'boom') return isFirebaseUnitId(msg.unitId)")
     && htmlText.includes("case 'boom':"));
   check('a rematch start bypasses stale physics and waits only for reveal verification',
-    htmlText.includes("if (msg.t === 'start') {\n        if (online.revealVerified) applyNetMessage(msg);")
+    htmlText.includes("if (msg.t === 'start') {\n        if (firebaseRevealsReady()) applyNetMessage(msg);")
     && htmlText.includes("online.pendingStart = msg;")
     && htmlText.includes("if (msg.t === 'fire' || msg.t === 'boom')")
     && htmlText.includes("if (online.pendingStart) {\n        const pendingStart = online.pendingStart;"));
@@ -717,7 +722,7 @@ function check(name, value) {
   check('online snapshots keep each camera local and focus the acting unit',
     htmlText.includes("if (isOnline()) {\n      // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。")
     && htmlText.includes('focusCameraOn(activeUnit().x, true);')
-    && htmlText.includes("activeIndex = first === 'p1' ? 0 : 1;\n      focusCameraOn(activeUnit().x, true);"));
+    && htmlText.includes('activeIndex = firstIndex;\n      focusCameraOn(activeUnit().x, true);'));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('the battle view-distance slider changes only the local camera and never sends a network message',
@@ -819,7 +824,8 @@ function check(name, value) {
     && msg['.validate'].includes("newData.child('roundId').val() === $roundId"));
   // 相手が落ちたのに自分の手番表示が先に出ると、自分が落ちたように見える。
   check('the turn does not advance while waiting for the peer to declare the result',
-    htmlText.includes('const waitingForPeerResult = isOnline() && !matchOver && units.some(u => u.hp <= 0);')
+    // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと手番が二度と進まない。
+    htmlText.includes("const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));")
     && htmlText.includes('if (!waitingForPeerResult) endTurn();'));
   check('the remote action is still marked resolved while waiting, so the result correlates',
     /waitingForPeerResult[\s\S]{0,400}online\.remoteAction\.resolved = true;/.test(htmlText));
@@ -834,8 +840,11 @@ function check(name, value) {
     msg['.validate'].includes("'v','t','from','seat','roundId','sentAt'")
     && msg.v['.validate'] === 'newData.val() === 3'
     && seats.every(x => msg.seat['.validate'].includes("'" + x + "'")));
-  check('rules keep spectators read-only for game-affecting packets',
-    msg['.write'].includes("newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('t').val() === 'presence'"));
+  // 段Bで s1/s2 は観戦席ではなく対戦者席になった(Issue #25)。送信できる席を4つへ開くが、
+  // 「送れるのは席を実際に持っている本人だけ」という縛りは据え置き。
+  check('rules let all four seats speak, and only the seat holder can speak as that seat',
+    msg['.write'].includes("newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('seat').val() === 's1' || newData.child('seat').val() === 's2'")
+    && msg['.write'].includes("root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid"));
   check('rules reserve host-only packets for p1',
     msg['.write'].includes("newData.child('t').val() !== 'settings'") && msg['.write'].includes("newData.child('seat').val() === 'p1'"));
   check('rules retain actionId and payload limits for fire/state/result',
@@ -843,8 +852,28 @@ function check(name, value) {
     && msg['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','useJump','actionId'])")
     && msg['.validate'].includes("'state' && newData.hasChildren(['snap','actionId','unitId'])")
     && msg['.validate'].includes("'result' && newData.hasChildren(['winner','reason','units','actionId','unitId'])"));
-  check('rules force unitId to match the sender seat',
-    msg.unitId['.validate'].includes("newData.val() === newData.parent().child('seat').val()"));
+  // 席と動かせるキャラを固定で結ぶ(p1→p1 / e1→e1 / s1→p2 / s2→e2)。
+  // チーム分けを「誰がどのキャラか」の設定にすると、この一行でなりすましを封じられなくなる。
+  check('rules bind each seat to exactly one unit, so nobody can move someone else',
+    msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 'p1' && newData.val() === 'p1'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 'e1' && newData.val() === 'e1'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's1' && newData.val() === 'p2'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's2' && newData.val() === 'e2'"));
+  // 2vs2で空席をCPUが埋める時、そのCPUを動かす端末が必要になる(決定3)。
+  // ホストに限り、誰も座っていない席のキャラを動かせる。座っている席へは手を出せない。
+  check('the host may act for a seat nobody is sitting in, so CPU teammates can play',
+    ['e1:e1', 'p2:s1', 'e2:s2'].every(pair => {
+      const [unit, seat] = pair.split(':');
+      return msg.unitId['.validate'].includes(`newData.parent().child('seat').val() === 'p1' && newData.val() === '${unit}' && !root.child('rooms').child($room).child('slots').child('${seat}').exists()`);
+    }));
+  check('the host still cannot act for a seat somebody is sitting in',
+    // 例外はすべて !...exists() 付き。無条件にホストが他人のキャラを動かせる分岐は無い
+    msg.unitId['.validate'].split('||')
+      .filter(x => x.includes("val() === 'p1' &&") && !x.includes("newData.val() === 'p1'"))
+      .every(x => x.includes('.exists()')));
+  check('the round roster can name all four seats',
+    ['p1', 'e1', 's1', 's2'].every(x => rules.round.players[x] && rules.round.players[x]['.validate'].includes('isString'))
+    && rules.round.players.$other['.validate'] === false);
   check('rules bound the client timestamp on every packet',
     msg['.validate'].includes('now - 120000') && msg.sentAt['.validate'].includes('now + 120000'));
   check('rules permit heartbeat and presence without actionId',
@@ -1141,6 +1170,347 @@ function check(name, value) {
   check('the host learns someone arrived through the existing presence path',
     htmlText.includes("if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);")
     && /refreshFirebaseRoster[\s\S]{0,400}syncQuickMatchListing\(\);/.test(htmlText));
+
+  // ===== Issue #25 段B: 観戦席を対戦者席へ転用する（土台） =====
+  h.setOnlineForLogTest(null);
+  check('seats map to fixed units, so a seat can never move someone else’s monster',
+    ['p1:p1', 'e1:e1', 's1:p2', 's2:e2'].every(pair => {
+      const [seat, unit] = pair.split(':');
+      return h.firebaseSeatUnitId(seat) === unit;
+    }));
+  check('the two spectator seats belong to opposite teams, so 2vs2 is 2 against 2',
+    h.firebaseSeatTeam('p1') === 'player' && h.firebaseSeatTeam('s1') === 'player'
+    && h.firebaseSeatTeam('e1') === 'cpu' && h.firebaseSeatTeam('s2') === 'cpu');
+  check('the client mapping matches the mapping the rules enforce',
+    ['p1', 'e1', 's1', 's2'].every(seat =>
+      msg.unitId['.validate'].includes(`newData.parent().child('seat').val() === '${seat}' && newData.val() === '${h.firebaseSeatUnitId(seat)}'`)));
+
+  function lobbyWith(format, seat = 'p1') {
+    return {
+      kind: 'firebase', role: seat === 'p1' ? 'host' : 'guest', phase: 'lobby', seat,
+      room: 'A2BC3DEF', auth: { uid: 'uid-' + seat },
+      settings: h.normalizeLobbySettings({ terrain: 'random', wind: 'random', turnsPerPlayer: 15, format, revision: 1 }),
+      slots: {}, participantRole: ['p1', 'e1'].includes(seat) ? 'player' : 'spectator',
+      lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: 0 }, seatSeen: {}, seatStale: {}, log: []
+    };
+  }
+  h.setOnlineForLogTest(lobbyWith('1v1'));
+  check('a 1vs1 lobby still has exactly two player seats',
+    h.firebasePlayerSeats().join() === 'p1,e1' && !h.firebaseLobbyIs2v2());
+  check('the 1vs1 seat labels are unchanged',
+    [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s1')].join('/')
+      === 'P1 ホスト/P2 対戦者/S1 観戦');
+  h.setOnlineForLogTest(lobbyWith('2v2'));
+  check('a 2vs2 lobby turns every seat into a player seat',
+    h.firebasePlayerSeats().join() === 'p1,e1,s1,s2' && h.firebaseLobbyIs2v2());
+  check('the 2vs2 seat labels say which team each seat is on',
+    [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('s1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s2')].join('/')
+      === 'P1 ホスト/P2 味方/E1 敵チーム/E2 敵チーム');
+  // 対戦方式はホストから後から届く。届いた時点で s1 の人は観戦者から対戦者へ変わる。
+  const late = lobbyWith('1v1', 's1');
+  h.setOnlineForLogTest(late);
+  h.syncFirebaseParticipantRole();
+  check('sitting in s1 of a 1vs1 room is still spectating', late.participantRole === 'spectator');
+  late.settings = h.normalizeLobbySettings({ ...late.settings, format: '2v2' });
+  h.syncFirebaseParticipantRole();
+  check('the same seat becomes a player once the host says the room is 2vs2',
+    late.participantRole === 'player');
+  check('and that player is put in charge of p2, not of the seat name',
+    h.localUnitId() === 'p2');
+  // e1 の人は1vs1でも2vs2でも「対戦者」のままなので役割が変わらない。ここで席を
+  // 貼り直さないと、増えた p2/e2 は宣言時の control='cpu' のまま units へ入り、
+  // ホストでない端末までCPUを動かし始める。
+  {
+    const e1Guest = lobbyWith('1v1', 'e1');
+    h.setOnlineForLogTest(e1Guest);
+    h.syncFirebaseParticipantRole();
+    const before = app.controls();
+    e1Guest.settings = h.normalizeLobbySettings({ ...e1Guest.settings, format: '2v2' });
+    h.syncFirebaseParticipantRole();
+    check('switching a room to 2vs2 re-seats a guest whose role did not change',
+      before === 'p1:remote,e1:local' && app.controls() === 'p1:remote,e1:local,p2:remote,e2:remote');
+  }
+  h.setOnlineForLogTest(null);
+  check('the lobby settings carry the match format, defaulting to 1vs1 for older peers',
+    h.normalizeLobbySettings({}).format === '1v1'
+    && h.normalizeLobbySettings({ format: '2v2' }).format === '2v2'
+    && h.normalizeLobbySettings({ format: 'nonsense' }).format === '1v1');
+  check('rules accept the format field in settings and nothing else new',
+    rules.settings.format['.validate'] === "newData.val() === '1v1' || newData.val() === '2v2'"
+    && rules.settings.$other['.validate'] === false);
+  check('only the host can still change the settings, format included',
+    rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
+    && rules.settings['.write'].includes("child('status').val() === 'lobby'"));
+
+  // ---- 4人ぶんの準備完了と、空席をCPUが埋めること（決定3） ----
+  function seated(...seats) {
+    const slots = {};
+    for (const seat of ['p1', 'e1', 's1', 's2']) slots[seat] = seats.includes(seat) ? { uid: 'uid-' + seat } : null;
+    return slots;
+  }
+  function readyLobby(format, occupied, readySeats) {
+    const o = lobbyWith(format, 'p1');
+    o.slots = seated(...occupied);
+    o.selfReady = readySeats.includes('p1');
+    o.seatReady = {};
+    for (const seat of readySeats) o.seatReady[seat] = true;
+    return o;
+  }
+  h.setOnlineForLogTest(readyLobby('2v2', ['p1', 'e1', 's1', 's2'], ['p1', 'e1', 's1']));
+  check('a 2vs2 room is not startable while one of the four is still choosing',
+    !h.allFirebasePlayersReady());
+  h.setOnlineForLogTest(readyLobby('2v2', ['p1', 'e1', 's1', 's2'], ['p1', 'e1', 's1', 's2']));
+  check('a full 2vs2 room starts once all four are ready', h.allFirebasePlayersReady());
+  // 空席は待たない。CPUが埋めるので、来ない人をいつまでも待たされない(決定3)。
+  const short = readyLobby('2v2', ['p1', 'e1'], ['p1', 'e1']);
+  h.setOnlineForLogTest(short);
+  check('an empty seat never blocks the start; it is filled by a CPU',
+    h.allFirebasePlayersReady() && h.firebaseCpuSeats().join() === 's1,s2'
+    && h.firebaseOccupiedPlayerSeats().join() === 'p1,e1');
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1'], ['p1']));
+  check('1vs1 still waits for the one opponent', !h.allFirebasePlayersReady());
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1'], ['p1', 'e1']));
+  check('1vs1 starts when both are ready', h.allFirebasePlayersReady());
+  // 1vs1で観戦者が座っていても、対戦者の準備完了には関係しない。
+  h.setOnlineForLogTest(readyLobby('1v1', ['p1', 'e1', 's1'], ['p1', 'e1']));
+  check('a spectator in a 1vs1 room is not counted as a player who must ready up',
+    h.allFirebasePlayersReady() && h.firebaseOccupiedPlayerSeats().join() === 'p1,e1');
+  h.setOnlineForLogTest(null);
+  check('the empty seats are labelled as CPU in the lobby, not left looking vacant',
+    htmlText.includes("state.textContent = 'CPUが担当';"));
+  check('the start button follows the same all-ready rule the host code uses',
+    htmlText.includes("onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';")
+    && htmlText.includes("if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;"));
+  check('a rematch clears every seat’s ready state, not just the two 1vs1 ones',
+    htmlText.includes("online.selfReady = false; online.peerReady = false; online.seatReady = {};"));
+  check('the host announces the roster for whichever seats are actually taken',
+    /const players = \{ p1: online\.clientId \};[\s\S]{0,260}firebasePlayerSeats\(\)[\s\S]{0,200}players\[seat\] = online\.slots\[seat\]\.uid;/.test(htmlText));
+
+  // ===== Issue #26 段C: 4人ぶんの通信データ =====
+  // 人数と並びは対戦方式で1通りに決まる。ここを緩めて好きな並びを送れるようにすると、
+  // 「席とユニットの対応」というなりすまし防止の要を、通信データ側から崩せてしまう。
+  function snapshotFor2v2(base) {
+    const snap = JSON.parse(JSON.stringify(base));
+    snap.matchFormat = '2v2';
+    snap.units = ['p1', 'e1', 'p2', 'e2'].map((id, i) => ({ ...JSON.parse(JSON.stringify(base.units[i % 2])), id }));
+    snap.turnOrder = ['p1', 'e1', 'p2', 'e2'];
+    return snap;
+  }
+  const snap2v2 = snapshotFor2v2(safeSnap);
+  const startOf = snap => ({ v: 2, from: 'peer', t: 'start', sentAt: Date.now(), snap });
+  check('a four-unit snapshot is accepted when it names the 2vs2 format',
+    h.validateFirebaseMessage(startOf(snap2v2)));
+  check('the same four units are rejected while the snapshot still calls itself 1vs1',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: '1v1' })).reason === 'start.snap.units'
+    && h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: undefined })).reason === 'start.snap.units');
+  check('an unknown match format is rejected instead of being guessed at',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, matchFormat: '3v3' })).reason === 'start.snap.matchFormat');
+  check('2vs2 fixes the turn order to p1 e1 p2 e2, so seats cannot be shuffled',
+    h.validateFirebaseMessageDetail(startOf({ ...snap2v2, turnOrder: ['p1', 'p2', 'e1', 'e2'] })).reason === 'start.snap.turn'
+    && h.validateFirebaseMessageDetail(startOf({ ...snap2v2, units: [snap2v2.units[0], snap2v2.units[2], snap2v2.units[1], snap2v2.units[3]] })).reason === 'start.snap.units');
+  check('all four units are compared, not just the first two',
+    h.stateSnapshotMismatchReason(snap2v2, snap2v2) === ''
+    && h.stateSnapshotMismatchReason(snap2v2, safeSnap) === 'shape'
+    && (() => {
+      const drift = snapshotFor2v2(safeSnap);
+      drift.units[3].x += 400;
+      return h.stateSnapshotMismatchReason(drift, snap2v2) === `x.3(${Math.round(snap2v2.units[3].x)}->${Math.round(drift.units[3].x)})`;
+    })());
+  // 盤面を動かすパケットは p2 / e2 も名乗れる。知らないIDは従来どおり捨てる。
+  const roundId2 = roundId;
+  const packetFor = (seat, unitId, extra) => ({ v: 3, from: 'peer', seat, roundId: roundId2, sentAt: Date.now(), actionId, unitId, ...extra });
+  const fireBody = { x: 720, y: 512, anchor: { x: 720, y: 512 }, vx0: 100, vy0: -200, useSpecial: false, useJump: false };
+  check('fire, move and boom accept the two 2vs2 units and still reject unknown ids',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'fire', ...fireBody }))
+    && h.validateFirebaseMessage(packetFor('s2', 'e2', { t: 'move', x: 720, fuel: 40 }))
+    && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'boom' }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'fire', ...fireBody }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'boom' })));
+  const roster2v2 = snap2v2.units.map(u => ({ id: u.id, hp: u.hp }));
+  check('a result carries all four units in 2vs2 and keeps the fixed order',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2 }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: [roster2v2[0], roster2v2[2], roster2v2[1], roster2v2[3]] }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2.slice(0, 3) })));
+  // 席とユニットの対応は、通信データの検証と席の門の両方で同じ表を使う。
+  h.setOnlineForLogTest(lobbyWith('2v2'));
+  check('s1 may only ever act as p2, in both the payload check and the seat gate',
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
+    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
+  // ホストは空席のキャラだけを動かせる。人が座っている席へは手を出せない。
+  // ルール側の例外(!slots.$seat.exists())とまったく同じ条件をクライアントでも見る。
+  {
+    const hostLobby = lobbyWith('2v2');
+    hostLobby.slots = seated('p1', 'e1');
+    h.setOnlineForLogTest(hostLobby);
+    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: snap2v2 });
+    check('the host may act for the empty seats and for nobody else’s',
+      h.validateFirebaseMessage(hostActs('p2')) && h.firebasePacketSeatAllowed(hostActs('p2'))
+      && h.validateFirebaseMessage(hostActs('e2')) && h.firebasePacketSeatAllowed(hostActs('e2'))
+      && !h.validateFirebaseMessage(hostActs('e1')) && !h.firebasePacketSeatAllowed(hostActs('e1')));
+    hostLobby.slots = seated('p1', 'e1', 's1', 's2');
+    check('once someone sits down, the host loses the right to move that unit',
+      !h.validateFirebaseMessage(hostActs('p2')) && !h.firebasePacketSeatAllowed(hostActs('p2'))
+      && !h.firebasePacketSeatAllowed(hostActs('e2')));
+    // 1vs1の部屋では例外そのものが無い。ホストは自分のキャラしか動かせない。
+    const hostSolo = lobbyWith('1v1');
+    hostSolo.slots = seated('p1');
+    h.setOnlineForLogTest(hostSolo);
+    check('a 1vs1 host never gains the empty-seat exception',
+      !h.firebasePacketSeatAllowed({ ...packetFor('p1', 'e1', { t: 'state', snap: safeSnap }) })
+      && h.firebasePacketSeatAllowed({ ...packetFor('p1', 'p1', { t: 'state', snap: safeSnap }) }));
+  }
+  h.setOnlineForLogTest(null);
+
+  // ---- 手番の受け渡し(Issue #26 段C) ----
+  // 空席のCPUは、ホストの端末だけが動かして結果を配る。ほかの端末は受け取る側なので
+  // remote のまま置く。両方が動かすと、乱数の混ざった照準が端末ごとに別の結果になる。
+  function seatedLobby(format, seat, occupied) {
+    const o = lobbyWith(format, seat);
+    o.slots = seated(...occupied);
+    return o;
+  }
+  h.setMatchFormat('2v2');
+  h.setOnlineForLogTest(seatedLobby('2v2', 'p1', ['p1', 'e1']));
+  h.setOnlineSeat('p1');
+  check('the host takes charge of the empty seats as CPUs, and of nobody else’s',
+    app.controls() === 'p1:local,e1:remote,p2:cpu,e2:cpu');
+  h.setOnlineForLogTest(seatedLobby('2v2', 's1', ['p1', 'e1', 's1']));
+  h.setOnlineSeat('s1');
+  check('a guest sits in its own unit and waits for every other one, CPU seats included',
+    app.controls() === 'p1:remote,e1:remote,p2:local,e2:remote');
+  check('only the device that drives a unit announces its moves and shots',
+    h.netControlsUnit('p2') && !h.netControlsUnit('e2') && !h.netControlsUnit('p1'));
+  h.setOnlineForLogTest(seatedLobby('2v2', 'p1', ['p1', 'e1', 's1', 's2']));
+  h.setOnlineSeat('p1');
+  check('a full room leaves the host in charge of one unit only',
+    app.controls() === 'p1:local,e1:remote,p2:remote,e2:remote');
+  // 呼び名は全員に同じものを出す。ホスト以外では control が remote に見えるため、
+  // control だけで判断すると同じキャラが「CPU」と「相手」に分かれて表示される。
+  h.setOnlineForLogTest(seatedLobby('2v2', 's1', ['p1', 's1']));
+  h.setOnlineSeat('s1');
+  check('an empty seat is called a CPU on every device, not just on the host',
+    h.unitSeatIsCpu('e1') && h.unitSeatIsCpu('e2') && !h.unitSeatIsCpu('p1')
+    && h.turnOwnerLabel('e1') === 'CPUのターン' && h.turnOwnerLabel('p1') === '相手のターン'
+    && h.turnOwnerLabel('p2') === 'あなたのターン');
+  h.setOnlineForLogTest(null);
+  h.setMatchFormat('1v1');
+  h.setOnlineSeat('e1');
+  check('1vs1 seating is unchanged: one local unit and one remote unit',
+    app.controls() === 'p1:remote,e1:local');
+  h.setMatchFormat('1v1');
+  // 発射の配信は1か所に集約する。人とCPUで別々に組み立てると、片方だけ
+  // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
+  check('the human shot and the CPU shot are announced through the same one place',
+    (htmlText.match(/netSendFire\(/g) || []).length === 3
+    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, specialArmed,')
+    && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
+    && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
+  check('the turn-end authority and the result declaration follow the same rule',
+    htmlText.includes('if (!netControlsUnit(actedUnit)) return;')
+    && htmlText.includes('return !isOnline() || netControlsUnit(activeUnit());'));
+  check('a CPU turn no longer flushes the local unit’s position as if it had moved',
+    htmlText.includes('} else if (moveSyncPending && isLocalTurn()) {')
+    && htmlText.includes('if (moveSyncPending && netControlsUnit(cpuActor)) {'));
+
+  // ---- 4人ぶんの伏せ合い(Issue #26 段C) ----
+  // 実際の受信経路(netReceiveInner)へ commit / reveal を流し、席ごとに覚えられるか見る。
+  // 自分は s1 のゲストにしておく。ホストにすると検証の成功がそのまま試合開始へ進んでしまう。
+  function revealingLobby(occupied) {
+    const o = seatedLobby('2v2', 's1', occupied);
+    o.role = 'guest'; o.peerSeat = 'p1'; o.clientId = 'uid-s1'; o.currentRoundId = roundId;
+    o.phase = 'lobby'; o.participantRole = 'player';
+    o.selfCharacter = 'kyoryu'; o.selfNonce = 'a'.repeat(48); o.selfCommit = null; o.selfRevealed = false;
+    o.seatCommit = {}; o.seatCommitAt = {}; o.seatRevealSeen = {}; o.seatCharacter = {}; o.seatNonce = {}; o.seatVerified = {};
+    o.peerCommit = null; o.peerCommitAt = null; o.peerCommitted = false; o.peerRevealSeen = false; o.revealVerified = false;
+    o.rematchVotes = {}; o.seatReady = {}; o.queue = []; o.pendingRemoteTerminals = new Map(); o.completedRemoteActions = new Map();
+    o.peerLiveness = { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: 0 };
+    o.unitCharacters = null; o.autoStartNextRound = false;
+    return o;
+  }
+  const revealChars = { p1: 'kyoryu', e1: 'medama', s2: 'iwa' };
+  const revealNonces = { p1: 'b'.repeat(48), e1: 'c'.repeat(48), s2: 'd'.repeat(48) };
+  async function feedCommitsAndReveals(o, seats) {
+    for (const seat of seats) {
+      const hash = await h.commitPayload(revealChars[seat], revealNonces[seat]);
+      h.receiveFirebaseForTest({ v: 3, from: 'uid-' + seat, seat, roundId, t: 'commit', sentAt: Date.now(), hash });
+    }
+    const committed = seats.map(seat => o.seatCommit[seat]);
+    for (const seat of seats) {
+      h.receiveFirebaseForTest({ v: 3, from: 'uid-' + seat, seat, roundId, t: 'reveal', sentAt: Date.now(), character: revealChars[seat], nonce: revealNonces[seat] });
+    }
+    // 公開の検証はSHA-256を待つ非同期処理。決着まで数回まわして落ち着かせる。
+    for (let i = 0; i < 8; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    return committed;
+  }
+  {
+    const o = revealingLobby(['p1', 'e1', 's1', 's2']);
+    h.setOnlineForLogTest(o);
+    o.selfCommit = await h.commitPayload('kyoryu', o.selfNonce);
+    o.selfRevealed = true;
+    const committed = await feedCommitsAndReveals(o, ['p1', 'e1', 's2']);
+    check('all three other players are remembered separately, not overwritten by the last one',
+      committed.every(Boolean) && new Set(committed).size === 3
+      && o.seatCharacter.p1 === 'kyoryu' && o.seatCharacter.e1 === 'medama' && o.seatCharacter.s2 === 'iwa'
+      && !o.error);
+    check('a 2vs2 room is ready to start only once every seated player has revealed',
+      h.allFirebasePlayersCommitted() && h.allFirebaseRevealsVerified() && h.firebaseRevealsReady());
+  }
+  {
+    // 途中まで。まだ公開していない人が残っている間は開始へ進まない。
+    const o = revealingLobby(['p1', 'e1', 's1', 's2']);
+    h.setOnlineForLogTest(o);
+    o.selfCommit = await h.commitPayload('kyoryu', o.selfNonce);
+    o.selfRevealed = true;
+    await feedCommitsAndReveals(o, ['p1', 'e1']);
+    check('one silent player still holds the room, even though the other two are done',
+      !h.allFirebasePlayersCommitted() && !h.firebaseRevealsReady()
+      && h.firebaseSeatRevealVerified('p1') && !h.firebaseSeatRevealVerified('s2'));
+  }
+  {
+    // 空席のCPUはコミットも公開もしない。人が座っている席だけがそろえばよい(決定3)。
+    const o = revealingLobby(['p1', 's1']);
+    h.setOnlineForLogTest(o);
+    o.selfCommit = await h.commitPayload('kyoryu', o.selfNonce);
+    o.selfRevealed = true;
+    await feedCommitsAndReveals(o, ['p1']);
+    check('empty seats never have to commit, so two people can start a 2vs2 against CPUs',
+      h.allFirebasePlayersCommitted() && h.firebaseRevealsReady() && h.firebaseCpuSeats().join() === 'e1,s2');
+    // 開始データは、人が座っている席のキャラだけを伏せ合いと突き合わせる。
+    // 空席のCPUのキャラはホストが決めるので、知らないキャラでないことだけ見る。
+    const startSnap = snapshotFor2v2(safeSnap);
+    const charOf = { p1: 'kyoryu', e1: 'medama', p2: 'kyoryu', e2: 'iwa' };
+    for (const u of startSnap.units) u.character = charOf[u.id];
+    check('the host may pick the CPU monsters, but never someone else’s',
+      h.firebaseStartCharactersMatch(startSnap)
+      && !h.firebaseStartCharactersMatch({ ...startSnap, units: startSnap.units.map(u => u.id === 'p1' ? { ...u, character: 'iwa' } : u) })
+      && h.firebaseStartCharactersMatch({ ...startSnap, units: startSnap.units.map(u => u.id === 'e1' ? { ...u, character: 'tori' } : u) })
+      && !h.firebaseStartCharactersMatch({ ...startSnap, units: startSnap.units.map(u => u.id === 'e1' ? { ...u, character: 'nonsense' } : u) }));
+    // 再戦は全員が押す(決定11)。空席のCPUは数えない。
+    o.rematchVotes = { p1: true };
+    check('a rematch needs every seated player, and does not wait for the CPU seats',
+      !h.allFirebaseRematchVotesIn() && (() => { o.rematchVotes.s1 = true; return h.allFirebaseRematchVotesIn(); })());
+  }
+  // ---- 決着と再戦(Issue #26 段C) ----
+  // ホストは全員が開始データを受け取るまで撃てない。1人でも取りこぼしたまま撃つと、
+  // その人だけ違う盤面から始まってしまう。
+  {
+    const o = revealingLobby(['p1', 'e1', 's1']);
+    o.role = 'host'; o.seat = 'p1'; o.peerSeat = 'e1'; o.clientId = 'uid-p1';
+    o.phase = 'starting'; o.startAcks = {}; o.matchStarted = true;
+    h.setOnlineForLogTest(o);
+    h.receiveFirebaseForTest({ v: 3, from: 'uid-e1', seat: 'e1', roundId, t: 'ready', sentAt: Date.now() });
+    const afterOne = o.phase;
+    h.receiveFirebaseForTest({ v: 3, from: 'uid-s1', seat: 's1', roundId, t: 'ready', sentAt: Date.now() });
+    check('the host stays locked until every seated player has the start data',
+      afterOne === 'starting' && o.phase === 'playing');
+  }
+  check('a host with nobody else seated unlocks itself, instead of waiting for an ack that never comes',
+    htmlText.includes('if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat)) online.phase = \'playing\';'));
+  h.setOnlineForLogTest(null);
+  h.setMatchFormat('1v1');
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;
