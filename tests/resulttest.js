@@ -230,6 +230,37 @@ for (const hasSave of [true, false]) {
 }
 check('中断データの有無どちらでもタイトルを描画できる', !titleDrawThrew, titleDrawThrew);
 
+
+// ---- 起動演出:砦の壁を撃ち抜いてタイトルへ(v110) ----
+// 見た目そのものはヘッドレスChromiumで実際に描いて確認している。ここで守るのは
+// 「一度決めた性質が黙って崩れないこと」だけ。
+const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+// 起動時の1回だけ。'press' からしか 'breaking' へ入らないので、対戦を終えて
+// タイトルへ戻る時は従来どおり直接表示になる。毎回壊れたら必ず飽きる。
+check('壁が出るのは起動時の1回だけ',
+  (html.match(/gamePhase = 'breaking'/g) || []).length === 1
+  && /if \(e\.type === 'pointerup' && gamePhase === 'press'\)[\s\S]{0,400}beginWallBreak\(aim\);/.test(html));
+// タップした場所へ撃ち込む。中央固定にすると「自分が壊した」感触が無くなる。
+check('砲弾はタップした場所へ飛ぶ',
+  html.includes('const aim = canvasPointFromEvent(e);')
+  && /function beginWallBreak\(point\)[\s\S]{0,400}x: Math\.max\(VW \* 0\.15, Math\.min\(VW \* 0\.85, point\.x\)\)/.test(html));
+// 奥に描くのは本物のタイトル。TAP TO START の時点でロゴも背景も読み込み済み。
+check('壁の向こうに本物のタイトルを描いている',
+  /gamePhase === 'breaking' && wallBreak\)[\s\S]{0,400}drawTitleScreen\(\);\s*\n\s*drawFortressWall\(wallBreak\);/.test(html));
+// 石に隙間を空けると継ぎ目から奥のタイトルが透け、壁に見えなくなる(実際に透けた)。
+check('石は隙間なく敷き詰める',
+  html.includes("pieces.push({ kind: 'stone', x, y: row * bh, w: bw, h: bh,"));
+// 遠い石は飛びきる前に演出が終わる。消しきらないと切り替わった瞬間に瓦礫がパッと消える。
+check('終わり際に破片を必ず消しきる',
+  html.includes('const WALL_CLEAR_SEC')
+  && /const clearing = breakState[\s\S]{0,200}WALL_BREAK_SEC - breakState\.t\) \/ WALL_CLEAR_SEC/.test(html));
+check('演出中は入力を受け付けない',
+  html.includes("if (gamePhase === 'loading' || gamePhase === 'breaking') return;"));
+// 読み込み中も毎フレーム回る。破片ごとのグラデーションは作り直さず持たせる。
+check('壁のグラデーションを毎フレーム作り直さない',
+  (html.match(/piece\.grad = ctx\.createLinearGradient/g) || []).length === 3
+  && !/const stone = ctx\.createLinearGradient/.test(html));
+
 console.log('\n=== result screen ===');
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
