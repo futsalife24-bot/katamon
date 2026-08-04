@@ -225,6 +225,9 @@ const HOOK = `
       updateFirebasePeerLiveness: () => updateFirebasePeerLiveness()
     }),
     setPhase: (p) => { gamePhase = p; },
+    // 画面の揺れ。対戦中以外でも必ず止まることを見るため(v110の起動演出で震え続けた)。
+    shakeTimer: () => shakeTimer,
+    triggerShakeForTest: (mag, sec) => triggerShake(mag, sec),
     // おまけ曲(タイトルの「おまけ」ボタン)
     bonusBtn: () => ({ ...titleBonusBtn }),
     titleBtnRects: () => ({
