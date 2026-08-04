@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v118';
+  const BUILD_ID = 'v119';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2200,6 +2200,18 @@
   };
   const DEFAULT_FACE = [0.5, 0.3, 0.42];
 
+  // VSカットイン専用。必殺技の大きい顔窓とは半径が違うため、同じ値を流用すると
+  // 岩男やトリ戦車などで顔ではなく車体が中央へ来る。元画像に対する
+  // [中心X, 中心Y, 切り出し幅] を16体それぞれ目視で合わせている。
+  const MATCHUP_FACES = {
+    kyoryu: [0.67, 0.20, 0.32], medama: [0.58, 0.36, 0.36], iwa: [0.53, 0.42, 0.34],
+    tori: [0.72, 0.34, 0.30], barugerukan: [0.43, 0.32, 0.34], nisenmono: [0.48, 0.43, 0.36],
+    burumutan: [0.50, 0.55, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.20, 0.73, 0.30],
+    mocchario: [0.42, 0.42, 0.36], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
+    jinba: [0.54, 0.16, 0.24], kishi: [0.43, 0.28, 0.28], neko: [0.55, 0.33, 0.32],
+    shinigami: [0.59, 0.31, 0.30]
+  };
+
   const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'];
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
@@ -3064,11 +3076,32 @@
   let isBossMatch = false; // 10連勝ごとの節目演出フラグ
   let bossBannerTimer = 0;
 
-  // ===== カットイン(ターン交代・タイムアップ演出) =====
+  // ===== カットイン(対戦開始・ターン交代・タイムアップ演出) =====
   // 表示中はupdate()を早期returnさせてゲーム進行を止め、切り替わりを分かりやすくする
-  let cutIn = null; // { timer, duration, text, sub, onDone }
+  const MATCHUP_CUTIN_DURATION = 1.8;
+  let cutIn = null; // message: { timer, duration, text, sub, onDone } / matchup: { kind, left, right, ... }
   function showCutIn(text, sub, duration, onDone) {
-    cutIn = { timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
+    cutIn = { kind: 'message', timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
+  }
+
+  // 席順ではなく陣営で分ける。units は p1,e1,p2,e2 の交互順なので、
+  // filter すると左=p1,p2 / 右=e1,e2 の表示順が必ず保たれる。
+  function matchupTeam(team) {
+    return units.filter(u => u.team === team).map(u => ({ id: u.id, character: u.character }));
+  }
+
+  function showBattleStartCutIn() {
+    // 中断セーブを作るために、タイトル画面の裏で resetMatch を呼ぶ経路がある。
+    // そこでは表示せず、本当に戦闘画面へ入る時だけ作る。
+    if (gamePhase !== 'battle') return;
+    cutIn = {
+      kind: 'matchup',
+      timer: MATCHUP_CUTIN_DURATION,
+      duration: MATCHUP_CUTIN_DURATION,
+      left: matchupTeam('player'),
+      right: matchupTeam('cpu'),
+      onDone: null
+    };
   }
 
   // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
@@ -4612,7 +4645,13 @@
   function netReceiveInner(msg) {
     if (!online || !msg || msg.from === online.clientId) return; // 自分の送信は無視
     if (online.kind === 'firebase') {
-      if (msg.v !== FIREBASE_PROTO_VERSION) { online.versionMismatch = true; return; }
+      if (msg.v !== FIREBASE_PROTO_VERSION) {
+        // 版不一致が分かった時点で、演出待ちの通常メッセージも今後は適用しない。
+        // 対戦開始カットイン中に受信キューが残っている場合でも、安全停止を最優先する。
+        online.versionMismatch = true;
+        online.queue.length = 0;
+        return;
+      }
       if (msg.t === 'start' || msg.t === 'state') msg = { ...msg, snap: normalizeFirebaseSnapshot(msg.snap) };
       const validation = validateFirebaseMessageDetail(msg);
       if (!validation.ok) {
@@ -4666,6 +4705,7 @@
     }
     if (msg.v !== PROTO_VERSION) {
       online.versionMismatch = true;
+      online.queue.length = 0;
       return;
     }
     if (NET_CONTROL_TYPES.has(msg.t)) {
@@ -4753,6 +4793,7 @@
         setOnlineSeat(online.seat);
         battleMode = 'normal';
         gamePhase = 'battle';
+        showBattleStartCutIn();
         syncBgm({ restartStage: true });
         online.phase = 'playing';
         netSend({ t: 'ready' });
@@ -5680,6 +5721,9 @@
       // 待っても永久に来ないので、その場で入力を解禁する(2vs2をCPU3体と遊ぶ場合)。
       if (firebaseOccupiedPlayerSeats().every(seat => seat === online.seat)) online.phase = 'playing';
       closeOnlineLobby();
+      // 通信保存を待っている間も gameLoop は進む。resetMatch 直後に出すと、
+      // ロビーの裏で1.8秒を使い切るため、見える画面へ戻ってから開始する。
+      showBattleStartCutIn();
     } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
   }
   async function applyFirebaseStart(msg) {
@@ -5703,6 +5747,7 @@
       online.startVerifying = false;
       netSend({ t: 'ready' });
       closeOnlineLobby();
+      showBattleStartCutIn();
     } catch (_) { if (online) { online.startVerifying = false; online.protocolError = '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
 
@@ -5861,6 +5906,7 @@
     // 観戦者には操作権を与えない。ローカル席をp1へ戻して入力ガードで完全に止める。
     setOnlineSeat('p1');
     battleMode = 'normal'; gamePhase = 'battle'; online.phase = 'playing'; closeOnlineLobby();
+    showBattleStartCutIn();
   }
   function receiveFirebaseSpectatorResult(msg) {
     if (!online || online.kind !== 'firebase') return;
@@ -9680,8 +9726,169 @@
     ctx.restore();
   }
 
+  // VSカットインの顔窓。左陣営は右、右陣営は左を向かせ、中央で対峙させる。
+  function drawMatchupPortrait(entry, cx, cy, r, color, side, progress) {
+    const def = entry && CHARACTERS[entry.character];
+    const img = entry && charImages[entry.character];
+    const ready = def && img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    const back = ctx.createRadialGradient(cx, cy - r * 0.35, 3, cx, cy, r);
+    back.addColorStop(0, `${color}66`);
+    back.addColorStop(1, 'rgba(2,6,14,0.98)');
+    ctx.fillStyle = back;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+    if (ready) {
+      const [fx, fy, fw] = MATCHUP_FACES[entry.character] || CHARACTER_FACES[entry.character] || DEFAULT_FACE;
+      const sw = img.naturalWidth * fw;
+      const sh = sw;
+      const sx = Math.max(0, Math.min(img.naturalWidth - sw, img.naturalWidth * fx - sw / 2));
+      const sy = Math.max(0, Math.min(Math.max(0, img.naturalHeight - sh), img.naturalHeight * fy - sh / 2));
+      const zoom = 1.12 - 0.12 * Math.min(1, progress * 3);
+      const d = r * 2 * zoom;
+      // facesLeft=true は元素材が左向き。左陣営は右向きに、右陣営は左向きに統一する。
+      const flip = side === 'left' ? !!def.facesLeft : !def.facesLeft;
+      ctx.save();
+      if (flip) {
+        ctx.translate(cx, cy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, sx, sy, sw, sh, -d / 2, -d / 2, d, d);
+      } else {
+        ctx.drawImage(img, sx, sy, sw, sh, cx - d / 2, cy - d / 2, d, d);
+      }
+      ctx.restore();
+    } else {
+      ctx.fillStyle = color;
+      ctx.font = `900 ${Math.round(r * 0.72)}px ${UI_FONT_HEAVY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(def ? def.name.slice(0, 1) : '?', cx, cy + r * 0.25);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMatchupSide(entries, side, progress) {
+    const leftSide = side === 'left';
+    const color = leftSide ? '#59c9ff' : '#ff765f';
+    const count = entries.length;
+    const centers = count > 1
+      ? (leftSide ? [74, 188] : [352, 466])
+      : [leftSide ? 135 : 405];
+    const radius = count > 1 ? 57 : 86;
+    const slide = (1 - progress) * (leftSide ? -92 : 92);
+
+    entries.forEach((entry, index) => {
+      const x = centers[index] + slide;
+      drawMatchupPortrait(entry, x, 455, radius, color, side, progress);
+      const def = CHARACTERS[entry.character];
+      const fontSize = count > 1 ? 13 : 21;
+      const font = `900 ${fontSize}px ${UI_FONT_HEAVY}`;
+      const name = fitText(def ? def.name : '？', font, count > 1 ? 106 : 210);
+      drawOutlinedText(name, x, count > 1 ? 548 : 574, {
+        font, color: '#fff4d6', lineWidth: count > 1 ? 3.5 : 5
+      });
+    });
+
+    if (count > 1) {
+      drawOutlinedText('＆', (centers[0] + centers[1]) / 2 + slide, 463, {
+        font: `900 22px ${UI_FONT_HEAVY}`, color, lineWidth: 4
+      });
+    }
+  }
+
+  function drawMatchupCutIn() {
+    const elapsed = cutIn.duration - cutIn.timer;
+    const enter = Math.min(1, elapsed / 0.34);
+    const progress = 1 - Math.pow(1 - enter, 3);
+    const fadeOut = Math.min(1, cutIn.timer / 0.24);
+    const alpha = Math.max(0, Math.min(1, elapsed / 0.12, fadeOut));
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(2,5,12,0.94)';
+    ctx.fillRect(0, 0, VW, VH);
+
+    const leftGrad = ctx.createLinearGradient(0, 280, 285, 650);
+    leftGrad.addColorStop(0, 'rgba(25,121,181,0.88)');
+    leftGrad.addColorStop(1, 'rgba(5,24,51,0.96)');
+    ctx.fillStyle = leftGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, 286); ctx.lineTo(292, 326); ctx.lineTo(246, 676); ctx.lineTo(0, 718); ctx.closePath();
+    ctx.fill();
+
+    const rightGrad = ctx.createLinearGradient(VW, 280, VW - 285, 650);
+    rightGrad.addColorStop(0, 'rgba(181,65,48,0.88)');
+    rightGrad.addColorStop(1, 'rgba(53,12,18,0.96)');
+    ctx.fillStyle = rightGrad;
+    ctx.beginPath();
+    ctx.moveTo(VW, 286); ctx.lineTo(VW - 292, 326); ctx.lineTo(VW - 246, 676); ctx.lineTo(VW, 718); ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 1;
+    for (let y = 322; y <= 682; y += 24) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(VW, y - 30); ctx.stroke();
+    }
+
+    drawOutlinedText('BATTLE START', VW / 2, 220, {
+      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+    drawOutlinedText('BLUE TEAM', 120, 323, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: '#8be0ff', lineWidth: 3
+    });
+    drawOutlinedText('RED TEAM', VW - 120, 323, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: '#ff9d88', lineWidth: 3
+    });
+
+    drawMatchupSide(cutIn.left, 'left', progress);
+    drawMatchupSide(cutIn.right, 'right', progress);
+
+    ctx.save();
+    ctx.translate(VW / 2, 455);
+    ctx.rotate(-0.12);
+    ctx.fillStyle = 'rgba(4,8,16,0.96)';
+    ctx.strokeStyle = UI.gold;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-33, -42); ctx.lineTo(34, -34); ctx.lineTo(29, 40); ctx.lineTo(-38, 33); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.rotate(0.12);
+    drawOutlinedText('VS', 0, 12, {
+      font: `900 34px ${UI_FONT_HEAVY}`, color: '#fff4d6', lineWidth: 6
+    });
+    ctx.restore();
+
+    drawOutlinedText(cutIn.left.length > 1 || cutIn.right.length > 1 ? '2 vs 2' : '1 vs 1', VW / 2, 700, {
+      font: `900 14px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+    ctx.restore();
+  }
+
   function drawCutIn() {
     if (!cutIn) return;
+    if (cutIn.kind === 'matchup') {
+      drawMatchupCutIn();
+      return;
+    }
     const elapsed = cutIn.duration - cutIn.timer;
     const fadeIn = Math.min(1, elapsed / 0.15);
     const fadeOut = Math.min(1, cutIn.timer / 0.25);
@@ -11067,7 +11274,10 @@
 
   function onPointerDown(e) {
     e.preventDefault();
-    if (cutIn) return; // カットイン中は入力を受け付けない
+    // 通常はカットイン中の操作を止める。ただし通信の致命的エラー画面だけは、
+    // 演出より「タップでタイトルへ戻る」を優先し、閉じ込めない。
+    const fatalOnlineExit = isOnline() && (online.protocolError || online.peerLeft || online.versionMismatch);
+    if (cutIn && !fatalOnlineExit) return;
     const p0 = canvasPointFromEvent(e);
     if (gamePhase === 'loading' || gamePhase === 'breaking') return;
     if (gamePhase === 'press') {
@@ -11597,6 +11807,9 @@
     menuOpen = false;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
+    // Firebaseホストは、このあと開始スナップショットの保存・送信を待つ。その間も
+    // ロビーの裏でgameLoopが進むので、closeOnlineLobby後に改めて表示する。
+    if (!(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();
     // 戦闘開始・再戦・連戦(ボス連勝)のすべてがここを通る。gamePhaseがbattle以外なら
     // syncBgm内部のdesiredBgmが'stage'を返さないので、実質的に何もしない
     // (例:suspendRunToTitleはresetMatch呼び出し前にgamePhaseをtitleへ戻して抑止している)。

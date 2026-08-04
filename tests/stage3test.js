@@ -1648,6 +1648,17 @@ function check(name, value) {
       (twoVsTwo.match(/CPUが担当/g) || []).length === 3
       && !oneVsOne.includes('CPUが担当'));
   }
+  // v119: 開始データを受け取る側にもVSカットインを出す。
+  // resetMatch を通るのはホストだけなので、ここを落とすとタブ2つのQAで
+  // 「配る側には出るが、受け取る側には出ない」という左右差になる。
+  check('the Firebase host starts the VS cut-in only after the lobby closes',
+    /async function maybeStartFirebaseMatch\(\)[\s\S]{0,2600}closeOnlineLobby\(\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
+  check('a Firebase guest shows the VS cut-in after accepting the verified start snapshot',
+    /async function applyFirebaseStart\(msg\)[\s\S]{0,1700}applySnapshot\(msg\.snap\);[\s\S]{0,450}showBattleStartCutIn\(\);/.test(htmlText));
+  check('the loopback guest also shows the VS cut-in after applying the start snapshot',
+    /case 'start':[\s\S]{0,900}applySnapshot\(msg\.snap\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
+  check('a spectator sees the same VS cut-in when the match starts',
+    /function applyFirebaseSpectatorSnapshot\(msg\)[\s\S]{0,500}showBattleStartCutIn\(\);/.test(htmlText));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 

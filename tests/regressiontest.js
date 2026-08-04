@@ -31,6 +31,10 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+// v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
+// 別の種類として持たせないと、4体の顔ぶれを描き分けられない。
+check('VSカットインの状態を検査できる', typeof kt.matchupCutIn === 'function');
+
 check('死神がキャラ選択に追加されている', kt.chars().includes('shinigami'), kt.chars().join(','));
 const deathGate = kt.deathGate();
 check('デスゲートはDEAD LINEの下から固定射程',
@@ -51,13 +55,22 @@ const shinigami = kt.character('shinigami');
     html.includes('const SPRITE_REFERENCE_ASPECT')
     && html.includes('return design * Math.sqrt(SPRITE_REFERENCE_ASPECT / (img.naturalWidth / img.naturalHeight));')
     && (html.match(/SPRITE_SIZE \* unitSpriteScale\(u\.character\)/g) || []).length === 2);
+  // 必殺技の大きい丸窓とVSの小さい丸窓では、同じ切り出しでも顔の見え方が違う。
+  // VS側に16体ぶんの専用値が無いと、岩男やトリ戦車の顔ではなく車体が中央へ来る。
+  const matchupFaceBlock = /const MATCHUP_FACES = \{([\s\S]*?)\n  \};/.exec(html);
+  check('VSカットインは全キャラ専用の顔位置を持つ',
+    !!matchupFaceBlock
+    && kt.chars().every(key => new RegExp(`(?:^|[,\\s])${key}:\\s*\\[`).test(matchupFaceBlock[1]))
+    && html.includes('MATCHUP_FACES[entry.character] || CHARACTER_FACES[entry.character] || DEFAULT_FACE'),
+    matchupFaceBlock ? matchupFaceBlock[1] : 'MATCHUP_FACESなし');
   // 判定は全キャラ共通の円。絵の大きさを揃えても、どこに当たるかは絵からは読めない。
   check('当たり判定を円で可視化している',
     html.includes('function drawUnitHitCircle(u)')
     && html.includes('ctx.arc(a.x, a.y, UNIT_HIT_RADIUS, 0, Math.PI * 2);')
     && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
-    /drawUnitHitCircle\(u\);[\s\S]{0,1200}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+    // 両者の間には描画理由のコメントもある。文字数ではなく同じ drawUnit 内の順序を見る。
+    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
   // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
   // 中心にすると見えている上半分に当たらない(実機で指摘)。
   check('直撃の円をキャラの体へ上げている',
@@ -77,6 +90,19 @@ check('死神は右向きの元画像で、戦闘中だけ2割大きく表示す
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
 kt.startBattle('shinigami');
+const vs1v1 = kt.matchupCutIn();
+check('1vs1の開始時は両陣営1体ずつのVSカットイン',
+  vs1v1 && vs1v1.kind === 'matchup'
+    && vs1v1.left.map(entry => entry.id).join(',') === 'p1'
+    && vs1v1.right.map(entry => entry.id).join(',') === 'e1',
+  JSON.stringify(vs1v1));
+const turnBeforeVs = kt.state().turnCount;
+kt.step(0.5);
+check('VSカットイン中は対戦を進めない',
+  kt.state().turnCount === turnBeforeVs && !kt.hud().fireActive && !kt.hud().moveActive,
+  JSON.stringify({ before: turnBeforeVs, after: kt.state().turnCount, hud: kt.hud() }));
+settle();
+check('VSカットインは自動で終了する', !kt.hasCutIn());
 const cratersBeforeDeathGate = kt.craters();
 // 地形パターンごとに「誰も立っていない、DEAD LINEより上の地面」を探して印の着弾点にする。
 kt.fireDeathGateForTest(kt.deathGateTestX());
@@ -364,6 +390,7 @@ check('掘った直後の地表はクレーターぶん下がっている',
 // 直前のテストで倒れた状態が残っていると、決着後は向きの再判定が走らない。
 // 必ず新しい試合から始める。
 kt.startBattle('kyoryu');
+settle();
 kt.disableCpuForTest();
 kt.setTerrain('rolling');
 let facingNg = [];
@@ -544,6 +571,13 @@ const spawn1v1 = kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000
 
 kt.setFreeFormat('2v2');
 kt.startFreeMatch();
+const vs2v2 = kt.matchupCutIn();
+check('2vs2のVSカットインは p1＆p2 vs e1＆e2 の順',
+  vs2v2
+    && vs2v2.left.map(entry => entry.id).join(',') === 'p1,p2'
+    && vs2v2.right.map(entry => entry.id).join(',') === 'e1,e2'
+    && [...vs2v2.left, ...vs2v2.right].every(entry => kt.chars().includes(entry.character)),
+  JSON.stringify(vs2v2));
 check('2vs2を選ぶと4体で試合が始まる',
   kt.matchFormat() === '2v2' && kt.units.length === 4 && kt.is2v2(),
   `${kt.matchFormat()} 人数=${kt.units.length}`);
@@ -670,6 +704,7 @@ kt.applySnapshotForTest(snap2v2);
 check('2vs2の中断データを読み込むと4体へ戻る',
   kt.units.length === 4 && kt.matchFormat() === '2v2',
   `${kt.matchFormat()} 人数=${kt.units.length}`);
+check('通常の状態同期でVSカットインを出し直さない', !kt.hasCutIn());
 // 形式を名乗らない旧セーブ(v99以前・オンラインの相手)は1vs1として扱う。
 kt.applySnapshotForTest({ ...snap2v2, matchFormat: undefined, units: snap2v2.units.slice(0, 2) });
 check('形式を持たない旧データは1vs1として読む',

@@ -94,6 +94,13 @@ const HOOK = `
     fireBtn: () => ({ ...FIRE_BTN }),
     moveBtns: () => ({ left: { ...leftBtn }, right: { ...rightBtn } }),
     hasCutIn: () => !!cutIn,
+    matchupCutIn: () => cutIn && cutIn.kind === 'matchup' ? {
+      kind: cutIn.kind,
+      duration: cutIn.duration,
+      left: cutIn.left.map(entry => ({ ...entry })),
+      right: cutIn.right.map(entry => ({ ...entry }))
+    } : null,
+    showBattleStartCutInForTest: () => showBattleStartCutIn(),
     forceWinner: (team) => { winner = team; matchOver = true; },
     // --- リグレッション用 ---
     snapshot: () => buildSnapshot(),
