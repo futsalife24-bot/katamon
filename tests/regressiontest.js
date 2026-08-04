@@ -40,8 +40,27 @@ const shinigami = kt.character('shinigami');
 // facesLeft は「元画像がどちら向きか」であって「敵を向くか」ではない。敵の方を向くことは
 // 後段の向き検査(全キャラ・左右両配置)で確認している。ここは画像を差し替えた時に
 // 設定の追随漏れへ気づくための固定。2026-08-03に右向きの絵へ差し替えたため false。
-check('死神は右向きの元画像で、戦闘中だけ大きく表示する',
-  !shinigami.facesLeft && shinigami.spriteScale === 1.35,
+// spriteScale は「みんなを揃えたうえで、この子だけ大きい」という設計の意図だけを持つ。
+// 絵が縦長か横長かの差は unitSpriteScale が別に打ち消す(v117)。1.35→1.21 はその分離で、
+// 画面に出る大きさは変えていない。
+// 見かけの大きさを揃える補正(v117)。高さ基準で描くので縦長の絵ほど小さく見えていた。
+// 絵の比率だけで決まるので表を持たない=絵を差し替えても勝手に追随する。
+{
+  const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+  check('見かけの大きさを絵の比率から揃えている',
+    html.includes('const SPRITE_REFERENCE_ASPECT')
+    && html.includes('return design * Math.sqrt(SPRITE_REFERENCE_ASPECT / (img.naturalWidth / img.naturalHeight));')
+    && (html.match(/SPRITE_SIZE \* unitSpriteScale\(u\.character\)/g) || []).length === 2);
+  // 判定は全キャラ共通の円。絵の大きさを揃えても、どこに当たるかは絵からは読めない。
+  check('当たり判定を円で可視化している',
+    html.includes('function drawUnitHitCircle(u, a)')
+    && html.includes('ctx.arc(a.x, a.y, UNIT_HIT_RADIUS, 0, Math.PI * 2);')
+    && html.includes('drawUnitHitCircle(u, a);'));
+  check('判定の輪はキャラ画像より先に描く',
+    /drawUnitHitCircle\(u, a\);[\s\S]{0,1200}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+}
+check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
+  !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
 kt.startBattle('shinigami');
 const cratersBeforeDeathGate = kt.craters();

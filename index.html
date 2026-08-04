@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v116';
+  const BUILD_ID = 'v117';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2184,7 +2184,9 @@
       desc: '大鎌の呪いで足場を断つ技巧派。必殺は地面を縦に削り、相手を死線へ誘う。',
       selectStats: [3, 2, 4], specialDesc: '着弾地点の真下から縦穴を削る冥府の鎌',
       maxHp: 92, blastMul: 0.9, windMul: 0.82, fuelMul: 1.1, velScaleMul: 1.02, specialVelocityMul: 1.0, tBias: 0.95,
-      color: '#b87cff', special: 'デスゲート', spriteScale: 1.35
+      // spriteScale は「みんなを揃えたうえで、この子だけ大きい/小さい」という**設計の意図**。
+      // 絵が縦長か横長かの差は unitSpriteScale が別に打ち消すので、ここには書かない。
+      color: '#b87cff', special: 'デスゲート', spriteScale: 1.21
     }
   };
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
@@ -2269,6 +2271,19 @@
   titleTimeBackgroundImage.onerror = () => { titleTimeBackgroundFailed = true; };
   titleTimeBackgroundImage.src = titleTimeBackgroundPaths[titleTimeTheme];
   const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
+  // **高さ基準で描くので、縦長の絵ほど小さく、横長の絵ほど大きく見える。**
+  // 実測で1.65倍のひらきがあった(実機で「明らかに大きさが違う」と指摘)。
+  // 見かけの大きさを √(幅×高さ) とみなし、これが揃うよう絵の比率から補正を出す。
+  // 表を持たないので、絵を差し替えても勝手に追随する。
+  // 基準の比率は「いまの16体の補正の平均が1.00になる値」。ここを動かすと全員の
+  // 大きさが一斉に動くので、絵の差し替えでは触らないこと。
+  const SPRITE_REFERENCE_ASPECT = 1.318;
+  function unitSpriteScale(key) {
+    const design = CHARACTERS[key]?.spriteScale || 1;
+    const img = charImages[key];
+    if (!img || !img.naturalWidth || !img.naturalHeight) return design;
+    return design * Math.sqrt(SPRITE_REFERENCE_ASPECT / (img.naturalWidth / img.naturalHeight));
+  }
 
   // ===== ユニット =====
   const UNIT_RADIUS = 16;      // 接地・アンカー計算用の半径
@@ -8262,9 +8277,39 @@
     return Math.max(-MAX_TILT, Math.min(MAX_TILT, Math.atan2(y2 - y1, 2 * d)));
   }
 
+  // 当たり判定の可視化。**判定は全キャラ共通の円**で、中心はキャラの中心、
+  // 半径は UNIT_HIT_RADIUS。絵の形も大きさも違うので、どこに当たるのかは絵からは読めない。
+  // 主張しすぎない明るさにすること。ここが濃いと盤面がうるさくなって弾道が見えなくなる。
+  function drawUnitHitCircle(u, a) {
+    if (u.hp <= 0) return;
+    const active = activeUnit() === u;
+    const tint = u.team === 'player' ? '120,190,255' : '255,150,120';
+    // ゆっくり明滅させる。止まった輪より「判定がそこにある」ことが伝わる。
+    const pulse = 0.82 + Math.sin(Date.now() / 520) * 0.18;
+    const fill = (active ? 0.15 : 0.08) * pulse;
+    const edge = (active ? 0.46 : 0.26) * pulse;
+    ctx.save();
+    const glow = ctx.createRadialGradient(a.x, a.y, UNIT_HIT_RADIUS * 0.45, a.x, a.y, UNIT_HIT_RADIUS);
+    glow.addColorStop(0, `rgba(${tint},0)`);
+    glow.addColorStop(0.86, `rgba(${tint},${fill})`);
+    glow.addColorStop(1, `rgba(${tint},0)`);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, UNIT_HIT_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${tint},${edge})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, UNIT_HIT_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawUnit(u) {
     if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
+    // 絵より先に描く。上に重ねるとキャラが霞む。
+    drawUnitHitCircle(u, a);
     const isBossUnit = isBossMatch && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
@@ -8273,8 +8318,7 @@
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
-    const spriteScale = CHARACTERS[u.character]?.spriteScale || 1;
-    const h = SPRITE_SIZE * spriteScale;
+    const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
     const imgTopAbs = a.y + UNIT_RADIUS - h;
 
@@ -8682,8 +8726,7 @@
     const imgReady = img && img.complete && img.naturalWidth > 0;
     // 跳躍中のキャラ画像。地上の描画と同じ変換を使う。
     const facingLeft = spriteFlipForFacing(u, unitFacesLeftInWorld(u));
-    const spriteScale = CHARACTERS[u.character]?.spriteScale || 1;
-    const h = SPRITE_SIZE * spriteScale;
+    const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
     const angle = Math.atan2(p.vy, p.vx);
     ctx.save();
