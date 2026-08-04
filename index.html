@@ -140,7 +140,8 @@
   #onlineLobby.in-room #onlineLobbyTitle { display: none; }
   #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 8px; }
   #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
-  #onlineLobby.in-room.quickplay #onlineRoomCodeRow { display: none; }
+  /* v101までのすぐ対戦は全員が同じ固定合言葉だったので隠していた。v102からは部屋ごとに
+     別の合言葉になるため、待っている間こそ見せる。呼びたい相手へ直接伝えられる。 */
   #onlineRoomCode { color: #ffd24a; font: 900 22px/1 monospace; letter-spacing: .14em; }
   /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
   #onlineCopy {
@@ -262,6 +263,9 @@
   #onlineLobby.in-room.results #onlineReturnLobby { display: block; }
   #onlineLobby.in-room.results #onlineReady, #onlineLobby.in-room.results #onlineStart, #onlineLobby.in-room.results #onlineLeave { display: none; }
   #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
+  /* 「CPUで始める」は、すぐ対戦で相手を待っている間だけ出す。自動では始めない(決定15) */
+  #onlineQuickCpu { display: none; }
+  #onlineLobby.in-room.quickplay #onlineQuickCpu { display: block; }
   #onlineQuick, #onlineReady, #onlineStart { border-color: #ffd24a !important; color: #ffe2a1 !important; }
   #onlineQuick, #onlineReady { min-height: 54px; font-size: 16px; }
   #onlineCodeToggle {
@@ -342,6 +346,7 @@
       <button id="onlineRematch" type="button">このまま再戦</button>
       <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
       <button id="onlineQuick" type="button">すぐ対戦する</button>
+      <button id="onlineQuickCpu" type="button">CPUで始める</button>
       <button id="onlineCodeToggle" type="button">合言葉を使う</button>
     </div>
   </div>
@@ -395,7 +400,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v101';
+  const BUILD_ID = 'v102';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3576,8 +3581,10 @@
   const FIREBASE_PLAYER_SEATS = ['p1', 'e1'];
   const FIREBASE_ROUND_RE = /^[0-9a-f]{48}$/;
   const LOOPBACK_ROOM = 'katamon-loopback';
-  // 合言葉なしの簡単対戦用。満室・対戦中なら合言葉モードを使ってもらう。
-  const QUICK_MATCH_ROOM = 'KATAMN22';
+  // v101までの「すぐ対戦」は世界にこの1部屋しか無く、3人目は必ず弾かれていた。
+  // v102からは open インデックス経由のマッチメイキングへ移行したので、もう使わない。
+  // 定数だけ残してあるのは、旧版の端末がまだこの部屋に居る可能性を説明するため。
+  const LEGACY_QUICK_MATCH_ROOM = 'KATAMN22';
   const NET_RETRY_SEC = 0.6; // 相手待ちの間、join/hello を撒き直す間隔
   const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const ROOM_CODE_LENGTH = 8;
@@ -3589,6 +3596,12 @@
   // ROOM_LEASE_RENEW_MS は ROOM_TTL_MS より十分に短く保つこと(stage3testで固定してある)。
   const ROOM_TTL_MS = 10 * 60 * 1000;
   const ROOM_LEASE_RENEW_MS = 60 * 1000;
+  // 待っている部屋の公開一覧(Issue #23)。載せるのは「この合言葉の部屋が空いて待っている」
+  // という事実だけで、部屋の中身(rooms/$room)は従来どおり席を持つ人しか読めない。
+  // 案内の期限は部屋の期限と揃える。ホストが居る限りは部屋の延命と一緒に載せ直す。
+  const OPEN_INDEX_TTL_MS = ROOM_TTL_MS;
+  const OPEN_MATCH_FORMATS = ['1v1', '2v2']; // v102のUIは1v1のみ。2v2は段Bで開く
+  const OPEN_INDEX_MAX_CANDIDATES = 12;      // 1回の「すぐ対戦」で座りにいく上限
   const FIREBASE = {
     apiKey: 'AIzaSyAoKk4qwhIlLeuMXfosRUpSgVqXiDjskDc',
     databaseURL: 'https://katamon-online-default-rtdb.asia-southeast1.firebasedatabase.app'
@@ -4923,22 +4936,76 @@
       throw err;
     }
   }
-  async function joinQuickFirebaseRoom() {
-    // 先に空きプレイヤー席を取りにいき、なければホストとして共通部屋を作る。
-    // 同時に押された場合も、作成に負けた側がもう一度参加を試すため二人で開始できる。
-    try {
-      return { ...(await claimFirebaseRoom(QUICK_MATCH_ROOM, ['e1'])), role: 'guest' };
-    } catch (_) {
-      try {
-        return { ...(await createFirebaseRoom(QUICK_MATCH_ROOM)), role: 'host' };
-      } catch (_) {
-        try {
-          return { ...(await claimFirebaseRoom(QUICK_MATCH_ROOM, ['e1'])), role: 'guest' };
-        } catch (_) {
-          throw new Error('ただいま簡単対戦は利用中です。合言葉を使って部屋を作ってください。');
-        }
-      }
+  // ===== 待っている部屋の公開一覧(Issue #23) =====
+  // 部屋は原理的に探せない(ルートは読めず、部屋の中は席を持つ人だけ)。そこで
+  // 「空いて待っている部屋の合言葉」だけを別ノードへ出し、そこから探しにいく。
+  function normalizeOpenFormat(format) {
+    return OPEN_MATCH_FORMATS.includes(format) ? format : '1v1';
+  }
+  // 一覧の1件が使えるかどうか。壊れた項目や期限切れは静かに捨てる
+  // (他人が書いたデータなので、形が違っても例外にせず無視するだけにする)。
+  function usableOpenEntry(code, entry, format, now) {
+    if (!isRoomCode(code) || !entry || typeof entry !== 'object') return false;
+    if (normalizeOpenFormat(entry.format) !== format) return false;
+    if (!Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) return false;
+    return typeof entry.hostUid === 'string' && entry.hostUid.length > 0;
+  }
+  // 一覧から入る先を選ぶ。通信を挟まないので、そのまま検証できる形にしてある。
+  // 「待たせている時間が長い順」に返す。長く待っている人から拾うのが公平。
+  function pickOpenCandidates(listing, selfUid, format, now) {
+    if (!listing || typeof listing !== 'object') return [];
+    const rows = [];
+    for (const code of Object.keys(listing)) {
+      const entry = listing[code];
+      if (!usableOpenEntry(code, entry, format, now)) continue;
+      if (entry.hostUid === selfUid) continue; // 自分が待たせている部屋には入らない
+      rows.push({ code, createdAt: Number(entry.createdAt) || 0 });
     }
+    rows.sort((a, b) => (a.createdAt - b.createdAt) || (a.code < b.code ? -1 : 1));
+    return rows.slice(0, OPEN_INDEX_MAX_CANDIDATES);
+  }
+  async function readOpenRooms(auth, format, now) {
+    let listing = null;
+    try { listing = await firebaseRequest('open', auth); }
+    catch (_) { return []; } // 一覧が読めなくても、自分で部屋を作れば対戦はできる
+    return pickOpenCandidates(listing, auth.uid, format, now);
+  }
+  async function publishOpenRoom(code, auth, format) {
+    const now = firebaseServerNow(auth);
+    await firebaseRequest(`open/${code}`, auth, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        format: normalizeOpenFormat(format), hostUid: auth.uid,
+        createdAt: { '.sv': 'timestamp' }, expiresAt: now + OPEN_INDEX_TTL_MS
+      })
+    });
+  }
+  // 取り下げは投げ捨てでよい。失敗しても案内は期限で消えるし、満室の部屋を拾った側は
+  // 席の確保に失敗して次の候補へ進むだけなので、実害が出ない。
+  function unpublishOpenRoom(code, auth) {
+    if (!code || !auth) return;
+    firebaseRequest(`open/${code}`, auth, { method: 'DELETE' }).catch(() => {});
+  }
+
+  async function joinQuickFirebaseRoom(format = '1v1') {
+    const wanted = normalizeOpenFormat(format);
+    const auth = await ensureFirebaseAuth();
+    const now = firebaseServerNow(auth);
+    // 1. 待っている部屋を順に当たる。満室・対戦中・消滅済みはここで自然に外れる。
+    for (const candidate of await readOpenRooms(auth, wanted, now)) {
+      let joined = null;
+      try { joined = await claimFirebaseRoom(candidate.code, ['e1']); }
+      catch (_) { continue; } // 競り負け・満室・期限切れ。次の候補へ
+      return { ...joined, role: 'guest', quickFormat: wanted };
+    }
+    // 2. どこにも座れなければ自分が部屋を作り、待っていることを一覧へ載せる。
+    const made = await createFirebaseRoom();
+    try { await publishOpenRoom(made.code, made.auth, wanted); }
+    catch (_) {
+      // 載せられなくても部屋は使える。合言葉を伝えれば入ってもらえるので、対戦をここで止めない。
+      return { ...made, role: 'host', quickFormat: wanted, quickWaiting: true, quickListed: false };
+    }
+    return { ...made, role: 'host', quickFormat: wanted, quickWaiting: true, quickListed: true };
   }
 
   // 部屋の延命。ホストだけが送る。1回の失敗では何もしない(次の更新で取り戻せるし、
@@ -4952,6 +5019,11 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next)
       });
     } catch (_) { /* 次の更新に任せる */ }
+    // 待ち続けている間は案内も載せ直す。載せっぱなしにすると期限で落ちて拾われなくなる。
+    if (online === leasing && leasing.quickWaiting && leasing.quickListed) {
+      try { await publishOpenRoom(leasing.room, leasing.auth, leasing.quickFormat); }
+      catch (_) { /* 次の更新に任せる */ }
+    }
   }
   function scheduleFirebaseRoomLease() {
     if (!isFirebaseHost()) return;
@@ -5012,6 +5084,24 @@
     }
     noticeOwnFirebaseSeatLost();
   }
+  // 相手が座ったら「探しています」を終える。案内も取り下げる(満室の部屋を拾わせないため)。
+  // 席が空いた時は載せ直す。ホストが待ち続けている限り、また拾ってもらえる。
+  function syncQuickMatchListing() {
+    if (!online || online.kind !== 'firebase' || !online.quickFormat || online.role !== 'host') return;
+    const someoneElse = FIREBASE_SEATS.some(seat => seat !== 'p1'
+      && online.slots && online.slots[seat] && online.slots[seat].uid);
+    const shouldWait = !someoneElse && online.phase === 'lobby';
+    if (shouldWait === online.quickWaiting) return;
+    online.quickWaiting = shouldWait;
+    if (!shouldWait && online.quickListed) {
+      online.quickListed = false;
+      unpublishOpenRoom(online.room, online.auth);
+    }
+    if (onlineLobbyEl) onlineLobbyEl.classList.toggle('quickplay', shouldWait);
+    if (!shouldWait) onlineLobbyStatus('対戦相手が来ました。キャラを選んで「準備完了」を押してください。');
+    renderFirebaseLobby();
+  }
+
   function ownFirebaseSeatIsLost() {
     if (!online || online.kind !== 'firebase' || !online.seat) return false;
     const mine = online.slots && online.slots[online.seat];
@@ -5087,7 +5177,7 @@
       if (online) online.authRefreshing = false;
     }
   }
-  function beginFirebaseOnline(role, code, auth, character, room, seat) {
+  function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null) {
     const transport = makeFirebaseTransport(code, auth, room && room.round && room.round.id, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
       if (online && online.kind === 'firebase') rejectFirebaseMessage(err && err.message ? `通信を継続できません（${err.message}）` : '通信を継続できません');
     });
@@ -5104,6 +5194,10 @@
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       seatSeen: {}, seatStale: {},
+      // すぐ対戦で自分が待っている間だけ立つ。相手が座ったら降ろし、一覧からも取り下げる。
+      quickWaiting: !!(quick && quick.quickWaiting),
+      quickListed: !!(quick && quick.quickListed),
+      quickFormat: quick && quick.quickFormat ? quick.quickFormat : null,
       log: []
     };
     transport.onMessage(netReceive);
@@ -5114,9 +5208,13 @@
     hasSuspendedSave = !!loadSuspendedMatch();
     battleMode = 'normal'; winStreak = 0; runStats = { damageDealt: 0, shots: 0 };
     onlineLobbyEl && onlineLobbyEl.classList.add('in-room');
-    onlineLobbyEl && onlineLobbyEl.classList.toggle('quickplay', code === QUICK_MATCH_ROOM);
+    // すぐ対戦は毎回ちがう合言葉の部屋になる。相手を待っている間だけ合言葉を隠し、
+    // 一覧から誰か来た時点で普通の部屋として扱う(合言葉を教えて呼ぶこともできる)。
+    onlineLobbyEl && onlineLobbyEl.classList.toggle('quickplay', !!online.quickWaiting);
     onlineLobbyEl && onlineLobbyEl.classList.toggle('host', role === 'host');
-    onlineLobbyStatus(online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。');
+    onlineLobbyStatus(online.quickWaiting
+      ? '対戦相手を探しています… 上の合言葉を伝えれば直接呼べます。「CPUで始める」も選べます。'
+      : (online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。'));
     scheduleFirebaseTokenRefresh();
     scheduleFirebaseRoomLease();
     scheduleFirebaseSeatHeartbeat();
@@ -5357,6 +5455,8 @@
       if (!online || !room) return;
       online.slots = room.slots || online.slots;
       online.settings = normalizeLobbySettings(room.settings || online.settings);
+      syncQuickMatchListing();
+      if (!online) return;
       if (broadcast && isFirebaseHost()) netSend({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings, name: localPlayerName() });
       renderFirebaseLobby();
     } catch (_) { /* SSEは継続し、次のpresenceで再試行する */ }
@@ -5553,6 +5653,9 @@
     if (leaving.authRetryTimer) clearTimeout(leaving.authRetryTimer);
     if (leaving.roomLeaseTimer) clearTimeout(leaving.roomLeaseTimer);
     if (leaving.seatHeartbeatTimer) clearTimeout(leaving.seatHeartbeatTimer);
+    // どの抜け方でもここを通るので、すぐ対戦の案内の取り下げは1箇所にまとめる。
+    // 間に合わなくても案内は期限で消え、拾った側は席の確保に失敗して次へ進むだけ。
+    if (leaving.kind === 'firebase' && leaving.quickListed) unpublishOpenRoom(leaving.room, leaving.auth);
     // v3 Firebaseは試合終了・ページ離脱で部屋を消さない。明示的なロビー退出だけが席/部屋を消す。
     if (sendBye && leaving.kind !== 'firebase') { netSend({ t: 'bye' }); netSend({ t: 'bye' }); }
     leaving.transport.close();
@@ -9237,12 +9340,25 @@
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('対戦相手を探しています…');
     try {
-      const { code, auth, room, seat, role } = await joinQuickFirebaseRoom();
-      beginFirebaseOnline(role, code, auth, selectedOnlineCharacter(), room, seat);
+      const quick = await joinQuickFirebaseRoom('1v1');
+      const { code, auth, room, seat, role } = quick;
+      // 待っている間も合言葉は使える。呼びたい相手が居るなら、これを伝えれば直接来てもらえる。
+      if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
+      if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
+      beginFirebaseOnline(role, code, auth, selectedOnlineCharacter(), room, seat, quick);
       setOnlineLobbyBusy(false);
     } catch (err) {
       setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '簡単対戦を始められませんでした。');
     }
+  });
+  // 相手が来ない時の逃げ道。待ち続けるか、ここでCPU戦へ移るかは人が決める(決定15)。
+  const onlineQuickCpuButton = document.getElementById('onlineQuickCpu');
+  if (onlineQuickCpuButton) onlineQuickCpuButton.addEventListener('click', () => {
+    if (!online || online.kind !== 'firebase' || !online.quickWaiting) return;
+    const character = selectedOnlineCharacter();
+    endOnline(false, true); // 部屋と案内をたたんでからCPU戦へ移る
+    closeOnlineLobby();
+    selectCharacterAndStart(character);
   });
   if (onlineCreateButton) onlineCreateButton.addEventListener('click', async () => {
     if (onlineLobbyBusy || online) return;

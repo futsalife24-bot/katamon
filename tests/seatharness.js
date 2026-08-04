@@ -184,7 +184,16 @@ const HOOK = `
       titleNotice: () => activeTitleNotice(),
       titleNoticeBand: () => ({ top: TITLE_NOTICE_Y - TITLE_NOTICE_H / 2, bottom: TITLE_NOTICE_Y + TITLE_NOTICE_H / 2 }),
       saveBubbleBand: () => ({ top: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, bottom: SAVE_BUBBLE_CY + SAVE_BUBBLE_RY }),
-      titleModeLabelY: () => TITLE_MODE_LABEL_Y
+      titleModeLabelY: () => TITLE_MODE_LABEL_Y,
+      // ---- マッチメイキング(Issue #23) ----
+      pickOpenCandidates: (listing, selfUid, format, now) => pickOpenCandidates(listing, selfUid, format, now),
+      usableOpenEntry: (code, entry, format, now) => usableOpenEntry(code, entry, format, now),
+      normalizeOpenFormat: (f) => normalizeOpenFormat(f),
+      openIndexTtlMs: () => OPEN_INDEX_TTL_MS,
+      openMatchFormats: () => OPEN_MATCH_FORMATS.slice(),
+      openMaxCandidates: () => OPEN_INDEX_MAX_CANDIDATES,
+      syncQuickMatchListing: () => syncQuickMatchListing(),
+      legacyQuickRoom: () => LEGACY_QUICK_MATCH_ROOM
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)
