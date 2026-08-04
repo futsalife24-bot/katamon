@@ -254,6 +254,17 @@ check('石は隙間なく敷き詰める',
 check('終わり際に破片を必ず消しきる',
   html.includes('const WALL_CLEAR_SEC')
   && /const clearing = breakState[\s\S]{0,200}WALL_BREAK_SEC - breakState\.t\) \/ WALL_CLEAR_SEC/.test(html));
+// 実機で「タイトル表示してからずっとブルブル震える」。着弾で画面を揺らした後、
+// 揺れを減らす処理が update の「対戦中」の分岐の内側にあったため一度も走らなかった。
+// 揺れは描画側の効果であって対戦の状態ではない。どの画面でも必ず止まること。
+for (const phase of ['title', 'select', 'ranking', 'freeSetup']) {
+  kt.setPhase(phase);
+  kt.triggerShakeForTest(9, 0.32);
+  for (let i = 0; i < 40; i++) kt.step(0.02);   // 0.8秒ぶん回す
+  check(`${phase} でも画面の揺れが止まる`, kt.shakeTimer() === 0, `残り=${kt.shakeTimer()}`);
+}
+kt.setPhase('title');
+
 check('演出中は入力を受け付けない',
   html.includes("if (gamePhase === 'loading' || gamePhase === 'breaking') return;"));
 // 読み込み中も毎フレーム回る。破片ごとのグラデーションは作り直さず持たせる。

@@ -434,7 +434,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v110';
+  const BUILD_ID = 'v111';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -11487,6 +11487,10 @@
   function update(dt) {
     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
     updateOnline(dt);
+    // 画面の揺れは描画側の効果であって対戦の状態ではない。**どの画面でも必ず減らす。**
+    // 以前はこれを対戦中の分岐の内側でやっていたため、起動演出(着弾で揺らす)のあと
+    // タイトルへ移ると減衰が一度も走らず、画面が永久に震え続けた。
+    if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (gamePhase === 'breaking') { updateWallBreak(dt); return; }
     if (gamePhase === 'select') {
       updateSelectWheel(dt);
@@ -11515,9 +11519,9 @@
       }
     }
 
-    // 演出系の更新はカットイン中も続ける(シェイクが残り続けて震え続けるのを防ぐ)
+    // 演出系の更新はカットイン中も続ける(残り続けて画面に出っぱなしになるのを防ぐ)
+    // 画面の揺れだけは update の先頭で減らす。ここは対戦中しか通らないため。
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
-    if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
     if (submitRevealTimer > 0) submitRevealTimer = Math.max(0, submitRevealTimer - dt);
     if (matchEndPause > 0) {
