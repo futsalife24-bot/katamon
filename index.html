@@ -2398,7 +2398,9 @@
     for (const u of units) u.control = (u.id === id) ? 'local' : foeControl;
   }
   function setLocalSeat(id) { setSeat(id, 'cpu'); }   // CPU戦
-  function setOnlineSeat(id) { setSeat(id, 'remote'); } // オンライン対戦
+  // オンライン対戦。渡すのは「席」で、動かすのはその席に結ばれたユニット。
+  // 1vs1では席名とユニット名が一致するので、これまでと同じ動きになる。
+  function setOnlineSeat(seat) { setSeat(firebaseSeatUnitId(seat), 'remote'); }
   // 席とcontrolの割り当てを1行で残す。実機で「ターンバーはあなた、ダイヤルは相手」という
   // 食い違いが出た。両者は localUnitId と control を別々に見ているため、ここがズレると起きる。
   function logSeatAssignment(where) {
@@ -4425,10 +4427,11 @@
     // ホストだけが部屋の状態を宣言できる。
     if (msg.t === 'lobbyState' || msg.t === 'settings' || msg.t === 'start') return msg.seat === 'p1';
     // 対戦者だけの合図。
-    if (msg.t === 'commit' || msg.t === 'ready' || msg.t === 'reveal' || msg.t === 'rematchVote') return FIREBASE_PLAYER_SEATS.includes(msg.seat);
+    if (msg.t === 'commit' || msg.t === 'ready' || msg.t === 'reveal' || msg.t === 'rematchVote') return firebasePlayerSeats().includes(msg.seat);
     // 盤面を動かすものは、対戦者かつ自分のユニットについてのみ。
+    // 席とユニットの対応は固定(p1→p1 / e1→e1 / s1→p2 / s2→e2)。ルール側も同じ表で縛っている。
     if (msg.t === 'move' || msg.t === 'fire' || msg.t === 'boom' || msg.t === 'state' || msg.t === 'result') {
-      return FIREBASE_PLAYER_SEATS.includes(msg.seat) && msg.unitId === msg.seat;
+      return firebasePlayerSeats().includes(msg.seat) && msg.unitId === firebaseSeatUnitId(msg.seat);
     }
     return false;
   }
@@ -4451,14 +4454,14 @@
       // 生存確認を戻せるのは対戦者の通信だけ。観戦者のpingで相手の切断を見逃さないため。
       // 自分の送信は上で除外済みなので、対戦者から見ればこれは相手のパケットに等しい。
       // 観戦者から見ればどちらかの対戦者が生きていればよいので、この判定で両方に合う。
-      if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();
+      if (firebasePlayerSeats().includes(msg.seat)) noteFirebasePeerMessage();
       // ロビー表示用の在席記録は観戦者も含めて全席ぶん取る(上の対戦者限定の判定とは別物)。
       noteFirebaseSeatSeen(msg.seat);
       if (online.participantRole === 'spectator') {
         if (msg.t === 'start' || msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
         else if (msg.t === 'result') receiveFirebaseSpectatorResult(msg);
         else if (msg.t === 'lobbyState') applyFirebaseLobbyState(msg);
-        else if (msg.t === 'settings') { online.settings = normalizeLobbySettings(msg.settings); renderFirebaseLobby(); }
+        else if (msg.t === 'settings') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); renderFirebaseLobby(); }
         return;
       }
       if (msg.t === 'state' || msg.t === 'result') {
@@ -4540,10 +4543,10 @@
         if (online && online.kind === 'firebase') applyFirebaseLobbyState(msg);
         break;
       case 'settings':
-        if (online && online.kind === 'firebase') { online.settings = normalizeLobbySettings(msg.settings); renderFirebaseLobby(); }
+        if (online && online.kind === 'firebase') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); renderFirebaseLobby(); }
         break;
       case 'rematchVote':
-        if (online && online.kind === 'firebase' && FIREBASE_PLAYER_SEATS.includes(msg.seat)) {
+        if (online && online.kind === 'firebase' && firebasePlayerSeats().includes(msg.seat)) {
           online.rematchVotes[msg.seat] = !!msg.vote;
           renderFirebaseLobby();
           if (isFirebaseHost() && msg.vote === false) { resetFirebaseRound(false); break; }
@@ -4874,11 +4877,41 @@
     const terrain = FREE_TERRAIN_OPTIONS.some(x => x.key === raw.terrain) ? raw.terrain : 'random';
     const wind = WIND_OPTIONS.some(x => x.key === raw.wind) ? raw.wind : 'random';
     const turnsPerPlayer = [10, 15, 20].includes(Number(raw.turnsPerPlayer)) ? Number(raw.turnsPerPlayer) : 15;
-    return { terrain, wind, turnsPerPlayer, revision: Math.max(1, Number(raw.revision) || 1) };
+    // 対戦方式はロビーで共有する。持っていない相手(v102以前)は1vs1として扱う。
+    const format = raw.format === '2v2' ? '2v2' : '1v1';
+    return { terrain, wind, turnsPerPlayer, format, revision: Math.max(1, Number(raw.revision) || 1) };
   }
   function firebaseRoundId() { return secureNonce(); }
-  function firebaseSeatLabel(seat) { return seat === 'p1' ? 'P1 ホスト' : seat === 'e1' ? 'P2 対戦者' : `${seat.toUpperCase()} 観戦`; }
-  function firebaseSeatIsPlayer(seat) { return FIREBASE_PLAYER_SEATS.includes(seat); }
+  // 席と試合中のキャラの対応。ここを設定で動かせるようにすると、ルールの
+  // 「自分の席のキャラしか動かせない」が成立しなくなるので固定にしてある(Issue #25)。
+  const FIREBASE_SEAT_UNIT = { p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' };
+  const FIREBASE_SEAT_TEAM = { p1: 'player', s1: 'player', e1: 'cpu', s2: 'cpu' };
+  function firebaseSeatUnitId(seat) { return FIREBASE_SEAT_UNIT[seat] || 'p1'; }
+  // ロビーが2vs2かどうか。設定を持っていない場面(入室直後など)は1vs1として扱う。
+  function firebaseLobbyIs2v2() { return !!(online && online.settings && online.settings.format === '2v2'); }
+  // 2vs2では観戦席が無くなり、4席すべてが対戦者席になる(決定8)。
+  function firebasePlayerSeats() { return firebaseLobbyIs2v2() ? FIREBASE_SEATS.slice() : FIREBASE_PLAYER_SEATS.slice(); }
+  function firebaseSeatLabel(seat) {
+    if (seat === 'p1') return 'P1 ホスト';
+    if (seat === 'e1') return firebaseLobbyIs2v2() ? 'E1 敵チーム' : 'P2 対戦者';
+    if (seat === 's1') return firebaseLobbyIs2v2() ? 'P2 味方' : 'S1 観戦';
+    return firebaseLobbyIs2v2() ? 'E2 敵チーム' : 'S2 観戦';
+  }
+  function firebaseSeatIsPlayer(seat) { return firebasePlayerSeats().includes(seat); }
+  // 対戦方式はホストから後から届く。2vs2だと分かった時点で、s1/s2に座っている人は
+  // 観戦者ではなく対戦者になる。席そのものは動かないので、役割だけを付け直す。
+  function syncFirebaseParticipantRole() {
+    if (!online || online.kind !== 'firebase') return;
+    // 先に人数を合わせる。2vs2の席(s1→p2 / s2→e2)は、ユニットが4体ある状態でないと
+    // 割り当てられない(setSeat は存在しないユニットIDを黙って捨てる)。
+    // 試合開始時は start のスナップショットが同じ形式を持ってくるので、ここで作り替えても食い違わない。
+    if (online.phase === 'lobby') setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
+    const role = firebaseSeatIsPlayer(online.seat) ? 'player' : 'spectator';
+    if (role === online.participantRole) return;
+    online.participantRole = role;
+    if (role === 'player') setOnlineSeat(online.seat);
+    else setOnlineSeat('p1'); // 観戦へ戻る時は操作権を持たない席へ寄せる
+  }
   // ランキングと同じ名前をルームでも見せる。未登録なら何も出さない。
   const MAX_PLAYER_NAME_LENGTH = 12; // gas/ranking.gs の MAX_NAME_LENGTH と揃える
   function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
@@ -4892,7 +4925,7 @@
     return (online.seatNames && online.seatNames[seat]) || '';
   }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
-  function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && FIREBASE_PLAYER_SEATS.includes(online.seat)); }
+  function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && firebasePlayerSeats().includes(online.seat)); }
   async function createFirebaseRoom(requestedCode = null) {
     const auth = await ensureFirebaseAuth();
     const now = firebaseServerNow(auth);
@@ -5184,7 +5217,10 @@
     if (!transport) throw new Error('このブラウザはオンライン通信に対応していません。');
     online = {
       kind: 'firebase', role, room: code, auth, transport, clientId: auth.uid,
-      seat, peerSeat: seat === 'p1' ? 'e1' : 'p1', participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
+      seat, peerSeat: seat === 'p1' ? 'e1' : 'p1',
+      // 2vs2かどうかは settings が届いてから決まる。入室直後は1vs1として扱い、
+      // 設定を受け取った時点で renderFirebaseLobby 側が席の役割を出し直す。
+      participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
@@ -5429,7 +5465,7 @@
       noticeOwnFirebaseSeatLost();
       if (!online) return;
     }
-    if (msg.settings && typeof msg.settings === 'object') online.settings = normalizeLobbySettings(msg.settings);
+    if (msg.settings && typeof msg.settings === 'object') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); }
     if (msg.status === 'revealing') { online.phase = 'revealing'; maybeRevealCharacter(); }
     else if (msg.status === 'lobby') { if (msg.nextRoundId) { online.currentRoundId = msg.nextRoundId; online.transport.setRoundId(msg.nextRoundId); online.transport.reconnect(); } resetLocalFirebaseRoundState(msg.autoReady === true); openFirebaseLobby(); }
     renderFirebaseLobby();
@@ -5455,6 +5491,7 @@
       if (!online || !room) return;
       online.slots = room.slots || online.slots;
       online.settings = normalizeLobbySettings(room.settings || online.settings);
+      syncFirebaseParticipantRole();
       syncQuickMatchListing();
       if (!online) return;
       if (broadcast && isFirebaseHost()) netSend({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings, name: localPlayerName() });

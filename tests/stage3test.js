@@ -463,8 +463,10 @@ function check(name, value) {
     return types.every(t => seatAllowsSrc[0].includes("'" + t + "'"));
   })());
   // 観戦者のpingで対戦相手の切断を見逃さないこと。
-  check('peer liveness is refreshed only by player-seat traffic',
-    htmlText.includes('if (FIREBASE_PLAYER_SEATS.includes(msg.seat)) noteFirebasePeerMessage();'));
+  // 2vs2では s1/s2 も対戦者なので、対戦者席の判定は対戦方式ごとに変わる(Issue #25)。
+  check('peer liveness is refreshed only by player-seat traffic, for whichever seats are players',
+    htmlText.includes('if (firebasePlayerSeats().includes(msg.seat)) noteFirebasePeerMessage();')
+    && htmlText.includes("function firebasePlayerSeats() { return firebaseLobbyIs2v2() ? FIREBASE_SEATS.slice() : FIREBASE_PLAYER_SEATS.slice(); }"));
   // 古いラウンドの正当なパケットで対戦を切らないこと(席判定より先に捨てる)。
   check('stale-round packets are dropped before the seat check',
     htmlText.indexOf('if (msg.roundId !== online.currentRoundId) return;') < htmlText.indexOf('if (!firebasePacketSeatAllowed(msg))'));
@@ -834,8 +836,11 @@ function check(name, value) {
     msg['.validate'].includes("'v','t','from','seat','roundId','sentAt'")
     && msg.v['.validate'] === 'newData.val() === 3'
     && seats.every(x => msg.seat['.validate'].includes("'" + x + "'")));
-  check('rules keep spectators read-only for game-affecting packets',
-    msg['.write'].includes("newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('t').val() === 'presence'"));
+  // 段Bで s1/s2 は観戦席ではなく対戦者席になった(Issue #25)。送信できる席を4つへ開くが、
+  // 「送れるのは席を実際に持っている本人だけ」という縛りは据え置き。
+  check('rules let all four seats speak, and only the seat holder can speak as that seat',
+    msg['.write'].includes("newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('seat').val() === 's1' || newData.child('seat').val() === 's2'")
+    && msg['.write'].includes("root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid"));
   check('rules reserve host-only packets for p1',
     msg['.write'].includes("newData.child('t').val() !== 'settings'") && msg['.write'].includes("newData.child('seat').val() === 'p1'"));
   check('rules retain actionId and payload limits for fire/state/result',
@@ -843,8 +848,16 @@ function check(name, value) {
     && msg['.validate'].includes("'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','useJump','actionId'])")
     && msg['.validate'].includes("'state' && newData.hasChildren(['snap','actionId','unitId'])")
     && msg['.validate'].includes("'result' && newData.hasChildren(['winner','reason','units','actionId','unitId'])"));
-  check('rules force unitId to match the sender seat',
-    msg.unitId['.validate'].includes("newData.val() === newData.parent().child('seat').val()"));
+  // 席と動かせるキャラを固定で結ぶ(p1→p1 / e1→e1 / s1→p2 / s2→e2)。
+  // チーム分けを「誰がどのキャラか」の設定にすると、この一行でなりすましを封じられなくなる。
+  check('rules bind each seat to exactly one unit, so nobody can move someone else',
+    msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 'p1' && newData.val() === 'p1'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 'e1' && newData.val() === 'e1'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's1' && newData.val() === 'p2'")
+    && msg.unitId['.validate'].includes("newData.parent().child('seat').val() === 's2' && newData.val() === 'e2'"));
+  check('the round roster can name all four seats',
+    ['p1', 'e1', 's1', 's2'].every(x => rules.round.players[x] && rules.round.players[x]['.validate'].includes('isString'))
+    && rules.round.players.$other['.validate'] === false);
   check('rules bound the client timestamp on every packet',
     msg['.validate'].includes('now - 120000') && msg.sentAt['.validate'].includes('now + 120000'));
   check('rules permit heartbeat and presence without actionId',
@@ -1141,6 +1154,64 @@ function check(name, value) {
   check('the host learns someone arrived through the existing presence path',
     htmlText.includes("if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);")
     && /refreshFirebaseRoster[\s\S]{0,400}syncQuickMatchListing\(\);/.test(htmlText));
+
+  // ===== Issue #25 段B: 観戦席を対戦者席へ転用する（土台） =====
+  h.setOnlineForLogTest(null);
+  check('seats map to fixed units, so a seat can never move someone else’s monster',
+    ['p1:p1', 'e1:e1', 's1:p2', 's2:e2'].every(pair => {
+      const [seat, unit] = pair.split(':');
+      return h.firebaseSeatUnitId(seat) === unit;
+    }));
+  check('the two spectator seats belong to opposite teams, so 2vs2 is 2 against 2',
+    h.firebaseSeatTeam('p1') === 'player' && h.firebaseSeatTeam('s1') === 'player'
+    && h.firebaseSeatTeam('e1') === 'cpu' && h.firebaseSeatTeam('s2') === 'cpu');
+  check('the client mapping matches the mapping the rules enforce',
+    ['p1', 'e1', 's1', 's2'].every(seat =>
+      msg.unitId['.validate'].includes(`newData.parent().child('seat').val() === '${seat}' && newData.val() === '${h.firebaseSeatUnitId(seat)}'`)));
+
+  function lobbyWith(format, seat = 'p1') {
+    return {
+      kind: 'firebase', role: seat === 'p1' ? 'host' : 'guest', phase: 'lobby', seat,
+      room: 'A2BC3DEF', auth: { uid: 'uid-' + seat },
+      settings: h.normalizeLobbySettings({ terrain: 'random', wind: 'random', turnsPerPlayer: 15, format, revision: 1 }),
+      slots: {}, participantRole: ['p1', 'e1'].includes(seat) ? 'player' : 'spectator',
+      lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: 0 }, seatSeen: {}, seatStale: {}, log: []
+    };
+  }
+  h.setOnlineForLogTest(lobbyWith('1v1'));
+  check('a 1vs1 lobby still has exactly two player seats',
+    h.firebasePlayerSeats().join() === 'p1,e1' && !h.firebaseLobbyIs2v2());
+  check('the 1vs1 seat labels are unchanged',
+    [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s1')].join('/')
+      === 'P1 ホスト/P2 対戦者/S1 観戦');
+  h.setOnlineForLogTest(lobbyWith('2v2'));
+  check('a 2vs2 lobby turns every seat into a player seat',
+    h.firebasePlayerSeats().join() === 'p1,e1,s1,s2' && h.firebaseLobbyIs2v2());
+  check('the 2vs2 seat labels say which team each seat is on',
+    [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('s1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s2')].join('/')
+      === 'P1 ホスト/P2 味方/E1 敵チーム/E2 敵チーム');
+  // 対戦方式はホストから後から届く。届いた時点で s1 の人は観戦者から対戦者へ変わる。
+  const late = lobbyWith('1v1', 's1');
+  h.setOnlineForLogTest(late);
+  h.syncFirebaseParticipantRole();
+  check('sitting in s1 of a 1vs1 room is still spectating', late.participantRole === 'spectator');
+  late.settings = h.normalizeLobbySettings({ ...late.settings, format: '2v2' });
+  h.syncFirebaseParticipantRole();
+  check('the same seat becomes a player once the host says the room is 2vs2',
+    late.participantRole === 'player');
+  check('and that player is put in charge of p2, not of the seat name',
+    h.localUnitId() === 'p2');
+  h.setOnlineForLogTest(null);
+  check('the lobby settings carry the match format, defaulting to 1vs1 for older peers',
+    h.normalizeLobbySettings({}).format === '1v1'
+    && h.normalizeLobbySettings({ format: '2v2' }).format === '2v2'
+    && h.normalizeLobbySettings({ format: 'nonsense' }).format === '1v1');
+  check('rules accept the format field in settings and nothing else new',
+    rules.settings.format['.validate'] === "newData.val() === '1v1' || newData.val() === '2v2'"
+    && rules.settings.$other['.validate'] === false);
+  check('only the host can still change the settings, format included',
+    rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
+    && rules.settings['.write'].includes("child('status').val() === 'lobby'"));
 
   console.log(`\n${pass}/${pass + fail} passed`);
   process.exitCode = fail ? 1 : 0;

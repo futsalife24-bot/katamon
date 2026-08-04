@@ -33,6 +33,7 @@
           "terrain": { ".validate": "newData.val() === 'random' || newData.val() === 'plateauLeft' || newData.val() === 'plateauRight' || newData.val() === 'mountainCenter' || newData.val() === 'valley' || newData.val() === 'rolling' || newData.val() === 'bridge' || newData.val() === 'tieredBasin'" },
           "wind": { ".validate": "newData.val() === 'random' || newData.val() === 'left' || newData.val() === 'calm' || newData.val() === 'right'" },
           "turnsPerPlayer": { ".validate": "newData.val() === 10 || newData.val() === 15 || newData.val() === 20" },
+          "format": { ".validate": "newData.val() === '1v1' || newData.val() === '2v2'" },
           "revision": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100000" },
           "$other": { ".validate": false }
         },
@@ -58,6 +59,8 @@
             ".validate": "newData.hasChildren(['p1'])",
             "p1": { ".validate": "newData.isString() || !newData.exists()" },
             "e1": { ".validate": "newData.isString() || !newData.exists()" },
+            "s1": { ".validate": "newData.isString() || !newData.exists()" },
+            "s2": { ".validate": "newData.isString() || !newData.exists()" },
             "$other": { ".validate": false }
           },
           "$other": { ".validate": false }
@@ -75,7 +78,7 @@
 
             "messages": {
               "$message": {
-                ".write": "auth != null && !data.exists() && newData.exists() && root.child('rooms').child($room).child('expiresAt').val() > now && (root.child('rooms').child($room).child('round').child('id').val() === $roundId || (newData.child('t').val() === 'lobbyState' && newData.child('seat').val() === 'p1')) && newData.child('from').val() === auth.uid && root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid && (newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('t').val() === 'presence' || newData.child('t').val() === 'ping' || newData.child('t').val() === 'bye') && (newData.child('t').val() !== 'settings' && newData.child('t').val() !== 'lobbyState' && newData.child('t').val() !== 'start' || newData.child('seat').val() === 'p1')",
+                ".write": "auth != null && !data.exists() && newData.exists() && root.child('rooms').child($room).child('expiresAt').val() > now && (root.child('rooms').child($room).child('round').child('id').val() === $roundId || (newData.child('t').val() === 'lobbyState' && newData.child('seat').val() === 'p1')) && newData.child('from').val() === auth.uid && root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid && (newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('seat').val() === 's1' || newData.child('seat').val() === 's2') && (newData.child('t').val() !== 'settings' && newData.child('t').val() !== 'lobbyState' && newData.child('t').val() !== 'start' || newData.child('seat').val() === 'p1')",
                 ".validate": "newData.hasChildren(['v','t','from','seat','roundId','sentAt']) && newData.child('v').val() === 3 && newData.child('from').isString() && newData.child('roundId').val() === $roundId && newData.child('sentAt').isNumber() && newData.child('sentAt').val() >= now - 120000 && newData.child('sentAt').val() <= now + 120000 && ((newData.child('t').val() === 'ready' || newData.child('t').val() === 'bye' || newData.child('t').val() === 'ping' || newData.child('t').val() === 'presence') || (newData.child('t').val() === 'lobbyState' && newData.hasChildren(['status'])) || (newData.child('t').val() === 'settings' && newData.hasChildren(['settings'])) || (newData.child('t').val() === 'rematchVote' && newData.hasChildren(['vote'])) || (newData.child('t').val() === 'start' && newData.hasChildren(['snap'])) || (newData.child('t').val() === 'state' && newData.hasChildren(['snap','actionId','unitId'])) || (newData.child('t').val() === 'commit' && newData.hasChildren(['hash'])) || (newData.child('t').val() === 'reveal' && newData.hasChildren(['character','nonce'])) || (newData.child('t').val() === 'fire' && newData.hasChildren(['unitId','x','y','anchor','vx0','vy0','useSpecial','useJump','actionId'])) || (newData.child('t').val() === 'move' && newData.hasChildren(['unitId','x','fuel'])) || (newData.child('t').val() === 'boom' && newData.hasChildren(['unitId'])) || (newData.child('t').val() === 'result' && newData.hasChildren(['winner','reason','units','actionId','unitId'])))",
                 "v": { ".validate": "newData.val() === 3" },
                 "t": { ".validate": "newData.val() === 'lobbyState' || newData.val() === 'settings' || newData.val() === 'start' || newData.val() === 'ready' || newData.val() === 'move' || newData.val() === 'fire' || newData.val() === 'boom' || newData.val() === 'state' || newData.val() === 'result' || newData.val() === 'bye' || newData.val() === 'commit' || newData.val() === 'reveal' || newData.val() === 'rematchVote' || newData.val() === 'presence' || newData.val() === 'ping'" },
@@ -95,7 +98,7 @@
                 "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko' || newData.val() === 'shinigami'" },
                 "nonce": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
                 "snap": { ".validate": "newData.hasChildren(['units','turnOrder','activeIndex','turnCount','wind'])" },
-                "unitId": { ".validate": "(newData.val() === 'p1' || newData.val() === 'e1') && newData.val() === newData.parent().child('seat').val()" },
+                "unitId": { ".validate": "(newData.parent().child('seat').val() === 'p1' && newData.val() === 'p1') || (newData.parent().child('seat').val() === 'e1' && newData.val() === 'e1') || (newData.parent().child('seat').val() === 's1' && newData.val() === 'p2') || (newData.parent().child('seat').val() === 's2' && newData.val() === 'e2')" },
                 "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
                 "y": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 1960" },
                 "anchor": { ".validate": "newData.hasChildren(['x','y'])" },

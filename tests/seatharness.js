@@ -193,7 +193,15 @@ const HOOK = `
       openMatchFormats: () => OPEN_MATCH_FORMATS.slice(),
       openMaxCandidates: () => OPEN_INDEX_MAX_CANDIDATES,
       syncQuickMatchListing: () => syncQuickMatchListing(),
-      legacyQuickRoom: () => LEGACY_QUICK_MATCH_ROOM
+      legacyQuickRoom: () => LEGACY_QUICK_MATCH_ROOM,
+      // ---- 4人の席(Issue #25) ----
+      firebaseSeatUnitId: (seat) => firebaseSeatUnitId(seat),
+      firebaseSeatTeam: (seat) => FIREBASE_SEAT_TEAM[seat] || null,
+      firebasePlayerSeats: () => firebasePlayerSeats(),
+      firebaseSeatLabel: (seat) => firebaseSeatLabel(seat),
+      firebaseLobbyIs2v2: () => firebaseLobbyIs2v2(),
+      syncFirebaseParticipantRole: () => syncFirebaseParticipantRole(),
+      localUnitId: () => localUnitId
     }),
     setPhase: (p) => { gamePhase = p; },
     // おまけ曲(タイトルの「おまけ」ボタン)
