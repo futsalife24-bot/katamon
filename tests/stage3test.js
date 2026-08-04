@@ -986,9 +986,16 @@ function check(name, value) {
     && seatRule.includes("newData.child('claimedAt').val() === data.child('claimedAt').val()"));
   check('rules let p1 release a seat only when its heartbeat has gone stale',
     seatRule.includes("child('slots').child('p1').child('uid').val() === auth.uid && data.child('seenAt').isNumber() && data.child('seenAt').val() < now - 90000"));
-  check('rules keep the host release gated to the lobby, so nobody is evicted mid-match',
-    // 空ける分岐は必ず status==='lobby' と同じ括弧の中に居る。
-    /\(root\.child\('rooms'\)\.child\(\$room\)\.child\('round'\)\.child\('status'\)\.val\(\) === 'lobby' && data\.exists\(\) && !newData\.exists\(\) && root\.child\('rooms'\)\.child\(\$room\)\.child\('slots'\)\.child\('p1'\)/.test(seatRule));
+  // v121(段D)でここを広げた。従来は status==='lobby' の時しか席を空けられず、
+  // 試合中に落ちた人の席は誰にも空けられなかったため、CPUへ引き継ぐ道が無かった。
+  // 広げたのは「いつ空けられるか」だけで、「誰が・どれだけ古い席を」は一切緩めていない。
+  check('rules let the host release a stale seat during a match too, so a CPU can take it over',
+    /\(\(root\.child\('rooms'\)\.child\(\$room\)\.child\('round'\)\.child\('status'\)\.val\(\) === 'lobby' \|\| root\.child\('rooms'\)\.child\(\$room\)\.child\('round'\)\.child\('status'\)\.val\(\) === 'playing'\) && data\.exists\(\) && !newData\.exists\(\) && root\.child\('rooms'\)\.child\(\$room\)\.child\('slots'\)\.child\('p1'\)/.test(seatRule));
+  check('the widened release is still host-only and still needs a 90-second-old heartbeat',
+    /=== 'playing'\) && data\.exists\(\) && !newData\.exists\(\) && root\.child\('rooms'\)\.child\(\$room\)\.child\('slots'\)\.child\('p1'\)\.child\('uid'\)\.val\(\) === auth\.uid && data\.child\('seenAt'\)\.isNumber\(\) && data\.child\('seenAt'\)\.val\(\) < now - 90000/.test(seatRule));
+  // 準備・キャラ確認の最中は席を動かさない。ここまで広げると開始データと名簿が食い違う。
+  check('a seat can still never be released while characters are being revealed',
+    !seatRule.includes("=== 'revealing'"));
   check('rules still let a seat holder release their own seat, and nobody else do it blindly',
     seatRule.includes("data.exists() && !newData.exists() && data.child('uid').val() === auth.uid")
     // uid一致でも生存印が新しくてもない「無条件の削除」は一つも無い
@@ -1471,6 +1478,156 @@ function check(name, value) {
   check('a CPU turn no longer flushes the local unit’s position as if it had moved',
     htmlText.includes('} else if (moveSyncPending && isLocalTurn()) {')
     && htmlText.includes('if (moveSyncPending && netControlsUnit(cpuActor)) {'));
+
+  // ===== 段D: 切断・CPU引き継ぎ(Issue #8 / v121) =====
+  // 試合中に落ちた席をCPUが引き継ぎ、残った人が最後まで遊べるようにする。
+  // 席を空けてしまえば、あとは段Cの「空席はホストがCPUで動かして結果を配る」がそのまま働く。
+  // 新しい通信の種類もスナップショットの追加項目も無い、というのがこの版の要。
+  const SUSPECT = h.matchSeatSuspectMs();
+  function matchLobby(format, seat, occupied, silent = {}) {
+    const o = seatedLobby(format, seat, occupied);
+    o.phase = 'playing';
+    o.participantRole = 'player';
+    o.matchSeatSilentMs = { ...silent };
+    o.matchSeatCheckedAt = 0;
+    o.matchSeatVerifyWaitMs = 0;
+    o.matchSeatChecking = false;
+    // 相手の無音がすでに打ち切りの線を越えている状態から始める。
+    // 実時間を待たずに「まさに切ろうとしている瞬間」を作るため。
+    o.peerLiveness = { peerVisibleMs: h.peerVisibleTimeoutMs(), pingVisibleMs: 0, checkedAt: 0 };
+    o.pendingRemoteTerminals = new Map();
+    o.completedRemoteActions = new Map();
+    o.remoteAction = null;
+    return o;
+  }
+  h.setMatchFormat('2v2');
+
+  // ---- 誰の席を見張るか ----
+  h.setOnlineForLogTest(matchLobby('2v2', 'p1', ['p1', 'e1', 's1']));
+  check('the host watches every seated player except itself, and never an empty seat',
+    h.firebaseMatchTakeoverSeats().join() === 'e1,s1');
+  h.setOnlineForLogTest(matchLobby('2v2', 's1', ['p1', 'e1', 's1']));
+  check('a guest watches the other guests but not its own seat',
+    h.firebaseMatchTakeoverSeats().join() === 'e1');
+  // ホスト席は生存印(seenAt)を持たない。90秒の確認ができないので引き継ぎの対象にできない。
+  // ここを緩めると「確認できていない席を空ける」ことになるので、必ず除外し続けること。
+  check('the host seat itself is never a takeover candidate, because it has no seenAt to verify',
+    !h.firebaseMatchTakeoverSeats().includes('p1'));
+  h.setOnlineForLogTest(matchLobby('1v1', 'p1', ['p1', 'e1']));
+  check('1vs1 never hands a seat to a CPU: losing the only opponent ends the match as before',
+    h.firebaseMatchTakeoverSeats().length === 0);
+  const stillLobby = matchLobby('2v2', 'p1', ['p1', 'e1']);
+  stillLobby.phase = 'lobby';
+  h.setOnlineForLogTest(stillLobby);
+  check('the lobby keeps its own manual release and never uses the match takeover',
+    h.firebaseMatchTakeoverSeats().length === 0);
+
+  // ---- 疑いの立て方 ----
+  h.setOnlineForLogTest(matchLobby('2v2', 'p1', ['p1', 'e1', 's1'], { e1: SUSPECT - 1, s1: SUSPECT }));
+  check('a seat one millisecond short of the silence threshold is not suspected yet',
+    !h.firebaseMatchSeatSuspect('e1') && h.firebaseMatchSeatSuspect('s1'));
+  check('one suspected seat is enough to say a takeover is being worked out',
+    h.firebaseSeatTakeoverPending());
+  h.noteFirebaseMatchSeatMessage('s1');
+  check('a single packet from the seat cancels the suspicion immediately',
+    !h.firebaseMatchSeatSuspect('s1') && !h.firebaseSeatTakeoverPending());
+  // 45秒の警告が90秒の確認より先に来るのと同じ関係。疑いは必ず確認より早く立つ。
+  check('the silence threshold is well inside the server window, so a takeover is always verified first',
+    h.matchSeatSuspectMs() < h.seatStaleReleaseMs());
+
+  // ---- 巻き添えで試合を切らない(この版の本題) ----
+  // 従来は誰か1人が35秒無音になると、残った人まで含めて試合ごと打ち切っていた。
+  const doomed = matchLobby('2v2', 'p1', ['p1', 'e1', 's1']);
+  h.setOnlineForLogTest(doomed);
+  h.updateFirebasePeerLiveness();
+  check('with nobody suspected, a silent room still ends the match exactly as before',
+    doomed.protocolError === '相手との通信が途切れました。' && doomed.phase === 'ended');
+  const saved = matchLobby('2v2', 'p1', ['p1', 'e1', 's1'], { e1: SUSPECT });
+  h.setOnlineForLogTest(saved);
+  h.updateFirebasePeerLiveness();
+  check('while a seat is being handed to a CPU, the other three players are not cut off with it',
+    !saved.protocolError && saved.phase === 'playing');
+  // 行動通知待ちの15秒も同じ扱いにする。片方だけ残すと、待っている間に別の理由で切れる。
+  check('the action-notice timeout also waits for a takeover instead of ending the match',
+    h.firebaseMatchSeatAwaitingTakeover('e1', 15000) && !h.firebaseMatchSeatAwaitingTakeover('p1', 15000));
+  check('a seat that has only just gone quiet does not excuse a missing action notice',
+    !h.firebaseMatchSeatAwaitingTakeover('s1', 15000));
+
+  // ---- 引き継いだ後 ----
+  // 席が消えた後の姿は段Cの空席とまったく同じ。だからこそ新しい仕組みが要らない。
+  const afterHost = matchLobby('2v2', 'p1', ['p1', 'e1', 's1']);
+  delete afterHost.slots.e1;
+  h.setOnlineForLogTest(afterHost);
+  h.setOnlineSeat('p1');
+  check('once the seat is gone the host drives that character as a CPU, like any empty seat',
+    app.controls() === 'p1:local,e1:cpu,p2:remote,e2:cpu' && h.netControlsUnit('e1'));
+  check('the rules already let the host act for a freed seat: no rule change is needed for this part',
+    h.firebaseHostActsForEmptySeat('p1', 'e1'));
+  const afterGuest = matchLobby('2v2', 's1', ['p1', 'e1', 's1']);
+  delete afterGuest.slots.e1;
+  h.setOnlineForLogTest(afterGuest);
+  h.setOnlineSeat('s1');
+  check('the other devices call the taken-over character a CPU and keep waiting for the host',
+    h.unitSeatIsCpu('e1') && h.turnOwnerLabel('e1') === 'CPUのターン'
+    && h.unitControl('e1') === 'remote' && !h.netControlsUnit('e1'));
+
+  // ---- 手番の途中で引き継いだ場合 ----
+  // 行動計画は startTurn でしか作られない。引き継ぎは手番の途中で起きるので、
+  // 立て直さないとその手番だけ誰も動かず、試合がそこで止まってしまう。
+  const midTurn = matchLobby('2v2', 'p1', ['p1', 'e1', 's1']);
+  delete midTurn.slots.e1;
+  midTurn.remoteAction = { unitId: 'e1', actionId: 'b'.repeat(48), from: 'peer-e1', resolved: false };
+  h.setOnlineForLogTest(midTurn);
+  h.setOnlineSeat('p1');
+  h.clearCpuPlan();
+  h.setActiveUnitForTest('e1');
+  h.applyFirebaseSeatTakeover('e1');
+  check('taking over mid-turn re-plans the CPU turn, so the match does not stall there',
+    ['move', 'aim'].includes(h.cpuPlan().phase) && h.cpuPlan().think > 0);
+  check('the dropped player’s unfinished action is dropped, or the next shot is refused as out of order',
+    midTurn.remoteAction === null);
+  check('everyone is told what happened instead of the turn silently changing hands',
+    app.hasCutIn());
+
+  // ---- 引き継げない時はきちんと諦める ----
+  // FirebaseのRulesがまだ古い(Consoleへ反映する前)と、席の削除は必ず断られる。
+  // 諦めないと打ち切りを抑えたまま待ち続け、残った人が試合から出られなくなる。
+  const refused = matchLobby('2v2', 'p1', ['p1', 'e1', 's1'], { e1: SUSPECT });
+  refused.matchSeatTakeoverFails = { e1: 3 };
+  h.setOnlineForLogTest(refused);
+  check('a seat that keeps refusing to be freed is given up on, not waited for forever',
+    !h.firebaseMatchTakeoverSeats().includes('e1') && !h.firebaseSeatTakeoverPending());
+  h.updateFirebasePeerLiveness();
+  check('after giving up, the match ends the old way instead of hanging',
+    refused.protocolError === '相手との通信が途切れました。');
+  const recovered = matchLobby('2v2', 'p1', ['p1', 'e1', 's1'], { e1: SUSPECT });
+  recovered.matchSeatTakeoverFails = { e1: 3 };
+  h.setOnlineForLogTest(recovered);
+  h.noteFirebaseMatchSeatMessage('e1');
+  check('a seat that starts answering again is no longer written off for the rest of the match',
+    h.firebaseMatchTakeoverSeats().includes('e1'));
+
+  // ---- 引き継ぎを決めるのは常にサーバー時刻 ----
+  check('the takeover reuses the same 90-second seenAt check as the lobby release',
+    /async function verifyFirebaseMatchSeats\(\)[\s\S]{0,1400}firebaseSeatHeartbeatAllowsRelease\(serverNow, Number\(slot\.seenAt\)\)/.test(htmlText));
+  check('the takeover only ever runs on the host',
+    /async function verifyFirebaseMatchSeats\(\)\s*\{\s*if \(!isFirebaseHost\(\)/.test(htmlText));
+  check('a room that cannot be read leaves everyone seated: no takeover on stale information',
+    /async function verifyFirebaseMatchSeats\([\s\S]{0,1600}\} catch \(_\) \{[\s\S]{0,200}\}/.test(htmlText));
+  check('a refused delete means the player is alive, so the silence count starts over',
+    /async function takeOverFirebaseSeatWithCpu\([\s\S]{0,700}acting\.matchSeatSilentMs\[seat\] = 0;/.test(htmlText));
+  check('the new roster is handed to everyone before the CPU picks up the seat',
+    /async function takeOverFirebaseSeatWithCpu\([\s\S]{0,1200}refreshFirebaseRoster\(true\);[\s\S]{0,120}applyFirebaseSeatTakeover\(seat\);/.test(htmlText));
+  check('a rematch starts from silence zero, so the last match cannot trigger a takeover',
+    /online\.matchSeatSilentMs = \{\};\s*online\.matchSeatCheckedAt/.test(htmlText));
+  // 画面ロック中の人を無音とみなさない。ロビー・対戦の既存2系統と同じ扱いに揃える。
+  check('time spent with the tab hidden is not counted as silence',
+    /function updateFirebaseMatchSeatTakeover\(\)[\s\S]{0,1200}if \(!hidden\) online\.matchSeatSilentMs\[seat\] \+= elapsed;/.test(htmlText));
+  check('the players can see that a disconnect is being checked instead of a frozen screen',
+    htmlText.includes('の切断を確認中…'));
+
+  h.setOnlineForLogTest(null);
+  h.setMatchFormat('1v1');
 
   // ---- 部屋の見た目(実機で「どれを押すのか毎回探す」と指摘) ----
   // ここは見た目なので最終判断は実機。テストは「一度直した区別が黙って消えないこと」を守る。
