@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v119';
+  const BUILD_ID = 'v120';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4333,6 +4333,8 @@
     if (!online || online.kind !== 'firebase' || !online.lobbyLiveness || !online.seatSeen) return;
     if (!FIREBASE_SEATS.includes(seat)) return;
     online.seatSeen[seat] = online.lobbyLiveness.clockMs;
+    // 通信が戻った席は、直前のサーバー確認結果をその場で破棄する。
+    if (online.seatReleaseReady) delete online.seatReleaseReady[seat];
   }
   // 自席は判定しない(自分が生きているのは自明)。空席も判定しない。
   function firebaseSeatIsStale(seat) {
@@ -4359,7 +4361,18 @@
     let changed = false;
     for (const seat of FIREBASE_SEATS) {
       const stale = firebaseSeatIsStale(seat);
-      if (!!online.seatStale[seat] !== stale) { online.seatStale[seat] = stale; changed = true; }
+      if (!!online.seatStale[seat] !== stale) {
+        online.seatStale[seat] = stale;
+        if (!stale && online.seatReleaseReady) delete online.seatReleaseReady[seat];
+        changed = true;
+      }
+    }
+    // 画面上の無応答(45秒)は早めの警告。席を実際に空けられるかはRulesと同じ
+    // seenAt(90秒)を読み直して確認する。5秒おきなら書き込みを増やさず、待ち時間も短い。
+    if (isFirebaseHost() && FIREBASE_SEATS.some(seat => online.seatStale[seat])
+        && result.clockMs >= (online.seatReleaseNextCheckMs || 0)) {
+      online.seatReleaseNextCheckMs = result.clockMs + FIREBASE_SEAT_RELEASE_VERIFY_INTERVAL_MS;
+      verifyStaleFirebaseSeats();
     }
     // 状態表示も合わせて直す。入室時の「接続しました。相手を待っています…」が残ると
     // 席ボードの「応答なし」と食い違い、どちらが本当なのか分からなくなる。
@@ -5350,6 +5363,11 @@
   // ルール側で「これだけ古い生存印なら空けてよい」とする幅。書き込み間隔の4倍以上を取り、
   // 裏に回ったタブの間引き(Chromeは最長1分程度)で生きている席が空けられないようにする。
   const FIREBASE_SEAT_STALE_RELEASE_MS = 90000;
+  const FIREBASE_SEAT_RELEASE_VERIFY_INTERVAL_MS = 5000;
+  function firebaseSeatHeartbeatAllowsRelease(serverNow, seenAt) {
+    return Number.isFinite(serverNow) && Number.isFinite(seenAt)
+      && seenAt < serverNow - FIREBASE_SEAT_STALE_RELEASE_MS;
+  }
   function firebaseSeatHeartbeatTarget() {
     if (!online || online.kind !== 'firebase' || !online.seat || online.seat === 'p1') return null;
     return online.seat;
@@ -5432,7 +5450,38 @@
     if (!isFirebaseHost() || online.phase !== 'lobby') return false;
     if (seat === 'p1' || !FIREBASE_SEATS.includes(seat)) return false;
     if (!(online.slots && online.slots[seat] && online.slots[seat].uid)) return false;
-    return firebaseSeatIsStale(seat);
+    return firebaseSeatIsStale(seat) && !!(online.seatReleaseReady && online.seatReleaseReady[seat]);
+  }
+  async function verifyStaleFirebaseSeats() {
+    if (!isFirebaseHost() || online.phase !== 'lobby' || online.seatReleaseChecking) return;
+    const checking = online;
+    checking.seatReleaseChecking = true;
+    try {
+      // メッセージ用SSEはslotsを購読していない。押せる表示を出す直前だけ部屋を読み直し、
+      // Rulesが見るものと同じサーバー時刻のseenAtで判定する。
+      const room = await firebaseRequest(`rooms/${checking.room}`, checking.auth);
+      if (online !== checking || !room || checking.phase !== 'lobby') return;
+      checking.slots = room.slots || {};
+      const serverNow = firebaseServerNow(checking.auth);
+      const next = {};
+      for (const candidate of FIREBASE_SEATS) {
+        const slot = checking.slots[candidate];
+        if (checking.seatStale[candidate] && slot && slot.uid
+            && firebaseSeatHeartbeatAllowsRelease(serverNow, Number(slot.seenAt))) next[candidate] = true;
+      }
+      const changed = FIREBASE_SEATS.some(candidate => !!checking.seatReleaseReady[candidate] !== !!next[candidate]);
+      checking.seatReleaseReady = next;
+      if (changed) renderFirebaseLobby();
+    } catch (_) {
+      // 読み直せない時は押せる表示を出さない。古い情報で削除を試すより安全側へ倒す。
+      if (online === checking) {
+        const hadReleaseButton = FIREBASE_SEATS.some(candidate => checking.seatReleaseReady[candidate]);
+        checking.seatReleaseReady = {};
+        if (hadReleaseButton) renderFirebaseLobby();
+      }
+    } finally {
+      if (online === checking) checking.seatReleaseChecking = false;
+    }
   }
   async function releaseStaleFirebaseSeat(seat) {
     if (!canReleaseFirebaseSeat(seat)) return;
@@ -5449,6 +5498,7 @@
     logOnlineEvent({ type: 'seatReleased', seat });
     if (online.seatSeen) delete online.seatSeen[seat];
     if (online.seatStale) delete online.seatStale[seat];
+    if (online.seatReleaseReady) delete online.seatReleaseReady[seat];
     // 空けた結果を全員へ配る。空けられた本人がまだ生きていれば、これで気づいて退出する。
     await refreshFirebaseRoster(true);
     if (online === acting) onlineLobbyStatus(`${firebaseSeatLabel(seat)}を空けました。`);
@@ -5503,7 +5553,7 @@
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
-      seatSeen: {}, seatStale: {},
+      seatSeen: {}, seatStale: {}, seatReleaseReady: {}, seatReleaseNextCheckMs: 0, seatReleaseChecking: false,
       seatReady: {}, // 席ごとの準備完了。2vs2は4人ぶん要る
       // 伏せ合いも席ごとに持つ。1vs1の peer* はこの表の「相手の席」ぶんを写したもので、
       // 既存の経路を変えずに済ませるために残してある。
@@ -5791,7 +5841,9 @@
     if (stale) {
       const state = document.createElement('span');
       state.className = 'seatState stale';
-      state.textContent = '応答なし';
+      // 45秒で無応答を知らせ、Rulesと同じ90秒のseenAt確認が済むまでは
+      // 押せないボタンを見せず「確認中」とする。実機で起きた表示と削除可否の矛盾を防ぐ。
+      state.textContent = isFirebaseHost() && !canReleaseFirebaseSeat(seat) ? '切断確認中…' : '応答なし';
       row.appendChild(state);
       if (canReleaseFirebaseSeat(seat)) {
         const release = document.createElement('button');
@@ -5864,6 +5916,7 @@
     if (!online || online.kind !== 'firebase') return;
     logSeatAssignment('roundReset');
     online.phase = 'lobby'; online.selfReady = false; online.peerReady = false; online.seatReady = {};
+    online.seatReleaseReady = {}; online.seatReleaseNextCheckMs = 0; online.seatReleaseChecking = false;
     online.selfCharacter = selectedOnlineCharacter();
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false; online.peerCommitAt = null;

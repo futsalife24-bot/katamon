@@ -995,30 +995,40 @@ function check(name, value) {
     && !/!newData\.exists\(\)\)(?!.*seenAt)/.test(seatRule.split('||').filter(x => x.includes('!newData.exists()') && !x.includes("data.child('uid').val() === auth.uid") && !x.includes('seenAt')).join('')));
   check('the release window in the rules is far wider than the heartbeat interval',
     h.seatStaleReleaseMs() >= h.seatHeartbeatMs() * 4 && seatRule.includes(String(h.seatStaleReleaseMs())));
-  check('the client only offers the button after its own no-response display has fired',
+  check('the no-response warning fires before the server allows a release',
     h.lobbySeatStaleVisibleMs() < h.seatStaleReleaseMs());
+  // 実機では45秒の画面側判定だけでボタンが出た一方、RulesはseenAtが90秒古くなるまで
+  // 削除を許さず、「応答なし」なのに押すと「まだ応答あり」になった。
+  check('the release button waits for a fresh server-side seenAt check',
+    htmlText.includes('seatReleaseReady: {}')
+    && /function canReleaseFirebaseSeat\(seat\)[\s\S]{0,420}online\.seatReleaseReady\[seat\]/.test(htmlText));
   check('the seat claim carries a heartbeat from the very first write',
     htmlText.includes("claimedAt: firebaseServerNow(auth), seenAt: { '.sv': 'timestamp' }"));
   check('the heartbeat writes a server timestamp, not a client clock',
     /slots\/\$\{seat\}\/seenAt`[\s\S]{0,220}'\.sv': 'timestamp'/.test(htmlText));
+  check('the client uses the same strict 90-second seenAt boundary as the rules',
+    !h.firebaseSeatHeartbeatAllowsRelease(200000, 200000 - h.seatStaleReleaseMs())
+    && h.firebaseSeatHeartbeatAllowsRelease(200001, 200000 - h.seatStaleReleaseMs()));
 
   // ---- クライアント側: 誰の席をいつ空けられるか ----
-  function fakeLobby({ role = 'host', phase = 'lobby', seat = 'p1', clockMs = 200000, seen = {} } = {}) {
+  function fakeLobby({ role = 'host', phase = 'lobby', seat = 'p1', clockMs = 200000, seen = {}, releaseReady = {} } = {}) {
     return {
       kind: 'firebase', role, phase, seat, room: 'A2BC3DEF', auth: { uid: 'uid-p1' },
       slots: { p1: { uid: 'uid-p1' }, e1: { uid: 'uid-e1' }, s1: null, s2: { uid: 'uid-s2' } },
       lobbyLiveness: { clockMs, pingVisibleMs: 0, checkedAt: 0 },
-      seatSeen: seen, seatStale: {}, log: []
+      seatSeen: seen, seatStale: {}, seatReleaseReady: releaseReady, log: []
     };
   }
   const STALE = 200000 - h.lobbySeatStaleVisibleMs() - 1000; // 十分に古い
   const FRESH = 200000 - 1000;                               // ついさっき見えた
 
-  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH } }));
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH }, releaseReady: { e1: true } }));
   check('the host can release a seat that stopped responding', h.canReleaseFirebaseSeat('e1'));
   check('the host cannot release a seat that is still responding', !h.canReleaseFirebaseSeat('s2'));
   check('the host cannot release an empty seat', !h.canReleaseFirebaseSeat('s1'));
   check('nobody can release the host seat itself', !h.canReleaseFirebaseSeat('p1'));
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE } }));
+  check('a no-response warning alone never exposes a button before the server check', !h.canReleaseFirebaseSeat('e1'));
 
   h.setOnlineForLogTest(fakeLobby({ role: 'guest', seat: 'e1', seen: { s2: STALE } }));
   check('a guest is never offered the release button', !h.canReleaseFirebaseSeat('s2'));
@@ -1057,13 +1067,18 @@ function check(name, value) {
   check('spectator seats heartbeat too, so a ghost spectator can also be cleared',
     h.firebaseSeatHeartbeatTarget() === 's2');
   // ---- 席ボードに実際にボタンが出るか ----
-  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH } }));
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE, s2: FRESH }, releaseReady: { e1: true } }));
   const hostRows = h.renderLobbySeats();
   const rowText = hostRows.map(r => r.parts.join('|')).join('\n');
   check('the no-response seat shows a release button to the host',
     /seatReleaseBtn:この席を空ける/.test(rowText), rowText);
   check('exactly one release button is drawn: only the seat that stopped responding',
     (rowText.match(/seatReleaseBtn/g) || []).length === 1, rowText);
+  h.setOnlineForLogTest(fakeLobby({ seen: { e1: STALE } }));
+  const checkingRows = h.renderLobbySeats();
+  check('the host sees a checking label instead of a button while seenAt is still fresh',
+    checkingRows.some(r => r.parts.join('|').includes('切断確認中…'))
+    && !checkingRows.some(r => r.parts.join('|').includes('seatReleaseBtn')));
   h.setOnlineForLogTest(fakeLobby({ role: 'guest', seat: 'e1', seen: { s2: STALE } }));
   const guestRows = h.renderLobbySeats();
   check('a guest sees the no-response mark but never a release button',
