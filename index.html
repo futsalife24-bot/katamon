@@ -402,7 +402,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v104';
+  const BUILD_ID = 'v105';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5464,6 +5464,10 @@
     online.selfRevealed = true;
     netSend({ t: 'reveal', character: online.selfCharacter, nonce: online.selfNonce });
     onlineLobbyStatus('相手のモンスターを検証しています…');
+    // ほかに人が座っていなければ、検証する相手の公開が届かない。開始の合図は
+    // verifyPeerReveal からしか出ていなかったため、1人＋CPU3体の2vs2が始まらなかった。
+    // ここでも試す。相手が居る場合は公開がそろうまで maybeStartFirebaseMatch 側が待つ。
+    maybeStartFirebaseMatch();
   }
   async function verifyPeerReveal(msg) {
     if (!online || online.kind !== 'firebase') return;
@@ -5654,8 +5658,9 @@
       state.className = 'seatState ' + (ready ? 'ready' : 'picking');
       state.textContent = ready ? '準備完了 ✓' : '選択中…';
       row.appendChild(state);
-    } else if (isPlayerSeat && !occupied && online.phase === 'lobby') {
+    } else if (isPlayerSeat && !occupied && firebaseLobbyIs2v2() && online.phase === 'lobby') {
       // 空いたままの対戦者席はCPUが埋める(決定3)。待たされていると思わせないよう明示する。
+      // 1vs1では空席をCPUが埋めないので出さない(相手が来ないと開始できない)。
       const state = document.createElement('span');
       state.className = 'seatState cpu';
       state.textContent = 'CPUが担当';
@@ -9705,7 +9710,8 @@
   if (onlineLeaveBtn) onlineLeaveBtn.addEventListener('click', () => { if (!onlineLobbyBusy) beginLeaveFirebaseLobbyConfirm(); });
   if (onlineLeaveConfirmYesButton) onlineLeaveConfirmYesButton.addEventListener('click', () => { if (!onlineLobbyBusy) leaveFirebaseLobby(); });
   if (onlineLeaveConfirmNoButton) onlineLeaveConfirmNoButton.addEventListener('click', () => { cancelLeaveFirebaseLobbyConfirm(); });
-  [onlineTerrainEl, onlineWindEl, onlineTurnsEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
+  // 対戦方式もここに含めること。外すと選んでも送られず、次の描画で元へ戻るだけになる。
+  [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
   if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }
     if (online) endOnline(true);
