@@ -142,6 +142,11 @@
   #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
   /* v101までのすぐ対戦は全員が同じ固定合言葉だったので隠していた。v102からは部屋ごとに
      別の合言葉になるため、待っている間こそ見せる。呼びたい相手へ直接伝えられる。 */
+  /* 数字と英字の並びだけでは何なのか分からない、という指摘。見出しを1つ添える。 */
+  #onlineRoomCodeLabel {
+    flex: 0 0 auto; font: 900 10px/1 "Yu Gothic UI", sans-serif; letter-spacing: .12em; color: #d39b4b;
+    border: 1px solid rgba(199,131,53,.7); border-radius: 3px; padding: 4px 5px;
+  }
   #onlineRoomCode { color: #ffd24a; font: 900 22px/1 monospace; letter-spacing: .14em; }
   /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
   #onlineCopy {
@@ -264,8 +269,38 @@
   #onlineLobby.in-room.results #onlineReturnLobby { display: block; }
   #onlineLobby.in-room.results #onlineReady, #onlineLobby.in-room.results #onlineStart, #onlineLobby.in-room.results #onlineLeave { display: none; }
   #onlineLobby.in-room #onlineQuick, #onlineLobby.in-room #onlineCodeToggle { display: none; }
-  #onlineQuick, #onlineReady, #onlineStart { border-color: #ffd24a !important; color: #ffe2a1 !important; }
-  #onlineQuick, #onlineReady { min-height: 54px; font-size: 16px; }
+  /* ボタンの序列。押してほしい順に、塗り・高さ・幅を変えて一目で分かるようにする。
+       主役   = 対戦開始 / このまま再戦 / すぐ対戦する … 塗りつぶし + いちばん大きい
+       次点   = 準備完了                              … 縁取りのまま中くらい
+       控えめ = ロビーへ戻る                          … 小さく、幅も詰めて主役と並べない
+     **セレクタは必ず #onlineLobbyButtons から書くこと。** 直前の一括指定が
+     `#onlineLobbyButtons button`(id+要素)で、`#onlineStart` 単体では詳細度で負ける。
+     以前ここが `#onlineQuick, #onlineReady { min-height: 54px }` と書かれていて、
+     実測では全ボタンが 376x48px・15px の完全に同じ見た目のままだった(実機で指摘)。 */
+  #onlineLobbyButtons #onlineStart,
+  #onlineLobbyButtons #onlineRematch,
+  #onlineLobbyButtons #onlineQuick {
+    min-height: 64px; font-size: 19px; letter-spacing: .1em;
+    color: #2a1706;
+    border-color: #ffe9a8;
+    background: linear-gradient(180deg, #ffdf95, #f0a92e 52%, #c2701a);
+    text-shadow: 0 1px 0 rgba(255,255,255,.35);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 7px 20px rgba(240,169,46,.3);
+  }
+  #onlineLobbyButtons #onlineStart:active,
+  #onlineLobbyButtons #onlineRematch:active,
+  #onlineLobbyButtons #onlineQuick:active {
+    background: linear-gradient(180deg, #f0a92e, #b3670f); box-shadow: 0 0 0 1px rgba(0,0,0,.5);
+  }
+  #onlineLobbyButtons #onlineReady { min-height: 52px; font-size: 16px; border-color: #ffd24a; color: #ffe2a1; }
+  /* 準備完了を押した後は「取り消す」に変わる。主役から降りたことを色でも示す。 */
+  #onlineLobbyButtons #onlineReady.is-ready { border-color: #7d94a1; color: #cfe0ea; }
+  #onlineLobbyButtons #onlineReturnLobby {
+    width: 74%; margin: 2px auto 0; min-height: 40px; font-size: 13px; border-color: #7d94a1; color: #cfe0ea;
+  }
+  /* 押せない時は押せないと分かるようにする。今までは押せる時と見た目が同じで、
+     「間違っていないか探してから押す」状態になっていた。 */
+  #onlineLobbyButtons button:disabled { opacity: .32; box-shadow: none; cursor: default; }
   #onlineCodeToggle {
     border: none !important; background: none !important; min-height: 0 !important; padding: 4px !important;
     color: #d39b4b !important; font: 700 12px "Yu Gothic UI", sans-serif !important; letter-spacing: .04em; text-decoration: underline;
@@ -308,8 +343,9 @@
     <div id="onlineLobbyHeader">
       <div id="onlineLobbyTitle">ONLINE BATTLE</div>
       <div id="onlineRoomCodeRow">
+        <span id="onlineRoomCodeLabel">部屋ID</span>
         <div id="onlineRoomCode"></div>
-        <button id="onlineCopy" type="button" aria-label="合言葉をコピー / 共有" title="合言葉をコピー / 共有">
+        <button id="onlineCopy" type="button" aria-label="部屋IDをコピー / 共有" title="部屋IDをコピー / 共有">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
         </button>
       </div>
@@ -322,8 +358,8 @@
     </div>
     <div id="onlineLobbyBody">
       <img id="onlineLobbyEmblem" src="assets/loading-emblem.png" alt="" aria-hidden="true">
-      <div id="onlineLobbyNote">そのまま対戦相手を待てます。合言葉を使いたい時だけ設定を開いてください</div>
-      <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の合言葉 8文字" aria-describedby="onlineRoomHint">
+      <div id="onlineLobbyNote">そのまま対戦相手を待てます。部屋IDを使いたい時だけ設定を開いてください</div>
+      <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の部屋ID 8文字" aria-describedby="onlineRoomHint">
       <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
       <button id="onlineCreate" type="button">部屋を作る</button>
       <button id="onlineJoin" type="button">部屋に入る</button>
@@ -345,7 +381,7 @@
       <button id="onlineRematch" type="button">このまま再戦</button>
       <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
       <button id="onlineQuick" type="button">すぐ対戦する</button>
-      <button id="onlineCodeToggle" type="button">合言葉を使う</button>
+      <button id="onlineCodeToggle" type="button">部屋IDを使う</button>
     </div>
   </div>
 </div>
@@ -398,7 +434,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v108';
+  const BUILD_ID = 'v109';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4990,8 +5026,8 @@
     onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry');
     cancelLeaveFirebaseLobbyConfirm();
     const codeToggle = document.getElementById('onlineCodeToggle');
-    if (codeToggle) codeToggle.textContent = '合言葉を使う';
-    onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。合言葉が必要な時だけ設定を開いてください。');
+    if (codeToggle) codeToggle.textContent = '部屋IDを使う';
+    onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。部屋IDが必要な時だけ設定を開いてください。');
     syncBgm();
   }
   function setOnlineLobbyBusy(busy) {
@@ -5416,7 +5452,7 @@
     onlineLobbyEl && onlineLobbyEl.classList.toggle('quickplay', !!online.quickWaiting);
     onlineLobbyEl && onlineLobbyEl.classList.toggle('host', role === 'host');
     onlineLobbyStatus(online.quickWaiting
-      ? '対戦相手を探しています… 上の合言葉を伝えれば直接呼べます。'
+      ? '対戦相手を探しています… 上の部屋IDを伝えれば直接呼べます。'
       : (online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。'));
     scheduleFirebaseTokenRefresh();
     scheduleFirebaseRoomLease();
@@ -5718,6 +5754,7 @@
     if (onlineReadyBtn) {
       onlineReadyBtn.disabled = !isFirebasePlayer() || online.phase !== 'lobby';
       onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';
+      onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);
     }
     // 人が座っている対戦者席が全部そろって準備完了なら押せる。空席はCPUなので待たない。
     if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';
@@ -6271,6 +6308,12 @@
       steel.addColorStop(0, '#315a58');
       steel.addColorStop(0.48, '#163c3e');
       steel.addColorStop(1, '#092326');
+    } else if (kind === 'online') {
+      // CPU BATTLE と同じ鋼色だったので、文字を読むまで見分けが付かなかった(実機で指摘)。
+      // 大きさと位置は変えず、色味だけ真鍮寄りにして別物だと分かるようにする。
+      steel.addColorStop(0, '#6a5a3a');
+      steel.addColorStop(0.48, '#3d3320');
+      steel.addColorStop(1, '#1c1710');
     } else {
       steel.addColorStop(0, '#46566a');
       steel.addColorStop(0.48, '#273747');
