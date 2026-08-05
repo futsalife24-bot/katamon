@@ -326,6 +326,20 @@ check('壁の絵を先読みし、オフラインでも出せるようにして�
   html.includes('<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">')
   && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/wall.jpg'"));
 
+// 撃ち込む砲弾の絵(v128でユーザー提供素材へ差し替え)。
+// 参照だけ書いてファイルを入れ忘れると、実機では何も出ないまま静かに壊れる。
+const introBallPath = require('path').join(__dirname, '..', 'assets', 'intro-cannonball.png');
+check('砲弾の素材ファイルが実在する', require('fs').existsSync(introBallPath));
+check('砲弾の絵を先読みし、オフラインでも出せるようにしている',
+  html.includes('<link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">')
+  && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/intro-cannonball.png'"));
+check('砲弾は絵で描く',
+  /if \(introBallArtReady\(\)\) \{[\s\S]{0,260}ctx\.drawImage\(introBallImage, x - radius, y - radius, radius \* 2, radius \* 2\);/.test(html));
+// 起動直後の1回きりの演出。絵の読み込みを待って起動を止めない。
+check('砲弾の絵が間に合わない時は手描きの鉄球で出す',
+  /\} else \{[\s\S]{0,400}const iron = ctx\.createRadialGradient/.test(html)
+  && !html.includes('areCoreImagesReady() && introBallArtReady()'));
+
 check('演出中は入力を受け付けない',
   html.includes("if (gamePhase === 'loading' || gamePhase === 'breaking') return;"));
 // 読み込み中も毎フレーム回る。破片ごとのグラデーションは作り直さず持たせる。

@@ -743,6 +743,58 @@ check('電磁波は味方にも当たる(誤爆の扱いを通常の爆発と統
   empAlly.hp < empHpBefore && empAlly.moveLockTurns > 0,
   `hp ${empHpBefore}→${empAlly.hp} lock=${empAlly.moveLockTurns}`);
 
+// 撃破済みのキャラへの二重ヒット(v128)。2vs2で先に倒れた味方/敵は薄く描かれるのに、
+// その上へダメージ数字が出ていた(実機報告)。爆風・電磁波・拡散弾のどれでも同じこと。
+// 数字だけでなく与ダメ記録にも積まれていたので、結果画面の平均ダメージまで水増しされていた。
+kt.startFreeMatch();
+const downed = kt.unitById('e2');
+const stillUp = kt.unitById('e1');
+downed.hp = 0;
+stillUp.x = downed.x + 900; // 巻き込まれない位置へ退避させ、倒れている側だけを見る
+check('薄く描く条件とダメージ判定の条件が同じ関数を通っている',
+  kt.unitDefeated('e2') === true && kt.unitDefeated('e1') === false,
+  `e2=${kt.unitDefeated('e2')} e1=${kt.unitDefeated('e1')}`);
+
+const statsBefore = kt.stats().damageDealt;
+kt.stage3().clearDamageTexts();
+kt.explodeAtForTest(downed.x, downed.y, 1, 'p1');
+check('撃破済みのキャラにダメージ数字を出さない(爆風)',
+  kt.stage3().damageTexts().length === 0, kt.stage3().damageTexts().join(','));
+check('撃破済みへの爆風は与ダメ記録にも積まない',
+  kt.stats().damageDealt === statsBefore,
+  `${statsBefore}→${kt.stats().damageDealt}`);
+
+kt.stage3().clearDamageTexts();
+kt.emitEmpForTest(downed.x, downed.y, 200, 'p1', 1);
+check('撃破済みのキャラにダメージ数字を出さない(電磁波)',
+  kt.stage3().damageTexts().length === 0, kt.stage3().damageTexts().join(','));
+check('撃破済みのキャラに移動封印をかけ直さない',
+  !downed.moveLockTurns, String(downed.moveLockTurns));
+
+kt.stage3().clearDamageTexts();
+kt.fireworkShardExplodeForTest(downed.x, downed.y, 'p1');
+check('撃破済みのキャラにダメージ数字を出さない(拡散弾)',
+  kt.stage3().damageTexts().length === 0, kt.stage3().damageTexts().join(','));
+
+// 直しすぎの検査。生きているキャラには今までどおり出る。
+kt.stage3().clearDamageTexts();
+const aliveTarget = kt.unitById('e1');
+const aliveHpBefore = aliveTarget.hp;
+kt.explodeAtForTest(aliveTarget.x, aliveTarget.y, 1, 'p1');
+check('生きているキャラには今までどおりダメージ数字が出る',
+  kt.stage3().damageTexts().length > 0 && aliveTarget.hp < aliveHpBefore,
+  `${kt.stage3().damageTexts().join(',')} hp ${aliveHpBefore}→${aliveTarget.hp}`);
+
+// 弾の owner は**ユニットのidの文字列**であって、ユニットそのものではない。
+// v128の検査を書く時にここを取り違え、creditDamage が黙って何もしない状態で
+// 「積んでいない」と誤判定しかけた。同じ間違いを繰り返さないよう固定する。
+kt.startFreeMatch();
+kt.fireForTest(160, -260);
+check('弾のownerはユニットのidの文字列',
+  kt.projectileOwnerKind().length > 0 && kt.projectileOwnerKind().every(t => t === 'string'),
+  kt.projectileOwnerKind().join(','));
+kt.startFreeMatch();
+
 // CPUの標的選び。味方の近くに居る敵は狙わない。
 kt.startFreeMatch();
 const cpuSelf = kt.unitById('e1');
