@@ -1352,6 +1352,36 @@ check('高精細な端末では上限で止まる(塗る量が二乗で増える
 check('描く細かさの上限は2', kt.maxRenderScale() === 2, String(kt.maxRenderScale()));
 kt.resizeForTest(540, 960, 1);
 
+// ===== タイトル画面を1枚に焼く(v132) =====
+// 背景の全画面グラデーションとロゴの影＋切り抜きは動かないのに、以前は毎コマ作っていた。
+// 空(v129)と同じく2倍で1枚に焼き、画像の準備状態が変わった時だけ作り直す。
+const titleArtStart = kt.titleArtInfo();
+check('タイトルの動かない絵を焼く仕組みがある', !!titleArtStart,
+  titleArtStart ? JSON.stringify(titleArtStart) : '未実装');
+if (titleArtStart) {
+  check('タイトルは仮想座標の2倍で焼く',
+    titleArtStart.scale === 2 && titleArtStart.width === VW * 2 && titleArtStart.height === VH * 2,
+    JSON.stringify(titleArtStart));
+
+  kt.setPhase('title');
+  kt.render();
+  const titleAfterFirstDraw = kt.titleArtInfo();
+  for (let i = 0; i < 30; i++) kt.render();
+  const titleAfterThirtyFrames = kt.titleArtInfo();
+  check('タイトルを毎コマ焼き直していない(30コマ描いても回数が増えない)',
+    titleAfterThirtyFrames.builds === titleAfterFirstDraw.builds,
+    `${titleAfterFirstDraw.builds}→${titleAfterThirtyFrames.builds}`);
+
+  const fallbackSignature = titleAfterThirtyFrames.signature;
+  kt.setTitleArtReadyForTest();
+  kt.render();
+  const titleAfterImagesReady = kt.titleArtInfo();
+  check('背景とロゴの準備状態が変わればタイトルを1回だけ焼き直す',
+    titleAfterImagesReady.signature !== fallbackSignature
+      && titleAfterImagesReady.builds === titleAfterThirtyFrames.builds + 1,
+    `${fallbackSignature}→${titleAfterImagesReady.signature} / ${titleAfterThirtyFrames.builds}→${titleAfterImagesReady.builds}`);
+}
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
