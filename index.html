@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v126';
+  const BUILD_ID = 'v127';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3112,7 +3112,10 @@
 
   // ===== カットイン(対戦開始・ターン交代・タイムアップ演出) =====
   // 表示中はupdate()を早期returnさせてゲーム進行を止め、切り替わりを分かりやすくする
-  const MATCHUP_CUTIN_DURATION = 1.8;
+  // 表示時間はユーザー要望で2倍にした(1.8→3.6秒)。
+  // 飛来(VS_FLY_SEC)・衝突・撃ち抜け(VS_EXIT_SEC)の速さは変えない。伸ばした分は
+  // まん中の「止まって見せている時間」に足す。動きまで倍にすると鈍く見えるため。
+  const MATCHUP_CUTIN_DURATION = 3.6;
   // 手番の知らせ。実測で「交代から発射まで1.8〜2.1秒、うち0.9秒はカットインで盤面が隠れている」
   // ため、盤面を見られる時間が1秒しかなかった。誰の番かを読む時間を先に確保する。
   const TURN_CUTIN_DURATION = 1.3;
@@ -3611,6 +3614,18 @@
   // **必ず画面の一番上から掘ること。** 地形には宙に浮いた薄い足場があり、
   // 地面の帯(GROUND_MIN_Y)より上に的が立つことがある。そこから掘り始めると
   // 的の高さが掘り残しになり、足場が崩れない。
+  // 最後の項目で的が立つ板の、半分の幅と厚み。
+  // 板は「通常弾のクレーター1発で消える大きさ」に収めること。ここを大きくすると、
+  // 1発で崩れなくなって項目が終わらなくなる(実機で指摘)。
+  const TUTORIAL_LEDGE_HALF_W = 26;
+  const TUTORIAL_LEDGE_THICKNESS = 24;
+  // 的の足元に薄い板だけ残して、その下を空洞にする。
+  function tutorialHollowUnder(unit) {
+    const top = unit.y + UNIT_RADIUS + TUTORIAL_LEDGE_THICKNESS;
+    for (let x = unit.x - TUTORIAL_LEDGE_HALF_W - 8; x <= unit.x + TUTORIAL_LEDGE_HALF_W + 8; x += 22) {
+      for (let y = top + 34; y <= TERRAIN_BOTTOM_Y + 40; y += 40) carveCrater(x, y, 34);
+    }
+  }
   function tutorialDigColumn(x, radius) {
     for (let y = 0; y <= TERRAIN_BOTTOM_Y + radius; y += radius * 0.6) {
       carveCrater(x, y, radius);
@@ -3658,15 +3673,22 @@
     {
       key: 'terrain', title: '足場を壊す',
       body: ['地面は撃つと削れる。相手の足場を壊すと', '落ちて場外になる。細い足場を撃ち抜こう。'],
-      hint: '足場のまん中あたりを、何度か撃って削ろう。',
+      hint: '足場のまん中あたりを狙おう。1発で崩せる。',
       setup() {
         tutorialSetWind(1, 0);
         const foe = tutorialDummy();
         tutorialPlace(player, 0.16);
         tutorialPlace(foe, 0.68);
-        // 的の左右を底まで掘り、細い足場の上に立たせる。
-        tutorialDigColumn(foe.x - 86, 52);
-        tutorialDigColumn(foe.x + 86, 52);
+        // 左右を底まで掘って切り離し、さらに**足元の下も空洞にする**。
+        //
+        // ここは一度、左右を掘るだけにしていた。すると的は「底まで続く太い柱」の上に
+        // 立つことになり、1発では削りきれない(通常弾のクレーターは半径60px弱、柱の高さは
+        // 200px以上)。落ちてもすぐ柱の残りに着地するので、何度撃っても終わらなかった。
+        // 薄い板だけ残して下を抜けば、1発で崩れてそのまま場外まで落ちる。
+        tutorialDigColumn(foe.x - TUTORIAL_LEDGE_HALF_W - 46, 46);
+        tutorialDigColumn(foe.x + TUTORIAL_LEDGE_HALF_W + 46, 46);
+        initUnitOnGround(foe);
+        tutorialHollowUnder(foe);
         initUnitOnGround(foe);
       },
       cleared() {
@@ -10582,7 +10604,8 @@
     }
     ctx.restore();
 
-    drawOutlinedText('BATTLE START', VW / 2, 250, {
+    // チュートリアルは対戦ではないので、見出しも「対戦開始」とは言わない。
+    drawOutlinedText(battleMode === 'tutorial' ? 'TUTORIAL START!' : 'BATTLE START', VW / 2, 250, {
       font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
     });
 

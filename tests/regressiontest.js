@@ -127,6 +127,14 @@ const shinigami = kt.character('shinigami');
   check('砲弾がぶつかるのはカットインが終わるより前',
     vs.flySec > 0 && vs.flySec < vs.duration * 0.5,
     `fly=${vs.flySec} duration=${vs.duration}`);
+  // v126で表示時間を2倍にした(1.8→3.6秒)。名前と能力を読む時間を取るため。
+  // 飛来と撃ち抜けの速さは変えていないので、伸びた分はまん中の「見せる時間」に入る。
+  check('VSカットの表示時間は3.6秒で、動きの速さは変えていない',
+    vs.duration === 3.6 && vs.flySec === 0.42 && vs.exitSec === 0.52,
+    `duration=${vs.duration} fly=${vs.flySec} exit=${vs.exitSec}`);
+  check('止まって見せている時間が、動いている時間より長い',
+    vs.duration - vs.flySec - vs.exitSec > vs.flySec + vs.exitSec,
+    `見せる=${(vs.duration - vs.flySec - vs.exitSec).toFixed(2)}秒`);
   check('砲弾は画面の外から飛んでくる',
     html.includes('const allySlide = -(1 - eased) * (VW + VS_PLATE_W)')
     && html.includes('const foeSlide = (1 - eased) * (VW + VS_PLATE_W)'));
@@ -1121,8 +1129,42 @@ kt.setLocalSeat('p1');
   // そのために地形は固定する。ランダムのままだと奈落のある地形を引く。
   check('チュートリアルの地形は固定されていて、毎回同じ手触りで覚えられる',
     kt.pattern() === 'rolling', kt.pattern());
+  // チュートリアルは対戦ではないので、開始の見出しも「対戦開始」とは言わない。
+  {
+    kt.startTutorialForTest();
+    kt.resetDrawnText();
+    kt.render();
+    const drawn = kt.drawnText();
+    check('チュートリアルの開始カットは TUTORIAL START! と出る',
+      drawn.includes('TUTORIAL START!') && !drawn.includes('BATTLE START'), drawn.join('/'));
+  }
+
+  // 最後の項目の足場は「通常弾1発で崩れる」大きさであること。
+  // 一度、左右を掘るだけにしていたら、的が底まで続く太い柱の上に立ってしまい、
+  // 1発では削りきれず何度撃っても終わらなかった(実機で指摘)。
+  {
+    const ledge = kt.tutorialLedge();
+    // 通常弾の最大クレーターは半径59.4px。板はそれで丸ごと消える大きさに収める。
+    check('足場は通常弾1発ぶんのクレーターに収まる大きさ',
+      ledge.halfW * 2 <= 59.4 * 2 && ledge.thickness <= 59.4,
+      `幅=${ledge.halfW * 2} 厚み=${ledge.thickness}`);
+    let fell = 0;
+    for (let run = 0; run < 4; run++) {
+      kt.startTutorialForTest();
+      settle();
+      kt.tutorialGoto('terrain');
+      const foe = kt.units.find(u => u.id === 'e1');
+      // 中心から少しずれた、弱めの一発(半径44)でも崩れること
+      kt.carveForTest(foe.x + (run % 2 ? 18 : -18), foe.y + kt.unitRadius() + 14, 44);
+      for (let i = 0; i < 60 * 6; i++) kt.step(1 / 60);
+      if (foe.hp <= 0 || foe.y + kt.unitRadius() >= kt.deadLineY()) fell++;
+    }
+    check('足場を1発撃てば、的は場外まで落ちる(4回とも)', fell === 4, `${fell}/4`);
+  }
 
   // 最後の項目を終えると、完了の合図を出してタイトルへ戻る。
+  kt.startTutorialForTest();
+  settle();
   {
     kt.tutorialGoto('terrain');
     const foe = kt.units.find(u => u.id === 'e1');
