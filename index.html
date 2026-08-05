@@ -13,14 +13,14 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-<link rel="preload" as="image" href="assets/loading-emblem.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/loading-emblem.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
-<link rel="preload" as="image" href="assets/title-logo.png" fetchpriority="high">
-<link rel="preload" as="image" href="assets/kyoryu.png">
-<link rel="preload" as="image" href="assets/medama.png">
-<link rel="preload" as="image" href="assets/iwa.png">
-<link rel="preload" as="image" href="assets/tori.png">
+<link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/kyoryu.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/medama.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/tori.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 <style>
   html, body {
@@ -181,8 +181,10 @@
     display: flex; flex-direction: column; align-items: stretch;
     padding: 18px 18px 8px; text-align: center;
   }
+  /* picture で包んでいる(WebPが読めない端末はPNGへ落ちる)。包みも block にしないと中央に来ない。 */
+  #onlineLobbyBody picture { display: block; }
   #onlineLobbyEmblem { width: min(140px, 32vh); height: auto; margin: 4px auto 14px; display: block; opacity: .92; filter: drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
-  #onlineLobby.in-room #onlineLobbyEmblem { display: none; }
+  #onlineLobby.in-room #onlineLobbyBody picture { display: none; }
   #onlineLobbyNote, #onlineLobbyStatus { font-size: 12px; line-height: 1.55; }
   #onlineLobbyNote { color: #d39b4b; margin-bottom: 10px; }
   #onlineLobby.in-room #onlineLobbyNote { display: none; }
@@ -359,7 +361,11 @@
       <button id="onlineCancel" type="button">タイトルへ戻る</button>
     </div>
     <div id="onlineLobbyBody">
-      <img id="onlineLobbyEmblem" src="assets/loading-emblem.png" alt="" aria-hidden="true">
+      <!-- WebPが読めない端末は下のPNGへ自動で落ちる。CSSは img に当たるので見た目は変わらない。 -->
+      <picture>
+        <source srcset="assets/loading-emblem.webp" type="image/webp">
+        <img id="onlineLobbyEmblem" src="assets/loading-emblem.png" alt="" aria-hidden="true">
+      </picture>
       <div id="onlineLobbyNote">そのまま対戦相手を待てます。部屋IDを使いたい時だけ設定を開いてください</div>
       <input id="onlineRoomInput" type="text" inputmode="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="相手の部屋ID 8文字" aria-describedby="onlineRoomHint">
       <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
@@ -436,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v129';
+  const BUILD_ID = 'v130';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2246,26 +2252,51 @@
 
   const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'];
 
+  // ===== 起動時に読む絵(v130でWebPへ) =====
+  // キャラ16体とロゴで3.83MBあり、**読み込み画面はこれを全部待ってから明ける**。
+  // WebP(画質90)にすると0.74MB。表示する大きさで画素を見比べても違いは出ない。
+  //
+  // **WebPが読めない古い端末では、絵が1枚も出ないまま起動してしまう。**
+  // そこで、読めなかった時だけ同じ名前のPNGへ落とす。PNGは消さずに残してある。
+  // 判定を先回りしない(canvas経由の判定はSafariで嘘をつく)。実際に読ませて、
+  // 失敗した時だけ落とすほうが確実。
+  function loadArtImage(baseName, opts = {}) {
+    const img = new Image();
+    img.decoding = 'async';
+    if (opts.highPriority) img.fetchPriority = 'high';
+    const suffix = opts.version ? `?v=${opts.version}` : '';
+    let triedPng = false;
+    img.onload = () => { if (opts.onReady) opts.onReady(); };
+    img.onerror = () => {
+      if (!triedPng) {
+        triedPng = true;
+        img.src = `assets/${baseName}.png${suffix}`;
+        return;
+      }
+      if (opts.onFailed) opts.onFailed();
+    };
+    img.src = `assets/${baseName}.webp${suffix}`;
+    return img;
+  }
+
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
   // キャラ画像のキャッシュ版数。差し替えたキャラだけ載せる(未記載は版なし=初版)。
+  // **画像を差し替えたら、ここの版を必ず上げること。** URLが同じままだと
+  // Service Workerもブラウザも古い絵を持ち続け、中身を入れ替えても表に出ない
+  // (v115でニセンモノを差し替えた時に実際に出なかった)。
+  // 差し替えたキャラだけ上げる。全部を一括で上げると、変えていないぶんまで配り直す。
+  // v130でWebPへ移した時は拡張子ごと変わったので、版を上げる必要はなかった。
   const CHARACTER_ASSET_VERSION = { nisenmono: 2 };
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
-    const img = new Image();
-    img.decoding = 'async';
-    img.fetchPriority = 'high';
-    img.onload = () => { characterImagesReady++; };
-    img.onerror = () => { characterImagesFailed++; };
-    // **画像を差し替えたら、ここの版を必ず上げること。** URLが同じままだと
-    // Service Workerもブラウザも古い絵を持ち続け、中身を入れ替えても表に出ない
-    // (v115でニセンモノを差し替えた時に実際に出なかった)。
-    // 差し替えたキャラだけ上げる。全部を一括で上げると、変えていない15体ぶん
-    // (約2.5MB)まで配り直すことになる。BGMが `?v=` を持っているのと同じ考え方。
-    const assetVersion = CHARACTER_ASSET_VERSION[key];
-    img.src = `assets/${CHARACTERS[key].asset || key}.png${assetVersion ? `?v=${assetVersion}` : ''}`;
-    charImages[key] = img;
+    charImages[key] = loadArtImage(CHARACTERS[key].asset || key, {
+      highPriority: true,
+      version: CHARACTER_ASSET_VERSION[key],
+      onReady: () => { characterImagesReady++; },
+      onFailed: () => { characterImagesFailed++; }
+    });
   }
   function areCoreImagesReady() {
     const titleSettled = titleLogoReady || titleLogoFailed;
@@ -2279,19 +2310,19 @@
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
   let loadingEmblemReady = false;
-  const loadingEmblemImage = new Image();
-  loadingEmblemImage.fetchPriority = 'high';
-  loadingEmblemImage.onload = () => { loadingEmblemReady = true; };
-  loadingEmblemImage.src = 'assets/loading-emblem.png';
+  const loadingEmblemImage = loadArtImage('loading-emblem', {
+    highPriority: true,
+    onReady: () => { loadingEmblemReady = true; }
+  });
 
   // 背景透過のタイトルロゴ。
   let titleLogoReady = false;
   let titleLogoFailed = false;
-  const titleLogoImage = new Image();
-  titleLogoImage.fetchPriority = 'high';
-  titleLogoImage.onload = () => { titleLogoReady = true; };
-  titleLogoImage.onerror = () => { titleLogoFailed = true; };
-  titleLogoImage.src = 'assets/title-logo.png';
+  const titleLogoImage = loadArtImage('title-logo', {
+    highPriority: true,
+    onReady: () => { titleLogoReady = true; },
+    onFailed: () => { titleLogoFailed = true; }
+  });
   // 起動した端末のローカル時刻で、タイトル背景を朝・昼・夕・夜に切り替える。
   function getTitleTimeTheme(hour) {
     if (hour >= 4 && hour < 10) return 'morning';

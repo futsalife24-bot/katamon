@@ -299,9 +299,17 @@ function check(name, value) {
   // 中身のハッシュとURLを一緒に固定し、片方だけ変えたらここで気づけるようにする。
   // 音源を差し替える時は、このハッシュと index.html の ?v=N を必ず両方更新すること。
   const crypto = require('crypto');
-  const fileHash = name => crypto.createHash('md5')
-    .update(require('fs').readFileSync(require('path').join(__dirname, '..', name)))
-    .digest('hex').slice(0, 12);
+  // ファイルが無い時に例外で死ぬと、テスト全体の出力ごと消える(実際に消えた)。
+  // 「無い」を値として返し、検査の側で不合格として報告させる。
+  const fileHash = name => {
+    try {
+      return crypto.createHash('md5')
+        .update(require('fs').readFileSync(require('path').join(__dirname, '..', name)))
+        .digest('hex').slice(0, 12);
+    } catch (_) {
+      return '(ファイルが無い)';
+    }
+  };
   const htmlForAudio = readRepoFile('index.html');
   const BONUS_TRACK_PINS = [
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
@@ -324,39 +332,68 @@ function check(name, value) {
   // 古い絵を持ち続け、中身を入れ替えても表に出ない(v115で実際に出なかった)。
   // 画像を差し替えたらこの表のハッシュと CHARACTER_ASSET_VERSION の両方を更新すること。
   const CHARACTER_ASSET_PINS = [
-    { key: 'kyoryu', file: 'assets/kyoryu.png', hash: 'd7e8126f2075' },
-    { key: 'medama', file: 'assets/medama.png', hash: 'f1d5608f8625' },
-    { key: 'iwa', file: 'assets/iwa.png', hash: '283307e2478f' },
-    { key: 'tori', file: 'assets/tori.png', hash: 'b4f372180210' },
-    { key: 'barugerukan', file: 'assets/barugerukan.png', hash: 'bb3c27616491' },
-    { key: 'nisenmono', file: 'assets/nisenmono.png', hash: 'ff4991ae8756', version: 2 },
-    { key: 'burumutan', file: 'assets/burumutan.png', hash: '5e739accbd3a' },
-    { key: 'sumoeru', file: 'assets/sumoeru.png', hash: 'ce3bb11b1a64' },
-    { key: 'doRednote', file: 'assets/do-rednote.png', hash: '6219b95e512f' },
-    { key: 'mocchario', file: 'assets/mocchario.png', hash: '228b1ea240b7' },
-    { key: 'mecha', file: 'assets/mecha.png', hash: '086923d116e6' },
-    { key: 'akuma', file: 'assets/akuma.png', hash: 'a70b4d0c56fd' },
-    { key: 'jinba', file: 'assets/jinba.png', hash: 'ccefcac9ced5' },
-    { key: 'kishi', file: 'assets/kishi.png', hash: '54142e9e8e56' },
-    { key: 'neko', file: 'assets/neko.png', hash: '1de7bdc6727e' },
-    { key: 'shinigami', file: 'assets/shinigami.png', hash: '806d572ce13d' }
+    { key: 'kyoryu', base: 'assets/kyoryu', webp: 'c13291632f36', png: 'd7e8126f2075' },
+    { key: 'medama', base: 'assets/medama', webp: '29c0f8b99547', png: 'f1d5608f8625' },
+    { key: 'iwa', base: 'assets/iwa', webp: 'e5bc1c5714d2', png: '283307e2478f' },
+    { key: 'tori', base: 'assets/tori', webp: '1396a2448001', png: 'b4f372180210' },
+    { key: 'barugerukan', base: 'assets/barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
+    { key: 'nisenmono', base: 'assets/nisenmono', webp: '19933146097d', png: 'ff4991ae8756', version: 2 },
+    { key: 'burumutan', base: 'assets/burumutan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
+    { key: 'sumoeru', base: 'assets/sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
+    { key: 'doRednote', base: 'assets/do-rednote', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
+    { key: 'mocchario', base: 'assets/mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
+    { key: 'mecha', base: 'assets/mecha', webp: 'ec5ac42f758b', png: '086923d116e6' },
+    { key: 'akuma', base: 'assets/akuma', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
+    { key: 'jinba', base: 'assets/jinba', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
+    { key: 'kishi', base: 'assets/kishi', webp: '52e362107fa5', png: '54142e9e8e56' },
+    { key: 'neko', base: 'assets/neko', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
+    { key: 'shinigami', base: 'assets/shinigami', webp: 'ea291207269c', png: '806d572ce13d' }
   ];
   const versionMapSrc = /const CHARACTER_ASSET_VERSION = \{([^}]*)\}/.exec(htmlForAudio);
   const declaredVersions = {};
   for (const [, k, v] of (versionMapSrc ? versionMapSrc[1] : '').matchAll(/(\w+):\s*(\d+)/g)) declaredVersions[k] = Number(v);
   const charNg = [];
   for (const pin of CHARACTER_ASSET_PINS) {
-    if (fileHash(pin.file) !== pin.hash) {
-      charNg.push(`${pin.file} の中身が変わっている(${fileHash(pin.file)})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+    // v130から実際に配るのは .webp。読めない端末が落ちてくる先の .png も一緒に留める。
+    // 片方だけ差し替えると、端末によって別の絵が出る。
+    if (fileHash(pin.base + '.webp') !== pin.webp) {
+      charNg.push(`${pin.base}.webp の中身が変わっている(${fileHash(pin.base + '.webp')})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+    }
+    if (fileHash(pin.base + '.png') !== pin.png) {
+      charNg.push(`${pin.base}.png の中身が変わっている(${fileHash(pin.base + '.png')})。webp と食い違っていないか確かめること`);
     }
     if (declaredVersions[pin.key] !== pin.version) {
       charNg.push(`${pin.key} の版が食い違う(宣言=${declaredVersions[pin.key]} 期待=${pin.version})`);
     }
   }
   check('character images and their cache-busting versions stay in sync', charNg.length === 0, charNg.join(' / '));
+  // v130: webp を先に読み、読めなかった時だけ同じ名前の png へ落とす。
+  check('the art loader asks for webp first and falls back to png',
+    /img\.src = `assets\/\$\{baseName\}\.webp\$\{suffix\}`;/.test(htmlForAudio)
+    && /img\.src = `assets\/\$\{baseName\}\.png\$\{suffix\}`;/.test(htmlForAudio)
+    && htmlForAudio.includes('if (!triedPng) {'));
   check('the character image URL actually carries the version',
-    htmlForAudio.includes('const assetVersion = CHARACTER_ASSET_VERSION[key];')
-    && htmlForAudio.includes('.png${assetVersion ? `?v=${assetVersion}` : \'\'}`'));
+    htmlForAudio.includes('version: CHARACTER_ASSET_VERSION[key],')
+    && /const suffix = opts\.version \? `\?v=\$\{opts\.version\}` : '';/.test(htmlForAudio));
+  // 落とし先の png を消すと、古い端末で絵が1枚も出なくなる。
+  check('the png fallbacks still exist on disk',
+    CHARACTER_ASSET_PINS.every(pin => require('fs').existsSync(require('path').join(__dirname, '..', pin.base + '.png'))));
+  // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
+  check('the preload hints point at webp',
+    ['loading-emblem', 'title-logo', 'kyoryu', 'medama', 'iwa', 'tori'].every(n =>
+      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/${n}.webp" type="image/webp"`))
+    && !/rel="preload" as="image" href="assets\/(loading-emblem|title-logo|kyoryu|medama|iwa|tori)\.png/.test(htmlForAudio));
+  // ロビーのエンブレムはDOMの<img>。JSを通らないので picture で振り分ける。
+  check('the lobby emblem falls back through <picture>',
+    /<source srcset="assets\/loading-emblem\.webp" type="image\/webp">/.test(htmlForAudio)
+    && /<img id="onlineLobbyEmblem" src="assets\/loading-emblem\.png"/.test(htmlForAudio)
+    && htmlForAudio.includes('#onlineLobbyBody picture { display: block; }'));
+  // 起動時に読む絵の合計。ここが膨らむと読み込み画面が長くなる(v130で3.83MB→0.74MB)。
+  const startupArtBytes = ['title-logo', 'loading-emblem']
+    .concat(CHARACTER_ASSET_PINS.map(pin => pin.base.replace('assets/', '')))
+    .reduce((sum, n) => sum + require('fs').statSync(require('path').join(__dirname, '..', 'assets', n + '.webp')).size, 0);
+  check('the images the loading screen waits for stay under 1MB',
+    startupArtBytes < 1024 * 1024, `${(startupArtBytes / 1024).toFixed(0)}KB`);
 
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
   check('Firebase v3 fire keeps the v2 payload checks behind the required round envelope',
