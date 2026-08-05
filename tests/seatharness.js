@@ -31,6 +31,24 @@ const HOOK = `
     resetDrawnText: () => { globalThis.__ktTextLog.length = 0; },
     resetPanels: () => { __panelLog.length = 0; },
     render: () => render(),
+    // 描く細かさ(v131)。画面の実画素とキャンバスの画素が一致しているかを見る。
+    resizeForTest: (w, h, dpr) => {
+      window.innerWidth = w; window.innerHeight = h; window.devicePixelRatio = dpr;
+      resize();
+      const cssW = parseFloat(canvas.style.width);
+      const cssH = parseFloat(canvas.style.height);
+      return {
+        cssW, cssH,
+        canvasW: canvas.width, canvasH: canvas.height,
+        画面の実画素W: Math.round(cssW * dpr),
+        画面の実画素H: Math.round(cssH * dpr),
+        renderScale: canvas.width / VW,
+        // 実際にctxへ指示された拡大率。キャンバスの画素数と一致していないといけない。
+        transformScaleX: globalThis.__ktTransform ? globalThis.__ktTransform[0] : null,
+        transformScaleY: globalThis.__ktTransform ? globalThis.__ktTransform[3] : null
+      };
+    },
+    maxRenderScale: () => MAX_RENDER_SCALE,
     // 描き直しの節約(v129)。焼いた絵を何回作り直したかと、作り直しの合図が立っているか。
     artBuilds: () => ({ sky: skyArtBuilds, terrain: terrainArtBuilds }),
     terrainArtDirty: () => terrainArtDirty,
@@ -396,6 +414,9 @@ function makeCtx() {
   // 描かれた文字を控える。「画像が無くても名前は出るか」のような、
   // 位置ではなく結果を見る検査に使う。
   ctx.fillText = (text) => { globalThis.__ktTextLog.push(String(text)); };
+  // 最後に指示された座標変換。キャンバスの画素数と食い違うと、絵が画面から
+  // はみ出すか小さく寄る。大きさだけ見ていると気づけないので記録する。
+  ctx.setTransform = (a, b, c, d, e, f) => { globalThis.__ktTransform = [a, b, c, d, e, f]; };
   ctx.measureText = () => ({ width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
   ctx.createLinearGradient = ctx.createRadialGradient = () => ({ addColorStop: noop });
   ctx.createPattern = () => ({});

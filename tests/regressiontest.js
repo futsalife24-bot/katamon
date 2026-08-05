@@ -1313,6 +1313,45 @@ kt.render();
 check('テーマを変えたら、空を実際に1回だけ焼き直す',
   kt.artBuilds().sky === skyBefore + 1, `${skyBefore}→${kt.artBuilds().sky}`);
 
+// ===== 描く細かさ(v131) =====
+// 以前は `VW * dpr` でキャンバスを持っていた。これは画面に映る大きさを見ていないので、
+// 端末によっては画面の実画素より大きいキャンバスを塗ってから縮めていた(実機で1.7倍)。
+// 見えるものは同じで、塗る量だけ増える。ここが崩れると軽量化がそのまま戻る。
+const VW = 540, VH = 960;
+const screens = [
+  { name: '実機(1080x2374, 2.625倍)', w: 411, h: 904, dpr: 2.625 },
+  { name: '横長の端末(412x915, 3倍)', w: 412, h: 915, dpr: 3 },
+  { name: '低い解像度(360x640, 2倍)', w: 360, h: 640, dpr: 2 },
+  { name: '等倍の画面(540x960, 1倍)', w: 540, h: 960, dpr: 1 }
+];
+for (const s of screens) {
+  const r = kt.resizeForTest(s.w, s.h, s.dpr);
+  const capped = s.dpr * Math.min(s.w / 540, s.h / 960) > kt.maxRenderScale();
+  if (capped) {
+    check(`${s.name}: 上限で頭打ちになる`,
+      Math.abs(r.renderScale - kt.maxRenderScale()) < 0.001, JSON.stringify(r));
+  } else {
+    // 幅と高さの両方で、キャンバスの画素数が画面の実画素と一致すること(±1は丸め)
+    check(`${s.name}: キャンバスが画面の実画素とぴったり一致する`,
+      Math.abs(r.canvasW - r.画面の実画素W) <= 1 && Math.abs(r.canvasH - r.画面の実画素H) <= 1,
+      JSON.stringify(r));
+  }
+  check(`${s.name}: 上限を超えない`,
+    r.renderScale <= kt.maxRenderScale() + 0.001, `renderScale=${r.renderScale}`);
+  // 大きさだけ合っていても、拡大率がずれていれば絵が画面からはみ出す。
+  check(`${s.name}: キャンバスの大きさと拡大率が食い違わない`,
+    Math.abs(r.transformScaleX * VW - r.canvasW) <= 1 && Math.abs(r.transformScaleY * VH - r.canvasH) <= 1,
+    `拡大率=${r.transformScaleX}x${r.transformScaleY} キャンバス=${r.canvasW}x${r.canvasH}`);
+}
+// 上限に当たる端末(高精細)。画面より粗くはなるが、上限どおりで止まること。
+const hi = kt.resizeForTest(412, 915, 4);
+check('高精細な端末では上限で止まる(塗る量が二乗で増えるのを防ぐ)',
+  Math.abs(hi.renderScale - kt.maxRenderScale()) < 0.001 && hi.canvasW < hi.画面の実画素W,
+  JSON.stringify(hi));
+// 上限の値そのもの。上げると重くなるので、変えたら必ずここも直す。
+check('描く細かさの上限は2', kt.maxRenderScale() === 2, String(kt.maxRenderScale()));
+kt.resizeForTest(540, 960, 1);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
