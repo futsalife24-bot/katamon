@@ -1007,6 +1007,158 @@ kt.setLocalSeat('p1');
   kt.setFreeFormat('1v1');
 }
 
+// ===== v126: チュートリアル(あそび方) =====
+// 読ませるのではなく、実際に操作させて覚えてもらう作り。
+// 何度失敗しても詰まらないこと、負けて終わらないことが要。
+{
+  const steps = kt.tutorialSteps();
+  check('チュートリアルは6項目で、すべて場の用意と完了判定を持つ',
+    steps.length === 6 && steps.every(s => s.hasSetup && s.hasCleared && s.title && s.body.length),
+    steps.map(s => s.key).join(','));
+  // 本文は自動で折り返さない。端末ごとに折り返し位置が変わらないよう1行ずつ書く決まり。
+  check('本文は1行ずつ書かれていて、長すぎる行が無い',
+    steps.every(s => s.body.every(line => line.length <= 26)),
+    JSON.stringify(steps.map(s => s.body.map(l => l.length))));
+  check('教える順は、撃つ→風→動く→跳ぶ→必殺→足場',
+    steps.map(s => s.key).join(',') === 'fire,wind,move,jump,special,terrain');
+
+  kt.startTutorialForTest();
+  const t0 = kt.tutorialState();
+  check('チュートリアル中の手番は自分だけ(相手は撃ち返してこない)',
+    t0.turnOrder.join() === 'p1' && t0.active, JSON.stringify(t0.turnOrder));
+  check('最初は1つ目の項目から始まる', t0.stepIndex === 0 && t0.key === 'fire');
+  settle();
+
+  // 何もしなければ進まない。「当てるまで何度でも」なので、待つだけでは次へ行かない。
+  for (let i = 0; i < 60 * 6; i++) kt.step(1 / 60);
+  check('当てるまでは何分待っても次へ進まない', kt.tutorialState().stepIndex === 0,
+    JSON.stringify(kt.tutorialState()));
+  check('相手は一度も撃ってこない(弾が飛んでいない)', kt.projectiles().length === 0);
+  check('時間切れで終わらない', kt.state().matchOver === false);
+
+  // 当てたら「できた!」を見せてから次の項目へ。
+  kt.tutorialHurtDummy(10);
+  kt.step(1 / 60);
+  check('当てた瞬間に「できた!」へ変わる', kt.tutorialState().cleared === true);
+  for (let i = 0; i < 60 * 3; i++) kt.step(1 / 60);
+  const t1 = kt.tutorialState();
+  check('少し見せてから次の項目へ進む', t1.stepIndex === 1 && t1.key === 'wind' && !t1.cleared,
+    JSON.stringify(t1));
+  check('次の項目では的のHPが戻っている(倒して途中で終わらせない)',
+    t1.foeHp === kt.character('iwa').maxHp, String(t1.foeHp));
+
+  // 的が倒れても、勝ち負けは付かないし結果画面へも行かない。
+  // 決着の入口(checkMatchEnd)を実際に呼んで、そこで止まることを見る。
+  kt.tutorialHurtDummy(9999);
+  kt.checkMatchEndForTest();
+  check('的が倒れても結果画面へ行かない(勝ち負けを付けない)',
+    kt.state().matchOver === false && kt.state().winner === null,
+    JSON.stringify(kt.state()));
+  kt.step(1 / 60);
+  kt.step(1 / 60);
+  check('倒れかけた的は1で止まり、撃ち続けられる', kt.tutorialState().foeHp >= 1,
+    String(kt.tutorialState().foeHp));
+
+  // 時間切れの仕組みも通さない。タイムアップの演出が明けても決着しないこと。
+  kt.setTurnCountForTest(9999);
+  kt.endTurnForTest();
+  for (let i = 0; i < 60 * 4; i++) kt.step(1 / 60);
+  check('手番を重ねても時間切れで終わらない',
+    kt.state().matchOver === false && kt.state().winner === null, JSON.stringify(kt.state()));
+
+  // 「動く」は動いたら完了。撃たなくてもよい。
+  kt.tutorialGoto('move');
+  const beforeX = kt.tutorialState().meX;
+  kt.units.find(u => u.id === 'p1').x = beforeX + 80;
+  kt.step(1 / 60);
+  check('「動く」は動いた時点で完了する', kt.tutorialState().cleared === true);
+
+  // 「跳ぶ」は跳躍を使ったら完了。前の項目で使い切っていても、始めに戻すこと。
+  kt.units.find(u => u.id === 'p1').jumpAvailable = false;
+  kt.tutorialGoto('jump');
+  check('「跳ぶ」の始めには跳躍が使える(前の項目で使っていても戻す)',
+    kt.units.find(u => u.id === 'p1').jumpAvailable === true);
+  kt.units.find(u => u.id === 'p1').jumpAvailable = false;
+  kt.step(1 / 60);
+  check('「跳ぶ」は跳躍を使った時点で完了する', kt.tutorialState().cleared === true);
+
+  // 「必殺」は始めから溜まった状態にしておく。溜まるのを待たせない。
+  kt.tutorialGoto('special');
+  check('「必殺」の始めには必殺が溜まっている', kt.specialReady());
+
+  // 最後は足場を壊して落とす。的の左右が底まで掘られていること。
+  kt.tutorialGoto('terrain');
+  {
+    // 的の足元だけが残り、左右は掘り抜かれていること。地面の有無で直接見る。
+    const foe = kt.units.find(u => u.id === 'e1');
+    const footY = foe.y + kt.unitRadius() + 6;
+    const under = kt.isSolidAt(foe.x, footY);
+    const left = kt.isSolidAt(foe.x - 86, footY);
+    const right = kt.isSolidAt(foe.x + 86, footY);
+    check('最後の項目では、的が細い足場の上に立っている(左右は掘り抜かれている)',
+      under && !left && !right, `下=${under} 左=${left} 右=${right}`);
+  }
+
+  // 地形がランダムだと、闘技場のように中央が奈落の地形を引いた時に的が足場の無い
+  // 場所へ置かれて落ちる。落下を「当てた」と誤判定して勝手に進んでいた。
+  {
+    // 最後の項目は地面を掘るので、掘った跡が残ったまま測ると嘘になる。
+    // 実際の流れと同じく、始めからやり直して順に見る。
+    kt.startTutorialForTest();
+    settle();
+    let allOnGround = true;
+    const detail = [];
+    for (const key of ['fire', 'wind', 'move', 'jump', 'special', 'terrain']) {
+      kt.tutorialGoto(key);
+      const foe = kt.units.find(u => u.id === 'e1');
+      const onGround = kt.isSolidAt(foe.x, foe.y + kt.unitRadius() + 6);
+      detail.push(`${key}:${onGround}`);
+      if (!onGround) allOnGround = false;
+    }
+    check('どの項目でも、的は必ず地面の上に置かれる(落ちて勝手に進まない)',
+      allOnGround, detail.join(' '));
+  }
+  // そのために地形は固定する。ランダムのままだと奈落のある地形を引く。
+  check('チュートリアルの地形は固定されていて、毎回同じ手触りで覚えられる',
+    kt.pattern() === 'rolling', kt.pattern());
+
+  // 最後の項目を終えると、完了の合図を出してタイトルへ戻る。
+  {
+    kt.tutorialGoto('terrain');
+    const foe = kt.units.find(u => u.id === 'e1');
+    foe.hp = 0;                       // 足場を撃ち抜いて落ちた状態
+    kt.step(1 / 60);
+    check('最後の項目を終えると完了になる', kt.tutorialState() === null || kt.tutorialState().cleared,
+      JSON.stringify(kt.tutorialState()));
+    for (let i = 0; i < 60 * 6; i++) kt.step(1 / 60);
+    check('完了するとタイトルへ戻り、通常の対戦モードへ戻る',
+      kt.state().gamePhase === 'title' && kt.mode() === 'normal',
+      `${kt.state().gamePhase}/${kt.mode()}`);
+    check('完了すると、次からはタイトルで勧めない', kt.tutorialRecommended() === false);
+    check('完了しても勝ち負けは付かない', kt.state().winner === null, String(kt.state().winner));
+  }
+
+  // 「とばす」はいつでも押せて、タイトルへ戻る。
+  kt.startTutorialForTest();
+  settle();
+  kt.tutorialSkipForTest();
+  check('とばすとタイトルへ戻り、通常の対戦モードに戻る',
+    kt.state().gamePhase === 'title' && kt.mode() === 'normal' && kt.tutorialState() === null,
+    `${kt.state().gamePhase}/${kt.mode()}`);
+  // 飛ばした人にも二度目は勧めない。本人が決めたことを蒸し返さない。
+  check('一度通すか飛ばすと、タイトルで勧めなくなる', kt.tutorialRecommended() === false);
+}
+
+// タイトルの「あそび方」は、ほかのボタンと重ならないこと。
+{
+  const b = kt.titleBtnRects();
+  const others = [b.cpu, b.online, b.free, b.bonus, b.ranking, b.update];
+  check('「あそび方」ボタンが他のタイトルボタンと重ならない',
+    others.every(o => !rectsOverlap(b.tutorial, o)), JSON.stringify(b.tutorial));
+  check('「あそび方」ボタンが画面内に収まっている',
+    b.tutorial.y - b.tutorial.h / 2 > 0 && b.tutorial.y + b.tutorial.h / 2 < kt.viewH());
+}
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
