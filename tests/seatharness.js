@@ -112,7 +112,8 @@ const HOOK = `
     vsPlate: () => ({
       slots: JSON.parse(JSON.stringify(VS_PLATE_SLOTS)),
       srcs: Object.fromEntries(Object.entries(vsPlateImages).map(([k, img]) => [k, img.src.split('/').pop()])),
-      flySec: VS_FLY_SEC, plateW: VS_PLATE_W, tilt: VS_TILT, duration: MATCHUP_CUTIN_DURATION
+      flySec: VS_FLY_SEC, exitSec: VS_EXIT_SEC, plateW: VS_PLATE_W, tilt: VS_TILT, duration: MATCHUP_CUTIN_DURATION,
+      faces: JSON.parse(JSON.stringify(MATCHUP_FACES))
     }),
     forceWinner: (team) => { winner = team; matchOver = true; },
     // --- リグレッション用 ---

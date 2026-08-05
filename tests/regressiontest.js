@@ -130,6 +130,32 @@ const shinigami = kt.character('shinigami');
   check('砲弾は画面の外から飛んでくる',
     html.includes('const allySlide = -(1 - eased) * (VW + VS_PLATE_W)')
     && html.includes('const foeSlide = (1 - eased) * (VW + VS_PLATE_W)'));
+  // 傾いたまま真横へ滑ると「飛んでいる」ように見えない。回転のあとに動かして、
+  // 先端の向いている方向へ進ませる(実機で指摘)。
+  check('砲弾は自分が向いている方向へ進む',
+    /ctx\.rotate\(VS_TILT\);[\s\S]{0,300}ctx\.translate\(slideX, 0\);/.test(html)
+    && !html.includes('VW / 2 + off.x + slideX'));
+  // 最後はお互いを撃ち抜けて画面の外へ出る(実機で要望)。
+  check('最後はお互いを撃ち抜けて画面の外へ出る',
+    html.includes('const allySlide = -(1 - eased) * (VW + VS_PLATE_W) + recoil * -1 + exitSlide;')
+    && html.includes('const foeSlide = (1 - eased) * (VW + VS_PLATE_W) + recoil - exitSlide;'));
+  check('撃ち抜けが始まるのはぶつかった後で、カットインの中で終わる',
+    vs.flySec + vs.exitSec < vs.duration && vs.exitSec > 0,
+    `fly=${vs.flySec} exit=${vs.exitSec} duration=${vs.duration}`);
+  // 顔の切り出しは16体ぶん揃っていること。抜けると DEFAULT_FACE に落ちて顔から外れる。
+  check('顔の切り出しは全16体ぶん揃っている',
+    kt.chars().every(key => Array.isArray(vs.faces[key]) && vs.faces[key].length === 3),
+    kt.chars().filter(key => !vs.faces[key]).join(','));
+  check('切り出しの値は画像の内側を指している',
+    kt.chars().every(key => {
+      const face = vs.faces[key];
+      if (!Array.isArray(face)) return false; // 抜けは前の検査が名指しする
+      const [fx, fy, fw] = face;
+      return fx > 0 && fx < 1 && fy > 0 && fy < 1 && fw > 0.1 && fw <= 0.6;
+    }), JSON.stringify(vs.faces));
+  // 名前の帯があごを隠していたので、帯の上の範囲で顔を中央に置く。
+  check('顔は名前の帯を避けた範囲の中央に置く',
+    html.includes('const cy = rect.y + (rect.h - band) / 2;'));
 }
 
 
