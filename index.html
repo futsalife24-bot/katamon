@@ -15,6 +15,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="preload" as="image" href="assets/loading-emblem.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
+<link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/kyoryu.png">
 <link rel="preload" as="image" href="assets/medama.png">
@@ -435,7 +436,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v127';
+  const BUILD_ID = 'v128';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2612,6 +2613,12 @@
     for (const u of units) faceUnitTowardOpponent(u);
   }
 
+  // 撃破済みの判定はここ1か所だけ。**絵を薄くする条件と、爆風が当たる条件を必ず同じにする。**
+  // 別々に書いていた頃は、2vs2で薄くなっているキャラの上にダメージ数字が出ていた(実機報告)。
+  function unitDefeated(u) {
+    return !u || u.hp <= 0;
+  }
+
   // 与ダメ効率に積むのは「プレイヤー陣営が敵陣営へ与えた分」だけ。自爆や味方誤爆は数えない。
   function creditDamage(owner, target, amount) {
     if (teamOfOwner(owner) === 'player' && target.team !== 'player') runStats.damageDealt += amount;
@@ -2877,6 +2884,7 @@
     spawnExplosion(x, y, blastMul * 0.5);
     playCrackleSound(blastMul);
     for (const u of units) {
+      if (unitDefeated(u)) continue;
       const dealt = fireworkBurstDamage ? (fireworkBurstDamage[u.id] || 0) : 0;
       const budget = FIREWORK_BURST_DAMAGE_CAP - dealt;
       if (budget <= 0) continue;
@@ -7337,6 +7345,14 @@
   wallImage.onload = () => { wallImageReady = true; wallPieces = null; };
   wallImage.src = 'assets/wall.jpg';
   function wallArtReady() { return wallImageReady && wallImage.naturalWidth > 0; }
+  // 撃ち込む砲弾の絵(ユーザー提供素材)。壁と同じく**待ち合わせには入れない**。
+  // 間に合わなければ手描きの鉄球で出す。1回きりの演出のために起動を遅らせない。
+  let introBallImageReady = false;
+  const introBallImage = new Image();
+  introBallImage.fetchPriority = 'high';
+  introBallImage.onload = () => { introBallImageReady = true; };
+  introBallImage.src = 'assets/intro-cannonball.png';
+  function introBallArtReady() { return introBallImageReady && introBallImage.naturalWidth > 0; }
   // 画面いっぱいに覆う(cover)ための、画面座標→画像座標の対応。
   function wallArtMapping() {
     const scale = Math.max(VW / wallImage.naturalWidth, VH / wallImage.naturalHeight);
@@ -7671,20 +7687,32 @@
       const y = startY + (breakState.y - startY) * travel - Math.sin(travel * Math.PI) * WALL_ARC;
       const radius = 26 * startScale * Math.pow(0.075, u);
       ctx.save();
-      ctx.globalAlpha = ghost === 0 ? 1 : 0.5 / ghost;
-      const iron = ctx.createRadialGradient(x - radius * 0.4, y - radius * 0.45, radius * 0.15, x, y, radius);
-      iron.addColorStop(0, '#9aa6b0');
-      iron.addColorStop(0.45, '#404a54');
-      iron.addColorStop(1, '#0d1114');
-      ctx.fillStyle = iron;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
+      // 尾を引く炎は**弾の後ろ**へ描く。手描きの鉄球の頃は上へ重ねていたが、
+      // 絵に替えると鉄球の質感がオレンジで塗り潰されて見えなくなる(実測)。
       if (ghost === 0) {
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = '#ffb347';
+        ctx.globalAlpha = 0.5;
+        const flame = ctx.createRadialGradient(x, y + radius * 0.5, radius * 0.1, x, y + radius * 0.5, radius * 1.15);
+        flame.addColorStop(0, 'rgba(255,214,140,.95)');
+        flame.addColorStop(0.5, 'rgba(255,150,60,.55)');
+        flame.addColorStop(1, 'rgba(255,120,30,0)');
+        ctx.fillStyle = flame;
         ctx.beginPath();
-        ctx.arc(x, y + radius * 0.35, radius * 0.62, 0, Math.PI * 2);
+        ctx.arc(x, y + radius * 0.5, radius * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = ghost === 0 ? 1 : 0.5 / ghost;
+      if (introBallArtReady()) {
+        // 絵は正方形。直径ぶんの正方形に収めるので、半径の使い方は手描きの時と同じ。
+        ctx.drawImage(introBallImage, x - radius, y - radius, radius * 2, radius * 2);
+      } else {
+        // 絵が間に合わない時の代わり。**起動直後に必ず出る演出なので、絵を待たない。**
+        const iron = ctx.createRadialGradient(x - radius * 0.4, y - radius * 0.45, radius * 0.15, x, y, radius);
+        iron.addColorStop(0, '#9aa6b0');
+        iron.addColorStop(0.45, '#404a54');
+        iron.addColorStop(1, '#0d1114');
+        ctx.fillStyle = iron;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -8209,6 +8237,7 @@
     // 敵専用だったため、2vs2で「味方に当たる/当たらない」が技ごとに変わってしまう。
     // 判定の例外をなくし、当たった者は陣営に関係なく食らう形へ統一する。
     for (const u of units) {
+      if (unitDefeated(u)) continue;
       const dist = simDistance(u.x, u.y, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
@@ -8257,6 +8286,7 @@
     triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
     playExplosionSound(blastMul);
     for (const u of units) {
+      if (unitDefeated(u)) continue;
       const a = unitAnchor(u);
       const dist = simDistance(a.x, a.y, x, y);
       const dmg = computeDamage(dist, blastMul, damageMul);
@@ -9024,7 +9054,7 @@
 
     if (imgReady) {
       ctx.save();
-      ctx.globalAlpha = u.hp > 0 ? 1 : 0.4;
+      ctx.globalAlpha = unitDefeated(u) ? 0.4 : 1;
       // 接地点(0, UNIT_RADIUS)を軸に地形傾斜ぶんだけ回転。flipより外側に回転をかけることで
       // 反転していても傾き方向が世界座標基準(実際の地形)と一致するようにする
       ctx.translate(0, UNIT_RADIUS);

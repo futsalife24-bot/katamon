@@ -333,6 +333,14 @@ const HOOK = `
     cpuPickTarget: (id) => { const t = cpuPickTarget(unitById(id)); return t ? t.id : null; },
     cpuFriendlyFireRadius: () => CPU_FRIENDLY_FIRE_RADIUS,
     emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, unitById(ownerId), turns || 1),
+    // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
+    // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
+    explodeAtForTest: (x, y, blastMul, ownerId) => explodeAt(x, y, blastMul || 1, ownerId),
+    fireworkShardExplodeForTest: (x, y, ownerId) => fireworkShardExplode({ owner: ownerId }, 1, x, y),
+    projectileOwnerKind: () => projectiles.map(p => typeof p.owner),
+    damageTexts: () => floatTexts.map(t => t.text),
+    clearDamageTexts: () => { floatTexts.length = 0; },
+    unitDefeated: (id) => unitDefeated(unitById(id)),
     saveSuspendedForTest: () => saveSuspendedMatch(),
     loadSuspendedForTest: () => loadSuspendedMatch(),
     applySnapshotForTest: (data) => applySnapshot(data),
