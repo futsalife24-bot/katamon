@@ -230,7 +230,26 @@ const HOOK = `
       firebaseRevealsReady: () => firebaseRevealsReady(),
       firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap),
       firebaseHasSeatedOpponent: () => firebaseHasSeatedOpponent(),
-      updateFirebasePeerLiveness: () => updateFirebasePeerLiveness()
+      updateFirebasePeerLiveness: () => updateFirebasePeerLiveness(),
+      // ---- 段D: 切断・CPU引き継ぎ(Issue #8) ----
+      peerVisibleTimeoutMs: () => FIREBASE_PEER_VISIBLE_TIMEOUT_MS,
+      pendingVisibleTimeoutMs: () => FIREBASE_PENDING_VISIBLE_TIMEOUT_MS,
+      matchSeatSuspectMs: () => FIREBASE_MATCH_SEAT_SUSPECT_MS,
+      matchSeatVerifyIntervalMs: () => FIREBASE_MATCH_SEAT_VERIFY_INTERVAL_MS,
+      firebaseMatchTakeoverSeats: () => firebaseMatchTakeoverSeats(),
+      firebaseMatchSeatSuspect: (seat) => firebaseMatchSeatSuspect(seat),
+      firebaseMatchSeatAwaitingTakeover: (seat, ms) => firebaseMatchSeatAwaitingTakeover(seat, ms),
+      firebaseSeatTakeoverPending: () => firebaseSeatTakeoverPending(),
+      noteFirebaseMatchSeatMessage: (seat) => noteFirebaseMatchSeatMessage(seat),
+      updateFirebaseMatchSeatTakeover: () => updateFirebaseMatchSeatTakeover(),
+      applyFirebaseSeatTakeover: (seat) => applyFirebaseSeatTakeover(seat),
+      updateFirebasePendingTerminals: () => updateFirebasePendingTerminals(),
+      firebaseHostActsForEmptySeat: (seat, unitId) => firebaseHostActsForEmptySeat(seat, unitId),
+      cpuPlan: () => ({ phase: cpuPhase, dir: cpuMoveDir, remaining: cpuMoveRemaining, think: cpuThinkTimer }),
+      clearCpuPlan: () => { cpuPhase = null; cpuMoveDir = 0; cpuMoveRemaining = 0; cpuThinkTimer = -1; },
+      setUnitControl: (id, control) => { const u = unitById(id); if (u) u.control = control; },
+      unitControl: (id) => { const u = unitById(id); return u ? u.control : null; },
+      setActiveUnitForTest: (id) => { const i = turnOrder.indexOf(id); if (i >= 0) activeIndex = i; return activeUnit().id; }
     }),
     setPhase: (p) => { gamePhase = p; },
     // 画面の揺れ。対戦中以外でも必ず止まることを見るため(v110の起動演出で震え続けた)。

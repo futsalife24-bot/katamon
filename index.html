@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v120';
+  const BUILD_ID = 'v121';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4226,6 +4226,11 @@
   // ここで切断は絶対にしない。表示だけ。切る判定は updateFirebasePeerLiveness の側だけが持つ。
   const FIREBASE_LOBBY_HEARTBEAT_VISIBLE_INTERVAL_MS = 15000;
   const FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS = 45000;
+  // 段D(Issue #8)。試合中に応答が途切れた席をCPUへ引き継ぐまでの2段構え。
+  // 35秒は「疑い」で、全端末に確認中の表示を出すだけ。席を空けてよいかはロビーと同じく
+  // サーバー時刻のseenAt(90秒)だけが決める。表示用の時計で席を消してはいけない。
+  const FIREBASE_MATCH_SEAT_SUSPECT_MS = 35000;
+  const FIREBASE_MATCH_SEAT_VERIFY_INTERVAL_MS = 5000;
   function firebaseMonotonicNow() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
   function firebaseActionMatches(msg, action) {
     return !!action && FIREBASE_ACTION_ID_RE.test(msg.actionId || '')
@@ -4276,6 +4281,10 @@
     const hidden = typeof document !== 'undefined' && document.hidden;
     for (const entry of online.pendingRemoteTerminals.values()) {
       if (advanceFirebasePendingVisibleTime(entry, now, hidden)) {
+        // 段D。届かない相手がCPUへ引き継げる席なら、ここで試合を切らずに引き継ぎを待つ。
+        // その席の無音がここと同じだけ続いていることを条件にする。ほかの原因で
+        // 行動通知だけが欠けた時は、従来どおり中断させる。
+        if (firebaseMatchSeatAwaitingTakeover(entry.msg && entry.msg.seat, FIREBASE_PENDING_VISIBLE_TIMEOUT_MS)) continue;
         // 見出し側で「中断しました/開始できません」を出し分けるので、ここは原因だけを述べる。
         rejectFirebaseMessage('相手の行動通知が届きませんでした。');
         return;
@@ -4288,8 +4297,9 @@
   }
   // 人が座っている対戦者席が自分だけなら、通信が途切れる相手がそもそも居ない。
   // 2vs2をCPU3体と遊ぶ場合がこれで、何も届かないまま35秒で必ず切られていた。
-  // 試合中に席へ座ることはできない(ルールがロビー中の確保しか許さない)ので、
-  // ここが一度falseになった試合は最後までfalseのまま。
+  // 試合中に席へ座ることはできない(ルールがロビー中の確保しか許さない)。
+  // 段Dで席が減ることはあるが、減る向きにしか動かないので、ここが一度falseになった
+  // 試合は最後までfalseのまま。CPUだけが残った試合が35秒で切られることはない。
   function firebaseHasSeatedOpponent() {
     return firebaseOccupiedPlayerSeats().some(seat => seat !== online.seat);
   }
@@ -4303,12 +4313,119 @@
     }
     const liveness = advanceFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow(), typeof document !== 'undefined' && document.hidden);
     if (liveness.timedOut) {
+      // 段D。落ちた席をCPUへ引き継げる見込みがある間は、ここで試合を切らない。
+      // 切ると「1人落ちただけで残り3人まで巻き添え」になる。引き継ぎが済むか、
+      // 相手の応答が戻れば、この関数は次の巡回から従来どおり働く。
+      if (firebaseSeatTakeoverPending()) {
+        online.peerLiveness.peerVisibleMs = 0;
+        return;
+      }
       rejectFirebaseMessage('相手との通信が途切れました。');
       return;
     }
     if (liveness.pingDue) {
       online.peerLiveness.pingVisibleMs = 0;
       netSend({ t: 'ping' });
+    }
+  }
+  // --- 試合中の席ごとの生存(段D / Issue #8) ---
+  // 対戦全体の生存(updateFirebasePeerLiveness)は「誰か1人からでも届けば」時計が戻るので、
+  // 4人戦で1人だけ落ちたことを見分けられない。引き継ぎは席単位で決めたいので、
+  // 席ごとの無音時間をここで別に数える。ロビーの時計とも混ぜない(あちらは表示専用)。
+  //
+  // 見張るのは「2vs2で、人が座っていて、自分でもホストでもない席」だけ。
+  //   - ホスト席(p1)は対象外。ルールがp1の席へ生存印を書かせないので90秒の確認ができず、
+  //     進行役の引っ越しという別の仕組みが要る。v121の範囲外(従来どおり試合終了)。
+  //   - 1vs1も対象外。相手が居なくなった時点で勝負の意味が無いため(ユーザー判断)。
+  // 席を空けようとして続けて断られたら、その席は引き継げないものとして諦める。
+  // Rulesがまだ古い(Consoleへ反映する前)と削除が必ず断られる。諦めないと、
+  // 打ち切りを抑えたまま永久に待ち続けて、残った人が試合から出られなくなる。
+  // 諦めた後は従来どおり「相手との通信が途切れました」で終わる。
+  const FIREBASE_MATCH_TAKEOVER_MAX_FAILURES = 3;
+  function firebaseMatchTakeoverSeats() {
+    if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !firebaseLobbyIs2v2()) return [];
+    return firebasePlayerSeats().filter(seat => seat !== 'p1' && seat !== online.seat
+      && firebaseSeatOccupied(seat) && !firebaseMatchTakeoverGaveUp(seat));
+  }
+  function firebaseMatchTakeoverGaveUp(seat) {
+    const fails = (online && online.matchSeatTakeoverFails && online.matchSeatTakeoverFails[seat]) || 0;
+    return fails >= FIREBASE_MATCH_TAKEOVER_MAX_FAILURES;
+  }
+  function firebaseMatchSeatSilentMs(seat) {
+    if (!online || !online.matchSeatSilentMs) return 0;
+    return online.matchSeatSilentMs[seat] || 0;
+  }
+  function firebaseMatchSeatSuspect(seat) {
+    return firebaseMatchSeatSilentMs(seat) >= FIREBASE_MATCH_SEAT_SUSPECT_MS;
+  }
+  // その席が「引き継ぎ待ちで、しかも指定した時間ずっと無音」か。
+  // 呼び出し側のしびれを切らす時間と同じ幅で無音が続いている時だけ真になる。
+  // 引き継げない席(ホスト・1vs1・空席)では必ず偽なので、従来の中断はそのまま働く。
+  function firebaseMatchSeatAwaitingTakeover(seat, silentMs) {
+    if (!seat || !firebaseMatchTakeoverSeats().includes(seat)) return false;
+    return firebaseMatchSeatSilentMs(seat) >= silentMs;
+  }
+  // 引き継ぎの確認中か。表示にも、対戦全体の切断判定を抑える判断にも同じものを使う。
+  // 別々の条件にすると「画面は確認中なのに裏で試合が切れる」という食い違いが出る。
+  function firebaseSeatTakeoverPending() {
+    return firebaseMatchTakeoverSeats().some(firebaseMatchSeatSuspect);
+  }
+  // その席から何か届いた。無音時間を0へ戻す。
+  function noteFirebaseMatchSeatMessage(seat) {
+    if (!online || online.kind !== 'firebase' || !online.matchSeatSilentMs) return;
+    if (!FIREBASE_SEATS.includes(seat)) return;
+    online.matchSeatSilentMs[seat] = 0;
+    // 応答が戻った席は、断られた回数も帳消しにする。回線が一時的に悪かっただけの席を、
+    // その試合のあいだずっと引き継ぎ対象外にしないため。
+    if (online.matchSeatTakeoverFails) delete online.matchSeatTakeoverFails[seat];
+  }
+  function updateFirebaseMatchSeatTakeover() {
+    if (!online || online.kind !== 'firebase' || online.phase !== 'playing' || !firebaseLobbyIs2v2()) return;
+    if (!online.matchSeatSilentMs) return;
+    const now = firebaseMonotonicNow();
+    const elapsed = Math.max(0, now - (online.matchSeatCheckedAt || now));
+    online.matchSeatCheckedAt = now;
+    // 裏に回っている間は数えない。ロビー・対戦の既存2系統と同じ考え方で、
+    // 画面ロック中の人を無音とみなして追い出さないため。
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const watched = firebaseMatchTakeoverSeats();
+    for (const seat of FIREBASE_SEATS) {
+      if (!watched.includes(seat)) { delete online.matchSeatSilentMs[seat]; continue; }
+      if (!Number.isFinite(online.matchSeatSilentMs[seat])) online.matchSeatSilentMs[seat] = 0;
+      if (!hidden) online.matchSeatSilentMs[seat] += elapsed;
+    }
+    if (!isFirebaseHost()) return;
+    if (!watched.some(firebaseMatchSeatSuspect)) return;
+    // 押せる表示を出すロビーと違い、試合中は自動で進める(ユーザー判断)。
+    // ホストが席を外していても残りの3人が最後まで遊べるようにするため。
+    online.matchSeatVerifyWaitMs = (online.matchSeatVerifyWaitMs || 0) + elapsed;
+    if (online.matchSeatVerifyWaitMs < FIREBASE_MATCH_SEAT_VERIFY_INTERVAL_MS) return;
+    online.matchSeatVerifyWaitMs = 0;
+    verifyFirebaseMatchSeats();
+  }
+  // ホストだけ。ロビーの verifyStaleFirebaseSeats と同じくサーバー時刻のseenAtで確かめるが、
+  // ボタンを出すのではなくその場で引き継ぐ。読み直せない時は何もしない(古い情報で席を消さない)。
+  async function verifyFirebaseMatchSeats() {
+    if (!isFirebaseHost() || online.phase !== 'playing' || online.matchSeatChecking) return;
+    const checking = online;
+    checking.matchSeatChecking = true;
+    try {
+      const room = await firebaseRequest(`rooms/${checking.room}`, checking.auth);
+      if (online !== checking || !room || checking.phase !== 'playing') return;
+      checking.slots = room.slots || {};
+      const serverNow = firebaseServerNow(checking.auth);
+      for (const seat of firebaseMatchTakeoverSeats()) {
+        if (!firebaseMatchSeatSuspect(seat)) continue;
+        const slot = checking.slots[seat];
+        if (!slot || !slot.uid || !firebaseSeatHeartbeatAllowsRelease(serverNow, Number(slot.seenAt))) continue;
+        await takeOverFirebaseSeatWithCpu(seat);
+        // 名簿を配り直すので、残りは次の巡回で見る。1回に1席だけ引き継ぐ。
+        return;
+      }
+    } catch (_) {
+      // 部屋を読めないのは通信不良。ここで引き継ぐと生きている人を追い出しかねない。
+    } finally {
+      if (online === checking) checking.matchSeatChecking = false;
     }
   }
   // --- ロビーの心拍(Stage 4-1) ---
@@ -4682,6 +4799,8 @@
       if (firebasePlayerSeats().includes(msg.seat)) noteFirebasePeerMessage();
       // ロビー表示用の在席記録は観戦者も含めて全席ぶん取る(上の対戦者限定の判定とは別物)。
       noteFirebaseSeatSeen(msg.seat);
+      // 試合中の席ごとの生存(段D)。上の2つとは数える対象も使い道も違うので分けてある。
+      noteFirebaseMatchSeatMessage(msg.seat);
       if (online.participantRole === 'spectator') {
         if (msg.t === 'start' || msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
         else if (msg.t === 'result') receiveFirebaseSpectatorResult(msg);
@@ -5504,6 +5623,65 @@
     if (online === acting) onlineLobbyStatus(`${firebaseSeatLabel(seat)}を空けました。`);
   }
 
+  // 段D。試合中に落ちた席を空け、そのキャラをCPUの担当へ移す(Issue #8)。
+  // 席を空けてしまえば、あとは段Cの「空席はホストがCPUで動かして結果を配る」が
+  // そのまま働く。新しい通信の種類も、スナップショットへの追加項目も要らない。
+  async function takeOverFirebaseSeatWithCpu(seat) {
+    const acting = online;
+    try {
+      await firebaseRequest(`rooms/${acting.room}/slots/${seat}`, acting.auth, { method: 'DELETE' });
+    } catch (_) {
+      // ルールは生存印が90秒以上古い席しか消させない。断られた＝相手はまだ生きている。
+      // 疑いを取り消して数え直す。ここで粘ると、生きている人を追い出そうとし続ける。
+      if (online === acting && acting.matchSeatSilentMs) acting.matchSeatSilentMs[seat] = 0;
+      if (online === acting) {
+        if (!acting.matchSeatTakeoverFails) acting.matchSeatTakeoverFails = {};
+        acting.matchSeatTakeoverFails[seat] = (acting.matchSeatTakeoverFails[seat] || 0) + 1;
+        logOnlineEvent({ type: 'seatTakeoverRefused', seat, fails: acting.matchSeatTakeoverFails[seat] });
+      }
+      return;
+    }
+    if (online !== acting) return;
+    logOnlineEvent({ type: 'seatTakeover', seat });
+    if (acting.matchSeatSilentMs) delete acting.matchSeatSilentMs[seat];
+    // 名簿を全員へ配る。受け取った端末では空席＝CPU担当になり、手番の呼び名も揃う。
+    // 空けられた本人がまだ生きていれば、この名簿で気づいてタイトルへ戻る。
+    await refreshFirebaseRoster(true);
+    if (online !== acting) return;
+    applyFirebaseSeatTakeover(seat);
+  }
+  // 名簿が変わった端末すべてで呼ぶ。担当の割り直しは段Cの setOnlineSeat が持っているので、
+  // ここでは呼び直すだけにする。ホストだけが control='cpu' を持ち、ほかの端末は
+  // remote のまま結果を受け取る、という段Cの形を崩さない。
+  function applyFirebaseSeatTakeover(seat) {
+    if (!online || online.kind !== 'firebase' || !firebaseLobbyIs2v2()) return;
+    const unitId = firebaseSeatUnitId(seat);
+    if (online.participantRole === 'player') setOnlineSeat(online.seat);
+    logSeatAssignment('seatTakeover');
+    // 引き継いだ席の行動待ちは捨てる。残すと次の発射が「通信順序が不正」で弾かれ、
+    // 引き継いだ意味が無くなる。捨ててよいのは、この席がもう何も送ってこないため。
+    if (online.remoteAction && online.remoteAction.unitId === unitId) online.remoteAction = null;
+    if (online.pendingRemoteTerminals) {
+      for (const [actionId, entry] of online.pendingRemoteTerminals) {
+        if (entry && entry.msg && entry.msg.unitId === unitId) online.pendingRemoteTerminals.delete(actionId);
+      }
+    }
+    // 対戦全体の生存時計も戻す。無音のまま溜めた時間で、この直後に切れてしまうため。
+    if (online.peerLiveness) resetFirebasePeerLiveness(online.peerLiveness, firebaseMonotonicNow());
+    const u = unitById(unitId);
+    if (u && u.control === 'cpu') resumeCpuTurnAfterTakeover(u);
+    showCutIn(`${firebaseSeatLabel(seat)}が切断しました`, 'CPUが引き継ぎます', 1.6);
+  }
+  // 引き継いだ席の手番の途中なら、CPUの行動計画をここで立て直す。
+  // 計画は startTurn でしか作られないので、これが無いとその手番だけ誰も動かず止まる。
+  // 弾が飛んでいる最中は触らない。解決はどの端末でも同じように進むので、次の手番から効く。
+  function resumeCpuTurnAfterTakeover(u) {
+    const acting = activeUnit();
+    if (!acting || acting.id !== u.id) return;
+    if (awaitingResolve || projectiles.length) return;
+    beginCpuTurnPlan(acting);
+  }
+
   function scheduleFirebaseTokenRefresh() {
     if (!online || online.kind !== 'firebase') return;
     if (online.authRefreshTimer) clearTimeout(online.authRefreshTimer);
@@ -5554,6 +5732,9 @@
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       seatSeen: {}, seatStale: {}, seatReleaseReady: {}, seatReleaseNextCheckMs: 0, seatReleaseChecking: false,
+      // 試合中の席ごとの無音時間(段D)。ロビーの seatSeen とは別物なので混ぜない。
+      matchSeatSilentMs: {}, matchSeatCheckedAt: firebaseMonotonicNow(), matchSeatVerifyWaitMs: 0, matchSeatChecking: false,
+      matchSeatTakeoverFails: {},
       seatReady: {}, // 席ごとの準備完了。2vs2は4人ぶん要る
       // 伏せ合いも席ごとに持つ。1vs1の peer* はこの表の「相手の席」ぶんを写したもので、
       // 既存の経路を変えずに済ませるために残してある。
@@ -5902,9 +6083,17 @@
     if (msg.seat !== 'p1') return;
     rememberFirebaseName(msg);
     if (msg.slots && typeof msg.slots === 'object') {
+      const before = online.slots || {};
+      // 段D。試合中に席が消えたら、ホストがCPUへ引き継いだということ。
+      // 名簿を入れ替える前に、どの席が消えたかを控えておく。
+      const takenOver = online.phase === 'playing' && firebaseLobbyIs2v2()
+        ? FIREBASE_SEATS.filter(s => s !== online.seat && before[s] && before[s].uid && !(msg.slots[s] && msg.slots[s].uid))
+        : [];
       online.slots = msg.slots;
       // ホストが席を空けた直後にこの名簿が届く。自席が消えていたら、その場で気づく。
       noticeOwnFirebaseSeatLost();
+      if (!online) return;
+      for (const seat of takenOver) applyFirebaseSeatTakeover(seat);
       if (!online) return;
     }
     if (msg.settings && typeof msg.settings === 'object') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); }
@@ -5929,6 +6118,9 @@
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
     online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
     online.pendingRemoteTerminals.clear(); online.completedRemoteActions.clear(); online.rematchVotes = {};
+    // 前の試合の無音時間を持ち越さない。持ち越すと再戦の開始直後に引き継ぎが走る。
+    online.matchSeatSilentMs = {}; online.matchSeatCheckedAt = firebaseMonotonicNow();
+    online.matchSeatVerifyWaitMs = 0; online.matchSeatTakeoverFails = {};
     online.autoStartNextRound = !!autoReady;
     if (autoReady && isFirebasePlayer()) commitOwnCharacter();
   }
@@ -6198,6 +6390,10 @@
     // 既に終わっている接続を毎フレーム再判定しない。保留中の通知は放棄する。
     if (online.phase === 'ended' || online.protocolError) return;
     updateFirebasePendingTerminals();
+    if (!online || online.phase === 'ended') return;
+    // 席ごとの生存は、対戦全体の生存より先に見る。順が逆だと、引き継げるはずの席の
+    // 疑いがまだ立っていない一瞬に、全体の判定が試合を切ってしまう。
+    updateFirebaseMatchSeatTakeover();
     if (!online || online.phase === 'ended') return;
     updateFirebasePeerLiveness();
     if (!online || online.phase === 'ended') return;
@@ -7827,13 +8023,16 @@
     const acting = activeUnit();
     acting.fuel = acting.fuelMax;
     focusCameraOn(acting.x);
-    if (acting.control === 'cpu') {
-      cpuThinkTimer = 0.7 + Math.random() * 0.5;
-      const plan = planCpuMove(acting);
-      cpuMoveDir = plan.dir;
-      cpuMoveRemaining = plan.distance;
-      cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
-    }
+    if (acting.control === 'cpu') beginCpuTurnPlan(acting);
+  }
+  // CPUの手番の入り口。startTurn だけでなく、試合中に落ちた席をCPUが引き継いだ時にも
+  // 呼ぶ(段D)。引き継ぎは手番の途中で起きるので、ここを通さないと計画が無いまま止まる。
+  function beginCpuTurnPlan(acting) {
+    cpuThinkTimer = 0.7 + Math.random() * 0.5;
+    const plan = planCpuMove(acting);
+    cpuMoveDir = plan.dir;
+    cpuMoveRemaining = plan.distance;
+    cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
   }
 
   function endTurn() {
@@ -9585,6 +9784,33 @@
     drawOutlinedText(battleMode === 'free' ? '演習' : `${winStreak}連勝`, VW - 20, barY + 14, {
       align: 'right', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
     });
+    // 段D。応答の途切れた席を確認している間だけ、その旨を全端末に出す。
+    // 出さないと「相手の手番のまま何も起きない」時間が90秒近く続き、固まったように見える。
+    // 置き場所はミニマップの下。ターンバーとミニマップの間は7pxしか空いておらず、
+    // そこへ出すとミニマップの枠と「MAP」の行に重なる(実ブラウザで確認済み)。
+    const checkingSeats = firebaseMatchTakeoverSeats().filter(firebaseMatchSeatSuspect);
+    if (checkingSeats.length) {
+      const who = checkingSeats.length === 1 ? firebaseSeatLabel(checkingSeats[0]) : '一部の席';
+      const text = `${who}の切断を確認中…`;
+      const y = minimapTop() + MINIMAP.h + 13;
+      ctx.save();
+      ctx.font = `900 11px ${UI_FONT_HEAVY}`;
+      const w = ctx.measureText(text).width + 22;
+      // 地形も空も背景になり得るので、必ず暗い下敷きを敷いてから文字を置く。
+      ctx.fillStyle = 'rgba(10,14,22,0.72)';
+      ctx.beginPath();
+      // 角丸は古い端末に無いことがある。ほかのHUDと同じく、無ければ四角で描く。
+      if (ctx.roundRect) ctx.roundRect(VW / 2 - w / 2, y - 11, w, 18, 9);
+      else ctx.rect(VW / 2 - w / 2, y - 11, w, 18);
+      ctx.fill();
+      ctx.strokeStyle = UI.brass;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+      drawOutlinedText(text, VW / 2, y + 3, {
+        align: 'center', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+      });
+    }
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
