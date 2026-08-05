@@ -156,6 +156,15 @@ const shinigami = kt.character('shinigami');
   // 名前の帯があごを隠していたので、帯の上の範囲で顔を中央に置く。
   check('顔は名前の帯を避けた範囲の中央に置く',
     html.includes('const cy = rect.y + (rect.h - band) / 2;'));
+  // v124: 1vs1は窓が広く、顔を外側へ寄せた残りが大きく空く(実機で指摘)。
+  // そこへ入れるのは「キャラだけで決まる値」に限る。名前や戦績のような
+  // 端末ごとに変わる値を入れると、同じ試合なのに画面が食い違う。
+  {
+    const infoFn = /function drawVsPlateInfo\(([\s\S]*?)\n  \}\n/.exec(html);
+    const body = infoFn ? infoFn[1] : '';
+    check('空きに出す情報は端末ごとに変わる値を使わない',
+      !!body && !/\bonline\b|winStreak|localPlayerName|firebaseSeatName|Date\./.test(body), body.slice(0, 200));
+  }
 }
 
 
@@ -970,6 +979,32 @@ kt.setLocalSeat('p1');
     names.map(n => `${n}:${countIn(before, n)}→${countIn(after, n)}`).join(' '));
   check('その状態でもVSの合図は文字で出る',
     after.includes('VS') && !before.includes('VS'), after.join('/'));
+}
+
+// v124: 1vs1の空きに出す「役割・HP・必殺技」。実際に描かれた文字で確かめる。
+// 2vs2は窓が狭いので出さない。出すと顔と重なって両方読めなくなる。
+{
+  const shown = (fmt) => {
+    kt.setFreeFormat(fmt);
+    kt.startFreeMatch();
+    const card = kt.matchupCutIn();
+    const defs = card.left.concat(card.right).map(e => kt.character(e.character));
+    for (let i = 0; i < 30; i++) kt.step(1 / 60);
+    kt.resetDrawnText();
+    kt.render();
+    return { defs, drawn: kt.drawnText() };
+  };
+  const one = shown('1v1');
+  check('1vs1では役割・HP・必殺技が実際に描かれる',
+    one.defs.every(d => one.drawn.includes(d.role)
+      && one.drawn.includes(`HP ${d.maxHp}`)
+      && one.drawn.includes(`必殺 ${d.special}`)),
+    one.defs.map(d => d.role + '/' + d.maxHp + '/' + d.special).join(' ') + ' drawn=' + one.drawn.join('/'));
+  const two = shown('2v2');
+  check('2vs2では窓が狭いので出さない',
+    two.defs.every(d => !two.drawn.includes(d.role)),
+    two.defs.map(d => d.role).join(' ') + ' drawn=' + two.drawn.join('/'));
+  kt.setFreeFormat('1v1');
 }
 
 console.log(`\n=== regression seat=${SEAT} ===`);

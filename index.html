@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v124';
+  const BUILD_ID = 'v125';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -10126,6 +10126,9 @@
       // 砲弾の外側(紋章から遠い方)へ寄せる。2vs2は窓が2つなので真ん中でよい。
       const anchor = entries.length > 1 ? 0.5 : (mirror ? 0.68 : 0.32);
       drawVsPlateFace(entry, rect, mirror, anchor);
+      // 1vs1は窓が広く、顔を外側へ寄せた残りが大きく空く(実機で指摘)。
+      // そこへ「何と戦うのか」が分かるものを入れる。2vs2は窓が狭いので入れない。
+      if (entries.length === 1) drawVsPlateInfo(entry, rect, mirror, anchor);
     });
 
     // ぶつかった瞬間だけ、砲弾の縁を光らせる。
@@ -10141,6 +10144,53 @@
       ctx.restore();
     }
     ctx.restore();
+  }
+
+  // 1vs1の窓の空きに出す、相手を測るための3行。
+  // 役割・最大HP・必殺技の名前は、どの端末でもキャラだけで決まるので表示がずれない。
+  // 名前や戦績のような端末ごとに変わる値はここへ入れないこと。
+  function drawVsPlateInfo(entry, rect, mirror, anchor) {
+    const def = entry && CHARACTERS[entry.character];
+    if (!def) return;
+    // 顔が寄っている側の反対に置く。顔の幅ぶんは避ける。
+    const faceHalf = (rect.h - Math.min(19, rect.h * 0.3)) * 0.62;
+    const faceCx = rect.x + rect.w * anchor;
+    const x0 = mirror ? rect.x + 8 : faceCx + faceHalf + 8;
+    const x1 = mirror ? faceCx - faceHalf - 8 : rect.x + rect.w - 8;
+    const w = x1 - x0;
+    if (w < 60) return;
+    // 紋章は自陣営の右下・相手陣営の左上から食い込むので、横も少しだけ逃がす。
+    const cx = (x0 + x1) / 2 + (mirror ? 10 : -6);
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 9);
+    else ctx.rect(rect.x, rect.y, rect.w, rect.h);
+    ctx.clip();
+    // 顔との境目に細い仕切りを入れて、絵と文字がぶつかって見えないようにする。
+    ctx.strokeStyle = 'rgba(255,226,150,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const lineX = mirror ? x1 + 5 : x0 - 5;
+    ctx.moveTo(lineX, rect.y + rect.h * 0.16);
+    ctx.lineTo(lineX, rect.y + rect.h * 0.84);
+    ctx.stroke();
+    ctx.restore();
+
+    const roleFont = `900 ${Math.round(Math.min(12, w * 0.115))}px ${UI_FONT_HEAVY}`;
+    const lineFont = `900 ${Math.round(Math.min(11, w * 0.105))}px ${UI_FONT_HEAVY}`;
+    // 中央のVS紋章は、自陣営の砲弾の「下」と相手陣営の砲弾の「上」にかぶる。
+    // 紋章から遠い側へ3行を寄せる(実機で相手側の1行目が隠れていた)。
+    const top = rect.y + rect.h * (mirror ? 0.46 : 0.22);
+    const step = rect.h * 0.19;
+    drawOutlinedText(fitText(def.role || '', roleFont, w), cx, top, {
+      font: roleFont, color: UI.gold, lineWidth: 3.5
+    });
+    drawOutlinedText(fitText(`HP ${def.maxHp}`, lineFont, w), cx, top + step, {
+      font: lineFont, color: UI.parchment, lineWidth: 3
+    });
+    drawOutlinedText(fitText(`必殺 ${def.special || '—'}`, lineFont, w), cx, top + step * 2, {
+      font: lineFont, color: UI.brassLight, lineWidth: 3
+    });
   }
 
   // 窓1つぶん。顔は窓を埋める大きさに切り出し、はみ出した分は窓で切る。
