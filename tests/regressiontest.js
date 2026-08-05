@@ -1382,6 +1382,83 @@ if (titleArtStart) {
     `${fallbackSignature}→${titleAfterImagesReady.signature} / ${titleAfterThirtyFrames.builds}→${titleAfterImagesReady.builds}`);
 }
 
+// ===== 次の風を先に知らせる(v133) =====
+// 画面に出した予報を次の切替で振り直すと、予報が嘘になる。1vs1の既存周期である
+// 4ターン目までは今の風を保ち、4ターン目に予報そのものを使うことを確認する。
+kt.startBattle('kyoryu');
+settle();
+const firstForecast = kt.windForecast();
+check('対戦開始時に次の風が1つ用意される', !!firstForecast,
+  firstForecast ? JSON.stringify(firstForecast) : '予報なし');
+const forecastReady = kt.setWindCycleForTest(
+  { dir: -1, strength: 0.25, calmWind: false },
+  { dir: 1, strength: 0.75, calmWind: false }
+);
+kt.setTurnCountForTest(3);
+kt.startTurnForTest();
+const beforeWindChange = kt.wind();
+kt.setTurnCountForTest(4);
+kt.startTurnForTest();
+const afterWindChange = kt.wind();
+check('1vs1は4ターン目まで現在の風を保ち、予報した風を次に使う',
+  forecastReady
+    && beforeWindChange.dir === -1 && beforeWindChange.strength === 0.25
+    && afterWindChange.dir === 1 && afterWindChange.strength === 0.75,
+  JSON.stringify({ forecastReady, beforeWindChange, afterWindChange }));
+kt.setWindCycleForTest(
+  { dir: 1, strength: 0.5, calmWind: false },
+  { dir: -1, strength: 0.123456789, calmWind: false }
+);
+kt.stage3().resetMatchForTest();
+const forecastAfterRematch = kt.windForecast();
+check('再戦では前の試合の風予報を持ち越さない', !!forecastAfterRematch
+  && !(forecastAfterRematch.dir === -1 && forecastAfterRematch.strength === 0.123456789),
+  JSON.stringify(forecastAfterRematch));
+
+kt.setFreeWindForTest('left');
+kt.startFreeMatch();
+const fixedCurrent = kt.wind();
+const fixedForecast = kt.windForecast();
+check('固定風は現在と次が同じ値になる', fixedCurrent.dir === -1 && fixedCurrent.strength === 0.6
+  && fixedForecast && fixedForecast.dir === fixedCurrent.dir && fixedForecast.strength === fixedCurrent.strength,
+  JSON.stringify({ fixedCurrent, fixedForecast }));
+kt.setFreeWindForTest('calm');
+kt.startFreeMatch();
+const calmCurrent = kt.wind();
+const calmForecast = kt.windForecast();
+check('無風固定は現在も次も無風になる', calmCurrent.strength === 0
+  && calmForecast && calmForecast.strength === 0 && calmForecast.calmWind === true,
+  JSON.stringify({ calmCurrent, calmForecast }));
+
+kt.setFreeWindForTest('random');
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+kt.setWindCycleForTest(
+  { dir: -1, strength: 0.2, calmWind: false },
+  { dir: 1, strength: 0.8, calmWind: false }
+);
+kt.setTurnCountForTest(7);
+kt.startTurnForTest();
+const before2v2WindChange = kt.wind();
+kt.setTurnCountForTest(8);
+kt.startTurnForTest();
+const after2v2WindChange = kt.wind();
+check('2vs2は全員が2巡する8ターン目に予報した風を使う',
+  before2v2WindChange.dir === -1 && before2v2WindChange.strength === 0.2
+    && after2v2WindChange.dir === 1 && after2v2WindChange.strength === 0.8,
+  JSON.stringify({ before2v2WindChange, after2v2WindChange }));
+
+const forecastBeforeSave = kt.windForecast();
+const forecastSnapshot = kt.buildSnapshotForTest();
+kt.setWindCycleForTest(
+  { dir: 1, strength: 0.1, calmWind: false },
+  { dir: -1, strength: 0.9, calmWind: false }
+);
+kt.applySnapshotForTest(forecastSnapshot);
+check('中断再開・観戦用の状態復元でも次の風が一致する',
+  JSON.stringify(kt.windForecast()) === JSON.stringify(forecastBeforeSave),
+  `${JSON.stringify(forecastBeforeSave)}→${JSON.stringify(kt.windForecast())}`);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

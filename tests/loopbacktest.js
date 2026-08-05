@@ -105,6 +105,9 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
         `${hostState.units.map(u => u.ch)} / ${guestState.units.map(u => u.ch)}`);
       check('風が一致して始まる', JSON.stringify(hostState.wind) === JSON.stringify(guestState.wind),
         `${JSON.stringify(hostState.wind)}/${JSON.stringify(guestState.wind)}`);
+      check('次の風も両方に同じ値が表示されて始まる', !!hostState.nextWind
+        && JSON.stringify(hostState.nextWind) === JSON.stringify(guestState.nextWind),
+        `${JSON.stringify(hostState.nextWind)}/${JSON.stringify(guestState.nextWind)}`);
       autoFireEnabled = true;
     }
     if (hostState.matchOver && guestState.matchOver) break;
@@ -121,6 +124,10 @@ async function runSession({ delayRounds = 0, dropEvery = 0, autoSpecial = false,
   check('決着時のHPが一致する',
     JSON.stringify(hostState.units.map(u => u.hp)) === JSON.stringify(guestState.units.map(u => u.hp)),
     `${JSON.stringify(hostState.units.map(u => u.hp))} / ${JSON.stringify(guestState.units.map(u => u.hp))}`);
+  check('決着時も現在の風と次の風が一致する',
+    JSON.stringify({ wind: hostState.wind, nextWind: hostState.nextWind })
+      === JSON.stringify({ wind: guestState.wind, nextWind: guestState.nextWind }),
+    `${JSON.stringify({ wind: hostState.wind, nextWind: hostState.nextWind })} / ${JSON.stringify({ wind: guestState.wind, nextWind: guestState.nextWind })}`);
 
   // 対人戦は連勝にもランキングにも中断セーブにも触らない
   check('連勝を積まない', hostState.streak === 0 && guestState.streak === 0,

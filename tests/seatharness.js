@@ -197,6 +197,16 @@ const HOOK = `
     load: () => loadSuspendedMatch(),
     apply: (d) => applySnapshot(d),
     wind: () => ({ dir: wind.dir, strength: wind.strength }),
+    windForecast: () => (typeof nextWind === 'undefined' || !nextWind ? null : { ...nextWind }),
+    setWindCycleForTest: (current, forecast) => {
+      wind.dir = current.dir;
+      wind.strength = current.strength;
+      calmWind = current.calmWind === true;
+      if (typeof nextWind === 'undefined') return false;
+      nextWind = { ...forecast };
+      return true;
+    },
+    startTurnForTest: () => startTurn(),
     craters: () => craterHistory.length,
     craterHistory: () => craterHistory.map(crater => ({ ...crater })),
     streak: () => winStreak,
@@ -374,6 +384,9 @@ const HOOK = `
     freeConfig: () => ({ ...freeModeConfig }),
     setFreeFormat: (key) => {
       freeModeConfig.formatIndex = Math.max(0, FORMAT_OPTIONS.findIndex(o => o.key === key));
+    },
+    setFreeWindForTest: (key) => {
+      freeModeConfig.windIndex = Math.max(0, WIND_OPTIONS.findIndex(o => o.key === key));
     },
     changeFreeOption: (kind, dir) => changeFreeOption(kind, dir),
     startFreeMatch: () => startFreeMatch(),
