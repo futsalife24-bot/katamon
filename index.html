@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v131';
+  const BUILD_ID = 'v132';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -7139,41 +7139,86 @@
     ctx.restore();
   }
 
-  function drawTitleScreen() {
-    ctx.save();
+  // タイトルの背景・全画面グラデーション・ロゴは動かないのに、以前は毎コマ描いていた。
+  // 実機では drawTitleScreen だけで1コマ52ミリ秒、タイトル全体の半分以上を使っていたため、
+  // 空(v129)と同じく1枚に焼き、以後は貼るだけにする。ボタン・通知・build番号など、
+  // 状態で変わるものは焼かず、これまでどおり毎コマ描く。
+  //
+  // **等倍にしないこと。** 仮想座標の等倍で焼いて高精細画面へ広げるとロゴの輪郭が眠くなる。
+  // SKY_ART_SCALE と同じ2倍なら、現行の描画上限でも元の輪郭を保てる。
+  const TITLE_ART_SCALE = 2;
+  const titleArtCanvas = document.createElement('canvas');
+  titleArtCanvas.width = VW * TITLE_ART_SCALE;
+  titleArtCanvas.height = VH * TITLE_ART_SCALE;
+  const titleArtCtx = titleArtCanvas.getContext('2d');
+  let titleArtKey = '';
+  let titleArtBuilds = 0; // 焼き直した回数。毎フレーム増えていないことを検査で見る
+
+  function titleArtSignature() {
+    // 背景とロゴは非同期で届く。届く前の代替表示を焼いたあと画像が届いても、
+    // 古い絵を貼り続けないよう、実際に描く条件と画像の大きさを署名へ含める。
+    const background = titleTimeBackgroundReady
+      ? `${titleTimeTheme}:${titleTimeBackgroundImage.naturalWidth || 0}x${titleTimeBackgroundImage.naturalHeight || 0}`
+      : 'fallback';
+    const logoReady = titleLogoImage.complete && titleLogoImage.naturalWidth > 0;
+    const logo = logoReady
+      ? `${titleLogoImage.naturalWidth}x${titleLogoImage.naturalHeight}`
+      : 'fallback';
+    return `${background}|${logo}`;
+  }
+
+  function drawTitleStaticArt(g) {
+    g.save();
     if (titleTimeBackgroundReady) {
-      ctx.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
+      g.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
     }
-    const titleShade = ctx.createLinearGradient(0, 0, 0, VH);
+    const titleShade = g.createLinearGradient(0, 0, 0, VH);
     titleShade.addColorStop(0, 'rgba(4,8,20,0.20)');
     titleShade.addColorStop(0.45, 'rgba(4,8,20,0.34)');
     titleShade.addColorStop(1, 'rgba(4,8,20,0.72)');
-    ctx.fillStyle = titleShade;
-    ctx.fillRect(0, 0, VW, VH);
+    g.fillStyle = titleShade;
+    g.fillRect(0, 0, VW, VH);
 
     // 透明余白を表示時にトリミングし、ロゴ本体を画面上部へ寄せる。
     const logo = { x: 15, y: 55, w: VW - 30, h: 390 };
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.75)';
-    ctx.shadowBlur = 24;
-    ctx.shadowOffsetY = 10;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(logo.x, logo.y, logo.w, logo.h, 18);
-    else ctx.rect(logo.x, logo.y, logo.w, logo.h);
-    ctx.clip();
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.75)';
+    g.shadowBlur = 24;
+    g.shadowOffsetY = 10;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(logo.x, logo.y, logo.w, logo.h, 18);
+    else g.rect(logo.x, logo.y, logo.w, logo.h);
+    g.clip();
     if (titleLogoImage.complete && titleLogoImage.naturalWidth > 0) {
       const cropX = titleLogoImage.naturalWidth * 0.09;
       const cropY = titleLogoImage.naturalHeight * 0.10;
       const cropW = titleLogoImage.naturalWidth * 0.82;
       const cropH = titleLogoImage.naturalHeight * 0.78;
-      ctx.drawImage(titleLogoImage, cropX, cropY, cropW, cropH, logo.x, logo.y, logo.w, logo.h);
+      g.drawImage(titleLogoImage, cropX, cropY, cropW, cropH, logo.x, logo.y, logo.w, logo.h);
     } else {
-      ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 35px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('CATAMON PROJECT', VW / 2, logo.y + logo.h / 2);
+      g.fillStyle = '#ffd24a';
+      g.font = 'bold 35px sans-serif';
+      g.textAlign = 'center';
+      g.fillText('CATAMON PROJECT', VW / 2, logo.y + logo.h / 2);
     }
-    ctx.restore();
+    g.restore();
+    g.restore();
+  }
+
+  function rebuildTitleArt() {
+    const key = titleArtSignature();
+    if (key === titleArtKey) return;
+    titleArtKey = key;
+    titleArtBuilds++;
+    titleArtCtx.setTransform(TITLE_ART_SCALE, 0, 0, TITLE_ART_SCALE, 0, 0);
+    titleArtCtx.clearRect(0, 0, VW, VH);
+    drawTitleStaticArt(titleArtCtx);
+  }
+
+  function drawTitleScreen() {
+    ctx.save();
+    rebuildTitleArt();
+    ctx.drawImage(titleArtCanvas, 0, 0, VW, VH);
 
     // ボタン群の一番上に見出しを掲げる。文字幅を測って左右に真鍮ラインを添える(キャラ選択ヘッダと同じ色・太さ)。
     ctx.textAlign = 'center';

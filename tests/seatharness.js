@@ -51,6 +51,26 @@ const HOOK = `
     maxRenderScale: () => MAX_RENDER_SCALE,
     // 描き直しの節約(v129)。焼いた絵を何回作り直したかと、作り直しの合図が立っているか。
     artBuilds: () => ({ sky: skyArtBuilds, terrain: terrainArtBuilds }),
+    // タイトルの焼き付け(v132)。未実装の版でもハーネス自体を例外で止めず、
+    // テスト結果をFAILとして表示できるよう typeof で包む。
+    titleArtInfo: () => typeof titleArtBuilds === 'undefined' ? null : ({
+      builds: titleArtBuilds,
+      scale: TITLE_ART_SCALE,
+      width: titleArtCanvas.width,
+      height: titleArtCanvas.height,
+      signature: titleArtSignature()
+    }),
+    setTitleArtReadyForTest: () => {
+      if (typeof titleArtBuilds === 'undefined') return false;
+      titleTimeBackgroundReady = true;
+      titleTimeBackgroundFailed = false;
+      titleLogoReady = true;
+      titleLogoFailed = false;
+      titleLogoImage.complete = true;
+      titleLogoImage.naturalWidth = 1530;
+      titleLogoImage.naturalHeight = 1170;
+      return true;
+    },
     terrainArtDirty: () => terrainArtDirty,
     rebuildTerrainRimForTest: () => rebuildTerrainRim(),
     rebuildBridgeForTest: () => rebuildBridgeDecoration(),
