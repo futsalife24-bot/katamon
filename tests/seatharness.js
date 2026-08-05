@@ -27,6 +27,8 @@ const HOOK = `
     projectiles: () => projectiles,
     state: () => ({ gamePhase, matchOver, winner, awaitingResolve, turnCount, activeIndex, turnOrder: turnOrder.slice() }),
     panels: () => __panelLog.slice(),
+    drawnText: () => globalThis.__ktTextLog.slice(),
+    resetDrawnText: () => { globalThis.__ktTextLog.length = 0; },
     resetPanels: () => { __panelLog.length = 0; },
     render: () => render(),
     step: (dt) => update(dt),
@@ -101,6 +103,17 @@ const HOOK = `
       right: cutIn.right.map(entry => ({ ...entry }))
     } : null,
     showBattleStartCutInForTest: () => showBattleStartCutIn(),
+    // 素材が届いていない端末を再現する(画像を持たない状態にする)。
+    dropImagesForTest: () => {
+      for (const key of Object.keys(charImages)) charImages[key] = null;
+      for (const key of Object.keys(vsPlateImages)) vsPlateImages[key] = null;
+    },
+    // v123: 砲弾ネームプレートのVSカットイン
+    vsPlate: () => ({
+      slots: JSON.parse(JSON.stringify(VS_PLATE_SLOTS)),
+      srcs: Object.fromEntries(Object.entries(vsPlateImages).map(([k, img]) => [k, img.src.split('/').pop()])),
+      flySec: VS_FLY_SEC, plateW: VS_PLATE_W, tilt: VS_TILT, duration: MATCHUP_CUTIN_DURATION
+    }),
     forceWinner: (team) => { winner = team; matchOver = true; },
     // --- リグレッション用 ---
     snapshot: () => buildSnapshot(),
@@ -316,6 +329,9 @@ code = code.slice(0, idx) + HOOK + '\n' + code.slice(idx);
 
 // ---- ブラウザAPIのスタブ ----
 const noop = () => {};
+// 描かれた文字の記録。ctxのスタブはこのファイルのスコープなので globalThis に置き、
+// ゲーム側スコープのフックからも同じ配列を見られるようにする。
+globalThis.__ktTextLog = [];
 function makeCtx() {
   const ctx = {
     canvas: null,
@@ -330,6 +346,9 @@ function makeCtx() {
     'fillText','strokeText','translate','rotate','scale','transform','setTransform','resetTransform',
     'drawImage','putImageData','setLineDash','getLineDash'];
   for (const k of methods) ctx[k] = noop;
+  // 描かれた文字を控える。「画像が無くても名前は出るか」のような、
+  // 位置ではなく結果を見る検査に使う。
+  ctx.fillText = (text) => { globalThis.__ktTextLog.push(String(text)); };
   ctx.measureText = () => ({ width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
   ctx.createLinearGradient = ctx.createRadialGradient = () => ({ addColorStop: noop });
   ctx.createPattern = () => ({});

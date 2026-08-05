@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v122';
+  const BUILD_ID = 'v123';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2282,6 +2282,30 @@
   titleTimeBackgroundImage.onload = () => { titleTimeBackgroundReady = true; };
   titleTimeBackgroundImage.onerror = () => { titleTimeBackgroundFailed = true; };
   titleTimeBackgroundImage.src = titleTimeBackgroundPaths[titleTimeTheme];
+  // ===== 対戦開始カットインの砲弾ネームプレート(ユーザー提供素材) =====
+  // 1枚のシートから切り出した5点。緑=自陣営／赤=相手陣営で、1vs1用(顔1つ)と
+  // 2vs2用(顔2つ)を持つ。赤は左右反転して描くので、砲弾の先端が中央で向き合う。
+  //
+  // 窓の位置は素材の中に描かれているので、コードからは「絵に対する比率」で指す。
+  // 絵を差し替えた時はこの比率も測り直すこと(assets/vs-plate-*.png の紺色の窓)。
+  const VS_PLATE_SLOTS = {
+    ally1: [[0.197, 0.170, 0.750, 0.824]],
+    foe1: [[0.182, 0.182, 0.726, 0.824]],
+    ally2: [[0.163, 0.173, 0.459, 0.821], [0.477, 0.168, 0.781, 0.815]],
+    foe2: [[0.148, 0.173, 0.444, 0.827], [0.463, 0.173, 0.773, 0.821]]
+  };
+  const vsPlateImages = {};
+  for (const [key, file] of [
+    ['ally1', 'vs-plate-ally-1'], ['foe1', 'vs-plate-foe-1'],
+    ['ally2', 'vs-plate-ally-2'], ['foe2', 'vs-plate-foe-2'], ['badge', 'vs-badge']
+  ]) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = `assets/${file}.png`;
+    vsPlateImages[key] = img;
+  }
+  function vsPlateReady(img) { return !!(img && img.complete && img.naturalWidth > 0); }
+
   const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
   // **高さ基準で描くので、縦長の絵ほど小さく、横長の絵ほど大きく見える。**
   // 実測で1.65倍のひらきがあった(実機で「明らかに大きさが違う」と指摘)。
@@ -10039,21 +10063,92 @@
     ctx.restore();
   }
 
-  // VSカットインの顔窓。左陣営は右、右陣営は左を向かせ、中央で対峙させる。
-  function drawMatchupPortrait(entry, cx, cy, r, color, side, progress) {
+  // ===== 対戦開始のVSカットイン(砲弾ネームプレート) =====
+  // 左右から砲弾が飛んできて中央でぶつかり、そこにVSの紋章が出る。
+  // 絵はユーザー提供の1枚のシートから切り出したもの(assets/vs-plate-*.png、vs-badge.png)。
+  //
+  // 配置は素材の見本(bullet image)の比率から起こしてある。
+  // 自陣営の砲弾が上、相手陣営の砲弾が下で、少し斜めに構えて中央で重なる。
+  const VS_TILT = -0.23;              // 砲弾の傾き(ラジアン)。上下とも同じ角度で平行に見せる
+  const VS_PLATE_W = 430;             // 砲弾の長さ(仮想座標)
+  const VS_CENTER_Y = 495;            // composition 全体の中心
+  // 左右にずらして、VSの紋章が顔ではなく窓と窓の境目へ落ちるようにする。
+  const VS_ALLY_OFFSET = { x: -42, y: -68 };
+  const VS_FOE_OFFSET = { x: 30, y: 54 };
+  const VS_BADGE_W = 104;
+  const VS_FLY_SEC = 0.42;            // 飛んでくる時間。ここを過ぎた瞬間が衝突
+
+  // 砲弾1本を描く。窓の中にキャラの顔と名前を入れる。
+  // mirror=true は相手陣営。素材の先端は右向きなので、反転して中央へ向ける。
+  function drawVsPlate(entries, mirror, slideX, flash) {
+    const two = entries.length > 1;
+    const img = vsPlateImages[mirror ? (two ? 'foe2' : 'foe1') : (two ? 'ally2' : 'ally1')];
+    const slots = VS_PLATE_SLOTS[mirror ? (two ? 'foe2' : 'foe1') : (two ? 'ally2' : 'ally1')];
+    const off = mirror ? VS_FOE_OFFSET : VS_ALLY_OFFSET;
+    const ratio = vsPlateReady(img) ? img.naturalHeight / img.naturalWidth : 173 / 726;
+    const pw = VS_PLATE_W;
+    const ph = pw * ratio;
+
+    ctx.save();
+    ctx.translate(VW / 2 + off.x + slideX, VS_CENTER_Y + off.y);
+    ctx.rotate(VS_TILT);
+
+    if (vsPlateReady(img)) {
+      ctx.save();
+      if (mirror) ctx.scale(-1, 1);
+      ctx.drawImage(img, -pw / 2, -ph / 2, pw, ph);
+      ctx.restore();
+    } else {
+      // 画像が届いていない端末でも、顔と名前は必ず出す。
+      ctx.fillStyle = mirror ? 'rgba(74,18,18,0.94)' : 'rgba(14,52,38,0.94)';
+      ctx.strokeStyle = UI.gold;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 16);
+      else ctx.rect(-pw / 2, -ph / 2, pw, ph);
+      ctx.fill(); ctx.stroke();
+    }
+
+    entries.forEach((entry, index) => {
+      const raw = slots[Math.min(index, slots.length - 1)];
+      // 反転して描いた砲弾では、窓も左右が入れ替わる。
+      const x0 = mirror ? 1 - raw[2] : raw[0];
+      const x1 = mirror ? 1 - raw[0] : raw[2];
+      const rect = {
+        x: -pw / 2 + x0 * pw, y: -ph / 2 + raw[1] * ph,
+        w: (x1 - x0) * pw, h: (raw[3] - raw[1]) * ph
+      };
+      // 1vs1は窓が1つで横に広い。顔を窓の真ん中へ置くと中央のVS紋章の下に隠れるので、
+      // 砲弾の外側(紋章から遠い方)へ寄せる。2vs2は窓が2つなので真ん中でよい。
+      const anchor = entries.length > 1 ? 0.5 : (mirror ? 0.68 : 0.32);
+      drawVsPlateFace(entry, rect, mirror, anchor);
+    });
+
+    // ぶつかった瞬間だけ、砲弾の縁を光らせる。
+    if (flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = flash * 0.32;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = mirror ? '#ff9a6b' : '#8fe6b0';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 16);
+      else ctx.rect(-pw / 2, -ph / 2, pw, ph);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // 窓1つぶん。顔は窓を埋める大きさに切り出し、はみ出した分は窓で切る。
+  function drawVsPlateFace(entry, rect, mirror, anchor) {
     const def = entry && CHARACTERS[entry.character];
     const img = entry && charImages[entry.character];
     const ready = def && img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
-
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    if (ctx.roundRect) ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 9);
+    else ctx.rect(rect.x, rect.y, rect.w, rect.h);
     ctx.clip();
-    const back = ctx.createRadialGradient(cx, cy - r * 0.35, 3, cx, cy, r);
-    back.addColorStop(0, `${color}66`);
-    back.addColorStop(1, 'rgba(2,6,14,0.98)');
-    ctx.fillStyle = back;
-    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
 
     if (ready) {
       const [fx, fy, fw] = MATCHUP_FACES[entry.character] || CHARACTER_FACES[entry.character] || DEFAULT_FACE;
@@ -10061,136 +10156,115 @@
       const sh = sw;
       const sx = Math.max(0, Math.min(img.naturalWidth - sw, img.naturalWidth * fx - sw / 2));
       const sy = Math.max(0, Math.min(Math.max(0, img.naturalHeight - sh), img.naturalHeight * fy - sh / 2));
-      const zoom = 1.12 - 0.12 * Math.min(1, progress * 3);
-      const d = r * 2 * zoom;
-      // facesLeft=true は元素材が左向き。左陣営は右向きに、右陣営は左向きに統一する。
-      const flip = side === 'left' ? !!def.facesLeft : !def.facesLeft;
+      // 窓は横長。長辺に合わせると顔が拡大されすぎて目だけになるので、高さに合わせる。
+      // 左右に窓の紺色が残るが、見本の絵もそうなっている。
+      const d = rect.h * 1.06;
+      const cx = rect.x + rect.w * anchor;
+      const cy = rect.y + rect.h / 2;
+      // facesLeft=true は元素材が左向き。自陣営は右を、相手陣営は左を向かせる。
+      const flip = mirror ? !def.facesLeft : !!def.facesLeft;
       ctx.save();
-      if (flip) {
-        ctx.translate(cx, cy);
-        ctx.scale(-1, 1);
-        ctx.drawImage(img, sx, sy, sw, sh, -d / 2, -d / 2, d, d);
-      } else {
-        ctx.drawImage(img, sx, sy, sw, sh, cx - d / 2, cy - d / 2, d, d);
-      }
+      ctx.translate(cx, cy);
+      if (flip) ctx.scale(-1, 1);
+      ctx.drawImage(img, sx, sy, sw, sh, -d / 2, -d / 2, d, d);
       ctx.restore();
-    } else {
-      ctx.fillStyle = color;
-      ctx.font = `900 ${Math.round(r * 0.72)}px ${UI_FONT_HEAVY}`;
-      ctx.textAlign = 'center';
-      ctx.fillText(def ? def.name.slice(0, 1) : '?', cx, cy + r * 0.25);
     }
+
+    // 名前は顔の真下に敷く。窓の中央に置くと、1vs1では顔から離れて紋章の下へ入る。
+    const nameH = Math.min(19, rect.h * 0.3);
+    const nameW = Math.min(rect.w, rect.h * 1.5);
+    const nameX = Math.max(rect.x, Math.min(rect.x + rect.w - nameW, rect.x + rect.w * anchor - nameW / 2));
+    ctx.fillStyle = 'rgba(3,10,16,0.72)';
+    ctx.fillRect(nameX, rect.y + rect.h - nameH, nameW, nameH);
     ctx.restore();
 
-    ctx.save();
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 16;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r - 5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawMatchupSide(entries, side, progress) {
-    const leftSide = side === 'left';
-    const color = leftSide ? '#59c9ff' : '#ff765f';
-    const count = entries.length;
-    const centers = count > 1
-      ? (leftSide ? [74, 188] : [352, 466])
-      : [leftSide ? 135 : 405];
-    const radius = count > 1 ? 57 : 86;
-    const slide = (1 - progress) * (leftSide ? -92 : 92);
-
-    entries.forEach((entry, index) => {
-      const x = centers[index] + slide;
-      drawMatchupPortrait(entry, x, 455, radius, color, side, progress);
-      const def = CHARACTERS[entry.character];
-      const fontSize = count > 1 ? 13 : 21;
-      const font = `900 ${fontSize}px ${UI_FONT_HEAVY}`;
-      const name = fitText(def ? def.name : '？', font, count > 1 ? 106 : 210);
-      drawOutlinedText(name, x, count > 1 ? 548 : 574, {
-        font, color: '#fff4d6', lineWidth: count > 1 ? 3.5 : 5
-      });
-    });
-
-    if (count > 1) {
-      drawOutlinedText('＆', (centers[0] + centers[1]) / 2 + slide, 463, {
-        font: `900 22px ${UI_FONT_HEAVY}`, color, lineWidth: 4
-      });
-    }
+    const font = `900 ${Math.round(Math.min(13, nameW * 0.13))}px ${UI_FONT_HEAVY}`;
+    drawOutlinedText(fitText(def ? def.name : '？', font, nameW - 8), nameX + nameW / 2,
+      rect.y + rect.h - nameH / 2 + 4,
+      { font, color: '#fff4d6', lineWidth: 3.5 });
   }
 
   function drawMatchupCutIn() {
     const elapsed = cutIn.duration - cutIn.timer;
-    const enter = Math.min(1, elapsed / 0.34);
-    const progress = 1 - Math.pow(1 - enter, 3);
+    // 飛んでくる → ぶつかる → 見せる、の3段。ぶつかる瞬間を VS_FLY_SEC に置く。
+    const fly = Math.min(1, elapsed / VS_FLY_SEC);
+    const eased = 1 - Math.pow(1 - fly, 3);
+    const sinceHit = elapsed - VS_FLY_SEC;
+    const flash = sinceHit >= 0 ? Math.max(0, 1 - sinceHit / 0.26) : 0;
     const fadeOut = Math.min(1, cutIn.timer / 0.24);
-    const alpha = Math.max(0, Math.min(1, elapsed / 0.12, fadeOut));
+    const alpha = Math.max(0, Math.min(1, elapsed / 0.1, fadeOut));
+    // 画面の外から飛び込ませる。ぶつかった後はわずかに押し戻される。
+    const recoil = sinceHit >= 0 ? Math.sin(Math.min(1, sinceHit / 0.26) * Math.PI) * 7 : 0;
+    const allySlide = -(1 - eased) * (VW + VS_PLATE_W) + recoil * -1;
+    const foeSlide = (1 - eased) * (VW + VS_PLATE_W) + recoil;
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(2,5,12,0.94)';
     ctx.fillRect(0, 0, VW, VH);
 
-    const leftGrad = ctx.createLinearGradient(0, 280, 285, 650);
-    leftGrad.addColorStop(0, 'rgba(25,121,181,0.88)');
-    leftGrad.addColorStop(1, 'rgba(5,24,51,0.96)');
-    ctx.fillStyle = leftGrad;
-    ctx.beginPath();
-    ctx.moveTo(0, 286); ctx.lineTo(292, 326); ctx.lineTo(246, 676); ctx.lineTo(0, 718); ctx.closePath();
-    ctx.fill();
-
-    const rightGrad = ctx.createLinearGradient(VW, 280, VW - 285, 650);
-    rightGrad.addColorStop(0, 'rgba(181,65,48,0.88)');
-    rightGrad.addColorStop(1, 'rgba(53,12,18,0.96)');
-    ctx.fillStyle = rightGrad;
-    ctx.beginPath();
-    ctx.moveTo(VW, 286); ctx.lineTo(VW - 292, 326); ctx.lineTo(VW - 246, 676); ctx.lineTo(VW, 718); ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-    ctx.lineWidth = 1;
-    for (let y = 322; y <= 682; y += 24) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(VW, y - 30); ctx.stroke();
-    }
-
-    drawOutlinedText('BATTLE START', VW / 2, 220, {
-      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
-    });
-    drawOutlinedText('BLUE TEAM', 120, 323, {
-      font: `900 12px ${UI_FONT_HEAVY}`, color: '#8be0ff', lineWidth: 3
-    });
-    drawOutlinedText('RED TEAM', VW - 120, 323, {
-      font: `900 12px ${UI_FONT_HEAVY}`, color: '#ff9d88', lineWidth: 3
-    });
-
-    drawMatchupSide(cutIn.left, 'left', progress);
-    drawMatchupSide(cutIn.right, 'right', progress);
-
+    // 奥行きの集中線。ぶつかる瞬間に一番強くなる。
     ctx.save();
-    ctx.translate(VW / 2, 455);
-    ctx.rotate(-0.12);
-    ctx.fillStyle = 'rgba(4,8,16,0.96)';
-    ctx.strokeStyle = UI.gold;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-33, -42); ctx.lineTo(34, -34); ctx.lineTo(29, 40); ctx.lineTo(-38, 33); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.rotate(0.12);
-    drawOutlinedText('VS', 0, 12, {
-      font: `900 34px ${UI_FONT_HEAVY}`, color: '#fff4d6', lineWidth: 6
-    });
+    ctx.globalAlpha = alpha * ((1 - eased) * 0.2 + flash * 0.5);
+    ctx.strokeStyle = '#ffd98a';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 26 && ctx.globalAlpha > 0.004; i++) {
+      const a = (i / 26) * Math.PI * 2 + 0.2;
+      const inner = 74 + flash * 26;
+      ctx.beginPath();
+      ctx.moveTo(VW / 2 + Math.cos(a) * inner, VS_CENTER_Y + Math.sin(a) * inner);
+      ctx.lineTo(VW / 2 + Math.cos(a) * 560, VS_CENTER_Y + Math.sin(a) * 560);
+      ctx.stroke();
+    }
     ctx.restore();
 
-    drawOutlinedText(cutIn.left.length > 1 || cutIn.right.length > 1 ? '2 vs 2' : '1 vs 1', VW / 2, 700, {
+    drawOutlinedText('BATTLE START', VW / 2, 250, {
+      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+    });
+
+    // 相手陣営を先に描き、自陣営を上に重ねる(見本と同じ重なり)。
+    drawVsPlate(cutIn.right, true, foeSlide, flash);
+    drawVsPlate(cutIn.left, false, allySlide, flash);
+
+    // VSの紋章。ぶつかった瞬間に大きく出て、少し縮んで落ち着く。
+    if (sinceHit >= -0.02) {
+      const pop = Math.min(1, Math.max(0, (sinceHit + 0.02) / 0.2));
+      const scale = 0.4 + 0.75 * (1 - Math.pow(1 - pop, 3)) + Math.sin(pop * Math.PI) * 0.16;
+      const badge = vsPlateImages.badge;
+      ctx.save();
+      ctx.translate(VW / 2, VS_CENTER_Y);
+      ctx.scale(scale, scale);
+      if (vsPlateReady(badge)) {
+        const bw = VS_BADGE_W;
+        const bh = bw * (badge.naturalHeight / badge.naturalWidth);
+        ctx.drawImage(badge, -bw / 2, -bh / 2, bw, bh);
+      } else {
+        drawOutlinedText('VS', 0, 16, {
+          font: `900 46px ${UI_FONT_HEAVY}`, color: '#ffb43c', lineWidth: 7
+        });
+      }
+      ctx.restore();
+    }
+
+    // 火花。ぶつかった直後だけ、中央から散る。
+    if (flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha * flash;
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2 + 0.6;
+        const spread = (1 - flash) * 150 + 62;
+        const px = VW / 2 + Math.cos(a) * spread * (0.6 + (i % 3) * 0.28);
+        const py = VS_CENTER_Y + Math.sin(a) * spread * 0.5 * (0.6 + (i % 3) * 0.28);
+        ctx.fillStyle = i % 2 ? '#ffd15c' : '#ff8a3c';
+        ctx.beginPath();
+        ctx.arc(px, py, 2.6 + flash * 3.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    drawOutlinedText(cutIn.left.length > 1 || cutIn.right.length > 1 ? '2 vs 2' : '1 vs 1', VW / 2, 706, {
       font: `900 14px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
     ctx.restore();

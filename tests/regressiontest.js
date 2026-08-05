@@ -86,6 +86,54 @@ const shinigami = kt.character('shinigami');
     html.includes('function unitAnchor(u) {')
     && /function unitAnchor\(u\) \{[\s\S]{0,200}return \{ x: u\.x, y: u\.y \};/.test(html));
 }
+// ===== v123: 対戦開始カットインを砲弾ネームプレートにした =====
+// 素材はユーザー提供の1枚のシートから切り出した5点。左右から砲弾が飛んできて
+// 中央でぶつかり、そこにVSの紋章が出る。
+{
+  const fs2 = require('fs'), path2 = require('path');
+  const html = fs2.readFileSync(path2.join(__dirname, '..', 'index.html'), 'utf8');
+  const vs = kt.vsPlate();
+  check('砲弾の素材5点をassetsから読み込んでいる',
+    ['ally1', 'foe1', 'ally2', 'foe2', 'badge'].every(k => /^vs-(plate-(ally|foe)-[12]|badge)\.png$/.test(vs.srcs[k] || '')),
+    JSON.stringify(vs.srcs));
+  check('その5点が実際にリポジトリへ入っている',
+    ['vs-plate-ally-1', 'vs-plate-foe-1', 'vs-plate-ally-2', 'vs-plate-foe-2', 'vs-badge']
+      .every(n => fs2.existsSync(path2.join(__dirname, '..', 'assets', n + '.png'))));
+  // 窓の数は対戦人数と一致していないと、2vs2で味方が出ない/1vs1で空欄が出る。
+  check('1vs1の砲弾は窓が1つ、2vs2の砲弾は窓が2つ',
+    vs.slots.ally1.length === 1 && vs.slots.foe1.length === 1
+    && vs.slots.ally2.length === 2 && vs.slots.foe2.length === 2,
+    JSON.stringify(Object.entries(vs.slots).map(([k, v]) => k + ':' + v.length)));
+  // 窓は絵に対する比率で持つ。0〜1を外れると、顔が砲弾からはみ出す。
+  check('窓の位置は絵に対する比率で、必ず絵の内側に収まる',
+    Object.values(vs.slots).every(list => list.every(([x0, y0, x1, y1]) =>
+      x0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && x1 > x0 && y1 > y0)),
+    JSON.stringify(vs.slots));
+  check('2vs2の2つの窓は重ならない',
+    [vs.slots.ally2, vs.slots.foe2].every(([a, b]) => a[2] <= b[0]),
+    JSON.stringify([vs.slots.ally2, vs.slots.foe2]));
+  // 素材の砲弾はどちらも右向き。相手陣営を反転しないと、先端が中央で向き合わない。
+  check('相手陣営の砲弾は左右反転して描く',
+    /if \(mirror\) ctx\.scale\(-1, 1\);/.test(html));
+  check('反転した砲弾では窓の左右も入れ替える',
+    html.includes('const x0 = mirror ? 1 - raw[2] : raw[0];')
+    && html.includes('const x1 = mirror ? 1 - raw[0] : raw[2];'));
+  // 画像の読み込みは端末や回線で失敗しうる。失敗しても対戦カードは必ず読めること。
+  check('砲弾の絵が届かない端末のために、枠を自前で描く道がある',
+    /if \(vsPlateReady\(img\)\) \{[\s\S]{0,400}\} else \{[\s\S]{0,400}roundRect/.test(html));
+  check('顔の切り出しはVS専用の値をそのまま使っている',
+    html.includes('MATCHUP_FACES[entry.character] || CHARACTER_FACES[entry.character] || DEFAULT_FACE'));
+  // ぶつかる瞬間はカットインの中に収まっていること。飛び終わる前に消えたら演出にならない。
+  check('砲弾がぶつかるのはカットインが終わるより前',
+    vs.flySec > 0 && vs.flySec < vs.duration * 0.5,
+    `fly=${vs.flySec} duration=${vs.duration}`);
+  check('砲弾は画面の外から飛んでくる',
+    html.includes('const allySlide = -(1 - eased) * (VW + VS_PLATE_W)')
+    && html.includes('const foeSlide = (1 - eased) * (VW + VS_PLATE_W)'));
+}
+
+
+
 check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
@@ -868,6 +916,35 @@ check('手番の知らせは、前より長く出て読み切れる', h3.turnCut
 kt.setFreeFormat('1v1');
 kt.setLocalSeat('p1');
 
+
+// 画像は端末や回線で読めないことがある。読めなくても「誰と誰が戦うのか」は
+// 必ず出ること。文字の位置ではなく、実際に描かれた文字で確かめる。
+// 画像を捨てるので、ほかの検査に影響しないよう一番最後に置く。
+{
+  kt.setFreeFormat('2v2');
+  kt.startFreeMatch();
+  const card = kt.matchupCutIn();
+  const names = card.left.concat(card.right).map(e => kt.character(e.character).name);
+  kt.dropImagesForTest();
+  const countIn = (list, name) => list.filter(t => t === name).length;
+  // まずカットインを消した状態を数える。名前はHPカードなどでも描かれるので、
+  // 「カットインで何回増えたか」で見ないと、出ていないことに気づけない。
+  settle();
+  kt.resetDrawnText();
+  kt.render();
+  const before = kt.drawnText();
+  // もう一度カットインを出し、砲弾がぶつかってVSの紋章が出るところまで進める。
+  kt.showBattleStartCutInForTest();
+  for (let i = 0; i < 30; i++) kt.step(1 / 60);
+  kt.resetDrawnText();
+  kt.render();
+  const after = kt.drawnText();
+  check('砲弾もキャラも画像が届かない端末で、4人の名前がカットインにも描かれる',
+    names.every(n => countIn(after, n) > countIn(before, n)),
+    names.map(n => `${n}:${countIn(before, n)}→${countIn(after, n)}`).join(' '));
+  check('その状態でもVSの合図は文字で出る',
+    after.includes('VS') && !before.includes('VS'), after.join('/'));
+}
 
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
