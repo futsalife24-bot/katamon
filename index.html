@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v132';
+  const BUILD_ID = 'v133';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2752,6 +2752,7 @@
   const CALM_WIND_CHANCE = 0.18; // 風が切り替わる区間ごとに無風になる確率
   const CALM_BATTLE_CHANCE = 0.06; // 対戦全体が無風になる確率
   let wind = { dir: 1, strength: 0 }; // strength: 0..1
+  let nextWind = null; // 次の切替で必ず使う予報値。表示後に振り直さない。
   let calmWind = false;
   let calmBattle = false;
 
@@ -2770,25 +2771,49 @@
     return null;
   }
 
-  function rollWind() {
-    {
-      const selected = activeFixedWind();
-      if (selected) {
-        calmBattle = selected.key === 'calm';
-        calmWind = selected.key === 'calm';
-        wind.dir = selected.dir || 1;
-        wind.strength = selected.strength;
-        return;
-      }
-    }
-    calmWind = calmBattle || Math.random() < CALM_WIND_CHANCE;
-    if (calmWind) {
-      wind.dir = 1;
-      wind.strength = 0;
+  function fixedWindValue(selected) {
+    return {
+      dir: selected.dir || 1,
+      strength: selected.strength,
+      calmWind: selected.key === 'calm'
+    };
+  }
+
+  // 「抽選」と「現在の風へ反映」を分ける。予報を表示したあとで再抽選しないための境目です。
+  function rollWindValue() {
+    const selected = activeFixedWind();
+    if (selected) return fixedWindValue(selected);
+    const isCalm = calmBattle || Math.random() < CALM_WIND_CHANCE;
+    if (isCalm) return { dir: 1, strength: 0, calmWind: true };
+    return {
+      dir: Math.random() < 0.5 ? -1 : 1,
+      strength: Math.random(), // 0(無風)〜1(強風)
+      calmWind: false
+    };
+  }
+
+  function applyWindValue(value) {
+    wind.dir = value.dir;
+    wind.strength = value.strength;
+    calmWind = value.calmWind === true;
+  }
+
+  function consumeNextWind() {
+    const selected = activeFixedWind();
+    if (selected) {
+      // 固定風は現在も次も同じ。設定を変えない限り乱数を一切使わない。
+      calmBattle = selected.key === 'calm';
+      const fixed = fixedWindValue(selected);
+      applyWindValue(fixed);
+      nextWind = { ...fixed };
       return;
     }
-    wind.dir = Math.random() < 0.5 ? -1 : 1;
-    wind.strength = Math.random(); // 0(無風)〜1(強風)
+    applyWindValue(nextWind || rollWindValue());
+    nextWind = rollWindValue();
+  }
+
+  function rollWind() {
+    consumeNextWind();
   }
 
   // ===== 弾道物理 =====
@@ -3689,6 +3714,8 @@
     wind.strength = strength;
     calmWind = strength <= 0.001;
     calmBattle = calmWind;
+    // チュートリアルは項目ごとの固定風。次も同じと示して嘘の予報を出さない。
+    nextWind = { dir, strength, calmWind };
   }
   // 地面を上から底まで貫いて穴にする。最後の項目で的を細い足場の上へ乗せるために使う。
   // 1発ぶんのクレーターでは底まで届かないので、縦に並べて掘る。
@@ -3980,6 +4007,7 @@
       turnOrder: turnOrder.slice(),
       activeIndex, turnCount,
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
+      nextWind: nextWind ? { ...nextWind } : { dir: wind.dir, strength: wind.strength, calmWind },
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, zoom: cameraZoom }
     };
@@ -3987,7 +4015,18 @@
 
   // v3までは player/cpu の2固定だった。現行の units 形式へ寄せてから読む。
   function migrateSnapshot(data) {
-    if (!data || Array.isArray(data.units)) return data;
+    if (!data) return data;
+    if (Array.isArray(data.units)) {
+      // v132以前の中断データには予報が無い。最初の切替だけ現在と同じ風にして安全に再開する。
+      if (!data.nextWind && data.wind) {
+        data.nextWind = {
+          dir: data.wind.dir,
+          strength: data.wind.strength,
+          calmWind: data.wind.calmWind === true
+        };
+      }
+      return data;
+    }
     if (!data.player || !data.cpu) return null;
     data.units = [
       { ...data.player, id: 'p1', team: 'player', control: 'local', character: data.playerChar },
@@ -3996,6 +4035,9 @@
     data.turnOrder = ['p1', 'e1'];
     data.activeIndex = data.currentTurn === 'cpu' ? 1 : 0;
     data.matchFormat = '1v1';
+    if (!data.nextWind && data.wind) {
+      data.nextWind = { dir: data.wind.dir, strength: data.wind.strength, calmWind: data.wind.calmWind === true };
+    }
     data.v = SNAPSHOT_VERSION;
     return data;
   }
@@ -4098,6 +4140,12 @@
     wind.strength = data.wind.strength;
     calmBattle = data.wind.calmBattle === true;
     calmWind = data.wind.calmWind === true || (calmBattle && wind.strength === 0);
+    const savedNextWind = data.nextWind || data.wind;
+    nextWind = {
+      dir: savedNextWind.dir,
+      strength: savedNextWind.strength,
+      calmWind: savedNextWind.calmWind === true
+    };
     winStreak = data.winStreak;
     runStats = data.runStats;
     isBossMatch = data.isBossMatch;
@@ -4558,6 +4606,7 @@
     if (!Array.isArray(snap.units) || snap.units.length !== unitIds.length || !unitIds.every((id, i) => hasSafeUnitSnapshot(snap.units[i], id))) return 'snap.units';
     if (!Array.isArray(snap.turnOrder) || snap.turnOrder.length !== unitIds.length || !unitIds.every((id, i) => snap.turnOrder[i] === id) || !isFiniteIn(snap.activeIndex, 0, unitIds.length - 1) || !isFiniteIn(snap.turnCount, 0, 10000)) return 'snap.turn';
     if (!snap.wind || typeof snap.wind !== 'object' || !isFiniteIn(snap.wind.dir, -1, 1) || !isFiniteIn(snap.wind.strength, 0, 2) || typeof snap.wind.calmWind !== 'boolean' || typeof snap.wind.calmBattle !== 'boolean') return 'snap.wind';
+    if (!snap.nextWind || typeof snap.nextWind !== 'object' || (snap.nextWind.dir !== -1 && snap.nextWind.dir !== 1) || !isFiniteIn(snap.nextWind.strength, 0, 1) || typeof snap.nextWind.calmWind !== 'boolean') return 'snap.nextWind';
     if (!isFiniteIn(snap.winStreak, 0, 100000) || !snap.runStats || typeof snap.runStats !== 'object' || !isFiniteIn(snap.runStats.damageDealt, 0, 1000000) || !isFiniteIn(snap.runStats.shots, 0, 1000000) || typeof snap.isBossMatch !== 'boolean') return 'snap.stats';
     if (!snap.camera || typeof snap.camera !== 'object' || !isFiniteIn(snap.camera.x, 0, STAGE_W) || !isFiniteIn(snap.camera.zoom, 0.1, 8)) return 'snap.camera';
     return '';
@@ -4976,6 +5025,11 @@
     if (snap.pattern !== baseline.pattern) return 'pattern';
     if (snap.themeKey !== baseline.themeKey) return 'themeKey';
     if (snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
+    // 現在の風は前のターンから全員に予告済みなので一致を要求できる。
+    // 新しい次の風は行動側がこのターン境界で抽選するため、ここでは比較せず受け入れて同期する。
+    if (!snap.wind || !baseline.wind || snap.wind.dir !== baseline.wind.dir
+      || Math.abs(snap.wind.strength - baseline.wind.strength) > 0.000001
+      || snap.wind.calmWind !== baseline.wind.calmWind) return 'wind';
     // RTDBを往復するとオブジェクトのキーがアルファベット順に並び替わって返る。
     // 生成した側は {startX,endX,y,style,seed} の順、受け取った側は {endX,seed,...} の順になり、
     // 素の JSON.stringify では値が同じでも文字列が一致せず、橋ステージで必ず切れていた。
@@ -9303,7 +9357,8 @@
   }
 
   function drawWindMeter() {
-    const cx = VW / 2, cardY = 46, cardW = 164, cardH = 40;
+    // 上のステージ名と下のターン帯の間へ、現在と次を1枚に収める。
+    const cx = VW / 2, cardY = 38, cardW = 164, cardH = 54;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
     drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
       cut: 10,
@@ -9312,7 +9367,7 @@
     });
 
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
-    drawOutlinedText(calmWind ? '無風 / CALM' : `風力 ${windLevel}`, cx, cardY + 14, {
+    drawOutlinedText(calmWind ? '無風 / CALM' : `現在　風力 ${windLevel}`, cx, cardY + 12, {
       font: `900 11px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 3
     });
 
@@ -9323,21 +9378,42 @@
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - dir * len / 2, cardY + 29);
-    ctx.lineTo(cx + dir * len / 2, cardY + 29);
+    ctx.moveTo(cx - dir * len / 2, cardY + 26);
+    ctx.lineTo(cx + dir * len / 2, cardY + 26);
     ctx.stroke();
     if (!calmWind) {
       // 矢じり
       const ax = cx + dir * len / 2;
       ctx.beginPath();
-      ctx.moveTo(ax + dir * 2, cardY + 29);
-      ctx.lineTo(ax - dir * 7, cardY + 25);
-      ctx.lineTo(ax - dir * 7, cardY + 33);
+      ctx.moveTo(ax + dir * 2, cardY + 26);
+      ctx.lineTo(ax - dir * 7, cardY + 22);
+      ctx.lineTo(ax - dir * 7, cardY + 30);
       ctx.closePath();
       ctx.fillStyle = accent;
       ctx.fill();
     }
     ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,151,83,0.36)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - cardW / 2 + 12, cardY + 34);
+    ctx.lineTo(cx + cardW / 2 - 12, cardY + 34);
+    ctx.stroke();
+    ctx.restore();
+
+    const forecast = nextWind || { dir: wind.dir, strength: wind.strength, calmWind };
+    const fixedForecast = !!activeFixedWind() || battleMode === 'tutorial';
+    const forecastLevel = forecast.strength < 0.34 ? '弱' : forecast.strength < 0.67 ? '中' : '強';
+    const forecastText = fixedForecast
+      ? '次の風　同じ'
+      : (forecast.calmWind ? '次の風　無風' : `次の風　${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
+    drawOutlinedText(forecastText, cx, cardY + 48, {
+      font: `900 10px ${UI_FONT_HEAVY}`,
+      color: forecast.calmWind ? '#72e8ff' : UI.parchment,
+      lineWidth: 2.5
+    });
   }
 
   // ===== プレイヤー/CPUのHP・燃料ゲージ(WINDの左右)。燃料はターン開始で満タンに戻るので
@@ -12733,6 +12809,7 @@
     const freeWind = activeFixedWind();
     calmBattle = freeWind ? freeWind.key === 'calm' : Math.random() < CALM_BATTLE_CHANCE;
     calmWind = false;
+    nextWind = null; // 前の試合で表示していた予報を再戦へ持ち越さない。
     const freeTerrain = battleMode === 'free' ? FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex]
       : (lobbySettings ? FREE_TERRAIN_OPTIONS.find(option => option.key === lobbySettings.terrain) : null);
     // チュートリアルの地形は固定する。ランダムだと闘技場のように中央が奈落の地形を引き、

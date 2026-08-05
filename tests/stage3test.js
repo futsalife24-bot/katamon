@@ -77,6 +77,13 @@ function check(name, value) {
   app.startBattle('kyoryu');
   const safeSnap = app.snapshot();
   check('Firebase state accepts a complete safe snapshot', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: safeSnap }));
+  const missingWindForecast = JSON.parse(JSON.stringify(safeSnap));
+  delete missingWindForecast.nextWind;
+  const invalidWindForecast = JSON.parse(JSON.stringify(safeSnap));
+  invalidWindForecast.nextWind = { dir: 1, strength: 9, calmWind: false };
+  check('Firebase rejects a missing or out-of-range next-wind forecast before applying it',
+    !h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: missingWindForecast })
+    && !h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: invalidWindForecast }));
   app.setTerrain('tieredBasin');
   const tieredStart = app.snapshot();
   check('Firebase start accepts tieredBasin empty terrain columns', tieredStart.segments.some(column => column.length === 0)
@@ -153,6 +160,14 @@ function check(name, value) {
   grossState.units[0].hp = Math.max(0, grossState.units[0].hp - 50);
   check('A large HP-only divergence no longer disconnects the match (action-side authority)', h.stateSnapshotMatchesBaseline(grossState, safeSnap));
   check('Mismatch reason is empty for HP-only divergence, even when large', h.stateSnapshotMismatchReason(grossState, safeSnap) === '');
+  const changedCurrentWind = JSON.parse(JSON.stringify(safeSnap));
+  changedCurrentWind.wind.strength = changedCurrentWind.wind.strength > 0.5 ? 0.1 : 0.9;
+  check('a peer cannot replace the current wind that was already forecast',
+    h.stateSnapshotMismatchReason(changedCurrentWind, safeSnap) === 'wind');
+  const changedFutureWind = JSON.parse(JSON.stringify(safeSnap));
+  changedFutureWind.nextWind = { dir: safeSnap.nextWind.dir * -1, strength: 0.314159, calmWind: false };
+  check('the acting side may publish the newly rolled future wind at a turn boundary',
+    h.stateSnapshotMismatchReason(changedFutureWind, safeSnap) === '');
   // 実機:相手が撃つ前に移動すると必ず fuel.0 で切断された。移動そのものは通信しておらず、
   // fire は移動後の座標しか運ばないため、受信側は相手の燃料を減らしようがない。
   // 満タンから使い切りまでのどの差でも受理できること。
@@ -650,8 +665,8 @@ function check(name, value) {
     && htmlText.includes("if (online && online.kind === 'firebase' && online.settings) {")
     && htmlText.includes('const selected = activeFixedWind();')
     && htmlText.includes('const freeWind = activeFixedWind();'));
-  check('rollWind no longer branches on free mode alone', (() => {
-    const src = /function rollWind\(\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
+  check('the next-wind consumer no longer branches on free mode alone', (() => {
+    const src = /function consumeNextWind\(\) \{[\s\S]*?\r?\n  \}/.exec(htmlText);
     return !!src && !src[0].includes("battleMode === 'free'") && src[0].includes('activeFixedWind()');
   })());
   // 決着後の画面に準備フェーズの文言が残っていた。

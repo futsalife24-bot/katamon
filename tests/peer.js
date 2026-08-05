@@ -80,6 +80,7 @@ function snapshotForCompare() {
     units: kt.unitState(),
     craters: kt.craters(),
     wind: kt.wind(),
+    nextWind: kt.windForecast(),
     online: kt.onlineState(),
     fireActive: kt.hud().fireActive,
     inputLocked: kt.inputLocked(),
