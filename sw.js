@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v129';
+const CACHE_VERSION = 'katamon-pwa-v130';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,8 +8,8 @@ const APP_SHELL = [
   './assets/icon-192.png',
   './assets/icon-512.png',
   './assets/icon-maskable-512.png',
-  './assets/loading-emblem.png',
-  './assets/title-logo.png',
+  './assets/loading-emblem.webp',
+  './assets/title-logo.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png'
 ];
