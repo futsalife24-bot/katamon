@@ -436,7 +436,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v128';
+  const BUILD_ID = 'v129';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1222,6 +1222,7 @@
   const terrainRimLayerCtx = terrainRimLayer.getContext('2d');
 
   function paintTerrainRimLayer(color, radius) {
+    markTerrainArtDirty();
     terrainRimLayerCtx.save();
     terrainRimLayerCtx.clearRect(0, 0, STAGE_W, VH);
     terrainRimLayerCtx.globalCompositeOperation = 'source-over';
@@ -1240,6 +1241,7 @@
   }
 
   function rebuildTerrainRim() {
+    markTerrainArtDirty();
     terrainRimCtx.clearRect(0, 0, STAGE_W, VH);
     const arena = currentPattern === 'tieredBasin';
     paintTerrainRimLayer(arena ? '#090c11' : currentTheme.rimShadow, 6);
@@ -1259,7 +1261,32 @@
   arenaDecorationCanvas.height = VH;
   const arenaDecorationCtx = arenaDecorationCanvas.getContext('2d');
 
+  // 上の4枚(地形・縁取り・橋・闘技場の飾り)を1枚に束ねたもの。**毎フレーム4枚貼るのをやめるため。**
+  // 実測で、4枚貼りは1コマ32ミリ秒(全体の3割)を使っていた。中身が変わるのは
+  // 「地形を作った」「穴があいた」時だけなので、その時だけ束ね直せばよい。
+  //
+  // **束ね直しの合図(markTerrainArtDirty)を書き忘れると、古い地形が表示されたままになる。**
+  // 4枚のどれかに描く関数には必ず入れること。試作の段階で実際にこれを踏んだ。
+  const terrainArtCanvas = document.createElement('canvas');
+  terrainArtCanvas.width = STAGE_W;
+  terrainArtCanvas.height = VH;
+  const terrainArtCtx = terrainArtCanvas.getContext('2d');
+  let terrainArtDirty = true;
+  let terrainArtBuilds = 0; // 束ね直した回数。毎フレーム増えていないことを検査で見る
+  function markTerrainArtDirty() { terrainArtDirty = true; }
+  function rebuildTerrainArt() {
+    if (!terrainArtDirty) return;
+    terrainArtDirty = false;
+    terrainArtBuilds++;
+    terrainArtCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainArtCtx.drawImage(terrainCanvas, 0, 0);
+    terrainArtCtx.drawImage(terrainRimCanvas, 0, 0);
+    terrainArtCtx.drawImage(bridgeCanvas, 0, 0);
+    terrainArtCtx.drawImage(arenaDecorationCanvas, 0, 0);
+  }
+
   function rebuildArenaDecoration() {
+    markTerrainArtDirty();
     arenaDecorationCtx.clearRect(0, 0, STAGE_W, VH);
     if (currentPattern !== 'tieredBasin') return;
 
@@ -1315,6 +1342,7 @@
   }
 
   function rebuildBridgeDecoration() {
+    markTerrainArtDirty();
     bridgeCtx.clearRect(0, 0, STAGE_W, VH);
     if (!currentBridge) return;
     const { startX, endX, y, style } = currentBridge;
@@ -1416,6 +1444,7 @@
   }
 
   function drawTerrainDetails() {
+    markTerrainArtDirty();
     if (currentPattern === 'tieredBasin') {
       terrainCtx.save();
       terrainCtx.globalCompositeOperation = 'source-atop';
@@ -1527,6 +1556,7 @@
   }
 
   function buildTerrainMask(segments, refreshRim = true) {
+    markTerrainArtDirty();
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
     const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, TERRAIN_BOTTOM_Y);
@@ -1579,6 +1609,7 @@
 
   // 着弾クレーターの実処理:見た目(キャンバス)と判定(グリッド)の両方を円形にくり抜く
   function carveCraterInternal(cx, cy, radius, refreshRim = true) {
+    markTerrainArtDirty();
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'destination-out';
     terrainCtx.beginPath();
@@ -8636,81 +8667,140 @@
   }
 
   // ===== 描画 =====
-  function drawSky() {
-    const fx = THEME_FX[currentThemeKey];
-    const g = ctx.createLinearGradient(0, 0, 0, VH);
-    g.addColorStop(0, currentTheme.sky[0]);
-    g.addColorStop(0.55, currentTheme.sky[1]);
-    g.addColorStop(1, currentTheme.sky[2]);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, VW, VH);
-
-    const stageBackground = getReadyStageBackground();
-    if (stageBackground) {
-      ctx.drawImage(stageBackground, 0, 0, VW, VH);
-      // HUD・弾道・キャラクターの視認性を保ちつつ、生成背景の色彩を残す。
-      const readabilityShade = ctx.createLinearGradient(0, 0, 0, VH);
-      readabilityShade.addColorStop(0, 'rgba(5,10,18,0.06)');
-      readabilityShade.addColorStop(0.48, 'rgba(5,10,18,0.03)');
-      readabilityShade.addColorStop(1, 'rgba(5,10,18,0.19)');
-      ctx.fillStyle = readabilityShade;
-      ctx.fillRect(0, 0, VW, VH);
+  // 空は「動かない絵」と「動く粒」に分かれている。動かない側は試合中ずっと同じ絵なのに
+  // 毎フレーム作り直していて、実測で1コマ36ミリ秒(全体の3分の1)を使っていた。
+  // 全画面のグラデーションは塗るのが極端に重い。1枚に焼いて貼るだけにする。
+  //
+  // 焼くのは2枚。粒の後ろに来る側(skyBack)と、粒より手前に来る陰(skyFront)。
+  // **読みやすさの陰だけは、元は粒より後ろに描いていた。** 手前へ移したが、
+  // 陰の濃さは空の部分で3〜6%しかなく、粒は1〜2pxの点なので見た目には出ない。
+  // 分けずに1枚にすると、粒が陰に隠れず浮いて見えるので2枚に分けている。
+  //
+  // 焼く解像度は仮想座標の2倍。等倍で焼くと、天体(輪郭がはっきりした丸)を拡大した時に
+  // 眠くなる。実測で、等倍だと最大64/255ずれ、2倍にすると10以下まで落ちた。
+  // 端末の解像度そのまま(3倍)では1枚18MBになるので、2倍で頭打ちにしている。
+  const SKY_ART_SCALE = 2;
+  const skyBackCanvas = document.createElement('canvas');
+  skyBackCanvas.width = VW * SKY_ART_SCALE; skyBackCanvas.height = VH * SKY_ART_SCALE;
+  const skyBackCtx = skyBackCanvas.getContext('2d');
+  const skyFrontCanvas = document.createElement('canvas');
+  skyFrontCanvas.width = VW * SKY_ART_SCALE; skyFrontCanvas.height = VH * SKY_ART_SCALE;
+  const skyFrontCtx = skyFrontCanvas.getContext('2d');
+  let skyArtKey = '';
+  let skyArtBuilds = 0; // 焼き直した回数。毎フレーム増えていないことを検査で見る
+  function skyArtSignature() {
+    // 焼いた絵が変わる条件はこの3つだけ。背景画像は後から読み終わるので必ず含める。
+    return `${currentThemeKey}|${parallaxSeed}|${getReadyStageBackground() ? 1 : 0}`;
+  }
+  function rebuildSkyArt() {
+    const key = skyArtSignature();
+    if (key === skyArtKey) return;
+    skyArtKey = key;
+    skyArtBuilds++;
+    for (const g of [skyBackCtx, skyFrontCtx]) {
+      g.setTransform(SKY_ART_SCALE, 0, 0, SKY_ART_SCALE, 0, 0);
+      g.clearRect(0, 0, VW, VH);
     }
+    drawSkyBackArt(skyBackCtx);
+    drawSkyFrontArt(skyFrontCtx);
+  }
 
-    if (!stageBackground) {
+  function drawSky() {
+    rebuildSkyArt();
+    ctx.drawImage(skyBackCanvas, 0, 0, VW, VH);
+    // ステージ背景の写真だけは焼かずに直接貼る。焼くと540x960へ一度落ちて眠くなる。
+    const stageBackground = getReadyStageBackground();
+    if (stageBackground) ctx.drawImage(stageBackground, 0, 0, VW, VH);
+    drawSkyParticles();
+    ctx.drawImage(skyFrontCanvas, 0, 0, VW, VH);
+  }
+
+  // 粒より後ろに来る、動かない部分。
+  function drawSkyBackArt(g) {
+    const fx = THEME_FX[currentThemeKey];
+    const sky = g.createLinearGradient(0, 0, 0, VH);
+    sky.addColorStop(0, currentTheme.sky[0]);
+    sky.addColorStop(0.55, currentTheme.sky[1]);
+    sky.addColorStop(1, currentTheme.sky[2]);
+    g.fillStyle = sky;
+    g.fillRect(0, 0, VW, VH);
+
+    // 背景写真がある時は、この上へ写真がそのままかぶる。天体やオーロラは出さない。
+    if (getReadyStageBackground()) return;
+
     // テーマごとの天体と地平線の光。背景画像を増やさず、試合ごとに位置が少し変わる。
     const orbX = 78 + ((parallaxSeed * 0.137) % (VW - 156));
     const orbY = currentThemeKey === 'desert' ? 168 : 92;
     const orbRadius = currentThemeKey === 'desert' ? 32 : currentThemeKey === 'volcanic' ? 22 : 20;
-    const glow = ctx.createRadialGradient(orbX, orbY, 0, orbX, orbY, orbRadius * 4.8);
+    const glow = g.createRadialGradient(orbX, orbY, 0, orbX, orbY, orbRadius * 4.8);
     glow.addColorStop(0, fx.glow);
     glow.addColorStop(0.36, fx.glow);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(orbX - orbRadius * 5, orbY - orbRadius * 5, orbRadius * 10, orbRadius * 10);
-    ctx.save();
-    ctx.shadowColor = fx.orb;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = fx.orb;
-    ctx.beginPath();
-    ctx.arc(orbX, orbY, orbRadius, 0, Math.PI * 2);
-    ctx.fill();
+    g.fillStyle = glow;
+    g.fillRect(orbX - orbRadius * 5, orbY - orbRadius * 5, orbRadius * 10, orbRadius * 10);
+    g.save();
+    g.shadowColor = fx.orb;
+    g.shadowBlur = 18;
+    g.fillStyle = fx.orb;
+    g.beginPath();
+    g.arc(orbX, orbY, orbRadius, 0, Math.PI * 2);
+    g.fill();
     if (currentThemeKey === 'grass' || currentThemeKey === 'snow') {
-      ctx.fillStyle = currentTheme.sky[0];
-      ctx.beginPath();
-      ctx.arc(orbX + 8, orbY - 5, orbRadius * 0.92, 0, Math.PI * 2);
-      ctx.fill();
+      g.fillStyle = currentTheme.sky[0];
+      g.beginPath();
+      g.arc(orbX + 8, orbY - 5, orbRadius * 0.92, 0, Math.PI * 2);
+      g.fill();
     }
-    ctx.restore();
+    g.restore();
 
     if (currentThemeKey === 'snow') {
       // 淡いオーロラ。主張を抑えてUIと弾道を見やすく保つ。
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      ctx.lineCap = 'round';
+      g.save();
+      g.globalAlpha = 0.22;
+      g.lineCap = 'round';
       for (let band = 0; band < 3; band++) {
-        const aurora = ctx.createLinearGradient(0, 0, VW, 0);
+        const aurora = g.createLinearGradient(0, 0, VW, 0);
         aurora.addColorStop(0, 'rgba(76,255,208,0)');
         aurora.addColorStop(0.45, band === 1 ? 'rgba(96,196,255,0.65)' : 'rgba(98,255,195,0.55)');
         aurora.addColorStop(1, 'rgba(132,109,255,0)');
-        ctx.strokeStyle = aurora;
-        ctx.lineWidth = 16 - band * 3;
-        ctx.beginPath();
-        ctx.moveTo(-40, 105 + band * 28);
-        ctx.bezierCurveTo(120, 35 + band * 22, 350, 210 - band * 18, VW + 40, 70 + band * 30);
-        ctx.stroke();
+        g.strokeStyle = aurora;
+        g.lineWidth = 16 - band * 3;
+        g.beginPath();
+        g.moveTo(-40, 105 + band * 28);
+        g.bezierCurveTo(120, 35 + band * 22, 350, 210 - band * 18, VW + 40, 70 + band * 30);
+        g.stroke();
       }
-      ctx.restore();
+      g.restore();
     } else if (currentThemeKey === 'volcanic') {
-      const lavaGlow = ctx.createRadialGradient(VW * 0.62, GROUND_MIN_Y + 10, 10, VW * 0.62, GROUND_MIN_Y, 260);
+      const lavaGlow = g.createRadialGradient(VW * 0.62, GROUND_MIN_Y + 10, 10, VW * 0.62, GROUND_MIN_Y, 260);
       lavaGlow.addColorStop(0, 'rgba(255,72,20,0.34)');
       lavaGlow.addColorStop(1, 'rgba(255,50,10,0)');
-      ctx.fillStyle = lavaGlow;
-      ctx.fillRect(0, 170, VW, GROUND_MIN_Y);
+      g.fillStyle = lavaGlow;
+      g.fillRect(0, 170, VW, GROUND_MIN_Y);
     }
-    }
+  }
 
-    // 星・火の粉・雪・砂埃をテーマ別に描き分ける。
+  // 粒より手前に来る、動かない部分。読みやすさの陰と四隅の落ち。
+  function drawSkyFrontArt(g) {
+    if (getReadyStageBackground()) {
+      // HUD・弾道・キャラクターの視認性を保ちつつ、生成背景の色彩を残す。
+      const readabilityShade = g.createLinearGradient(0, 0, 0, VH);
+      readabilityShade.addColorStop(0, 'rgba(5,10,18,0.06)');
+      readabilityShade.addColorStop(0.48, 'rgba(5,10,18,0.03)');
+      readabilityShade.addColorStop(1, 'rgba(5,10,18,0.19)');
+      g.fillStyle = readabilityShade;
+      g.fillRect(0, 0, VW, VH);
+    }
+    const vignette = g.createRadialGradient(VW / 2, VH * 0.4, 80, VW / 2, VH * 0.4, VW * 0.72);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+    g.fillStyle = vignette;
+    g.fillRect(0, 0, VW, VH);
+  }
+
+  // 星・火の粉・雪・砂埃をテーマ別に描き分ける。ここだけは毎フレーム動く。
+  function drawSkyParticles() {
+    const fx = THEME_FX[currentThemeKey];
     const t = performance.now() * 0.001;
     for (let i = 0; i < 44; i++) {
       let sx = (i * 137.5 + parallaxSeed * 0.19) % VW;
@@ -8738,12 +8828,6 @@
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-
-    const vignette = ctx.createRadialGradient(VW / 2, VH * 0.4, 80, VW / 2, VH * 0.4, VW * 0.72);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, VW, VH);
   }
 
   // ===== 遠景パララックス(山のシルエット・雲。カメラより遅く動いて奥行きを出す) =====
@@ -8862,14 +8946,10 @@
   function drawTerrain() {
     // 外壁の延長は地形より先に敷く。地形の縁取りや鉄柵が上に乗る順序を崩さないため。
     drawArenaWallExtension();
-    // 地形マスク(ピクセル単位で穴があいた実体)をそのまま描画
-    ctx.drawImage(terrainCanvas, 0, 0);
-    // 地形マスクから生成した全周の境界線。浮島・縦崖・爆破穴も実際の形どおりに縁取る。
-    ctx.drawImage(terrainRimCanvas, 0, 0);
-    // 橋は既存の薄床地形に重ねた装飾。地形と一緒に爆破で削れる。
-    ctx.drawImage(bridgeCanvas, 0, 0);
-    // 闘技場だけの鉄柵・補強材。キャラクターより手前へ出ず、地形と一緒に爆破で欠ける。
-    ctx.drawImage(arenaDecorationCanvas, 0, 0);
+    // 地形・縁取り・橋・闘技場の飾りは、中身が変わった時だけ1枚へ束ねてある。
+    // 重ねる順番は束ねる側(rebuildTerrainArt)が持つ。見え方は4枚貼っていた頃と同じ。
+    rebuildTerrainArt();
+    ctx.drawImage(terrainArtCanvas, 0, 0);
   }
 
   function drawArenaObstacles() {

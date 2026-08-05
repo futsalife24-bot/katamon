@@ -1253,6 +1253,66 @@ kt.setLocalSeat('p1');
     b.tutorial.y - b.tutorial.h / 2 > 0 && b.tutorial.y + b.tutorial.h / 2 < kt.viewH());
 }
 
+// ===== 描き直しの節約(v129) =====
+// 空と地形は「毎コマ作り直していた絵」を1枚に焼いて貼る形にした。
+// **焼き直しの合図を書き忘れると、古い絵が出たままになる。** そこを固定する。
+kt.startBattle('kyoryu');
+kt.setTerrain('rolling');
+kt.render();
+
+// 1) 毎コマ焼き直していないこと。これが崩れると軽くした意味が無くなる。
+const artA = kt.artBuilds();
+for (let i = 0; i < 30; i++) kt.render();
+const artB = kt.artBuilds();
+check('空を毎コマ焼き直していない(30コマ描いても回数が増えない)',
+  artB.sky === artA.sky, `${artA.sky}→${artB.sky}`);
+check('地形を毎コマ束ね直していない(30コマ描いても回数が増えない)',
+  artB.terrain === artA.terrain, `${artA.terrain}→${artB.terrain}`);
+
+// 2) 中身が変わったら必ず作り直すこと。4枚それぞれの入口を実際に通す。
+const dirtyAfter = (name, fn) => {
+  kt.render();                       // ここで合図は必ず倒れる
+  const before = kt.terrainArtDirty();
+  fn();
+  const after = kt.terrainArtDirty();
+  check(`${name}のあと、地形を束ね直す合図が立つ`, before === false && after === true,
+    `前=${before} 後=${after}`);
+};
+dirtyAfter('穴あけ', () => kt.carveCraterForTest(600, 460, 50));
+// 拡散弾と中断からの復元は「縁取りを作り直さない穴あけ」を使う。
+// この道は他の合図に助けてもらえないので、ここが抜けると古い地形が残る。
+dirtyAfter('縁取りなしの穴あけ(拡散弾の道)', () => kt.carveCraterNoRimForTest(640, 470, 44));
+dirtyAfter('地形の作り直し', () => kt.buildTerrainMaskForTest());
+dirtyAfter('縁取りの描き直し', () => kt.rebuildTerrainRimForTest());
+dirtyAfter('橋の描き直し', () => kt.rebuildBridgeForTest());
+dirtyAfter('闘技場の飾りの描き直し', () => kt.rebuildArenaDecoForTest());
+
+// 実際に束ね直しの回数が1つ増えることも見る(合図だけ立てて描き直さない実装を弾く)
+kt.render();
+const beforeCarve = kt.artBuilds().terrain;
+kt.carveCraterForTest(700, 470, 46);
+kt.render();
+check('穴があいたら、地形を実際に1回だけ束ね直す',
+  kt.artBuilds().terrain === beforeCarve + 1,
+  `${beforeCarve}→${kt.artBuilds().terrain}`);
+
+// 3) 空を焼き直す条件。テーマ・遠景の種・背景写真の有無で変わること。
+kt.setThemeForTest('grass');
+const sigBase = kt.skyArtSignature();
+kt.setThemeForTest('snow');
+check('テーマが変われば空を焼き直す', kt.skyArtSignature() !== sigBase,
+  `${sigBase} / ${kt.skyArtSignature()}`);
+const sigSnow = kt.skyArtSignature();
+kt.setParallaxSeedForTest(12345.5);
+check('遠景の種が変われば空を焼き直す', kt.skyArtSignature() !== sigSnow,
+  `${sigSnow} / ${kt.skyArtSignature()}`);
+kt.render();
+const skyBefore = kt.artBuilds().sky;
+kt.setThemeForTest('volcanic');
+kt.render();
+check('テーマを変えたら、空を実際に1回だけ焼き直す',
+  kt.artBuilds().sky === skyBefore + 1, `${skyBefore}→${kt.artBuilds().sky}`);
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);
