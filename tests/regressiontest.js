@@ -757,6 +757,118 @@ check('席がe1でも4枚とも上下2段に収まる',
   JSON.stringify(panelsE1));
 kt.setLocalSeat('p1');
 
+
+// ===== v122: 開始カットインが終わるまで手番を始めない =====
+// 実機報告「初手が相手ターン(CPU)の時、カットイン中に発射されて明けたら着弾している」。
+// 原因は2つ重なっていた。
+//   1. resetMatch は activeIndex=0(自分)で startTurn を済ませるが、オンラインはその後に
+//      先攻を入れ直す。入れ直した側は startTurn を通らず、思考時間が0のまま残る。
+//   2. ホストは resetMatch から開始カットインまでの間に通信を4往復する。その間
+//      gamePhase は battle でカットインも無いので、盤面が動いてしまう。
+// 修正前の実測はカットイン終了の0.02秒後に発射。修正後は約2.1秒の猶予がある。
+const h3 = kt.stage3();
+const FRAME = 1 / 60;
+
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+check('開始カットインが出ている間は「手番はまだ始まっていない」',
+  kt.hasCutIn() && h3.battleIntroPending());
+
+// オンラインのホストと同じく、カットインが出たあとで先攻を差し替える。
+h3.setActiveUnitForTest('e1');
+h3.setUnitControl('e1', 'cpu');
+let firedAt = -1, cutInEndedAt = -1, clock = 0;
+for (let i = 0; i < 60 * 8; i++) {
+  const had = kt.hasCutIn();
+  kt.step(FRAME); clock += FRAME;
+  if (had && !kt.hasCutIn() && cutInEndedAt < 0) cutInEndedAt = clock;
+  if (firedAt < 0 && (kt.projectiles().length || kt.state().awaitingResolve)) firedAt = clock;
+}
+check('先攻を差し替えても、カットインが明ける前には撃たれない',
+  cutInEndedAt > 0 && firedAt > cutInEndedAt, `cutIn=${cutInEndedAt} fire=${firedAt}`);
+check('カットインが明けてから撃つまでに、盤面を見る時間が1秒以上ある',
+  firedAt - cutInEndedAt >= 1, `猶予=${(firedAt - cutInEndedAt).toFixed(2)}秒`);
+check('差し替えた側の手番でもCPUの行動計画がきちんと作られる',
+  ['move', 'aim'].includes(h3.cpuPlan().phase));
+
+// カットインを出さないまま時間が流れる窓(オンラインのホストの通信待ち)を再現する。
+// online が firebase だと resetMatch は開始カットインを出さない。ホストはそのあと
+// 「先攻の抽選 → 部屋の更新 → 盤面の保存 → 開始データの送信」と4往復してから出す。
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+settle(); // 直前の試合の開始カットインを最後まで消化してから始める(前の状態を持ち込まない)
+h3.setOnlineForLogTest({
+  kind: 'firebase', role: 'host', phase: 'starting', seat: 'p1', room: 'A2BC3DEF',
+  auth: { uid: 'uid-p1' }, log: [], queue: [], clientId: 'uid-p1', currentRoundId: 'r'.repeat(48),
+  // 撃たれてしまった時に送信で落ちると、検査に届く前にテストごと止まる。
+  // ここは「撃たれないこと」を見るための足場なので、送信は受け流す。
+  transport: { send: () => Promise.resolve(true), close() {}, setRoundId() {}, reconnect() {} },
+  settings: h3.normalizeLobbySettings({ terrain: 'random', wind: 'random', turnsPerPlayer: 15, format: '2v2', revision: 1 }),
+  slots: { p1: { uid: 'uid-p1' }, s1: { uid: 'uid-s1' } }, participantRole: 'player',
+  pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), remoteAction: null
+});
+h3.resetMatchForTest();
+check('ホストの通信待ちの間は、まだカットインが出ていない',
+  !kt.hasCutIn() && h3.battleIntroPending());
+h3.setActiveUnitForTest('e1');
+h3.setUnitControl('e1', 'cpu');
+let firedInGap = false;
+for (let i = 0; i < 60 * 5 && !firedInGap; i++) {
+  kt.step(FRAME);
+  if (kt.projectiles().length || kt.state().awaitingResolve) firedInGap = true;
+}
+check('カットインがまだ出ていない通信待ちの間も、CPUは撃たない', !firedInGap);
+h3.setOnlineForLogTest(null);
+
+// ===== v122: 誰の手番かを名前と陣営色で出す =====
+// 2vs2は4体居るので「CPUのターン」だけでは、味方CPUなのか敵CPUなのかも分からなかった。
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+kt.setLocalSeat('p1');
+const mine = h3.turnCutInLines('p1');
+const ally = h3.turnCutInLines('p2');
+const foe = h3.turnCutInLines('e1');
+const cards = kt.unitPanelLayout();
+const cardName = id => (cards.find(c => c.id === id) || {}).label;
+check('手番の知らせは、HPカードと同じ呼び名を見出しにする',
+  mine.text === cardName('p1') && ally.text === cardName('p2') && foe.text === cardName('e1'),
+  [mine.text, ally.text, foe.text].join('/'));
+// 同じキャラを両陣営が選ぶことはあるので、名前だけに頼らない。
+// 名前が並んでも、役どころの行と見出しの色で味方CPUと敵CPUが必ず分かれる。
+check('同じキャラが左右に並んでも、味方CPUと敵CPUは見分けられる',
+  ally.sub !== foe.sub && ally.color !== foe.color,
+  `${ally.sub}/${foe.sub}`);
+check('自分・味方・相手を言い分ける',
+  mine.sub === 'あなたのターン' && ally.sub === '味方のターン（CPU）' && foe.sub === '相手のターン（CPU）',
+  [mine.sub, ally.sub, foe.sub].join('/'));
+check('自陣営と相手陣営で見出しの色が違う',
+  mine.color === ally.color && mine.color !== foe.color);
+// 実際に手番が変わるまで進め、出てくるカットインの中身を見る。
+settle();
+let turnCutIn = null;
+{
+  // 自分の手番は入力が無いと進まないので、全席をCPUにして手番を回す。
+  for (const id of ['p1', 'p2', 'e1', 'e2']) h3.setUnitControl(id, 'cpu');
+  const startId = kt.state().turnOrder[kt.state().activeIndex];
+  for (let i = 0; i < 60 * 30 && !turnCutIn; i++) {
+    kt.step(FRAME);
+    const info = h3.cutInInfo();
+    if (info && kt.state().turnOrder[kt.state().activeIndex] !== startId) turnCutIn = info;
+  }
+}
+check('手番が変わると、その名前と役どころが実際にカットインへ出る',
+  !!turnCutIn && turnCutIn.duration === h3.turnCutInDuration()
+  && /のターン/.test(turnCutIn.sub) && !!turnCutIn.text,
+  JSON.stringify(turnCutIn));
+
+// ===== v122: テンポ =====
+check('CPUが狙いを定める時間は1.5秒以上ある',
+  h3.cpuThinkRange()[0] >= 1.5 && h3.cpuThinkRange()[1] > h3.cpuThinkRange()[0]);
+check('手番の知らせは、前より長く出て読み切れる', h3.turnCutInDuration() >= 1.2);
+kt.setFreeFormat('1v1');
+kt.setLocalSeat('p1');
+
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

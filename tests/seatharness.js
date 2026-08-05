@@ -22,7 +22,7 @@ let code = m[1];
 const HOOK = `
   globalThis.__kt = {
     units, unitById, localUnit, foeUnit, activeUnit, isLocalTurn, localWon,
-    turnOwnerLabel, setLocalSeat,
+    setLocalSeat,
     seat: () => localUnitId,
     projectiles: () => projectiles,
     state: () => ({ gamePhase, matchOver, winner, awaitingResolve, turnCount, activeIndex, turnOrder: turnOrder.slice() }),
@@ -88,7 +88,7 @@ const HOOK = `
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
       moveActive: isLocalTurn() && localUnit().moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn,
-      turnLabel: turnOwnerLabel(activeUnit()),
+      turnLabel: turnCutInLines(activeUnit()).short,
       fuelRatio: localUnit().fuelMax > 0 ? localUnit().fuel / localUnit().fuelMax : 0
     }),
     fireBtn: () => ({ ...FIRE_BTN }),
@@ -218,7 +218,7 @@ const HOOK = `
       setOnlineSeat: (seat) => setOnlineSeat(seat),
       netControlsUnit: (id) => netControlsUnit(unitById(id)),
       unitSeatIsCpu: (id) => unitSeatIsCpu(unitById(id)),
-      turnOwnerLabel: (id) => turnOwnerLabel(unitById(id)),
+
       setMatchFormat: (format) => setMatchFormat(format),
       // 4人ぶんの伏せ合いと再戦(Issue #26 段C)
       firebaseSeatCommitted: (seat) => firebaseSeatCommitted(seat),
@@ -231,7 +231,15 @@ const HOOK = `
       firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap),
       firebaseHasSeatedOpponent: () => firebaseHasSeatedOpponent(),
       updateFirebasePeerLiveness: () => updateFirebasePeerLiveness(),
-      // ---- 段D: 切断・CPU引き継ぎ(Issue #8) ----
+      // ---- v121: 開始カットインが終わるまで手番を始めない / 手番表示 ----
+      battleIntroPending: () => battleIntroPending,
+      resetMatchForTest: () => resetMatch(false),
+      turnCutInLines: (id) => turnCutInLines(unitById(id)),
+      cutInInfo: () => cutIn && cutIn.kind === 'message'
+        ? { text: cutIn.text, sub: cutIn.sub, color: cutIn.color, duration: cutIn.duration } : null,
+      turnCutInDuration: () => TURN_CUTIN_DURATION,
+      cpuThinkRange: () => [CPU_THINK_MIN_SEC, CPU_THINK_MIN_SEC + CPU_THINK_RANGE_SEC],
+      // ---- v122 段D: 切断・CPU引き継ぎ(Issue #8) ----
       peerVisibleTimeoutMs: () => FIREBASE_PEER_VISIBLE_TIMEOUT_MS,
       pendingVisibleTimeoutMs: () => FIREBASE_PENDING_VISIBLE_TIMEOUT_MS,
       matchSeatSuspectMs: () => FIREBASE_MATCH_SEAT_SUSPECT_MS,
@@ -279,7 +287,7 @@ const HOOK = `
     },
     changeFreeOption: (kind, dir) => changeFreeOption(kind, dir),
     startFreeMatch: () => startFreeMatch(),
-    unitPanelLayout: () => unitPanelLayout().map(s => ({ id: s.unit.id, align: s.align, cardY: s.cardY, h: s.h })),
+    unitPanelLayout: () => unitPanelLayout().map(s => ({ id: s.unit.id, label: s.unit.label, align: s.align, cardY: s.cardY, h: s.h })),
     hudBottom: () => 116 + hudShift(),
     minimapTop: () => minimapTop(),
     turnBarTop: () => 94 + hudShift(),
