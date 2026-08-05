@@ -138,6 +138,7 @@ const HOOK = `
     tutorialSkipBtn: () => ({ ...tutorialSkipBtn }),
     endTurnForTest: () => endTurn(),
     checkMatchEndForTest: () => checkMatchEnd('テスト'),
+    tutorialLedge: () => ({ halfW: TUTORIAL_LEDGE_HALF_W, thickness: TUTORIAL_LEDGE_THICKNESS }),
     setTurnCountForTest: (n) => { turnCount = n; },
     // --- リグレッション用 ---
     snapshot: () => buildSnapshot(),
