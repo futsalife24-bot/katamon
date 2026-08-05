@@ -116,6 +116,29 @@ const HOOK = `
       faces: JSON.parse(JSON.stringify(MATCHUP_FACES))
     }),
     forceWinner: (team) => { winner = team; matchOver = true; },
+    // ---- v126: チュートリアル ----
+    startTutorialForTest: () => startTutorial(),
+    tutorialState: () => (tutorial ? {
+      active: tutorialActive(), stepIndex: tutorial.stepIndex,
+      key: TUTORIAL_STEPS[tutorial.stepIndex] && TUTORIAL_STEPS[tutorial.stepIndex].key,
+      cleared: tutorial.cleared, stepShots: tutorial.stepShots,
+      turnOrder: turnOrder.slice(), foeHp: unitById('e1').hp, meX: player.x
+    } : null),
+    tutorialSteps: () => TUTORIAL_STEPS.map(step => ({
+      key: step.key, title: step.title, body: step.body.slice(), hint: step.hint,
+      hasSetup: typeof step.setup === 'function', hasCleared: typeof step.cleared === 'function'
+    })),
+    tutorialGoto: (key) => {
+      tutorial.stepIndex = TUTORIAL_STEPS.findIndex(step => step.key === key);
+      applyTutorialStep();
+    },
+    tutorialHurtDummy: (amount) => { unitById('e1').hp -= amount; },
+    tutorialSkipForTest: () => skipTutorial(),
+    tutorialRecommended: () => tutorialIsRecommended(),
+    tutorialSkipBtn: () => ({ ...tutorialSkipBtn }),
+    endTurnForTest: () => endTurn(),
+    checkMatchEndForTest: () => checkMatchEnd('テスト'),
+    setTurnCountForTest: (n) => { turnCount = n; },
     // --- リグレッション用 ---
     snapshot: () => buildSnapshot(),
     save: () => saveSuspendedMatch(),
@@ -281,6 +304,7 @@ const HOOK = `
     bonusBtn: () => ({ ...titleBonusBtn }),
     titleBtnRects: () => ({
       cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn }, free: { ...titleFreeBtn },
+      tutorial: { ...titleTutorialBtn },
       bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
     }),
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),

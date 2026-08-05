@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v125';
+  const BUILD_ID = 'v126';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2949,6 +2949,7 @@
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
     const activateJump = deferred ? !!useJump : (!!useJump && unit.jumpAvailable !== false && unit.moveLockTurns <= 0);
 
+    if (tutorialActive() && unit.id === 'p1' && !deferred) tutorial.stepShots++;
     if (activateJump && !deferred) unit.jumpAvailable = false;
     unit.jumpShot = activateJump;
 
@@ -3300,7 +3301,7 @@
 
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'press' | 'breaking' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
-  let battleMode = 'normal'; // 'normal' | 'free'
+  let battleMode = 'normal'; // 'normal' | 'free' | 'tutorial'
   const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
   const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
   // おまけ曲の再生ボタン。演習(下端789)とRANKING(上端835)の隙間へ収める。
@@ -3312,7 +3313,10 @@
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
   const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
-  const titleFreeBtn = { x: VW / 2, y: 762, w: 382, h: 54 };
+  // 演習の段を左右に割り、左をチュートリアルにする。どちらも「練習」なので同じ段に置く。
+  // 下は「おまけ」まで詰まっていて新しい段を足す余白が無い(タイトルは921まで使っている)。
+  const titleTutorialBtn = { x: VW / 2 - 97, y: 762, w: 188, h: 54 };
+  const titleFreeBtn = { x: VW / 2 + 97, y: 762, w: 188, h: 54 };
   const FREE_TERRAIN_OPTIONS = [
     { key: 'random', name: 'ランダム', sub: '毎回ちがう戦場' },
     { key: 'plateauLeft', name: '左高台', sub: '左から右へ下る地形' },
@@ -3552,6 +3556,288 @@
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
+  }
+
+
+  // ===== チュートリアル(はじめての方へ) =====
+  // 読ませるのではなく、実際に操作させて覚えてもらう。カタモンは「どれだけ引くか」の
+  // 手触りが全てなので、文章だけでは身につかない。
+  //
+  // 作りの要は3つ。
+  //   1. 手番は自分だけが持つ(turnOrder を p1 だけにする)。相手は撃ち返してこない的。
+  //   2. 的は倒れない(HPを大きくする)。最後の項目だけ、落として終わる。
+  //   3. 通常の決着へは入らない(checkMatchEnd をチュートリアル中は通さない)。
+  // これで、何度失敗しても詰まらないし、負けて終わることもない。
+  const TUTORIAL_KEY = 'katamon_tutorial_v1';
+  const TUTORIAL_CLEAR_HOLD_SEC = 1.5;  // 「できた!」を見せてから次の項目へ移るまで
+  const TUTORIAL_HINT_AFTER_SHOTS = 3;  // これだけ外したら、追加の一言を足す
+  let tutorialCleared = false;
+  try { tutorialCleared = localStorage.getItem(TUTORIAL_KEY) === 'done'; } catch (_) { /* 保存できなくても遊べる */ }
+  function markTutorialCleared() {
+    tutorialCleared = true;
+    try { localStorage.setItem(TUTORIAL_KEY, 'done'); } catch (_) { /* 保存できなくても遊べる */ }
+  }
+  // タイトルで「はじめての方へ」と添えるかどうか。一度でも通せば出さない。
+  function tutorialIsRecommended() { return !tutorialCleared; }
+
+  let tutorial = null;
+  function tutorialActive() { return battleMode === 'tutorial' && !!tutorial; }
+  function tutorialStep() { return tutorial ? TUTORIAL_STEPS[tutorial.stepIndex] : null; }
+  function tutorialDummy() { return unitById('e1'); }
+
+  function tutorialPlace(unit, ratio) {
+    if (!unit) return;
+    let x = spawnXNear(STAGE_W * ratio, []);
+    // spawnXNear は足場が見つからない時も比率の位置を返す。そこへ置くと奈落へ落ち、
+    // 落下を「当てた」と誤判定してしまう。地面のある列が見つかるまで探し直す。
+    if (groundYAt(x) >= DEAD_LINE_Y) {
+      for (let offset = COL_W; offset <= STAGE_W; offset += COL_W) {
+        if (groundYAt(x + offset) < DEAD_LINE_Y) { x += offset; break; }
+        if (groundYAt(x - offset) < DEAD_LINE_Y) { x -= offset; break; }
+      }
+    }
+    unit.x = Math.max(UNIT_RADIUS + 4, Math.min(STAGE_W - UNIT_RADIUS - 4, x));
+    initUnitOnGround(unit);
+  }
+  function tutorialSetWind(dir, strength) {
+    wind.dir = dir;
+    wind.strength = strength;
+    calmWind = strength <= 0.001;
+    calmBattle = calmWind;
+  }
+  // 地面を上から底まで貫いて穴にする。最後の項目で的を細い足場の上へ乗せるために使う。
+  // 1発ぶんのクレーターでは底まで届かないので、縦に並べて掘る。
+  //
+  // **必ず画面の一番上から掘ること。** 地形には宙に浮いた薄い足場があり、
+  // 地面の帯(GROUND_MIN_Y)より上に的が立つことがある。そこから掘り始めると
+  // 的の高さが掘り残しになり、足場が崩れない。
+  function tutorialDigColumn(x, radius) {
+    for (let y = 0; y <= TERRAIN_BOTTOM_Y + radius; y += radius * 0.6) {
+      carveCrater(x, y, radius);
+    }
+  }
+
+  // 各項目。setup で場を整え、cleared() が真になったら次へ進む。
+  // body は自動改行しない。1行ずつ書くこと(端末ごとに折り返し位置が変わらないため)。
+  const TUTORIAL_STEPS = [
+    {
+      key: 'fire', title: '引いて発射',
+      body: ['まん中の輪を指で引いて、離すと撃つ。', '引くほど強く飛ぶ。当ててみよう。'],
+      hint: '当たらない時は、引く強さを少しずつ変えてみよう。',
+      setup() { tutorialSetWind(1, 0); tutorialPlace(player, 0.18); tutorialPlace(tutorialDummy(), 0.52); },
+      cleared() { return tutorialDummy().hp < tutorial.baseHp; }
+    },
+    {
+      key: 'wind', title: '風を読む',
+      body: ['画面の上に風の向きと強さが出ている。', '弾は風に流される。ずらして狙おう。'],
+      hint: '風下へ撃つなら弱く、風上へ撃つなら強く。',
+      setup() { tutorialSetWind(1, 0.85); tutorialPlace(player, 0.16); tutorialPlace(tutorialDummy(), 0.74); },
+      cleared() { return tutorialDummy().hp < tutorial.baseHp; }
+    },
+    {
+      key: 'move', title: '動く',
+      body: ['左下と右下のボタンで動ける。', '動けるのは燃料の分だけ。動いてみよう。'],
+      hint: '燃料はターンごとに戻る。使い切って大丈夫。',
+      setup() { tutorialSetWind(-1, 0.3); },
+      cleared() { return Math.abs(player.x - tutorial.baseX) >= 55; }
+    },
+    {
+      key: 'jump', title: '跳ぶ',
+      body: ['左の「跳躍」を押してから撃つと跳べる。', '1試合に1回だけ。使ってみよう。'],
+      hint: '跳躍を押すとボタンが光る。そのまま輪を引いて離す。',
+      setup() { tutorialSetWind(1, 0.2); player.jumpAvailable = true; },
+      cleared() { return player.jumpAvailable === false; }
+    },
+    {
+      key: 'special', title: '必殺技',
+      body: ['右下の「必殺」は手番を重ねると溜まる。', '溜まったら押してから撃つ。撃ってみよう。'],
+      hint: '必殺を押してから、いつもどおり輪を引いて離す。',
+      setup() { tutorialSetWind(1, 0.1); player.specialCharge = SPECIAL_CHARGE_MAX; tutorialPlace(tutorialDummy(), 0.62); },
+      cleared() { return player.specialCharge < tutorial.baseCharge; }
+    },
+    {
+      key: 'terrain', title: '足場を壊す',
+      body: ['地面は撃つと削れる。相手の足場を壊すと', '落ちて場外になる。細い足場を撃ち抜こう。'],
+      hint: '足場のまん中あたりを、何度か撃って削ろう。',
+      setup() {
+        tutorialSetWind(1, 0);
+        const foe = tutorialDummy();
+        tutorialPlace(player, 0.16);
+        tutorialPlace(foe, 0.68);
+        // 的の左右を底まで掘り、細い足場の上に立たせる。
+        tutorialDigColumn(foe.x - 86, 52);
+        tutorialDigColumn(foe.x + 86, 52);
+        initUnitOnGround(foe);
+      },
+      cleared() {
+        const foe = tutorialDummy();
+        return foe.hp <= 0 || foe.y + UNIT_RADIUS >= DEAD_LINE_Y;
+      }
+    }
+  ];
+
+  function startTutorial() {
+    clearSuspendedMatch();
+    hasSuspendedSave = false;
+    battleMode = 'tutorial';
+    setMatchFormat('1v1');
+    // 使うキャラは固定。恐竜は説明文どおり素直な弾道で、最初の一発を当てやすい。
+    player.character = 'kyoryu';
+    cpu.character = 'iwa';   // 的は大きくて当てやすいもの
+    gamePhase = 'battle';
+    winStreak = 0;
+    runStats = { damageDealt: 0, shots: 0 };
+    tutorial = { stepIndex: 0, stepShots: 0, clearTimer: 0, cleared: false, baseHp: 0, baseX: 0, baseCharge: 0 };
+    resetMatch(false);
+    // 手番は自分だけ。相手を turnOrder から外すので、的は一度も動かない。
+    turnOrder = ['p1'];
+    activeIndex = 0;
+    turnCount = 0;
+    applyTutorialStep();
+  }
+
+  function applyTutorialStep() {
+    const step = tutorialStep();
+    if (!step) return;
+    step.setup();
+    faceAllUnitsTowardOpponents();
+    player.fuel = player.fuelMax;
+    tutorial.stepShots = 0;
+    tutorial.cleared = false;
+    tutorial.clearTimer = 0;
+    // 項目ごとにHPを戻す。倒せてしまうと項目の途中で終わってしまうため。
+    tutorialDummy().hp = tutorialDummy().maxHp;
+    tutorial.baseHp = tutorialDummy().hp;
+    tutorial.baseX = player.x;
+    tutorial.baseCharge = player.specialCharge;
+    focusCameraOn((player.x + tutorialDummy().x) / 2, true);
+  }
+
+  function advanceTutorialStep() {
+    tutorial.stepIndex++;
+    if (tutorial.stepIndex >= TUTORIAL_STEPS.length) { finishTutorial(); return; }
+    applyTutorialStep();
+  }
+
+  function finishTutorial() {
+    markTutorialCleared();
+    tutorial = null;
+    battleMode = 'normal';
+    showCutIn('チュートリアル完了!', 'これで対戦に出られます', 2.0, () => {
+      returnToTitleFromResult();
+      showTitleNotice('おつかれさま。まずはCPU対戦から遊んでみよう。');
+    });
+  }
+
+  // 「とばす」を押した人にも、次からは勧めない。本人が決めたことなので蒸し返さない。
+  function skipTutorial() {
+    markTutorialCleared();
+    tutorial = null;
+    battleMode = 'normal';
+    returnToTitleFromResult();
+  }
+
+  function updateTutorial(dt) {
+    if (!tutorialActive() || gamePhase !== 'battle') return;
+    const step = tutorialStep();
+    if (!step) return;
+    if (tutorial.cleared) {
+      tutorial.clearTimer -= dt;
+      if (tutorial.clearTimer <= 0) advanceTutorialStep();
+      return;
+    }
+    // 撃ち続けても的は倒れない。完了判定より先に止めること。後にすると、
+    // 一撃で倒しきった時にHPが負のまま画面へ出る。
+    // 最後の項目だけは、落として終わるので止めない。
+    const foe = tutorialDummy();
+    if (step.key !== 'terrain' && foe.hp <= 0) foe.hp = 1;
+    if (step.cleared()) {
+      tutorial.cleared = true;
+      tutorial.clearTimer = TUTORIAL_CLEAR_HOLD_SEC;
+    }
+  }
+
+  // チュートリアルの案内板。上のHUDと下の操作パネルの間に置くので、
+  // 説明を読みながらそのまま操作できる。指の邪魔になる位置には出さない。
+  const TUTORIAL_PANEL = { x: 14, y: 232, w: VW - 28, h: 104 };
+  const tutorialSkipBtn = { x: VW - 72, y: 252, w: 96, h: 28 };
+  function drawTutorialOverlay() {
+    if (!tutorialActive() || gamePhase !== 'battle') return;
+    const step = tutorialStep();
+    if (!step) return;
+    const p = TUTORIAL_PANEL;
+
+    // 的の上に印を出す。どれを狙うのかを迷わせない。
+    const foe = tutorialDummy();
+    if (foe && foe.hp > 0 && !tutorial.cleared) {
+      const ax = worldToScreenX(foe.x);
+      const ay = worldToScreenY(foe.y - UNIT_RADIUS - 34);
+      const bob = Math.sin(simTimeMs / 260) * 4;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = UI.gold;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay + bob + 12);
+      ctx.lineTo(ax - 9, ay + bob - 4);
+      ctx.lineTo(ax + 9, ay + bob - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,12,20,0.82)';
+    ctx.strokeStyle = tutorial.cleared ? '#8fe6b0' : UI.brass;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(p.x, p.y, p.w, p.h, 12);
+    else ctx.rect(p.x, p.y, p.w, p.h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    const stepNo = `${tutorial.stepIndex + 1}/${TUTORIAL_STEPS.length}`;
+    if (tutorial.cleared) {
+      drawOutlinedText('できた!', p.x + p.w / 2, p.y + 46, {
+        font: `900 26px ${UI_FONT_HEAVY}`, color: '#8fe6b0', lineWidth: 5
+      });
+      const next = TUTORIAL_STEPS[tutorial.stepIndex + 1];
+      drawOutlinedText(next ? `つぎは「${next.title}」` : 'これで最後', p.x + p.w / 2, p.y + 76, {
+        font: `900 13px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+      });
+      return;
+    }
+
+    drawOutlinedText(`${stepNo}  ${step.title}`, p.x + 16, p.y + 28, {
+      align: 'left', font: `900 17px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 4
+    });
+    step.body.forEach((line, i) => {
+      drawOutlinedText(line, p.x + 16, p.y + 54 + i * 21, {
+        align: 'left', font: `900 13px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+      });
+    });
+    // 何度か外した人にだけ、追加の一言を出す。最初から全部出すと読む気が失せる。
+    if (tutorial.stepShots >= TUTORIAL_HINT_AFTER_SHOTS && step.hint) {
+      drawOutlinedText(step.hint, p.x + 16, p.y + 96, {
+        align: 'left', font: `900 12px ${UI_FONT_HEAVY}`, color: '#ffd98a', lineWidth: 3
+      });
+    }
+
+    // 「とばす」はいつでも押せる。閉じ込めない。
+    const b = tutorialSkipBtn;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,28,40,0.9)';
+    ctx.strokeStyle = UI.brass;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 8);
+    else ctx.rect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    drawOutlinedText('とばす', b.x, b.y + 5, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
   }
 
   // ===== 中断/再開(ブラウザを閉じても続きから再開できる) =====
@@ -6695,6 +6981,11 @@
       steel.addColorStop(0, '#315a58');
       steel.addColorStop(0.48, '#163c3e');
       steel.addColorStop(1, '#092326');
+    } else if (kind === 'tutorial') {
+      // 演習の隣に並ぶので、同じ緑系だと見分けが付かない。少し紫寄りにして分ける。
+      steel.addColorStop(0, '#4b4470');
+      steel.addColorStop(0.48, '#2b2747');
+      steel.addColorStop(1, '#151329');
     } else if (kind === 'online') {
       // CPU BATTLE と同じ鋼色だったので、文字を読むまで見分けが付かなかった(実機で指摘)。
       // 大きさと位置は変えず、色味だけ真鍮寄りにして別物だと分かるようにする。
@@ -6801,7 +7092,11 @@
     // 押し間違いで意図せず中断データを消費してしまうため、ここでは知らせるだけ。
     drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
     drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
-    drawTitleModeButton(titleFreeBtn, '演習', '対戦条件を組み上げて開始', 'free');
+    // まだ通していない人には「はじめての方へ」と添える。押すかどうかは本人が決める。
+    drawTitleModeButton(titleTutorialBtn, 'あそび方',
+      tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
+      tutorialIsRecommended());
+    drawTitleModeButton(titleFreeBtn, '演習', '条件を組んで開始', 'free');
     // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
     drawSuspendedSaveBubble();
     drawTitleNotice();
@@ -8003,6 +8298,8 @@
 
   function checkMatchEnd(reason) {
     if (matchOver) return;
+    // チュートリアルは勝ち負けを付けない。的が落ちたかどうかは updateTutorial が見る。
+    if (tutorialActive()) return;
     const playerAlive = teamAlive('player');
     const cpuAlive = teamAlive('cpu');
     if (playerAlive && cpuAlive) return;
@@ -8073,7 +8370,8 @@
     resetMoveSync();
     for (const u of units) u.netWalkTargetX = null;
     // 風は全員が2巡するごとに切り替える(1vs1では従来どおり4ターンごと)
-    if (turnCount % (turnOrder.length * 2) === 0) rollWind();
+    // チュートリアルは項目ごとに風を決めているので、勝手に振り直さない。
+    if (battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
     acting.fuel = acting.fuelMax;
     focusCameraOn(acting.x);
@@ -8097,7 +8395,8 @@
     // そのキャラが1手番を終えるごとに1段階。使用した手番の終了時から再充填を始める。
     advanceSpecialCharge(acting);
     turnCount++;
-    if (turnCount >= maxTurnsTotal()) {
+    // チュートリアルは時間切れで終わらせない。当てるまで何度でも撃たせる。
+    if (battleMode !== 'tutorial' && turnCount >= maxTurnsTotal()) {
       showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
       return;
     }
@@ -9835,8 +10134,11 @@
     // 4体のうちどれなのかも分からなかった(実機で指摘)。HPカードと同じ呼び名を添える。
     const turnLabel = turnCutInLines(actingUnit).short;
     const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
+    // チュートリアルは時間切れが無いので、あるように見える「TURN n/15」は出さない。
+    const turnCounter = battleMode === 'tutorial' ? 'れんしゅう'
+      : `TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}`;
     drawOutlinedText(
-      `${turnLabel}　TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}${lockLabel}`,
+      `${turnLabel}　${turnCounter}${lockLabel}`,
       20, barY + 14, { align: 'left', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3 }
     );
     drawOutlinedText(battleMode === 'free' ? '演習' : `${winStreak}連勝`, VW - 20, barY + 14, {
@@ -11674,6 +11976,7 @@
     drawResultBanner();
     drawBossBanner();
     drawSpecialFlash();
+    drawTutorialOverlay();
     drawCutIn();
     drawMenuOverlay();
     drawSoundPanel();
@@ -11740,6 +12043,13 @@
     ensureBgmGraph();
     syncBgm();
     retryBgmOnUserGesture();
+
+    // チュートリアルの「とばす」。手番でも演出中でもいつでも押せるようにする。
+    if (tutorialActive() && gamePhase === 'battle' && hitRect(p0, tutorialSkipBtn)) {
+      playUiSound();
+      skipTutorial();
+      return;
+    }
 
     // 確認ダイアログが最優先。開いている間は他の入力を一切通さない。
     if (confirmDialog) {
@@ -11819,6 +12129,9 @@
         playUiSound();
         gamePhase = 'ranking';
         fetchRankingBoard();
+      } else if (hitRect(p0, titleTutorialBtn)) {
+        playUiSound();
+        startTutorial();
       } else if (hitRect(p0, titleFreeBtn)) {
         playUiSound();
         gamePhase = 'freeSetup';
@@ -12201,9 +12514,14 @@
     calmWind = false;
     const freeTerrain = battleMode === 'free' ? FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex]
       : (lobbySettings ? FREE_TERRAIN_OPTIONS.find(option => option.key === lobbySettings.terrain) : null);
-    const selectedTerrain = isBossMatch
-      ? 'tieredBasin'
-      : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined);
+    // チュートリアルの地形は固定する。ランダムだと闘技場のように中央が奈落の地形を引き、
+    // 的が足場の無い場所へ置かれて落ちてしまう(そのまま「当てた」と誤判定していた)。
+    // なだらかな地形なら、誰がやっても同じ手触りで覚えられる。
+    const selectedTerrain = battleMode === 'tutorial'
+      ? 'rolling'
+      : (isBossMatch
+        ? 'tieredBasin'
+        : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined));
     newTerrain(selectedTerrain);
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
@@ -12410,6 +12728,7 @@
     // タイトルへ移ると減衰が一度も走らず、画面が永久に震え続けた。
     if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
     if (gamePhase === 'breaking') { updateWallBreak(dt); return; }
+    updateTutorial(dt);
     if (gamePhase === 'select') {
       updateSelectWheel(dt);
       return;
