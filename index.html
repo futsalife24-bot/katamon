@@ -435,7 +435,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v121';
+  const BUILD_ID = 'v122';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2469,13 +2469,17 @@
   // 「勝ったのはこの端末の陣営か」。winner は陣営名なので席を見て判定する。
   function localWon() { return winner != null && winner !== 'draw' && winner === localUnit().team; }
   function isDraw() { return winner === 'draw'; }
-  // 手番の呼び名。席から見て自分／CPU／(将来の)リモート相手を出し分ける。
-  function turnOwnerLabel(u) {
-    if (!u) return '';
-    if (u.id === localUnitId) return 'あなたのターン';
-    // 空席のCPUはホストの端末だけが control='cpu' で持つ。ほかの端末では remote に
-    // 見えるので、席が空いているかどうかで呼び名を決める(全員に同じ表示を出す)。
-    return (u.control === 'cpu' || unitSeatIsCpu(u)) ? 'CPUのターン' : '相手のターン';
+  // 手番の知らせに出す2行。2vs2は4体居るので「CPUのターン」だけでは、
+  // 味方のCPUなのか敵のCPUなのかも、4体のうちどれなのかも分からない(実機で指摘)。
+  // 見出しはHPカードと同じ呼び名にして、カードと見比べられるようにする。
+  function turnCutInLines(u) {
+    if (!u) return { text: '', sub: '', color: '#fff' };
+    const mine = u.team === localUnit().team;
+    const isCpu = u.control === 'cpu' || unitSeatIsCpu(u);
+    const role = u.id === localUnitId ? 'あなたのターン' : (mine ? '味方のターン' : '相手のターン');
+    const sub = u.id === localUnitId || !isCpu ? role : `${role}（CPU）`;
+    // ターンバーは常に出ているので短く。カットインが消えた後もここで誰の番か分かる。
+    return { text: u.label, sub, short: `${u.label} ${role}`, color: mine ? UI.ally : UI.enemy };
   }
   // そのユニットの席に人が座っていないか。2vs2の空席＝CPUの担当(決定3)。
   function unitSeatIsCpu(u) {
@@ -3068,6 +3072,11 @@
   function isLocalTurn() { return activeUnit().control === 'local'; }
   let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
   const TURN_SETTLE_SEC = 0.8; // 着弾が収まってから手番を交代するまでの余韻
+  // CPUが狙いを定めるのにかける時間。実測で「手番の交代から発射まで1.8〜2.1秒、うち
+  // 0.9秒はカットインで盤面が隠れている」ため、CPUが何をしているか見られる時間が
+  // 1秒しかなかった。ここを伸ばすと、移動して狙う様子が読めるようになる。
+  const CPU_THINK_MIN_SEC = 1.5;
+  const CPU_THINK_RANGE_SEC = 0.8;
   let turnSettle = TURN_SETTLE_SEC;
   let matchOver = false;
   let winner = null;
@@ -3079,9 +3088,12 @@
   // ===== カットイン(対戦開始・ターン交代・タイムアップ演出) =====
   // 表示中はupdate()を早期returnさせてゲーム進行を止め、切り替わりを分かりやすくする
   const MATCHUP_CUTIN_DURATION = 1.8;
-  let cutIn = null; // message: { timer, duration, text, sub, onDone } / matchup: { kind, left, right, ... }
-  function showCutIn(text, sub, duration, onDone) {
-    cutIn = { kind: 'message', timer: duration, duration, text, sub: sub || '', onDone: onDone || null };
+  // 手番の知らせ。実測で「交代から発射まで1.8〜2.1秒、うち0.9秒はカットインで盤面が隠れている」
+  // ため、盤面を見られる時間が1秒しかなかった。誰の番かを読む時間を先に確保する。
+  const TURN_CUTIN_DURATION = 1.3;
+  let cutIn = null; // message: { timer, duration, text, sub, color, onDone } / matchup: { kind, left, right, ... }
+  function showCutIn(text, sub, duration, onDone, color) {
+    cutIn = { kind: 'message', timer: duration, duration, text, sub: sub || '', onDone: onDone || null, color: color || '#fff' };
   }
 
   // 席順ではなく陣営で分ける。units は p1,e1,p2,e2 の交互順なので、
@@ -3093,15 +3105,33 @@
   function showBattleStartCutIn() {
     // 中断セーブを作るために、タイトル画面の裏で resetMatch を呼ぶ経路がある。
     // そこでは表示せず、本当に戦闘画面へ入る時だけ作る。
-    if (gamePhase !== 'battle') return;
+    if (gamePhase !== 'battle') { battleIntroPending = false; return; }
+    battleIntroPending = true;
     cutIn = {
       kind: 'matchup',
       timer: MATCHUP_CUTIN_DURATION,
       duration: MATCHUP_CUTIN_DURATION,
       left: matchupTeam('player'),
       right: matchupTeam('cpu'),
-      onDone: null
+      onDone: beginFirstTurn
     };
+  }
+  // 開始カットインが終わるまで、最初の手番は始まっていない。
+  //
+  // これが無いと、オンラインのホストで「初手が相手(CPU)の時、カットインが明けた
+  // 瞬間に着弾している」という状態になる。原因は2つ重なっていた。
+  //   1. resetMatch は activeIndex=0(自分)で startTurn を済ませるが、そのあと
+  //      オンラインは先攻を activeIndex へ入れ直す。入れ直した相手の手番は
+  //      startTurn を通らないので、CPUの思考時間が用意されないまま 0 で残る。
+  //   2. ホストは resetMatch から開始カットインまでの間に通信を4往復する。
+  //      その間 gamePhase は battle でカットインも無いので、盤面が動いてしまう。
+  // 実測では、カットイン終了の0.02秒後に発射されていた。
+  let battleIntroPending = false;
+  function beginFirstTurn() {
+    battleIntroPending = false;
+    const acting = activeUnit();
+    // 先攻が入れ替わっていても、ここで必ずその手番の入り口を通す。
+    if (acting && acting.control === 'cpu') beginCpuTurnPlan(acting);
   }
 
   // ===== 下部コントローラパネル(この境界より下は地形を描かない専用エリア) =====
@@ -8025,10 +8055,11 @@
     focusCameraOn(acting.x);
     if (acting.control === 'cpu') beginCpuTurnPlan(acting);
   }
-  // CPUの手番の入り口。startTurn だけでなく、試合中に落ちた席をCPUが引き継いだ時にも
-  // 呼ぶ(段D)。引き継ぎは手番の途中で起きるので、ここを通さないと計画が無いまま止まる。
+  // CPUの手番の入り口。startTurn だけでなく、開始カットインが明けた時(v121)と、
+  // 試合中に落ちた席をCPUが引き継いだ時(段D)にも呼ぶ。どちらも startTurn を
+  // 通らない場面なので、ここを通さないと行動計画が無いまま止まる/即撃ちする。
   function beginCpuTurnPlan(acting) {
-    cpuThinkTimer = 0.7 + Math.random() * 0.5;
+    cpuThinkTimer = CPU_THINK_MIN_SEC + Math.random() * CPU_THINK_RANGE_SEC;
     const plan = planCpuMove(acting);
     cpuMoveDir = plan.dir;
     cpuMoveRemaining = plan.distance;
@@ -8053,7 +8084,8 @@
       if (activeUnit().hp > 0) break;
     }
     startTurn();
-    showCutIn(turnOwnerLabel(activeUnit()), '', 0.9);
+    const lines = turnCutInLines(activeUnit());
+    showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
   }
 
   // ===== CPU AI(精度成長型)=====
@@ -9775,7 +9807,9 @@
     ctx.restore();
 
     const actingUnit = activeUnit();
-    const turnLabel = turnOwnerLabel(actingUnit);
+    // 2vs2は4体居るので「CPUのターン」だけでは、味方のCPUなのか敵のCPUなのかも
+    // 4体のうちどれなのかも分からなかった(実機で指摘)。HPカードと同じ呼び名を添える。
+    const turnLabel = turnCutInLines(actingUnit).short;
     const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
     drawOutlinedText(
       `${turnLabel}　TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}${lockLabel}`,
@@ -10179,7 +10213,8 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(0, VH * 0.4, VW, 120);
-    ctx.fillStyle = '#fff';
+    // 見出しは陣営の色で出す。文字を読む前に「自分側か相手側か」が分かる。
+    ctx.fillStyle = cutIn.color || '#fff';
     ctx.font = 'bold 30px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(cutIn.text, VW / 2, VH * 0.4 + 62);
@@ -12073,6 +12108,11 @@
     cpuMoveDir = 0;
     cpuMoveRemaining = 0;
     cpuPhase = 'aim';
+    // 前の試合の思考時間を持ち越さない。0のまま残ると、手番へ入った最初の1フレームで撃つ。
+    cpuThinkTimer = 0;
+    // 開始カットインが終わるまで手番は始めない。オンラインのホストはこのあと
+    // 通信を4往復してからカットインを出すので、その間ずっと止めておく必要がある。
+    battleIntroPending = true;
     particles = [];
     empRings = [];
     lightningBeams = [];
@@ -12512,7 +12552,9 @@
 
     // CPU移動→思考→発射
     const cpuActor = activeUnit();
-    if (cpuActor.control === 'cpu' && !awaitingResolve && cpuActor.grounded && !projectiles.length) {
+    // 開始カットインが終わるまでは、まだ誰の手番も始まっていない。
+    // ここを通すと、カットインが出る前や明けた直後にCPUが撃ってしまう。
+    if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && cpuActor.grounded && !projectiles.length) {
       if (cpuPhase === 'move') {
         if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpuActor.fuel > 0) {
           const dist = Math.min(MOVE_SPEED * dt, cpuActor.fuel, cpuMoveRemaining);

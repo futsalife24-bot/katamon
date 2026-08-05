@@ -1457,8 +1457,14 @@ function check(name, value) {
   h.setOnlineSeat('s1');
   check('an empty seat is called a CPU on every device, not just on the host',
     h.unitSeatIsCpu('e1') && h.unitSeatIsCpu('e2') && !h.unitSeatIsCpu('p1')
-    && h.turnOwnerLabel('e1') === 'CPUのターン' && h.turnOwnerLabel('p1') === '相手のターン'
-    && h.turnOwnerLabel('p2') === 'あなたのターン');
+    && h.turnCutInLines('e1').sub === '相手のターン（CPU）'
+    && h.turnCutInLines('p2').sub === 'あなたのターン');
+  // v122まで、味方であるホストの手番が「相手のターン」と出ていた。呼び名が陣営を
+  // 見ておらず「自分か・CPUか・それ以外」でしか分けていなかったため。
+  check('your team-mate is called a team-mate, not an opponent',
+    h.turnCutInLines('p1').sub === '味方のターン'
+    && h.turnCutInLines('p1').color === h.turnCutInLines('p2').color
+    && h.turnCutInLines('e1').color !== h.turnCutInLines('p2').color);
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
   h.setOnlineSeat('e1');
@@ -1568,7 +1574,7 @@ function check(name, value) {
   h.setOnlineForLogTest(afterGuest);
   h.setOnlineSeat('s1');
   check('the other devices call the taken-over character a CPU and keep waiting for the host',
-    h.unitSeatIsCpu('e1') && h.turnOwnerLabel('e1') === 'CPUのターン'
+    h.unitSeatIsCpu('e1') && h.turnCutInLines('e1').sub === '相手のターン（CPU）'
     && h.unitControl('e1') === 'remote' && !h.netControlsUnit('e1'));
 
   // ---- 手番の途中で引き継いだ場合 ----

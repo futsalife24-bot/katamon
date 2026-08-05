@@ -63,8 +63,12 @@ check('カードは左右に1枚ずつ', panels.filter(p => p.align === 'left').
 // 先攻は turnOrder[0]=p1。席が e1 のときは「相手(CPU)の手番」から始まる。
 const myTurnFirst = kt.activeUnit().id === SEAT;
 check('isLocalTurn() が席と一致', kt.isLocalTurn() === myTurnFirst, `active=${kt.activeUnit().id}`);
+// v122から、呼び名にはHPカードと同じキャラ名が付く。4体居る2vs2で
+// 「CPUのターン」だけでは、どれの番なのかが分からなかったため。
 check('ターン表示が席から見た呼び名',
-  kt.hud().turnLabel === (myTurnFirst ? 'あなたのターン' : 'CPUのターン'), kt.hud().turnLabel);
+  kt.hud().turnLabel.endsWith(myTurnFirst ? 'あなたのターン' : '相手のターン')
+  && kt.hud().turnLabel !== (myTurnFirst ? 'あなたのターン' : '相手のターン'),
+  kt.hud().turnLabel);
 check('発射ボタンの活性が手番と一致', kt.hud().fireActive === myTurnFirst, String(kt.hud().fireActive));
 
 // 自席の手番になるまで進める(CPUの手番なら物理を回して交代を待つ)
