@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v135';
+  const BUILD_ID = 'v136';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -8396,6 +8396,8 @@
   function emitEmp(x, y, radius, owner, turns) {
     spawnEmpPulse(x, y, radius);
     triggerShake(2.5, 0.16);
+    const ownerTeam = teamOfOwner(owner);
+    let opponentHit = false;
     // 通常の爆発(explodeAt)は昔から撃った本人も味方も巻き込む。電磁波だけが
     // 敵専用だったため、2vs2で「味方に当たる/当たらない」が技ごとに変わってしまう。
     // 判定の例外をなくし、当たった者は陣営に関係なく食らう形へ統一する。
@@ -8407,10 +8409,12 @@
       const damage = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
       u.hp = Math.max(0, u.hp - damage);
       u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
+      if (ownerTeam !== null && u.team !== ownerTeam) opponentHit = true;
       spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, damage);
       creditDamage(owner, u, damage);
     }
-    triggerSpecialFlash(`電磁波: 移動封印 ${turns}手`);
+    // 発射時の必殺カットインとは別の「命中結果」。空振りや味方だけの誤爆では出さない。
+    if (opponentHit) triggerSpecialFlash(`電磁波命中: 移動不可 ${turns}手`);
     playExplosionSound(0.8);
     checkMatchEnd();
   }
@@ -9238,6 +9242,78 @@
     ctx.restore();
   }
 
+  function moveLockStatus(u) {
+    if (unitDefeated(u) || !(u.moveLockTurns > 0)) return null;
+    return { turns: u.moveLockTurns, effect: 'chain', placement: 'feet', icon: 'padlock' };
+  }
+
+  function drawMoveLockChainLink(x, y, angle) {
+    // 外側の濃い線と内側の金属色を重ね、どの背景でも鎖の輪郭が消えないようにする。
+    for (const [width, color] of [[4.6, '#28323a'], [2.1, '#b9c4cc']]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 5.4, 3.1, angle, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function drawMoveLockChains(u, a, tilt, layer) {
+    const status = moveLockStatus(u);
+    if (!status) return;
+
+    // 小刻みな横揺れだけを足し、鎖が地面でジャラついて見えるようにする。
+    // 時刻は表示にしか使わず、移動不可の判定や通信には一切使わない。
+    const phase = (Date.now() % 1400) / 1400;
+    const jangle = Math.sin(phase * Math.PI * 8) * (0.7 + Math.sin(phase * Math.PI * 2) * 0.45);
+    const groundY = a.y + UNIT_RADIUS - 3;
+    const rx = UNIT_RADIUS + 11;
+    const ry = 9;
+    const isBack = layer === 'back';
+    const start = isBack ? Math.PI : 0;
+    const end = isBack ? Math.PI * 2 : Math.PI;
+
+    ctx.save();
+    ctx.translate(a.x + jangle, groundY);
+    ctx.rotate(tilt);
+    ctx.globalAlpha = isBack ? 0.82 : 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i <= 6; i++) {
+      const ang = start + (end - start) * i / 6;
+      const x = Math.cos(ang) * rx;
+      const y = Math.sin(ang) * ry;
+      const tangent = Math.atan2(ry * Math.cos(ang), -rx * Math.sin(ang));
+      drawMoveLockChainLink(x, y, tangent + (i % 2 ? Math.PI / 2 : 0));
+    }
+
+    if (!isBack) {
+      // 正面中央の南京錠。青い点の数で残り手数(最大2)を文字なしで示す。
+      ctx.strokeStyle = '#d7e0e6';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 3, 6, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      selectRoundedRect(-9, 2, 18, 15, 4);
+      ctx.fillStyle = '#a8732a';
+      ctx.fill();
+      ctx.strokeStyle = '#ffe0a0';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      const pips = Math.max(1, Math.min(2, Math.round(status.turns)));
+      ctx.fillStyle = '#9fe9ff';
+      ctx.shadowColor = '#6be9ff';
+      ctx.shadowBlur = 5;
+      for (let i = 0; i < pips; i++) {
+        const px = pips === 1 ? 0 : (i === 0 ? -3 : 3);
+        ctx.beginPath();
+        ctx.arc(px, 10, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   function drawUnit(u) {
     if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
@@ -9249,6 +9325,7 @@
     // 向きと反転の変換は共通関数だけを通す(直接式を書くと向き判定側と食い違う)。
     const facingLeft = spriteFlipForFacing(u, unitFacesLeftInWorld(u));
     const tilt = u.grounded ? groundSlopeAt(u) : 0; // 空中では傾けない
+    drawMoveLockChains(u, a, tilt, 'back');
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
@@ -9291,6 +9368,7 @@
       ctx.fillText(u.label, 0, 4);
     }
     ctx.restore();
+    drawMoveLockChains(u, a, tilt, 'front');
 
     if (isBossUnit) {
       ctx.save();

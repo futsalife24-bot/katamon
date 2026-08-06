@@ -6,6 +6,7 @@ const kt = h.kt();
 const canvas = h.canvas;
 const win = globalThis.window;
 const SEAT = h.SEAT;
+const indexHtml = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
 
 let pass = 0, fail = 0;
 const log = [];
@@ -807,6 +808,37 @@ kt.emitEmpForTest(empAlly.x, empAlly.y, 120, 'p1', 1);
 check('電磁波は味方にも当たる(誤爆の扱いを通常の爆発と統一)',
   empAlly.hp < empHpBefore && empAlly.moveLockTurns > 0,
   `hp ${empHpBefore}→${empAlly.hp} lock=${empAlly.moveLockTurns}`);
+
+// v136: 着弾時の「移動不可」は、敵へ実際に当たった時だけ成功表示を出す。
+// 発射時の必殺カットインとは別物。空振りや味方だけの誤爆で成功したように見せない。
+kt.clearSpecialFlashForTest();
+kt.emitEmpForTest(-500, -500, 30, 'p1', 2);
+check('電磁波が空振りなら着弾時の移動不可カットインを出さない',
+  kt.specialFlashForTest() === null, JSON.stringify(kt.specialFlashForTest()));
+
+const empOwner = kt.unitById('p1');
+empOwner.x = 40; empOwner.y = 300;
+empAlly.x = 300; empAlly.y = 300;
+kt.unitById('e1').x = 700; kt.unitById('e1').y = 300;
+kt.unitById('e2').x = 1000; kt.unitById('e2').y = 300;
+kt.clearSpecialFlashForTest();
+kt.emitEmpForTest(empAlly.x, empAlly.y, 20, 'p1', 2);
+check('電磁波が味方だけに当たった時は成功カットインを出さない',
+  kt.specialFlashForTest() === null, JSON.stringify(kt.specialFlashForTest()));
+
+const empEnemy = kt.unitById('e1');
+kt.clearSpecialFlashForTest();
+kt.emitEmpForTest(empEnemy.x, empEnemy.y, 20, 'p1', 2);
+const empHitFlash = kt.specialFlashForTest();
+check('電磁波が敵へ命中した時だけ移動不可カットインを出す',
+  !!empHitFlash && empHitFlash.text.includes('電磁波命中') && empHitFlash.text.includes('移動不可'),
+  JSON.stringify(empHitFlash));
+const empLockVisual = kt.moveLockVisualForTest('e1');
+check('移動封印中は文字や電気ではなく、足元を前後から囲む鎖と南京錠を割り当てる',
+  !!empLockVisual && !('label' in empLockVisual) && empLockVisual.turns === 2
+    && empLockVisual.effect === 'chain' && empLockVisual.placement === 'feet' && empLockVisual.icon === 'padlock'
+    && /drawMoveLockChains\(u, a, tilt, 'back'\);[\s\S]{0,3000}drawMoveLockChains\(u, a, tilt, 'front'\);/.test(indexHtml),
+  JSON.stringify(empLockVisual));
 
 // 撃破済みのキャラへの二重ヒット(v128)。2vs2で先に倒れた味方/敵は薄く描かれるのに、
 // その上へダメージ数字が出ていた(実機報告)。爆風・電磁波・拡散弾のどれでも同じこと。
