@@ -280,6 +280,14 @@ const HOOK = `
     specialReady: () => isSpecialReady(localUnit()),
     charges: () => units.map(u => u.specialCharge),
     fillCharges: () => { for (const u of units) u.specialCharge = SPECIAL_CHARGE_MAX; },
+    specialSequenceForTest: () => ({
+      phase: pendingShot ? pendingShot.phase || 'cutin' : null,
+      auraVisible: !!specialAura,
+      flashVisible: specialFlash.timer > 0,
+      projectileCount: projectiles.length,
+      auraDuration: SPECIAL_AURA_DURATION,
+      flashDuration: SPECIAL_FLASH_DURATION
+    }),
     proto: () => PROTO_VERSION,
     stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, stateSnapshotMismatchReason, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, advanceFirebaseLobbyLiveness, firebaseSeatStale, onlineErrorTitle, canLeaveFirebaseLobby, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken,
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,

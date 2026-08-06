@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v136';
+  const BUILD_ID = 'v137';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3087,9 +3087,11 @@
 
     if (activateSpecial && !deferred) {
       unit.specialCharge = 0;
-      triggerSpecialFlash(`必殺: ${def.special}!!`, def);
-      playSpecialSound();
-      pendingShot = { timer: SPECIAL_FLASH_DURATION, fire: () => launchShot(unit, anchor, vx0, vy0, true, true, activateJump) };
+      beginSpecialSequence(
+        unit,
+        def,
+        () => launchShot(unit, anchor, vx0, vy0, true, true, activateJump)
+      );
       return;
     }
 
@@ -3210,7 +3212,7 @@
       });
     }
 
-    // チャージ消費・カットイン・必殺音は保留に入る前に済ませてある。
+    // チャージ消費・オーラ・カットイン・必殺音は保留側で済ませてある。
     unit.jumpShot = false;
     if (!activateSpecial) playLaunchSound();
   }
@@ -3369,9 +3371,11 @@
   let floatTexts = [];  // ダメージ数字ポップ
   let shakeTimer = 0;
   let shakeMag = 0;
+  const SPECIAL_AURA_DURATION = 0.78;
   const SPECIAL_FLASH_DURATION = 1.12;
+  let specialAura = null;     // 必殺を放つ本人の周囲で、カットイン前だけ沸き立つ
   let specialFlash = { timer: 0, text: '', color: '#ff9d42', sub: '' };
-  let pendingShot = null;    // 必殺カットインを見せ終わるまで発射を待たせる
+  let pendingShot = null;    // 必殺のオーラ→カットインを見せ終わるまで発射を待たせる
   let lightningBeams = [];   // 着弾後に一瞬だけ残る電撃の残像
 
   function spawnExplosion(x, y, blastMul) {
@@ -3431,6 +3435,23 @@
       text,
       color: def?.color || '#ff9d42',
       sub: def?.specialDesc || 'SPECIAL ATTACK'
+    };
+  }
+
+  function beginSpecialSequence(unit, def, fire) {
+    specialAura = {
+      timer: SPECIAL_AURA_DURATION,
+      duration: SPECIAL_AURA_DURATION,
+      unitId: unit.id,
+      key: def?.key || null,
+      color: def?.color || '#ff9d42'
+    };
+    pendingShot = {
+      phase: 'aura',
+      timer: SPECIAL_AURA_DURATION,
+      text: `必殺: ${def.special}!!`,
+      def,
+      fire
     };
   }
 
@@ -4183,6 +4204,7 @@
     lightningBeams = [];
     floatTexts = [];
     shakeTimer = 0;
+    specialAura = null;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
     confirmDialog = null;
@@ -9314,9 +9336,91 @@
     ctx.restore();
   }
 
+  function drawSpecialAura(u, a) {
+    if (!specialAura || specialAura.unitId !== u.id || unitDefeated(u)) return;
+    const duration = specialAura.duration || SPECIAL_AURA_DURATION;
+    const progress = Math.max(0, Math.min(1, 1 - specialAura.timer / duration));
+    const phase = (Date.now() % 1200) / 1200 * Math.PI * 2;
+    const color = specialAura.color || '#ff9d42';
+    const spriteH = unitSpriteScale(u.character) * SPRITE_SIZE * 1.18;
+    const feetY = a.y + UNIT_RADIUS + 3;
+    const topY = feetY - spriteH - 18;
+    const pulse = 0.88 + Math.sin(phase * 2) * 0.12;
+    const appear = Math.min(1, progress * 5);
+
+    ctx.save();
+    ctx.globalAlpha = appear;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 24;
+
+    // 体を包む柔らかい光。外周を先に置き、キャラ本体の輪郭は潰さない。
+    const glow = ctx.createRadialGradient(a.x, a.y - spriteH * 0.28, 4, a.x, a.y - spriteH * 0.22, spriteH * 0.78);
+    glow.addColorStop(0, 'rgba(255,255,255,0.54)');
+    glow.addColorStop(0.42, `${color}a8`);
+    glow.addColorStop(1, `${color}00`);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(a.x, a.y - spriteH * 0.22, spriteH * 0.7 * pulse, spriteH * 0.82, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 足元から上へ伸びる炎状の筋。乱数は使わず、見た目だけを時刻で揺らす。
+    for (let i = 0; i < 7; i++) {
+      const lane = (i - 3) / 3;
+      const sway = Math.sin(phase * (1.15 + i * 0.07) + i * 1.7) * (4 + Math.abs(lane) * 3);
+      const baseX = a.x + lane * spriteH * 0.38;
+      const baseY = feetY - Math.abs(lane) * 5;
+      const tongueH = spriteH * (0.58 + (i % 3) * 0.13) * (0.92 + Math.sin(phase + i) * 0.08);
+      const halfW = 7 + (i % 2) * 3;
+      const tipX = baseX + sway;
+      const tipY = Math.max(topY, baseY - tongueH);
+      ctx.beginPath();
+      ctx.moveTo(baseX - halfW, baseY);
+      ctx.bezierCurveTo(baseX - halfW * 1.4, baseY - tongueH * 0.34, tipX - 3, tipY + tongueH * 0.2, tipX, tipY);
+      ctx.bezierCurveTo(tipX + 4, tipY + tongueH * 0.22, baseX + halfW * 1.35, baseY - tongueH * 0.32, baseX + halfW, baseY);
+      ctx.closePath();
+      const flame = ctx.createLinearGradient(baseX, baseY, tipX, tipY);
+      flame.addColorStop(0, `${color}ee`);
+      flame.addColorStop(0.58, `${color}b8`);
+      flame.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = flame;
+      ctx.fill();
+      ctx.globalAlpha = appear * 0.76;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.globalAlpha = appear;
+    }
+
+    // 下から上へ走る白い光筋で「力が沸き立っている」方向をはっきり見せる。
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 5; i++) {
+      const lane = (i - 2) * spriteH * 0.13;
+      const travel = (progress * 1.9 + i * 0.21) % 1;
+      const y = feetY - travel * spriteH * 0.92;
+      ctx.globalAlpha = appear * Math.sin(travel * Math.PI) * 0.9;
+      ctx.strokeStyle = i % 2 ? '#fff' : color;
+      ctx.lineWidth = i % 2 ? 2.2 : 3.2;
+      ctx.beginPath();
+      ctx.moveTo(a.x + lane, y + 22);
+      ctx.lineTo(a.x + lane + Math.sin(phase + i) * 4, y);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = appear * (0.74 + Math.sin(phase * 3) * 0.18);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(a.x, feetY - 2, spriteH * 0.42 * pulse, 8 * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawUnit(u) {
     if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
+    drawSpecialAura(u, a);
     // 絵より先に描く。上に重ねるとキャラが霞む。
     drawUnitHitCircle(u);
     const isBossUnit = isBossMatch && u.team === 'cpu';
@@ -11277,7 +11381,7 @@
 
   function drawSpecialFlash() {
     if (specialFlash.timer <= 0) return;
-    const duration = 1.12;
+    const duration = SPECIAL_FLASH_DURATION;
     const progress = Math.max(0, Math.min(1, 1 - specialFlash.timer / duration));
     const alpha = Math.sin(Math.min(1, progress * 3.4) * Math.PI / 2) * Math.min(1, specialFlash.timer * 3.1);
     const color = specialFlash.color || '#ff9d42';
@@ -12944,6 +13048,7 @@
     lightningBeams = [];
     floatTexts = [];
     shakeTimer = 0;
+    specialAura = null;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
     confirmDialog = null;
@@ -13131,6 +13236,7 @@
     // 演出系の更新はカットイン中も続ける(残り続けて画面に出っぱなしになるのを防ぐ)
     // 画面の揺れだけは update の先頭で減らす。ここは対戦中しか通らないため。
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
+    if (specialAura) specialAura.timer = Math.max(0, specialAura.timer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
     if (submitRevealTimer > 0) submitRevealTimer = Math.max(0, submitRevealTimer - dt);
     if (matchEndPause > 0) {
@@ -13143,13 +13249,21 @@
         triggerShake(5, 0.2);
       }
     }
-    // カットインが終わったところで、保留していた必殺の弾を発射する。
+    // 必殺はオーラを見せ切ってからカットインへ進み、カットイン後にだけ発射する。
     if (pendingShot) {
       pendingShot.timer -= dt;
       if (pendingShot.timer <= 0) {
-        const fire = pendingShot.fire;
-        pendingShot = null;
-        fire();
+        if (pendingShot.phase === 'aura') {
+          specialAura = null;
+          triggerSpecialFlash(pendingShot.text, pendingShot.def);
+          playSpecialSound();
+          pendingShot.phase = 'cutin';
+          pendingShot.timer = SPECIAL_FLASH_DURATION;
+        } else {
+          const fire = pendingShot.fire;
+          pendingShot = null;
+          fire();
+        }
       }
     }
     for (let i = lightningBeams.length - 1; i >= 0; i--) {
