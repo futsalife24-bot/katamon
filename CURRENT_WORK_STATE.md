@@ -2423,7 +2423,7 @@ v101は「新クライアントが `seenAt` を送る → 旧ルールが未宣�
    - 新規検査は、実装前に `regressiontest p1` が `256 passed, 2 failed`、`stage3test` が `396/398 passed` になることを確認。実装後は `seattest 20件×2席 + regressiontest 258件×2席 + resulttest 96件 + stage3test 398件 + lobbysimtest 7件 + loopbacktest 103件`、合計 **1160件すべて成功**。中継数は `38 / 64 / 83 / 61 / 48` のまま。
    - ローカルHTTPと実ブラウザで、v138表示、音源が `fetch` で読み込まれること、CPU戦で通常弾を発射して進行すること、ローカルページ由来のエラー・警告が0件であることを確認。
    - `database.rules.json` は変更なし。Firebase Console作業なし。
-22. **v139 指定された爆発音へ差し替え、起動砲弾にも共用** — PR作成前。
+22. **v139 指定された爆発音へ差し替え、起動砲弾にも共用** — PR #66、承認待ち。
    - メロニキ指定のPixabay素材 `Loud Explosion`（作者: DRAGON-STUDIO、2.904秒）へ `assets/normal-impact-explosion.mp3` の中身を差し替えた。配布元URL・直接取得URL・Pixabay Content License・確認日（2026-08-06）・SHA-256は `assets/SOUND_LICENSES.md` に記録した。
    - 通常弾の着弾に加え、`TAP TO START` で飛ぶ砲弾が壁へ当たった瞬間にも同じ読み込み済み音源を鳴らす。音量は通常弾を `0.34`、起動の壁着弾をさらに小さい `0.26` とし、既存の効果音音量・ミュート・圧縮経路はそのまま通す。音源URLは `?v=2` へ進め、サービスワーカーも同じURLをキャッシュする。
    - 理由: v138の音よりメロニキ指定素材の方が求める爆発感に合い、起動砲弾だけ従来の合成音だと同じ砲弾の着弾なのに音の印象が分かれるため。元素材が大きい音なので、ゲーム内では控えめに絞った。
