@@ -9,8 +9,8 @@
   "orientation": "any",
   "lang": "ja",
   "dir": "ltr",
-  "theme_color": "#111827",
-  "background_color": "#0d1420",
+  "theme_color": "#070a0c",
+  "background_color": "#070a0c",
   "categories": ["games", "utilities"],
   "icons": [
     {

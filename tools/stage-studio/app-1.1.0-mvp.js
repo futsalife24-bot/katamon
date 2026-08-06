@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.0-mvp';
+  const APP_VERSION = '1.1.0-mvp';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -34,7 +34,8 @@
     deadLineY: Number.isFinite(RAW_PHYSICS.deadLineY) ? RAW_PHYSICS.deadLineY : LIMITS.terrainBottomY,
     fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
   });
-  const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'gimmicks', 'appearance', 'playtest', 'validate', 'export'];
+  const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'playtest', 'validate', 'export'];
+  const SCREEN_ALIASES = Object.freeze({ gimmicks: 'playtest', appearance: 'terrain' });
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
@@ -43,12 +44,46 @@
     fortress: '要塞', floatingIslands: '浮島', platforms: '複数足場', cave: '洞窟',
     elevation: '高低差重視', random: 'ランダム'
   };
-  const THEME_COLORS = {
-    grass: { sky: '#8fd3ff', terrain: '#476b38', gradient: ['#7fc8f2', '#d9f2ff'] },
-    desert: { sky: '#f3ca81', terrain: '#9a6635', gradient: ['#e8a95b', '#ffe3a7'] },
-    snow: { sky: '#a9cceb', terrain: '#6d8798', gradient: ['#8eb5d6', '#eaf7ff'] },
-    volcanic: { sky: '#4a2730', terrain: '#4a302c', gradient: ['#351c26', '#a64c35'] }
-  };
+  /* Keep these values aligned with the target game's canonical stage themes. */
+  const THEME_COLORS = Object.freeze({
+    grass: {
+      sky: '#1a2340', terrain: '#7a5a3a', gradient: ['#1a2340', '#4a5a8a'],
+      dirtTop: '#7a5a3a', dirtBottom: '#33241a', rim: '#9be08a', rimShadow: '#4f8a4f',
+      strata: 'rgba(255,222,160,0.10)', stoneLight: 'rgba(236,213,172,0.16)', stoneDark: 'rgba(38,24,16,0.20)'
+    },
+    desert: {
+      sky: '#3a2b1a', terrain: '#c9954a', gradient: ['#3a2b1a', '#c98a4a'],
+      dirtTop: '#c9954a', dirtBottom: '#5a3a1c', rim: '#e0c37a', rimShadow: '#a97f30',
+      strata: 'rgba(255,223,153,0.14)', stoneLight: 'rgba(255,226,168,0.18)', stoneDark: 'rgba(83,44,18,0.20)'
+    },
+    snow: {
+      sky: '#233047', terrain: '#e8eef5', gradient: ['#233047', '#7c9bb8'],
+      dirtTop: '#e8eef5', dirtBottom: '#6f7f93', rim: '#ffffff', rimShadow: '#b9cadd',
+      strata: 'rgba(214,240,255,0.17)', stoneLight: 'rgba(255,255,255,0.22)', stoneDark: 'rgba(62,87,116,0.17)'
+    },
+    volcanic: {
+      sky: '#200f14', terrain: '#5a4038', gradient: ['#200f14', '#8a3018'],
+      dirtTop: '#5a4038', dirtBottom: '#180f0d', rim: '#ff7a3a', rimShadow: '#a8371a',
+      strata: 'rgba(255,105,47,0.12)', stoneLight: 'rgba(255,142,91,0.13)', stoneDark: 'rgba(10,5,5,0.30)'
+    }
+  });
+  const BACKGROUND_SOURCES = Object.freeze({
+    grass: '../../assets/stage-grass-bg.jpg',
+    desert: '../../assets/stage-desert-bg.jpg',
+    snow: '../../assets/stage-snow-bg.jpg',
+    volcanic: '../../assets/stage-volcanic-bg.jpg'
+  });
+  const CHARACTER_SOURCES = Object.freeze({
+    kyoryu: ['../../assets/kyoryu.webp', '../../assets/kyoryu.png'],
+    medama: ['../../assets/medama.webp', '../../assets/medama.png'],
+    tori: ['../../assets/tori.webp', '../../assets/tori.png'],
+    iwa: ['../../assets/iwa.webp', '../../assets/iwa.png']
+  });
+  const SLOT_CHARACTER = Object.freeze({ p1: 'kyoryu', e1: 'medama', p2: 'tori', e2: 'iwa' });
+  const SPRITE_SIZE = 78;
+  const SPRITE_REFERENCE_ASPECT = 1.318;
+  const UNIT_HIT_RADIUS = 30;
+  const UNIT_HIT_RISE = 23;
   const LOW_POWER_AUTO_DETECTED = (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4)
     || (Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) <= 4);
   const ISSUE_MESSAGES = {
@@ -126,12 +161,55 @@
   };
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const nowIso = () => new Date().toISOString();
+  const normalizeScreen = (screen) => {
+    const candidate = SCREEN_ALIASES[screen] || screen;
+    return SCREEN_ORDER.includes(candidate) ? candidate : 'home';
+  };
+
+  function loadImageWithFallback(sources) {
+    const image = new Image();
+    let index = 0;
+    image.decoding = 'async';
+    image.onload = () => renderAllCanvases();
+    image.onerror = () => {
+      index += 1;
+      if (index < sources.length) image.src = sources[index];
+    };
+    image.src = sources[index];
+    return image;
+  }
+
+  const stageBackgroundImages = Object.fromEntries(Object.entries(BACKGROUND_SOURCES)
+    .map(([key, source]) => [key, loadImageWithFallback([source])]));
+  const characterImages = Object.fromEntries(Object.entries(CHARACTER_SOURCES)
+    .map(([key, sources]) => [key, loadImageWithFallback(sources)]));
+
+  const terrainNoiseTile = document.createElement('canvas');
+  terrainNoiseTile.width = 28;
+  terrainNoiseTile.height = 28;
+  (() => {
+    const context = terrainNoiseTile.getContext('2d');
+    const image = context.createImageData(28, 28);
+    let seed = 0x4b415441;
+    for (let index = 0; index < image.data.length; index += 4) {
+      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+      const value = seed & 1 ? 255 : 0;
+      image.data[index] = value;
+      image.data[index + 1] = value;
+      image.data[index + 2] = value;
+      image.data[index + 3] = Math.abs(seed >>> 24) % 47;
+    }
+    context.putImageData(image, 0, 0);
+  })();
 
   const state = {
     stage: null,
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
+    characterGuides: [],
+    activeGuideIndex: 0,
+    guideDrag: null,
     activeSpawn: 'p1',
     undo: [],
     redo: [],
@@ -165,7 +243,9 @@
     pwaUpdateRequested: false,
     lowPowerMode: LOW_POWER_AUTO_DETECTED,
     lowPowerAutoDetected: LOW_POWER_AUTO_DETECTED,
-    toastTimer: null
+    toastTimer: null,
+    ready: false,
+    documentStarted: false
   };
 
   function coreReady() {
@@ -194,6 +274,7 @@
   }
 
   function markDirty() {
+    state.documentStarted = true;
     state.dirty = true;
     state.editRevision += 1;
     state.lastValidation = null;
@@ -206,7 +287,8 @@
   }
 
   function navigate(screen, options) {
-    if (!SCREEN_ORDER.includes(screen)) return;
+    screen = normalizeScreen(screen);
+    const previousScreen = state.currentScreen;
     document.querySelectorAll('.screen').forEach((node) => node.classList.toggle('is-active', node.dataset.screen === screen));
     document.querySelectorAll('.step-tab').forEach((node) => node.classList.toggle('is-active', node.dataset.step === screen));
     state.currentScreen = screen;
@@ -221,6 +303,10 @@
     if (screen === 'playtest') resetPlaytest(false);
     if (screen === 'validate') renderValidation(state.lastValidation);
     if (screen === 'export') updateExportSummary();
+    if (state.ready && state.documentStarted && state.stage && previousScreen !== screen) {
+      clearTimeout(state.preferenceSaveTimer);
+      state.preferenceSaveTimer = setTimeout(() => saveDraftNow(true, true), 250);
+    }
   }
 
   function createFallbackStage(metadata) {
@@ -325,6 +411,7 @@
     $('windStrength').value = Math.round((wind && Number(wind.strength) || 0.35) * 100);
     const background = state.stage.background || {};
     if (THEME_COLORS[background.theme]) $('themeSelect').value = background.theme;
+    $('backgroundMode').value = ['theme', 'gradient', 'color'].includes(background.mode) ? background.mode : 'theme';
     const editableBackground = background.mode === 'gradient' && background.gradient ? background.gradient.from : background.color;
     $('backgroundColor').value = /^#[0-9a-f]{6}$/i.test(editableBackground || '') ? editableBackground : THEME_COLORS[$('themeSelect').value].sky;
     $('terrainColor').value = state.stage.materials && /^#[0-9a-f]{6}$/i.test(state.stage.materials[0] && state.stage.materials[0].color || '') ? state.stage.materials[0].color : THEME_COLORS[$('themeSelect').value].terrain;
@@ -336,11 +423,34 @@
     updateExportSummary();
   }
 
+  function surfaceYAtGrid(grid, x) {
+    const column = clamp(Math.floor(x / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    for (let row = 0; row < LIMITS.terrainRows; row++) {
+      if (grid[row * LIMITS.terrainColumns + column]) return row * LIMITS.rowHeight;
+    }
+    return LIMITS.stageHeight;
+  }
+
+  function defaultCharacterGuides(grid) {
+    return [
+      { x: LIMITS.stageWidth * 0.28, character: 'kyoryu', direction: 'right' },
+      { x: LIMITS.stageWidth * 0.72, character: 'medama', direction: 'left' }
+    ].map((guide) => ({
+      x: guide.x,
+      y: surfaceYAtGrid(grid, guide.x) - LIMITS.unitRadius,
+      character: guide.character,
+      direction: guide.direction
+    }));
+  }
+
   function setStage(stage, options) {
     clearTimeout(state.autosaveTimer);
     state.dirty = false;
     state.stage = clone(stage);
     state.grid = gridFromTerrain(state.stage.terrain);
+    state.characterGuides = defaultCharacterGuides(state.grid);
+    state.activeGuideIndex = 0;
+    state.guideDrag = null;
     state.appearanceBrightness = 1;
     state.undo = [];
     state.redo = [];
@@ -363,7 +473,9 @@
       gimmicks: clone(state.stage.gimmicks || []),
       background: clone(state.stage.background || {}),
       decorations: clone(state.stage.decorations || {}),
-      materials: clone(state.stage.materials || [])
+      materials: clone(state.stage.materials || []),
+      characterGuides: clone(state.characterGuides || []),
+      appearanceBrightness: state.appearanceBrightness
     };
   }
 
@@ -374,6 +486,10 @@
     state.stage.background = clone(snapshot.background);
     state.stage.decorations = clone(snapshot.decorations);
     state.stage.materials = clone(snapshot.materials);
+    state.characterGuides = Array.isArray(snapshot.characterGuides) && snapshot.characterGuides.length
+      ? clone(snapshot.characterGuides)
+      : defaultCharacterGuides(snapshot.grid);
+    if (Number.isFinite(snapshot.appearanceBrightness)) state.appearanceBrightness = snapshot.appearanceBrightness;
     syncTerrainToStage();
     syncStageToForm();
     renderSpawnCards();
@@ -412,7 +528,9 @@
       gimmicks: clone(snapshot.gimmicks || []),
       background: clone(snapshot.background || {}),
       decorations: clone(snapshot.decorations || {}),
-      materials: clone(snapshot.materials || [])
+      materials: clone(snapshot.materials || []),
+      characterGuides: clone(snapshot.characterGuides || []),
+      appearanceBrightness: snapshot.appearanceBrightness
     };
   }
 
@@ -424,7 +542,11 @@
       gimmicks: clone(snapshot.gimmicks || []),
       background: clone(snapshot.background || {}),
       decorations: clone(snapshot.decorations || {}),
-      materials: clone(snapshot.materials || [])
+      materials: clone(snapshot.materials || []),
+      characterGuides: Array.isArray(snapshot.characterGuides) && snapshot.characterGuides.length
+        ? clone(snapshot.characterGuides)
+        : null,
+      appearanceBrightness: Number.isFinite(snapshot.appearanceBrightness) ? snapshot.appearanceBrightness : 1
     };
   }
 
@@ -535,11 +657,12 @@
       history: state.undo.slice(-12).map(serializeSnapshot),
       redoHistory: state.redo.slice(-12).map(serializeSnapshot),
       lastScreen: state.currentScreen,
-      editorState: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode },
-      editor: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode }
+      editorState: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode, characterGuides: clone(state.characterGuides) },
+      editor: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode, characterGuides: clone(state.characterGuides) }
     };
     try {
       await putDraft(record);
+      state.documentStarted = true;
       const savedLatestRevision = savingRevision === state.editRevision;
       if (savedLatestRevision) {
         state.dirty = false;
@@ -609,6 +732,7 @@
     const draftStage = record && record.stage ? record.stage : record;
     if (!draftStage || !draftStage.terrain) return showToast('下書きが壊れているため開けません。');
     setStage(draftStage, { skipSave: true });
+    state.documentStarted = true;
     const editor = record && (record.editorState || record.editor) || {};
     if (Array.isArray(record.history)) state.undo = record.history.map(deserializeSnapshot).filter(Boolean).slice(-state.maxHistory);
     if (Array.isArray(record.redoHistory)) state.redo = record.redoHistory.map(deserializeSnapshot).filter(Boolean).slice(-state.maxHistory);
@@ -616,11 +740,19 @@
     if (Number.isFinite(editor.appearanceBrightness)) state.appearanceBrightness = clamp(editor.appearanceBrightness, 0.6, 1.3);
     if (Number.isFinite(editor.noiseCounter)) state.noiseCounter = Math.max(0, Math.floor(editor.noiseCounter));
     if (typeof editor.lowPowerMode === 'boolean') state.lowPowerMode = editor.lowPowerMode;
+    if (Array.isArray(editor.characterGuides) && editor.characterGuides.length) {
+      state.characterGuides = editor.characterGuides.slice(0, 4).map((guide, index) => ({
+        x: clamp(Number(guide.x) || LIMITS.stageWidth * (index ? 0.72 : 0.28), 0, LIMITS.stageWidth),
+        y: clamp(Number(guide.y) || 0, -SPRITE_SIZE, LIMITS.stageHeight + SPRITE_SIZE),
+        character: CHARACTER_SOURCES[guide.character] ? guide.character : (index ? 'medama' : 'kyoryu'),
+        direction: guide.direction === 'left' ? 'left' : 'right'
+      }));
+    }
     updateLowPowerModeUi();
     syncStageToForm();
     updateHistoryButtons();
     $('saveState').textContent = '下書きを復元しました';
-    const restoredScreen = SCREEN_ORDER.includes(record.lastScreen) ? record.lastScreen : (SCREEN_ORDER.includes(editor.screen) ? editor.screen : 'terrain');
+    const restoredScreen = normalizeScreen(record.lastScreen || editor.screen || 'terrain');
     navigate(restoredScreen);
   }
 
@@ -750,19 +882,184 @@
     return grid;
   }
 
+  function imageReady(image) {
+    return !!(image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+  }
+
+  function drawImageCover(context, image, x, y, width, height) {
+    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+    const sourceWidth = width / scale;
+    const sourceHeight = height / scale;
+    const sourceX = Math.max(0, (image.naturalWidth - sourceWidth) / 2);
+    const sourceY = Math.max(0, (image.naturalHeight - sourceHeight) * 0.48);
+    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  }
+
+  function characterCollision(guide, grid) {
+    const centerX = Number(guide.x);
+    const centerY = Number(guide.y) - UNIT_HIT_RISE;
+    if (centerX - UNIT_HIT_RADIUS < 0 || centerX + UNIT_HIT_RADIUS > LIMITS.stageWidth
+        || centerY - UNIT_HIT_RADIUS < 0 || centerY + UNIT_HIT_RADIUS > LIMITS.stageHeight) return 'outside';
+    const minColumn = clamp(Math.floor((centerX - UNIT_HIT_RADIUS) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    const maxColumn = clamp(Math.floor((centerX + UNIT_HIT_RADIUS) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    const minRow = clamp(Math.floor((centerY - UNIT_HIT_RADIUS) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
+    const maxRow = clamp(Math.floor((centerY + UNIT_HIT_RADIUS) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
+    for (let column = minColumn; column <= maxColumn; column++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        if (!grid[row * LIMITS.terrainColumns + column]) continue;
+        const left = column * LIMITS.columnWidth;
+        const top = row * LIMITS.rowHeight;
+        const nearestX = clamp(centerX, left, left + LIMITS.columnWidth);
+        const nearestY = clamp(centerY, top, top + LIMITS.rowHeight);
+        const deltaX = centerX - nearestX;
+        const deltaY = centerY - nearestY;
+        if (deltaX * deltaX + deltaY * deltaY <= UNIT_HIT_RADIUS * UNIT_HIT_RADIUS) return 'overlap';
+      }
+    }
+    return null;
+  }
+
+  function drawCharacterAt(context, guide, grid, options) {
+    const settings = options || {};
+    const image = characterImages[guide.character] || characterImages.kyoryu;
+    const collision = settings.forceInvalid || characterCollision(guide, grid);
+    const enemyTeam = settings.team === 'cpu' || settings.team === 'enemy';
+    const teamTint = enemyTeam ? '255,150,120' : '120,190,255';
+    const ringTint = collision ? '255,72,72' : teamTint;
+    const hitY = guide.y - UNIT_HIT_RISE;
+    context.save();
+    context.fillStyle = `rgba(${ringTint},${collision ? 0.24 : 0.09})`;
+    context.strokeStyle = `rgba(${ringTint},${collision ? 0.98 : 0.56})`;
+    context.lineWidth = settings.active ? 3.5 : 1.8;
+    context.beginPath();
+    context.arc(guide.x, hitY, UNIT_HIT_RADIUS, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+
+    if (imageReady(image)) {
+      const aspect = image.naturalWidth / image.naturalHeight;
+      const spriteHeight = SPRITE_SIZE * Math.sqrt(SPRITE_REFERENCE_ASPECT / aspect);
+      const spriteWidth = spriteHeight * aspect;
+      context.save();
+      context.globalAlpha = settings.ghost ? 0.82 : 1;
+      context.translate(guide.x, guide.y + LIMITS.unitRadius);
+      if (guide.direction === 'left') context.scale(-1, 1);
+      if (collision) context.filter = 'sepia(1) saturate(7) hue-rotate(315deg) brightness(.9)';
+      context.drawImage(image, -spriteWidth / 2, -spriteHeight, spriteWidth, spriteHeight);
+      context.restore();
+    } else {
+      context.fillStyle = collision ? '#ef5c5c' : (enemyTeam ? '#ff9678' : '#78beff');
+      context.beginPath();
+      context.arc(guide.x, guide.y, LIMITS.unitRadius, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    if (collision) {
+      context.strokeStyle = '#ff4040';
+      context.lineWidth = 4;
+      context.beginPath();
+      context.moveTo(guide.x - 12, hitY - 12);
+      context.lineTo(guide.x + 12, hitY + 12);
+      context.moveTo(guide.x + 12, hitY - 12);
+      context.lineTo(guide.x - 12, hitY + 12);
+      context.stroke();
+    }
+    context.restore();
+    return collision;
+  }
+
+  function drawTerrain(context, columns, theme, terrainTop, showCollision) {
+    const gradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
+    gradient.addColorStop(0, terrainTop);
+    gradient.addColorStop(1, theme.dirtBottom);
+    context.fillStyle = gradient;
+    for (let column = 0; column < columns.length; column++) {
+      const x = column * LIMITS.columnWidth;
+      for (const segment of columns[column]) {
+        context.fillRect(x, segment[0], LIMITS.columnWidth + 0.6, Math.max(0, segment[1] - segment[0]));
+      }
+    }
+
+    if (!state.lowPowerMode) {
+      context.save();
+      context.beginPath();
+      for (let column = 0; column < columns.length; column++) {
+        const x = column * LIMITS.columnWidth;
+        for (const segment of columns[column]) context.rect(x, segment[0], LIMITS.columnWidth + 0.7, Math.max(0, segment[1] - segment[0]));
+      }
+      context.clip();
+      context.fillStyle = context.createPattern(terrainNoiseTile, 'repeat');
+      context.fillRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
+      context.lineCap = 'round';
+      context.strokeStyle = theme.strata;
+      context.lineWidth = 2;
+      for (let band = 0; band < 9; band++) {
+        const baseY = 246 + band * 44;
+        context.beginPath();
+        for (let x = -20; x <= LIMITS.stageWidth + 20; x += 18) {
+          const y = baseY + Math.sin(x * 0.012 + band * 1.7) * 6 + Math.sin(x * 0.031 + band) * 2;
+          if (x === -20) context.moveTo(x, y); else context.lineTo(x, y);
+        }
+        context.stroke();
+      }
+      for (let index = 0; index < 120; index++) {
+        const x = (index * 73.37 + 19) % LIMITS.stageWidth;
+        const y = 238 + ((index * 47.19 + 31) % Math.max(1, LIMITS.stageHeight - 260));
+        context.fillStyle = index % 3 === 0 ? theme.stoneLight : theme.stoneDark;
+        context.beginPath();
+        context.ellipse(x, y, 2.4 + (index % 5) * 0.9, 1.5 + (index % 3) * 0.8, Math.sin(index * 2.13) * 0.75, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.restore();
+    }
+
+    for (let column = 0; column < columns.length; column++) {
+      const segment = columns[column][0];
+      if (!segment) continue;
+      const x = column * LIMITS.columnWidth;
+      context.fillStyle = theme.rimShadow;
+      context.fillRect(x, segment[0] + 4, LIMITS.columnWidth + 0.7, 5);
+      context.fillStyle = showCollision ? 'rgba(255,226,94,.72)' : theme.rim;
+      context.fillRect(x, segment[0], LIMITS.columnWidth + 0.7, 5);
+    }
+  }
+
+  function mixHexColor(from, to, ratio) {
+    const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const read = (color, offset) => Number.parseInt(String(color).slice(offset, offset + 2), 16);
+    const channel = (a, b) => Math.round(a + (b - a) * safeRatio).toString(16).padStart(2, '0');
+    return `#${channel(read(from, 1), read(to, 1))}${channel(read(from, 3), read(to, 3))}${channel(read(from, 5), read(to, 5))}`;
+  }
+
+  function drawCharacterGuides(context, grid) {
+    let warningCount = 0;
+    state.characterGuides.forEach((guide, index) => {
+      if (drawCharacterAt(context, guide, grid, { active: index === state.activeGuideIndex, ghost: true, team: index ? 'cpu' : 'player' })) warningCount += 1;
+    });
+    const hint = $('characterGuideHint');
+    if (hint) {
+      hint.dataset.state = warningCount ? 'warning' : 'ok';
+      hint.textContent = warningCount
+        ? `警告：${warningCount}体の当たり判定が地形または画面外と重なっています。赤いキャラクターをドラッグしてください。`
+        : '実ゲームと同じ寸法です。キャラ確認ツールでドラッグでき、重なると赤く警告します。';
+    }
+  }
+
   function drawStageScene(canvas, grid, options) {
     const prepared = resizeCanvas(canvas);
     if (!prepared || !state.stage) return;
-    const { context: context, width, height } = prepared;
+    const { context, width, height } = prepared;
     const settings = options || {};
     const transform = canvasTransform(canvas, !!settings.editable);
     const background = state.stage.background || {};
-    const theme = THEME_COLORS[background.theme] || THEME_COLORS.grass;
+    const themeKey = THEME_COLORS[background.theme] ? background.theme : 'grass';
+    const theme = THEME_COLORS[themeKey];
     const gradientColors = background.gradient && /^#[0-9a-f]{6}$/i.test(background.gradient.from || '') && /^#[0-9a-f]{6}$/i.test(background.gradient.to || '')
       ? [background.gradient.from, background.gradient.to] : theme.gradient;
     const backgroundGradient = context.createLinearGradient(0, 0, 0, height);
-    backgroundGradient.addColorStop(0, gradientColors[0]);
-    backgroundGradient.addColorStop(1, gradientColors[gradientColors.length - 1]);
+    const solidColor = /^#[0-9a-f]{6}$/i.test(background.color || '') ? background.color : theme.sky;
+    backgroundGradient.addColorStop(0, background.mode === 'color' ? solidColor : gradientColors[0]);
+    backgroundGradient.addColorStop(1, background.mode === 'color' ? solidColor : gradientColors[gradientColors.length - 1]);
     context.fillStyle = backgroundGradient;
     context.fillRect(0, 0, width, height);
 
@@ -773,36 +1070,20 @@
     context.translate(transform.offsetX, transform.offsetY);
     context.scale(transform.scale, transform.scale);
 
-    if (!state.lowPowerMode && state.stage.decorations && state.stage.decorations.enabled !== false) {
-      context.fillStyle = 'rgba(255,255,255,.12)';
-      for (let x = 100; x < LIMITS.stageWidth; x += 280) {
-        context.beginPath();
-        context.arc(x, 105 + (x % 3) * 24, 54, 0, Math.PI * 2);
-        context.fill();
-      }
-    }
+    const showGameBackground = background.mode === 'theme'
+      && state.stage.decorations && state.stage.decorations.enabled !== false
+      && imageReady(stageBackgroundImages[themeKey]);
+    if (showGameBackground) drawImageCover(context, stageBackgroundImages[themeKey], 0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
 
-    const material = state.stage.materials && state.stage.materials[0] || {};
-    const terrainTop = /^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.terrain;
-    const terrainBottom = theme.terrain;
-    const terrainGradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
-    terrainGradient.addColorStop(0, terrainTop);
-    terrainGradient.addColorStop(1, terrainBottom);
-    context.fillStyle = terrainGradient;
     const columns = columnsFromGrid(grid);
-    for (let column = 0; column < columns.length; column++) {
-      const x = column * LIMITS.columnWidth;
-      for (const segment of columns[column]) {
-        context.fillRect(x, segment[0], LIMITS.columnWidth + 0.45, Math.max(0, segment[1] - segment[0]));
-      }
-    }
-
-    if (settings.showCollision) {
-      context.fillStyle = 'rgba(255, 226, 94, .2)';
-      for (let column = 0; column < columns.length; column++) {
-        for (const segment of columns[column]) context.fillRect(column * LIMITS.columnWidth, segment[0], LIMITS.columnWidth + 0.5, Math.min(6, segment[1] - segment[0]));
-      }
-    }
+    const material = state.stage.materials && state.stage.materials[0] || {};
+    const terrainTop = /^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop;
+    const terrainTheme = Object.assign({}, theme, {
+      dirtBottom: mixHexColor(terrainTop, '#000000', 0.58),
+      rim: mixHexColor(terrainTop, '#ffffff', 0.34),
+      rimShadow: mixHexColor(terrainTop, '#000000', 0.36)
+    });
+    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision);
 
     if (!state.lowPowerMode && settings.showGrid && transform.scale * 24 >= 10) {
       context.strokeStyle = 'rgba(255,255,255,.22)';
@@ -816,7 +1097,7 @@
     context.strokeStyle = 'rgba(255,255,255,.55)';
     context.lineWidth = 2 / transform.scale;
     context.strokeRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
-    context.strokeStyle = 'rgba(220,50,68,.6)';
+    context.strokeStyle = 'rgba(255,72,72,.72)';
     context.setLineDash([10 / transform.scale, 7 / transform.scale]);
     context.beginPath();
     context.moveTo(0, LIMITS.terrainBottomY);
@@ -824,7 +1105,8 @@
     context.stroke();
     context.setLineDash([]);
 
-    if (settings.spawns !== false) drawSpawnsOnContext(context, transform.scale);
+    if (settings.guides) drawCharacterGuides(context, grid);
+    if (settings.spawns === true) drawSpawnsOnContext(context, transform.scale, grid);
     if (Array.isArray(settings.testFallTrail) && settings.testFallTrail.length > 1) {
       context.strokeStyle = 'rgba(255, 207, 77, .9)';
       context.lineWidth = 3 / transform.scale;
@@ -835,30 +1117,20 @@
       context.setLineDash([]);
     }
     if (Number.isFinite(settings.testActorX)) {
-      const actorColumn = columns[clamp(Math.floor(settings.testActorX / LIMITS.columnWidth), 0, columns.length - 1)] || [];
-      const actorGround = actorColumn.length ? actorColumn[0][0] : LIMITS.stageHeight;
-      const actorY = Number.isFinite(settings.testActorY) ? settings.testActorY : actorGround - LIMITS.unitRadius;
+      const actorGround = surfaceYAtGrid(grid, settings.testActorX);
+      const actor = {
+        x: settings.testActorX,
+        y: Number.isFinite(settings.testActorY) ? settings.testActorY : actorGround - LIMITS.unitRadius,
+        character: 'kyoryu',
+        direction: Number($('shotAngle').value) > 90 ? 'left' : 'right'
+      };
       const actorDead = settings.testActorStatus === 'dead';
-      context.fillStyle = actorDead ? '#ef5c5c' : '#ffcf4d';
-      context.strokeStyle = '#ffffff';
-      context.lineWidth = 4 / transform.scale;
-      context.beginPath();
-      context.arc(settings.testActorX, actorY, LIMITS.unitRadius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
+      drawCharacterAt(context, actor, grid, { active: true, team: 'player', forceInvalid: actorDead ? 'outside' : null });
       if (actorDead) {
-        context.strokeStyle = '#521313';
-        context.lineWidth = 3 / transform.scale;
-        context.beginPath();
-        context.moveTo(settings.testActorX - 7, actorY - 7);
-        context.lineTo(settings.testActorX + 7, actorY + 7);
-        context.moveTo(settings.testActorX + 7, actorY - 7);
-        context.lineTo(settings.testActorX - 7, actorY + 7);
-        context.stroke();
         context.fillStyle = '#fff';
-        context.font = `700 ${15 / transform.scale}px system-ui, sans-serif`;
+        context.font = '700 15px system-ui, sans-serif';
         context.textAlign = 'center';
-        context.fillText('DEAD LINE', settings.testActorX, actorY - LIMITS.unitRadius - 10 / transform.scale);
+        context.fillText('DEAD LINE', actor.x, actor.y - SPRITE_SIZE - 10);
       }
     }
     if (Array.isArray(settings.trajectory) && settings.trajectory.length) drawTrajectoryOnContext(context, settings.trajectory, settings.impact, transform.scale);
@@ -874,26 +1146,24 @@
     }
   }
 
-  function drawSpawnsOnContext(context, scale) {
+  function drawSpawnsOnContext(context, scale, grid) {
     const spawns = Array.isArray(state.stage.spawnPoints) ? state.stage.spawnPoints : [];
     for (const spawn of spawns) {
-      const redTeam = spawn.team === 'player';
-      context.fillStyle = redTeam ? '#df4d5c' : '#3984d9';
-      context.strokeStyle = spawn.slot === state.activeSpawn ? '#ffe56a' : '#ffffff';
-      context.lineWidth = (spawn.slot === state.activeSpawn ? 5 : 3) / scale;
-      context.beginPath();
-      context.arc(spawn.x, spawn.y, LIMITS.unitRadius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
+      const active = spawn.slot === state.activeSpawn;
+      drawCharacterAt(context, Object.assign({}, spawn, { character: SLOT_CHARACTER[spawn.slot] || 'kyoryu' }), grid, {
+        active,
+        ghost: true,
+        team: spawn.team
+      });
       const direction = spawn.direction === 'left' ? -1 : 1;
-      context.strokeStyle = '#ffffff';
-      context.lineWidth = 3 / scale;
+      context.strokeStyle = active ? '#ffd24a' : '#fff5dc';
+      context.lineWidth = (active ? 4 : 2.5) / scale;
       context.beginPath();
-      context.moveTo(spawn.x, spawn.y);
-      context.lineTo(spawn.x + direction * 28, spawn.y);
-      context.lineTo(spawn.x + direction * 20, spawn.y - 7);
-      context.moveTo(spawn.x + direction * 28, spawn.y);
-      context.lineTo(spawn.x + direction * 20, spawn.y + 7);
+      context.moveTo(spawn.x, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 30, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 21, spawn.y + LIMITS.unitRadius);
+      context.moveTo(spawn.x + direction * 30, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 21, spawn.y + LIMITS.unitRadius + 14);
       context.stroke();
     }
   }
@@ -931,7 +1201,7 @@
 
   function renderTerrainCanvas() {
     if (state.currentScreen !== 'terrain') return;
-    drawStageScene($('terrainCanvas'), state.grid, { editable: true, showGrid: $('showGrid').checked, showCollision: $('showCollision').checked });
+    drawStageScene($('terrainCanvas'), state.grid, { editable: true, guides: true, showGrid: $('showGrid').checked, showCollision: $('showCollision').checked });
     $('zoomLabel').textContent = `${Math.round(state.view.zoom * 100)}%`;
   }
 
@@ -1070,8 +1340,31 @@
     }
     state.pointerMap.set(event.pointerId, eventPoint(canvas, event));
     if (state.pointerMap.size === 1) {
-      pushUndo();
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
+      if (state.activeTool === 'guide') {
+        let selectedIndex = -1;
+        let selectedDistance = Infinity;
+        state.characterGuides.forEach((guide, index) => {
+          const distance = Math.hypot(guide.x - world.x, (guide.y - 32) - world.y);
+          if (distance < selectedDistance && distance <= 150) {
+            selectedIndex = index;
+            selectedDistance = distance;
+          }
+        });
+        if (selectedIndex < 0) {
+          state.pointerMap.delete(event.pointerId);
+          showToast('動かすキャラクターをタップしてください。');
+          return;
+        }
+        pushUndo();
+        state.activeGuideIndex = selectedIndex;
+        const guide = state.characterGuides[selectedIndex];
+        state.guideDrag = { index: selectedIndex, offsetX: guide.x - world.x, offsetY: guide.y - world.y };
+        state.strokeActive = true;
+        renderTerrainCanvas();
+        return;
+      }
+      pushUndo();
       state.lastWorldPoint = world;
       if (state.activeTool === 'fill') {
         if (!floodFill(world)) {
@@ -1096,10 +1389,12 @@
       if (state.strokeActive && state.undo.length) {
         const beforeStroke = state.undo.pop();
         state.grid = beforeStroke.grid.slice();
+        state.characterGuides = clone(beforeStroke.characterGuides || state.characterGuides);
         state.redo.length = 0;
         updateHistoryButtons();
       }
       state.strokeActive = false;
+      state.guideDrag = null;
       state.shapeStart = null;
       state.shapeBaseGrid = null;
       const points = Array.from(state.pointerMap.values());
@@ -1131,6 +1426,13 @@
     }
     if (state.pointerMap.size === 1 && state.strokeActive && (event.buttons || event.pointerType === 'touch' || event.pointerType === 'pen')) {
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
+      if (state.activeTool === 'guide' && state.guideDrag) {
+        const guide = state.characterGuides[state.guideDrag.index];
+        guide.x = clamp(world.x + state.guideDrag.offsetX, -SPRITE_SIZE, LIMITS.stageWidth + SPRITE_SIZE);
+        guide.y = clamp(world.y + state.guideDrag.offsetY, -SPRITE_SIZE, LIMITS.stageHeight + SPRITE_SIZE);
+        renderTerrainCanvas();
+        return;
+      }
       if (state.activeTool === 'fill') return;
       if (SHAPE_TOOLS.has(state.activeTool)) previewShape(world);
       else paintInterpolated(state.lastWorldPoint || world, world);
@@ -1148,6 +1450,7 @@
         state.lastWorldPoint = null;
         state.shapeStart = null;
         state.shapeBaseGrid = null;
+        state.guideDrag = null;
         syncTerrainToStage();
         resetPlaytest(false);
         markDirty();
@@ -1325,7 +1628,7 @@
     const container = $('spawnCards');
     if (!container || !state.stage) return;
     container.replaceChildren();
-    const labels = { p1: '赤チーム1', e1: '青チーム1', p2: '赤チーム2', e2: '青チーム2' };
+    const labels = { p1: 'プレイヤー1（青）', e1: '相手1（赤）', p2: 'プレイヤー2（青）', e2: '相手2（赤）' };
     for (const spawn of state.stage.spawnPoints || []) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -1333,7 +1636,7 @@
       button.dataset.slot = spawn.slot;
       button.setAttribute('aria-pressed', String(spawn.slot === state.activeSpawn));
       const dot = document.createElement('span');
-      dot.className = `team-dot ${spawn.team === 'player' ? 'red' : 'blue'}`;
+      dot.className = `team-dot ${spawn.team === 'player' ? 'blue' : 'red'}`;
       const text = document.createElement('span');
       const strong = document.createElement('strong');
       strong.textContent = labels[spawn.slot] || spawn.slot;
@@ -1404,18 +1707,15 @@
     if (pushHistoryFirst) pushUndo();
     const preset = $('themeSelect').value;
     const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
+    const mode = ['theme', 'gradient', 'color'].includes($('backgroundMode').value) ? $('backgroundMode').value : 'theme';
     state.stage.background = Object.assign({}, state.stage.background, {
-      mode: 'gradient',
+      mode,
       theme: preset,
       color: $('backgroundColor').value,
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    if (!Array.isArray(state.stage.materials) || !state.stage.materials.length) state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' }];
-    state.stage.materials[0].id = 'terrain';
-    state.stage.materials[0].type = 'destructible';
-    state.stage.materials[0].destructible = true;
-    state.stage.materials[0].color = $('terrainColor').value;
+    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     updateAppearance();
     renderAllCanvases();
@@ -1430,12 +1730,9 @@
   }
 
   function updateAppearance() {
-    const preview = $('appearancePreview');
-    const preset = $('themeSelect').value;
-    const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
-    preview.style.background = `linear-gradient(${$('backgroundColor').value} 0%, ${theme.gradient[1]} 62%, ${$('terrainColor').value} 62%)`;
-    preview.style.filter = `brightness(${Number($('brightnessRange').value) / 100})`;
+    state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     $('brightnessOutput').textContent = $('brightnessRange').value;
+    renderTerrainCanvas();
   }
 
   function updateLowPowerModeUi() {
@@ -1514,7 +1811,7 @@
     const themeKey = THEME_COLORS[requestedTheme] ? requestedTheme : 'grass';
     const theme = THEME_COLORS[themeKey];
     stage.background = {
-      mode: 'gradient', theme: themeKey, color: theme.gradient[0],
+      mode: 'theme', theme: themeKey, color: theme.gradient[0],
       gradient: { from: theme.gradient[0], to: theme.gradient[1] }
     };
     if (stage.materials && stage.materials[0]) stage.materials[0].color = theme.terrain;
@@ -1830,17 +2127,13 @@
     applyWindFromForm(false);
     const preset = $('themeSelect').value;
     const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
+    const mode = ['theme', 'gradient', 'color'].includes($('backgroundMode').value) ? $('backgroundMode').value : 'theme';
     state.stage.background = Object.assign({}, state.stage.background, {
-      mode: 'gradient', theme: preset, color: $('backgroundColor').value,
+      mode, theme: preset, color: $('backgroundColor').value,
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    if (state.stage.materials && state.stage.materials[0]) {
-      state.stage.materials[0].id = 'terrain';
-      state.stage.materials[0].type = 'destructible';
-      state.stage.materials[0].destructible = true;
-      state.stage.materials[0].color = $('terrainColor').value;
-    }
+    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     return clone(state.stage);
   }
@@ -2085,6 +2378,7 @@
         }
       }
       setStage(stageDocument, { skipSave: true });
+      state.documentStarted = true;
       await saveDraftNow(true, true);
       navigate('terrain');
       showToast(`「${state.stage.title}」を安全にインポートしました。`);
@@ -2125,7 +2419,7 @@
   }
 
   function setActiveTool(tool) {
-    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill'];
+    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill', 'guide'];
     state.activeTool = supported.includes(tool) ? tool : 'draw';
     document.querySelectorAll('[data-tool]').forEach((button) => {
       const selected = button.dataset.tool === state.activeTool;
@@ -2303,6 +2597,7 @@
     $('toolRectangle').addEventListener('click', () => setActiveTool('rectangle'));
     $('toolCircle').addEventListener('click', () => setActiveTool('circle'));
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
+    $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
     $('undoButton').addEventListener('click', undo);
     $('redoButton').addEventListener('click', redo);
     $('undoGlobal').addEventListener('click', undo);
@@ -2360,6 +2655,7 @@
     $('windStrength').addEventListener('change', () => applyWindFromForm(true));
 
     $('themeSelect').addEventListener('change', applyThemeDefaults);
+    $('backgroundMode').addEventListener('change', () => applyAppearanceFromForm(true));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('input', updateAppearance));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
@@ -2381,7 +2677,7 @@
     globalThis.addEventListener('offline', updateConnectivity);
     globalThis.addEventListener('popstate', () => {
       const screen = location.hash.slice(1);
-      navigate(SCREEN_ORDER.includes(screen) ? screen : 'home', { fromHistory: true });
+      navigate(normalizeScreen(screen), { fromHistory: true });
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && state.dirty) saveDraftNow(true);
@@ -2433,9 +2729,11 @@
 
     refreshDraftList();
     refreshStorageEstimate();
-    const firstScreen = 'home';
+    const requestedScreen = location.hash.slice(1);
+    const firstScreen = requestedScreen ? normalizeScreen(requestedScreen) : 'home';
     history.replaceState({ stageStudioScreen: firstScreen }, '', `#${firstScreen}`);
     navigate(firstScreen, { fromHistory: true });
+    state.ready = true;
   }
 
   initialize();

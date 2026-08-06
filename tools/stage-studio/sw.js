@@ -1,16 +1,30 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.0.0-mvp`;
+const CACHE_NAME = `${CACHE_PREFIX}1.1.0-mvp`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css',
-  './app.js',
+  './styles-1.1.0-mvp.css',
+  './app-1.1.0-mvp.js',
   './generator-worker.js',
   './manifest.webmanifest',
   './icon.svg',
+  '../../assets/loading-emblem.webp',
+  '../../assets/loading-emblem.png',
+  '../../assets/stage-grass-bg.jpg',
+  '../../assets/stage-desert-bg.jpg',
+  '../../assets/stage-snow-bg.jpg',
+  '../../assets/stage-volcanic-bg.jpg',
+  '../../assets/kyoryu.webp',
+  '../../assets/kyoryu.png',
+  '../../assets/medama.webp',
+  '../../assets/medama.png',
+  '../../assets/tori.webp',
+  '../../assets/tori.png',
+  '../../assets/iwa.webp',
+  '../../assets/iwa.png',
   '../../assets/apple-touch-icon.png',
   '../../assets/icon-192.png',
   '../../assets/icon-512.png',

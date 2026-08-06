@@ -197,6 +197,40 @@ test('only the supported global wind gimmick and range are accepted', () => {
   assert.ok(core.validateStage(outOfRange).errors.some((entry) => entry.code === 'wind_strength'));
 });
 
+test('material allowlist accepts only one destructible terrain material', () => {
+  assert.deepEqual(core.MATERIAL_CATALOG.terrain, {
+    id: 'terrain',
+    label: '通常地形',
+    type: 'destructible',
+    destructible: true,
+    enabled: true,
+    exportable: true,
+    requiresGameFeature: null
+  });
+  assert.equal(core.MATERIAL_CATALOG.steel.enabled, false);
+  assert.equal(core.MATERIAL_CATALOG.steel.exportable, false);
+  assert.equal(core.MATERIAL_CATALOG.steel.requiresGameFeature, 'indestructible-terrain-v1');
+
+  const valid = makeStage();
+  assert.equal(core.validateStage(valid).valid, true);
+
+  const disguisedSteel = makeStage();
+  disguisedSteel.materials[0].id = 'steel';
+  assert.ok(core.validateStage(disguisedSteel).errors.some((entry) => entry.code === 'unsupported_material'));
+
+  const unknown = makeStage();
+  unknown.materials[0].id = 'unknown';
+  assert.ok(core.validateStage(unknown).errors.some((entry) => entry.code === 'unsupported_material'));
+
+  const multiple = makeStage();
+  multiple.materials.push({ id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' });
+  assert.ok(core.validateStage(multiple).errors.some((entry) => entry.code === 'unsupported_material'));
+
+  const indestructible = makeStage();
+  indestructible.materials[0] = { id: 'terrain', type: 'indestructible', destructible: false, color: '#7A5435' };
+  assert.ok(core.validateStage(indestructible).errors.some((entry) => entry.code === 'unsupported_material'));
+});
+
 test('game compatibility accepts only vNNN ranges containing the current build', () => {
   const accepted = makeStage();
   accepted.gameCompatibility = { gameId: core.GAME_ID, minBuild: 'v100', maxBuild: 'v200' };

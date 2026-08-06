@@ -107,8 +107,16 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.0.0-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.1.0-mvp');
   await expect(page.locator('#updateNotice')).toBeHidden();
+  await expect(page.locator('.step-tab')).toHaveCount(8);
+  await expect(page.locator('.usage-panel')).toBeVisible();
+  await expect(page.locator('.usage-panel')).toContainText('対象ゲームへインポート');
+  await expect(page.locator('.usage-panel')).not.toHaveAttribute('open');
+  const usageBeforeDeviceState = await page.locator('.usage-panel').evaluate((usage, stats) => (
+    usage.compareDocumentPosition(document.querySelector(stats)) & Node.DOCUMENT_POSITION_FOLLOWING
+  ) !== 0, '.stats-panel');
+  expect(usageBeforeDeviceState, '利用方法を端末の状態より先に表示する').toBe(true);
 
   const mobileLayout = await page.evaluate(() => {
     const navRect = document.querySelector('.step-nav').getBoundingClientRect();
@@ -150,10 +158,10 @@ async function createValidatedStage(page, options = {}) {
   const terrainCanvas = page.getByTestId('terrain-canvas');
   await expect(terrainCanvas).toBeVisible();
   await page.getByTestId('tool-draw').click();
-  await tapCanvas(page, terrainCanvas, 0.5, 0.38);
+  await tapCanvas(page, terrainCanvas, 0.5, 0.62);
   await expect(page.getByTestId('undo')).toBeEnabled();
   await page.getByTestId('tool-erase').click();
-  await tapCanvas(page, terrainCanvas, 0.52, 0.38);
+  await tapCanvas(page, terrainCanvas, 0.52, 0.62);
   await page.getByTestId('undo').click();
   await page.getByTestId('redo').click();
   if (options.advancedEditing) {
@@ -164,22 +172,25 @@ async function createValidatedStage(page, options = {}) {
     await page.getByTestId('undo').click();
     await page.getByTestId('redo').click();
   }
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
+  await expect(page.locator('#backgroundMode')).toHaveValue('theme');
+  await page.locator('#themeSelect').selectOption('grass');
+  await page.locator('#brightnessRange').fill('100');
+  if (options.advancedEditing) {
+    await page.locator('#toolGuide').click();
+    await dragCanvas(page, terrainCanvas, 0.28, 0.5, 0.28, 0.72);
+    await expect(page.locator('#characterGuideHint')).toHaveAttribute('data-state', 'warning');
+  }
 
   await goToStep(page, 'spawns');
   await expect(page.getByTestId('spawn-canvas')).toBeVisible();
   await page.locator('#spawnCount').selectOption('2');
   await page.locator('#autoPlaceSpawns').click();
 
-  await goToStep(page, 'gimmicks');
+  await goToStep(page, 'playtest');
   await page.locator('#windEnabled').check();
   await page.locator('#windDirection').selectOption('1');
   await page.locator('#windStrength').fill('35');
-
-  await goToStep(page, 'appearance');
-  await page.locator('#themeSelect').selectOption('grass');
-  await page.locator('#brightnessRange').fill('100');
-
-  await goToStep(page, 'playtest');
   await page.locator('#shotAngle').fill('45');
   await page.locator('#shotPower').fill('65');
   await page.getByTestId('test-play').click();
@@ -272,6 +283,7 @@ test.describe('Stage Studio モバイル縦フロー', () => {
 
     await page.reload();
     await expect(page.getByTestId('stage-studio')).toBeVisible();
+    await goToStep(page, 'home');
     await expect(page.getByTestId('draft-list')).toContainText(TITLE);
     await page.locator('#resumeDraftButton').click();
     await expect(page.locator('#stageTitle')).toHaveValue(TITLE);
