@@ -1,5 +1,5 @@
-export const DRAFT_SCHEMA_VERSION = 4 as const;
-export const GENERATOR_VERSION = '0.3.0';
+export const DRAFT_SCHEMA_VERSION = 5 as const;
+export const GENERATOR_VERSION = '0.4.0';
 
 export type WorkflowStep =
   | 'image'
@@ -18,7 +18,7 @@ export type WorkflowStep =
 
 export const WORKFLOW_STEPS: ReadonlyArray<{ id: WorkflowStep; label: string }> = [
   { id: 'image', label: '画像' },
-  { id: 'setup', label: '向きと目' },
+  { id: 'setup', label: '向きと基準点' },
   { id: 'motion', label: '生成' },
   { id: 'character', label: 'キャラ' },
   { id: 'publish', label: 'GitHub' },
@@ -35,18 +35,11 @@ export interface NormalizedPoint {
   y: number;
 }
 
-export interface EyeMarker extends NormalizedPoint {
-  id: 'eye-1' | 'eye-2';
-  /** Diameter in normalized image coordinates. */
-  size: number;
-}
-
 export interface MotionLandmarks {
   status: 'idle' | 'ready' | 'needs-review';
   facing: FacingDirection;
   ground: NormalizedPoint;
   muzzle: NormalizedPoint;
-  eyes: EyeMarker[];
   detectedAt: string | null;
 }
 
@@ -242,6 +235,8 @@ export interface DraftRecord {
   lastStep: WorkflowStep;
   character: CharacterForm;
   imageInfo: ImageInfo | null;
+  /** Optional alternate artwork used only by the hit motion. The blob stays in IndexedDB. */
+  hitImageInfo: ImageInfo | null;
   editor: ImageEditorState;
   motionPreset: MotionPreset;
   motionAction: MotionAction;

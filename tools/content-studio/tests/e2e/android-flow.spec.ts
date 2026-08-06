@@ -1,8 +1,13 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { basename } from 'node:path';
 
-async function attachSyntheticCharacter(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+async function attachSyntheticCharacter(
+  page: Page,
+  selector = '[data-testid="image-input"]',
+  fileName = 'sample-character.png',
+  hitVariant = false,
+): Promise<void> {
+  await page.evaluate(async ({ selector: inputSelector, fileName: name, hitVariant: isHit }) => {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
@@ -25,14 +30,19 @@ async function attachSyntheticCharacter(page: Page): Promise<void> {
     context.fillStyle = '#111827';
     context.fillRect(38, 103, 23, 12);
     context.fillRect(72, 103, 23, 12);
+    if (isHit) {
+      context.fillStyle = '#f4f7fb';
+      context.fillRect(48, 43, 10, 4);
+      context.fillRect(68, 43, 10, 4);
+    }
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('PNGを作成できませんでした。')), 'image/png'));
     const transfer = new DataTransfer();
-    transfer.items.add(new File([blob], 'sample-character.png', { type: 'image/png', lastModified: Date.now() }));
-    const input = document.querySelector<HTMLInputElement>('[data-testid="image-input"]');
+    transfer.items.add(new File([blob], name, { type: 'image/png', lastModified: Date.now() }));
+    const input = document.querySelector<HTMLInputElement>(inputSelector);
     if (!input) throw new Error('画像入力が見つかりませんでした。');
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  }, { selector, fileName, hitVariant });
 }
 
 async function swipeUpFrom(context: BrowserContext, page: Page, target: Locator): Promise<void> {
@@ -74,6 +84,10 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
   else await attachSyntheticCharacter(page);
   await expect(page.getByText(localSample ? basename(localSample) : 'sample-character.png')).toBeVisible();
 
+  if (localSample) await page.getByTestId('hit-image-input').setInputFiles(localSample);
+  else await attachSyntheticCharacter(page, '[data-testid="hit-image-input"]', 'sample-hit-character.png', true);
+  await expect(page.getByTestId('hit-image-card')).toContainText(localSample ? basename(localSample) : 'sample-hit-character.png');
+
   const cutoutCanvas = page.locator('canvas[aria-label="背景除去後"]');
   await expect(cutoutCanvas).toBeVisible();
   const scrollBeforeCutoutSwipe = await page.evaluate(() => window.scrollY);
@@ -88,13 +102,13 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
   await expect(page.getByTestId('landmark-canvas')).toBeVisible();
   await page.getByTestId('facing-right').click();
   await page.getByTestId('detect-landmarks').click();
-  await page.getByRole('button', { name: '目1', exact: true }).click();
+  await page.getByRole('button', { name: '接地点', exact: true }).click();
   const landmarkCanvas = page.getByTestId('landmark-canvas');
   const landmarkBox = await landmarkCanvas.boundingBox();
   if (!landmarkBox) throw new Error('位置調整画像を取得できませんでした。');
-  await landmarkCanvas.tap({ position: { x: landmarkBox.width * 0.62, y: landmarkBox.height * 0.3 } });
-  await expect(page.getByLabel('目の印を大きく')).toBeEnabled();
-  await page.getByLabel('目の印を大きく').click();
+  await landmarkCanvas.tap({ position: { x: landmarkBox.width * 0.5, y: landmarkBox.height * 0.9 } });
+  await page.getByRole('button', { name: '砲口', exact: true }).click();
+  await landmarkCanvas.tap({ position: { x: landmarkBox.width * 0.82, y: landmarkBox.height * 0.5 } });
 
   await page.getByTestId('step-nav-motion').click();
   await expect(page.getByTestId('step-motion').locator('input[type="range"]')).toHaveCount(0);
@@ -149,6 +163,8 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
   await expect(page.getByText('サンプルキャラクター', { exact: true }).first()).toBeVisible();
 
   await page.locator('.draft-card__open').filter({ hasText: 'サンプルキャラクター' }).first().click();
+  await page.getByTestId('step-nav-image').click();
+  await expect(page.getByTestId('hit-image-card')).toContainText(localSample ? basename(localSample) : 'sample-hit-character.png');
   await page.getByTestId('step-nav-motion').click();
   await expect(page.getByRole('button', { name: 'プレビュー停止' })).toBeVisible();
   await page.getByTestId('preview-fire').click();

@@ -27,6 +27,19 @@ describe('draft migrations', () => {
     expect(importDraftJson(exportDraftJson(draft))).toEqual(draft);
   });
 
+  it('v4の目マーカーを破棄し、被弾用画像なしの現行下書きへ移行する', () => {
+    const legacy = createDraft('44444444-4444-4444-8444-444444444444') as unknown as Record<string, unknown>;
+    legacy.schemaVersion = 4;
+    legacy.landmarks = {
+      ...(legacy.landmarks as Record<string, unknown>),
+      eyes: [{ id: 'eye-1', x: 0.6, y: 0.3, size: 0.06 }],
+    };
+    delete legacy.hitImageInfo;
+    const migrated = migrateDraft(legacy);
+    expect(migrated.hitImageInfo).toBeNull();
+    expect(migrated.landmarks).not.toHaveProperty('eyes');
+  });
+
   it('rejects future versions and dangerous fields', () => {
     expect(() => migrateDraft({ schemaVersion: 999 })).toThrow(DraftMigrationError);
     expect(() => migrateDraft({ schemaVersion: '1' })).toThrow(DraftMigrationError);

@@ -24,15 +24,14 @@ function testImage(): PixelBuffer {
 }
 
 describe('端末内ランドマーク推定', () => {
-  it('同じ画素から接地点・砲口・最大2個の目を決定的に返す', () => {
+  it('同じ画素から接地点と砲口を決定的に返す', () => {
     const detectedAt = '2026-08-06T00:00:00.000Z';
     const first = detectMotionLandmarks(testImage(), 'right', detectedAt);
     const second = detectMotionLandmarks(testImage(), 'right', detectedAt);
     expect(first).toEqual(second);
+    expect(first.status).toBe('ready');
     expect(first.ground.y).toBeGreaterThanOrEqual(0.89);
     expect(first.muzzle.x).toBeGreaterThan(0.75);
-    expect(first.eyes.length).toBeLessThanOrEqual(2);
-    expect(first.eyes.every((eye) => eye.size >= 0.025 && eye.size <= 0.12)).toBe(true);
   });
 
   it('透明画像でも安全な手動修正用初期値を返す', () => {
@@ -42,7 +41,6 @@ describe('端末内ランドマーク推定', () => {
       facing: 'left',
       ground: { x: 0.5, y: 0.9 },
       muzzle: { x: 0.2, y: 0.5 },
-      eyes: [],
     });
   });
 });

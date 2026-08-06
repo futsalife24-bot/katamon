@@ -50,7 +50,7 @@ const BASE_CLIPS: Readonly<Record<MotionClipId, ClipDefinition>> = Object.freeze
   },
   hit: {
     action: 'hit', preset: 'standard', loop: false,
-    parameters: { frameCount: 8, fps: 10, durationMs: 800, moveX: -12, moveY: 3, scaleAmount: 0.002, squashAmount: 0.022, rotationDegrees: -3.2, idlePause: 0, intensity: 1 },
+    parameters: { frameCount: 8, fps: 12, durationMs: 667, moveX: -7, moveY: 58, scaleAmount: 0, squashAmount: 0, rotationDegrees: -112, idlePause: 0, intensity: 1 },
   },
   land: {
     action: 'land', preset: 'heavy', loop: false,
@@ -87,6 +87,8 @@ export function motionClipParameters(
 
 export interface MotionBatchGenerationRequest {
   source: PixelBuffer;
+  /** Optional alternate artwork used for the hit clip only. */
+  hitSource?: PixelBuffer;
   sourceImage: string;
   landmarks: MotionLandmarks;
   outputSize?: MotionParameters['outputSize'];
@@ -120,7 +122,7 @@ export async function generateMotionBatch(
     const clipId = MOTION_CLIP_IDS[index];
     const definition = BASE_CLIPS[clipId];
     const motion = await processor.generate({
-      source: request.source,
+      source: clipId === 'hit' && request.hitSource ? request.hitSource : request.source,
       sourceImage: request.sourceImage,
       preset: definition.preset,
       parameters: motionClipParameters(clipId, request.landmarks.facing, request.outputSize),
@@ -129,7 +131,6 @@ export async function generateMotionBatch(
       actionPreset: definition.action === 'move' ? 'move-steady' : definition.action === 'fire' ? 'fire-recoil' : definition.action === 'hit' ? 'hit-light' : undefined,
       groundPoint: request.landmarks.ground,
       muzzlePoint: request.landmarks.muzzle,
-      eyeMarkers: clipId === 'hit' ? request.landmarks.eyes : [],
       clipId,
       generatedAt,
     }, {

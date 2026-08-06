@@ -163,10 +163,10 @@ export const motionParametersSchema = z.object({
   fps: z.number().finite().min(1).max(30),
   durationMs: z.number().int().min(250).max(10_000),
   moveX: z.number().finite().min(-64).max(64),
-  moveY: z.number().finite().min(-64).max(64),
+  moveY: z.number().finite().min(-256).max(256),
   scaleAmount: z.number().finite().min(0).max(0.25),
   squashAmount: z.number().finite().min(0).max(0.25),
-  rotationDegrees: z.number().finite().min(-15).max(15),
+  rotationDegrees: z.number().finite().min(-180).max(180),
   idlePause: z.number().finite().min(0).max(0.9),
   groundContact: z.number().finite().min(0).max(1),
   intensity: z.number().finite().min(0).max(2),
@@ -263,21 +263,11 @@ const normalizedPointSchema = z.object({
   y: z.number().finite().min(0).max(1),
 });
 
-const eyeMarkerSchema = normalizedPointSchema.extend({
-  id: z.enum(['eye-1', 'eye-2']),
-  size: z.number().finite().min(0.015).max(0.2),
-});
-
 const motionLandmarksSchema = z.object({
   status: z.enum(['idle', 'ready', 'needs-review']),
   facing: z.enum(['left', 'right']),
   ground: normalizedPointSchema,
   muzzle: normalizedPointSchema,
-  eyes: z.array(eyeMarkerSchema).max(2).superRefine((eyes, context) => {
-    if (new Set(eyes.map(({ id }) => id)).size !== eyes.length) {
-      context.addIssue({ code: 'custom', message: '目のマーカーが重複しています' });
-    }
-  }),
   detectedAt: z.union([z.null(), z.string().datetime({ offset: true })]),
 });
 
@@ -317,6 +307,7 @@ export const draftRecordSchema = z
     lastStep: z.enum(['image', 'setup', 'character', 'cutout', 'parts', 'motion', 'details', 'skills', 'preview', 'validate', 'publish', 'complete', 'export']),
     character: draftCharacterFormSchema,
     imageInfo: imageInfoSchema.nullable(),
+    hitImageInfo: imageInfoSchema.nullable(),
     editor: imageEditorStateSchema,
     motionPreset: z.enum(['standard', 'heavy', 'light', 'hover', 'flying', 'flexible', 'winged', 'mechanical', 'breathing', 'almost-still']),
     motionAction: motionActionSchema,

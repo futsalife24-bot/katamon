@@ -9,6 +9,7 @@ import {
   getActionPreset,
   listActionPresets,
   motionTransformForFrame,
+  motionClipParameters,
 } from '../../src/motion';
 
 function silhouette(width = 120, height = 100) {
@@ -58,6 +59,16 @@ describe('モーション専用フロー', () => {
     expect(motionTransformForFrame(parameters, 7, 'fire', 'fire-recoil').translateX).toBeCloseTo(0);
     expect(motionTransformForFrame(parameters, 0, 'hit', 'hit-heavy').translateX).toBeCloseTo(0);
     expect(motionTransformForFrame(parameters, 7, 'hit', 'hit-heavy').translateX).toBeCloseTo(0);
+  });
+
+  it('右向きの被弾は浮上しながら反時計回りに90度を超え、最終フレームで戻る', () => {
+    const parameters = motionClipParameters('hit', 'right', 128);
+    const frames = Array.from({ length: parameters.frameCount }, (_, index) => motionTransformForFrame(parameters, index, 'hit', 'hit-light'));
+    expect(Math.min(...frames.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
+    expect(Math.min(...frames.map(({ translateY }) => translateY))).toBeLessThan(-40);
+    expect(frames[0].rotationRadians).toBeCloseTo(0);
+    expect(frames.at(-1)?.rotationRadians).toBeCloseTo(0);
+    expect(frames.at(-1)?.translateY).toBeCloseTo(0);
   });
 
   it('各動作に3つの選択式プリセットがあり、自由コードを必要としない', () => {

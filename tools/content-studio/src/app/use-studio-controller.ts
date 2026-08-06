@@ -41,6 +41,7 @@ import { consumeSharedImage } from '../pwa/share-target';
 import { fetchPublishedImage, loadPublishedContent } from '../game/published-content';
 import {
   addPublishHistory,
+  deleteDraftBlob,
   deleteDraft,
   deleteOutbox,
   duplicateDraft,
@@ -88,6 +89,7 @@ export interface StudioController {
   history: PublishHistoryRecord[];
   outbox: OutboxRecord[];
   processed: ProcessedImage | null;
+  hitProcessed: ProcessedImage | null;
   sprite: EncodedIdleSpriteResult | null;
   motions: Partial<MotionBatchResult>;
   selectedClip: MotionClipId;
@@ -122,6 +124,8 @@ export interface StudioController {
   previousStep(): void;
   acceptFile(file: File): Promise<void>;
   onFileInput(event: ChangeEvent<HTMLInputElement>): Promise<void>;
+  onHitFileInput(event: ChangeEvent<HTMLInputElement>): Promise<void>;
+  removeHitImage(): Promise<void>;
   onDrop(event: DragEvent<HTMLElement>): Promise<void>;
   applyImageOperations(operations?: ImageOperation[]): Promise<void>;
   autoRemoveBackground(): Promise<void>;
@@ -290,7 +294,7 @@ async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchR
 }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.3.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.4.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -305,6 +309,7 @@ export function useStudioController(): StudioController {
   const [history, setHistory] = useState<PublishHistoryRecord[]>([]);
   const [outbox, setOutbox] = useState<OutboxRecord[]>([]);
   const [processed, setProcessed] = useState<ProcessedImage | null>(null);
+  const [hitProcessed, setHitProcessed] = useState<ProcessedImage | null>(null);
   const [sprite, setSprite] = useState<EncodedIdleSpriteResult | null>(null);
   const [motions, setMotions] = useState<Partial<MotionBatchResult>>({});
   const [selectedClip, setSelectedClip] = useState<MotionClipId>('move-forward');
@@ -323,7 +328,9 @@ export function useStudioController(): StudioController {
   const [redo, setRedo] = useState<ImageOperation[]>([]);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const originalBlobRef = useRef<Blob | null>(null);
+  const hitOriginalBlobRef = useRef<Blob | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const hitAbortRef = useRef<AbortController | null>(null);
   const draftRef = useRef<DraftRecord | null>(null);
   const bundleRef = useRef<ArtifactBundle | null>(null);
 
@@ -450,15 +457,18 @@ export function useStudioController(): StudioController {
       setError('下書きが見つかりませんでした。');
       return;
     }
-    const [original, restoredSprite, restoredMotions] = await Promise.all([
+    const [original, hitOriginal, restoredSprite, restoredMotions] = await Promise.all([
       getDraftBlob(id, 'original'),
+      getDraftBlob(id, 'hit-original'),
       restoreStoredSprite(id),
       restoreMotionBatch(id),
     ]);
     originalBlobRef.current = original;
+    hitOriginalBlobRef.current = hitOriginal;
     setDraft(stored);
     draftRef.current = stored;
     setProcessed(null);
+    setHitProcessed(null);
     setMotions(restoredMotions);
     const firstRestored = MOTION_CLIP_IDS.find((clipId) => restoredMotions[clipId]);
     setSelectedClip(firstRestored ?? 'move-forward');
@@ -471,9 +481,12 @@ export function useStudioController(): StudioController {
     setSavedAt(stored.updatedAt);
     setSaveState('saved');
     window.history.pushState({ studio: true, step: stored.lastStep }, '', `#${stored.lastStep}`);
-    if (original) {
+    if (original || hitOriginal) {
       setNotice('下書きを復旧しました。画像プレビューを再構築しています。');
-      setTimeout(() => void rebuildImage(stored, original, false), 0);
+      setTimeout(() => void (async () => {
+        if (original) await rebuildImage(stored, original, false);
+        if (hitOriginal) await rebuildHitImage(stored, hitOriginal, false);
+      })().catch(() => undefined), 0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -483,9 +496,11 @@ export function useStudioController(): StudioController {
     const next = createDraft();
     const saved = await saveDraft(next);
     originalBlobRef.current = null;
+    hitOriginalBlobRef.current = null;
     setDraft(saved);
     draftRef.current = saved;
     setProcessed(null);
+    setHitProcessed(null);
     setSprite(null);
     setMotions({});
     setSelectedClip('move-forward');
@@ -628,6 +643,66 @@ export function useStudioController(): StudioController {
     }
   }, [setBusyProgress, updateDraft]);
 
+  const rebuildHitImage = useCallback(async (snapshot: DraftRecord, source: Blob, invalidateMotion: boolean) => {
+    hitAbortRef.current?.abort();
+    const controller = new AbortController();
+    hitAbortRef.current = controller;
+    setBusy(true);
+    setError(null);
+    const wakeLock = await acquireWakeLock();
+    const process = (removeBackground: boolean) => new ContentImageProcessor().process(
+      {
+        fileName: snapshot.hitImageInfo?.fileName || 'hit-image.png',
+        blob: source,
+        removeBackground,
+        background: { tolerance: snapshot.editor.tolerance, feather: snapshot.editor.edgeFeather },
+        normalize: {
+          outputSize: snapshot.editor.outputSize,
+          padding: snapshot.editor.padding,
+          offsetX: snapshot.editor.offsetX,
+          offsetY: snapshot.editor.offsetY,
+          scale: snapshot.editor.scale,
+          flipHorizontal: snapshot.editor.flipHorizontal,
+        },
+        generateVariants: false,
+      },
+      {
+        signal: controller.signal,
+        onProgress: (item: ImageProgress) => setBusyProgress(item.progress, `被弾用: ${item.message}`),
+      },
+    );
+    try {
+      let result = await process(false);
+      if (!result.analysis.hasAlpha && result.analysis.isLikelySolidBackground) {
+        setBusyProgress(0.36, '被弾用画像の単色背景を除去しています');
+        result = await process(true);
+      }
+      setHitProcessed(result);
+      const hitImageInfo = {
+        ...result.info,
+        fileName: snapshot.hitImageInfo?.fileName || result.info.fileName,
+        status: 'ready' as const,
+      };
+      persistDraftState((current) => current.id === snapshot.id
+        ? { ...current, hitImageInfo, generatedClips: invalidateMotion ? [] : current.generatedClips }
+        : current);
+      if (invalidateMotion) {
+        setMotions({});
+        setSprite(null);
+        await Promise.all(MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${snapshot.id}:motion:${clipId}:metadata`, null)));
+      }
+      return result;
+    } catch (cause) {
+      setError(humanError(cause, '被弾用画像を処理できませんでした。別の画像で再試行してください。'));
+      throw cause;
+    } finally {
+      await wakeLock?.release().catch(() => undefined);
+      if (hitAbortRef.current === controller) hitAbortRef.current = null;
+      setBusy(false);
+      setProgress(null);
+    }
+  }, [persistDraftState, setBusyProgress]);
+
   const acceptFile = useCallback(async (file: File) => {
     const current = draftRef.current;
     if (!current) return;
@@ -656,7 +731,7 @@ export function useStudioController(): StudioController {
         warnings: [],
       },
       processingOperations: [],
-      landmarks: { ...current.landmarks, status: 'idle', eyes: [], detectedAt: null },
+      landmarks: { ...current.landmarks, status: 'idle', detectedAt: null },
       generatedClips: [],
       updatedAt: new Date().toISOString(),
       historyStatus: 'dirty',
@@ -672,6 +747,67 @@ export function useStudioController(): StudioController {
     event.target.value = '';
     if (file) await acceptFile(file);
   }, [acceptFile]);
+
+  const acceptHitFile = useCallback(async (file: File) => {
+    const current = draftRef.current;
+    if (!current) return;
+    if (!ALLOWED_FILE_TYPES.has(file.type)) {
+      setError('被弾用画像はPNG、JPEG、WebPのいずれかを選んでください。');
+      return;
+    }
+    if (file.size <= 0 || file.size > MAX_INPUT_BYTES) {
+      setError('被弾用画像は20MB以下にしてください。');
+      return;
+    }
+    hitOriginalBlobRef.current = file;
+    await putDraftBlob(current.id, 'hit-original', file);
+    const next: DraftRecord = {
+      ...current,
+      hitImageInfo: {
+        fileName: file.name,
+        mimeType: file.type as 'image/png' | 'image/jpeg' | 'image/webp',
+        byteLength: file.size,
+        width: 0,
+        height: 0,
+        hasAlpha: false,
+        colorMode: 'unknown',
+        estimatedOutputBytes: 0,
+        status: 'reading',
+        warnings: [],
+      },
+      generatedClips: [],
+      updatedAt: new Date().toISOString(),
+      historyStatus: 'dirty',
+    };
+    setDraft(next);
+    draftRef.current = next;
+    await rebuildHitImage(next, file, true);
+    setNotice('被弾用画像を保存しました。被弾モーションだけに使います。');
+  }, [rebuildHitImage]);
+
+  const onHitFileInput = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) await acceptHitFile(file);
+  }, [acceptHitFile]);
+
+  const removeHitImage = useCallback(async () => {
+    const current = draftRef.current;
+    if (!current) return;
+    hitAbortRef.current?.abort();
+    hitOriginalBlobRef.current = null;
+    setHitProcessed(null);
+    await Promise.all([
+      deleteDraftBlob(current.id, 'hit-original'),
+      ...MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${current.id}:motion:${clipId}:metadata`, null)),
+    ]);
+    setMotions({});
+    setSprite(null);
+    persistDraftState((active) => active.id === current.id
+      ? { ...active, hitImageInfo: null, generatedClips: [] }
+      : active);
+    setNotice('被弾用画像を外しました。次回生成は通常画像を使います。');
+  }, [persistDraftState]);
 
   const onDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -695,9 +831,11 @@ export function useStudioController(): StudioController {
       next.motion = structuredClone(record.spriteMetadata.motionParameters);
       next.lastStep = 'image';
       const saved = await saveDraft(next);
+      hitOriginalBlobRef.current = null;
       setDraft(saved);
       draftRef.current = saved;
       setProcessed(null);
+      setHitProcessed(null);
       setSprite(null);
       setMotions({});
       setSelectedClip('move-forward');
@@ -810,9 +948,7 @@ export function useStudioController(): StudioController {
         : active);
       setMotions({});
       setSprite(null);
-      setNotice(landmarks.eyes.length
-        ? `接地点・砲口・目${landmarks.eyes.length}個を端末内で推測しました。ズレていれば画像をタップして直せます。`
-        : '接地点と砲口を推測しました。目は画像をタップして追加できます。');
+      setNotice('接地点と砲口を端末内で推測しました。ズレていれば画像をタップして直せます。');
     } catch (cause) {
       setError(humanError(cause, '位置を推測できませんでした。手動で指定できます。'));
     }
@@ -830,6 +966,10 @@ export function useStudioController(): StudioController {
       setError('先に画像を切り抜いて正規化してください。');
       return;
     }
+    if (current.hitImageInfo && !hitProcessed) {
+      setError('被弾用画像を復旧できていません。画像ステップで選び直すか、被弾用画像を外してください。');
+      return;
+    }
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -842,6 +982,7 @@ export function useStudioController(): StudioController {
         : current.landmarks;
       const result = await generateMotionBatch({
         source,
+        hitSource: hitProcessed?.edited,
         sourceImage: 'normalized.png',
         landmarks,
         outputSize: current.motion.outputSize,
@@ -889,7 +1030,7 @@ export function useStudioController(): StudioController {
       setBusy(false);
       setProgress(null);
     }
-  }, [persistDraftState, processed, setBusyProgress]);
+  }, [hitProcessed, persistDraftState, processed, setBusyProgress]);
 
   const downloadMotionZip = useCallback(async () => {
     const current = draftRef.current;
@@ -1191,20 +1332,23 @@ export function useStudioController(): StudioController {
   }, [backToDashboard, goToStep]);
 
   const value = useMemo<StudioController>(() => ({
-    appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
+    appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, hitProcessed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
     repositoryStatus, capabilities, storage, saveState, savedAt, busy, progress, error, notice, redoCount: redo.length,
     installAvailable: Boolean(installEvent), installApp, dismissNotice: () => setNotice(null), dismissError: () => setError(null),
     createNewDraft, editPublishedCharacter, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
-    goToStep, nextStep, previousStep, acceptFile, onFileInput, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
+    goToStep, nextStep, previousStep, acceptFile, onFileInput, onHitFileInput, removeHitImage, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
     addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, generateMotion,
     downloadMotionZip, downloadMotionMetadata, downloadSpriteSheet, validateAndBuild, downloadZip, downloadJson,
     prepareChange, createPullRequest, retryOutbox, refreshRepositoryStatus, login, logout,
-    cancelProcessing: () => abortRef.current?.abort(),
+    cancelProcessing: () => {
+      abortRef.current?.abort();
+      hitAbortRef.current?.abort();
+    },
   }), [
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
     capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editPublishedCharacter,
     detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
-    nextStep, notice, onDrop, onFileInput, openDraft, outbox, prepareChange, prepared, previousStep, processed, progress,
+    nextStep, notice, onDrop, onFileInput, onHitFileInput, openDraft, outbox, prepareChange, prepared, previousStep, processed, hitProcessed, progress, removeHitImage,
     pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, repositoryStatus, retryOutbox, saveState, savedAt,
     motions, publishedCharacters, publishedWarning, selectedClip, selectMotionClip, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
   ]);

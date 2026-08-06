@@ -1,6 +1,5 @@
 import type {
   DetectedMotionPart,
-  EyeMarker,
   MotionAction,
   MotionActionPreset,
   MotionParameters,
@@ -29,7 +28,6 @@ export interface IdleMotionBlobRequest {
   anchorPartId?: string | null;
   groundPoint?: NormalizedPoint;
   muzzlePoint?: NormalizedPoint;
-  eyeMarkers?: EyeMarker[];
   clipId?: MotionClipId;
   removeBackground?: boolean;
   backgroundTolerance?: number;
@@ -87,7 +85,6 @@ export async function generateIdleMotionFromBlob(
       anchorPartId: request.anchorPartId,
       groundPoint: request.groundPoint,
       muzzlePoint: request.muzzlePoint,
-      eyeMarkers: request.eyeMarkers,
       clipId: request.clipId,
       generatedAt: request.generatedAt,
     },

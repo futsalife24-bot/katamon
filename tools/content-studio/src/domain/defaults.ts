@@ -85,6 +85,7 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
     lastStep: 'image',
     character: structuredClone(DEFAULT_CHARACTER),
     imageInfo: null,
+    hitImageInfo: null,
     editor: {
       tolerance: 32,
       edgeFeather: 1,
@@ -114,7 +115,6 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
       facing: 'right',
       ground: { x: 0.5, y: 0.9 },
       muzzle: { x: 0.8, y: 0.5 },
-      eyes: [],
       detectedAt: null,
     },
     generatedClips: [],

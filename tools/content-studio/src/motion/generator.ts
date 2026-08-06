@@ -1,4 +1,4 @@
-import type { ContentBounds, EyeMarker, MotionAction, MotionActionPreset, MotionParameters, MotionPreset, NormalizedPoint } from '../domain/types';
+import type { ContentBounds, MotionAction, MotionActionPreset, MotionParameters, MotionPreset } from '../domain/types';
 import { buildSpriteMetadata } from '../generation/sprite-metadata';
 import { findContentBounds, normalizeImage } from '../image/processing';
 import type { PixelBuffer } from '../image/types';
@@ -70,15 +70,28 @@ export function motionTransformForFrame(
   }
 
   if (action === 'hit') {
-    const impact = Math.sin(Math.PI * progress);
-    const wobble = Math.sin(Math.PI * 3 * progress) * (1 - progress);
-    const squash = parameters.squashAmount * impact * intensity;
+    // One decisive flip: rise and rotate past 90 degrees, then return quickly.
+    // A negative rotation is counterclockwise on the y-down canvas used here.
+    const outwardEnd = 0.46;
+    const returnEnd = 0.82;
+    const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
+    const easeInOutCubic = (value: number) => value < 0.5
+      ? 4 * value * value * value
+      : 1 - Math.pow(-2 * value + 2, 3) / 2;
+    const flip = progress <= outwardEnd
+      ? easeOutCubic(progress / outwardEnd)
+      : progress < returnEnd
+        ? 1 - easeInOutCubic((progress - outwardEnd) / (returnEnd - outwardEnd))
+        : 0;
+    const settle = progress >= returnEnd
+      ? Math.sin((progress - returnEnd) / (1 - returnEnd) * Math.PI) * 0.08
+      : 0;
     return {
-      translateX: parameters.moveX * impact * intensity,
-      translateY: -parameters.moveY * impact * intensity,
-      scaleX: Math.max(0.5, 1 + squash),
-      scaleY: Math.max(0.5, 1 - squash + parameters.scaleAmount * impact),
-      rotationRadians: parameters.rotationDegrees * Math.PI / 180 * (impact * 0.72 + wobble * 0.28) * intensity,
+      translateX: parameters.moveX * flip * intensity,
+      translateY: -parameters.moveY * (flip - settle) * intensity,
+      scaleX: 1,
+      scaleY: 1,
+      rotationRadians: parameters.rotationDegrees * Math.PI / 180 * flip * intensity,
       flipHorizontal: parameters.flipHorizontal,
     };
   }
@@ -185,16 +198,23 @@ export function renderMotionFrame(
   return { width: source.width, height: source.height, data: output };
 }
 
-function prepareMotionSource(source: PixelBuffer, parameters: MotionParameters, placement?: MotionGenerationRequest['sourcePlacement']): PixelBuffer {
+function prepareMotionSource(
+  source: PixelBuffer,
+  parameters: MotionParameters,
+  placement?: MotionGenerationRequest['sourcePlacement'],
+  action: MotionAction = 'idle',
+): PixelBuffer {
   const size = parameters.outputSize;
   const diagonal = Math.sqrt(2) * size;
   const rotationMargin = diagonal * Math.abs(Math.sin(parameters.rotationDegrees * Math.PI / 180)) * 0.5;
   const scaleMargin = size * (parameters.scaleAmount + parameters.squashAmount) * parameters.intensity * 0.55;
   const movementMargin = Math.max(Math.abs(parameters.moveX), Math.abs(parameters.moveY)) * parameters.intensity;
-  const safePadding = Math.min(
-    Math.floor(size * 0.4),
-    Math.ceil(parameters.canvasPadding + rotationMargin + scaleMargin + movementMargin),
-  );
+  const safePadding = action === 'hit'
+    ? Math.max(parameters.canvasPadding, Math.ceil(size * 0.22))
+    : Math.min(
+        Math.floor(size * 0.4),
+        Math.ceil(parameters.canvasPadding + rotationMargin + scaleMargin + movementMargin),
+      );
   const referenceSize = Math.max(1, placement?.referenceSize ?? size);
   const placementScale = size / referenceSize;
   const requestedPadding = Math.round((placement?.padding ?? 0) * placementScale);
@@ -213,6 +233,9 @@ function prepareMotionSource(source: PixelBuffer, parameters: MotionParameters, 
 function resolvePivot(request: MotionGenerationRequest, action: MotionAction, fallbackX: number, fallbackY: number): { x: number; y: number } {
   if (action === 'fire' && request.muzzlePoint) return { ...request.muzzlePoint };
   if ((action === 'move' || action === 'idle' || action === 'land') && request.groundPoint) return { ...request.groundPoint };
+  if (action === 'hit' && request.groundPoint) {
+    return { x: request.groundPoint.x, y: Math.max(0.32, request.groundPoint.y - 0.34) };
+  }
   const enabled = (request.partRegions ?? []).filter((part) => part.enabled);
   const requestedId = action === 'move' || action === 'idle' ? request.anchorPartId : request.focusPartId;
   const role = action === 'move' ? 'base' : action === 'fire' ? 'right' : action === 'hit' ? 'core' : 'core';
@@ -222,67 +245,6 @@ function resolvePivot(request: MotionGenerationRequest, action: MotionAction, fa
     x: Math.max(0, Math.min(1, part.bounds.x + part.bounds.width / 2)),
     y: Math.max(0, Math.min(1, action === 'move' ? part.bounds.y + part.bounds.height : part.bounds.y + part.bounds.height / 2)),
   };
-}
-
-function transformPoint(point: NormalizedPoint, transform: MotionFrameTransform, pivot: NormalizedPoint, size: number): { x: number; y: number } {
-  let localX = (point.x - pivot.x) * size;
-  const localY = (point.y - pivot.y) * size;
-  if (transform.flipHorizontal) localX = -localX;
-  const scaledX = localX * transform.scaleX;
-  const scaledY = localY * transform.scaleY;
-  const cos = Math.cos(transform.rotationRadians);
-  const sin = Math.sin(transform.rotationRadians);
-  return {
-    x: pivot.x * size + scaledX * cos - scaledY * sin + transform.translateX,
-    y: pivot.y * size + scaledX * sin + scaledY * cos + transform.translateY,
-  };
-}
-
-function paintDisc(frame: PixelBuffer, cx: number, cy: number, radius: number, color: readonly [number, number, number, number]): void {
-  const minX = Math.max(0, Math.floor(cx - radius));
-  const maxX = Math.min(frame.width - 1, Math.ceil(cx + radius));
-  const minY = Math.max(0, Math.floor(cy - radius));
-  const maxY = Math.min(frame.height - 1, Math.ceil(cy + radius));
-  const radiusSquared = radius * radius;
-  for (let y = minY; y <= maxY; y += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
-      if ((x - cx) ** 2 + (y - cy) ** 2 > radiusSquared) continue;
-      const offset = (y * frame.width + x) * 4;
-      frame.data[offset] = color[0];
-      frame.data[offset + 1] = color[1];
-      frame.data[offset + 2] = color[2];
-      frame.data[offset + 3] = color[3];
-    }
-  }
-}
-
-function paintLine(frame: PixelBuffer, fromX: number, fromY: number, toX: number, toY: number, thickness: number, color: readonly [number, number, number, number]): void {
-  const distance = Math.max(1, Math.hypot(toX - fromX, toY - fromY));
-  const steps = Math.ceil(distance * 1.4);
-  for (let step = 0; step <= steps; step += 1) {
-    const ratio = step / steps;
-    paintDisc(frame, fromX + (toX - fromX) * ratio, fromY + (toY - fromY) * ratio, thickness / 2, color);
-  }
-}
-
-function paintHitEyes(frame: PixelBuffer, markers: EyeMarker[], transform: MotionFrameTransform, pivot: NormalizedPoint, visibility: number): void {
-  if (visibility < 0.3) return;
-  for (const marker of markers) {
-    const center = transformPoint(marker, transform, pivot, frame.width);
-    const half = Math.max(4, marker.size * frame.width * 0.5);
-    const sampleX = Math.max(0, Math.min(frame.width - 1, Math.round(center.x)));
-    const sampleY = Math.max(0, Math.min(frame.height - 1, Math.round(center.y)));
-    const offset = (sampleY * frame.width + sampleX) * 4;
-    const localLight = frame.data[offset] * 0.2126 + frame.data[offset + 1] * 0.7152 + frame.data[offset + 2] * 0.0722;
-    const foreground = localLight > 132 ? [22, 26, 31, 255] as const : [255, 255, 255, 255] as const;
-    const outline = localLight > 132 ? [255, 255, 255, 255] as const : [22, 26, 31, 255] as const;
-    const outer = Math.max(4, half * 0.3);
-    const inner = Math.max(2, outer * 0.55);
-    paintLine(frame, center.x - half, center.y - half, center.x + half, center.y + half, outer, outline);
-    paintLine(frame, center.x + half, center.y - half, center.x - half, center.y + half, outer, outline);
-    paintLine(frame, center.x - half, center.y - half, center.x + half, center.y + half, inner, foreground);
-    paintLine(frame, center.x + half, center.y - half, center.x - half, center.y + half, inner, foreground);
-  }
 }
 
 function unionBounds(bounds: ContentBounds[]): ContentBounds {
@@ -314,7 +276,7 @@ export async function generateIdleSpriteSheet(
   assertPixelBuffer(request.source);
   const parameters = resolveMotionParameters(request.preset, request.parameters);
   const action = request.action ?? 'idle';
-  const prepared = prepareMotionSource(request.source, parameters, request.sourcePlacement);
+  const prepared = prepareMotionSource(request.source, parameters, request.sourcePlacement, action);
   const frameSize = parameters.outputSize;
   const sheet: PixelBuffer = {
     width: frameSize * parameters.frameCount,
@@ -331,10 +293,6 @@ export async function generateIdleSpriteSheet(
     throwIfAborted(control.signal);
     const transform = motionTransformForFrame(parameters, frameIndex, action, request.actionPreset);
     const frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
-    if (action === 'hit' && request.eyeMarkers?.length) {
-      const progress = parameters.frameCount <= 1 ? 0 : frameIndex / (parameters.frameCount - 1);
-      paintHitEyes(frame, request.eyeMarkers, transform, pivot, Math.sin(Math.PI * progress));
-    }
     transforms.push(transform);
     const bounds = findContentBounds(frame) ?? { x: 0, y: 0, width: 0, height: 0 };
     frameBounds.push(bounds);

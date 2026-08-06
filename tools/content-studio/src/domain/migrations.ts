@@ -30,7 +30,7 @@ export function migrateDraft(input: unknown): DraftRecord {
   }
 
   const version = input.schemaVersion === undefined ? 0 : input.schemaVersion;
-  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== DRAFT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== DRAFT_SCHEMA_VERSION) {
     throw new DraftMigrationError('未対応の下書きバージョンです');
   }
 
@@ -65,6 +65,7 @@ export function migrateDraft(input: unknown): DraftRecord {
     lastStep: activeStep as DraftRecord['lastStep'],
     character: mergeRecord(DEFAULT_CHARACTER, legacyCharacter),
     imageInfo: isRecord(input.imageInfo) ? input.imageInfo as unknown as DraftRecord['imageInfo'] : null,
+    hitImageInfo: isRecord(input.hitImageInfo) ? input.hitImageInfo as unknown as DraftRecord['hitImageInfo'] : null,
     editor: mergeRecord(base.editor, input.editor),
     motionPreset: typeof input.motionPreset === 'string' ? input.motionPreset as DraftRecord['motionPreset'] : base.motionPreset,
     motionAction: typeof input.motionAction === 'string' ? input.motionAction as DraftRecord['motionAction'] : base.motionAction,
@@ -74,7 +75,14 @@ export function migrateDraft(input: unknown): DraftRecord {
       ? mergeRecord(base.partDetection, input.partDetection)
       : base.partDetection,
     landmarks: isRecord(input.landmarks)
-      ? mergeRecord(base.landmarks, input.landmarks)
+      ? {
+          ...base.landmarks,
+          status: input.landmarks.status === 'ready' || input.landmarks.status === 'needs-review' ? input.landmarks.status : base.landmarks.status,
+          facing: input.landmarks.facing === 'left' ? 'left' : 'right',
+          ground: isRecord(input.landmarks.ground) ? input.landmarks.ground as unknown as DraftRecord['landmarks']['ground'] : base.landmarks.ground,
+          muzzle: isRecord(input.landmarks.muzzle) ? input.landmarks.muzzle as unknown as DraftRecord['landmarks']['muzzle'] : base.landmarks.muzzle,
+          detectedAt: typeof input.landmarks.detectedAt === 'string' ? input.landmarks.detectedAt : null,
+        }
       : base.landmarks,
     generatedClips: Array.isArray(input.generatedClips)
       ? input.generatedClips as DraftRecord['generatedClips']

@@ -1,6 +1,5 @@
 import type {
   DetectedMotionPart,
-  EyeMarker,
   MotionAction,
   MotionActionPreset,
   MotionParameters,
@@ -63,7 +62,6 @@ export interface MotionGenerationRequest {
   anchorPartId?: string | null;
   groundPoint?: NormalizedPoint;
   muzzlePoint?: NormalizedPoint;
-  eyeMarkers?: EyeMarker[];
   clipId?: MotionClipId;
   partMasks?: PartMaskDefinition[];
   generatedAt?: string;

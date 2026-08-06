@@ -24,12 +24,22 @@ function sourceImage(): PixelBuffer {
   return { width, height, data };
 }
 
+function hitImage(): PixelBuffer {
+  const image = sourceImage();
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3] === 0) continue;
+    image.data[offset] = 30;
+    image.data[offset + 1] = 95;
+    image.data[offset + 2] = 235;
+  }
+  return image;
+}
+
 const landmarks: MotionLandmarks = {
   status: 'ready',
   facing: 'right',
   ground: { x: 0.5, y: 0.9 },
   muzzle: { x: 0.8, y: 0.48 },
-  eyes: [{ id: 'eye-1', x: 0.62, y: 0.3, size: 0.06 }],
   detectedAt: '2026-08-06T00:00:00.000Z',
 };
 
@@ -39,13 +49,16 @@ describe('5モーション一括生成', () => {
     expect(motionClipParameters('move-backward', 'right', 128).moveX).toBeLessThan(0);
     expect(motionClipParameters('move-forward', 'left', 128).moveX).toBeLessThan(0);
     expect(motionClipParameters('move-backward', 'left', 128).moveX).toBeGreaterThan(0);
+    expect(motionClipParameters('hit', 'right', 128).rotationDegrees).toBeLessThan(-90);
+    expect(motionClipParameters('hit', 'left', 128).rotationDegrees).toBeGreaterThan(90);
     expect(MOTION_CLIP_IDS.every((clip) => motionClipParameters(clip, 'right', 128).flipHorizontal === false)).toBe(true);
   });
 
-  it('5種類を同一条件で生成し、個別PNG/JSON入りZIPへまとめる', async () => {
+  it('被弾だけ任意の別画像を使い、5種類を個別PNG/JSON入りZIPへまとめる', async () => {
     const progress: number[] = [];
     const motions = await generateMotionBatch({
       source: sourceImage(),
+      hitSource: hitImage(),
       sourceImage: 'source.png',
       landmarks,
       outputSize: 128,
@@ -58,7 +71,14 @@ describe('5モーション一括生成', () => {
     expect(motions.fire.metadata.loop).toBe(false);
     expect(motions.hit.metadata.loop).toBe(false);
     expect(motions.land.metadata.loop).toBe(false);
+    expect(motions.hit.metadata.motionParameters.rotationDegrees).toBe(-112);
+    expect(Math.min(...motions.hit.transforms.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
+    expect(Math.min(...motions.hit.transforms.map(({ translateY }) => translateY))).toBeLessThan(-40);
+    expect(motions.hit.transforms.at(-1)?.rotationRadians).toBeCloseTo(0);
+    expect(motions.hit.transforms.at(-1)?.translateY).toBeCloseTo(0);
     expect(MOTION_CLIP_IDS.every((clip) => motions[clip].metadata.clipId === clip)).toBe(true);
+    expect(Array.from(motions.hit.sheet.data).some((value, index, data) => index % 4 === 2 && value > data[index - 2])).toBe(true);
+    expect(Array.from(motions['move-forward'].sheet.data).some((value, index, data) => index % 4 === 2 && value > data[index - 2])).toBe(false);
     expect(progress.at(-1)).toBe(1);
 
     const draft = createDraft('motion-batch-test');

@@ -5,6 +5,7 @@ import { DRAFT_SCHEMA_VERSION } from '../domain/types';
 
 export type DraftBlobKind =
   | 'original'
+  | 'hit-original'
   | 'working'
   | 'normalized'
   | 'optimized'
@@ -138,16 +139,27 @@ export function migrateDraft(raw: unknown): DraftRecord {
     };
   }
 
-  if (raw.schemaVersion === 1 || raw.schemaVersion === 2 || raw.schemaVersion === 3 || raw.schemaVersion === undefined) {
+  if (raw.schemaVersion === 1 || raw.schemaVersion === 2 || raw.schemaVersion === 3 || raw.schemaVersion === 4 || raw.schemaVersion === undefined) {
     const fallback = createDraft(typeof raw.id === 'string' ? raw.id : crypto.randomUUID());
     const migrated: DraftRecord = {
       ...fallback,
       ...raw,
       schemaVersion: DRAFT_SCHEMA_VERSION,
       character: isRecord(raw.character) ? { ...fallback.character, ...raw.character } : fallback.character,
+      hitImageInfo: isRecord(raw.hitImageInfo) ? raw.hitImageInfo as unknown as DraftRecord['hitImageInfo'] : null,
       editor: isRecord(raw.editor) ? { ...fallback.editor, ...raw.editor } : fallback.editor,
       motion: isRecord(raw.motion) ? { ...fallback.motion, ...raw.motion } : fallback.motion,
       preview: isRecord(raw.preview) ? { ...fallback.preview, ...raw.preview } : fallback.preview,
+      landmarks: isRecord(raw.landmarks)
+        ? {
+            ...fallback.landmarks,
+            status: raw.landmarks.status === 'ready' || raw.landmarks.status === 'needs-review' ? raw.landmarks.status : fallback.landmarks.status,
+            facing: raw.landmarks.facing === 'left' ? 'left' : 'right',
+            ground: isRecord(raw.landmarks.ground) ? raw.landmarks.ground as unknown as DraftRecord['landmarks']['ground'] : fallback.landmarks.ground,
+            muzzle: isRecord(raw.landmarks.muzzle) ? raw.landmarks.muzzle as unknown as DraftRecord['landmarks']['muzzle'] : fallback.landmarks.muzzle,
+            detectedAt: typeof raw.landmarks.detectedAt === 'string' ? raw.landmarks.detectedAt : null,
+          }
+        : fallback.landmarks,
       updatedAt: new Date().toISOString(),
       historyStatus: 'dirty',
     } as DraftRecord;
@@ -214,6 +226,11 @@ export async function putDraftBlob(draftId: string, kind: DraftBlobKind, blob: B
 export async function getDraftBlob(draftId: string, kind: DraftBlobKind): Promise<Blob | null> {
   const db = await openStudioDb();
   return (await db.get('blobs', `${draftId}:${kind}`))?.blob ?? null;
+}
+
+export async function deleteDraftBlob(draftId: string, kind: DraftBlobKind): Promise<void> {
+  const db = await openStudioDb();
+  await db.delete('blobs', `${draftId}:${kind}`);
 }
 
 export async function listDraftBlobs(draftId: string): Promise<StoredBlob[]> {
@@ -347,7 +364,11 @@ export async function digestBlob(blob: Blob): Promise<string> {
 }
 
 function isDraftBlobKind(value: string): value is DraftBlobKind {
-  return ['original', 'working', 'normalized', 'optimized', 'mask', 'sprite', 'icon', 'thumbnail', 'preview'].includes(value);
+  return [
+    'original', 'hit-original', 'working', 'normalized', 'optimized', 'mask', 'sprite',
+    'motion-move-forward', 'motion-move-backward', 'motion-fire', 'motion-hit', 'motion-land',
+    'icon', 'thumbnail', 'preview',
+  ].includes(value);
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {

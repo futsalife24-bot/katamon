@@ -74,37 +74,11 @@ function RangeField({ label, value, min, max, step = 1, suffix = '', onChange }:
   );
 }
 
-function ParameterStepper({ label, value, min, max, step = 1, suffix = '', digits = 0, onChange }: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  suffix?: string;
-  digits?: number;
-  onChange: (value: number) => void;
-}) {
-  const change = (direction: -1 | 1) => {
-    const next = Math.max(min, Math.min(max, Number((value + step * direction).toFixed(Math.max(digits, 4)))));
-    onChange(next);
-  };
-  return (
-    <div className="parameter-stepper">
-      <span>{label}</span>
-      <div>
-        <button type="button" aria-label={`${label}を減らす`} disabled={value <= min} onClick={() => change(-1)}>−</button>
-        <output>{value.toFixed(digits)}{suffix}</output>
-        <button type="button" aria-label={`${label}を増やす`} disabled={value >= max} onClick={() => change(1)}>＋</button>
-      </div>
-    </div>
-  );
-}
-
-type LandmarkTool = 'ground' | 'muzzle' | 'eye-1' | 'eye-2';
+type LandmarkTool = 'ground' | 'muzzle';
 
 function LandmarkEditor({ studio }: { studio: StudioController }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [tool, setTool] = useState<LandmarkTool>('eye-1');
+  const [tool, setTool] = useState<LandmarkTool>('ground');
   const pixels = studio.processed?.normalized.pixels ?? null;
   const landmarks = studio.draft!.landmarks;
 
@@ -131,21 +105,6 @@ function LandmarkEditor({ studio }: { studio: StudioController }) {
     };
     marker(landmarks.ground.x, landmarks.ground.y, '#ff315e', '接地');
     marker(landmarks.muzzle.x, landmarks.muzzle.y, '#00c99a', '砲口');
-    for (const eye of landmarks.eyes) {
-      const cx = eye.x * pixels.width;
-      const cy = eye.y * pixels.height;
-      const half = eye.size * pixels.width * 0.5;
-      context.save();
-      context.strokeStyle = '#ffcc28';
-      context.lineWidth = Math.max(3, pixels.width / 120);
-      context.beginPath();
-      context.moveTo(cx - half, cy - half);
-      context.lineTo(cx + half, cy + half);
-      context.moveTo(cx + half, cy - half);
-      context.lineTo(cx - half, cy + half);
-      context.stroke();
-      context.restore();
-    }
   }, [landmarks, pixels]);
 
   const updateLandmarks = (updater: (current: typeof landmarks) => typeof landmarks) => studio.updateDraft((current) => ({
@@ -164,24 +123,8 @@ function LandmarkEditor({ studio }: { studio: StudioController }) {
     };
     updateLandmarks((current) => {
       if (tool === 'ground') return { ...current, status: 'ready', ground: point };
-      if (tool === 'muzzle') return { ...current, status: 'ready', muzzle: point };
-      const id = tool;
-      const existing = current.eyes.find((eye) => eye.id === id);
-      const eyes = [...current.eyes.filter((eye) => eye.id !== id), { id, ...point, size: existing?.size ?? 0.06 }]
-        .sort((a, b) => a.id.localeCompare(b.id));
-      return { ...current, status: 'ready', eyes };
+      return { ...current, status: 'ready', muzzle: point };
     });
-  };
-
-  const selectedEye = landmarks.eyes.find((eye) => eye.id === tool);
-  const changeEyeSize = (direction: -1 | 1) => {
-    if (!selectedEye) return;
-    updateLandmarks((current) => ({
-      ...current,
-      eyes: current.eyes.map((eye) => eye.id === selectedEye.id
-        ? { ...eye, size: Math.max(0.015, Math.min(0.2, Number((eye.size + direction * 0.01).toFixed(3)))) }
-        : eye),
-    }));
   };
 
   const chooseFacing = (facing: 'left' | 'right') => {
@@ -197,7 +140,7 @@ function LandmarkEditor({ studio }: { studio: StudioController }) {
   return (
     <section className="step-panel" data-testid="step-setup">
       <div className="step-intro"><span>2</span><div><h2>向きと位置を確認</h2><p>端末内で推測します。ズレた印だけ選んで画像をタップしてください。</p></div></div>
-      <p className="support-note">生成AI・外部通信は使いません。緑＝砲口、赤＝接地点、黄×＝被弾時の目やで。</p>
+      <p className="support-note">生成AI・外部通信は使いません。緑＝砲口、赤＝接地点です。</p>
       <h3 className="subheading">元画像が向いている方向</h3>
       <div className="segmented" role="group" aria-label="元画像の向き">
         <button type="button" className={landmarks.facing === 'left' ? 'active' : ''} onClick={() => chooseFacing('left')} data-testid="facing-left">← 左向き</button>
@@ -208,18 +151,9 @@ function LandmarkEditor({ studio }: { studio: StudioController }) {
       </div>
       <div className="landmark-tools" role="group" aria-label="修正する位置">
         {([
-          ['ground', '接地点'], ['muzzle', '砲口'], ['eye-1', '目1'], ['eye-2', '目2'],
+          ['ground', '接地点'], ['muzzle', '砲口'],
         ] as const).map(([id, label]) => <button type="button" key={id} className={tool === id ? 'active' : ''} onClick={() => setTool(id)}>{label}</button>)}
       </div>
-      {(tool === 'eye-1' || tool === 'eye-2') && <div className="eye-controls">
-        <span>{selectedEye ? '×の大きさ' : `${tool === 'eye-1' ? '目1' : '目2'}は未指定`}</span>
-        <div>
-          <button type="button" disabled={!selectedEye || selectedEye.size <= 0.015} onClick={() => changeEyeSize(-1)} aria-label="目の印を小さく">−</button>
-          <output>{selectedEye ? `${Math.round(selectedEye.size * 100)}%` : '—'}</output>
-          <button type="button" disabled={!selectedEye || selectedEye.size >= 0.2} onClick={() => changeEyeSize(1)} aria-label="目の印を大きく">＋</button>
-        </div>
-        {selectedEye && <button type="button" className="text-button" onClick={() => updateLandmarks((current) => ({ ...current, eyes: current.eyes.filter(({ id }) => id !== selectedEye.id) }))}>この目を削除</button>}
-      </div>}
       <button className="secondary full-width" type="button" disabled={!pixels || studio.busy} onClick={() => void studio.detectLandmarks()} data-testid="detect-landmarks">位置を自動推測し直す</button>
     </section>
   );
@@ -304,6 +238,7 @@ function Dashboard({ studio }: { studio: StudioController }) {
 
 function ImageStep({ studio }: { studio: StudioController }) {
   const info = studio.draft?.imageInfo;
+  const hitInfo = studio.draft?.hitImageInfo;
   const analysis = studio.processed?.analysis;
   return (
     <section className="step-panel" data-testid="step-image">
@@ -344,6 +279,27 @@ function ImageStep({ studio }: { studio: StudioController }) {
           {analysis.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}
         </div>
       )}
+      <article className={`hit-image-card ${hitInfo ? 'has-image' : ''}`} data-testid="hit-image-card">
+        <div className="section-heading">
+          <div><h3>被弾時の画像</h3><p>任意。別で作った表情差分があれば、被弾だけこちらへ切り替えます。</p></div>
+          <Status value={hitInfo ? '設定済み' : '通常画像を使用'} good={Boolean(hitInfo)} />
+        </div>
+        <label className="secondary full-width hit-image-picker">
+          <input data-testid="hit-image-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void studio.onHitFileInput(event)} />
+          {hitInfo ? '被弾用画像を選び直す' : '被弾用画像を選ぶ'}
+        </label>
+        {hitInfo && <>
+          <ImageCanvas pixels={studio.hitProcessed?.normalized.pixels ?? null} label="被弾時に使う画像" />
+          <dl className="facts facts--compact">
+            <div><dt>ファイル名</dt><dd>{hitInfo.fileName}</dd></div>
+            <div><dt>サイズ</dt><dd>{hitInfo.width} × {hitInfo.height}px</dd></div>
+            <div><dt>容量</dt><dd>{formatBytes(hitInfo.byteLength)}</dd></div>
+            <div><dt>透過</dt><dd>{hitInfo.hasAlpha ? 'あり' : 'なし'}</dd></div>
+          </dl>
+          <button type="button" className="text-button full-width" disabled={studio.busy} onClick={() => void studio.removeHitImage()}>被弾用画像を外す</button>
+        </>}
+        <p className="support-note">未選択なら通常画像をそのまま使います。画像そのものへ×目を描く処理は行いません。</p>
+      </article>
     </section>
   );
 }
@@ -463,7 +419,7 @@ function MotionStep({ studio }: { studio: StudioController }) {
       <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>前進・後退・単発砲撃・被弾・着地だけを、固定設定で一括生成します。</p></div></div>
       <div className="motion-batch-list" aria-label="生成するモーション">
         {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
-          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `のけぞり${draft.landmarks.eyes.length ? '＋×目' : ''}` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
+          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}浮上・112°反転・すぐ復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
         </article>)}
       </div>
       {generatedCount > 0 ? <>

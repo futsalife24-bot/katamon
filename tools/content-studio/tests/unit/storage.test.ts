@@ -61,7 +61,9 @@ describe('端末内の下書き保存', () => {
     autosave.schedule(draft);
     await autosave.flush();
     const source = new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: 'image/png' });
+    const hitSource = new Blob([new Uint8Array([5, 4, 3, 2, 1])], { type: 'image/png' });
     await putDraftBlob(draft.id, 'original', source);
+    await putDraftBlob(draft.id, 'hit-original', hitSource);
 
     const exported = await exportDraftJson(draft.id);
     const imported = await importDraftJson(exported);
@@ -69,6 +71,9 @@ describe('端末内の下書き保存', () => {
     expect(imported.title).toContain('サンプルキャラクター');
     expect(new Uint8Array(await (await getDraftBlob(imported.id, 'original'))!.arrayBuffer())).toEqual(
       new Uint8Array(await source.arrayBuffer()),
+    );
+    expect(new Uint8Array(await (await getDraftBlob(imported.id, 'hit-original'))!.arrayBuffer())).toEqual(
+      new Uint8Array(await hitSource.arrayBuffer()),
     );
   });
 });

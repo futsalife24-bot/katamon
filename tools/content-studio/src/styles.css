@@ -401,14 +401,17 @@ progress { width: 100%; accent-color: var(--brand); }
   background-size: 16px 16px;
 }
 .landmark-canvas-shell canvas { display: block; width: 100%; height: auto; touch-action: pan-y; }
-.landmark-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-block: 12px; }
+.landmark-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-block: 12px; }
 .landmark-tools button { min-height: 52px; padding: 6px 3px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface); font-size: .78rem; font-weight: 800; }
 .landmark-tools button.active { border-color: var(--brand); color: #fff; background: var(--brand); }
-.eye-controls { display: grid; gap: 9px; margin-bottom: 13px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-.eye-controls > span { font-size: .82rem; font-weight: 800; }
-.eye-controls > div { display: grid; grid-template-columns: 56px minmax(70px, 1fr) 56px; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-.eye-controls > div button { min-height: 52px; border: 0; color: var(--brand-strong); background: transparent; font-size: 1.4rem; font-weight: 900; }
-.eye-controls output { text-align: center; font-variant-numeric: tabular-nums; font-weight: 800; }
+
+.hit-image-card { display: grid; gap: 12px; margin-top: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.hit-image-card.has-image { border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); }
+.hit-image-card .section-heading { margin: 0; align-items: start; }
+.hit-image-card h3 { margin: 0 0 4px; }
+.hit-image-card .section-heading p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+.hit-image-picker { display: grid; place-items: center; min-height: 52px; cursor: pointer; }
+.hit-image-card .image-canvas-shell { margin: 0; }
 
 .motion-batch-list { display: grid; gap: 8px; margin-block: 14px; }
 .motion-batch-list article { display: grid; grid-template-columns: 34px minmax(0, 1fr) 26px; min-height: 62px; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
