@@ -267,7 +267,7 @@ progress { width: 100%; accent-color: var(--brand); }
 .upload-zone small { margin-top: 4px; color: #446a60; }
 .camera-button { display: grid; place-items: center; margin-top: 10px; }
 
-.canvas-shell { position: relative; width: 100%; max-height: 62dvh; margin-block: 14px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: #d9dde2; overscroll-behavior: contain; }
+.canvas-shell { position: relative; width: 100%; max-height: 62dvh; margin-block: 14px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: #d9dde2; overscroll-behavior-x: contain; overscroll-behavior-y: auto; }
 .image-canvas { display: block; width: 100%; max-width: none; height: auto; margin: auto; touch-action: pan-x pan-y; image-rendering: auto; }
 .image-canvas.is-brushing { cursor: crosshair; touch-action: none; }
 .canvas-empty { display: grid; min-height: 220px; place-items: center; padding: 30px; color: var(--muted); text-align: center; }
@@ -279,7 +279,7 @@ progress { width: 100%; accent-color: var(--brand); }
 
 .segmented, .tool-selector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .segmented--three, .tool-selector { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.segmented button, .tool-selector button { min-height: 44px; padding: 5px; border: 0; color: var(--muted); background: transparent; font-size: .82rem; font-weight: 750; }
+.segmented button, .tool-selector button { min-height: 48px; padding: 5px; border: 0; color: var(--muted); background: transparent; font-size: .82rem; font-weight: 750; }
 .segmented button.active, .tool-selector button.active { color: #fff; background: var(--brand); }
 .tool-selector { margin-block: 14px; }
 

@@ -241,6 +241,11 @@ function CutoutStep({ studio }: { studio: StudioController }) {
         <button type="button" className={compare === 'before' ? 'active' : ''} onClick={() => setCompare('before')}>処理前</button>
         <button type="button" className={compare === 'after' ? 'active' : ''} onClick={() => setCompare('after')}>処理後</button>
       </div>
+      <p className="support-note">ここは切り抜きを確認する静止画です。動きは次の「モーション」で生成します。</p>
+      <div className="tool-selector" role="group" aria-label="補正ブラシ">
+        {(['pan', 'erase', 'restore'] as const).map((tool) => <button type="button" key={tool} className={editor.tool === tool ? 'active' : ''} onClick={() => changeEditor('tool', tool)}>{tool === 'pan' ? '確認' : tool === 'erase' ? '消しゴム' : '復元ブラシ'}</button>)}
+      </div>
+      <p className="field-help">画像の上からページを動かすときは「確認」を選んで上下にスワイプしてください。</p>
       <ImageCanvas
         pixels={pixels ?? null}
         label={compare === 'before' ? '背景除去前' : '背景除去後'}
@@ -255,9 +260,6 @@ function CutoutStep({ studio }: { studio: StudioController }) {
         <button type="button" className="secondary" disabled={!draft.imageInfo || studio.busy} onClick={() => void studio.autoTrim()}>余白を自動トリム</button>
         <button type="button" className="secondary" disabled={draft.processingOperations.length === 0 || studio.busy} onClick={() => void studio.undoImageOperation()}>元に戻す</button>
         <button type="button" className="secondary" disabled={studio.redoCount === 0 || studio.busy} onClick={() => void studio.redoImageOperation()}>やり直す</button>
-      </div>
-      <div className="tool-selector" role="group" aria-label="補正ブラシ">
-        {(['pan', 'erase', 'restore'] as const).map((tool) => <button type="button" key={tool} className={editor.tool === tool ? 'active' : ''} onClick={() => changeEditor('tool', tool)}>{tool === 'pan' ? '確認' : tool === 'erase' ? '消しゴム' : '復元ブラシ'}</button>)}
       </div>
       <RangeField label="ブラシサイズ" value={editor.brushSize} min={4} max={160} suffix="px" onChange={(value) => changeEditor('brushSize', value)} />
       <RangeField label="拡大表示" value={editor.zoom} min={1} max={3} step={0.1} suffix="倍" onChange={(value) => changeEditor('zoom', value)} />
@@ -285,8 +287,12 @@ function MotionStep({ studio }: { studio: StudioController }) {
   return (
     <section className="step-panel" data-testid="step-motion">
       <div className="step-intro"><span>3</span><div><h2>待機モーション</h2><p>元画像へ周期的な2D変形だけを加えます。顔や装備は生成しません。</p></div></div>
+      {!studio.sprite && <>
+        <p className="support-note" aria-live="polite">まだ待機モーションはありません。生成すると、その場で自動再生します。</p>
+        <button className="primary full-width" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">モーションを生成して再生</button>
+      </>}
       <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} />
-      <button type="button" className="secondary full-width" onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>{draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生'}</button>
+      <button type="button" className="secondary full-width" disabled={!studio.sprite} onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>{studio.sprite ? (draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生') : '生成後に再生できます'}</button>
       <Field label="プリセット">
         <select value={draft.motionPreset} onChange={(event) => setPreset(event.target.value as MotionPreset)}>
           {Object.values(MOTION_PRESETS).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -308,7 +314,7 @@ function MotionStep({ studio }: { studio: StudioController }) {
       <RangeField label="キャンバス余白" value={draft.motion.canvasPadding} min={0} max={96} suffix="px" onChange={(value) => setMotion('canvasPadding', value)} />
       <Toggle label="低性能端末向け軽量プレビュー" checked={draft.motion.lightweightPreview} onChange={(checked) => setMotion('lightweightPreview', checked)} />
       <Toggle label="モーション側でも左右反転" checked={draft.motion.flipHorizontal} onChange={(checked) => setMotion('flipHorizontal', checked)} />
-      <button className="primary full-width" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">スプライトシートを生成</button>
+      {studio.sprite && <button className="primary full-width" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">設定を反映して再生成</button>}
       {studio.sprite && <dl className="facts facts--compact"><div><dt>シート</dt><dd>{studio.sprite.sheet.width} × {studio.sprite.sheet.height}px</dd></div><div><dt>容量</dt><dd>{formatBytes(studio.sprite.spriteSheetPng.byteLength)}</dd></div><div><dt>ループ</dt><dd>{studio.sprite.metadata.frameCount}枚 / {studio.sprite.metadata.fps}fps</dd></div><div><dt>基準点</dt><dd>{studio.sprite.metadata.anchorX.toFixed(2)}, {studio.sprite.metadata.anchorY.toFixed(2)}</dd></div></dl>}
     </section>
   );

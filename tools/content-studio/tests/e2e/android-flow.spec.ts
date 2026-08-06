@@ -57,6 +57,32 @@ test('Android縦画面で画像登録からモックPR、再開、オフライ�
   await expect(page.getByText('市松模様の焼き込み候補あり')).toBeVisible();
 
   await page.getByTestId('step-nav-cutout').click();
+  const cutoutCanvas = page.locator('canvas[aria-label="背景除去後"]');
+  await cutoutCanvas.scrollIntoViewIfNeeded();
+  const canvasBox = await cutoutCanvas.boundingBox();
+  if (!canvasBox) throw new Error('切り抜き画像の表示領域を取得できませんでした。');
+  const scrollBeforeSwipe = await page.evaluate(() => window.scrollY);
+  const shellScrollBeforeSwipe = await cutoutCanvas.evaluate((canvas) => canvas.closest('.canvas-shell')?.scrollTop ?? 0);
+  const touchClient = await context.newCDPSession(page);
+  const touchX = canvasBox.x + canvasBox.width / 2;
+  const touchStartY = canvasBox.y + canvasBox.height * 0.78;
+  const touchEndY = canvasBox.y + canvasBox.height * 0.22;
+  await touchClient.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchX, y: touchStartY }],
+  });
+  for (let step = 1; step <= 6; step += 1) {
+    await touchClient.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: touchX, y: touchStartY + (touchEndY - touchStartY) * step / 6 }],
+    });
+    await page.waitForTimeout(16);
+  }
+  await touchClient.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeSwipe + 40);
+  expect(await cutoutCanvas.evaluate((canvas) => canvas.closest('.canvas-shell')?.scrollTop ?? 0)).toBe(shellScrollBeforeSwipe);
+  await touchClient.detach();
+
   await page.getByRole('button', { name: '自動背景除去' }).click();
   await expect(page.getByRole('dialog', { name: '処理中' })).toBeHidden();
   await page.getByRole('button', { name: '余白を自動トリム' }).click();
@@ -67,6 +93,13 @@ test('Android縦画面で画像登録からモックPR、再開、オフライ�
   await page.getByTestId('step-nav-motion').click();
   await page.getByTestId('generate-motion').click();
   await expect(page.getByText(/8枚 \/ /)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'プレビュー停止' })).toBeVisible();
+  const motionCanvas = page.getByLabel('待機モーションプレビュー');
+  const firstMotionFrame = await motionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  await expect.poll(
+    () => motionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
+    { timeout: 2_000, intervals: [100, 100, 150, 200] },
+  ).not.toBe(firstMotionFrame);
 
   await page.getByTestId('step-nav-details').click();
   await page.getByTestId('character-id').fill('sample-unit');
@@ -100,6 +133,17 @@ test('Android縦画面で画像登録からモックPR、再開、オフライ�
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Content Studio', exact: true })).toBeVisible();
   await expect(page.getByText('サンプルキャラクター', { exact: true }).first()).toBeVisible();
+
+  await page.locator('.draft-card__open').filter({ hasText: 'サンプルキャラクター' }).first().click();
+  await page.getByTestId('step-nav-motion').click();
+  await expect(page.getByRole('button', { name: 'プレビュー停止' })).toBeVisible();
+  const restoredMotionCanvas = page.getByLabel('待機モーションプレビュー');
+  const restoredFirstFrame = await restoredMotionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  await expect.poll(
+    () => restoredMotionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
+    { timeout: 2_000, intervals: [100, 100, 150, 200] },
+  ).not.toBe(restoredFirstFrame);
+  await page.getByRole('button', { name: 'ダッシュボードへ戻る' }).click();
 
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker?.controller))).toBe(true);
   await context.setOffline(true);

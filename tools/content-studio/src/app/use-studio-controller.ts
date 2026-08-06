@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { createDraft } from '../domain/defaults';
-import { LEGACY_CHARACTERS, validateCharacter } from '../domain';
+import { LEGACY_CHARACTERS, spriteMetadataSchema, validateCharacter } from '../domain';
 import type {
   ArtifactBundle,
   DraftRecord,
@@ -20,7 +20,7 @@ import { buildArtifactBundle, createArtifactZip } from '../generation';
 import type { CanonicalCharacterRecord } from '../generation';
 import { MockRepositoryGateway } from '../github/mock-gateway';
 import { ServerRepositoryGateway } from '../github/server-gateway';
-import { ContentImageProcessor, encodePixelBuffer, type ImageProgress, type ProcessedImage } from '../image';
+import { ContentImageProcessor, decodeImageBlob, encodePixelBuffer, inspectImageBlob, type ImageProgress, type ProcessedImage } from '../image';
 import { generateIdleMotionFromBlob, type EncodedIdleSpriteResult, type MotionProgress } from '../motion';
 import { acquireWakeLock, detectCapabilities, requestPersistentStorage, storageUsage, type Capabilities } from '../pwa/capabilities';
 import { consumeSharedImage } from '../pwa/share-target';
@@ -174,8 +174,48 @@ function validationExtras(draft: DraftRecord, processed: ProcessedImage | null, 
   return issues;
 }
 
+async function restoreStoredSprite(draftId: string): Promise<EncodedIdleSpriteResult | null> {
+  const [blob, storedMetadata] = await Promise.all([
+    getDraftBlob(draftId, 'sprite'),
+    getAppMeta<unknown>(`${draftId}:sprite-metadata`),
+  ]);
+  if (!blob || !storedMetadata) return null;
+  const parsedMetadata = spriteMetadataSchema.safeParse(storedMetadata);
+  if (!parsedMetadata.success) return null;
+  const metadata = parsedMetadata.data as SpriteMetadata;
+
+  const dimensions = [metadata.frameWidth, metadata.frameHeight, metadata.frameCount];
+  if (!dimensions.every((value) => Number.isSafeInteger(value) && value > 0)) return null;
+  const sheetWidth = metadata.frameWidth * metadata.frameCount;
+  if (sheetWidth > 8192 || metadata.frameHeight > 8192 || sheetWidth * metadata.frameHeight > 24_000_000) return null;
+
+  try {
+    const safety = await inspectImageBlob(blob, 'idle-sprite.png', {
+      decodeMaxDimension: Math.max(sheetWidth, metadata.frameHeight),
+    });
+    const sheet = await decodeImageBlob(blob, safety);
+    if (sheet.width !== sheetWidth || sheet.height !== metadata.frameHeight) return null;
+    return {
+      spriteSheetPng: {
+        blob,
+        mimeType: 'image/png',
+        width: sheet.width,
+        height: sheet.height,
+        byteLength: blob.size,
+      },
+      sheet,
+      metadata,
+      transforms: [],
+      frameBounds: Array.from({ length: metadata.frameCount }, () => ({ ...metadata.contentBounds })),
+      usedWorker: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.1.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.1.1';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -333,12 +373,15 @@ export function useStudioController(): StudioController {
       setError('下書きが見つかりませんでした。');
       return;
     }
-    const original = await getDraftBlob(id, 'original');
+    const [original, restoredSprite] = await Promise.all([
+      getDraftBlob(id, 'original'),
+      restoreStoredSprite(id),
+    ]);
     originalBlobRef.current = original;
     setDraft(stored);
     draftRef.current = stored;
     setProcessed(null);
-    setSprite(null);
+    setSprite(restoredSprite);
     setBundle(null);
     setPrepared(null);
     setPullRequest(null);
@@ -409,12 +452,11 @@ export function useStudioController(): StudioController {
     const saveWhenHidden = () => {
       if (document.visibilityState === 'hidden') {
         void autosaveRef.current.flush();
-        if (draftRef.current?.preview.playing) persistDraftState((current) => ({ ...current, preview: { ...current.preview, playing: false } }));
       }
     };
     document.addEventListener('visibilitychange', saveWhenHidden);
     return () => document.removeEventListener('visibilitychange', saveWhenHidden);
-  }, [persistDraftState]);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -666,6 +708,9 @@ export function useStudioController(): StudioController {
         putDraftBlob(current.id, 'sprite', result.spriteSheetPng.blob),
         setAppMeta(`${current.id}:sprite-metadata`, result.metadata),
       ]);
+      persistDraftState((active) => active.id === current.id
+        ? { ...active, preview: { ...active.preview, playing: true } }
+        : active);
       setNotice('待機モーションとスプライトシートを生成しました。');
     } catch (cause) {
       setError(humanError(cause, '待機モーションを生成できませんでした。'));
@@ -675,7 +720,7 @@ export function useStudioController(): StudioController {
       setBusy(false);
       setProgress(null);
     }
-  }, [processed, setBusyProgress]);
+  }, [persistDraftState, processed, setBusyProgress]);
 
   const validateAndBuild = useCallback(async (): Promise<ValidationIssue[]> => {
     const current = draftRef.current;
