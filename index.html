@@ -401,6 +401,7 @@
 <!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
 <audio id="bonusBgm" preload="none" loop></audio>
 
+<script src="./generated/content-studio-catalog.js?v=v138"></script>
 <script>
 (() => {
   'use strict';
@@ -442,7 +443,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v137';
+  const BUILD_ID = 'v138';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2123,7 +2124,7 @@
   }
 
   // ===== キャラクター =====
-  const CHARACTERS = {
+  const LEGACY_CHARACTERS = {
     kyoryu: {
       key: 'kyoryu', name: '恐竜', role: 'バランス型', roleEn: 'BALANCE',
       desc: '弾道ガイドが長く、風にも少し強い。初めてでも扱いやすい王道タイプ。',
@@ -2239,6 +2240,25 @@
       color: '#b87cff', special: 'デスゲート', spriteScale: 1.21
     }
   };
+  // Content Studioの生成カタログは既存定義へ後付けする。既存16体は手書きのまま保持し、
+  // 生成データが壊れている場合はその項目だけ無視してゲーム本体を起動する。
+  function loadGeneratedCharacters(catalog) {
+    if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.order) || !catalog.characters) return {};
+    const accepted = {};
+    for (const id of catalog.order) {
+      const character = catalog.characters[id];
+      if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || !character || character.key !== id) continue;
+      if (Object.prototype.hasOwnProperty.call(LEGACY_CHARACTERS, id)) continue;
+      if (typeof character.name !== 'string' || typeof character.assetBase !== 'string') continue;
+      if (!character.assetBase.startsWith('assets/content-studio/') || character.assetBase.includes('..')) continue;
+      if (!Array.isArray(character.selectStats) || character.selectStats.length !== 3) continue;
+      accepted[id] = character;
+    }
+    return accepted;
+  }
+  const GENERATED_CHARACTERS = loadGeneratedCharacters(globalThis.__CONTENT_STUDIO_CATALOG__);
+  const CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
+
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
   const CHARACTER_FACES = {
     kyoryu: [0.64, 0.20, 0.36], medama: [0.58, 0.36, 0.38], iwa: [0.68, 0.40, 0.40],
@@ -2262,7 +2282,12 @@
     shinigami: [0.59, 0.31, 0.30]
   };
 
-  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'];
+  for (const [id, character] of Object.entries(GENERATED_CHARACTERS)) {
+    CHARACTER_FACES[id] = Array.isArray(character.face) ? character.face : DEFAULT_FACE;
+    MATCHUP_FACES[id] = Array.isArray(character.matchupFace) ? character.matchupFace : CHARACTER_FACES[id];
+  }
+  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'];
+  const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
 
   // ===== 起動時に読む絵(v130でWebPへ) =====
   // キャラ16体とロゴで3.83MBあり、**読み込み画面はこれを全部待ってから明ける**。
@@ -2279,15 +2304,18 @@
     const suffix = opts.version ? `?v=${opts.version}` : '';
     let triedPng = false;
     img.onload = () => { if (opts.onReady) opts.onReady(); };
+    const usesRepositoryPath = baseName.startsWith('assets/');
     img.onerror = () => {
       if (!triedPng) {
         triedPng = true;
-        img.src = `assets/${baseName}.png${suffix}`;
+        if (usesRepositoryPath) img.src = `${baseName}.png${suffix}`;
+        else img.src = `assets/${baseName}.png${suffix}`;
         return;
       }
       if (opts.onFailed) opts.onFailed();
     };
-    img.src = `assets/${baseName}.webp${suffix}`;
+    if (usesRepositoryPath) img.src = `${baseName}.webp${suffix}`;
+    else img.src = `assets/${baseName}.webp${suffix}`;
     return img;
   }
 
@@ -2303,7 +2331,7 @@
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
-    charImages[key] = loadArtImage(CHARACTERS[key].asset || key, {
+    charImages[key] = loadArtImage(CHARACTERS[key].assetBase || CHARACTERS[key].asset || key, {
       highPriority: true,
       version: CHARACTER_ASSET_VERSION[key],
       onReady: () => { characterImagesReady++; },
@@ -2873,6 +2901,7 @@
         ? fireworkApexBurst(anchor, vx, vy, wind.dir * wind.strength * WIND_ACCEL_MAX * windMul, GRAVITY * gravityMul)
         : null,
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
+      knockback: opts.knockback != null ? Math.max(0, Number(opts.knockback) || 0) : 0,
       pierce: !!opts.pierce,
       emp: !!opts.emp,
       empRadius: opts.empRadius || 90,
@@ -3069,6 +3098,53 @@
     craterHistory.push({ x, y, r: radius });
   }
 
+  // Content Studioが出力する宣言的な技だけを解釈する。文字列をコードとして評価せず、
+  // 既存の発射・爆発・回復・電磁波プリミティブへ安全に写像する。
+  function launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0) {
+    const skill = def && def.specialSkill;
+    if (!skill || skill.schemaVersion !== 1 || !skill.projectile || !skill.impact) return false;
+    const projectile = skill.projectile;
+    const impact = skill.impact;
+    const count = Math.max(1, Math.min(12, Math.round(Number(projectile.count) || 1)));
+    const speed = Math.max(0.1, Math.min(5, Number(projectile.speedMultiplier) || 1));
+    const power = Math.max(0.05, Math.min(5, Number(projectile.power) || 1));
+    const radius = Math.max(0.1, Math.min(5, Number(impact.radiusMultiplier) || 1));
+    const gravity = Math.max(0, Math.min(3, Number(projectile.gravityMultiplier)));
+    const knockback = Math.max(0, Math.min(500, Number(impact.knockback) || 0));
+
+    if (skill.selfEffect && Number(skill.selfEffect.heal) > 0) {
+      const heal = Math.min(Math.round(Number(skill.selfEffect.heal)), unit.maxHp - unit.hp);
+      unit.hp += heal;
+      if (heal > 0) spawnHealText(unit.x, unit.y - 32, heal);
+    }
+
+    // 確率効果は端末間でずれないよう、ターン・所有者・技IDから固定値を作る。
+    let hash = turnCount + 2166136261;
+    for (const char of `${owner}:${skill.id}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    const deterministicRoll = (hash >>> 0) / 4294967296;
+    const targetEffect = skill.targetEffect;
+    const useEmp = targetEffect && targetEffect.kind === 'movement-lock'
+      && deterministicRoll < Math.max(0, Math.min(1, Number(targetEffect.chance) || 0));
+
+    for (let index = 0; index < count; index++) {
+      const spread = count === 1 ? 0 : -14 + (28 * index) / (count - 1);
+      const velocity = rotateVec(vx0 * speed, vy0 * speed, spread);
+      fireProjectile(owner, anchor, velocity.vx, velocity.vy, {
+        blastMul: (def.blastMul || 1) * radius,
+        windMul: def.windMul != null ? def.windMul : 1,
+        gravityMul: Number.isFinite(gravity) ? gravity : 1,
+        damageMul: power,
+        pierce: Number(projectile.penetrationCount) > 0,
+        emp: !!useEmp,
+        empRadius: 90 * radius,
+        empTurns: targetEffect ? Math.max(1, Math.round(Number(targetEffect.durationTurns) || 1)) : 1,
+        noTerrain: !!useEmp,
+        knockback
+      });
+    }
+    return true;
+  }
+
   // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
@@ -3095,7 +3171,9 @@
       return;
     }
 
-    if (activateSpecial && def.key === 'shinigami') {
+    if (activateSpecial && launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0)) {
+      // 生成キャラクターの宣言的テンプレートは上で処理済み。
+    } else if (activateSpecial && def.key === 'shinigami') {
       // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
       // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
       fireProjectile(owner, anchor, vx0, vy0, {
@@ -8466,7 +8544,7 @@
     }
   }
 
-  function explodeAt(x, y, blastMul, owner, damageMul = 1) {
+  function explodeAt(x, y, blastMul, owner, damageMul = 1, knockback = 0) {
     blastMul = blastMul || 1;
     const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
@@ -8485,6 +8563,15 @@
         u.hp = Math.max(0, u.hp - actualDamage);
         if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
         creditDamage(owner, u, actualDamage);
+        if (knockback > 0) {
+          const reach = Math.max(1, 100 * blastMul);
+          const strength = Math.min(72, knockback * 0.14) * Math.max(0, 1 - dist / reach);
+          const direction = a.x >= x ? 1 : -1;
+          u.x = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, clampInsideArenaWall(u.x + direction * strength)));
+          u.grounded = false;
+          u.vy = Math.min(u.vy || 0, -Math.min(180, strength * 2));
+          u.fallStartY = u.y;
+        }
       }
     }
     checkMatchEnd();
@@ -13393,10 +13480,10 @@
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
             } else if (p.firework) {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.knockback);
               spawnFireworkBurst(p);
             } else {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.knockback);
             }
             if (p.lightning) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
@@ -13419,10 +13506,10 @@
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
         } else if (p.firework) {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.knockback);
           spawnFireworkBurst(p);
         } else {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul);
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.knockback);
         }
         triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
@@ -13446,9 +13533,9 @@
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
         else if (p.firework) {
-          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.knockback);
           spawnFireworkBurst(p);
-        } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul);
+        } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.knockback);
         if (p.lightning) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);

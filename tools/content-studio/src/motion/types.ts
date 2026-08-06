@@ -1,0 +1,68 @@
+import type { MotionParameters, MotionPreset, SpriteMetadata } from '../domain/types';
+import type { EncodedImage, PixelBuffer } from '../image/types';
+
+export interface MotionFrameTransform {
+  translateX: number;
+  translateY: number;
+  scaleX: number;
+  scaleY: number;
+  rotationRadians: number;
+  flipHorizontal: boolean;
+}
+
+export interface PartMaskDefinition {
+  id: string;
+  label: string;
+  blobKey?: string;
+  /** Optional alpha mask; omitted in the MVP metadata and retained only in the local draft. */
+  mask?: PixelBuffer;
+}
+
+export interface PartMotionContext {
+  frameIndex: number;
+  frameCount: number;
+  phase: number;
+  preset: MotionPreset;
+  parameters: MotionParameters;
+}
+
+/** Future providers can supply per-part affine transforms without changing the base generator. */
+export interface PartMotionProvider {
+  readonly id: string;
+  supports(part: PartMaskDefinition, preset: MotionPreset): boolean;
+  transform(part: PartMaskDefinition, context: PartMotionContext): MotionFrameTransform;
+}
+
+export interface MotionGenerationRequest {
+  source: PixelBuffer;
+  sourceImage: string;
+  preset: MotionPreset;
+  parameters?: Partial<MotionParameters>;
+  partMasks?: PartMaskDefinition[];
+  generatedAt?: string;
+}
+
+export interface MotionProgress {
+  frame: number;
+  totalFrames: number;
+  progress: number;
+  message: string;
+}
+
+export interface MotionControl {
+  signal?: AbortSignal;
+  onProgress?: (progress: MotionProgress) => void;
+  yieldToMainThread?: boolean;
+}
+
+export interface IdleSpriteResult {
+  sheet: PixelBuffer;
+  metadata: SpriteMetadata;
+  transforms: MotionFrameTransform[];
+  frameBounds: Array<{ x: number; y: number; width: number; height: number }>;
+  usedWorker: boolean;
+}
+
+export interface EncodedIdleSpriteResult extends IdleSpriteResult {
+  spriteSheetPng: EncodedImage;
+}
