@@ -2,11 +2,11 @@
 
 更新日: 2026-08-06（JST）
 
-## Stage Studio ゲームUI改修（公開作業中）
+## Stage Studio ゲームUI改修（PR #67）
 
 - 作業ブランチ: `feat/stage-studio-game-ui`
 - 分離worktree: `.codex-worktrees/stage-studio-mvp`
-- 状態: 初回MVPはPR #65で公開済み。今回、ホーム・新規・生成・地形・出撃・テスト・検証・共有の8工程へ整理し、見た目を地形へ、風をテストへ統合した。
+- 状態: 初回MVPはPR #65で公開済み。今回のゲームUI改修はPR #67で公開し、ホーム・新規・生成・地形・出撃・テスト・検証・共有の8工程へ整理して、見た目を地形へ、風をテストへ統合した。
 - データ基盤: `column-segments-v1`、決定的seed生成、正規化JSON、SHA-256、厳格検証、公式/カスタム保存領域分離、JSON/ZIP往復を実装済み。
 - UI: ゲーム同系統の鉄板・真鍮UI、既存4背景、地形質感、実ゲーム寸法キャラを地形・出撃・テストCanvasへ反映。キャラ確認はドラッグでき、円形当たり判定が地形へ重なると赤く警告する。
 - PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。旧キャッシュ混在を避けるためJS/CSSは`1.1.0-mvp`版付きファイル名へ変更した。
@@ -14,7 +14,7 @@
 - 最終自動確認: 既存ゲーム1,160件 + Stage基盤43件 = 1,203件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。JSON/ZIP双方でインポート、ゲーム再読込後の永続化、選択、実バトル開始、下書き復元、PWAオフライン再表示まで確認済み。
 - 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
 - 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
-- 公開経路: `master`へ直接pushせず、このfeatureブランチをPR経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
+- 公開経路: `master`へ直接pushせず、PR #67経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
 - 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
 
 以下はゲーム本体の版管理情報である。
@@ -32,7 +32,7 @@
 - ブランチ: `master`
 - 作業中ブランチ: `feat/stage-studio-game-ui`（Stage StudioのゲームUI改修）
 - 現行公開ビルド: `v138-stage-studio-mvp`（初回Stage Studio MVP。PR #65）
-- 今回の公開単位: `v138-stage-studio-ui` / Stage Studio `1.1.0-mvp`（PR経由で公開する）
+- 今回の公開単位: `v138-stage-studio-ui` / Stage Studio `1.1.0-mvp`（PR #67）
 - 次の候補: `v139`（必殺カットイン音を強化）
 - ひとつ前: `v133`（次の風を1区間先まで予報。PR #59）
 - その前: `v132`（タイトル画面の静止部分を1枚に焼く。PR #58）
