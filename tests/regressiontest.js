@@ -834,9 +834,10 @@ check('電磁波が敵へ命中した時だけ移動不可カットインを出�
   !!empHitFlash && empHitFlash.text.includes('電磁波命中') && empHitFlash.text.includes('移動不可'),
   JSON.stringify(empHitFlash));
 const empLockVisual = kt.moveLockVisualForTest('e1');
-check('移動封印中のキャラには移動不可アイコンと電撃エフェクトを割り当てる',
-  !!empLockVisual && empLockVisual.label === '移動不可' && empLockVisual.turns === 2 && empLockVisual.effect === 'electric'
-    && /function drawUnit\(u\)[\s\S]{0,4000}drawMoveLockEffect\(u, a, imgTopAbs, barY, h\);/.test(indexHtml),
+check('移動封印中は文字や電気ではなく、足元を前後から囲む鎖と南京錠を割り当てる',
+  !!empLockVisual && !('label' in empLockVisual) && empLockVisual.turns === 2
+    && empLockVisual.effect === 'chain' && empLockVisual.placement === 'feet' && empLockVisual.icon === 'padlock'
+    && /drawMoveLockChains\(u, a, tilt, 'back'\);[\s\S]{0,3000}drawMoveLockChains\(u, a, tilt, 'front'\);/.test(indexHtml),
   JSON.stringify(empLockVisual));
 
 // 撃破済みのキャラへの二重ヒット(v128)。2vs2で先に倒れた味方/敵は薄く描かれるのに、
