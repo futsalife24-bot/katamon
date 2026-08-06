@@ -31,6 +31,28 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+// v134: キャラ選択の紹介文・型・性能目盛りはゲーム内容と合っていないため出さない。
+// 一旦はキャラ名と必殺技名だけで選べる画面にする。
+{
+  kt.setPhase('select');
+  kt.resetDrawnText();
+  kt.render();
+  const drawn = kt.drawnText();
+  const focused = kt.character(selectWheelCards.focusedKey);
+  check('キャラ選択にはキャラ名と必殺技名を描く',
+    drawn.includes(focused.name) && drawn.includes('必殺技') && drawn.includes(focused.special),
+    drawn.join('/'));
+  check('キャラ選択には型と性能目盛りを描かない',
+    !drawn.includes('耐久') && !drawn.includes('火力') && !drawn.includes('機動')
+      && !kt.chars().map(key => kt.character(key)).some(d => drawn.includes(d.role) || drawn.includes(d.roleEn)),
+    drawn.join('/'));
+  const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+  const selectCard = /function drawWheelSelectCard\(card, def\) \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  function drawFixedSelectSortieButton/.exec(html);
+  check('キャラ選択には紹介文と必殺技の説明文を描かない',
+    !!selectCard && !/def\.(?:desc|specialDesc|selectStats|role|roleEn)\b/.test(selectCard[1]),
+    selectCard ? '古い情報の参照が残っています' : 'カード描画関数が見つかりません');
+}
+
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
 // 別の種類として持たせないと、4体の顔ぶれを描き分けられない。
 check('VSカットインの状態を検査できる', typeof kt.matchupCutIn === 'function');

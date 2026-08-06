@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v133';
+  const BUILD_ID = 'v134';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -7993,21 +7993,6 @@
     else ctx.rect(x, y, w, h);
   }
 
-  function drawSelectStat(label, value, x, y, color) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 8px ' + UI_FONT;
-    ctx.textAlign = 'left';
-    ctx.fillText(label, x, y);
-    // 目盛りの中の隙間(3px)より群と群の間(64-62=2px)の方が狭く、隣の項目とつながって
-    // 「耐久と火力で1本の10段メーター」に見えていた。群を詰めて間を空け、
-    // 群の間(12px)が中の隙間(3px)より明らかに広くなるようにする(2026-07-28)。
-    for (let i = 0; i < 5; i++) {
-      selectRoundedRect(x + i * 11, y + 6, 8, 4, 2);
-      ctx.fillStyle = i < value ? color : 'rgba(255,255,255,0.13)';
-      ctx.fill();
-    }
-  }
-
   function spawnEmpPulse(x, y, radius) {
     empRings.push({ x, y, radius, life: 0.55, maxLife: 0.55 });
     const count = 18;
@@ -8074,9 +8059,9 @@
     const cImg = charImages[card.key];
     const cReady = cImg && cImg.complete && cImg.naturalWidth > 0;
     const imageCx = imageBox.x + imageBox.w / 2;
-    const imageCy = imageBox.y + 74;
+    const imageCy = imageBox.y + imageBox.h / 2;
     if (cReady) {
-      const imageScale = Math.min(104 / cImg.naturalWidth, 112 / cImg.naturalHeight);
+      const imageScale = Math.min(104 / cImg.naturalWidth, 154 / cImg.naturalHeight);
       const iw = cImg.naturalWidth * imageScale;
       const ih = cImg.naturalHeight * imageScale;
       if (def.facesLeft) {
@@ -8095,58 +8080,38 @@
       ctx.fill();
     }
 
-    selectRoundedRect(imageBox.x + 12, imageBox.y + imageBox.h - 30, imageBox.w - 24, 19, 10);
-    ctx.fillStyle = 'rgba(0,0,0,0.74)';
-    ctx.fill();
-    ctx.strokeStyle = `${def.color}aa`;
-    ctx.stroke();
-    ctx.fillStyle = def.color;
-    ctx.font = 'bold 9px ' + UI_FONT;
-    ctx.textAlign = 'center';
-    ctx.fillText(def.role, imageCx, imageBox.y + imageBox.h - 16);
-
-    // 2/3幅の中へ情報を再配置する。
+    // ゲーム内容と合っていなかった型・紹介文・性能目盛りは表示しない。
+    // 選択画面は、キャラクター名と必殺技名だけを確実に読める形に絞る。
     const textX = left + 132;
     const contentRight = left + main.w - 12;
     const contentW = contentRight - textX;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#fff';
-    ctx.font = `900 ${def.name.length >= 5 ? 16 : 20}px ${UI_FONT_HEAVY}`;
-    ctx.fillText(def.name, textX, top + 31);
+    ctx.font = `900 ${def.name.length >= 5 ? 17 : 22}px ${UI_FONT_HEAVY}`;
+    ctx.fillText(def.name, textX, top + 43);
 
-    selectRoundedRect(contentRight - 68, top + 12, 64, 19, 10);
-    ctx.fillStyle = `${def.color}22`;
-    ctx.fill();
-    ctx.strokeStyle = `${def.color}99`;
+    ctx.strokeStyle = `${def.color}70`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(textX, top + 58);
+    ctx.lineTo(contentRight, top + 58);
     ctx.stroke();
-    ctx.fillStyle = def.color;
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(def.roleEn, contentRight - 36, top + 25);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.76)';
-    ctx.font = '10px ' + UI_FONT;
-    ctx.textAlign = 'left';
-    wrapText(def.desc, textX, top + 53, contentW, 13);
-
-    drawSelectStat('耐久', def.selectStats[0], textX, top + 101, def.color);
-    drawSelectStat('火力', def.selectStats[1], textX + 64, top + 101, def.color);
-    drawSelectStat('機動', def.selectStats[2], textX + 128, top + 101, def.color);
-
-    selectRoundedRect(textX, top + 127, contentW, 55, 10);
-    ctx.fillStyle = 'rgba(255,210,74,0.09)';
+    selectRoundedRect(textX, top + 73, contentW, 96, 12);
+    const specialFill = ctx.createLinearGradient(textX, top + 73, contentRight, top + 169);
+    specialFill.addColorStop(0, 'rgba(255,210,74,0.12)');
+    specialFill.addColorStop(1, `${def.color}1f`);
+    ctx.fillStyle = specialFill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,210,74,0.46)';
+    ctx.strokeStyle = 'rgba(255,210,74,0.58)';
     ctx.stroke();
     ctx.fillStyle = '#ffd24a';
-    ctx.font = 'bold 8px ' + UI_FONT;
-    ctx.textAlign = 'left';
-    ctx.fillText('SPECIAL', textX + 9, top + 141);
-    ctx.font = 'bold 12px ' + UI_FONT;
-    ctx.fillText(def.special, textX + 9, top + 158);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '8px ' + UI_FONT;
-    ctx.fillText(def.specialDesc, textX + 9, top + 174);
+    ctx.font = '900 10px ' + UI_FONT_HEAVY;
+    ctx.textAlign = 'center';
+    ctx.fillText('必殺技', textX + contentW / 2, top + 101);
+    ctx.fillStyle = '#fff4cf';
+    ctx.font = `900 ${def.special.length >= 7 ? 14 : 17}px ${UI_FONT_HEAVY}`;
+    ctx.fillText(def.special, textX + contentW / 2, top + 137);
 
     ctx.restore();
   }

@@ -136,7 +136,13 @@ const HOOK = `
     resetPhysicsClock: () => resetPhysicsClock(),
     selectWheelCards: () => {
       const cards = getRenderedSelectCards();
-      return { total: CHARACTER_LIST.length, rendered: cards.length, focused: cards.some(card => card.focused) };
+      const focused = cards.find(card => card.focused);
+      return {
+        total: CHARACTER_LIST.length,
+        rendered: cards.length,
+        focused: !!focused,
+        focusedKey: focused ? focused.key : null
+      };
     },
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
