@@ -1,10 +1,16 @@
-const CACHE_VERSION = 'katamon-pwa-v138';
+const CACHE_VERSION = 'katamon-pwa-v138-stage-studio-mvp';
 const APP_SHELL = [
   './',
   './index.html',
   './generated/content-studio-catalog.js',
   './generated/content-studio-manifest.json',
   './manifest.webmanifest',
+  './game-custom-stages.css',
+  './game-custom-stages.js',
+  './shared/stage-core.js',
+  './shared/stage-storage.js',
+  './shared/stage-repository.js',
+  './shared/stage-zip.js',
   './assets/favicon-32.png',
   './assets/apple-touch-icon.png',
   './assets/icon-192.png',
@@ -13,7 +19,8 @@ const APP_SHELL = [
   './assets/loading-emblem.webp',
   './assets/title-logo.webp',
   './assets/wall.jpg',
-  './assets/intro-cannonball.png'
+  './assets/intro-cannonball.png',
+  './assets/normal-impact-explosion.mp3?v=1'
 ];
 
 self.addEventListener('install', event => {
@@ -43,9 +50,11 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Content Studioは独立した子スコープのService Workerを持つ。親ゲームのオフライン
-  // フォールバックを返すと初回起動がゲーム画面になるため、この配下は常に子へ任せる。
-  if (url.pathname.includes('/tools/content-studio/')) return;
+  // 各Studioは子スコープ側のService Workerで管理する。
+  if (
+    url.pathname.includes('/tools/content-studio/')
+    || url.pathname.includes('/tools/stage-studio/')
+  ) return;
 
   // 音声・動画のRangeリクエストはブラウザに任せ、シークやループを壊さない。
   if (request.headers.has('range')) return;
@@ -90,7 +99,7 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request).then(cached => {
+    caches.match(request, { ignoreSearch: true }).then(cached => {
       if (cached) return cached;
       return fetch(request).then(response => {
         if (response.ok) {

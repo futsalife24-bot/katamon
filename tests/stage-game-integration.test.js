@@ -1,0 +1,252 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const Core = require('../shared/stage-core.js');
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+async function lowerPlatformStage() {
+  const stage = Core.generateStage({
+    preset: 'flat',
+    seed: 'game-integration-lower-platform',
+    title: '統合テストステージ',
+    format: '1v1',
+    wind: { direction: -1, strength: 0.5 }
+  });
+
+  // 同じXに上段と下段を置き、出撃地点は下段を明示する。ゲームがXだけを見て
+  // 最上面へ置く実装へ戻ると、このテストは184px付近になって失敗する。
+  for (const spawn of stage.spawnPoints) {
+    const center = Math.floor(spawn.x / Core.LIMITS.columnWidth);
+    for (let column = center - 8; column <= center + 8; column += 1) {
+      stage.terrain.columns[column] = [[200, 232], [500, Core.LIMITS.terrainBottom]];
+    }
+    spawn.y = 500 - Core.LIMITS.unitRadius;
+  }
+  stage.background = {
+    mode: 'gradient',
+    theme: 'snow',
+    color: '#26405A',
+    gradient: { from: '#102030', to: '#708090' }
+  };
+  stage.materials[0].color = '#8A5C32';
+  stage.decorations.enabled = false;
+  return Core.finalizeStage(stage, { touchUpdatedAt: false });
+}
+
+test('custom stage adapter starts an actual local battle with terrain, lower spawn and wind', async () => {
+  // seatharnessはindex.htmlの本体スクリプトをCanvas/DOMスタブ上で実行する。
+  // StageCoreを先にglobalThisへ公開すると、実ブラウザと同じ共有モジュール経路になる。
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+
+  assert.ok(bridge, 'game bridge is exposed');
+  assert.equal(bridge.getState().featureEnabled, true);
+  const adapter = await bridge.selectStage(stage);
+  assert.equal(adapter.stageId, stage.stageId);
+  assert.equal(adapter.contentHash, stage.checksums.contentHash);
+  assert.deepEqual(adapter.appearance, {
+    background: stage.background,
+    terrainColor: '#8A5C32',
+    decorationsEnabled: false
+  });
+  assert.equal(bridge.getState().gamePhase, 'freeSetup');
+
+  await bridge.startSelectedStage(stage);
+  const snapshot = kt.buildSnapshotForTest();
+  assert.equal(snapshot.battleMode, 'free');
+  assert.equal(snapshot.customStage.stageId, stage.stageId);
+  assert.equal(snapshot.wind.dir, -1);
+  assert.equal(snapshot.wind.strength, 0.5);
+  assert.equal(snapshot.nextWind.dir, -1);
+  assert.equal(snapshot.nextWind.strength, 0.5);
+  const customAppearance = kt.appearanceForTest();
+  assert.equal(customAppearance.themeKey, 'snow');
+  assert.deepEqual(customAppearance.theme.sky, ['#102030', '#405060', '#708090']);
+  assert.equal(customAppearance.theme.dirtTop, '#8A5C32');
+  assert.equal(customAppearance.custom.decorationsEnabled, false);
+  assert.equal(customAppearance.usesOfficialThemeObject, false, 'custom colors use a cloned theme');
+  for (const spawn of stage.spawnPoints) {
+    const unit = snapshot.units.find((entry) => entry.id === spawn.slot);
+    assert.ok(unit, `unit ${spawn.slot} exists`);
+    assert.equal(unit.x, spawn.x);
+    assert.equal(unit.y, spawn.y, `${spawn.slot} remains on the requested lower platform`);
+  }
+
+  const sampleX = stage.spawnPoints[0].x;
+  assert.equal(kt.isSolidAt(sampleX, 212), true, 'custom upper platform enters the real collision mask');
+  kt.carveCraterForTest(sampleX, 212, 30);
+  assert.equal(kt.isSolidAt(sampleX, 212), false, 'real battle crater removes custom collision');
+
+  await bridge.startSelectedStage(stage);
+  assert.equal(kt.isSolidAt(sampleX, 212), true, 'restart reloads the pristine custom terrain');
+
+  const resumableSnapshot = kt.buildSnapshotForTest();
+  const changedSnapshot = clone(resumableSnapshot);
+  changedSnapshot.customStage.title = '改ざんされたステージ';
+  assert.throws(() => kt.applySnapshotForTest(changedSnapshot), /contentHash/);
+
+  const changedTerrainSnapshot = clone(resumableSnapshot);
+  changedTerrainSnapshot.segments[0][0][0] += 4;
+  assert.throws(() => kt.applySnapshotForTest(changedTerrainSnapshot), /地形.*一致/);
+
+  const missingManifestSnapshot = clone(resumableSnapshot);
+  missingManifestSnapshot.customStage = null;
+  assert.throws(() => kt.applySnapshotForTest(missingManifestSnapshot), /ステージ情報/);
+
+  const wrongModeSnapshot = clone(resumableSnapshot);
+  wrongModeSnapshot.battleMode = 'normal';
+  assert.throws(() => kt.applySnapshotForTest(wrongModeSnapshot), /対戦種別/);
+
+  kt.saveSuspendedForTest();
+  const storedSnapshot = JSON.parse(globalThis.localStorage.getItem('katamon_custom_suspend_v1'));
+  storedSnapshot.customStage.description = '保存後に変更';
+  globalThis.localStorage.setItem('katamon_custom_suspend_v1', JSON.stringify(storedSnapshot));
+  assert.equal(kt.loadSuspendedForTest(), null, 'tampered custom save is not offered for resume');
+
+  kt.startBattle();
+  const officialSnapshot = kt.buildSnapshotForTest();
+  assert.equal(officialSnapshot.battleMode, 'normal');
+  assert.equal(officialSnapshot.customStage, null, 'normal battle snapshots never include custom stages');
+  assert.notEqual(officialSnapshot.pattern, 'custom', 'normal battle returns to official terrain generation');
+  assert.notEqual(
+    Core.canonicalStringify(officialSnapshot.segments),
+    Core.canonicalStringify(stage.terrain.columns),
+    'official terrain is isolated from the selected custom stage'
+  );
+  const officialAppearance = kt.appearanceForTest();
+  assert.equal(officialAppearance.custom, null);
+  assert.equal(officialAppearance.usesOfficialThemeObject, true, 'official terrain palette is not mutated by custom colors');
+
+  kt.applySnapshotForTest(resumableSnapshot);
+  assert.equal(kt.appearanceForTest().custom.decorationsEnabled, false, 'snapshot restore reapplies custom appearance');
+});
+
+test('custom battle keeps the official suspended save in an isolated slot', async () => {
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+
+  globalThis.localStorage.clear();
+  kt.startBattle();
+  assert.equal(kt.saveSuspendedForTest(), true);
+  const officialRaw = globalThis.localStorage.getItem('katamon_suspend_v1');
+  assert.ok(officialRaw, 'official battle has a suspended save');
+
+  await bridge.startSelectedStage(stage);
+  assert.equal(
+    globalThis.localStorage.getItem('katamon_suspend_v1'),
+    officialRaw,
+    'starting a custom battle must not overwrite or delete the official save'
+  );
+  assert.equal(globalThis.localStorage.getItem('katamon_custom_suspend_v1'), null, 'custom slot starts clean');
+
+  assert.equal(kt.saveSuspendedForTest(), true);
+  const customRaw = globalThis.localStorage.getItem('katamon_custom_suspend_v1');
+  assert.ok(customRaw, 'custom battle uses a separate suspended-save slot');
+  assert.equal(JSON.parse(customRaw).customStage.stageId, stage.stageId);
+  assert.equal(kt.loadSuspendedForTest().customStage.stageId, stage.stageId, 'custom resume takes priority');
+  assert.equal(globalThis.localStorage.getItem('katamon_suspend_v1'), officialRaw, 'official save remains unchanged');
+
+  kt.startBattle();
+});
+
+test('battle selection rejects a changed hash and inconsistent player layout', async () => {
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+  assert.equal(Core.contentHashSync(stage), await Core.contentHash(stage));
+  assert.equal(Core.verifyStageHashSync(stage).valid, true);
+  const changed = clone(stage);
+  changed.title = '内容を変更したステージ';
+  await assert.rejects(() => bridge.selectStage(changed), /contentHash/);
+
+  const inconsistent = clone(stage);
+  inconsistent.battleRules.format = '2v2';
+  inconsistent.battleRules.maxPlayers = 4;
+  // ハッシュ検査より前に、生データのスキーマ/対戦構成で拒否される。
+  assert.throws(() => bridge.validateStage(inconsistent), /出撃地点|ステージ|人数/);
+});
+
+test('changing a stage-owned free battle option clears the selected custom stage', async () => {
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+
+  for (const kind of ['format', 'wind', 'terrain']) {
+    await bridge.selectStage(stage);
+    assert.equal(bridge.getState().selectedStageId, stage.stageId);
+    kt.changeFreeOption(kind, 1);
+    assert.equal(bridge.getState().selectedStageId, null, `${kind} must not leave a stale custom adapter selected`);
+  }
+
+  await bridge.selectStage(stage);
+  kt.changeFreeOption('player', 1);
+  assert.equal(bridge.getState().selectedStageId, stage.stageId, 'character choice remains independent from stage data');
+});
+
+test('game integration remains isolated from official and online stage paths', () => {
+  const root = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const manager = fs.readFileSync(path.join(root, 'game-custom-stages.js'), 'utf8');
+  const managerCss = fs.readFileSync(path.join(root, 'game-custom-stages.css'), 'utf8');
+  const studioApp = fs.readFileSync(path.join(root, 'tools', 'stage-studio', 'app.js'), 'utf8');
+  const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+
+  assert.match(html, /battleMode === 'free' && selectedCustomAdapter/);
+  assert.match(html, /battleMode === 'normal' && online && online\.kind === 'firebase'/);
+  assert.match(html, /customStage: battleMode === 'free' && selectedCustomStage/);
+  assert.match(html, /onlineActive: isOnline\(\) \|\| roomScreenOpen\(\)/);
+  assert.match(html, /StageCore\.stepProjectile\(p, dt, windAccel, projectileGravity\)/);
+  assert.match(html, /loadTerrainFromSave\(\s*selectedCustomAdapter\.segments/);
+  assert.match(html, /KATAMON_FEATURES\?\.customStages !== false/);
+  assert.match(html, /StageCore\.createStageIdentity\(stage\)/);
+  assert.match(html, /StageCore\.compareStageIdentity\(sourceIdentity, adapterIdentity\)/);
+  assert.match(html, /StageCore\?\.PHYSICS\?\.deadLineY/);
+  assert.match(html, /StageCore\?\.PHYSICS\?\.fallTrigger/);
+  assert.match(html, /\['terrain', 'wind', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1'/);
+  assert.match(html, /startFreeMatch\(\{ preserveOfficialSuspend: true \}\)/);
+
+  assert.match(studioApp, /finalizeStage\(materializeStage\(\),\s*\{\s*touchUpdatedAt:\s*false\s*\}\)/);
+  assert.match(studioApp, /finalizeStage\(document,\s*\{\s*touchUpdatedAt:\s*false\s*\}\)/);
+  assert.match(studioApp, /catch \(_\) \{[\s\S]*?if \(!copied\) \{/);
+  assert.match(studioApp, /typeof document\.execCommand !== 'function'/);
+  assert.match(studioApp, /state\.editRevision \+= 1/);
+  assert.match(studioApp, /const savingRevision = state\.editRevision/);
+  assert.match(studioApp, /estimate\.backend !== 'memory' && estimate\.durable !== false/);
+  assert.match(studioApp, /一時保存（再読込で消えます）/);
+  assert.match(studioApp, /controllerchange[\s\S]{0,180}if \(!state\.pwaUpdateRequested\) return/);
+  assert.doesNotMatch(studioApp, /const hadController =/);
+  assert.match(studioApp, /if \(!saved \|\| state\.dirty \|\| !durable\)/);
+  assert.match(studioApp, /shareFailed = true[\s\S]{0,180}blobDownload\(file, file\.name\)/);
+  assert.match(serviceWorker, /caches\.match\(request, \{ ignoreSearch: true \}\)/);
+
+  assert.match(manager, /listCustom\(\)/);
+  assert.match(manager, /putCustom\(migrated\)/);
+  assert.match(manager, /StageRepository/);
+  assert.match(manager, /createLocalProvider/);
+  assert.doesNotMatch(manager, /storageModule\.open\(/);
+  assert.match(manager, /verifyStageHash\(migrated\)/);
+  assert.match(manager, /readStageBundle\(file\)/);
+  assert.match(manager, /createStageBundle\(finalized\)/);
+  assert.match(manager, /state\.onlineActive/);
+  for (const field of ['stageId', 'schemaVersion', 'contentHash', 'gameCompatibility']) {
+    assert.match(manager, new RegExp("label: '" + field + "'"));
+  }
+  assert.match(manager, /identityLine\.textContent\s*=/);
+  assert.match(manager, /バトル開始直前に4項目を再照合します/);
+  assert.doesNotMatch(manager, /innerHTML\s*=\s*stage\.|insertAdjacentHTML\s*\(/);
+  assert.match(managerCss, /\.custom-stage-identity\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(managerCss, /#customStageSelection\s*\{[^}]*white-space:\s*pre-line/s);
+});

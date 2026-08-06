@@ -326,6 +326,22 @@ function check(name, value) {
     }
   };
   const htmlForAudio = readRepoFile('index.html');
+  // v138: 通常弾の着弾音は外部URLを直接再生せず、同梱した素材をWebAudioで鳴らす。
+  // キャッシュ一覧から外すと、ホーム画面追加後のオフライン対戦だけ昔の合成音へ戻ってしまう。
+  let thirdPartyAudio = '';
+  try { thirdPartyAudio = readRepoFile('assets/SOUND_LICENSES.md'); } catch (_) { /* 下の検査で不合格にする */ }
+  check('the pinned Pixabay normal impact sound is present',
+    fileHash('assets/normal-impact-explosion.mp3') === 'df42418a2e76');
+  check('the normal impact sound is versioned in code and cached for offline play',
+    htmlForAudio.includes("assets/normal-impact-explosion.mp3?v=1")
+      && swText.includes("'./assets/normal-impact-explosion.mp3?v=1'")
+      && htmlForAudio.includes('normalImpactSound: !activateSpecial && !activateJump'));
+  check('the Pixabay source, creator, license and check date stay recorded with the asset',
+    thirdPartyAudio.includes('Animated Cartoon Explosion Impact')
+      && thirdPartyAudio.includes('Universfield')
+      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-animated-cartoon-explosion-impact-352744/')
+      && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
+      && thirdPartyAudio.includes('2026-08-06'));
   const BONUS_TRACK_PINS = [
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
     { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },

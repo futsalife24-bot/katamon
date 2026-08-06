@@ -24,7 +24,7 @@ MVPの主目的は、1枚の利用者画像から、背景補正、正規化、�
 
 ## 2. 調査した現在の構造
 
-調査基準は `origin/master` の `v137` である。既存の未コミット作業を保護するため、実装は最新正本から分離した `feat/content-studio-mvp` worktreeで行う。
+調査開始時の基準は `origin/master` の `v137` である。既存の未コミット作業を保護するため、実装は正本から分離した `feat/content-studio-mvp` worktreeで行い、完成前に `origin/master` の `v138-stage-studio-mvp` を統合して共存を確認する。
 
 ### 2.1 リポジトリと公開
 

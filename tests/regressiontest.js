@@ -75,6 +75,40 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
 }
 
+// v138: Pixabayの爆発音は通常弾の着弾だけに使う。
+// 必殺技や跳躍まで同じ印を持たせると、それぞれ固有の着弾音まで通常弾の音に置き換わってしまう。
+{
+  kt.setPhase('battle');
+  kt.setCharactersForTest('kyoryu', 'medama');
+  kt.clearProjectilesForTest();
+  kt.fireForTest(100, -200, { unitId: 'p1' });
+  const normal = kt.projectileProfilesForTest()[0];
+  kt.clearProjectilesForTest();
+  kt.fireForTest(100, -200, { unitId: 'p1', useJump: true });
+  const jump = kt.projectileProfilesForTest()[0];
+  check('通常弾だけがPixabay着弾音の印を持ち、跳躍弾には付かない',
+    !!normal && normal.normalImpactSound === true
+      && !!jump && jump.normalImpactSound === false,
+    JSON.stringify({ normal, jump }));
+
+  let soundRoute = null;
+  try {
+    kt.setNormalImpactBufferForTest();
+    const before = kt.decodedAudioStartsForTest();
+    kt.explodeAtForTest(-500, -500, 1, 'p1', true);
+    const afterNormal = kt.decodedAudioStartsForTest();
+    kt.explodeAtForTest(-500, -500, 1, 'p1', false);
+    soundRoute = { before, afterNormal, afterSpecial: kt.decodedAudioStartsForTest() };
+  } catch (err) {
+    soundRoute = { error: String(err && err.message || err) };
+  }
+  check('通常弾の炸裂だけが読み込んだ爆発音を1回鳴らし、従来の炸裂は鳴らさない',
+    soundRoute && soundRoute.afterNormal === soundRoute.before + 1
+      && soundRoute.afterSpecial === soundRoute.afterNormal,
+    JSON.stringify(soundRoute));
+  kt.clearProjectilesForTest();
+}
+
 // v137: 必殺は「キャラからオーラが沸き立つ → カットイン → 発射」の順に見せる。
 // 描画だけを足して発射待ちが従来のままだと、オーラとカットインが同時に出てしまうため、
 // 実際の保留状態と弾の有無を時間順に確かめる。
