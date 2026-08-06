@@ -66,6 +66,11 @@ describe('モーション専用フロー', () => {
     const frames = Array.from({ length: parameters.frameCount }, (_, index) => motionTransformForFrame(parameters, index, 'hit', 'hit-light'));
     expect(Math.min(...frames.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
     expect(Math.min(...frames.map(({ translateY }) => translateY))).toBeLessThan(-40);
+    expect(parameters.frameCount).toBe(12);
+    expect(frames[6].rotationRadians).toBeLessThan(-Math.PI / 2);
+    expect(frames[7].rotationRadians).toBeLessThan(-Math.PI / 2);
+    expect(frames[7].translateY).toBeLessThan(frames[6].translateY);
+    expect(Math.abs(frames[10].rotationRadians)).toBeLessThan(Math.abs(frames[8].rotationRadians));
     expect(frames[0].rotationRadians).toBeCloseTo(0);
     expect(frames.at(-1)?.rotationRadians).toBeCloseTo(0);
     expect(frames.at(-1)?.translateY).toBeCloseTo(0);

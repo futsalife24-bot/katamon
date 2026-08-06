@@ -72,8 +72,14 @@ describe('5モーション一括生成', () => {
     expect(motions.hit.metadata.loop).toBe(false);
     expect(motions.land.metadata.loop).toBe(false);
     expect(motions.hit.metadata.motionParameters.rotationDegrees).toBe(-112);
+    expect(motions.hit.metadata.frameCount).toBe(12);
     expect(Math.min(...motions.hit.transforms.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
     expect(Math.min(...motions.hit.transforms.map(({ translateY }) => translateY))).toBeLessThan(-40);
+    const hitBottom = (index: number) => motions.hit.frameBounds[index].y + motions.hit.frameBounds[index].height;
+    expect(motions.hit.transforms[6].rotationRadians).toBeLessThan(-Math.PI / 2);
+    expect(Math.abs(hitBottom(6) - hitBottom(0))).toBeLessThanOrEqual(1);
+    expect(hitBottom(7)).toBeLessThan(hitBottom(6));
+    expect(Math.abs(motions.hit.transforms[10].rotationRadians)).toBeLessThan(Math.abs(motions.hit.transforms[8].rotationRadians));
     expect(motions.hit.transforms.at(-1)?.rotationRadians).toBeCloseTo(0);
     expect(motions.hit.transforms.at(-1)?.translateY).toBeCloseTo(0);
     expect(MOTION_CLIP_IDS.every((clip) => motions[clip].metadata.clipId === clip)).toBe(true);

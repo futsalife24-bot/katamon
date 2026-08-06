@@ -419,7 +419,7 @@ function MotionStep({ studio }: { studio: StudioController }) {
       <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>前進・後退・単発砲撃・被弾・着地だけを、固定設定で一括生成します。</p></div></div>
       <div className="motion-batch-list" aria-label="生成するモーション">
         {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
-          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}浮上・112°反転・すぐ復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
+          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}反転着地・小バウンド・起き上がり` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
         </article>)}
       </div>
       {generatedCount > 0 ? <>

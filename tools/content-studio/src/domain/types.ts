@@ -1,5 +1,5 @@
 export const DRAFT_SCHEMA_VERSION = 5 as const;
-export const GENERATOR_VERSION = '0.4.0';
+export const GENERATOR_VERSION = '0.4.2';
 
 export type WorkflowStep =
   | 'image'

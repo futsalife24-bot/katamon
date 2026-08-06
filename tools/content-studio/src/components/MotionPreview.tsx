@@ -42,6 +42,7 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
     context.imageSmoothingQuality = 'high';
     let animation = 0;
     let lastFrame = -1;
+    const startedAt = performance.now();
     const frameCount = active?.metadata.frameCount ?? 1;
     const fps = active?.metadata.fps ?? 1;
     const sheetCanvas = document.createElement('canvas');
@@ -61,7 +62,7 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
 
     const draw = (timestamp: number) => {
       const frame = settings.playing && document.visibilityState === 'visible'
-        ? Math.floor(timestamp / (1000 / fps)) % frameCount
+        ? Math.floor(Math.max(0, timestamp - startedAt) / (1000 / fps)) % frameCount
         : 0;
       if (frame !== lastFrame) {
         lastFrame = frame;
@@ -115,7 +116,7 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
       }
       if (settings.playing) animation = requestAnimationFrame(draw);
     };
-    draw(0);
+    draw(startedAt);
     return () => cancelAnimationFrame(animation);
   }, [fallback, metadata, settings.background, settings.direction, settings.playing, settings.showAnchor, settings.showCollision, sprite]);
 

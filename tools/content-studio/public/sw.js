@@ -1,4 +1,4 @@
-const VERSION = '0.4.0';
+const VERSION = '0.4.2';
 const CACHE_NAME = `content-studio-pwa-${VERSION}`;
 const CACHE_PREFIX = 'content-studio-pwa-';
 const MAX_RUNTIME_ENTRIES = 80;

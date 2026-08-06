@@ -31,7 +31,18 @@ export class ContentMotionProcessor {
       }
     }
     const resolved = resolveMotionParameters(request.preset, request.parameters);
-    const fallback = makeLightweightMotionParameters(resolved);
+    const lightweight = makeLightweightMotionParameters(resolved);
+    // The hit sequence needs all 12 key poses to preserve landing, bounce and
+    // recovery even when OffscreenCanvas/Worker is unavailable. 256px still
+    // keeps the fallback memory footprint small enough for Android Chrome.
+    const fallback = request.action === 'hit' && resolved.frameCount === 12
+      ? {
+          ...lightweight,
+          frameCount: 12 as const,
+          fps: Math.min(resolved.fps, 12),
+          durationMs: Math.round(12 * 1000 / Math.min(resolved.fps, 12)),
+        }
+      : lightweight;
     return generateIdleSpriteSheet(
       { ...request, parameters: fallback },
       { ...control, yieldToMainThread: true },

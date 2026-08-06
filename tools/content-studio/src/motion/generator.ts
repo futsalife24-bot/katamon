@@ -13,6 +13,31 @@ import type {
 } from './types';
 
 const TWO_PI = Math.PI * 2;
+const HIT_TAKEOFF_END = 0.3;
+const HIT_LAND_START = 0.54;
+const HIT_BOUNCE_END = 0.78;
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function easeOutCubic(value: number): number {
+  const progress = clampUnit(value);
+  return 1 - Math.pow(1 - progress, 3);
+}
+
+function easeInOutCubic(value: number): number {
+  const progress = clampUnit(value);
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+}
+
+function hitBounceLift(parameters: MotionParameters, progress: number): number {
+  if (progress < HIT_LAND_START || progress >= HIT_BOUNCE_END) return 0;
+  const bounceProgress = (progress - HIT_LAND_START) / (HIT_BOUNCE_END - HIT_LAND_START);
+  return Math.sin(Math.PI * bounceProgress) * Math.max(5, parameters.moveY * 0.14) * parameters.intensity;
+}
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('モーション生成を中止しました。', 'AbortError');
@@ -70,25 +95,20 @@ export function motionTransformForFrame(
   }
 
   if (action === 'hit') {
-    // One decisive flip: rise and rotate past 90 degrees, then return quickly.
-    // A negative rotation is counterclockwise on the y-down canvas used here.
-    const outwardEnd = 0.46;
-    const returnEnd = 0.82;
-    const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
-    const easeInOutCubic = (value: number) => value < 0.5
-      ? 4 * value * value * value
-      : 1 - Math.pow(-2 * value + 2, 3) / 2;
-    const flip = progress <= outwardEnd
-      ? easeOutCubic(progress / outwardEnd)
-      : progress < returnEnd
-        ? 1 - easeInOutCubic((progress - outwardEnd) / (returnEnd - outwardEnd))
-        : 0;
-    const settle = progress >= returnEnd
-      ? Math.sin((progress - returnEnd) / (1 - returnEnd) * Math.PI) * 0.08
-      : 0;
+    // Take off, keep the overturned pose through landing and one small bounce,
+    // then stand back up. Negative rotation is counterclockwise on y-down canvas.
+    const takeoff = easeOutCubic(progress / HIT_TAKEOFF_END);
+    const recover = easeInOutCubic((progress - HIT_BOUNCE_END) / (1 - HIT_BOUNCE_END));
+    const flip = progress <= HIT_TAKEOFF_END ? takeoff : progress < HIT_BOUNCE_END ? 1 : 1 - recover;
+    const fall = easeInOutCubic((progress - HIT_TAKEOFF_END) / (HIT_LAND_START - HIT_TAKEOFF_END));
+    const vertical = progress <= HIT_TAKEOFF_END
+      ? -parameters.moveY * takeoff * intensity
+      : progress < HIT_LAND_START
+        ? -parameters.moveY * (1 - fall) * intensity
+        : -hitBounceLift(parameters, progress);
     return {
       translateX: parameters.moveX * flip * intensity,
-      translateY: -parameters.moveY * (flip - settle) * intensity,
+      translateY: vertical,
       scaleX: 1,
       scaleY: 1,
       rotationRadians: parameters.rotationDegrees * Math.PI / 180 * flip * intensity,
@@ -288,11 +308,23 @@ export async function generateIdleSpriteSheet(
   const anchorX = 0.5;
   const anchorY = parameters.groundContact;
   const pivot = resolvePivot(request, action, anchorX, anchorY);
+  const preparedBounds = findContentBounds(prepared);
+  const uprightBottom = preparedBounds ? preparedBounds.y + preparedBounds.height : frameSize * anchorY;
 
   for (let frameIndex = 0; frameIndex < parameters.frameCount; frameIndex += 1) {
     throwIfAborted(control.signal);
-    const transform = motionTransformForFrame(parameters, frameIndex, action, request.actionPreset);
-    const frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
+    let transform = motionTransformForFrame(parameters, frameIndex, action, request.actionPreset);
+    let frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
+    const progress = parameters.frameCount <= 1 ? 0 : frameIndex / (parameters.frameCount - 1);
+    if (action === 'hit' && progress >= HIT_LAND_START) {
+      const provisionalBounds = findContentBounds(frame);
+      if (provisionalBounds) {
+        const currentBottom = provisionalBounds.y + provisionalBounds.height;
+        const targetBottom = uprightBottom - hitBounceLift(parameters, progress);
+        transform = { ...transform, translateY: transform.translateY + targetBottom - currentBottom };
+        frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
+      }
+    }
     transforms.push(transform);
     const bounds = findContentBounds(frame) ?? { x: 0, y: 0, width: 0, height: 0 };
     frameBounds.push(bounds);
