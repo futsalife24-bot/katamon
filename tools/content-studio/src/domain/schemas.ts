@@ -211,6 +211,51 @@ const previewSettingsSchema = z.object({
   playing: z.boolean(),
 });
 
+const motionActionSchema = z.enum(['idle', 'move', 'fire', 'hit']);
+const motionActionPresetSchema = z.enum([
+  'idle-standard',
+  'idle-heavy',
+  'idle-hover',
+  'move-steady',
+  'move-heavy',
+  'move-dash',
+  'fire-recoil',
+  'fire-charge',
+  'fire-rapid',
+  'hit-light',
+  'hit-heavy',
+  'hit-knockback',
+]);
+
+const normalizedBoundsSchema = z.object({
+  x: z.number().finite().min(0).max(1),
+  y: z.number().finite().min(0).max(1),
+  width: z.number().finite().positive().max(1),
+  height: z.number().finite().positive().max(1),
+}).superRefine((bounds, context) => {
+  if (bounds.x + bounds.width > 1.000_001 || bounds.y + bounds.height > 1.000_001) {
+    context.addIssue({ code: 'custom', message: '部位候補の範囲が画像外です' });
+  }
+});
+
+const detectedMotionPartSchema = z.object({
+  id: assetReferenceSchema,
+  label: plainText(1, 40),
+  role: z.enum(['upper', 'core', 'left', 'right', 'base']),
+  bounds: normalizedBoundsSchema,
+  confidence: z.number().finite().min(0).max(1),
+  pixelRatio: z.number().finite().min(0).max(1),
+  enabled: z.boolean(),
+});
+
+const partDetectionStateSchema = z.object({
+  status: z.enum(['idle', 'ready', 'needs-review']),
+  parts: z.array(detectedMotionPartSchema).max(12),
+  focusPartId: z.union([z.null(), assetReferenceSchema]),
+  anchorPartId: z.union([z.null(), assetReferenceSchema]),
+  analyzedAt: z.union([z.null(), z.string().datetime({ offset: true })]),
+});
+
 const validationIssueSchema = z.object({
   severity: z.enum(['error', 'warning', 'info']),
   code: plainText(1, 80),
@@ -244,12 +289,15 @@ export const draftRecordSchema = z
     title: plainText(1, 80),
     createdAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
-    lastStep: z.enum(['image', 'cutout', 'motion', 'details', 'skills', 'preview', 'validate', 'publish', 'complete']),
+    lastStep: z.enum(['image', 'cutout', 'parts', 'motion', 'details', 'skills', 'preview', 'validate', 'publish', 'complete', 'export']),
     character: draftCharacterFormSchema,
     imageInfo: imageInfoSchema.nullable(),
     editor: imageEditorStateSchema,
     motionPreset: z.enum(['standard', 'heavy', 'light', 'hover', 'flying', 'flexible', 'winged', 'mechanical', 'breathing', 'almost-still']),
+    motionAction: motionActionSchema,
+    actionPreset: motionActionPresetSchema,
     motion: motionParametersSchema,
+    partDetection: partDetectionStateSchema,
     preview: previewSettingsSchema,
     validation: z.array(validationIssueSchema).max(200),
     processingOperations: z.array(imageOperationSchema).max(2_000),
@@ -288,12 +336,15 @@ export const spriteMetadataSchema = z
         '安全な画像参照を指定してください',
       ),
     preset: z.enum(['standard', 'heavy', 'light', 'hover', 'flying', 'flexible', 'winged', 'mechanical', 'breathing', 'almost-still']),
+    motionAction: motionActionSchema.optional(),
+    actionPreset: motionActionPresetSchema.optional(),
     motionParameters: motionParametersSchema,
     partMasks: z.array(z.object({
       id: assetReferenceSchema,
       label: plainText(1, 40),
       blobKey: z.string().max(160).regex(/^[a-z0-9:_-]+$/iu, '安全な保存キーを指定してください').optional(),
     })).max(32),
+    partRegions: z.array(detectedMotionPartSchema).max(12).optional(),
     generatedAt: z.string().datetime({ offset: true }),
     generatorVersion: z.string().min(1).max(32),
   })

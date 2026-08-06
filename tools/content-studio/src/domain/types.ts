@@ -1,28 +1,64 @@
-export const DRAFT_SCHEMA_VERSION = 2 as const;
-export const GENERATOR_VERSION = '0.1.0';
+export const DRAFT_SCHEMA_VERSION = 3 as const;
+export const GENERATOR_VERSION = '0.2.0';
 
 export type WorkflowStep =
   | 'image'
   | 'cutout'
+  | 'parts'
   | 'motion'
   | 'details'
   | 'skills'
   | 'preview'
   | 'validate'
   | 'publish'
-  | 'complete';
+  | 'complete'
+  | 'export';
 
 export const WORKFLOW_STEPS: ReadonlyArray<{ id: WorkflowStep; label: string }> = [
   { id: 'image', label: '画像' },
   { id: 'cutout', label: '切り抜き' },
-  { id: 'motion', label: 'モーション' },
-  { id: 'details', label: '基本情報' },
-  { id: 'skills', label: '技' },
-  { id: 'preview', label: 'プレビュー' },
-  { id: 'validate', label: '検証' },
-  { id: 'publish', label: 'GitHub反映' },
-  { id: 'complete', label: '完了' },
+  { id: 'parts', label: '部位候補' },
+  { id: 'motion', label: '動作' },
+  { id: 'preview', label: '確認' },
+  { id: 'export', label: '出力' },
 ];
+
+export type MotionAction = 'idle' | 'move' | 'fire' | 'hit';
+
+export type MotionActionPreset =
+  | 'idle-standard'
+  | 'idle-heavy'
+  | 'idle-hover'
+  | 'move-steady'
+  | 'move-heavy'
+  | 'move-dash'
+  | 'fire-recoil'
+  | 'fire-charge'
+  | 'fire-rapid'
+  | 'hit-light'
+  | 'hit-heavy'
+  | 'hit-knockback';
+
+export type MotionPartRole = 'upper' | 'core' | 'left' | 'right' | 'base';
+
+export interface DetectedMotionPart {
+  id: string;
+  label: string;
+  role: MotionPartRole;
+  /** Normalized bounds in the square motion source (0..1). */
+  bounds: ContentBounds;
+  confidence: number;
+  pixelRatio: number;
+  enabled: boolean;
+}
+
+export interface PartDetectionState {
+  status: 'idle' | 'ready' | 'needs-review';
+  parts: DetectedMotionPart[];
+  focusPartId: string | null;
+  anchorPartId: string | null;
+  analyzedAt: string | null;
+}
 
 export type MotionPreset =
   | 'standard'
@@ -182,7 +218,10 @@ export interface DraftRecord {
   imageInfo: ImageInfo | null;
   editor: ImageEditorState;
   motionPreset: MotionPreset;
+  motionAction: MotionAction;
+  actionPreset: MotionActionPreset;
   motion: MotionParameters;
+  partDetection: PartDetectionState;
   preview: PreviewSettings;
   validation: ValidationIssue[];
   processingOperations: ImageOperation[];
@@ -217,8 +256,11 @@ export interface SpriteMetadata {
   collisionBounds: ContentBounds;
   sourceImage: string;
   preset: MotionPreset;
+  motionAction?: MotionAction;
+  actionPreset?: MotionActionPreset;
   motionParameters: MotionParameters;
   partMasks: Array<{ id: string; label: string; blobKey?: string }>;
+  partRegions?: DetectedMotionPart[];
   generatedAt: string;
   generatorVersion: string;
 }

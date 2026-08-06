@@ -1,6 +1,6 @@
-import type { ContentBounds, MotionParameters, MotionPreset } from '../domain/types';
+import type { ContentBounds, MotionAction, MotionActionPreset, MotionParameters, MotionPreset } from '../domain/types';
 import { buildSpriteMetadata } from '../generation/sprite-metadata';
-import { findContentBounds, normalizeImage, resizePixelBuffer } from '../image/processing';
+import { findContentBounds, normalizeImage } from '../image/processing';
 import type { PixelBuffer } from '../image/types';
 import { assertPixelBuffer } from '../image/types';
 import { validatePartMasks } from './part-masks';
@@ -24,14 +24,67 @@ function shapedWave(value: number, pause: number): number {
   return Math.sign(value) * (1 - Math.pow(1 - magnitude, exponent));
 }
 
-export function motionTransformForFrame(parameters: MotionParameters, frameIndex: number): MotionFrameTransform {
+export function motionTransformForFrame(
+  parameters: MotionParameters,
+  frameIndex: number,
+  action: MotionAction = 'idle',
+  actionPreset?: MotionActionPreset,
+): MotionFrameTransform {
   if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= parameters.frameCount) {
     throw new RangeError('フレーム番号が範囲外です。');
   }
   const phase = TWO_PI * frameIndex / parameters.frameCount;
+  const progress = parameters.frameCount <= 1 ? 0 : frameIndex / (parameters.frameCount - 1);
+  const intensity = parameters.intensity;
+
+  if (action === 'move') {
+    const stride = Math.sin(phase);
+    const stepLift = Math.abs(Math.sin(phase));
+    const squash = parameters.squashAmount * stepLift * intensity;
+    return {
+      translateX: parameters.moveX * stride * intensity * 0.22,
+      translateY: -parameters.moveY * stepLift * intensity,
+      scaleX: Math.max(0.5, 1 + squash),
+      scaleY: Math.max(0.5, 1 - squash + parameters.scaleAmount * stepLift),
+      rotationRadians: parameters.rotationDegrees * Math.PI / 180 * stride * intensity,
+      flipHorizontal: parameters.flipHorizontal,
+    };
+  }
+
+  if (action === 'fire') {
+    const basicPulse = Math.pow(Math.sin(Math.PI * progress), 3);
+    const pulse = actionPreset === 'fire-rapid'
+      ? Math.pow(Math.abs(Math.sin(Math.PI * 3 * progress)), 2)
+      : actionPreset === 'fire-charge'
+        ? Math.pow(Math.sin(Math.PI * progress), 2)
+        : basicPulse;
+    const squash = parameters.squashAmount * pulse * intensity;
+    return {
+      translateX: -parameters.moveX * pulse * intensity,
+      translateY: -parameters.moveY * pulse * intensity,
+      scaleX: Math.max(0.5, 1 - squash + parameters.scaleAmount * pulse),
+      scaleY: Math.max(0.5, 1 + squash),
+      rotationRadians: -parameters.rotationDegrees * Math.PI / 180 * pulse * intensity,
+      flipHorizontal: parameters.flipHorizontal,
+    };
+  }
+
+  if (action === 'hit') {
+    const impact = Math.sin(Math.PI * progress);
+    const wobble = Math.sin(Math.PI * 3 * progress) * (1 - progress);
+    const squash = parameters.squashAmount * impact * intensity;
+    return {
+      translateX: parameters.moveX * impact * intensity,
+      translateY: -parameters.moveY * impact * intensity,
+      scaleX: Math.max(0.5, 1 + squash),
+      scaleY: Math.max(0.5, 1 - squash + parameters.scaleAmount * impact),
+      rotationRadians: parameters.rotationDegrees * Math.PI / 180 * (impact * 0.72 + wobble * 0.28) * intensity,
+      flipHorizontal: parameters.flipHorizontal,
+    };
+  }
+
   const wave = shapedWave(Math.sin(phase), parameters.idlePause);
   const lift = shapedWave((1 - Math.cos(phase)) / 2, parameters.idlePause * 0.5);
-  const intensity = parameters.intensity;
   const breath = parameters.scaleAmount * wave * intensity;
   const squash = parameters.squashAmount * lift * intensity;
   return {
@@ -111,9 +164,8 @@ export function renderMotionFrame(
   return { width: source.width, height: source.height, data: output };
 }
 
-function prepareMotionSource(source: PixelBuffer, parameters: MotionParameters): PixelBuffer {
+function prepareMotionSource(source: PixelBuffer, parameters: MotionParameters, placement?: MotionGenerationRequest['sourcePlacement']): PixelBuffer {
   const size = parameters.outputSize;
-  const resized = source.width === size && source.height === size ? source : resizePixelBuffer(source, size, size);
   const diagonal = Math.sqrt(2) * size;
   const rotationMargin = diagonal * Math.abs(Math.sin(parameters.rotationDegrees * Math.PI / 180)) * 0.5;
   const scaleMargin = size * (parameters.scaleAmount + parameters.squashAmount) * parameters.intensity * 0.55;
@@ -122,14 +174,31 @@ function prepareMotionSource(source: PixelBuffer, parameters: MotionParameters):
     Math.floor(size * 0.4),
     Math.ceil(parameters.canvasPadding + rotationMargin + scaleMargin + movementMargin),
   );
-  return normalizeImage(resized, {
+  const referenceSize = Math.max(1, placement?.referenceSize ?? size);
+  const placementScale = size / referenceSize;
+  const requestedPadding = Math.round((placement?.padding ?? 0) * placementScale);
+  // Normalize once from the highest-resolution edited source. Resizing a
+  // rectangular source to a square first both softened and distorted it.
+  return normalizeImage(source, {
     outputSize: size,
-    padding: safePadding,
-    offsetX: 0,
-    offsetY: 0,
-    scale: 1,
-    flipHorizontal: false,
+    padding: Math.max(safePadding, requestedPadding),
+    offsetX: (placement?.offsetX ?? 0) * placementScale,
+    offsetY: (placement?.offsetY ?? 0) * placementScale,
+    scale: placement?.scale ?? 1,
+    flipHorizontal: placement?.flipHorizontal ?? false,
   }).pixels;
+}
+
+function resolvePivot(request: MotionGenerationRequest, action: MotionAction, fallbackX: number, fallbackY: number): { x: number; y: number } {
+  const enabled = (request.partRegions ?? []).filter((part) => part.enabled);
+  const requestedId = action === 'move' || action === 'idle' ? request.anchorPartId : request.focusPartId;
+  const role = action === 'move' ? 'base' : action === 'fire' ? 'right' : action === 'hit' ? 'core' : 'core';
+  const part = enabled.find(({ id }) => id === requestedId) ?? enabled.find((candidate) => candidate.role === role);
+  if (!part) return { x: fallbackX, y: fallbackY };
+  return {
+    x: Math.max(0, Math.min(1, part.bounds.x + part.bounds.width / 2)),
+    y: Math.max(0, Math.min(1, action === 'move' ? part.bounds.y + part.bounds.height : part.bounds.y + part.bounds.height / 2)),
+  };
 }
 
 function unionBounds(bounds: ContentBounds[]): ContentBounds {
@@ -160,7 +229,8 @@ export async function generateIdleSpriteSheet(
 ): Promise<IdleSpriteResult> {
   assertPixelBuffer(request.source);
   const parameters = resolveMotionParameters(request.preset, request.parameters);
-  const prepared = prepareMotionSource(request.source, parameters);
+  const action = request.action ?? 'idle';
+  const prepared = prepareMotionSource(request.source, parameters, request.sourcePlacement);
   const frameSize = parameters.outputSize;
   const sheet: PixelBuffer = {
     width: frameSize * parameters.frameCount,
@@ -171,11 +241,12 @@ export async function generateIdleSpriteSheet(
   const frameBounds: ContentBounds[] = [];
   const anchorX = 0.5;
   const anchorY = parameters.groundContact;
+  const pivot = resolvePivot(request, action, anchorX, anchorY);
 
   for (let frameIndex = 0; frameIndex < parameters.frameCount; frameIndex += 1) {
     throwIfAborted(control.signal);
-    const transform = motionTransformForFrame(parameters, frameIndex);
-    const frame = renderMotionFrame(prepared, transform, anchorX, anchorY, control.signal);
+    const transform = motionTransformForFrame(parameters, frameIndex, action, request.actionPreset);
+    const frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
     transforms.push(transform);
     const bounds = findContentBounds(frame) ?? { x: 0, y: 0, width: 0, height: 0 };
     frameBounds.push(bounds);
@@ -200,8 +271,11 @@ export async function generateIdleSpriteSheet(
     contentBounds,
     sourceImage: request.sourceImage,
     preset: request.preset,
+    motionAction: action,
+    actionPreset: request.actionPreset,
     motionParameters: parameters,
     partMasks,
+    partRegions: request.partRegions,
     generatedAt: request.generatedAt,
   });
   return { sheet, metadata, transforms, frameBounds, usedWorker };

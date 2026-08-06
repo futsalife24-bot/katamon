@@ -15,7 +15,7 @@ export const DEFAULT_MOTION: MotionParameters = {
   intensity: 1,
   flipHorizontal: false,
   canvasPadding: 18,
-  outputSize: 256,
+  outputSize: 512,
   lightweightPreview: false,
 };
 
@@ -78,7 +78,7 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
   return {
     schemaVersion: DRAFT_SCHEMA_VERSION,
     id,
-    title: '新しいキャラクター',
+    title: '新しいモーション',
     createdAt: now,
     updatedAt: now,
     lastStep: 'image',
@@ -98,7 +98,16 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
       tool: 'pan',
     },
     motionPreset: 'standard',
+    motionAction: 'idle',
+    actionPreset: 'idle-standard',
     motion: structuredClone(DEFAULT_MOTION),
+    partDetection: {
+      status: 'idle',
+      parts: [],
+      focusPartId: null,
+      anchorPartId: null,
+      analyzedAt: null,
+    },
     preview: {
       background: 'game',
       direction: 'right',

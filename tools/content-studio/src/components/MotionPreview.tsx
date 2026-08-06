@@ -32,10 +32,14 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
     const width = metadata?.frameWidth ?? fallback?.width ?? 256;
     const height = metadata?.frameHeight ?? fallback?.height ?? 256;
     if (!canvas) return;
-    canvas.width = width;
-    canvas.height = height;
+    const displayScale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    canvas.width = Math.round(width * displayScale);
+    canvas.height = Math.round(height * displayScale);
     const context = canvas.getContext('2d');
     if (!context) return;
+    context.setTransform(displayScale, 0, 0, displayScale, 0, 0);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
     let animation = 0;
     let lastFrame = -1;
     const frameCount = active?.metadata.frameCount ?? 1;

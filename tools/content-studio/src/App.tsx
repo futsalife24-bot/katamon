@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import type { ArtifactFile, CharacterForm, ImageEditorState, MotionParameters, MotionPreset, PreviewSettings, SkillParameters, SpecialTemplate } from './domain/types';
+import type { ReactNode } from 'react';
+import type {
+  ArtifactFile,
+  CharacterForm,
+  ImageEditorState,
+  MotionAction,
+  MotionActionPreset,
+  MotionParameters,
+  PreviewSettings,
+  SkillParameters,
+  SpecialTemplate,
+} from './domain/types';
 import { WORKFLOW_STEPS } from './domain/types';
-import { MOTION_PRESETS } from './motion';
+import { ACTION_LABELS, getActionPreset, listActionPresets } from './motion';
 import { ImageCanvas } from './components/ImageCanvas';
 import { MotionPreview } from './components/MotionPreview';
-import { REGISTERED_LEGACY_CHARACTER_COUNT, useStudioController, type StudioController } from './app/use-studio-controller';
+import { PartPreview } from './components/PartPreview';
+import { useStudioController, type StudioController } from './app/use-studio-controller';
 
 const SPECIAL_OPTIONS: Array<{ id: SpecialTemplate; label: string; help: string }> = [
   { id: 'single', label: '単発', help: '既存の通常弾に近い単発技です。' },
@@ -61,50 +72,64 @@ function RangeField({ label, value, min, max, step = 1, suffix = '', onChange }:
   );
 }
 
+function ParameterStepper({ label, value, min, max, step = 1, suffix = '', digits = 0, onChange }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  suffix?: string;
+  digits?: number;
+  onChange: (value: number) => void;
+}) {
+  const change = (direction: -1 | 1) => {
+    const next = Math.max(min, Math.min(max, Number((value + step * direction).toFixed(Math.max(digits, 4)))));
+    onChange(next);
+  };
+  return (
+    <div className="parameter-stepper">
+      <span>{label}</span>
+      <div>
+        <button type="button" aria-label={`${label}を減らす`} disabled={value <= min} onClick={() => change(-1)}>−</button>
+        <output>{value.toFixed(digits)}{suffix}</output>
+        <button type="button" aria-label={`${label}を増やす`} disabled={value >= max} onClick={() => change(1)}>＋</button>
+      </div>
+    </div>
+  );
+}
+
 function Status({ value, good }: { value: string; good?: boolean }) {
   return <span className={`status-pill ${good ? 'status-pill--good' : ''}`}>{value}</span>;
 }
 
 function Dashboard({ studio }: { studio: StudioController }) {
   const importRef = useRef<HTMLInputElement>(null);
-  const dirtyCount = studio.drafts.filter((draft) => draft.historyStatus === 'dirty').length + studio.outbox.length;
+  const detectedCount = studio.drafts.filter((draft) => draft.partDetection.status === 'ready').length;
   return (
     <main className="dashboard" data-testid="dashboard">
       <header className="hero">
         <div>
-          <p className="eyebrow">対象ゲーム 管理ツール</p>
+          <p className="eyebrow">対象ゲーム モーション制作</p>
           <h1>Content Studio</h1>
-          <p>Androidだけで、画像からPRまで。通常運用は生成AIを使いません。</p>
+          <p>Androidだけで、切り抜き・部位候補・動作・スプライト出力まで。</p>
         </div>
         <span className="version">v{studio.appVersion}</span>
       </header>
 
       <section className="summary-grid" aria-label="運用状況">
-        <article><strong>{REGISTERED_LEGACY_CHARACTER_COUNT + studio.publishedCharacters.length}</strong><span>登録済み</span></article>
         <article><strong>{studio.drafts.length}</strong><span>下書き</span></article>
-        <article><strong>{dirtyCount}</strong><span>未反映</span></article>
-        <article><strong>{studio.repositoryStatus.build}</strong><span>最新ビルド</span></article>
+        <article><strong>{detectedCount}</strong><span>部位検出済み</span></article>
+        <article><strong>512</strong><span>標準画質 px</span></article>
+        <article><strong>{studio.capabilities.online ? '端末内' : 'オフライン'}</strong><span>処理方式</span></article>
       </section>
 
       <button className="primary hero-action" type="button" onClick={() => void studio.createNewDraft()} data-testid="add-character">
-        <span aria-hidden="true">＋</span> キャラクターを追加
+        <span aria-hidden="true">＋</span> モーションを新規作成
       </button>
 
-      <section className="card connection-card">
-        <div className="section-heading">
-          <div><h2>接続状態</h2><p>{studio.repositoryStatus.message}</p></div>
-          <Status value={studio.repositoryStatus.mode === 'mock' ? 'モック' : studio.repositoryStatus.connected ? '接続済み' : '未接続'} good={studio.repositoryStatus.connected} />
-        </div>
-        <dl className="facts facts--compact">
-          <div><dt>ユーザー</dt><dd>{studio.repositoryStatus.user ?? '未ログイン'}</dd></div>
-          <div><dt>CI</dt><dd>{studio.repositoryStatus.build}</dd></div>
-          <div><dt>公開</dt><dd>{studio.repositoryStatus.deployment}</dd></div>
-          <div><dt>通信</dt><dd>{studio.capabilities.online ? 'オンライン' : 'オフライン'}</dd></div>
-        </dl>
-        <div className="button-row">
-          <button type="button" className="secondary" onClick={() => void studio.refreshRepositoryStatus()}>再確認</button>
-          {studio.installAvailable && <button type="button" className="secondary" onClick={() => void studio.installApp()}>アプリをインストール</button>}
-        </div>
+      <section className="card connection-card motion-only-note">
+        <div><h2>生成AI・外部送信なし</h2><p>通常の画像処理と固定プリセットだけで動きます。画像を外部サービスへ送りません。</p></div>
+        {studio.installAvailable && <button type="button" className="secondary full-width" onClick={() => void studio.installApp()}>Androidへアプリとしてインストール</button>}
       </section>
 
       <section className="section-block">
@@ -138,38 +163,6 @@ function Dashboard({ studio }: { studio: StudioController }) {
             ))}
           </div>
         )}
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading"><div><h2>Content Studio登録済み</h2><p>正規データから安全に更新用下書きを作成します。</p></div></div>
-        {studio.publishedWarning && <p className="warning-text">{studio.publishedWarning}</p>}
-        {studio.publishedCharacters.length === 0 ? <p className="muted">新方式で登録されたキャラクターはまだありません。</p> : (
-          <div className="draft-list">{studio.publishedCharacters.slice(0, 8).map((record) => (
-            <article className="history-row" key={record.character.id}>
-              <span><b>{record.character.displayName}</b><small>{record.character.slug}・v{record.character.implementationVersion}</small></span>
-              <button type="button" className="secondary compact-button" onClick={() => void studio.editPublishedCharacter(record.character.slug)}>更新</button>
-            </article>
-          ))}</div>
-        )}
-      </section>
-
-      {studio.outbox.length > 0 && (
-        <section className="section-block">
-          <h2>通信待ち</h2>
-          {studio.outbox.map((item) => (
-            <article className="card" key={item.id}>
-              <p>{item.bundle.character.displayName}・再試行 {item.attempts}回</p>
-              <button className="secondary" type="button" disabled={!studio.capabilities.online} onClick={() => void studio.retryOutbox(item.id)}>再送する</button>
-            </article>
-          ))}
-        </section>
-      )}
-
-      <section className="section-block">
-        <h2>最近の完了</h2>
-        {studio.history.length === 0 ? <p className="muted">完了履歴はまだありません。</p> : studio.history.slice(0, 4).map((item) => (
-          <article className="history-row" key={item.id}><span><b>{item.displayName}</b><small>{formatDate(item.completedAt)}</small></span><Status value={item.result.checks} good={item.result.checks === 'success'} /></article>
-        ))}
       </section>
 
       <section className="device-card">
@@ -263,7 +256,7 @@ function CutoutStep({ studio }: { studio: StudioController }) {
       </div>
       <RangeField label="ブラシサイズ" value={editor.brushSize} min={4} max={160} suffix="px" onChange={(value) => changeEditor('brushSize', value)} />
       <RangeField label="拡大表示" value={editor.zoom} min={1} max={3} step={0.1} suffix="倍" onChange={(value) => changeEditor('zoom', value)} />
-      <details className="controls-card" open>
+      <details className="controls-card">
         <summary>背景と配置の調整</summary>
         <RangeField label="背景許容値" value={editor.tolerance} min={4} max={100} onChange={(value) => changeEditor('tolerance', value)} />
         <RangeField label="輪郭補正" value={editor.edgeFeather} min={0} max={6} step={0.5} suffix="px" onChange={(value) => changeEditor('edgeFeather', value)} />
@@ -280,42 +273,132 @@ function CutoutStep({ studio }: { studio: StudioController }) {
   );
 }
 
+function PartsStep({ studio }: { studio: StudioController }) {
+  const draft = studio.draft!;
+  const detection = draft.partDetection;
+  const updateDetection = (changes: Partial<typeof detection>) => studio.updateDraft((current) => ({
+    ...current,
+    partDetection: { ...current.partDetection, ...changes },
+  }));
+  const setEnabled = (id: string, enabled: boolean) => {
+    const parts = detection.parts.map((part) => part.id === id ? { ...part, enabled } : part);
+    const firstEnabled = parts.find((part) => part.enabled)?.id ?? null;
+    updateDetection({
+      parts,
+      focusPartId: parts.some((part) => part.enabled && part.id === detection.focusPartId) ? detection.focusPartId : firstEnabled,
+      anchorPartId: parts.some((part) => part.enabled && part.id === detection.anchorPartId) ? detection.anchorPartId : firstEnabled,
+    });
+  };
+  return (
+    <section className="step-panel" data-testid="step-parts">
+      <div className="step-intro"><span>3</span><div><h2>部位候補を確認</h2><p>透明な輪郭を端末内で分割し、動作の中心と接地点を決めます。</p></div></div>
+      <p className="support-note">生成AIや外部通信は使いません。解剖学的な判定ではなく「上・中心・左右・接地」の候補なので、画像に合わせて選び直せます。</p>
+      <PartPreview
+        source={studio.processed?.normalized.pixels ?? null}
+        parts={detection.parts}
+        focusPartId={detection.focusPartId}
+        anchorPartId={detection.anchorPartId}
+      />
+      <button className="primary full-width" type="button" disabled={studio.busy || !studio.processed} onClick={() => void studio.detectParts()} data-testid="detect-parts">
+        {detection.parts.length ? '部位候補を再検出' : '部位候補を検出'}
+      </button>
+      {detection.parts.length > 0 && <>
+        <div className="part-candidate-list">
+          {detection.parts.map((part) => (
+            <label className={`part-candidate ${part.enabled ? 'is-enabled' : ''}`} key={part.id}>
+              <input type="checkbox" checked={part.enabled} onChange={(event) => setEnabled(part.id, event.target.checked)} />
+              <span><b>{part.label}</b><small>候補度 {Math.round(part.confidence * 100)}%・画像の{Math.round(part.pixelRatio * 100)}%</small></span>
+            </label>
+          ))}
+        </div>
+        <Field label="砲撃・被弾の動作中心" hint="武器や前面に近い候補を選びます">
+          <select data-testid="focus-part" value={detection.focusPartId ?? ''} onChange={(event) => updateDetection({ focusPartId: event.target.value || null })}>
+            {detection.parts.filter(({ enabled }) => enabled).map((part) => <option key={part.id} value={part.id}>{part.label}</option>)}
+          </select>
+        </Field>
+        <Field label="待機・移動の接地点" hint="車輪、足元、影に近い候補を選びます">
+          <select data-testid="anchor-part" value={detection.anchorPartId ?? ''} onChange={(event) => updateDetection({ anchorPartId: event.target.value || null })}>
+            {detection.parts.filter(({ enabled }) => enabled).map((part) => <option key={part.id} value={part.id}>{part.label}</option>)}
+          </select>
+        </Field>
+      </>}
+    </section>
+  );
+}
+
 function MotionStep({ studio }: { studio: StudioController }) {
   const draft = studio.draft!;
   const setMotion = <K extends keyof MotionParameters>(key: K, value: MotionParameters[K]) => studio.updateDraft((current) => ({ ...current, motion: { ...current.motion, [key]: value } }));
-  const setPreset = (preset: MotionPreset) => studio.updateDraft((current) => ({ ...current, motionPreset: preset, motion: structuredClone(MOTION_PRESETS[preset].parameters) }));
+  const selectPreset = (id: MotionActionPreset) => {
+    const preset = getActionPreset(id);
+    studio.updateDraft((current) => ({
+      ...current,
+      motionAction: preset.action,
+      actionPreset: preset.id,
+      motionPreset: preset.motionPreset,
+      motion: {
+        ...structuredClone(preset.parameters),
+        outputSize: current.motion.outputSize,
+        lightweightPreview: current.motion.lightweightPreview,
+        flipHorizontal: current.motion.flipHorizontal,
+      },
+    }));
+  };
+  const selectAction = (action: MotionAction) => {
+    const first = listActionPresets(action)[0];
+    if (first) selectPreset(first.id);
+  };
+  const activePreset = getActionPreset(draft.actionPreset);
+  const quality = draft.motion.outputSize >= 512 ? '高画質 512px' : '軽量 256px';
   return (
     <section className="step-panel" data-testid="step-motion">
-      <div className="step-intro"><span>3</span><div><h2>待機モーション</h2><p>元画像へ周期的な2D変形だけを加えます。顔や装備は生成しません。</p></div></div>
-      {!studio.sprite && <>
-        <p className="support-note" aria-live="polite">まだ待機モーションはありません。生成すると、その場で自動再生します。</p>
-        <button className="primary full-width" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">モーションを生成して再生</button>
-      </>}
-      <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} />
-      <button type="button" className="secondary full-width" disabled={!studio.sprite} onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>{studio.sprite ? (draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生') : '生成後に再生できます'}</button>
-      <Field label="プリセット">
-        <select value={draft.motionPreset} onChange={(event) => setPreset(event.target.value as MotionPreset)}>
-          {Object.values(MOTION_PRESETS).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
-      </Field>
-      <p className="field-help">{MOTION_PRESETS[draft.motionPreset].description}</p>
-      <div className="two-columns">
-        <Field label="フレーム数"><select value={draft.motion.frameCount} onChange={(event) => setMotion('frameCount', Number(event.target.value) as 8 | 12)}><option value="8">8</option><option value="12">12</option></select></Field>
-        <Field label="FPS"><input type="number" inputMode="decimal" min="1" max="30" value={draft.motion.fps} onChange={(event) => setMotion('fps', Number(event.target.value))} /></Field>
+      <div className="step-intro"><span>4</span><div><h2>動作を選ぶ</h2><p>先に動作、その次にプリセットを選びます。必要なときだけ微調整を開けます。</p></div></div>
+      <div className="action-card-grid" role="group" aria-label="動作の種類">
+        {(Object.keys(ACTION_LABELS) as MotionAction[]).map((action) => (
+          <button type="button" key={action} className={draft.motionAction === action ? 'active' : ''} onClick={() => selectAction(action)} data-testid={`motion-action-${action}`}>
+            <b>{ACTION_LABELS[action].label}</b><small>{ACTION_LABELS[action].description}</small>
+          </button>
+        ))}
       </div>
-      <RangeField label="上下移動" value={draft.motion.moveY} min={-20} max={20} step={0.5} suffix="px" onChange={(value) => setMotion('moveY', value)} />
-      <RangeField label="横移動" value={draft.motion.moveX} min={-20} max={20} step={0.5} suffix="px" onChange={(value) => setMotion('moveX', value)} />
-      <RangeField label="拡大縮小" value={draft.motion.scaleAmount} min={0} max={0.08} step={0.001} onChange={(value) => setMotion('scaleAmount', value)} />
-      <RangeField label="潰れ・伸び" value={draft.motion.squashAmount} min={0} max={0.1} step={0.001} onChange={(value) => setMotion('squashAmount', value)} />
-      <RangeField label="回転" value={draft.motion.rotationDegrees} min={-8} max={8} step={0.1} suffix="°" onChange={(value) => setMotion('rotationDegrees', value)} />
-      <RangeField label="待機中の間" value={draft.motion.idlePause} min={0} max={0.8} step={0.01} onChange={(value) => setMotion('idlePause', value)} />
-      <RangeField label="地面への接地点" value={draft.motion.groundContact} min={0.5} max={1} step={0.01} onChange={(value) => setMotion('groundContact', value)} />
-      <RangeField label="揺れの強さ" value={draft.motion.intensity} min={0} max={2} step={0.05} onChange={(value) => setMotion('intensity', value)} />
-      <RangeField label="キャンバス余白" value={draft.motion.canvasPadding} min={0} max={96} suffix="px" onChange={(value) => setMotion('canvasPadding', value)} />
-      <Toggle label="低性能端末向け軽量プレビュー" checked={draft.motion.lightweightPreview} onChange={(checked) => setMotion('lightweightPreview', checked)} />
-      <Toggle label="モーション側でも左右反転" checked={draft.motion.flipHorizontal} onChange={(checked) => setMotion('flipHorizontal', checked)} />
-      {studio.sprite && <button className="primary full-width" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">設定を反映して再生成</button>}
-      {studio.sprite && <dl className="facts facts--compact"><div><dt>シート</dt><dd>{studio.sprite.sheet.width} × {studio.sprite.sheet.height}px</dd></div><div><dt>容量</dt><dd>{formatBytes(studio.sprite.spriteSheetPng.byteLength)}</dd></div><div><dt>ループ</dt><dd>{studio.sprite.metadata.frameCount}枚 / {studio.sprite.metadata.fps}fps</dd></div><div><dt>基準点</dt><dd>{studio.sprite.metadata.anchorX.toFixed(2)}, {studio.sprite.metadata.anchorY.toFixed(2)}</dd></div></dl>}
+      <h3 className="subheading">プリセット</h3>
+      <div className="preset-card-list">
+        {listActionPresets(draft.motionAction).map((preset) => (
+          <button type="button" key={preset.id} className={draft.actionPreset === preset.id ? 'active' : ''} onClick={() => selectPreset(preset.id)} data-testid={`action-preset-${preset.id}`}>
+            <span><b>{preset.label}</b><small>{preset.description}</small></span><span aria-hidden="true">{draft.actionPreset === preset.id ? '✓' : '›'}</span>
+          </button>
+        ))}
+      </div>
+      <div className="quality-selector">
+        <div><b>生成画質</b><small>普段は高画質がおすすめです</small></div>
+        <div className="segmented">
+          <button type="button" className={draft.motion.outputSize === 512 ? 'active' : ''} onClick={() => setMotion('outputSize', 512)}>高画質</button>
+          <button type="button" className={draft.motion.outputSize === 256 ? 'active' : ''} onClick={() => setMotion('outputSize', 256)}>軽量</button>
+        </div>
+      </div>
+      <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} label={`${ACTION_LABELS[draft.motionAction].label}モーションプレビュー`} />
+      <button type="button" className="secondary full-width" disabled={!studio.sprite} onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>
+        {studio.sprite ? (draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生') : '生成後に再生できます'}
+      </button>
+      <p className="support-note">{activePreset.description} 画像の顔・装備・色は生成せず、決定的な2D変形だけを使います。</p>
+      <details className="controls-card fine-tune-card">
+        <summary>微調整（必要なときだけ）</summary>
+        <p className="field-help">スライダーは使わず、大きい− / ＋ボタンで誤操作を防ぎます。</p>
+        <div className="segmented"><button type="button" className={draft.motion.frameCount === 8 ? 'active' : ''} onClick={() => setMotion('frameCount', 8)}>8フレーム</button><button type="button" className={draft.motion.frameCount === 12 ? 'active' : ''} onClick={() => setMotion('frameCount', 12)}>12フレーム</button></div>
+        <ParameterStepper label="FPS" value={draft.motion.fps} min={4} max={30} step={1} onChange={(value) => setMotion('fps', value)} />
+        <ParameterStepper label="上下移動" value={draft.motion.moveY} min={-32} max={32} step={1} suffix="px" onChange={(value) => setMotion('moveY', value)} />
+        <ParameterStepper label="横移動" value={draft.motion.moveX} min={-32} max={32} step={1} suffix="px" onChange={(value) => setMotion('moveX', value)} />
+        <ParameterStepper label="拡大縮小" value={draft.motion.scaleAmount} min={0} max={0.08} step={0.002} digits={3} onChange={(value) => setMotion('scaleAmount', value)} />
+        <ParameterStepper label="潰れ・伸び" value={draft.motion.squashAmount} min={0} max={0.1} step={0.002} digits={3} onChange={(value) => setMotion('squashAmount', value)} />
+        <ParameterStepper label="回転" value={draft.motion.rotationDegrees} min={-10} max={10} step={0.25} digits={2} suffix="°" onChange={(value) => setMotion('rotationDegrees', value)} />
+        <ParameterStepper label="揺れの強さ" value={draft.motion.intensity} min={0} max={2} step={0.1} digits={1} onChange={(value) => setMotion('intensity', value)} />
+        <ParameterStepper label="キャンバス余白" value={draft.motion.canvasPadding} min={0} max={96} step={4} suffix="px" onChange={(value) => setMotion('canvasPadding', value)} />
+        <Toggle label="モーション側でも左右反転" checked={draft.motion.flipHorizontal} onChange={(checked) => setMotion('flipHorizontal', checked)} />
+      </details>
+      <button className="primary full-width generate-motion-button" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">
+        {studio.sprite ? '設定を反映して再生成' : `${ACTION_LABELS[draft.motionAction].label}モーションを生成`}
+      </button>
+      {studio.sprite && <dl className="facts facts--compact"><div><dt>画質</dt><dd>{studio.sprite.metadata.frameWidth >= 512 ? '高画質 512px' : '軽量 256px'}</dd></div><div><dt>容量</dt><dd>{formatBytes(studio.sprite.spriteSheetPng.byteLength)}</dd></div><div><dt>再生</dt><dd>{studio.sprite.metadata.frameCount}枚 / {studio.sprite.metadata.fps}fps</dd></div><div><dt>処理</dt><dd>{studio.sprite.usedWorker ? 'Worker' : '軽量代替'}</dd></div></dl>}
+      {!studio.sprite && <p className="field-help">現在の設定: {quality}</p>}
     </section>
   );
 }
@@ -403,22 +486,42 @@ function SkillsStep({ studio }: { studio: StudioController }) {
 function PreviewStep({ studio }: { studio: StudioController }) {
   const draft = studio.draft!;
   const setPreview = <K extends keyof PreviewSettings>(key: K, value: PreviewSettings[K]) => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, [key]: value } }));
-  const c = draft.character;
   return (
     <section className="step-panel" data-testid="step-preview">
-      <div className="step-intro"><span>6</span><div><h2>ゲーム相当プレビュー</h2><p>一覧サイズ、向き、背景、基準点と当たり判定候補を確認します。</p></div></div>
-      <article className="game-preview-card" style={{ '--character-color': c.color } as CSSProperties}>
-        <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} metadata={studio.sprite?.metadata} label="ゲーム内プレビュー" />
-        <div className="game-preview-card__copy"><span>{c.classification || 'キャラクター'}</span><h3>{c.displayName || '名称未入力'}</h3><p>{c.description || 'キャラクター説明がここに表示されます。'}</p></div>
-        <div className="stats-strip"><span>HP <b>{c.maxHp}</b></span><span>攻 <b>{c.attack}</b></span><span>防 <b>{c.defense}</b></span><span>速 <b>{c.speed}</b></span></div>
-        <div className="skill-preview"><b>{c.specialName || '必殺技未入力'}</b><span>{c.specialDescription || '技の説明'}</span></div>
-      </article>
+      <div className="step-intro"><span>5</span><div><h2>モーションを確認</h2><p>向き・背景・サイズを切り替え、輪郭と動きの滑らかさを確認します。</p></div></div>
+      {!studio.sprite && <p className="warning-card">まだモーションがありません。前の画面で生成してください。</p>}
+      <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} metadata={studio.sprite?.metadata} label="モーション最終プレビュー" />
+      <button type="button" className="secondary full-width" disabled={!studio.sprite} onClick={() => setPreview('playing', !draft.preview.playing)}>{draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生'}</button>
       <div className="segmented segmented--three"><button type="button" className={draft.preview.background === 'light' ? 'active' : ''} onClick={() => setPreview('background', 'light')}>明るい</button><button type="button" className={draft.preview.background === 'dark' ? 'active' : ''} onClick={() => setPreview('background', 'dark')}>暗い</button><button type="button" className={draft.preview.background === 'game' ? 'active' : ''} onClick={() => setPreview('background', 'game')}>ゲーム風</button></div>
-      <div className="two-columns"><Field label="向き"><select value={draft.preview.direction} onChange={(event) => setPreview('direction', event.target.value as PreviewSettings['direction'])}><option value="left">左向き</option><option value="right">右向き</option></select></Field><Field label="表示サイズ"><select value={draft.preview.size} onChange={(event) => setPreview('size', event.target.value as PreviewSettings['size'])}><option value="small">一覧・小</option><option value="normal">通常</option></select></Field></div>
+      <div className="two-columns"><Field label="向き"><select value={draft.preview.direction} onChange={(event) => setPreview('direction', event.target.value as PreviewSettings['direction'])}><option value="left">左向き</option><option value="right">右向き</option></select></Field><Field label="表示サイズ"><select value={draft.preview.size} onChange={(event) => setPreview('size', event.target.value as PreviewSettings['size'])}><option value="small">小</option><option value="normal">通常</option></select></Field></div>
       <Toggle label="基準点を表示" checked={draft.preview.showAnchor} onChange={(checked) => setPreview('showAnchor', checked)} />
       <Toggle label="当たり判定候補を表示" checked={draft.preview.showCollision} onChange={(checked) => setPreview('showCollision', checked)} />
-      <Toggle label="待機モーションを再生" checked={draft.preview.playing} onChange={(checked) => setPreview('playing', checked)} />
-      <dl className="facts facts--compact"><div><dt>正規化画像</dt><dd>{formatBytes(studio.processed?.variants?.normalizedPng.byteLength)}</dd></div><div><dt>軽量WebP</dt><dd>{formatBytes(studio.processed?.variants?.lightweightWebp.byteLength)}</dd></div><div><dt>スプライト</dt><dd>{formatBytes(studio.sprite?.spriteSheetPng.byteLength)}</dd></div><div><dt>推定負荷</dt><dd>{draft.motion.outputSize <= 256 && draft.motion.frameCount === 8 ? '軽量' : '標準'}</dd></div></dl>
+      <dl className="facts facts--compact"><div><dt>動作</dt><dd>{ACTION_LABELS[draft.motionAction].label}</dd></div><div><dt>プリセット</dt><dd>{getActionPreset(draft.actionPreset).label}</dd></div><div><dt>スプライト</dt><dd>{formatBytes(studio.sprite?.spriteSheetPng.byteLength)}</dd></div><div><dt>画質</dt><dd>{studio.sprite?.metadata.frameWidth === 512 ? '高画質' : '軽量'}</dd></div></dl>
+    </section>
+  );
+}
+
+function ExportStep({ studio }: { studio: StudioController }) {
+  const draft = studio.draft!;
+  const sprite = studio.sprite;
+  return (
+    <section className="step-panel" data-testid="step-export">
+      <div className="step-intro"><span>6</span><div><h2>モーションを書き出す</h2><p>スプライトシート、メタデータ、部位候補をまとめて保存します。</p></div></div>
+      <article className="export-summary card">
+        <div className="section-heading"><div><h3>{getActionPreset(draft.actionPreset).label}</h3><p>{ACTION_LABELS[draft.motionAction].label}・{draft.motion.frameCount}フレーム</p></div><Status value={sprite ? '生成済み' : '未生成'} good={Boolean(sprite)} /></div>
+        <dl className="facts facts--compact"><div><dt>フレーム</dt><dd>{sprite ? `${sprite.metadata.frameWidth} × ${sprite.metadata.frameHeight}px` : '—'}</dd></div><div><dt>容量</dt><dd>{formatBytes(sprite?.spriteSheetPng.byteLength)}</dd></div><div><dt>部位候補</dt><dd>{draft.partDetection.parts.filter(({ enabled }) => enabled).length}個</dd></div><div><dt>処理</dt><dd>{sprite?.usedWorker ? '端末Worker' : sprite ? '軽量代替' : '—'}</dd></div></dl>
+      </article>
+      <button type="button" className="primary full-width export-primary" disabled={!sprite || studio.busy} onClick={() => void studio.downloadMotionZip()} data-testid="download-motion-zip">モーション一式をZIP保存</button>
+      <div className="button-grid">
+        <button type="button" className="secondary" disabled={!sprite} onClick={() => void studio.downloadSpriteSheet()}>PNGだけ保存</button>
+        <button type="button" className="secondary" disabled={!sprite} onClick={() => void studio.downloadMotionMetadata()}>JSONだけ保存</button>
+      </div>
+      <details className="controls-card">
+        <summary>ZIPに入るファイル</summary>
+        <ul className="package-file-list"><li>motion/sprite-sheet.png</li><li>motion/sprite-metadata.json</li><li>motion/motion-profile.json</li></ul>
+      </details>
+      <p className="support-note">技・能力・GitHub反映はこの日常フローから外しました。ここで作ったモーション素材を、後からゲーム側の設定へ紐づけます。</p>
+      <button type="button" className="secondary full-width" onClick={() => void studio.backToDashboard()}>下書きを保存して終了</button>
     </section>
   );
 }
@@ -492,13 +595,13 @@ function CompleteStep({ studio }: { studio: StudioController }) {
 }
 
 function Workflow({ studio }: { studio: StudioController }) {
-  const title = studio.draft?.character.displayName || studio.draft?.title || 'キャラクター追加';
+  const title = studio.draft?.title || 'モーション制作';
   return (
     <div className="workflow">
       <header className="workflow-header">
         <button type="button" className="icon-button" aria-label="ダッシュボードへ戻る" onClick={() => void studio.backToDashboard()}>‹</button>
         <div><b>{title}</b><span>{studio.saveState === 'pending' ? '保存中…' : studio.saveState === 'error' ? '保存エラー' : `自動保存済み ${formatDate(studio.savedAt)}`}</span></div>
-        <span className="step-count">{studio.stepIndex + 1}/9</span>
+        <span className="step-count">{studio.stepIndex + 1}/{WORKFLOW_STEPS.length}</span>
       </header>
       <nav className="step-grid" aria-label="作業ステップ">
         {WORKFLOW_STEPS.map((item, index) => <button type="button" key={item.id} data-testid={`step-nav-${item.id}`} className={`${studio.step === item.id ? 'active' : ''} ${index < studio.stepIndex ? 'done' : ''}`} onClick={() => studio.goToStep(item.id)}><span>{index + 1}</span><small>{item.label}</small></button>)}
@@ -506,15 +609,12 @@ function Workflow({ studio }: { studio: StudioController }) {
       <main className="workflow-main">
         {studio.step === 'image' && <ImageStep studio={studio} />}
         {studio.step === 'cutout' && <CutoutStep studio={studio} />}
+        {studio.step === 'parts' && <PartsStep studio={studio} />}
         {studio.step === 'motion' && <MotionStep studio={studio} />}
-        {studio.step === 'details' && <DetailsStep studio={studio} />}
-        {studio.step === 'skills' && <SkillsStep studio={studio} />}
         {studio.step === 'preview' && <PreviewStep studio={studio} />}
-        {studio.step === 'validate' && <ValidateStep studio={studio} />}
-        {studio.step === 'publish' && <PublishStep studio={studio} />}
-        {studio.step === 'complete' && <CompleteStep studio={studio} />}
+        {studio.step === 'export' && <ExportStep studio={studio} />}
       </main>
-      {studio.step !== 'complete' && studio.step !== 'publish' && <nav className="bottom-actions" aria-label="ステップ移動"><button type="button" className="secondary" onClick={studio.previousStep}>戻る</button><button type="button" className="primary" onClick={studio.nextStep}>次へ</button></nav>}
+      <nav className="bottom-actions" aria-label="ステップ移動"><button type="button" className="secondary" onClick={studio.previousStep}>戻る</button>{studio.step === 'export' ? <button type="button" className="primary" disabled={!studio.sprite} onClick={() => void studio.downloadMotionZip()}>ZIP保存</button> : <button type="button" className="primary" onClick={studio.nextStep}>次へ</button>}</nav>
     </div>
   );
 }

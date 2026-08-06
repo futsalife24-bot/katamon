@@ -1,4 +1,11 @@
-import type { MotionParameters, MotionPreset, SpriteMetadata } from '../domain/types';
+import type {
+  DetectedMotionPart,
+  MotionAction,
+  MotionActionPreset,
+  MotionParameters,
+  MotionPreset,
+  SpriteMetadata,
+} from '../domain/types';
 import type { EncodedImage, PixelBuffer } from '../image/types';
 
 export interface MotionFrameTransform {
@@ -38,6 +45,19 @@ export interface MotionGenerationRequest {
   sourceImage: string;
   preset: MotionPreset;
   parameters?: Partial<MotionParameters>;
+  sourcePlacement?: {
+    padding: number;
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+    flipHorizontal: boolean;
+    referenceSize: number;
+  };
+  action?: MotionAction;
+  actionPreset?: MotionActionPreset;
+  partRegions?: DetectedMotionPart[];
+  focusPartId?: string | null;
+  anchorPartId?: string | null;
   partMasks?: PartMaskDefinition[];
   generatedAt?: string;
 }

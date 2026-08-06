@@ -1,5 +1,14 @@
 import { spriteMetadataSchema } from '../domain/schemas';
-import { GENERATOR_VERSION, type ContentBounds, type MotionParameters, type MotionPreset, type SpriteMetadata } from '../domain/types';
+import {
+  GENERATOR_VERSION,
+  type ContentBounds,
+  type DetectedMotionPart,
+  type MotionAction,
+  type MotionActionPreset,
+  type MotionParameters,
+  type MotionPreset,
+  type SpriteMetadata,
+} from '../domain/types';
 
 export interface BuildSpriteMetadataInput {
   frameWidth: number;
@@ -12,8 +21,11 @@ export interface BuildSpriteMetadataInput {
   collisionBounds?: ContentBounds;
   sourceImage: string;
   preset: MotionPreset;
+  motionAction?: MotionAction;
+  actionPreset?: MotionActionPreset;
   motionParameters: MotionParameters;
   partMasks?: Array<{ id: string; label: string; blobKey?: string }>;
+  partRegions?: DetectedMotionPart[];
   generatedAt?: string;
   generatorVersion?: string;
 }
@@ -60,8 +72,11 @@ export function buildSpriteMetadata(input: BuildSpriteMetadataInput): SpriteMeta
     collisionBounds: { ...collisionBounds },
     sourceImage: input.sourceImage,
     preset: input.preset,
+    ...(input.motionAction ? { motionAction: input.motionAction } : {}),
+    ...(input.actionPreset ? { actionPreset: input.actionPreset } : {}),
     motionParameters: { ...input.motionParameters },
     partMasks: (input.partMasks ?? []).map((mask) => ({ ...mask })),
+    ...(input.partRegions ? { partRegions: input.partRegions.map((part) => structuredClone(part)) } : {}),
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     generatorVersion: input.generatorVersion ?? GENERATOR_VERSION,
   };

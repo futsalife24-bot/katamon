@@ -1,10 +1,16 @@
-import type { MotionParameters, MotionPreset } from '../domain/types';
+import type {
+  DetectedMotionPart,
+  MotionAction,
+  MotionActionPreset,
+  MotionParameters,
+  MotionPreset,
+} from '../domain/types';
 import { encodePixelBuffer } from '../image/canvas-codec';
 import { ContentImageProcessor } from '../image/pipeline';
 import type { ImageProgress, ProcessControl } from '../image/types';
 import { ContentMotionProcessor } from './processor';
 import { resolveMotionParameters } from './presets';
-import type { EncodedIdleSpriteResult, MotionProgress } from './types';
+import type { EncodedIdleSpriteResult, MotionGenerationRequest, MotionProgress } from './types';
 
 export interface IdleMotionBlobRequest {
   blob: Blob;
@@ -12,6 +18,12 @@ export interface IdleMotionBlobRequest {
   sourceImage: string;
   preset: MotionPreset;
   parameters?: Partial<MotionParameters>;
+  sourcePlacement?: MotionGenerationRequest['sourcePlacement'];
+  action?: MotionAction;
+  actionPreset?: MotionActionPreset;
+  partRegions?: DetectedMotionPart[];
+  focusPartId?: string | null;
+  anchorPartId?: string | null;
   removeBackground?: boolean;
   backgroundTolerance?: number;
   edgeFeather?: number;
@@ -54,10 +66,18 @@ export async function generateIdleMotionFromBlob(
   );
   const generated = await new ContentMotionProcessor().generate(
     {
-      source: prepared.normalized.pixels,
+      // Use the safety-limited edited source. The generator normalizes it once;
+      // feeding the already-normalized variant here caused visible repeated blur.
+      source: prepared.edited,
       sourceImage: request.sourceImage,
       preset: request.preset,
       parameters,
+      sourcePlacement: request.sourcePlacement,
+      action: request.action,
+      actionPreset: request.actionPreset,
+      partRegions: request.partRegions,
+      focusPartId: request.focusPartId,
+      anchorPartId: request.anchorPartId,
       generatedAt: request.generatedAt,
     },
     { signal: control.signal, onProgress: control.onMotionProgress },

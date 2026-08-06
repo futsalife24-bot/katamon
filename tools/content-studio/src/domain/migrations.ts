@@ -21,7 +21,7 @@ function mergeRecord<T extends object>(defaults: T, value: unknown): T {
 }
 
 /**
- * Reads unversioned/v1 drafts and produces the current v2 envelope. Unknown
+ * Reads legacy drafts and produces the current envelope. Unknown
  * fields are intentionally discarded so stale data cannot cross trust bounds.
  */
 export function migrateDraft(input: unknown): DraftRecord {
@@ -30,7 +30,7 @@ export function migrateDraft(input: unknown): DraftRecord {
   }
 
   const version = input.schemaVersion === undefined ? 0 : input.schemaVersion;
-  if (version !== 0 && version !== 1 && version !== DRAFT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== DRAFT_SCHEMA_VERSION) {
     throw new DraftMigrationError('未対応の下書きバージョンです');
   }
 
@@ -44,6 +44,14 @@ export function migrateDraft(input: unknown): DraftRecord {
   const base = createDraft(legacyId);
   const legacyCharacter = input.character ?? input.form;
   const legacyStep = input.lastStep ?? input.step;
+  const activeStep = legacyStep === 'image' || legacyStep === 'cutout' || legacyStep === 'parts' ||
+      legacyStep === 'motion' || legacyStep === 'preview' || legacyStep === 'export'
+    ? legacyStep
+    : legacyStep === 'details' || legacyStep === 'skills'
+      ? 'motion'
+      : legacyStep === 'validate' || legacyStep === 'publish' || legacyStep === 'complete'
+        ? 'export'
+        : base.lastStep;
 
   const candidate: DraftRecord = {
     ...base,
@@ -51,12 +59,17 @@ export function migrateDraft(input: unknown): DraftRecord {
     title: typeof input.title === 'string' ? input.title : base.title,
     createdAt: typeof input.createdAt === 'string' ? input.createdAt : base.createdAt,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : base.updatedAt,
-    lastStep: typeof legacyStep === 'string' ? legacyStep as DraftRecord['lastStep'] : base.lastStep,
+    lastStep: activeStep as DraftRecord['lastStep'],
     character: mergeRecord(DEFAULT_CHARACTER, legacyCharacter),
     imageInfo: isRecord(input.imageInfo) ? input.imageInfo as unknown as DraftRecord['imageInfo'] : null,
     editor: mergeRecord(base.editor, input.editor),
     motionPreset: typeof input.motionPreset === 'string' ? input.motionPreset as DraftRecord['motionPreset'] : base.motionPreset,
+    motionAction: typeof input.motionAction === 'string' ? input.motionAction as DraftRecord['motionAction'] : base.motionAction,
+    actionPreset: typeof input.actionPreset === 'string' ? input.actionPreset as DraftRecord['actionPreset'] : base.actionPreset,
     motion: mergeRecord(DEFAULT_MOTION, input.motion),
+    partDetection: isRecord(input.partDetection)
+      ? mergeRecord(base.partDetection, input.partDetection)
+      : base.partDetection,
     preview: mergeRecord(base.preview, input.preview),
     validation: Array.isArray(input.validation) ? input.validation as DraftRecord['validation'] : [],
     processingOperations: Array.isArray(input.processingOperations)
