@@ -31,6 +31,49 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+// v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。
+// 必殺技と跳躍は通常弾ではないため、従来のキャラ固有値を残す。
+{
+  const normalProfiles = kt.chars().map(key => ({ key, ...kt.shotPhysicsProfileForTest(key, false, false) }));
+  const commonNormal = normalProfiles.every(p =>
+    p.blastMul === 1 && p.windMul === 1 && p.gravityMul === 1
+      && p.velScaleMul === 1 && p.guideMul === 1 && p.tBias === 1);
+  check('全16キャラの通常弾は弾速・風・重力・爆風・狙い線・CPU弾道が共通',
+    commonNormal, JSON.stringify(normalProfiles));
+
+  const normalVelocities = kt.chars().map(key => ({ key, ...kt.launchVelocityForTest(key, 80, -60, false, false) }));
+  check('同じ引っぱりなら全16キャラの通常弾の初速が一致する',
+    normalVelocities.every(v => v.vx0 === normalVelocities[0].vx0 && v.vy0 === normalVelocities[0].vy0),
+    JSON.stringify(normalVelocities));
+
+  const firedProfiles = [];
+  for (const key of kt.chars()) {
+    kt.setCharactersForTest(key, key);
+    kt.clearProjectilesForTest();
+    kt.fireForTest(100, -200);
+    firedProfiles.push({ key, ...kt.projectileProfilesForTest()[0] });
+  }
+  kt.clearProjectilesForTest();
+  kt.setCharactersForTest('kyoryu', 'kyoryu');
+  check('実際に生成される通常弾も爆風・風・重力が共通',
+    firedProfiles.every(p => p.blastMul === 1 && p.windMul === 1 && p.gravityMul === 1),
+    JSON.stringify(firedProfiles));
+
+  const characterProfilesStay = kt.chars().every(key => {
+    const def = kt.character(key);
+    const special = kt.shotPhysicsProfileForTest(key, true, false);
+    const jump = kt.shotPhysicsProfileForTest(key, false, true);
+    return special.blastMul === (def.blastMul || 1)
+      && special.windMul === (def.windMul || 1)
+      && special.gravityMul === (def.gravityMul || 1)
+      && special.velScaleMul === (def.velScaleMul || 1)
+      && special.guideMul === (def.guideMul || 1)
+      && special.tBias === (def.tBias || 1)
+      && JSON.stringify(jump) === JSON.stringify(special);
+  });
+  check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
+}
+
 // v134: キャラ選択の紹介文・型・性能目盛りはゲーム内容と合っていないため出さない。
 // 一旦はキャラ名と必殺技名だけで選べる画面にする。
 {
@@ -190,7 +233,7 @@ const shinigami = kt.character('shinigami');
   // そこへ入れるのは「キャラだけで決まる値」に限る。名前や戦績のような
   // 端末ごとに変わる値を入れると、同じ試合なのに画面が食い違う。
   {
-    const infoFn = /function drawVsPlateInfo\(([\s\S]*?)\n  \}\n/.exec(html);
+    const infoFn = /function drawVsPlateInfo\(([\s\S]*?)\r?\n  \}\r?\n/.exec(html);
     const body = infoFn ? infoFn[1] : '';
     check('空きに出す情報は端末ごとに変わる値を使わない',
       !!body && !/\bonline\b|winStreak|localPlayerName|firebaseSeatName|Date\./.test(body), body.slice(0, 200));
@@ -454,11 +497,11 @@ check('地形の底はDEAD LINEと一致する', kt.terrainBottomY() === deadLin
   `bottom=${kt.terrainBottomY()} deadLine=${deadLine}`);
 
 const band = kt.groundBand();
-// 通常弾の最大クレーター半径は 44 * 1.35 = 59.4px。最も低い地形でも、これより
+// 共通化した通常弾のクレーター半径は44px。最も低い地形でも、これより
 // 床が厚くなければ1発で穴が空いて事故死になる。定数を動かした時にここで気づける。
-check('最も低い地形でも通常弾の最大クレーターより床が厚い',
-  deadLine - band.max > 44 * 1.35,
-  `厚み=${deadLine - band.max} 必要=${44 * 1.35}`);
+check('最も低い地形でも共通の通常弾クレーターより床が厚い',
+  deadLine - band.max > 44,
+  `厚み=${deadLine - band.max} 必要=44`);
 check('高低差の幅を確保している', band.max - band.min >= 200, `幅=${band.max - band.min}`);
 
 for (const pattern of ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']) {
@@ -472,7 +515,7 @@ for (const pattern of ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley'
   check(`${pattern}: 地形がDEAD LINEより下へはみ出さない`, lowest <= deadLine, `最下端=${lowest}`);
 }
 
-// 最も低い「底まである地面」に、通常弾の最大クレーターを直接開けても床が残ること。
+// 最も低い「底まである地面」に、共通の通常弾クレーターを直接開けても床が残ること。
 // 弾を撃って確かめると着弾点が風と乱数で動き、薄床ゾーン(意図的に貫通する弱点)へ
 // 当たった時に結果がぶれる。ここは地形と掘削だけを見たいので直接掘る。
 kt.setTerrain('valley');
@@ -487,7 +530,7 @@ for (let c = 0; c < valleySegs.length; c++) {
   if (ground[0] > deepestTop) { deepestTop = ground[0]; deepestX = (c + 0.5) * colW; }
 }
 check('底まである通常の地面が生成されている', deepestX !== null, `最深地表=${deepestTop}`);
-const maxNormalBlast = 44 * 1.35; // 通常弾の最大クレーター半径
+const maxNormalBlast = 44; // 共通化した通常弾のクレーター半径
 kt.carveForTest(deepestX, deepestTop, maxNormalBlast);
 check('最も低い地形でも通常弾1発では床が抜けない',
   kt.isSolidAt(deepestX, deadLine - 6),
@@ -1218,9 +1261,9 @@ kt.setLocalSeat('p1');
   // 1発では削りきれず何度撃っても終わらなかった(実機で指摘)。
   {
     const ledge = kt.tutorialLedge();
-    // 通常弾の最大クレーターは半径59.4px。板はそれで丸ごと消える大きさに収める。
+    // 共通化した通常弾のクレーターは半径44px。板はそれで丸ごと消える大きさに収める。
     check('足場は通常弾1発ぶんのクレーターに収まる大きさ',
-      ledge.halfW * 2 <= 59.4 * 2 && ledge.thickness <= 59.4,
+      ledge.halfW * 2 <= 44 * 2 && ledge.thickness <= 44,
       `幅=${ledge.halfW * 2} 厚み=${ledge.thickness}`);
     let fell = 0;
     for (let run = 0; run < 4; run++) {
