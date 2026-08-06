@@ -422,7 +422,10 @@ const HOOK = `
     turnBarTop: () => 94 + hudShift(),
     cpuPickTarget: (id) => { const t = cpuPickTarget(unitById(id)); return t ? t.id : null; },
     cpuFriendlyFireRadius: () => CPU_FRIENDLY_FIRE_RADIUS,
-    emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, unitById(ownerId), turns || 1),
+    emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, ownerId, turns || 1),
+    specialFlashForTest: () => specialFlash && specialFlash.timer > 0 ? { ...specialFlash } : null,
+    clearSpecialFlashForTest: () => { specialFlash = { timer: 0, key: null, text: '', color: '', sub: '' }; },
+    moveLockVisualForTest: (id) => typeof moveLockStatus === 'function' ? moveLockStatus(unitById(id)) : null,
     // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
     explodeAtForTest: (x, y, blastMul, ownerId) => explodeAt(x, y, blastMul || 1, ownerId),

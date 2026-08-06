@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v135';
+  const BUILD_ID = 'v136';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -8396,6 +8396,8 @@
   function emitEmp(x, y, radius, owner, turns) {
     spawnEmpPulse(x, y, radius);
     triggerShake(2.5, 0.16);
+    const ownerTeam = teamOfOwner(owner);
+    let opponentHit = false;
     // 通常の爆発(explodeAt)は昔から撃った本人も味方も巻き込む。電磁波だけが
     // 敵専用だったため、2vs2で「味方に当たる/当たらない」が技ごとに変わってしまう。
     // 判定の例外をなくし、当たった者は陣営に関係なく食らう形へ統一する。
@@ -8407,10 +8409,12 @@
       const damage = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
       u.hp = Math.max(0, u.hp - damage);
       u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
+      if (ownerTeam !== null && u.team !== ownerTeam) opponentHit = true;
       spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, damage);
       creditDamage(owner, u, damage);
     }
-    triggerSpecialFlash(`電磁波: 移動封印 ${turns}手`);
+    // 発射時の必殺カットインとは別の「命中結果」。空振りや味方だけの誤爆では出さない。
+    if (opponentHit) triggerSpecialFlash(`電磁波命中: 移動不可 ${turns}手`);
     playExplosionSound(0.8);
     checkMatchEnd();
   }
@@ -9238,6 +9242,83 @@
     ctx.restore();
   }
 
+  function moveLockStatus(u) {
+    if (unitDefeated(u) || !(u.moveLockTurns > 0)) return null;
+    return { label: '移動不可', turns: u.moveLockTurns, effect: 'electric' };
+  }
+
+  function drawMoveLockEffect(u, a, imgTopAbs, barY, h) {
+    const status = moveLockStatus(u);
+    if (!status) return;
+
+    const phase = (Date.now() % 1200) / 1200;
+    const pulse = 0.72 + Math.sin(phase * Math.PI * 2) * 0.18;
+    const bodyY = a.y + UNIT_RADIUS - h * 0.45;
+    const ringR = Math.max(27, Math.min(44, h * 0.43));
+
+    // キャラの周囲を回る電磁リング。状態が続く間は常に表示する。
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#6be9ff';
+    ctx.shadowColor = '#6be9ff';
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([7, 6]);
+    ctx.lineDashOffset = -phase * 28;
+    ctx.beginPath();
+    ctx.arc(a.x, bodyY, ringR, 0.18 * Math.PI, 0.92 * Math.PI);
+    ctx.arc(a.x, bodyY, ringR, 1.18 * Math.PI, 1.92 * Math.PI);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 小さな稲妻を3か所に置き、アイコンだけでなく封印中のキャラ自体も光らせる。
+    ctx.fillStyle = '#c69cff';
+    ctx.shadowColor = '#a878ff';
+    for (let i = 0; i < 3; i++) {
+      const ang = phase * Math.PI * 2 + i * Math.PI * 2 / 3;
+      const bx = a.x + Math.cos(ang) * ringR;
+      const by = bodyY + Math.sin(ang) * ringR;
+      ctx.beginPath();
+      ctx.moveTo(bx - 3, by - 7);
+      ctx.lineTo(bx + 2, by - 2);
+      ctx.lineTo(bx - 1, by - 2);
+      ctx.lineTo(bx + 3, by + 7);
+      ctx.lineTo(bx - 3, by + 1);
+      ctx.lineTo(bx, by + 1);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // HP表示より上へ固定の状態札を出す。残り手数もここで読める。
+    const badgeW = 78, badgeH = 18;
+    const badgeX = a.x - badgeW / 2;
+    const badgeY = Math.min(barY - 27, imgTopAbs - 25);
+    ctx.save();
+    selectRoundedRect(badgeX, badgeY, badgeW, badgeH, 8);
+    ctx.fillStyle = 'rgba(20,28,48,0.94)';
+    ctx.fill();
+    ctx.strokeStyle = '#6be9ff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#c69cff';
+    ctx.beginPath();
+    ctx.moveTo(badgeX + 10, badgeY + 3);
+    ctx.lineTo(badgeX + 15, badgeY + 8);
+    ctx.lineTo(badgeX + 12, badgeY + 8);
+    ctx.lineTo(badgeX + 16, badgeY + 15);
+    ctx.lineTo(badgeX + 9, badgeY + 9);
+    ctx.lineTo(badgeX + 12, badgeY + 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e8fbff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${status.label} ${status.turns}`, badgeX + 48, badgeY + badgeH / 2 + 0.5);
+    ctx.restore();
+  }
+
   function drawUnit(u) {
     if (projectiles.some(p => p.jump && p.owner === u.id)) return;
     const a = unitAnchor(u);
@@ -9314,6 +9395,7 @@
     ctx.fillStyle = '#fff';
     ctx.font = '10px sans-serif';
     ctx.fillText(`${u.hp}/${u.maxHp}`, a.x, barY - 3);
+    drawMoveLockEffect(u, a, imgTopAbs, barY, h);
   }
 
   function drawBattleHudBackdrop() {
