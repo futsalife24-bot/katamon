@@ -448,6 +448,10 @@ const HOOK = `
     ),
     setNormalImpactBufferForTest: () => { normalImpactBuffer = { __decodedAudio: true }; },
     decodedAudioStartsForTest: () => globalThis.__ktDecodedAudioStarts,
+    triggerTitleWallImpactForTest: () => {
+      beginWallBreak({ x: VW / 2, y: VH / 2 });
+      updateWallBreak(WALL_IMPACT_SEC);
+    },
     fireworkShardExplodeForTest: (x, y, ownerId) => fireworkShardExplode({ owner: ownerId }, 1, x, y),
     projectileOwnerKind: () => projectiles.map(p => typeof p.owner),
     damageTexts: () => floatTexts.map(t => t.text),

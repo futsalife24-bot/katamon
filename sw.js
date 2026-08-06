@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v138-stage-studio-mvp';
+const CACHE_VERSION = 'katamon-pwa-v139-stage-studio-mvp';
 const APP_SHELL = [
   './',
   './index.html',
@@ -18,7 +18,7 @@ const APP_SHELL = [
   './assets/title-logo.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
-  './assets/normal-impact-explosion.mp3?v=1'
+  './assets/normal-impact-explosion.mp3?v=2'
 ];
 
 self.addEventListener('install', event => {
