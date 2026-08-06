@@ -275,6 +275,51 @@ export class GitHubClient {
     return { number: pr.number as number, url: asString(pr.html_url, 'PR') };
   }
 
+  async getPullRequest(number: number): Promise<{
+    number: number;
+    url: string;
+    state: 'open' | 'closed';
+    baseRef: string;
+    headRef: string;
+    headSha: string;
+    merged: boolean;
+  }> {
+    const data = asRecord(
+      await this.request(`/repos/${this.repoPath()}/pulls/${number}`),
+      'PR',
+    );
+    if (!Number.isSafeInteger(data.number) || data.number !== number) {
+      throw new GitHubApiError(502, 'github_invalid_response', 'GitHubのPR番号を確認できませんでした。', 502);
+    }
+    const state = asString(data.state, 'PR');
+    if (state !== 'open' && state !== 'closed') {
+      throw new GitHubApiError(502, 'github_invalid_response', 'GitHubのPR状態を確認できませんでした。', 502);
+    }
+    return {
+      number,
+      url: asString(data.html_url, 'PR'),
+      state,
+      baseRef: asString(asRecord(data.base, 'PR base').ref, 'PR base'),
+      headRef: asString(asRecord(data.head, 'PR head').ref, 'PR head'),
+      headSha: asString(asRecord(data.head, 'PR head').sha, 'PR head'),
+      merged: data.merged === true,
+    };
+  }
+
+  async mergePullRequest(number: number, expectedHeadSha: string): Promise<{ merged: true }> {
+    const data = asRecord(
+      await this.request(`/repos/${this.repoPath()}/pulls/${number}/merge`, {
+        method: 'PUT',
+        body: JSON.stringify({ sha: expectedHeadSha, merge_method: 'squash' }),
+      }),
+      'PR merge',
+    );
+    if (data.merged !== true) {
+      throw new GitHubApiError(409, 'github_merge_rejected', 'PRを安全にマージできませんでした。競合とCI状態を確認してください。', 409);
+    }
+    return { merged: true };
+  }
+
   async getChecks(ref: string): Promise<BuildState> {
     const data = asRecord(
       await this.request(

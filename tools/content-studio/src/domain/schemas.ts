@@ -114,6 +114,7 @@ export const characterFormSchema = z
     faceCrop: cropPointSchema,
     matchupCrop: cropPointSchema,
     normalSkillId: z.literal('standard-projectile'),
+    specialEnabled: z.boolean().default(true),
     specialName: plainText(1, 40).refine((value) => !/[\r\n]/u.test(value), '改行は使用できません'),
     specialDescription: optionalPlainText(200),
     specialTemplate: z.enum([
@@ -140,7 +141,7 @@ export const characterFormSchema = z
   })
   .strict()
   .superRefine((character, context) => {
-    if (character.specialTemplate === 'custom-required' && character.customImplementationNote.length === 0) {
+    if (character.specialEnabled && character.specialTemplate === 'custom-required' && character.customImplementationNote.length === 0) {
       context.addIssue({
         code: 'custom',
         path: ['customImplementationNote'],
@@ -211,7 +212,8 @@ const previewSettingsSchema = z.object({
   playing: z.boolean(),
 });
 
-const motionActionSchema = z.enum(['idle', 'move', 'fire', 'hit']);
+const motionActionSchema = z.enum(['idle', 'move', 'fire', 'hit', 'land']);
+const motionClipIdSchema = z.enum(['move-forward', 'move-backward', 'fire', 'hit', 'land']);
 const motionActionPresetSchema = z.enum([
   'idle-standard',
   'idle-heavy',
@@ -256,6 +258,29 @@ const partDetectionStateSchema = z.object({
   analyzedAt: z.union([z.null(), z.string().datetime({ offset: true })]),
 });
 
+const normalizedPointSchema = z.object({
+  x: z.number().finite().min(0).max(1),
+  y: z.number().finite().min(0).max(1),
+});
+
+const eyeMarkerSchema = normalizedPointSchema.extend({
+  id: z.enum(['eye-1', 'eye-2']),
+  size: z.number().finite().min(0.015).max(0.2),
+});
+
+const motionLandmarksSchema = z.object({
+  status: z.enum(['idle', 'ready', 'needs-review']),
+  facing: z.enum(['left', 'right']),
+  ground: normalizedPointSchema,
+  muzzle: normalizedPointSchema,
+  eyes: z.array(eyeMarkerSchema).max(2).superRefine((eyes, context) => {
+    if (new Set(eyes.map(({ id }) => id)).size !== eyes.length) {
+      context.addIssue({ code: 'custom', message: '目のマーカーが重複しています' });
+    }
+  }),
+  detectedAt: z.union([z.null(), z.string().datetime({ offset: true })]),
+});
+
 const validationIssueSchema = z.object({
   severity: z.enum(['error', 'warning', 'info']),
   code: plainText(1, 80),
@@ -289,7 +314,7 @@ export const draftRecordSchema = z
     title: plainText(1, 80),
     createdAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
-    lastStep: z.enum(['image', 'cutout', 'parts', 'motion', 'details', 'skills', 'preview', 'validate', 'publish', 'complete', 'export']),
+    lastStep: z.enum(['image', 'setup', 'character', 'cutout', 'parts', 'motion', 'details', 'skills', 'preview', 'validate', 'publish', 'complete', 'export']),
     character: draftCharacterFormSchema,
     imageInfo: imageInfoSchema.nullable(),
     editor: imageEditorStateSchema,
@@ -298,6 +323,11 @@ export const draftRecordSchema = z
     actionPreset: motionActionPresetSchema,
     motion: motionParametersSchema,
     partDetection: partDetectionStateSchema,
+    landmarks: motionLandmarksSchema,
+    generatedClips: z.array(motionClipIdSchema).max(5).superRefine((clips, context) => {
+      if (new Set(clips).size !== clips.length) context.addIssue({ code: 'custom', message: '生成済みモーションが重複しています' });
+    }),
+    publishMode: z.enum(['pr-only', 'merge-after-ci']),
     preview: previewSettingsSchema,
     validation: z.array(validationIssueSchema).max(200),
     processingOperations: z.array(imageOperationSchema).max(2_000),
@@ -321,7 +351,7 @@ export const spriteMetadataSchema = z
     frameHeight: z.number().int().positive().max(4_096),
     frameCount: z.union([z.literal(8), z.literal(12)]),
     fps: z.number().finite().positive().max(30),
-    loop: z.literal(true),
+    loop: z.boolean(),
     anchorX: z.number().finite().min(0).max(1),
     anchorY: z.number().finite().min(0).max(1),
     contentBounds: contentBoundsSchema,
@@ -338,6 +368,7 @@ export const spriteMetadataSchema = z
     preset: z.enum(['standard', 'heavy', 'light', 'hover', 'flying', 'flexible', 'winged', 'mechanical', 'breathing', 'almost-still']),
     motionAction: motionActionSchema.optional(),
     actionPreset: motionActionPresetSchema.optional(),
+    clipId: motionClipIdSchema.optional(),
     motionParameters: motionParametersSchema,
     partMasks: z.array(z.object({
       id: assetReferenceSchema,

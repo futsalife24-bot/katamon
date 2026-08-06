@@ -29,6 +29,16 @@ interface RepositoryGitHub {
     body: string;
   }): Promise<{ number: number; url: string }>;
   findOpenPullRequest(branch: string): Promise<{ number: number; url: string } | null>;
+  getPullRequest(number: number): Promise<{
+    number: number;
+    url: string;
+    state: 'open' | 'closed';
+    baseRef: string;
+    headRef: string;
+    headSha: string;
+    merged: boolean;
+  }>;
+  mergePullRequest(number: number, expectedHeadSha: string): Promise<{ merged: true }>;
   getChecks(ref: string): Promise<BuildState>;
   getDeployment(ref: string): Promise<DeploymentState>;
 }
@@ -61,6 +71,8 @@ export interface PullRequestServiceResult {
   commitSha: string;
   checks: BuildState;
   deployment: DeploymentState;
+  merged?: boolean;
+  mergedAt?: string;
 }
 
 class PreparationStore {
@@ -203,6 +215,70 @@ export class RepositoryService {
     };
     prepared.result = result;
     return result;
+  }
+
+  async mergePullRequest(
+    preparationId: string,
+    pullRequestNumber: number,
+    expectedHeadSha: string,
+    actorKey: string,
+  ): Promise<PullRequestServiceResult> {
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(preparationId)) {
+      throw new HttpError(422, 'preparation_invalid', '公開準備IDが不正です。');
+    }
+    if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
+      throw new HttpError(422, 'pull_request_invalid', 'PR番号が不正です。');
+    }
+    if (!/^[a-f0-9]{40}$/.test(expectedHeadSha)) {
+      throw new HttpError(422, 'head_sha_invalid', 'PRのコミットSHAが不正です。');
+    }
+
+    const prepared = this.preparations.get(preparationId);
+    if (prepared.actorKey !== actorKey) {
+      throw new HttpError(403, 'preparation_mismatch', '公開準備とログイン中の管理者が一致しません。');
+    }
+    const result = prepared.result;
+    if (!result) {
+      throw new HttpError(409, 'pull_request_not_created', '先にPRを作成してください。');
+    }
+    if (
+      result.number !== pullRequestNumber
+      || result.commitSha !== expectedHeadSha
+      || result.branch !== prepared.branch
+    ) {
+      throw new HttpError(409, 'pull_request_mismatch', '公開準備とPRが一致しません。');
+    }
+    if (result.merged) return result;
+
+    const checks = await this.github.getChecks(expectedHeadSha);
+    result.checks = checks;
+    if (checks !== 'success') {
+      throw new HttpError(409, 'checks_not_successful', 'CIが成功していないためマージを中止しました。');
+    }
+
+    const pullRequest = await this.github.getPullRequest(pullRequestNumber);
+    if (
+      pullRequest.baseRef !== this.config.githubBaseBranch
+      || pullRequest.headRef !== prepared.branch
+      || pullRequest.headSha !== expectedHeadSha
+    ) {
+      throw new HttpError(409, 'pull_request_changed', 'PRの対象またはコミットが変わったためマージを中止しました。');
+    }
+    if (!pullRequest.merged && pullRequest.state !== 'open') {
+      throw new HttpError(409, 'pull_request_not_open', 'PRが開いていないためマージできません。');
+    }
+    if (!pullRequest.merged) {
+      await this.github.mergePullRequest(pullRequestNumber, expectedHeadSha);
+    }
+
+    const mergedResult: PullRequestServiceResult = {
+      ...result,
+      checks: 'success',
+      merged: true,
+      mergedAt: new Date(this.clock.now()).toISOString(),
+    };
+    prepared.result = mergedResult;
+    return mergedResult;
   }
 
   private async inspectBase(

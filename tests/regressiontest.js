@@ -572,9 +572,15 @@ kt.carveForTest(deepestX, deepestTop, maxNormalBlast);
 check('最も低い地形でも通常弾1発では床が抜けない',
   kt.isSolidAt(deepestX, deadLine - 6),
   `x=${deepestX && deepestX.toFixed(1)} 地表=${deepestTop} 半径=${maxNormalBlast} deadLine=${deadLine}`);
+// walkableGroundYAt は同じ列に浮島があると、指定位置より下の最初の足場を返す。
+// segmentsはクレーター履歴と別管理なので、掘った中心から下を実グリッド上で走査する。
+let carvedBottomTop = null;
+for (let y = Math.floor(deepestTop); y <= deadLine; y++) {
+  if (kt.isSolidAt(deepestX, y)) { carvedBottomTop = y; break; }
+}
 check('掘った直後の地表はクレーターぶん下がっている',
-  kt.groundYAt(deepestX, deepestTop - 40) > deepestTop,
-  `掘削後の地表=${kt.groundYAt(deepestX, deepestTop - 40)} 元=${deepestTop}`);
+  Number.isFinite(carvedBottomTop) && carvedBottomTop > deepestTop,
+  `掘削後の最下層=${carvedBottomTop} 元=${deepestTop}`);
 
 // ===== Issue #13: 元画像が左向きのキャラが相手に背を向けない =====
 // facingLeft は「画像を左右反転するか」であって「世界で左を向いているか」ではない。

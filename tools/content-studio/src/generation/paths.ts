@@ -1,4 +1,13 @@
 import { safeIdentifierSchema } from '../domain/schemas.js';
+import type { MotionClipId } from '../domain/types.js';
+
+const MOTION_FILE_STEMS: Record<MotionClipId, string> = {
+  'move-forward': 'move-forward',
+  'move-backward': 'move-backward',
+  fire: 'fire',
+  hit: 'hit',
+  land: 'land',
+};
 
 export interface GeneratedAssetPaths {
   directory: string;
@@ -9,6 +18,8 @@ export interface GeneratedAssetPaths {
   thumbnailWebp: string;
   spriteSheetPng: string;
   spriteMetadataJson: string;
+  motionSpriteSheets?: Record<MotionClipId, string>;
+  motionMetadataJson?: Record<MotionClipId, string>;
   previewPng: string;
 }
 
@@ -32,6 +43,7 @@ export function buildGeneratedPaths(
   slugInput: string,
   contentHash: string,
   sourceMimeType?: string,
+  includeMotionBatch = false,
 ): GeneratedContentPaths {
   const slug = safeIdentifierSchema.parse(slugInput);
   if (!/^[a-f0-9]{64}$/u.test(contentHash)) throw new Error('画像ハッシュが正しくありません');
@@ -41,6 +53,8 @@ export function buildGeneratedPaths(
     ? `${directory}/source.${extensionForImageMime(sourceMimeType)}`
     : undefined;
 
+  const motionSpriteSheets = Object.fromEntries(Object.entries(MOTION_FILE_STEMS).map(([clipId, stem]) => [clipId, `${directory}/${stem}.png`])) as Record<MotionClipId, string>;
+  const motionMetadataJson = Object.fromEntries(Object.entries(MOTION_FILE_STEMS).map(([clipId, stem]) => [clipId, `${directory}/${stem}.json`])) as Record<MotionClipId, string>;
   return {
     characterJson: `content/characters/${slug}.json`,
     catalogScript: 'generated/content-studio-catalog.js',
@@ -52,8 +66,9 @@ export function buildGeneratedPaths(
       optimizedWebp: `${directory}/character.webp`,
       iconPng: `${directory}/icon.png`,
       thumbnailWebp: `${directory}/thumbnail.webp`,
-      spriteSheetPng: `${directory}/idle.png`,
-      spriteMetadataJson: `${directory}/idle.json`,
+      spriteSheetPng: includeMotionBatch ? motionSpriteSheets['move-forward'] : `${directory}/idle.png`,
+      spriteMetadataJson: includeMotionBatch ? motionMetadataJson['move-forward'] : `${directory}/idle.json`,
+      ...(includeMotionBatch ? { motionSpriteSheets, motionMetadataJson } : {}),
       previewPng: `${directory}/preview.png`,
     },
   };

@@ -1,6 +1,6 @@
 import { convertSkillTemplate } from '../domain/skills';
 import { spriteMetadataSchema } from '../domain/schemas';
-import { GENERATOR_VERSION, type ArtifactBundle, type ArtifactFile, type CharacterForm, type SpriteMetadata, type ValidationIssue } from '../domain/types';
+import { GENERATOR_VERSION, type ArtifactBundle, type ArtifactFile, type CharacterForm, type MotionClipId, type SpriteMetadata, type ValidationIssue } from '../domain/types';
 import { assertValidCharacter, isAllowedGeneratedPath, type CharacterIdentity } from '../domain/validation';
 import {
   buildCompatibilityCatalog,
@@ -21,12 +21,14 @@ export interface ArtifactImages {
   iconPng: Blob;
   thumbnailWebp: Blob;
   spriteSheetPng: Blob;
+  motionSpriteSheets?: Record<MotionClipId, Blob>;
   previewPng: Blob;
 }
 
 export interface BuildArtifactBundleInput {
   character: CharacterForm;
   spriteMetadata: SpriteMetadata;
+  motionMetadata?: Record<MotionClipId, SpriteMetadata>;
   images: ArtifactImages;
   createdAt?: string;
   generatorVersion?: string;
@@ -36,7 +38,7 @@ export interface BuildArtifactBundleInput {
   currentCharacter?: CharacterIdentity;
 }
 
-const MIME_BY_IMAGE_KEY: Record<keyof Omit<ArtifactImages, 'sourceImage'>, string> = {
+const MIME_BY_IMAGE_KEY: Record<keyof Omit<ArtifactImages, 'sourceImage' | 'motionSpriteSheets'>, string> = {
   normalizedPng: 'image/png',
   optimizedWebp: 'image/webp',
   iconPng: 'image/png',
@@ -111,6 +113,11 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
   await assertValidBlob(input.images.iconPng, MIME_BY_IMAGE_KEY.iconPng, 'アイコン', 2 * 1024 * 1024);
   await assertValidBlob(input.images.thumbnailWebp, MIME_BY_IMAGE_KEY.thumbnailWebp, 'サムネイル', 2 * 1024 * 1024);
   await assertValidBlob(input.images.spriteSheetPng, MIME_BY_IMAGE_KEY.spriteSheetPng, 'スプライトシート', 16 * 1024 * 1024);
+  if (input.images.motionSpriteSheets) {
+    for (const [clipId, blob] of Object.entries(input.images.motionSpriteSheets)) {
+      await assertValidBlob(blob, 'image/png', `${clipId}スプライトシート`, 16 * 1024 * 1024);
+    }
+  }
   await assertValidBlob(input.images.previewPng, MIME_BY_IMAGE_KEY.previewPng, 'プレビュー', 4 * 1024 * 1024);
   if (input.images.sourceImage) await assertValidBlob(input.images.sourceImage, undefined, '元画像', 20 * 1024 * 1024);
 
@@ -122,6 +129,9 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     spriteSheetPng: await sha256Blob(input.images.spriteSheetPng),
     previewPng: await sha256Blob(input.images.previewPng),
     sourceImage: input.images.sourceImage ? await sha256Blob(input.images.sourceImage) : null,
+    motionSpriteSheets: input.images.motionSpriteSheets
+      ? Object.fromEntries(await Promise.all(Object.entries(input.images.motionSpriteSheets).map(async ([clipId, blob]) => [clipId, await sha256Blob(blob)])))
+      : null,
   };
   const assetVersionHash = await sha256Text(stableStringify({
     createdAt,
@@ -142,19 +152,29 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
       partMasks: input.spriteMetadata.partMasks,
     },
   }));
-  const paths = buildGeneratedPaths(character.slug, assetVersionHash, input.images.sourceImage?.type);
-  const spriteMetadata = spriteMetadataSchema.parse({
-    ...input.spriteMetadata,
-    sourceImage: paths.assets.normalizedPng,
-    generatedAt: createdAt,
-    generatorVersion,
-  }) as SpriteMetadata;
+  const paths = buildGeneratedPaths(character.slug, assetVersionHash, input.images.sourceImage?.type, Boolean(input.images.motionSpriteSheets && input.motionMetadata));
+  const normalizedMotionMetadata = input.motionMetadata
+    ? Object.fromEntries(Object.entries(input.motionMetadata).map(([clipId, metadata]) => [clipId, spriteMetadataSchema.parse({
+      ...metadata,
+      sourceImage: paths.assets.normalizedPng,
+      clipId,
+      generatedAt: createdAt,
+      generatorVersion,
+    })])) as Record<MotionClipId, SpriteMetadata>
+    : undefined;
+  const spriteMetadata = normalizedMotionMetadata?.['move-forward'] ?? spriteMetadataSchema.parse({
+      ...input.spriteMetadata,
+      sourceImage: paths.assets.normalizedPng,
+      generatedAt: createdAt,
+      generatorVersion,
+    }) as SpriteMetadata;
 
   const record: CanonicalCharacterRecord = canonicalCharacterRecordSchema.parse({
     schemaVersion: 1,
     character,
     assets: paths.assets,
     spriteMetadata,
+    ...(normalizedMotionMetadata ? { motionMetadata: normalizedMotionMetadata } : {}),
     generatorVersion,
   }) as CanonicalCharacterRecord;
   const records = [
@@ -182,13 +202,20 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
   files.push(await blobFile(paths.assets.optimizedWebp, 'image', input.images.optimizedWebp, imageHashes.optimizedWebp));
   files.push(await blobFile(paths.assets.iconPng, 'image', input.images.iconPng, imageHashes.iconPng));
   files.push(await blobFile(paths.assets.thumbnailWebp, 'image', input.images.thumbnailWebp, imageHashes.thumbnailWebp));
-  files.push(await blobFile(paths.assets.spriteSheetPng, 'sprite', input.images.spriteSheetPng, imageHashes.spriteSheetPng));
+  if (input.images.motionSpriteSheets && normalizedMotionMetadata && paths.assets.motionSpriteSheets && paths.assets.motionMetadataJson) {
+    for (const clipId of Object.keys(input.images.motionSpriteSheets) as MotionClipId[]) {
+      files.push(await blobFile(paths.assets.motionSpriteSheets[clipId], 'sprite', input.images.motionSpriteSheets[clipId], imageHashes.motionSpriteSheets?.[clipId]));
+      files.push(await textFile(paths.assets.motionMetadataJson[clipId], 'application/json', 'metadata', stableJsonFile(normalizedMotionMetadata[clipId])));
+    }
+  } else {
+    files.push(await blobFile(paths.assets.spriteSheetPng, 'sprite', input.images.spriteSheetPng, imageHashes.spriteSheetPng));
+    files.push(await textFile(paths.assets.spriteMetadataJson, 'application/json', 'metadata', stableJsonFile(spriteMetadata)));
+  }
   files.push(await blobFile(paths.assets.previewPng, 'preview', input.images.previewPng, imageHashes.previewPng));
   if (input.images.sourceImage && paths.assets.sourceImage) {
     files.push(await blobFile(paths.assets.sourceImage, 'image', input.images.sourceImage, imageHashes.sourceImage ?? undefined));
   }
 
-  files.push(await textFile(paths.assets.spriteMetadataJson, 'application/json', 'metadata', stableJsonFile(spriteMetadata)));
   files.push(await textFile(paths.characterJson, 'application/json', 'character-data', stableJsonFile(record)));
   const catalog = buildCompatibilityCatalog(records, generatorVersion);
   files.push(await textFile(paths.catalogScript, 'text/javascript', 'game-catalog', serializeCompatibilityCatalog(catalog)));

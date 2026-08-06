@@ -13,7 +13,7 @@ import { canonicalCharacterRecordSchema } from '../generation/catalog';
 import { sha256Blob, sha256Text } from '../generation/hash';
 import { stableStringify } from '../generation/stable';
 
-export type MockRepositoryErrorCode = 'NETWORK_OFFLINE' | 'TESTS_FAILED' | 'CONFLICT' | 'INVALID_BUNDLE' | 'NOT_PREPARED';
+export type MockRepositoryErrorCode = 'NETWORK_OFFLINE' | 'TESTS_FAILED' | 'CHECKS_FAILED' | 'CONFLICT' | 'INVALID_BUNDLE' | 'NOT_PREPARED' | 'PR_MISMATCH';
 
 export class MockRepositoryError extends Error {
   readonly code: MockRepositoryErrorCode;
@@ -207,6 +207,23 @@ export class MockRepositoryGateway implements RepositoryGateway {
       checks,
       deployment,
     };
+  }
+
+  async mergePullRequest(
+    prepared: PreparedChange,
+    result: PullRequestResult,
+    scenario = this.scenario,
+  ): Promise<PullRequestResult> {
+    await this.wait();
+    this.assertOnline(scenario);
+    if (scenario === 'conflict') throw new MockRepositoryError('CONFLICT', 'PRの競合を検出したためマージしませんでした。', true);
+    if (scenario === 'tests-failed' || this.checks.get(prepared.commitSha) !== 'success') {
+      throw new MockRepositoryError('CHECKS_FAILED', 'CIが成功していないためマージしませんでした。', true);
+    }
+    if (result.commitSha !== prepared.commitSha || result.branch !== prepared.branch) {
+      throw new MockRepositoryError('PR_MISMATCH', '準備した変更とPRが一致しません。', true);
+    }
+    return { ...result, merged: true, mergedAt: new Date().toISOString(), deployment: 'published' };
   }
 
   async getChecks(ref: string): Promise<RepositoryStatus['build']> {

@@ -21,5 +21,8 @@ export default defineConfig({
   preview: {
     port: 4175,
     strictPort: true,
+    // Temporary mobile QA uses Cloudflare Quick Tunnels. Keep this scoped to
+    // that suffix instead of disabling Vite's host-header protection.
+    allowedHosts: ['.trycloudflare.com'],
   },
 });

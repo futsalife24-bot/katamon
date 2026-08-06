@@ -30,7 +30,7 @@ export function migrateDraft(input: unknown): DraftRecord {
   }
 
   const version = input.schemaVersion === undefined ? 0 : input.schemaVersion;
-  if (version !== 0 && version !== 1 && version !== 2 && version !== DRAFT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== DRAFT_SCHEMA_VERSION) {
     throw new DraftMigrationError('未対応の下書きバージョンです');
   }
 
@@ -44,14 +44,17 @@ export function migrateDraft(input: unknown): DraftRecord {
   const base = createDraft(legacyId);
   const legacyCharacter = input.character ?? input.form;
   const legacyStep = input.lastStep ?? input.step;
-  const activeStep = legacyStep === 'image' || legacyStep === 'cutout' || legacyStep === 'parts' ||
-      legacyStep === 'motion' || legacyStep === 'preview' || legacyStep === 'export'
-    ? legacyStep
-    : legacyStep === 'details' || legacyStep === 'skills'
-      ? 'motion'
-      : legacyStep === 'validate' || legacyStep === 'publish' || legacyStep === 'complete'
-        ? 'export'
-        : base.lastStep;
+  const activeStep = legacyStep === 'image' || legacyStep === 'cutout'
+    ? 'image'
+    : legacyStep === 'setup' || legacyStep === 'parts'
+      ? 'setup'
+      : legacyStep === 'motion' || legacyStep === 'preview' || legacyStep === 'export'
+        ? 'motion'
+        : legacyStep === 'character' || legacyStep === 'details' || legacyStep === 'skills'
+          ? 'character'
+          : legacyStep === 'validate' || legacyStep === 'publish' || legacyStep === 'complete'
+            ? 'publish'
+            : base.lastStep;
 
   const candidate: DraftRecord = {
     ...base,
@@ -70,6 +73,13 @@ export function migrateDraft(input: unknown): DraftRecord {
     partDetection: isRecord(input.partDetection)
       ? mergeRecord(base.partDetection, input.partDetection)
       : base.partDetection,
+    landmarks: isRecord(input.landmarks)
+      ? mergeRecord(base.landmarks, input.landmarks)
+      : base.landmarks,
+    generatedClips: Array.isArray(input.generatedClips)
+      ? input.generatedClips as DraftRecord['generatedClips']
+      : [],
+    publishMode: input.publishMode === 'merge-after-ci' ? 'merge-after-ci' : 'pr-only',
     preview: mergeRecord(base.preview, input.preview),
     validation: Array.isArray(input.validation) ? input.validation as DraftRecord['validation'] : [],
     processingOperations: Array.isArray(input.processingOperations)
@@ -77,7 +87,11 @@ export function migrateDraft(input: unknown): DraftRecord {
       : [],
     historyStatus: input.historyStatus === 'dirty' ? 'dirty' : 'clean',
     mockScenario: typeof input.mockScenario === 'string' ? input.mockScenario as DraftRecord['mockScenario'] : 'success',
-    sourceIdentity: null,
+    sourceIdentity: isRecord(input.sourceIdentity)
+      && typeof input.sourceIdentity.id === 'string'
+      && typeof input.sourceIdentity.slug === 'string'
+      ? { id: input.sourceIdentity.id, slug: input.sourceIdentity.slug }
+      : null,
     schemaVersion: DRAFT_SCHEMA_VERSION,
   };
 

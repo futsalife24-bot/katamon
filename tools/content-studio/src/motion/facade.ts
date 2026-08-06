@@ -1,9 +1,12 @@
 import type {
   DetectedMotionPart,
+  EyeMarker,
   MotionAction,
   MotionActionPreset,
   MotionParameters,
   MotionPreset,
+  MotionClipId,
+  NormalizedPoint,
 } from '../domain/types';
 import { encodePixelBuffer } from '../image/canvas-codec';
 import { ContentImageProcessor } from '../image/pipeline';
@@ -24,6 +27,10 @@ export interface IdleMotionBlobRequest {
   partRegions?: DetectedMotionPart[];
   focusPartId?: string | null;
   anchorPartId?: string | null;
+  groundPoint?: NormalizedPoint;
+  muzzlePoint?: NormalizedPoint;
+  eyeMarkers?: EyeMarker[];
+  clipId?: MotionClipId;
   removeBackground?: boolean;
   backgroundTolerance?: number;
   edgeFeather?: number;
@@ -78,6 +85,10 @@ export async function generateIdleMotionFromBlob(
       partRegions: request.partRegions,
       focusPartId: request.focusPartId,
       anchorPartId: request.anchorPartId,
+      groundPoint: request.groundPoint,
+      muzzlePoint: request.muzzlePoint,
+      eyeMarkers: request.eyeMarkers,
+      clipId: request.clipId,
       generatedAt: request.generatedAt,
     },
     { signal: control.signal, onProgress: control.onMotionProgress },

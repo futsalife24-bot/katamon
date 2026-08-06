@@ -1,8 +1,10 @@
-export const DRAFT_SCHEMA_VERSION = 3 as const;
-export const GENERATOR_VERSION = '0.2.0';
+export const DRAFT_SCHEMA_VERSION = 4 as const;
+export const GENERATOR_VERSION = '0.3.0';
 
 export type WorkflowStep =
   | 'image'
+  | 'setup'
+  | 'character'
   | 'cutout'
   | 'parts'
   | 'motion'
@@ -16,14 +18,37 @@ export type WorkflowStep =
 
 export const WORKFLOW_STEPS: ReadonlyArray<{ id: WorkflowStep; label: string }> = [
   { id: 'image', label: '画像' },
-  { id: 'cutout', label: '切り抜き' },
-  { id: 'parts', label: '部位候補' },
-  { id: 'motion', label: '動作' },
-  { id: 'preview', label: '確認' },
-  { id: 'export', label: '出力' },
+  { id: 'setup', label: '向きと目' },
+  { id: 'motion', label: '生成' },
+  { id: 'character', label: 'キャラ' },
+  { id: 'publish', label: 'GitHub' },
 ];
 
-export type MotionAction = 'idle' | 'move' | 'fire' | 'hit';
+export type MotionAction = 'idle' | 'move' | 'fire' | 'hit' | 'land';
+
+export type MotionClipId = 'move-forward' | 'move-backward' | 'fire' | 'hit' | 'land';
+export type FacingDirection = 'left' | 'right';
+export type PublishMode = 'pr-only' | 'merge-after-ci';
+
+export interface NormalizedPoint {
+  x: number;
+  y: number;
+}
+
+export interface EyeMarker extends NormalizedPoint {
+  id: 'eye-1' | 'eye-2';
+  /** Diameter in normalized image coordinates. */
+  size: number;
+}
+
+export interface MotionLandmarks {
+  status: 'idle' | 'ready' | 'needs-review';
+  facing: FacingDirection;
+  ground: NormalizedPoint;
+  muzzle: NormalizedPoint;
+  eyes: EyeMarker[];
+  detectedAt: string | null;
+}
 
 export type MotionActionPreset =
   | 'idle-standard'
@@ -156,6 +181,7 @@ export interface CharacterForm {
   faceCrop: CropPoint;
   matchupCrop: CropPoint;
   normalSkillId: 'standard-projectile';
+  specialEnabled: boolean;
   specialName: string;
   specialDescription: string;
   specialTemplate: SpecialTemplate;
@@ -222,6 +248,9 @@ export interface DraftRecord {
   actionPreset: MotionActionPreset;
   motion: MotionParameters;
   partDetection: PartDetectionState;
+  landmarks: MotionLandmarks;
+  generatedClips: MotionClipId[];
+  publishMode: PublishMode;
   preview: PreviewSettings;
   validation: ValidationIssue[];
   processingOperations: ImageOperation[];
@@ -249,7 +278,7 @@ export interface SpriteMetadata {
   frameHeight: number;
   frameCount: number;
   fps: number;
-  loop: true;
+  loop: boolean;
   anchorX: number;
   anchorY: number;
   contentBounds: ContentBounds;
@@ -258,6 +287,7 @@ export interface SpriteMetadata {
   preset: MotionPreset;
   motionAction?: MotionAction;
   actionPreset?: MotionActionPreset;
+  clipId?: MotionClipId;
   motionParameters: MotionParameters;
   partMasks: Array<{ id: string; label: string; blobKey?: string }>;
   partRegions?: DetectedMotionPart[];
@@ -315,12 +345,15 @@ export interface PullRequestResult {
   commitSha: string;
   checks: 'queued' | 'running' | 'success' | 'failure';
   deployment: 'pending' | 'published' | 'failure';
+  merged?: boolean;
+  mergedAt?: string;
 }
 
 export interface RepositoryGateway {
   getStatus(): Promise<RepositoryStatus>;
   prepare(bundle: ArtifactBundle, scenario?: MockScenario): Promise<PreparedChange>;
   createPullRequest(prepared: PreparedChange, bundle: ArtifactBundle, scenario?: MockScenario): Promise<PullRequestResult>;
+  mergePullRequest(prepared: PreparedChange, result: PullRequestResult, scenario?: MockScenario): Promise<PullRequestResult>;
   getChecks(ref: string): Promise<RepositoryStatus['build']>;
   getDeployment(ref: string): Promise<RepositoryStatus['deployment']>;
   logout(): Promise<void>;

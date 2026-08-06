@@ -3,7 +3,21 @@ import type { ArtifactBundle, DraftRecord, PullRequestResult } from '../domain/t
 import { createDraft } from '../domain/defaults';
 import { DRAFT_SCHEMA_VERSION } from '../domain/types';
 
-export type DraftBlobKind = 'original' | 'working' | 'normalized' | 'optimized' | 'mask' | 'sprite' | 'icon' | 'thumbnail' | 'preview';
+export type DraftBlobKind =
+  | 'original'
+  | 'working'
+  | 'normalized'
+  | 'optimized'
+  | 'mask'
+  | 'sprite'
+  | 'motion-move-forward'
+  | 'motion-move-backward'
+  | 'motion-fire'
+  | 'motion-hit'
+  | 'motion-land'
+  | 'icon'
+  | 'thumbnail'
+  | 'preview';
 
 interface StoredBlob {
   key: string;
@@ -124,7 +138,7 @@ export function migrateDraft(raw: unknown): DraftRecord {
     };
   }
 
-  if (raw.schemaVersion === 1 || raw.schemaVersion === undefined) {
+  if (raw.schemaVersion === 1 || raw.schemaVersion === 2 || raw.schemaVersion === 3 || raw.schemaVersion === undefined) {
     const fallback = createDraft(typeof raw.id === 'string' ? raw.id : crypto.randomUUID());
     const migrated: DraftRecord = {
       ...fallback,

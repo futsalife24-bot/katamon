@@ -268,6 +268,33 @@ export function createApiHandler(dependencies: ApiDependencies) {
         return;
       }
 
+      if (method === 'POST' && pathname === '/api/github/merge') {
+        auditEvent = 'github.merge';
+        verifyOrigin(request.headers.origin, config.allowedOrigins);
+        verifyCsrf(sessionLookup!.session.csrfToken, request.headers['x-csrf-token'] as string | undefined);
+        const body = await readJsonBody(request, config.maxRequestBytes);
+        if (
+          !isRecord(body)
+          || typeof body.preparationId !== 'string'
+          || !Number.isSafeInteger(body.pullRequestNumber)
+          || typeof body.expectedHeadSha !== 'string'
+        ) {
+          throw new HttpError(422, 'merge_request_invalid', 'マージ要求が不正です。');
+        }
+        const result = await repository.mergePullRequest(
+          body.preparationId,
+          body.pullRequestNumber as number,
+          body.expectedHeadSha,
+          sessionLookup!.key,
+        );
+        audit.write(auditEvent, 'success', context.id, sessionLookup!.session.user.login, {
+          pullRequest: result.number,
+          merged: result.merged === true,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
       if (method === 'GET' && pathname === '/api/github/checks') {
         const ref = context.url.searchParams.get('ref');
         if (!ref || !/^[a-f0-9]{40}$/.test(ref)) {

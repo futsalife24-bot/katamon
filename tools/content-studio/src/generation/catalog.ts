@@ -2,10 +2,26 @@ import { z } from 'zod';
 
 import { characterFormSchema, spriteMetadataSchema } from '../domain/schemas.js';
 import { convertSkillTemplate, NORMAL_SKILL_DEFINITION, type DeclarativeSkillDefinition } from '../domain/skills.js';
-import { GENERATOR_VERSION, type CharacterForm, type SpriteMetadata } from '../domain/types.js';
+import { GENERATOR_VERSION, type CharacterForm, type MotionClipId, type SpriteMetadata } from '../domain/types.js';
 import { isAllowedGeneratedPath } from '../domain/validation.js';
 import type { GeneratedAssetPaths } from './paths.js';
 import { stableJsonFile, stableStringify } from './stable.js';
+
+const motionPathMapSchema = z.object({
+  'move-forward': z.string(),
+  'move-backward': z.string(),
+  fire: z.string(),
+  hit: z.string(),
+  land: z.string(),
+});
+
+const motionMetadataMapSchema = z.object({
+  'move-forward': spriteMetadataSchema,
+  'move-backward': spriteMetadataSchema,
+  fire: spriteMetadataSchema,
+  hit: spriteMetadataSchema,
+  land: spriteMetadataSchema,
+});
 
 const generatedAssetPathsSchema = z.object({
   directory: z.string().regex(/^assets\/content-studio\/[a-z][a-z0-9-]{0,23}\/[a-f0-9]{12}$/u),
@@ -16,11 +32,20 @@ const generatedAssetPathsSchema = z.object({
   thumbnailWebp: z.string(),
   spriteSheetPng: z.string(),
   spriteMetadataJson: z.string(),
+  motionSpriteSheets: motionPathMapSchema.optional(),
+  motionMetadataJson: motionPathMapSchema.optional(),
   previewPng: z.string(),
 }).superRefine((assets, context) => {
   for (const [field, path] of Object.entries(assets)) {
-    if (field === 'directory' || path === undefined) continue;
+    if (field === 'directory' || path === undefined || typeof path !== 'string') continue;
     if (!isAllowedGeneratedPath(path)) context.addIssue({ code: 'custom', path: [field], message: '許可されていない生成パスです' });
+  }
+  for (const field of ['motionSpriteSheets', 'motionMetadataJson'] as const) {
+    const paths = assets[field];
+    if (!paths) continue;
+    for (const [clipId, path] of Object.entries(paths)) {
+      if (!isAllowedGeneratedPath(path)) context.addIssue({ code: 'custom', path: [field, clipId], message: '許可されていない生成パスです' });
+    }
   }
 });
 
@@ -30,6 +55,7 @@ export const canonicalCharacterRecordSchema = z
     character: characterFormSchema,
     assets: generatedAssetPathsSchema,
     spriteMetadata: spriteMetadataSchema,
+    motionMetadata: motionMetadataMapSchema.optional(),
     generatorVersion: z.string().min(1).max(32),
   })
   .strict()
@@ -43,8 +69,8 @@ export const canonicalCharacterRecordSchema = z
       optimizedWebp: `${record.assets.directory}/character.webp`,
       iconPng: `${record.assets.directory}/icon.png`,
       thumbnailWebp: `${record.assets.directory}/thumbnail.webp`,
-      spriteSheetPng: `${record.assets.directory}/idle.png`,
-      spriteMetadataJson: `${record.assets.directory}/idle.json`,
+      spriteSheetPng: record.assets.motionSpriteSheets?.['move-forward'] ?? `${record.assets.directory}/idle.png`,
+      spriteMetadataJson: record.assets.motionMetadataJson?.['move-forward'] ?? `${record.assets.directory}/idle.json`,
       previewPng: `${record.assets.directory}/preview.png`,
     };
     for (const [field, expected] of Object.entries(expectedPaths)) {
@@ -58,6 +84,24 @@ export const canonicalCharacterRecordSchema = z
     if (record.spriteMetadata.sourceImage !== record.assets.normalizedPng) {
       context.addIssue({ code: 'custom', path: ['spriteMetadata', 'sourceImage'], message: 'スプライトの元画像参照が一致しません' });
     }
+    const clipIds = ['move-forward', 'move-backward', 'fire', 'hit', 'land'] as const;
+    if (record.assets.motionSpriteSheets || record.assets.motionMetadataJson || record.motionMetadata) {
+      if (!record.assets.motionSpriteSheets || !record.assets.motionMetadataJson || !record.motionMetadata) {
+        context.addIssue({ code: 'custom', path: ['motionMetadata'], message: '5種類のモーション参照が揃っていません' });
+      } else {
+        for (const clipId of clipIds) {
+          if (record.assets.motionSpriteSheets[clipId] !== `${record.assets.directory}/${clipId}.png`) {
+            context.addIssue({ code: 'custom', path: ['assets', 'motionSpriteSheets', clipId], message: 'モーション画像参照が一致しません' });
+          }
+          if (record.assets.motionMetadataJson[clipId] !== `${record.assets.directory}/${clipId}.json`) {
+            context.addIssue({ code: 'custom', path: ['assets', 'motionMetadataJson', clipId], message: 'モーション情報参照が一致しません' });
+          }
+          if (record.motionMetadata[clipId].clipId !== clipId || record.motionMetadata[clipId].sourceImage !== record.assets.normalizedPng) {
+            context.addIssue({ code: 'custom', path: ['motionMetadata', clipId], message: 'モーション情報の参照が一致しません' });
+          }
+        }
+      }
+    }
   });
 
 export interface CanonicalCharacterRecord {
@@ -65,6 +109,7 @@ export interface CanonicalCharacterRecord {
   character: CharacterForm;
   assets: GeneratedAssetPaths;
   spriteMetadata: SpriteMetadata;
+  motionMetadata?: Record<MotionClipId, SpriteMetadata>;
   generatorVersion: string;
 }
 
@@ -89,16 +134,19 @@ export interface CompatibilityCharacter {
   tBias: number;
   color: string;
   special: string;
+  specialEnabled: boolean;
   facesLeft: boolean;
   spriteScale: number;
   assetBase: string;
   icon: string;
   idleSheet: string;
   idleMetadata: string;
+  motionSheets?: Record<MotionClipId, string>;
+  motionMetadata?: Record<MotionClipId, string>;
   face: [number, number, number];
   matchupFace: [number, number, number];
   normalSkill: typeof NORMAL_SKILL_DEFINITION;
-  specialSkill: DeclarativeSkillDefinition;
+  specialSkill: DeclarativeSkillDefinition | null;
   implementationVersion: string;
 }
 
@@ -111,7 +159,7 @@ export interface CompatibilityCatalog {
 
 export function createCompatibilityCharacter(record: CanonicalCharacterRecord): CompatibilityCharacter | null {
   const skill = convertSkillTemplate(record.character);
-  if (!skill.autoRegistrable || !skill.definition) return null;
+  if (record.character.specialEnabled && (!skill.autoRegistrable || !skill.definition)) return null;
   const character = record.character;
   return {
     key: character.id,
@@ -121,7 +169,7 @@ export function createCompatibilityCharacter(record: CanonicalCharacterRecord): 
     roleEn: character.classification.toLocaleUpperCase('en-US'),
     desc: character.description,
     selectStats: [character.defense, character.attack, character.speed],
-    specialDesc: character.specialDescription,
+    specialDesc: character.specialEnabled ? character.specialDescription : '必殺技は未設定です。',
     maxHp: character.maxHp,
     blastMul: character.blastMultiplier,
     windMul: character.windMultiplier,
@@ -133,17 +181,20 @@ export function createCompatibilityCharacter(record: CanonicalCharacterRecord): 
     specialVelocityMul: character.specialVelocityMultiplier,
     tBias: character.cpuTargetBias,
     color: character.color,
-    special: character.specialName,
+    special: character.specialEnabled ? character.specialName : '未設定',
+    specialEnabled: character.specialEnabled,
     facesLeft: character.sourceFacesLeft,
     spriteScale: character.spriteScale,
     assetBase: record.assets.normalizedPng.replace(/\.png$/u, ''),
     icon: record.assets.iconPng,
     idleSheet: record.assets.spriteSheetPng,
     idleMetadata: record.assets.spriteMetadataJson,
+    ...(record.assets.motionSpriteSheets ? { motionSheets: record.assets.motionSpriteSheets } : {}),
+    ...(record.assets.motionMetadataJson ? { motionMetadata: record.assets.motionMetadataJson } : {}),
     face: [character.faceCrop.x, character.faceCrop.y, character.faceCrop.width],
     matchupFace: [character.matchupCrop.x, character.matchupCrop.y, character.matchupCrop.width],
     normalSkill: NORMAL_SKILL_DEFINITION,
-    specialSkill: skill.definition,
+    specialSkill: character.specialEnabled ? skill.definition : null,
     implementationVersion: character.implementationVersion,
   };
 }
@@ -204,7 +255,7 @@ export function buildContentManifest(
       slug: record.character.slug,
       contentFile: `content/characters/${record.character.slug}.json`,
       assetDirectory: record.assets.directory,
-      autoRegistrable: convertSkillTemplate(record.character).autoRegistrable,
+      autoRegistrable: !record.character.specialEnabled || convertSkillTemplate(record.character).autoRegistrable,
       implementationVersion: record.character.implementationVersion,
     }));
   return stableJsonFile({ schemaVersion: 1, generatorVersion, characters });

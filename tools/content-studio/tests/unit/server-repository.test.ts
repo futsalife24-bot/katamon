@@ -23,6 +23,8 @@ class FakeRepositoryGitHub {
   commits = 0;
   branches: string[] = [];
   pullRequests = 0;
+  merges = 0;
+  checks: BuildState = 'queued';
 
   async getBaseSha() { return this.baseSha; }
   async getCommit(commitSha: string) { return { sha: commitSha, treeSha: 'b'.repeat(40) }; }
@@ -49,7 +51,24 @@ class FakeRepositoryGitHub {
     return { number: 42, url: 'https://github.invalid/pull/42' };
   }
   async findOpenPullRequest() { return null; }
-  async getChecks(): Promise<BuildState> { return 'queued'; }
+  async getPullRequest(number: number) {
+    return {
+      number,
+      url: `https://github.invalid/pull/${number}`,
+      state: 'open' as const,
+      baseRef: 'master',
+      headRef: this.branches[0],
+      headSha: 'e'.repeat(40),
+      merged: false,
+    };
+  }
+  async mergePullRequest(number: number, expectedHeadSha: string) {
+    expect(number).toBe(42);
+    expect(expectedHeadSha).toBe('e'.repeat(40));
+    this.merges += 1;
+    return { merged: true as const };
+  }
+  async getChecks(): Promise<BuildState> { return this.checks; }
   async getDeployment(): Promise<DeploymentState> { return 'pending'; }
 }
 
@@ -106,6 +125,34 @@ describe('GitHub repository service', () => {
     expect(github.blobs).toBe(0);
     expect(github.commits).toBe(0);
     expect(github.branches).toHaveLength(0);
+  });
+
+  it('CI成功前は止め、成功後だけ準備済みPRをマージする', async () => {
+    const github = new FakeRepositoryGitHub();
+    const service = new RepositoryService(
+      serverTestConfig(),
+      github,
+      new FixedClock(Date.UTC(2026, 7, 6, 0, 0, 0)),
+    );
+    const bundle = validatedBundle();
+    const prepared = await service.prepare(bundle, 'session-hash');
+    const pullRequest = await service.createPullRequest(prepared.id, bundle, 'session-hash');
+
+    github.checks = 'failure';
+    await expect(service.mergePullRequest(prepared.id, pullRequest.number, pullRequest.commitSha, 'session-hash'))
+      .rejects.toMatchObject({ code: 'checks_not_successful' });
+    expect(github.merges).toBe(0);
+
+    github.checks = 'success';
+    const merged = await service.mergePullRequest(
+      prepared.id,
+      pullRequest.number,
+      pullRequest.commitSha,
+      'session-hash',
+    );
+    expect(merged.merged).toBe(true);
+    expect(merged.checks).toBe('success');
+    expect(github.merges).toBe(1);
   });
 
   it('GitHubClientは固定repositoryへPOSTでbranchを作り、ref更新PATCHを使わない', async () => {

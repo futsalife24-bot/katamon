@@ -50,8 +50,9 @@ export const DEFAULT_CHARACTER: CharacterForm = {
   faceCrop: { x: 0.5, y: 0.3, width: 0.42 },
   matchupCrop: { x: 0.5, y: 0.32, width: 0.36 },
   normalSkillId: 'standard-projectile',
-  specialName: '',
-  specialDescription: '',
+  specialEnabled: false,
+  specialName: '未設定',
+  specialDescription: '必殺技は未設定です。',
   specialTemplate: 'single',
   specialParameters: {
     power: 1.35,
@@ -78,7 +79,7 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
   return {
     schemaVersion: DRAFT_SCHEMA_VERSION,
     id,
-    title: '新しいモーション',
+    title: '新しいキャラクター',
     createdAt: now,
     updatedAt: now,
     lastStep: 'image',
@@ -108,6 +109,16 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
       anchorPartId: null,
       analyzedAt: null,
     },
+    landmarks: {
+      status: 'idle',
+      facing: 'right',
+      ground: { x: 0.5, y: 0.9 },
+      muzzle: { x: 0.8, y: 0.5 },
+      eyes: [],
+      detectedAt: null,
+    },
+    generatedClips: [],
+    publishMode: 'pr-only',
     preview: {
       background: 'game',
       direction: 'right',

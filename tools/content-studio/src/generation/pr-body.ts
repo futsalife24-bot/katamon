@@ -37,8 +37,8 @@ export function buildPullRequestBody(input: PullRequestBodyInput): string {
     `- slug: \`${input.character.slug}\``,
     `- ステータス: HP ${input.character.maxHp} / 攻撃 ${input.character.attack} / 防御 ${input.character.defense} / 速度 ${input.character.speed} / 重量 ${input.character.weight}`,
     `- 通常技: \`${input.character.normalSkillId}\`（既存共通・読み取り専用）`,
-    `- 必殺技: ${escapeMarkdown(input.character.specialName)} / \`${input.character.specialTemplate}\``,
-    `- モーション: \`${input.spriteMetadata.preset}\` / ${input.spriteMetadata.frameCount}フレーム / ${input.spriteMetadata.fps} FPS`,
+    `- 必殺技: ${input.character.specialEnabled ? `${escapeMarkdown(input.character.specialName)} / \`${input.character.specialTemplate}\`` : '未設定（ゲーム内ボタン無効）'}`,
+    `- モーション: 前進・後退・単発砲撃・被弾・着地 / 各${input.spriteMetadata.frameCount}フレーム`,
     `- 生成ツール: \`${input.generatorVersion}\``,
     '',
     '### 画像',
@@ -64,7 +64,7 @@ export function buildPullRequestBody(input: PullRequestBodyInput): string {
     '- 公開後のキャッシュ更新',
   ];
 
-  if (!skill.autoRegistrable) {
+  if (input.character.specialEnabled && !skill.autoRegistrable) {
     lines.push(
       '',
       '### カスタム実装が必要',

@@ -7,6 +7,7 @@ import type {
   DraftRecord,
   ImageOperation,
   MockScenario,
+  MotionClipId,
   PreparedChange,
   PullRequestResult,
   RepositoryGateway,
@@ -23,10 +24,16 @@ import { ServerRepositoryGateway } from '../github/server-gateway';
 import { ContentImageProcessor, decodeImageBlob, encodePixelBuffer, inspectImageBlob, type ImageProgress, type ProcessedImage } from '../image';
 import {
   buildMotionProfileJson,
+  buildMotionBatchProfileJson,
+  createMotionBatchPackage,
   createMotionPackage,
+  detectMotionLandmarks,
   detectMotionParts,
+  generateMotionBatch,
   generateIdleMotionFromBlob,
+  MOTION_CLIP_IDS,
   type EncodedIdleSpriteResult,
+  type MotionBatchResult,
   type MotionProgress,
 } from '../motion';
 import { acquireWakeLock, detectCapabilities, requestPersistentStorage, storageUsage, type Capabilities } from '../pwa/capabilities';
@@ -82,6 +89,8 @@ export interface StudioController {
   outbox: OutboxRecord[];
   processed: ProcessedImage | null;
   sprite: EncodedIdleSpriteResult | null;
+  motions: Partial<MotionBatchResult>;
+  selectedClip: MotionClipId;
   bundle: ArtifactBundle | null;
   prepared: PreparedChange | null;
   pullRequest: PullRequestResult | null;
@@ -121,6 +130,8 @@ export interface StudioController {
   undoImageOperation(): Promise<void>;
   redoImageOperation(): Promise<void>;
   detectParts(): Promise<void>;
+  detectLandmarks(): Promise<void>;
+  selectMotionClip(clipId: MotionClipId): void;
   generateMotion(): Promise<void>;
   downloadMotionZip(): Promise<void>;
   downloadMotionMetadata(): Promise<void>;
@@ -170,15 +181,27 @@ function humanError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function validationExtras(draft: DraftRecord, processed: ProcessedImage | null, sprite: EncodedIdleSpriteResult | null): ValidationIssue[] {
+function waitFor(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException('処理を中止しました。', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+function validationExtras(draft: DraftRecord, processed: ProcessedImage | null, motions: Partial<MotionBatchResult>): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (!draft.imageInfo || !processed) issues.push({ severity: 'error', code: 'image.missing', field: 'image', message: 'キャラクター画像を登録してください。' });
   if (draft.imageInfo && draft.imageInfo.byteLength > MAX_INPUT_BYTES) issues.push({ severity: 'error', code: 'image.too_large', field: 'image', message: '元画像は20MB以下にしてください。' });
-  if (!sprite) issues.push({ severity: 'error', code: 'motion.missing', field: 'motion', message: '待機モーションを生成してください。' });
+  const missingClips = MOTION_CLIP_IDS.filter((clipId) => !motions[clipId]);
+  if (missingClips.length) issues.push({ severity: 'error', code: 'motion.missing', field: 'motion', message: `5種類のモーションを生成してください（不足: ${missingClips.join(', ')}）` });
   if (processed?.analysis.hasBakedCheckerboard) issues.push({ severity: 'warning', code: 'image.checkerboard', field: 'image', message: '市松模様が焼き付いている可能性があります。透明表示で輪郭を確認してください。' });
   if (processed?.analysis.hasBakedBlackBackground) issues.push({ severity: 'warning', code: 'image.black_background', field: 'image', message: '黒背景が焼き付いている可能性があります。' });
-  if (draft.character.specialTemplate === 'custom-required') issues.push({ severity: 'warning', code: 'skill.custom_required', field: 'specialTemplate', message: 'カスタム実装が必要です。自動登録せずPR本文へ仕様メモを出力します。' });
-  if (draft.character.specialTemplate === 'custom-required' && !draft.character.customImplementationNote.trim()) issues.push({ severity: 'error', code: 'skill.custom_note_missing', field: 'customImplementationNote', message: 'カスタム実装の仕様メモを入力してください。' });
+  if (draft.character.specialEnabled && draft.character.specialTemplate === 'custom-required') issues.push({ severity: 'warning', code: 'skill.custom_required', field: 'specialTemplate', message: 'カスタム実装が必要です。自動登録せずPR本文へ仕様メモを出力します。' });
+  if (draft.character.specialEnabled && draft.character.specialTemplate === 'custom-required' && !draft.character.customImplementationNote.trim()) issues.push({ severity: 'error', code: 'skill.custom_note_missing', field: 'customImplementationNote', message: 'カスタム実装の仕様メモを入力してください。' });
   if (draft.sourceIdentity && (draft.character.id !== draft.sourceIdentity.id || draft.character.slug !== draft.sourceIdentity.slug)) {
     issues.push({ severity: 'error', code: 'character.identity_locked', field: 'id', message: '更新時は内部IDとslugを変更できません。別キャラクターとして追加してください。' });
   }
@@ -225,8 +248,49 @@ async function restoreStoredSprite(draftId: string): Promise<EncodedIdleSpriteRe
   }
 }
 
+const MOTION_BLOB_KIND: Record<MotionClipId, DraftBlobKind> = {
+  'move-forward': 'motion-move-forward',
+  'move-backward': 'motion-move-backward',
+  fire: 'motion-fire',
+  hit: 'motion-hit',
+  land: 'motion-land',
+};
+
+async function restoreStoredMotion(draftId: string, clipId: MotionClipId): Promise<EncodedIdleSpriteResult | null> {
+  const [blob, storedMetadata] = await Promise.all([
+    getDraftBlob(draftId, MOTION_BLOB_KIND[clipId]),
+    getAppMeta<unknown>(`${draftId}:motion:${clipId}:metadata`),
+  ]);
+  if (!blob || !storedMetadata) return null;
+  const parsed = spriteMetadataSchema.safeParse(storedMetadata);
+  if (!parsed.success || parsed.data.clipId !== clipId) return null;
+  const metadata = parsed.data as SpriteMetadata;
+  const sheetWidth = metadata.frameWidth * metadata.frameCount;
+  if (sheetWidth > 8192 || metadata.frameHeight > 8192 || sheetWidth * metadata.frameHeight > 24_000_000) return null;
+  try {
+    const safety = await inspectImageBlob(blob, `${clipId}.png`, { decodeMaxDimension: Math.max(sheetWidth, metadata.frameHeight) });
+    const sheet = await decodeImageBlob(blob, safety);
+    if (sheet.width !== sheetWidth || sheet.height !== metadata.frameHeight) return null;
+    return {
+      spriteSheetPng: { blob, mimeType: 'image/png', width: sheet.width, height: sheet.height, byteLength: blob.size },
+      sheet,
+      metadata,
+      transforms: [],
+      frameBounds: Array.from({ length: metadata.frameCount }, () => ({ ...metadata.contentBounds })),
+      usedWorker: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchResult>> {
+  const entries = await Promise.all(MOTION_CLIP_IDS.map(async (clipId) => [clipId, await restoreStoredMotion(draftId, clipId)] as const));
+  return Object.fromEntries(entries.filter((entry): entry is readonly [MotionClipId, EncodedIdleSpriteResult] => entry[1] !== null));
+}
+
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.2.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.3.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -242,6 +306,8 @@ export function useStudioController(): StudioController {
   const [outbox, setOutbox] = useState<OutboxRecord[]>([]);
   const [processed, setProcessed] = useState<ProcessedImage | null>(null);
   const [sprite, setSprite] = useState<EncodedIdleSpriteResult | null>(null);
+  const [motions, setMotions] = useState<Partial<MotionBatchResult>>({});
+  const [selectedClip, setSelectedClip] = useState<MotionClipId>('move-forward');
   const [bundle, setBundleState] = useState<ArtifactBundle | null>(null);
   const [prepared, setPrepared] = useState<PreparedChange | null>(null);
   const [pullRequest, setPullRequest] = useState<PullRequestResult | null>(null);
@@ -384,15 +450,19 @@ export function useStudioController(): StudioController {
       setError('下書きが見つかりませんでした。');
       return;
     }
-    const [original, restoredSprite] = await Promise.all([
+    const [original, restoredSprite, restoredMotions] = await Promise.all([
       getDraftBlob(id, 'original'),
       restoreStoredSprite(id),
+      restoreMotionBatch(id),
     ]);
     originalBlobRef.current = original;
     setDraft(stored);
     draftRef.current = stored;
     setProcessed(null);
-    setSprite(restoredSprite);
+    setMotions(restoredMotions);
+    const firstRestored = MOTION_CLIP_IDS.find((clipId) => restoredMotions[clipId]);
+    setSelectedClip(firstRestored ?? 'move-forward');
+    setSprite(firstRestored ? restoredMotions[firstRestored]! : restoredSprite);
     setBundle(null);
     setPrepared(null);
     setPullRequest(null);
@@ -417,6 +487,8 @@ export function useStudioController(): StudioController {
     draftRef.current = saved;
     setProcessed(null);
     setSprite(null);
+    setMotions({});
+    setSelectedClip('move-forward');
     setBundle(null);
     setPrepared(null);
     setPullRequest(null);
@@ -524,9 +596,15 @@ export function useStudioController(): StudioController {
         },
       );
       setProcessed(result);
-      if (generateVariants) setSprite(null);
+      if (generateVariants) {
+        setSprite(null);
+        setMotions({});
+      }
       const imageInfo = { ...result.info, fileName: snapshot.imageInfo?.fileName || result.info.fileName, status: 'ready' as const };
-      updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations }));
+      const landmarks = snapshot.landmarks.status === 'idle'
+        ? detectMotionLandmarks(result.normalized.pixels, snapshot.landmarks.facing)
+        : snapshot.landmarks;
+      updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations, landmarks, generatedClips: generateVariants ? [] : current.generatedClips }));
       if (result.variants) {
         await Promise.all([
           putDraftBlob(snapshot.id, 'working', await encodePixelBuffer(result.edited, 'image/png').then(({ blob }) => blob)),
@@ -535,6 +613,7 @@ export function useStudioController(): StudioController {
           putDraftBlob(snapshot.id, 'icon', result.variants.iconPng.blob),
           putDraftBlob(snapshot.id, 'thumbnail', result.variants.thumbnail.blob),
           setAppMeta(`${snapshot.id}:sprite-metadata`, null),
+          ...MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${snapshot.id}:motion:${clipId}:metadata`, null)),
         ]);
       }
       return result;
@@ -577,6 +656,8 @@ export function useStudioController(): StudioController {
         warnings: [],
       },
       processingOperations: [],
+      landmarks: { ...current.landmarks, status: 'idle', eyes: [], detectedAt: null },
+      generatedClips: [],
       updatedAt: new Date().toISOString(),
       historyStatus: 'dirty',
     };
@@ -618,6 +699,8 @@ export function useStudioController(): StudioController {
       draftRef.current = saved;
       setProcessed(null);
       setSprite(null);
+      setMotions({});
+      setSelectedClip('move-forward');
       setBundle(null);
       setPrepared(null);
       setPullRequest(null);
@@ -706,12 +789,44 @@ export function useStudioController(): StudioController {
     }
   }, [persistDraftState, processed]);
 
+  const detectLandmarks = useCallback(async () => {
+    const current = draftRef.current;
+    const source = processed?.normalized.pixels;
+    if (!current || !source) {
+      setError('先に画像を登録して切り抜きを確認してください。');
+      return;
+    }
+    try {
+      const landmarks = detectMotionLandmarks(source, current.landmarks.facing);
+      const partDetection = detectMotionParts(source);
+      persistDraftState((active) => active.id === current.id
+        ? {
+          ...active,
+          landmarks,
+          partDetection,
+          character: { ...active.character, sourceFacesLeft: landmarks.facing === 'left' },
+          generatedClips: [],
+        }
+        : active);
+      setMotions({});
+      setSprite(null);
+      setNotice(landmarks.eyes.length
+        ? `接地点・砲口・目${landmarks.eyes.length}個を端末内で推測しました。ズレていれば画像をタップして直せます。`
+        : '接地点と砲口を推測しました。目は画像をタップして追加できます。');
+    } catch (cause) {
+      setError(humanError(cause, '位置を推測できませんでした。手動で指定できます。'));
+    }
+  }, [persistDraftState, processed]);
+
+  const selectMotionClip = useCallback((clipId: MotionClipId) => {
+    setSelectedClip(clipId);
+    setSprite(motions[clipId] ?? null);
+  }, [motions]);
+
   const generateMotion = useCallback(async () => {
     const current = draftRef.current;
-    if (!current) return;
-    let motionSource = await getDraftBlob(current.id, 'working');
-    if (!motionSource && processed) motionSource = (await encodePixelBuffer(processed.edited, 'image/png')).blob;
-    if (!motionSource) {
+    const source = processed?.edited;
+    if (!current || !source) {
       setError('先に画像を切り抜いて正規化してください。');
       return;
     }
@@ -722,47 +837,52 @@ export function useStudioController(): StudioController {
     setError(null);
     const wakeLock = await acquireWakeLock();
     try {
-      const result = await generateIdleMotionFromBlob(
-        {
-          blob: motionSource,
-          fileName: 'motion-source.png',
-          sourceImage: 'motion-source.png',
-          preset: current.motionPreset,
-          parameters: current.motion,
-          sourcePlacement: {
-            padding: current.editor.padding,
-            offsetX: current.editor.offsetX,
-            offsetY: current.editor.offsetY,
-            scale: current.editor.scale,
-            flipHorizontal: current.editor.flipHorizontal,
-            referenceSize: current.editor.outputSize,
-          },
-          action: current.motionAction,
-          actionPreset: current.actionPreset,
-          partRegions: current.partDetection.parts,
-          focusPartId: current.partDetection.focusPartId,
-          anchorPartId: current.partDetection.anchorPartId,
-          removeBackground: false,
+      const landmarks = current.landmarks.status === 'idle'
+        ? detectMotionLandmarks(processed.normalized.pixels, current.landmarks.facing)
+        : current.landmarks;
+      const result = await generateMotionBatch({
+        source,
+        sourceImage: 'normalized.png',
+        landmarks,
+        outputSize: current.motion.outputSize,
+        sourcePlacement: {
+          padding: current.editor.padding,
+          offsetX: current.editor.offsetX,
+          offsetY: current.editor.offsetY,
+          scale: current.editor.scale,
+          flipHorizontal: current.editor.flipHorizontal,
+          referenceSize: current.editor.outputSize,
         },
-        {
-          signal: controller.signal,
-          onImageProgress: (item: ImageProgress) => setBusyProgress(item.progress * 0.3, item.message),
-          onMotionProgress: (item: MotionProgress) => setBusyProgress(0.3 + item.progress * 0.7, item.message),
-        },
-      );
-      setSprite(result);
+      }, {
+        signal: controller.signal,
+        onProgress: (item) => setBusyProgress(item.progress, item.message),
+      });
+      const active = result['move-forward'];
+      setMotions(result);
+      setSelectedClip('move-forward');
+      setSprite(active);
       await Promise.all([
-        putDraftBlob(current.id, 'sprite', result.spriteSheetPng.blob),
-        setAppMeta(`${current.id}:sprite-metadata`, result.metadata),
+        putDraftBlob(current.id, 'sprite', active.spriteSheetPng.blob),
+        setAppMeta(`${current.id}:sprite-metadata`, active.metadata),
+        ...MOTION_CLIP_IDS.flatMap((clipId) => [
+          putDraftBlob(current.id, MOTION_BLOB_KIND[clipId], result[clipId].spriteSheetPng.blob),
+          setAppMeta(`${current.id}:motion:${clipId}:metadata`, result[clipId].metadata),
+        ]),
       ]);
-      persistDraftState((active) => active.id === current.id
-        ? { ...active, preview: { ...active.preview, playing: true } }
-        : active);
-      setNotice(result.usedWorker
-        ? `${result.metadata.frameWidth}pxの高画質モーションとスプライトシートを生成しました。`
-        : '端末のWorkerを利用できなかったため、256pxの軽量モーションで生成しました。');
+      persistDraftState((draftItem) => draftItem.id === current.id
+        ? {
+          ...draftItem,
+          landmarks,
+          generatedClips: [...MOTION_CLIP_IDS],
+          preview: { ...draftItem.preview, playing: true },
+        }
+        : draftItem);
+      const usedWorker = MOTION_CLIP_IDS.every((clipId) => result[clipId].usedWorker);
+      setNotice(usedWorker
+        ? '前進・後退・単発砲撃・被弾・着地の5種類を高画質で生成しました。'
+        : 'Worker未対応のため、端末を固めない軽量画質で5種類を生成しました。');
     } catch (cause) {
-      setError(humanError(cause, '待機モーションを生成できませんでした。'));
+      setError(humanError(cause, '5種類のモーションを生成できませんでした。'));
     } finally {
       await wakeLock?.release().catch(() => undefined);
       if (abortRef.current === controller) abortRef.current = null;
@@ -773,32 +893,34 @@ export function useStudioController(): StudioController {
 
   const downloadMotionZip = useCallback(async () => {
     const current = draftRef.current;
-    if (!current || !sprite) {
-      setError('先にモーションを生成してください。');
+    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId]);
+    if (!current || !complete) {
+      setError('先に5種類のモーションを生成してください。');
       return;
     }
     setBusy(true);
     setBusyProgress(0.2, 'モーションZIPを準備しています');
     try {
-      const archive = await createMotionPackage(current, sprite);
+      const archive = await createMotionBatchPackage(current, motions as MotionBatchResult);
       setBusyProgress(1, 'モーションZIPを作成しました');
-      downloadBlob(archive, `content-studio-motion-${current.id.slice(0, 8)}.zip`);
+      downloadBlob(archive, `content-studio-motions-${current.id.slice(0, 8)}.zip`);
     } catch (cause) {
       setError(humanError(cause, 'モーションZIPを作成できませんでした。'));
     } finally {
       setBusy(false);
       setProgress(null);
     }
-  }, [setBusyProgress, sprite]);
+  }, [motions, setBusyProgress]);
 
   const downloadMotionMetadata = useCallback(async () => {
     const current = draftRef.current;
-    if (!current || !sprite) {
-      setError('先にモーションを生成してください。');
+    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId]);
+    if (!current || !complete) {
+      setError('先に5種類のモーションを生成してください。');
       return;
     }
-    downloadBlob(new Blob([buildMotionProfileJson(current, sprite)], { type: 'application/json' }), `motion-profile-${current.id.slice(0, 8)}.json`);
-  }, [sprite]);
+    downloadBlob(new Blob([buildMotionBatchProfileJson(current, motions as MotionBatchResult)], { type: 'application/json' }), `motion-profile-${current.id.slice(0, 8)}.json`);
+  }, [motions]);
 
   const downloadSpriteSheet = useCallback(async () => {
     const current = draftRef.current;
@@ -806,13 +928,18 @@ export function useStudioController(): StudioController {
       setError('先にモーションを生成してください。');
       return;
     }
-    downloadBlob(sprite.spriteSheetPng.blob, `sprite-sheet-${current.id.slice(0, 8)}.png`);
-  }, [sprite]);
+    downloadBlob(sprite.spriteSheetPng.blob, `${selectedClip}-sprite-${current.id.slice(0, 8)}.png`);
+  }, [selectedClip, sprite]);
 
   const validateAndBuild = useCallback(async (): Promise<ValidationIssue[]> => {
     const current = draftRef.current;
     if (!current) return [];
-    let activeSprite = sprite;
+    let activeMotions = motions;
+    if (!MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) {
+      activeMotions = await restoreMotionBatch(current.id);
+      if (MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) setMotions(activeMotions);
+    }
+    let activeSprite = activeMotions['move-forward'] ?? sprite;
     if (!activeSprite) {
       const storedSprite = await getDraftBlob(current.id, 'sprite');
       const metadata = await getAppMeta<SpriteMetadata>(`${current.id}:sprite-metadata`);
@@ -830,7 +957,7 @@ export function useStudioController(): StudioController {
     const existing = publishedCharacters.map(({ character }) => ({ id: character.id, slug: character.slug }));
     const issues = [
       ...validateCharacter(current.character, { existing, current: current.sourceIdentity ?? undefined }),
-      ...validationExtras(current, processed, activeSprite),
+      ...validationExtras(current, processed, activeMotions),
     ];
     persistDraftState((item) => ({ ...item, validation: issues }));
     if (issues.some(({ severity }) => severity === 'error')) {
@@ -841,7 +968,7 @@ export function useStudioController(): StudioController {
     const optimizedWebp = processed?.variants?.lightweightWebp.blob ?? await getDraftBlob(current.id, 'optimized');
     const iconPng = processed?.variants?.iconPng.blob ?? await getDraftBlob(current.id, 'icon');
     const thumbnailWebp = processed?.variants?.thumbnail.blob ?? await getDraftBlob(current.id, 'thumbnail');
-    if (!normalizedPng || !optimizedWebp || !iconPng || !thumbnailWebp || !activeSprite) {
+    if (!normalizedPng || !optimizedWebp || !iconPng || !thumbnailWebp || !activeSprite || !MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) {
       const missing: ValidationIssue = { severity: 'error', code: 'artifact.missing', message: '画像生成物が不足しています。切り抜きとモーションを再生成してください。' };
       const next = [...issues, missing];
       persistDraftState((item) => ({ ...item, validation: next }));
@@ -851,12 +978,14 @@ export function useStudioController(): StudioController {
       const nextBundle = await buildArtifactBundle({
         character: current.character,
         spriteMetadata: activeSprite.metadata,
+        motionMetadata: Object.fromEntries(MOTION_CLIP_IDS.map((clipId) => [clipId, activeMotions[clipId]!.metadata])) as Record<MotionClipId, SpriteMetadata>,
         images: {
           normalizedPng,
           optimizedWebp,
           iconPng,
           thumbnailWebp,
           spriteSheetPng: activeSprite.spriteSheetPng.blob,
+          motionSpriteSheets: Object.fromEntries(MOTION_CLIP_IDS.map((clipId) => [clipId, activeMotions[clipId]!.spriteSheetPng.blob])) as Record<MotionClipId, Blob>,
           previewPng: iconPng,
         },
         expectedBaseSha: repositoryStatus.baseSha,
@@ -872,7 +1001,7 @@ export function useStudioController(): StudioController {
       persistDraftState((item) => ({ ...item, validation: next }));
       return next;
     }
-  }, [persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, sprite]);
+  }, [motions, persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, sprite]);
 
   const downloadZip = useCallback(async () => {
     let active = bundleRef.current;
@@ -929,11 +1058,31 @@ export function useStudioController(): StudioController {
       setError('自動テストが失敗しています。PR作成前に修正してください。');
       return;
     }
+    const mergeRequested = current.publishMode === 'merge-after-ci';
+    if (mergeRequested && !window.confirm('PRを作成し、CIがすべて成功した場合だけmasterへマージしますか？失敗や競合があれば自動で中断します。')) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setError(null);
     try {
-      const result = await gatewayRef.current.createPullRequest(prepared, bundle, current.mockScenario);
+      setBusyProgress(0.2, 'ブランチへpushしてPRを作成しています');
+      let result = await gatewayRef.current.createPullRequest(prepared, bundle, current.mockScenario);
       setPullRequest(result);
+      if (mergeRequested) {
+        let checks: RepositoryStatus['build'] = result.checks;
+        for (let attempt = 0; checks !== 'success'; attempt += 1) {
+          if (checks === 'failure') throw new Error('CIが失敗したためPRはマージしていません。PR上で結果を確認してください。');
+          if (attempt >= 75) throw new Error('CIの完了待ちが10分を超えました。PRは作成済みですがマージしていません。');
+          setBusyProgress(Math.min(0.75, 0.3 + attempt * 0.006), `CI完了を待っています（${checks}）`);
+          await waitFor(8_000, controller.signal);
+          checks = await gatewayRef.current.getChecks(result.commitSha);
+        }
+        setBusyProgress(0.82, 'CI成功を確認しました。競合を再確認してマージします');
+        result = await gatewayRef.current.mergePullRequest(prepared, { ...result, checks: 'success' }, current.mockScenario);
+        setPullRequest(result);
+      }
+      setBusyProgress(1, result.merged ? 'マージが完了しました' : 'PRを作成しました');
       await addPublishHistory({
         id: crypto.randomUUID(),
         draftId: current.id,
@@ -942,15 +1091,17 @@ export function useStudioController(): StudioController {
         completedAt: new Date().toISOString(),
         result,
       });
-      persistDraftState((item) => ({ ...item, lastStep: 'complete', historyStatus: 'clean' }));
-      setNotice('モックPRを作成し、CIと公開状態を確認しました。');
+      persistDraftState((item) => ({ ...item, lastStep: 'publish', historyStatus: 'clean' }));
+      setNotice(result.merged ? 'PRを作成し、CI成功後に安全にマージしました。' : 'PRを作成しました。内容を確認してからマージできます。');
       await refreshLists();
     } catch (cause) {
       setError(humanError(cause, 'PRを作成できませんでした。'));
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setBusy(false);
+      setProgress(null);
     }
-  }, [bundle, persistDraftState, prepared, refreshLists]);
+  }, [bundle, persistDraftState, prepared, refreshLists, setBusyProgress]);
 
   const retryOutbox = useCallback(async (id: string) => {
     const item = outbox.find((candidate) => candidate.id === id);
@@ -1040,22 +1191,22 @@ export function useStudioController(): StudioController {
   }, [backToDashboard, goToStep]);
 
   const value = useMemo<StudioController>(() => ({
-    appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, sprite, bundle, prepared, pullRequest,
+    appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
     repositoryStatus, capabilities, storage, saveState, savedAt, busy, progress, error, notice, redoCount: redo.length,
     installAvailable: Boolean(installEvent), installApp, dismissNotice: () => setNotice(null), dismissError: () => setError(null),
     createNewDraft, editPublishedCharacter, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
     goToStep, nextStep, previousStep, acceptFile, onFileInput, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
-    addBrushStroke, undoImageOperation, redoImageOperation, detectParts, generateMotion,
+    addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, generateMotion,
     downloadMotionZip, downloadMotionMetadata, downloadSpriteSheet, validateAndBuild, downloadZip, downloadJson,
     prepareChange, createPullRequest, retryOutbox, refreshRepositoryStatus, login, logout,
     cancelProcessing: () => abortRef.current?.abort(),
   }), [
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
     capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editPublishedCharacter,
-    detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
+    detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
     nextStep, notice, onDrop, onFileInput, openDraft, outbox, prepareChange, prepared, previousStep, processed, progress,
     pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, repositoryStatus, retryOutbox, saveState, savedAt,
-    publishedCharacters, publishedWarning, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
+    motions, publishedCharacters, publishedWarning, selectedClip, selectMotionClip, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
   ]);
 
   return value;

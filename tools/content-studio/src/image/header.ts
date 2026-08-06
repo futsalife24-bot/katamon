@@ -9,7 +9,9 @@ export const DEFAULT_IMAGE_LIMITS: Readonly<ImageSafetyLimits> = Object.freeze({
   maxDecodedBytes: 96 * 1024 * 1024,
 });
 
-export const WORKER_DECODE_MAX_DIMENSION = 3072;
+// Android Chromeで背景除去用の全画素バッファを複数確保してもメモリを圧迫しない上限。
+// 最終出力は512pxなので、編集精度を保ちつつ1600pxへ事前縮小する。
+export const WORKER_DECODE_MAX_DIMENSION = 1600;
 export const MAIN_THREAD_DECODE_MAX_DIMENSION = 1600;
 const HEADER_READ_BYTES = 512 * 1024;
 

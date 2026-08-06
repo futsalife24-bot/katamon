@@ -45,6 +45,7 @@ describe('artifact generation flow', () => {
 
   it('does not register custom-required skills in the compatibility catalog', async () => {
     const bundle = await sampleBundle(sampleCharacter({
+      specialEnabled: true,
       specialTemplate: 'custom-required',
       customImplementationNote: '専用処理を別途実装する。',
     }));

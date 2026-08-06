@@ -2447,6 +2447,7 @@
   const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX。新規挑戦は0、次戦へ残量を持ち越す
 
   function isSpecialReady(u) {
+    if (!u || CHARACTERS[u.character]?.specialEnabled === false) return false;
     return u.specialCharge >= SPECIAL_CHARGE_MAX;
   }
 
@@ -3970,6 +3971,13 @@
 
   function advanceTutorialStep() {
     tutorial.stepIndex++;
+    while (
+      tutorial.stepIndex < TUTORIAL_STEPS.length
+      && TUTORIAL_STEPS[tutorial.stepIndex].key === 'special'
+      && CHARACTERS[player.character]?.specialEnabled === false
+    ) {
+      tutorial.stepIndex++;
+    }
     if (tutorial.stepIndex >= TUTORIAL_STEPS.length) { finishTutorial(); return; }
     applyTutorialStep();
   }
@@ -11240,10 +11248,11 @@
 
   function drawSpecialButton() {
     const me = localUnit();
+    const def = CHARACTERS[me.character];
+    const specialEnabled = def.specialEnabled !== false;
     const ready = isSpecialReady(me);
     const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
-    const chargeRatio = me.specialCharge / SPECIAL_CHARGE_MAX;
-    const def = CHARACTERS[me.character];
+    const chargeRatio = specialEnabled ? me.specialCharge / SPECIAL_CHARGE_MAX : 0;
     ctx.save();
     // 台座の影
     ctx.beginPath();
@@ -11256,7 +11265,7 @@
       specialBtn.x - specialBtn.r * 0.35, specialBtn.y - specialBtn.r * 0.4, specialBtn.r * 0.1,
       specialBtn.x, specialBtn.y, specialBtn.r
     );
-    if (specialArmed) {
+    if (specialArmed && specialEnabled) {
       sBody.addColorStop(0, '#ffb45e'); sBody.addColorStop(0.55, '#e0642a'); sBody.addColorStop(1, '#7a2410');
     } else if (ready) {
       sBody.addColorStop(0, '#574a26'); sBody.addColorStop(0.6, '#332c17'); sBody.addColorStop(1, '#15120a');
@@ -11301,11 +11310,11 @@
       font: `900 13px ${UI_FONT_HEAVY}`,
       color: ready ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 3.5
     });
-    drawOutlinedText(def.special, specialBtn.x, specialBtn.y + 2, {
+    drawOutlinedText(specialEnabled ? def.special : '未設定', specialBtn.x, specialBtn.y + 2, {
       font: `900 8px ${UI_FONT_HEAVY}`,
       color: ready ? UI.brassLight : 'rgba(226,232,240,0.5)', lineWidth: 3
     });
-    drawOutlinedText(ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
+    drawOutlinedText(specialEnabled ? (ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`) : '—', specialBtn.x, specialBtn.y + 17, {
       font: `900 11px ${UI_FONT_HEAVY}`,
       color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
     });

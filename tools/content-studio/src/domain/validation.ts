@@ -91,7 +91,7 @@ export function isAllowedGeneratedPath(path: string): boolean {
   return (
     /^content\/characters\/[a-z][a-z0-9-]{0,23}\.json$/u.test(path) ||
     /^generated\/content-studio-(?:catalog\.js|manifest\.json)$/u.test(path) ||
-    /^assets\/content-studio\/[a-z][a-z0-9-]{0,23}\/[a-f0-9]{12}\/(?:source\.(?:png|jpe?g|webp)|character\.(?:png|webp)|icon\.png|thumbnail\.webp|idle\.(?:png|json)|preview\.png)$/u.test(path)
+    /^assets\/content-studio\/[a-z][a-z0-9-]{0,23}\/[a-f0-9]{12}\/(?:source\.(?:png|jpe?g|webp)|character\.(?:png|webp)|icon\.png|thumbnail\.webp|idle\.(?:png|json)|(?:move-forward|move-backward|fire|hit|land)\.(?:png|json)|preview\.png)$/u.test(path)
   );
 }
 

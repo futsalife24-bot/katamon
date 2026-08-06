@@ -226,6 +226,18 @@ export class ServerRepositoryGateway implements RepositoryGateway {
     });
   }
 
+  async mergePullRequest(prepared: PreparedChange, result: PullRequestResult): Promise<PullRequestResult> {
+    await this.ensureAuthenticated();
+    return this.request<PullRequestResult>('/api/github/merge', {
+      method: 'POST',
+      body: JSON.stringify({
+        preparationId: prepared.id,
+        pullRequestNumber: result.number,
+        expectedHeadSha: result.commitSha,
+      }),
+    });
+  }
+
   async getChecks(ref: string): Promise<RepositoryStatus['build']> {
     await this.ensureAuthenticated();
     const result = await this.request<{ build: RepositoryStatus['build'] }>(

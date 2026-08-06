@@ -55,7 +55,8 @@ async function swipeUpFrom(context: BrowserContext, page: Page, target: Locator)
   await client.detach();
 }
 
-test('Android縦画面で部位検出から砲撃モーション出力、再開、オフライン復旧まで完走する', async ({ page, context }) => {
+test('Android縦画面で5モーション生成、固定操作、モック反映、再開まで完走する', async ({ page, context }) => {
+  test.setTimeout(180_000);
   const runtimeErrors: string[] = [];
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
 
@@ -73,8 +74,8 @@ test('Android縦画面で部位検出から砲撃モーション出力、再開�
   else await attachSyntheticCharacter(page);
   await expect(page.getByText(localSample ? basename(localSample) : 'sample-character.png')).toBeVisible();
 
-  await page.getByTestId('step-nav-cutout').click();
   const cutoutCanvas = page.locator('canvas[aria-label="背景除去後"]');
+  await expect(cutoutCanvas).toBeVisible();
   const scrollBeforeCutoutSwipe = await page.evaluate(() => window.scrollY);
   await swipeUpFrom(context, page, cutoutCanvas);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeCutoutSwipe + 40);
@@ -83,25 +84,31 @@ test('Android縦画面で部位検出から砲撃モーション出力、再開�
   await page.getByRole('button', { name: '余白を自動トリム' }).click();
   await expect(page.getByRole('dialog', { name: '処理中' })).toBeHidden();
 
-  await page.getByTestId('step-nav-parts').click();
-  await page.getByTestId('detect-parts').click();
-  await expect(page.locator('.part-candidate')).toHaveCount(5);
-  await expect(page.getByTestId('focus-part')).toBeVisible();
-  await page.getByTestId('focus-part').selectOption('part-right');
+  await page.getByTestId('step-nav-setup').click();
+  await expect(page.getByTestId('landmark-canvas')).toBeVisible();
+  await page.getByTestId('facing-right').click();
+  await page.getByTestId('detect-landmarks').click();
+  await page.getByRole('button', { name: '目1', exact: true }).click();
+  const landmarkCanvas = page.getByTestId('landmark-canvas');
+  const landmarkBox = await landmarkCanvas.boundingBox();
+  if (!landmarkBox) throw new Error('位置調整画像を取得できませんでした。');
+  await landmarkCanvas.tap({ position: { x: landmarkBox.width * 0.62, y: landmarkBox.height * 0.3 } });
+  await expect(page.getByLabel('目の印を大きく')).toBeEnabled();
+  await page.getByLabel('目の印を大きく').click();
 
   await page.getByTestId('step-nav-motion').click();
-  await page.getByTestId('motion-action-fire').click();
-  await page.getByTestId('action-preset-fire-recoil').click();
   await expect(page.getByTestId('step-motion').locator('input[type="range"]')).toHaveCount(0);
-  const motionCanvas = page.getByLabel('砲撃モーションプレビュー');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  const scrollBeforeMotionSwipe = await page.evaluate(() => window.scrollY);
-  await swipeUpFrom(context, page, motionCanvas);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeMotionSwipe + 40);
+  const generateButton = page.getByTestId('generate-motion');
+  await expect(generateButton).toBeVisible();
+  expect(await generateButton.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+  })).toBe(true);
 
-  await page.getByTestId('generate-motion').click();
-  await expect(page.getByRole('dialog', { name: '処理中' })).toBeHidden({ timeout: 30_000 });
-  await expect(page.getByText('高画質 512px', { exact: true }).last()).toBeVisible();
+  await generateButton.click();
+  await expect(page.getByTestId('generate-motion')).toHaveText('5種類を再生成', { timeout: 120_000 });
+  await expect(page.locator('.motion-batch-list article.is-complete')).toHaveCount(5);
+  const motionCanvas = page.getByLabel('前進プレビュー');
   await expect(page.getByRole('button', { name: 'プレビュー停止' })).toBeVisible();
   const firstMotionFrame = await motionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
   await expect.poll(
@@ -109,29 +116,43 @@ test('Android縦画面で部位検出から砲撃モーション出力、再開�
     { timeout: 2_000, intervals: [100, 100, 150, 200] },
   ).not.toBe(firstMotionFrame);
 
-  await page.getByTestId('step-nav-preview').click();
-  await expect(page.getByLabel('モーション最終プレビュー')).toBeVisible();
-  await page.getByRole('button', { name: '暗い' }).click();
-  await page.getByLabel('向き').selectOption('left');
+  await page.getByTestId('preview-fire').click();
+  await expect(page.getByLabel('単発砲撃プレビュー')).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.getByTestId('generate-motion').evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+  })).toBe(true);
 
-  await page.getByTestId('step-nav-export').click();
-  await page.getByText('ZIPに入るファイル', { exact: true }).click();
-  await expect(page.getByText('motion/sprite-sheet.png')).toBeVisible();
+  await page.getByTestId('step-nav-character').click();
+  await page.getByTestId('display-name').fill('サンプルキャラクター');
+  await page.getByTestId('character-id').fill('sample-unit');
+  await expect(page.getByText('未設定（ボタン無効）')).toBeVisible();
+
+  await page.getByTestId('step-nav-publish').click();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByTestId('download-motion-zip').click();
+  await page.getByRole('button', { name: 'モーションZIP' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^content-studio-motion-[a-f0-9]{8}\.zip$/u);
+  expect(download.suggestedFilename()).toMatch(/^content-studio-motions-[a-f0-9]{8}\.zip$/u);
 
-  await page.getByRole('button', { name: '下書きを保存して終了' }).click();
-  await expect(page.getByText('新しいモーション', { exact: true }).first()).toBeVisible();
+  await page.getByTestId('publish-mode-merge').click();
+  await page.getByTestId('prepare-change').click();
+  await expect(page.getByText('自動テスト', { exact: true })).toBeVisible({ timeout: 60_000 });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByTestId('create-pr').click();
+  await expect(page.getByTestId('publish-complete')).toContainText('PRを作成してマージしました', { timeout: 60_000 });
+
+  await page.getByRole('button', { name: '保存して終了' }).click();
+  await expect(page.getByText('サンプルキャラクター', { exact: true }).first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Content Studio', exact: true })).toBeVisible();
-  await expect(page.getByText('新しいモーション', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('サンプルキャラクター', { exact: true }).first()).toBeVisible();
 
-  await page.locator('.draft-card__open').filter({ hasText: '新しいモーション' }).first().click();
+  await page.locator('.draft-card__open').filter({ hasText: 'サンプルキャラクター' }).first().click();
   await page.getByTestId('step-nav-motion').click();
   await expect(page.getByRole('button', { name: 'プレビュー停止' })).toBeVisible();
-  const restoredMotionCanvas = page.getByLabel('砲撃モーションプレビュー');
+  await page.getByTestId('preview-fire').click();
+  const restoredMotionCanvas = page.getByLabel('単発砲撃プレビュー');
   const restoredFirstFrame = await restoredMotionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
   await expect.poll(
     () => restoredMotionCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
@@ -143,7 +164,7 @@ test('Android縦画面で部位検出から砲撃モーション出力、再開�
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Content Studio', exact: true })).toBeVisible();
-  await expect(page.getByText('新しいモーション', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('サンプルキャラクター', { exact: true }).first()).toBeVisible();
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByText('通信が復帰しました。未送信の変更を再送できます。')).toBeVisible();

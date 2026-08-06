@@ -7,6 +7,7 @@ import {
   type MotionActionPreset,
   type MotionParameters,
   type MotionPreset,
+  type MotionClipId,
   type SpriteMetadata,
 } from '../domain/types';
 
@@ -23,6 +24,8 @@ export interface BuildSpriteMetadataInput {
   preset: MotionPreset;
   motionAction?: MotionAction;
   actionPreset?: MotionActionPreset;
+  clipId?: MotionClipId;
+  loop?: boolean;
   motionParameters: MotionParameters;
   partMasks?: Array<{ id: string; label: string; blobKey?: string }>;
   partRegions?: DetectedMotionPart[];
@@ -65,7 +68,7 @@ export function buildSpriteMetadata(input: BuildSpriteMetadataInput): SpriteMeta
     frameHeight: input.frameHeight,
     frameCount: input.frameCount,
     fps: input.fps,
-    loop: true,
+    loop: input.loop ?? true,
     anchorX: input.anchorX,
     anchorY: input.anchorY,
     contentBounds: { ...input.contentBounds },
@@ -74,6 +77,7 @@ export function buildSpriteMetadata(input: BuildSpriteMetadataInput): SpriteMeta
     preset: input.preset,
     ...(input.motionAction ? { motionAction: input.motionAction } : {}),
     ...(input.actionPreset ? { actionPreset: input.actionPreset } : {}),
+    ...(input.clipId ? { clipId: input.clipId } : {}),
     motionParameters: { ...input.motionParameters },
     partMasks: (input.partMasks ?? []).map((mask) => ({ ...mask })),
     ...(input.partRegions ? { partRegions: input.partRegions.map((part) => structuredClone(part)) } : {}),

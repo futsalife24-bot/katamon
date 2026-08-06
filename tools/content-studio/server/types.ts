@@ -127,6 +127,8 @@ export interface PreparedRecord {
     commitSha: string;
     checks: BuildState;
     deployment: DeploymentState;
+    merged?: boolean;
+    mergedAt?: string;
   };
   pendingCommitSha?: string;
 }

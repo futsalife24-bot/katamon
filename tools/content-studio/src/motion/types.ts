@@ -1,9 +1,12 @@
 import type {
   DetectedMotionPart,
+  EyeMarker,
   MotionAction,
   MotionActionPreset,
   MotionParameters,
   MotionPreset,
+  MotionClipId,
+  NormalizedPoint,
   SpriteMetadata,
 } from '../domain/types';
 import type { EncodedImage, PixelBuffer } from '../image/types';
@@ -58,6 +61,10 @@ export interface MotionGenerationRequest {
   partRegions?: DetectedMotionPart[];
   focusPartId?: string | null;
   anchorPartId?: string | null;
+  groundPoint?: NormalizedPoint;
+  muzzlePoint?: NormalizedPoint;
+  eyeMarkers?: EyeMarker[];
+  clipId?: MotionClipId;
   partMasks?: PartMaskDefinition[];
   generatedAt?: string;
 }
@@ -86,3 +93,5 @@ export interface IdleSpriteResult {
 export interface EncodedIdleSpriteResult extends IdleSpriteResult {
   spriteSheetPng: EncodedImage;
 }
+
+export type MotionBatchResult = Record<MotionClipId, EncodedIdleSpriteResult>;

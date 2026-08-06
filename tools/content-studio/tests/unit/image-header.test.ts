@@ -86,6 +86,17 @@ describe('画像ヘッダー検査', () => {
       { decodeMaxDimension: 1600 },
     );
     expect(safe).toMatchObject({ safeDecodeWidth: 1600, safeDecodeHeight: 1200, resizedBeforeDecode: true });
+    const androidSafeDefault = validateImageSafety(
+      { mimeType: 'image/jpeg', width: 2048, height: 2048, hasAlphaHint: false, colorMode: 'sRGB' },
+      2_000_000,
+      'sample.jpg',
+    );
+    expect(androidSafeDefault).toMatchObject({
+      safeDecodeWidth: 1600,
+      safeDecodeHeight: 1600,
+      resizedBeforeDecode: true,
+    });
+    expect(androidSafeDefault.warnings).toContain('端末保護のため読み込み時に1600×1600pxへ縮小します。');
     expect(() => validateImageSafety(
       { mimeType: 'image/png', width: 8000, height: 8000, hasAlphaHint: true, colorMode: 'sRGB' },
       2_000_000,

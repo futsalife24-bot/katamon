@@ -4,6 +4,7 @@ import type {
   ArtifactFile,
   CharacterForm,
   ImageEditorState,
+  MotionClipId,
   MotionAction,
   MotionActionPreset,
   MotionParameters,
@@ -12,7 +13,8 @@ import type {
   SpecialTemplate,
 } from './domain/types';
 import { WORKFLOW_STEPS } from './domain/types';
-import { ACTION_LABELS, getActionPreset, listActionPresets } from './motion';
+import { ACTION_LABELS, getActionPreset, listActionPresets, MOTION_CLIP_IDS, MOTION_CLIP_LABELS } from './motion';
+import type { PixelBuffer } from './image';
 import { ImageCanvas } from './components/ImageCanvas';
 import { MotionPreview } from './components/MotionPreview';
 import { PartPreview } from './components/PartPreview';
@@ -98,33 +100,158 @@ function ParameterStepper({ label, value, min, max, step = 1, suffix = '', digit
   );
 }
 
+type LandmarkTool = 'ground' | 'muzzle' | 'eye-1' | 'eye-2';
+
+function LandmarkEditor({ studio }: { studio: StudioController }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [tool, setTool] = useState<LandmarkTool>('eye-1');
+  const pixels = studio.processed?.normalized.pixels ?? null;
+  const landmarks = studio.draft!.landmarks;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !pixels) return;
+    canvas.width = pixels.width;
+    canvas.height = pixels.height;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+    const marker = (x: number, y: number, color: string, label: string) => {
+      context.save();
+      context.strokeStyle = color;
+      context.fillStyle = color;
+      context.lineWidth = Math.max(3, pixels.width / 130);
+      context.beginPath();
+      context.arc(x * pixels.width, y * pixels.height, Math.max(10, pixels.width / 40), 0, Math.PI * 2);
+      context.stroke();
+      context.font = `800 ${Math.max(15, pixels.width / 24)}px system-ui`;
+      context.textAlign = 'center';
+      context.fillText(label, x * pixels.width, y * pixels.height - Math.max(16, pixels.width / 32));
+      context.restore();
+    };
+    marker(landmarks.ground.x, landmarks.ground.y, '#ff315e', '接地');
+    marker(landmarks.muzzle.x, landmarks.muzzle.y, '#00c99a', '砲口');
+    for (const eye of landmarks.eyes) {
+      const cx = eye.x * pixels.width;
+      const cy = eye.y * pixels.height;
+      const half = eye.size * pixels.width * 0.5;
+      context.save();
+      context.strokeStyle = '#ffcc28';
+      context.lineWidth = Math.max(3, pixels.width / 120);
+      context.beginPath();
+      context.moveTo(cx - half, cy - half);
+      context.lineTo(cx + half, cy + half);
+      context.moveTo(cx + half, cy - half);
+      context.lineTo(cx - half, cy + half);
+      context.stroke();
+      context.restore();
+    }
+  }, [landmarks, pixels]);
+
+  const updateLandmarks = (updater: (current: typeof landmarks) => typeof landmarks) => studio.updateDraft((current) => ({
+    ...current,
+    landmarks: updater(current.landmarks),
+    generatedClips: [],
+  }));
+
+  const place = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !pixels) return;
+    const rect = canvas.getBoundingClientRect();
+    const point = {
+      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+    };
+    updateLandmarks((current) => {
+      if (tool === 'ground') return { ...current, status: 'ready', ground: point };
+      if (tool === 'muzzle') return { ...current, status: 'ready', muzzle: point };
+      const id = tool;
+      const existing = current.eyes.find((eye) => eye.id === id);
+      const eyes = [...current.eyes.filter((eye) => eye.id !== id), { id, ...point, size: existing?.size ?? 0.06 }]
+        .sort((a, b) => a.id.localeCompare(b.id));
+      return { ...current, status: 'ready', eyes };
+    });
+  };
+
+  const selectedEye = landmarks.eyes.find((eye) => eye.id === tool);
+  const changeEyeSize = (direction: -1 | 1) => {
+    if (!selectedEye) return;
+    updateLandmarks((current) => ({
+      ...current,
+      eyes: current.eyes.map((eye) => eye.id === selectedEye.id
+        ? { ...eye, size: Math.max(0.015, Math.min(0.2, Number((eye.size + direction * 0.01).toFixed(3)))) }
+        : eye),
+    }));
+  };
+
+  const chooseFacing = (facing: 'left' | 'right') => {
+    studio.updateDraft((current) => ({
+      ...current,
+      landmarks: { ...current.landmarks, facing },
+      character: { ...current.character, sourceFacesLeft: facing === 'left' },
+      generatedClips: [],
+    }));
+    queueMicrotask(() => void studio.detectLandmarks());
+  };
+
+  return (
+    <section className="step-panel" data-testid="step-setup">
+      <div className="step-intro"><span>2</span><div><h2>向きと位置を確認</h2><p>端末内で推測します。ズレた印だけ選んで画像をタップしてください。</p></div></div>
+      <p className="support-note">生成AI・外部通信は使いません。緑＝砲口、赤＝接地点、黄×＝被弾時の目やで。</p>
+      <h3 className="subheading">元画像が向いている方向</h3>
+      <div className="segmented" role="group" aria-label="元画像の向き">
+        <button type="button" className={landmarks.facing === 'left' ? 'active' : ''} onClick={() => chooseFacing('left')} data-testid="facing-left">← 左向き</button>
+        <button type="button" className={landmarks.facing === 'right' ? 'active' : ''} onClick={() => chooseFacing('right')} data-testid="facing-right">右向き →</button>
+      </div>
+      <div className="landmark-canvas-shell">
+        {pixels ? <canvas ref={canvasRef} onClick={place} data-testid="landmark-canvas" aria-label="位置を手動調整" /> : <div className="canvas-empty">先に画像を登録してください</div>}
+      </div>
+      <div className="landmark-tools" role="group" aria-label="修正する位置">
+        {([
+          ['ground', '接地点'], ['muzzle', '砲口'], ['eye-1', '目1'], ['eye-2', '目2'],
+        ] as const).map(([id, label]) => <button type="button" key={id} className={tool === id ? 'active' : ''} onClick={() => setTool(id)}>{label}</button>)}
+      </div>
+      {(tool === 'eye-1' || tool === 'eye-2') && <div className="eye-controls">
+        <span>{selectedEye ? '×の大きさ' : `${tool === 'eye-1' ? '目1' : '目2'}は未指定`}</span>
+        <div>
+          <button type="button" disabled={!selectedEye || selectedEye.size <= 0.015} onClick={() => changeEyeSize(-1)} aria-label="目の印を小さく">−</button>
+          <output>{selectedEye ? `${Math.round(selectedEye.size * 100)}%` : '—'}</output>
+          <button type="button" disabled={!selectedEye || selectedEye.size >= 0.2} onClick={() => changeEyeSize(1)} aria-label="目の印を大きく">＋</button>
+        </div>
+        {selectedEye && <button type="button" className="text-button" onClick={() => updateLandmarks((current) => ({ ...current, eyes: current.eyes.filter(({ id }) => id !== selectedEye.id) }))}>この目を削除</button>}
+      </div>}
+      <button className="secondary full-width" type="button" disabled={!pixels || studio.busy} onClick={() => void studio.detectLandmarks()} data-testid="detect-landmarks">位置を自動推測し直す</button>
+    </section>
+  );
+}
+
 function Status({ value, good }: { value: string; good?: boolean }) {
   return <span className={`status-pill ${good ? 'status-pill--good' : ''}`}>{value}</span>;
 }
 
 function Dashboard({ studio }: { studio: StudioController }) {
   const importRef = useRef<HTMLInputElement>(null);
-  const detectedCount = studio.drafts.filter((draft) => draft.partDetection.status === 'ready').length;
+  const generatedCount = studio.drafts.filter((draft) => draft.generatedClips.length === 5).length;
   return (
     <main className="dashboard" data-testid="dashboard">
       <header className="hero">
         <div>
           <p className="eyebrow">対象ゲーム モーション制作</p>
           <h1>Content Studio</h1>
-          <p>Androidだけで、切り抜き・部位候補・動作・スプライト出力まで。</p>
+          <p>Androidだけで、画像1枚から5動作を生成しGitHubへ反映。</p>
         </div>
         <span className="version">v{studio.appVersion}</span>
       </header>
 
       <section className="summary-grid" aria-label="運用状況">
         <article><strong>{studio.drafts.length}</strong><span>下書き</span></article>
-        <article><strong>{detectedCount}</strong><span>部位検出済み</span></article>
+        <article><strong>{generatedCount}</strong><span>5動作生成済み</span></article>
         <article><strong>512</strong><span>標準画質 px</span></article>
         <article><strong>{studio.capabilities.online ? '端末内' : 'オフライン'}</strong><span>処理方式</span></article>
       </section>
 
       <button className="primary hero-action" type="button" onClick={() => void studio.createNewDraft()} data-testid="add-character">
-        <span aria-hidden="true">＋</span> モーションを新規作成
+        <span aria-hidden="true">＋</span> キャラクターを追加
       </button>
 
       <section className="card connection-card motion-only-note">
@@ -221,15 +348,16 @@ function ImageStep({ studio }: { studio: StudioController }) {
   );
 }
 
-function CutoutStep({ studio }: { studio: StudioController }) {
+function CutoutStep({ studio, embedded = false }: { studio: StudioController; embedded?: boolean }) {
   const [compare, setCompare] = useState<'before' | 'after'>('after');
   const draft = studio.draft!;
   const editor = draft.editor;
   const changeEditor = <K extends keyof ImageEditorState>(key: K, value: ImageEditorState[K]) => studio.updateDraft((current) => ({ ...current, editor: { ...current.editor, [key]: value } }));
   const pixels = compare === 'before' ? studio.processed?.original : studio.processed?.edited;
   return (
-    <section className="step-panel" data-testid="step-cutout">
-      <div className="step-intro"><span>2</span><div><h2>背景除去と切り抜き</h2><p>端末内だけで処理します。画像を外部へ送信しません。</p></div></div>
+    <section className={`step-panel ${embedded ? 'embedded-cutout' : ''}`} data-testid="step-cutout">
+      {!embedded && <div className="step-intro"><span>1</span><div><h2>背景除去と切り抜き</h2><p>端末内だけで処理します。画像を外部へ送信しません。</p></div></div>}
+      {embedded && <div className="section-heading"><div><h2>切り抜きを確認</h2><p>必要なときだけ背景除去や補正を使います。</p></div></div>}
       <div className="segmented" role="group" aria-label="処理前後の比較">
         <button type="button" className={compare === 'before' ? 'active' : ''} onClick={() => setCompare('before')}>処理前</button>
         <button type="button" className={compare === 'after' ? 'active' : ''} onClick={() => setCompare('after')}>処理後</button>
@@ -328,77 +456,62 @@ function PartsStep({ studio }: { studio: StudioController }) {
 
 function MotionStep({ studio }: { studio: StudioController }) {
   const draft = studio.draft!;
-  const setMotion = <K extends keyof MotionParameters>(key: K, value: MotionParameters[K]) => studio.updateDraft((current) => ({ ...current, motion: { ...current.motion, [key]: value } }));
-  const selectPreset = (id: MotionActionPreset) => {
-    const preset = getActionPreset(id);
-    studio.updateDraft((current) => ({
-      ...current,
-      motionAction: preset.action,
-      actionPreset: preset.id,
-      motionPreset: preset.motionPreset,
-      motion: {
-        ...structuredClone(preset.parameters),
-        outputSize: current.motion.outputSize,
-        lightweightPreview: current.motion.lightweightPreview,
-        flipHorizontal: current.motion.flipHorizontal,
-      },
-    }));
-  };
-  const selectAction = (action: MotionAction) => {
-    const first = listActionPresets(action)[0];
-    if (first) selectPreset(first.id);
-  };
-  const activePreset = getActionPreset(draft.actionPreset);
-  const quality = draft.motion.outputSize >= 512 ? '高画質 512px' : '軽量 256px';
+  const generatedCount = MOTION_CLIP_IDS.filter((clipId) => studio.motions[clipId]).length;
+  const active = studio.motions[studio.selectedClip] ?? null;
   return (
-    <section className="step-panel" data-testid="step-motion">
-      <div className="step-intro"><span>4</span><div><h2>動作を選ぶ</h2><p>先に動作、その次にプリセットを選びます。必要なときだけ微調整を開けます。</p></div></div>
-      <div className="action-card-grid" role="group" aria-label="動作の種類">
-        {(Object.keys(ACTION_LABELS) as MotionAction[]).map((action) => (
-          <button type="button" key={action} className={draft.motionAction === action ? 'active' : ''} onClick={() => selectAction(action)} data-testid={`motion-action-${action}`}>
-            <b>{ACTION_LABELS[action].label}</b><small>{ACTION_LABELS[action].description}</small>
-          </button>
-        ))}
+    <section className="step-panel motion-batch-step" data-testid="step-motion">
+      <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>前進・後退・単発砲撃・被弾・着地だけを、固定設定で一括生成します。</p></div></div>
+      <div className="motion-batch-list" aria-label="生成するモーション">
+        {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
+          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `のけぞり${draft.landmarks.eyes.length ? '＋×目' : ''}` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
+        </article>)}
       </div>
-      <h3 className="subheading">プリセット</h3>
-      <div className="preset-card-list">
-        {listActionPresets(draft.motionAction).map((preset) => (
-          <button type="button" key={preset.id} className={draft.actionPreset === preset.id ? 'active' : ''} onClick={() => selectPreset(preset.id)} data-testid={`action-preset-${preset.id}`}>
-            <span><b>{preset.label}</b><small>{preset.description}</small></span><span aria-hidden="true">{draft.actionPreset === preset.id ? '✓' : '›'}</span>
-          </button>
-        ))}
-      </div>
-      <div className="quality-selector">
-        <div><b>生成画質</b><small>普段は高画質がおすすめです</small></div>
-        <div className="segmented">
-          <button type="button" className={draft.motion.outputSize === 512 ? 'active' : ''} onClick={() => setMotion('outputSize', 512)}>高画質</button>
-          <button type="button" className={draft.motion.outputSize === 256 ? 'active' : ''} onClick={() => setMotion('outputSize', 256)}>軽量</button>
+      {generatedCount > 0 ? <>
+        <h3 className="subheading">プレビュー</h3>
+        <div className="clip-tabs" role="group" aria-label="確認するモーション">
+          {MOTION_CLIP_IDS.map((clipId) => <button type="button" key={clipId} disabled={!studio.motions[clipId]} className={studio.selectedClip === clipId ? 'active' : ''} onClick={() => studio.selectMotionClip(clipId)} data-testid={`preview-${clipId}`}>{MOTION_CLIP_LABELS[clipId]}</button>)}
         </div>
+        <MotionPreview sprite={active} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} label={`${MOTION_CLIP_LABELS[studio.selectedClip]}プレビュー`} />
+        <button type="button" className="secondary full-width" onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>
+          {draft.preview.playing ? 'プレビュー停止' : active?.metadata.loop ? 'プレビュー再生' : 'もう一度再生'}
+        </button>
+        {active && <dl className="facts facts--compact"><div><dt>動作</dt><dd>{MOTION_CLIP_LABELS[studio.selectedClip]}</dd></div><div><dt>画質</dt><dd>{active.metadata.frameWidth}px</dd></div><div><dt>容量</dt><dd>{formatBytes(active.spriteSheetPng.byteLength)}</dd></div><div><dt>再生</dt><dd>{active.metadata.loop ? 'ループ' : '1回'}</dd></div></dl>}
+      </> : <div className="empty-state"><b>まだ生成していません</b><span>下の固定ボタンは、どこまでスクロールしても押せます。</span></div>}
+      <p className="support-note">顔・武器・配色を生成し直す処理はありません。元画像を固定の2D変形で動かすため、通常運用でAI APIは一切呼びません。</p>
+      <div className={`motion-generate-dock ${studio.busy ? 'is-busy' : ''}`} aria-label="モーション生成">
+        {studio.busy ? <>
+          <div className="dock-progress"><b>{studio.progress?.label ?? '生成しています…'}</b><span>{Math.round((studio.progress?.value ?? 0) * 100)}%</span></div>
+          <progress max={1} value={studio.progress?.value ?? 0} />
+          <button className="secondary full-width" type="button" onClick={studio.cancelProcessing}>生成を中止</button>
+        </> : <button className="primary full-width generate-motion-button" type="button" disabled={!draft.imageInfo || !studio.processed} onClick={() => void studio.generateMotion()} data-testid="generate-motion">
+          {generatedCount === MOTION_CLIP_IDS.length ? '5種類を再生成' : '5種類をまとめて生成'}
+        </button>}
       </div>
-      <MotionPreview sprite={studio.sprite} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} label={`${ACTION_LABELS[draft.motionAction].label}モーションプレビュー`} />
-      <button type="button" className="secondary full-width" disabled={!studio.sprite} onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>
-        {studio.sprite ? (draft.preview.playing ? 'プレビュー停止' : 'プレビュー再生') : '生成後に再生できます'}
-      </button>
-      <p className="support-note">{activePreset.description} 画像の顔・装備・色は生成せず、決定的な2D変形だけを使います。</p>
-      <details className="controls-card fine-tune-card">
-        <summary>微調整（必要なときだけ）</summary>
-        <p className="field-help">スライダーは使わず、大きい− / ＋ボタンで誤操作を防ぎます。</p>
-        <div className="segmented"><button type="button" className={draft.motion.frameCount === 8 ? 'active' : ''} onClick={() => setMotion('frameCount', 8)}>8フレーム</button><button type="button" className={draft.motion.frameCount === 12 ? 'active' : ''} onClick={() => setMotion('frameCount', 12)}>12フレーム</button></div>
-        <ParameterStepper label="FPS" value={draft.motion.fps} min={4} max={30} step={1} onChange={(value) => setMotion('fps', value)} />
-        <ParameterStepper label="上下移動" value={draft.motion.moveY} min={-32} max={32} step={1} suffix="px" onChange={(value) => setMotion('moveY', value)} />
-        <ParameterStepper label="横移動" value={draft.motion.moveX} min={-32} max={32} step={1} suffix="px" onChange={(value) => setMotion('moveX', value)} />
-        <ParameterStepper label="拡大縮小" value={draft.motion.scaleAmount} min={0} max={0.08} step={0.002} digits={3} onChange={(value) => setMotion('scaleAmount', value)} />
-        <ParameterStepper label="潰れ・伸び" value={draft.motion.squashAmount} min={0} max={0.1} step={0.002} digits={3} onChange={(value) => setMotion('squashAmount', value)} />
-        <ParameterStepper label="回転" value={draft.motion.rotationDegrees} min={-10} max={10} step={0.25} digits={2} suffix="°" onChange={(value) => setMotion('rotationDegrees', value)} />
-        <ParameterStepper label="揺れの強さ" value={draft.motion.intensity} min={0} max={2} step={0.1} digits={1} onChange={(value) => setMotion('intensity', value)} />
-        <ParameterStepper label="キャンバス余白" value={draft.motion.canvasPadding} min={0} max={96} step={4} suffix="px" onChange={(value) => setMotion('canvasPadding', value)} />
-        <Toggle label="モーション側でも左右反転" checked={draft.motion.flipHorizontal} onChange={(checked) => setMotion('flipHorizontal', checked)} />
-      </details>
-      <button className="primary full-width generate-motion-button" type="button" disabled={studio.busy || !draft.imageInfo} onClick={() => void studio.generateMotion()} data-testid="generate-motion">
-        {studio.sprite ? '設定を反映して再生成' : `${ACTION_LABELS[draft.motionAction].label}モーションを生成`}
-      </button>
-      {studio.sprite && <dl className="facts facts--compact"><div><dt>画質</dt><dd>{studio.sprite.metadata.frameWidth >= 512 ? '高画質 512px' : '軽量 256px'}</dd></div><div><dt>容量</dt><dd>{formatBytes(studio.sprite.spriteSheetPng.byteLength)}</dd></div><div><dt>再生</dt><dd>{studio.sprite.metadata.frameCount}枚 / {studio.sprite.metadata.fps}fps</dd></div><div><dt>処理</dt><dd>{studio.sprite.usedWorker ? 'Worker' : '軽量代替'}</dd></div></dl>}
-      {!studio.sprite && <p className="field-help">現在の設定: {quality}</p>}
+    </section>
+  );
+}
+
+function CharacterStep({ studio }: { studio: StudioController }) {
+  const character = studio.draft!.character;
+  const setDisplayName = (displayName: string) => studio.updateDraft((current) => ({
+    ...current,
+    title: displayName.trim() || current.title,
+    character: { ...current.character, displayName, specialEnabled: false, specialName: '未設定' },
+  }));
+  const setId = (id: string) => studio.updateDraft((current) => ({
+    ...current,
+    character: { ...current.character, id, slug: id, specialEnabled: false, specialName: '未設定' },
+  }));
+  return (
+    <section className="step-panel" data-testid="step-character">
+      <div className="step-intro"><span>4</span><div><h2>キャラクター名を入力</h2><p>技や能力は後回し。ゲームへ選択可能にする最小情報だけです。</p></div></div>
+      <MotionPreview sprite={studio.motions['move-forward'] ?? null} fallback={studio.processed?.normalized.pixels ?? null} settings={{ ...studio.draft!.preview, showAnchor: false, showCollision: false }} label="キャラクタープレビュー" />
+      <Field label="表示名" required><input data-testid="display-name" maxLength={40} enterKeyHint="next" value={character.displayName} onChange={(event) => setDisplayName(event.target.value)} /></Field>
+      <Field label="短いID" hint="小文字英字から開始。小文字英数字とハイフン、24文字以内" required>
+        <input data-testid="character-id" disabled={Boolean(studio.draft!.sourceIdentity)} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={24} value={character.id} onChange={(event) => setId(event.target.value.toLowerCase())} />
+      </Field>
+      <dl className="facts facts--compact"><div><dt>slug</dt><dd>{character.slug || 'IDから自動設定'}</dd></div><div><dt>通常技</dt><dd>標準弾</dd></div><div><dt>必殺技</dt><dd>未設定（ボタン無効）</dd></div><div><dt>向き</dt><dd>{studio.draft!.landmarks.facing === 'left' ? '左向き' : '右向き'}</dd></div></dl>
+      <p className="support-note">登録後すぐキャラクター一覧から選べます。必殺技ボタンは「未設定」と表示して押せない状態にします。</p>
     </section>
   );
 }
@@ -560,7 +673,7 @@ function PublishStep({ studio }: { studio: StudioController }) {
   const selected = studio.bundle?.files.find(({ path }) => path === selectedPath) ?? null;
   return (
     <section className="step-panel" data-testid="step-publish">
-      <div className="step-intro"><span>8</span><div><h2>GitHub反映</h2><p>mainへ直接反映せず、専用ブランチの1コミットとPRを作ります。</p></div></div>
+      <div className="step-intro"><span>5</span><div><h2>GitHubへ反映</h2><p>専用ブランチへ1コミットでpushし、PRを作成します。mainへ直接pushしません。</p></div></div>
       <article className="connection-card card">
         <div className="section-heading"><div><h3>{studio.repositoryStatus.mode === 'mock' ? 'モック接続' : 'GitHub App接続'}</h3><p>{studio.repositoryStatus.message}</p></div><Status value={studio.repositoryStatus.connected ? '接続済み' : '未接続'} good={studio.repositoryStatus.connected} /></div>
         {studio.repositoryStatus.mode === 'server' && <div className="button-row"><button type="button" className="primary" onClick={studio.login}>GitHubへログイン</button><button type="button" className="secondary" onClick={() => void studio.logout()}>ログアウト</button></div>}
@@ -568,14 +681,20 @@ function PublishStep({ studio }: { studio: StudioController }) {
         {studio.repositoryStatus.mode === 'server' && <p className="warning-text">外部通信あり・料金が発生する可能性あり。公開準備とPR作成は、表示中の生成ファイルをGitHubへ送信します。</p>}
       </article>
       {studio.repositoryStatus.mode === 'mock' && <Field label="失敗状態の再現"><select value={draft.mockScenario} onChange={(event) => studio.updateDraft((current) => ({ ...current, mockScenario: event.target.value as typeof current.mockScenario }))}><option value="success">成功</option><option value="network-offline">通信切断</option><option value="tests-failed">テスト失敗</option><option value="conflict">GitHub競合</option></select></Field>}
-      <div className="button-grid"><button type="button" className="secondary" onClick={() => void studio.downloadZip()} disabled={!studio.bundle}>ZIP出力</button><button type="button" className="secondary" onClick={() => void studio.downloadJson()}>下書きJSON</button></div>
+      <h3 className="subheading">PRの後</h3>
+      <div className="publish-mode-list" role="radiogroup" aria-label="反映方法">
+        <button type="button" role="radio" aria-checked={draft.publishMode === 'pr-only'} className={draft.publishMode === 'pr-only' ? 'active' : ''} onClick={() => studio.updateDraft((current) => ({ ...current, publishMode: 'pr-only' }))} data-testid="publish-mode-pr"><b>PRだけ作る</b><small>内容を確認してから手動でマージ</small></button>
+        <button type="button" role="radio" aria-checked={draft.publishMode === 'merge-after-ci'} className={draft.publishMode === 'merge-after-ci' ? 'active' : ''} onClick={() => studio.updateDraft((current) => ({ ...current, publishMode: 'merge-after-ci' }))} data-testid="publish-mode-merge"><b>CI成功後にマージ</b><small>実行直前にもう一度確認。失敗・競合時は中断</small></button>
+      </div>
+      <div className="button-grid"><button type="button" className="secondary" onClick={() => void studio.downloadMotionZip()} disabled={draft.generatedClips.length !== 5}>モーションZIP</button><button type="button" className="secondary" onClick={() => void studio.downloadJson()}>下書きJSON</button></div>
       <h3>生成予定ファイル</h3>
       {!studio.bundle ? <p className="support-note">先に「検証」で生成ファイルを作成してください。</p> : <div className="file-list">{studio.bundle.files.map((file) => <button type="button" className={selectedPath === file.path ? 'active' : ''} key={file.path} onClick={() => setSelectedPath(file.path)}><span>{file.path}</span><small>{formatBytes(file.byteLength)}</small></button>)}</div>}
       <FileInspector file={selected} />
       {studio.bundle && <details className="controls-card"><summary>PR本文プレビュー</summary><pre>{studio.bundle.prBody}</pre></details>}
-      <button type="button" className="primary full-width" disabled={!studio.bundle || studio.busy} onClick={() => void studio.prepareChange()} data-testid="prepare-change">変更を準備・テスト</button>
+      <button type="button" className="primary full-width" disabled={studio.busy || draft.generatedClips.length !== 5 || !draft.character.id || !draft.character.displayName} onClick={() => void studio.prepareChange()} data-testid="prepare-change">検証・ファイル生成・テスト</button>
       {studio.prepared && <div className="result-card"><dl className="facts facts--compact"><div><dt>ブランチ</dt><dd>{studio.prepared.branch}</dd></div><div><dt>コミット</dt><dd>{studio.prepared.commitSha.slice(0, 12)}</dd></div><div><dt>自動テスト</dt><dd>{studio.prepared.testStatus}</dd></div><div><dt>変更</dt><dd>{studio.prepared.files.length}件</dd></div></dl><details><summary>差分を表示</summary><pre>{studio.prepared.diff}</pre></details></div>}
-      <button type="button" className="primary full-width" disabled={!studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy} onClick={() => void studio.createPullRequest()} data-testid="create-pr">PRを作成</button>
+      <button type="button" className="primary full-width" disabled={!studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy} onClick={() => void studio.createPullRequest()} data-testid="create-pr">{draft.publishMode === 'merge-after-ci' ? 'PR作成 → CI成功後にマージ' : 'PRを作成'}</button>
+      {studio.pullRequest && <div className="success-card" data-testid="publish-complete"><b>{studio.pullRequest.merged ? 'PRを作成してマージしました' : 'PRを作成しました'}</b><span>#{studio.pullRequest.number}・CI {studio.pullRequest.checks}・{studio.pullRequest.deployment}</span><a href={studio.pullRequest.url} target="_blank" rel="noreferrer">PRを開く</a></div>}
     </section>
   );
 }
@@ -607,14 +726,18 @@ function Workflow({ studio }: { studio: StudioController }) {
         {WORKFLOW_STEPS.map((item, index) => <button type="button" key={item.id} data-testid={`step-nav-${item.id}`} className={`${studio.step === item.id ? 'active' : ''} ${index < studio.stepIndex ? 'done' : ''}`} onClick={() => studio.goToStep(item.id)}><span>{index + 1}</span><small>{item.label}</small></button>)}
       </nav>
       <main className="workflow-main">
-        {studio.step === 'image' && <ImageStep studio={studio} />}
-        {studio.step === 'cutout' && <CutoutStep studio={studio} />}
-        {studio.step === 'parts' && <PartsStep studio={studio} />}
+        {studio.step === 'image' && <><ImageStep studio={studio} />{studio.draft?.imageInfo && <CutoutStep studio={studio} embedded />}</>}
+        {studio.step === 'setup' && <LandmarkEditor studio={studio} />}
         {studio.step === 'motion' && <MotionStep studio={studio} />}
-        {studio.step === 'preview' && <PreviewStep studio={studio} />}
-        {studio.step === 'export' && <ExportStep studio={studio} />}
+        {studio.step === 'character' && <CharacterStep studio={studio} />}
+        {studio.step === 'publish' && <PublishStep studio={studio} />}
       </main>
-      <nav className="bottom-actions" aria-label="ステップ移動"><button type="button" className="secondary" onClick={studio.previousStep}>戻る</button>{studio.step === 'export' ? <button type="button" className="primary" disabled={!studio.sprite} onClick={() => void studio.downloadMotionZip()}>ZIP保存</button> : <button type="button" className="primary" onClick={studio.nextStep}>次へ</button>}</nav>
+      <nav className="bottom-actions" aria-label="ステップ移動">
+        <button type="button" className="secondary" onClick={studio.previousStep}>戻る</button>
+        {studio.step === 'publish'
+          ? <button type="button" className="primary" onClick={() => void studio.backToDashboard()}>保存して終了</button>
+          : <button type="button" className="primary" disabled={studio.step === 'image' ? !studio.draft?.imageInfo : studio.step === 'motion' ? studio.draft?.generatedClips.length !== 5 : studio.step === 'character' ? !studio.draft?.character.id || !studio.draft.character.displayName : false} onClick={studio.nextStep}>次へ</button>}
+      </nav>
     </div>
   );
 }
@@ -635,7 +758,7 @@ export default function App() {
       {studio.notice && <div className="toast toast--notice" role="status"><span>{studio.notice}</span><button type="button" onClick={studio.dismissNotice} aria-label="通知を閉じる">×</button></div>}
       {studio.error && <div className="toast toast--error" role="alert"><span>{studio.error}</span><button type="button" onClick={studio.dismissError} aria-label="エラーを閉じる">×</button></div>}
       {updateRegistration && <div className="update-banner"><span>Content Studioの更新があります。</span><button type="button" onClick={() => updateRegistration.waiting?.postMessage({ type: 'SKIP_WAITING' })}>更新する</button></div>}
-      {studio.busy && <div className="busy-overlay" role="dialog" aria-modal="true" aria-label="処理中"><div><span className="spinner" /><b>{studio.progress?.label ?? '処理しています…'}</b><progress max={1} value={studio.progress?.value ?? undefined} /><small>{studio.progress ? `${Math.round(studio.progress.value * 100)}%` : '入力内容は自動保存されています'}</small><button type="button" className="secondary" onClick={studio.cancelProcessing}>処理を中止</button></div></div>}
+      {studio.busy && studio.step !== 'motion' && <div className="busy-overlay" role="dialog" aria-modal="true" aria-label="処理中"><div><span className="spinner" /><b>{studio.progress?.label ?? '処理しています…'}</b><progress max={1} value={studio.progress?.value ?? undefined} /><small>{studio.progress ? `${Math.round(studio.progress.value * 100)}%` : '入力内容は自動保存されています'}</small><button type="button" className="secondary" onClick={studio.cancelProcessing}>処理を中止</button></div></div>}
     </div>
   );
 }

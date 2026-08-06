@@ -77,6 +77,7 @@ export const ACTION_LABELS: Readonly<Record<MotionAction, { label: string; descr
   move: { label: '移動', description: '通常移動・重量移動・高速移動' },
   fire: { label: '砲撃', description: '単発・溜め・連続の反動' },
   hit: { label: '被弾', description: '軽い衝撃・強い衝撃・吹き飛び' },
+  land: { label: '着地', description: '落下・接地・小さな跳ね返り' },
 });
 
 export function listActionPresets(action: MotionAction): MotionActionPresetDefinition[] {
