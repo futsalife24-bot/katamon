@@ -225,6 +225,6 @@ UIの安定した契約には`data-testid`を使う。表示文言だけに依�
 | Android実機Chrome | 未実施 |
 | Androidインストール済みPWA | 未実施 |
 
-`npm test`は2026-08-06に成功し、既存ゲーム1,153件とStage基盤37件を合わせて1,190件、失敗0だった。E2Eは同日のWindows上のPlaywright 1.62.1で実行した。WebKitの`context.setOffline(true)`とナビゲーションの組み合わせにはPlaywright内部エラーがあるため、PWA試験はテスト専用localhostサーバーを起動し、Service Workerの制御開始後にサーバーを完全停止してから再読込する。両エンジンで、キャッシュだけによるアプリシェル再表示とオフライン案内を確認した。
+`npm test`は2026-08-06に成功し、既存ゲーム1,160件とStage基盤37件を合わせて1,197件、失敗0だった。E2Eは同日のWindows上のPlaywright 1.62.1で実行した。WebKitの`context.setOffline(true)`とナビゲーションの組み合わせにはPlaywright内部エラーがあるため、PWA試験はテスト専用localhostサーバーを起動し、Service Workerの制御開始後にサーバーを完全停止してから再読込する。両エンジンで、キャッシュだけによるアプリシェル再表示とオフライン案内を確認した。
 
 最終成功実行では`playwright.config.js`の`screenshot: 'only-on-failure'`によりスクリーンショットは生成していない。これはブラウザーエミュレーション結果であり、上表の4つの実機項目はすべて未確認である。

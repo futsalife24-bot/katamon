@@ -232,7 +232,7 @@
       schemaVersion: '1.0.0', stageId: `stage_${randomHex}`, title: metadata.title || 'サンプルステージ',
       description: metadata.description || '', authorDisplayName: metadata.authorDisplayName || '作成者',
       createdAt, updatedAt: createdAt, generatorVersion: '1.0.0', seed: metadata.seed || 'stage-studio',
-      gameCompatibility: { gameId: 'katamon', minBuild: 'v137', maxBuild: null },
+      gameCompatibility: { gameId: 'katamon', minBuild: 'v138', maxBuild: null },
       stageWidth: LIMITS.stageWidth, stageHeight: LIMITS.stageHeight,
       coordinateSystem: { origin: 'top-left', xAxis: 'right', yAxis: 'down', unit: 'px', terrainColumnWidth: LIMITS.columnWidth, terrainRowHeight: LIMITS.rowHeight },
       terrain: { encoding: 'column-segments-v1', columns: Array.from({ length: LIMITS.terrainColumns }, () => []), destructible: true, minimumThickness: 12 },

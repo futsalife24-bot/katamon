@@ -8,7 +8,7 @@
   var SCHEMA_VERSION = '1.0.0';
   var GENERATOR_VERSION = '1.0.0';
   var GAME_ID = 'katamon';
-  var GAME_BUILD = 'v137';
+  var GAME_BUILD = 'v138';
   var LIMITS = Object.freeze({
     stageWidth: 1440,
     stageHeight: 660,
@@ -930,7 +930,7 @@
       var maximumBuild = input.gameCompatibility.maxBuild === null ? null : buildNumber(input.gameCompatibility.maxBuild);
       var currentBuild = buildNumber(GAME_BUILD);
       if (minimumBuild === null || (input.gameCompatibility.maxBuild !== null && maximumBuild === null)) {
-        errors.push(issue('compatibility_build_format', '$.gameCompatibility', '対応ビルドはv137のような形式で指定してください。'));
+        errors.push(issue('compatibility_build_format', '$.gameCompatibility', '対応ビルドはv138のような形式で指定してください。'));
       } else if (maximumBuild !== null && minimumBuild > maximumBuild) {
         errors.push(issue('compatibility_build_range', '$.gameCompatibility', '対応ビルドの最小値と最大値が逆転しています。'));
       } else if (currentBuild === null || currentBuild < minimumBuild || (maximumBuild !== null && currentBuild > maximumBuild)) {

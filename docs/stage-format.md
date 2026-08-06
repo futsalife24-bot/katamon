@@ -21,7 +21,7 @@ Stage Studioは次の2形式を正式に扱う。
 | `schemaVersion` | `1.0.0` |
 | `generatorVersion` | `1.0.0` |
 | `gameCompatibility.gameId` | `katamon`（既存ゲームの内部互換ID） |
-| `gameCompatibility.minBuild` | `v137` |
+| `gameCompatibility.minBuild` | `v138` |
 | `gameCompatibility.maxBuild` | 上限なしの場合`null` |
 
 ゲームは、対応外の`schemaVersion`、異なる`gameId`、自身より新しい`minBuild`を安全に拒否する。表示名が同じでも、`stageId`または`contentHash`が異なるデータは別ステージとして扱う。
