@@ -2,17 +2,19 @@
 
 更新日: 2026-08-06（JST）
 
-## Stage Studio MVP（featureブランチ）
+## Stage Studio ゲームUI改修（PR #67）
 
-- 作業ブランチ: `feat/stage-studio-mvp`
+- 作業ブランチ: `feat/stage-studio-game-ui`
 - 分離worktree: `.codex-worktrees/stage-studio-mvp`
-- 状態: モバイルでの「生成・編集 → 出撃地点/風/見た目 → 共有物理テスト → 検証 → JSON/ZIP出力 → ゲームへインポート → カスタムバトル開始」の縦導線を実装済み。
+- 状態: 初回MVPはPR #65で公開済み。今回のゲームUI改修はPR #67で公開し、ホーム・新規・生成・地形・出撃・テスト・検証・共有の8工程へ整理して、見た目を地形へ、風をテストへ統合した。
 - データ基盤: `column-segments-v1`、決定的seed生成、正規化JSON、SHA-256、厳格検証、公式/カスタム保存領域分離、JSON/ZIP往復を実装済み。
-- PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。
-- 最終自動確認: 既存ゲーム1,160件 + Stage基盤37件 = 1,197件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。JSON/ZIP双方でインポート、ゲーム再読込後の永続化、選択、実バトル開始まで確認済み。
+- UI: ゲーム同系統の鉄板・真鍮UI、既存4背景、地形質感、実ゲーム寸法キャラを地形・出撃・テストCanvasへ反映。キャラ確認はドラッグでき、円形当たり判定が地形へ重なると赤く警告する。
+- PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。旧キャッシュ混在を避けるためJS/CSSは`1.1.0-mvp`版付きファイル名へ変更した。
+- 鋼鉄: 共通素材カタログへ無効・出力不可の将来項目だけ準備。ゲーム本体対応まではUI選択不可、現行JSON/ZIPも安全に拒否する。
+- 最終自動確認: 既存ゲーム1,160件 + Stage基盤43件 = 1,203件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。JSON/ZIP双方でインポート、ゲーム再読込後の永続化、選択、実バトル開始、下書き復元、PWAオフライン再表示まで確認済み。
 - 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
 - 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
-- 公開経路: `master`へ直接pushせず、このfeatureブランチをPR経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。
+- 公開経路: `master`へ直接pushせず、PR #67経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
 - 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
 
 以下はゲーム本体の版管理情報である。
@@ -28,9 +30,9 @@
 - ローカル: `C:\Users\futsa\OneDrive\デスクトップ\カタモン`
 - GitHub: `https://github.com/futsalife24-bot/katamon`
 - ブランチ: `master`
-- 作業中ブランチ: `feat/stage-studio-mvp`（モバイルStage Studioとカスタムバトル連携。公開準備中）
-- 現行ビルド: `v138`（通常弾の着弾爆発音を変更。PR #64、masterへマージ済み）
-- 次に公開するビルド: `v138-stage-studio-mvp`（Stage Studio MVP。PR経由で公開する）
+- 作業中ブランチ: `feat/stage-studio-game-ui`（Stage StudioのゲームUI改修）
+- 現行公開ビルド: `v138-stage-studio-mvp`（初回Stage Studio MVP。PR #65）
+- 今回の公開単位: `v138-stage-studio-ui` / Stage Studio `1.1.0-mvp`（PR #67）
 - 次の候補: `v139`（必殺カットイン音を強化）
 - ひとつ前: `v133`（次の風を1区間先まで予報。PR #59）
 - その前: `v132`（タイトル画面の静止部分を1枚に焼く。PR #58）
@@ -44,8 +46,8 @@
 - セッション最終開発コミット: `14ea290`（跳躍・引き分け・演習機能）
 - 正本移行コミット: `dbfe3c6`
 - 統合実装計画: `docs/実装計画_統合版.md`（2026-08-02 ユーザー承認済み）
-- 現在の進行: **Stage Studio MVPをv138へ統合し、PR経由の公開準備中。**
-  v138の既存1,160件とStage基盤37件、合計 **1,197件成功**。モバイル相当E2EはWebKit/Chromium合計8件成功。
+- 現在の進行: **Stage StudioのゲームUI改修をPR経由で公開中。**
+  既存1,160件とStage基盤43件、合計 **1,203件成功**。モバイル相当E2EはWebKit/Chromium合計8件成功。
   公開確認後は v139（必殺カットイン音）へ戻る。その後、各キャラの必殺技調整の相談を続ける。差し込み前の残タスク順は Issue #5（対戦部屋内の戦績表示）→ Issue #6（ランキング改修）→ Issue #4（オンラインHPバーのずれ）。
   **2026-08-05、開発をCodexへ移管。**
 - Version順（ユーザー承認済み）: v92 = Issue #9（固定刻み）→ v93 = Issue #10（DEAD LINEより上で地形を完結）→ v94 = Issue #3（boom頂点炸裂）→ 以降は統合計画のロードマップを1つずつ繰り下げ。

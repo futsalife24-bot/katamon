@@ -95,13 +95,13 @@
     "materials": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 4,
+      "maxItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["id", "type", "destructible"],
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+          "id": { "const": "terrain" },
           "type": { "const": "destructible" },
           "destructible": { "const": true },
           "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }

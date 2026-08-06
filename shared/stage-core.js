@@ -65,6 +65,26 @@
   }));
   var PRESET_KEYS = PRESETS.map(function (preset) { return preset.key; });
   var THEME_KEYS = ['grass', 'desert', 'snow', 'volcanic'];
+  var MATERIAL_CATALOG = Object.freeze({
+    terrain: Object.freeze({
+      id: 'terrain',
+      label: '通常地形',
+      type: 'destructible',
+      destructible: true,
+      enabled: true,
+      exportable: true,
+      requiresGameFeature: null
+    }),
+    steel: Object.freeze({
+      id: 'steel',
+      label: '鋼鉄',
+      type: 'indestructible',
+      destructible: false,
+      enabled: false,
+      exportable: false,
+      requiresGameFeature: 'indestructible-terrain-v1'
+    })
+  });
   var SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
   var TOP_LEVEL_KEYS = [
     'schemaVersion', 'stageId', 'title', 'description', 'authorDisplayName',
@@ -154,13 +174,13 @@
       materials: {
         type: 'array',
         minItems: 1,
-        maxItems: 4,
+        maxItems: 1,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['id', 'type', 'destructible'],
           properties: {
-            id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,31}$' },
+            id: { const: 'terrain' },
             type: { const: 'destructible' },
             destructible: { const: true },
             color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
@@ -1021,7 +1041,9 @@
     }
 
     var materials = Array.isArray(input.materials) ? input.materials : [];
-    if (!materials.length || materials.some(function (material) { return !material || material.type !== 'destructible' || material.destructible !== true; })) {
+    if (materials.length !== 1 || materials.some(function (material) {
+      return !material || material.id !== MATERIAL_CATALOG.terrain.id || material.type !== MATERIAL_CATALOG.terrain.type || material.destructible !== MATERIAL_CATALOG.terrain.destructible;
+    })) {
       errors.push(issue('unsupported_material', '$.materials', '未対応の地形素材が含まれています。MVPは破壊可能地形だけに対応します。'));
     }
     var gimmicks = Array.isArray(input.gimmicks) ? input.gimmicks : [];
@@ -1442,6 +1464,7 @@
     LIMITS: LIMITS,
     PHYSICS: PHYSICS,
     PRESETS: PRESETS,
+    MATERIAL_CATALOG: MATERIAL_CATALOG,
     schemaDocument: schemaDocument,
     createStageDocument: createStageDocument,
     generateStage: generateStage,
