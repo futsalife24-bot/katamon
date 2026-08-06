@@ -1527,7 +1527,7 @@ function check(name, value) {
   // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
   check('the human shot and the CPU shot are announced through the same one place',
     (htmlText.match(/netSendFire\(/g) || []).length === 3
-    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, specialArmed,')
+    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump);')
     && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
     && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
   check('the turn-end authority and the result declaration follow the same rule',

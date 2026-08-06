@@ -442,7 +442,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v134';
+  const BUILD_ID = 'v135';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1131,8 +1131,8 @@
   // 地形の底。DEAD LINEより下には地面を置かない。こうすると「床が抜けたか」が
   // 目で見て分かるようになり、見えない数pxの差で生死が反転しなくなる。
   // 闘技場(tieredBasin)は元からこの作りで、外壁の底625・棚の底387/468/549はすべてこの上。
-  // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。通常弾の最大クレーター半径は
-  // 59.4px(44*1.35)なので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
+  // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。共通化した通常弾のクレーター半径は
+  // 44pxなので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
   // (「地形大破壊」という技の役割どおりの挙動として意図的に許容する)。
   const TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
 
@@ -2822,11 +2822,35 @@
   const VEL_SCALE = 7.8; // 横長ステージでも高角度砲撃が届くよう、旧値から約20%延長
   const FIRE_MIN_DRAG = 12;
 
-  // 引っ張り量(dx,dy)からキャラ性能を反映した発射初速を計算する共通処理(プレビューと実発射で共有)
+  // 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果になる共通性能。
+  // 必殺技と跳躍は通常弾ではないため、従来のキャラ固有値をそのまま使う。
+  const NORMAL_SHOT_PROFILE = Object.freeze({
+    blastMul: 1,
+    windMul: 1,
+    gravityMul: 1,
+    velScaleMul: 1,
+    guideMul: 1,
+    tBias: 1
+  });
+
+  function shotPhysicsProfile(def, useSpecial, useJump) {
+    if (!useSpecial && !useJump) return NORMAL_SHOT_PROFILE;
+    return {
+      blastMul: def.blastMul != null ? def.blastMul : 1,
+      windMul: def.windMul != null ? def.windMul : 1,
+      gravityMul: def.gravityMul != null ? def.gravityMul : 1,
+      velScaleMul: def.velScaleMul != null ? def.velScaleMul : 1,
+      guideMul: def.guideMul != null ? def.guideMul : 1,
+      tBias: def.tBias != null ? def.tBias : 1
+    };
+  }
+
+  // 引っ張り量(dx,dy)から通常弾／必殺技／跳躍の発射初速を計算する共通処理(プレビューと実発射で共有)
   // 引っ張った向きをそのまま反映する(狙った角度を歪めない。水平が撃ちにくい問題はVEL_SCALE側で補う)
-  function computeLaunchVelocity(dx, dy, def) {
-    const vx0 = -dx * VEL_SCALE * def.velScaleMul;
-    const vy0 = -dy * VEL_SCALE * def.velScaleMul;
+  function computeLaunchVelocity(dx, dy, def, useSpecial, useJump) {
+    const profile = shotPhysicsProfile(def, useSpecial, useJump);
+    const vx0 = -dx * VEL_SCALE * profile.velScaleMul;
+    const vy0 = -dy * VEL_SCALE * profile.velScaleMul;
     return { vx0, vy0 };
   }
 
@@ -3045,7 +3069,7 @@
     craterHistory.push({ x, y, r: radius });
   }
 
-  // キャラ性能+必殺ショットを反映して発射する共通口。
+  // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
     const def = CHARACTERS[unit.character];
@@ -3055,6 +3079,7 @@
     // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
     const activateJump = deferred ? !!useJump : (!!useJump && unit.jumpAvailable !== false && unit.moveLockTurns <= 0);
+    const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
 
     if (tutorialActive() && unit.id === 'p1' && !deferred) tutorial.stepShots++;
     if (activateJump && !deferred) unit.jumpAvailable = false;
@@ -3179,9 +3204,9 @@
       });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, {
-        blastMul: def.blastMul,
-        windMul: def.windMul,
-        gravityMul: def.gravityMul
+        blastMul: shotProfile.blastMul,
+        windMul: shotProfile.windMul,
+        gravityMul: shotProfile.gravityMul
       });
     }
 
@@ -8691,13 +8716,14 @@
     const anchor = unitAnchor(self);
     const target = unitAnchor(foe);
     const def = CHARACTERS[self.character];
-    const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * def.tBias;
     const tier = cpuAccuracyTier(winStreak);
     const useSpecial = isSpecialReady(self) && (tier.name === 'high' || tier.name === 'perfect');
+    const shotProfile = shotPhysicsProfile(def, useSpecial, false);
+    const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * shotProfile.tBias;
     // 悪魔の必殺は重力も風も受けないので、逆算も直線で行わないと大きく外れる。
     const straightAim = useSpecial && def.key === 'akuma';
-    const aimWindMul = straightAim ? 0 : (useSpecial && def.key === 'tori' ? def.windMul * 0.55 : (def.windMul || 1));
-    const aimGravityMul = straightAim ? 0 : (def.gravityMul || 1);
+    const aimWindMul = straightAim ? 0 : (useSpecial && def.key === 'tori' ? def.windMul * 0.55 : shotProfile.windMul);
+    const aimGravityMul = straightAim ? 0 : shotProfile.gravityMul;
     const launchSpeedMul = useSpecial ? (def.specialVelocityMul || 1) : 1;
     const { vx0, vy0 } = perfectAimVelocity(anchor, target, baseT, aimGravityMul, aimWindMul, launchSpeedMul);
     const jitter = tier.jitter;
@@ -9529,13 +9555,16 @@
     // 発射方向は引っ張りの逆向き(自キャラの性能を反映)
     const me = localUnit();
     const def = CHARACTERS[me.character];
-    const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
+    const activateSpecial = specialArmed && isSpecialReady(me);
+    const activateJump = jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
+    const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
+    const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def, activateSpecial, activateJump);
     // 悪魔の必殺を構えている間は弾が直進するので、ガイドも重力・風を切って直線にする。
     const straightGuide = specialArmed && isSpecialReady(me) && def.key === 'akuma';
-    const gravity = straightGuide ? 0 : GRAVITY * (def.gravityMul || 1);
-    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * (def.guideMul || 1);
+    const gravity = straightGuide ? 0 : GRAVITY * shotProfile.gravityMul;
+    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul;
     const steps = 14;
-    const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * def.windMul;
+    const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul;
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -12734,9 +12763,11 @@
           dy = Math.sin(ang) * dist;
           const me = localUnit();
           const def = CHARACTERS[me.character];
-          const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def);
-          netSendFire(me, aimState.anchor, vx0, vy0, specialArmed, jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0);
-          launchShot(me, aimState.anchor, vx0, vy0, specialArmed, false, jumpArmed);
+          const activateSpecial = specialArmed && isSpecialReady(me);
+          const activateJump = jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
+          const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def, activateSpecial, activateJump);
+          netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump);
+          launchShot(me, aimState.anchor, vx0, vy0, activateSpecial, false, activateJump);
           runStats.shots++;
           specialArmed = false;
           jumpArmed = false;

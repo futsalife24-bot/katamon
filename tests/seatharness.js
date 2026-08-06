@@ -98,6 +98,26 @@ const HOOK = `
     chars: () => CHARACTER_LIST.slice(),
     deathGate: () => ({ range: DEATH_GATE_RANGE, speed: DEATH_GATE_SPEED, bottomRadius: DEATH_GATE_CARVE_RADIUS_BOTTOM, topRadius: DEATH_GATE_CARVE_RADIUS_TOP, curvePower: DEATH_GATE_CARVE_CURVE_POWER, stride: DEATH_GATE_CARVE_STRIDE, startDepth: DEATH_GATE_START_DEPTH }),
     character: key => ({ ...CHARACTERS[key] }),
+    shotPhysicsProfileForTest: (key, useSpecial, useJump) => {
+      const def = CHARACTERS[key];
+      // v135より前にも検査だけを先に差し込み、壊れた実装で落ちることを確認できるようにする。
+      if (typeof shotPhysicsProfile === 'function') return { ...shotPhysicsProfile(def, !!useSpecial, !!useJump) };
+      return {
+        blastMul: def.blastMul || 1,
+        windMul: def.windMul || 1,
+        gravityMul: def.gravityMul || 1,
+        velScaleMul: def.velScaleMul || 1,
+        guideMul: def.guideMul || 1,
+        tBias: def.tBias || 1
+      };
+    },
+    launchVelocityForTest: (key, dx, dy, useSpecial, useJump) => (
+      computeLaunchVelocity(dx, dy, CHARACTERS[key], !!useSpecial, !!useJump)
+    ),
+    projectileProfilesForTest: () => projectiles.map(p => ({
+      blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul
+    })),
+    clearProjectilesForTest: () => { projectiles.length = 0; },
     deathGateTestX: () => {
       for (let x = Math.round(STAGE_W * 0.2); x <= Math.round(STAGE_W * 0.8); x += 12) {
         const y = groundYAt(x);
