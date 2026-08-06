@@ -115,7 +115,8 @@ const HOOK = `
       computeLaunchVelocity(dx, dy, CHARACTERS[key], !!useSpecial, !!useJump)
     ),
     projectileProfilesForTest: () => projectiles.map(p => ({
-      blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul
+      blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
+      normalImpactSound: !!p.normalImpactSound
     })),
     clearProjectilesForTest: () => { projectiles.length = 0; },
     deathGateTestX: () => {
@@ -436,7 +437,11 @@ const HOOK = `
     moveLockVisualForTest: (id) => typeof moveLockStatus === 'function' ? moveLockStatus(unitById(id)) : null,
     // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
-    explodeAtForTest: (x, y, blastMul, ownerId) => explodeAt(x, y, blastMul || 1, ownerId),
+    explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound) => (
+      explodeAt(x, y, blastMul || 1, ownerId, 1, !!normalImpactSound)
+    ),
+    setNormalImpactBufferForTest: () => { normalImpactBuffer = { __decodedAudio: true }; },
+    decodedAudioStartsForTest: () => globalThis.__ktDecodedAudioStarts,
     fireworkShardExplodeForTest: (x, y, ownerId) => fireworkShardExplode({ owner: ownerId }, 1, x, y),
     projectileOwnerKind: () => projectiles.map(p => typeof p.owner),
     damageTexts: () => floatTexts.map(t => t.text),
@@ -467,6 +472,7 @@ const noop = () => {};
 // 描かれた文字の記録。ctxのスタブはこのファイルのスコープなので globalThis に置き、
 // ゲーム側スコープのフックからも同じ配列を見られるようにする。
 globalThis.__ktTextLog = [];
+globalThis.__ktDecodedAudioStarts = 0;
 function makeCtx() {
   const ctx = {
     canvas: null,
@@ -574,7 +580,13 @@ class AudioCtxStub {
   createGain() { return chain({ gain: { value: 1, setValueAtTime: noop, linearRampToValueAtTime: noop, exponentialRampToValueAtTime: noop, cancelScheduledValues: noop } }); }
   createOscillator() { return chain({ type: 'sine', frequency: { value: 440, setValueAtTime: noop, linearRampToValueAtTime: noop, exponentialRampToValueAtTime: noop }, detune: { value: 0, setValueAtTime: noop }, start: noop, stop: noop }); }
   createBuffer() { return { getChannelData: () => new Float32Array(1) }; }
-  createBufferSource() { return chain({ buffer: null, start: noop, stop: noop, loop: false, playbackRate: { value: 1, setValueAtTime: noop } }); }
+  createBufferSource() {
+    const source = chain({ buffer: null, stop: noop, loop: false, playbackRate: { value: 1, setValueAtTime: noop } });
+    source.start = () => {
+      if (source.buffer && source.buffer.__decodedAudio) globalThis.__ktDecodedAudioStarts++;
+    };
+    return source;
+  }
   createBiquadFilter() { return chain({ type: 'lowpass', frequency: { value: 1000, setValueAtTime: noop, linearRampToValueAtTime: noop, exponentialRampToValueAtTime: noop }, Q: { value: 1 }, gain: { value: 0 } }); }
   createDynamicsCompressor() { return chain({ threshold: { value: 0 }, knee: { value: 0 }, ratio: { value: 1 }, attack: { value: 0 }, release: { value: 0 } }); }
   createStereoPanner() { return chain({ pan: { value: 0, setValueAtTime: noop } }); }
