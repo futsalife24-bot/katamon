@@ -75,6 +75,42 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
 }
 
+// v137: 必殺は「キャラからオーラが沸き立つ → カットイン → 発射」の順に見せる。
+// 描画だけを足して発射待ちが従来のままだと、オーラとカットインが同時に出てしまうため、
+// 実際の保留状態と弾の有無を時間順に確かめる。
+{
+  const hasSequenceApi = typeof kt.specialSequenceForTest === 'function';
+  let phases = null;
+  if (hasSequenceApi) {
+    kt.setPhase('battle');
+    kt.setCharactersForTest('kyoryu', 'medama');
+    kt.fillCharges();
+    kt.clearProjectilesForTest();
+    kt.fireForTest(180, -260, { unitId: 'p1', useSpecial: true });
+    const aura = kt.specialSequenceForTest();
+    kt.step(aura ? aura.auraDuration + 0.01 : 1);
+    const cutin = kt.specialSequenceForTest();
+    kt.step(cutin ? cutin.flashDuration + 0.01 : 1);
+    const fired = kt.specialSequenceForTest();
+    phases = { aura, cutin, fired, projectileCount: kt.projectiles().length };
+  }
+  check('必殺はオーラだけを先に見せ、その後カットインへ移る',
+    !!phases
+      && phases.aura.phase === 'aura' && phases.aura.auraVisible && !phases.aura.flashVisible
+      && phases.cutin.phase === 'cutin' && !phases.cutin.auraVisible && phases.cutin.flashVisible,
+    JSON.stringify(phases));
+  check('必殺弾はオーラとカットインを見せ切るまで発射されない',
+    !!phases
+      && phases.aura.projectileCount === 0 && phases.cutin.projectileCount === 0
+      && phases.fired.phase === null && phases.projectileCount > 0,
+    JSON.stringify(phases));
+  check('オーラはキャラ画像の背後から上向きに描く',
+    indexHtml.includes('function drawSpecialAura(u, a)')
+      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
+    'drawSpecialAuraの描画順が見つかりません');
+  kt.clearProjectilesForTest();
+}
+
 // v134: キャラ選択の紹介文・型・性能目盛りはゲーム内容と合っていないため出さない。
 // 一旦はキャラ名と必殺技名だけで選べる画面にする。
 {
