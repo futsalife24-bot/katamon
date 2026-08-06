@@ -2,6 +2,21 @@
 
 更新日: 2026-08-06（JST）
 
+## Stage Studio MVP（featureブランチ）
+
+- 作業ブランチ: `feat/stage-studio-mvp`
+- 分離worktree: `.codex-worktrees/stage-studio-mvp`
+- 状態: モバイルでの「生成・編集 → 出撃地点/風/見た目 → 共有物理テスト → 検証 → JSON/ZIP出力 → ゲームへインポート → カスタムバトル開始」の縦導線を実装済み。
+- データ基盤: `column-segments-v1`、決定的seed生成、正規化JSON、SHA-256、厳格検証、公式/カスタム保存領域分離、JSON/ZIP往復を実装済み。
+- PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。
+- 最終自動確認: 既存ゲーム1,160件 + Stage基盤37件 = 1,197件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。JSON/ZIP双方でインポート、ゲーム再読込後の永続化、選択、実バトル開始まで確認済み。
+- 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
+- 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
+- 公開経路: `master`へ直接pushせず、このfeatureブランチをPR経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。
+- 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
+
+以下はゲーム本体の版管理情報である。
+
 ## 引き継ぎ元
 
 - CodexセッションID: `019fbc4d-d158-75e3-9e62-bcdb3d408d10`
@@ -13,9 +28,9 @@
 - ローカル: `C:\Users\futsa\OneDrive\デスクトップ\カタモン`
 - GitHub: `https://github.com/futsalife24-bot/katamon`
 - ブランチ: `master`
-- 作業中ブランチ: `feat/v138-normal-impact-sfx`（通常弾の着弾爆発音をPixabay音源へ変更。PR #64、レビュー待ち）
-- 現行ビルド: `v137`（必殺のオーラ→カットイン→発射。PR #63。公開済み）
-- 次に公開するビルド: `v138`（通常弾の着弾爆発音をPixabay音源へ変更。実装・検証済み）
+- 作業中ブランチ: `feat/stage-studio-mvp`（モバイルStage Studioとカスタムバトル連携。公開準備中）
+- 現行ビルド: `v138`（通常弾の着弾爆発音を変更。PR #64、masterへマージ済み）
+- 次に公開するビルド: `v138-stage-studio-mvp`（Stage Studio MVP。PR経由で公開する）
 - 次の候補: `v139`（必殺カットイン音を強化）
 - ひとつ前: `v133`（次の風を1区間先まで予報。PR #59）
 - その前: `v132`（タイトル画面の静止部分を1枚に焼く。PR #58）
@@ -29,9 +44,9 @@
 - セッション最終開発コミット: `14ea290`（跳躍・引き分け・演習機能）
 - 正本移行コミット: `dbfe3c6`
 - 統合実装計画: `docs/実装計画_統合版.md`（2026-08-02 ユーザー承認済み）
-- 現在の進行: **v138「通常弾の着弾爆発音をPixabay音源へ変更」を実装・検証済み。PR #64、レビュー待ち。**
-  v138は追加7件（regressiontestは2席で新規2件ずつ、stage3testは新規3件）を含む合計 **1160件成功**。
-  v138の次は v139（必殺カットイン音）。その後、各キャラの必殺技調整の相談を続ける。差し込み前の残タスク順は Issue #5（対戦部屋内の戦績表示）→ Issue #6（ランキング改修）→ Issue #4（オンラインHPバーのずれ）。
+- 現在の進行: **Stage Studio MVPをv138へ統合し、PR経由の公開準備中。**
+  v138の既存1,160件とStage基盤37件、合計 **1,197件成功**。モバイル相当E2EはWebKit/Chromium合計8件成功。
+  公開確認後は v139（必殺カットイン音）へ戻る。その後、各キャラの必殺技調整の相談を続ける。差し込み前の残タスク順は Issue #5（対戦部屋内の戦績表示）→ Issue #6（ランキング改修）→ Issue #4（オンラインHPバーのずれ）。
   **2026-08-05、開発をCodexへ移管。**
 - Version順（ユーザー承認済み）: v92 = Issue #9（固定刻み）→ v93 = Issue #10（DEAD LINEより上で地形を完結）→ v94 = Issue #3（boom頂点炸裂）→ 以降は統合計画のロードマップを1つずつ繰り下げ。
 
@@ -2399,7 +2414,7 @@ v101は「新クライアントが `seenAt` を送る → 旧ルールが未宣�
    - 新規3件は、実装前の状態で `253 passed, 3 failed` になることを先に確認。実装後は両席とも256件成功。全体は1153件成功。中継数は `38 / 64 / 83 / 61 / 48` のまま。
    - ローカルHTTPと実ブラウザで、オーラがキャラの背後からはっきり立ち上がること、キャラ本体とHPを隠さないこと、オーラが消えてからカットインへ切り替わることを確認。一時QA入口は削除済み。
    - `database.rules.json` は変更なし。Firebase Console作業なし。
-21. **v138 通常弾の着弾爆発音をPixabay音源へ変更** — 実装・検証済み、PR #64でレビュー待ち。
+21. ~~**v138 通常弾の着弾爆発音をPixabay音源へ変更**~~ — 公開済み（PR #64）。
    - Pixabayの `Animated Cartoon Explosion Impact`（作者: Universfield、2.376秒）を `assets/normal-impact-explosion.mp3` として同梱した。配布元URL・直接取得URL・Pixabay Content License・確認日（2026-08-06）・SHA-256は `assets/SOUND_LICENSES.md` に記録した。
    - 通常弾へだけ `normalImpactSound` の印を付け、ユニット・障害物・地形のどこへ当たっても同じ経路で新しい音を鳴らす。必殺技・跳躍・電磁波・壁破壊・花火の拡散弾は従来音を維持する。
    - 最初のタップから音源を先読みし、既存の効果音音量・ミュート・圧縮経路を通して再生する。読み込みが間に合わない時や取得失敗時だけ従来の合成爆発音へ戻し、着弾を無音にしない。サービスワーカーにも版付きURLを追加し、オフライン対戦でも鳴るようにした。

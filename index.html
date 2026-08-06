@@ -22,6 +22,7 @@
 <link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/tori.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
+<link rel="stylesheet" href="game-custom-stages.css?v=1">
 <style>
   html, body {
     margin: 0;
@@ -326,7 +327,7 @@
 </head>
 <body>
 <div id="stage">
-  <canvas id="game"></canvas>
+  <canvas id="game" data-testid="battle-canvas"></canvas>
 </div>
 <div id="debugPanel">M1: 地形生成+描画+破壊テスト(タップでクレーター)</div>
 <!-- 名前入力だけはCanvasではなくHTMLで受ける。日本語入力(IME)を自前で作るのは非現実的なため。 -->
@@ -401,6 +402,10 @@
 <!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
 <audio id="bonusBgm" preload="none" loop></audio>
 
+<script src="shared/stage-core.js?v=1"></script>
+<script src="shared/stage-storage.js?v=1"></script>
+<script src="shared/stage-repository.js?v=1"></script>
+<script src="shared/stage-zip.js?v=1"></script>
 <script>
 (() => {
   'use strict';
@@ -412,7 +417,7 @@
   // 下部コントローラパネルの境界と死線。地形の生成側(GROUND_MAX_Y/TERRAIN_BOTTOM_Y)が
   // 参照するため、パネル描画の定義より前に置く。値の意味は変えていない。
   const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
-  const DEAD_LINE_Y = CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
+  const DEAD_LINE_Y = globalThis.StageCore?.PHYSICS?.deadLineY || CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
 
   // ===== UI意匠トークン(真鍮×黒鉄) =====
   // タイトル/フリーモード画面で確立した「重厚な鉄板に真鍮の縁と鋲」の意匠を、
@@ -442,7 +447,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v138';
+  const BUILD_ID = 'v138-stage-studio-mvp';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1239,6 +1244,9 @@
     stageBackgroundImages[key] = image;
   }
   function getReadyStageBackground() {
+    if (currentCustomAppearance
+        && (currentCustomAppearance.background.mode !== 'theme'
+          || currentCustomAppearance.decorationsEnabled === false)) return null;
     const backgroundKey = currentPattern === 'tieredBasin'
       ? 'bossArena'
       : currentThemeKey;
@@ -1269,7 +1277,54 @@
   };
   let currentTheme = THEMES.grass;
   let currentThemeKey = 'grass';
+  // 公式ステージのTHEMESは共有定数のまま保持し、カスタムステージだけ複製した配色へ上書きする。
+  // これにより、カスタム地形色を適用した後も通常バトルの見た目は一切変わらない。
+  let currentCustomAppearance = null;
   let parallaxSeed = 0; // 遠景の山の形を試合ごとに変えるための位相オフセット
+
+  function mixHexColor(from, to, ratio) {
+    const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const read = (color, offset) => Number.parseInt(String(color).slice(offset, offset + 2), 16);
+    const channel = (a, b) => Math.round(a + (b - a) * safeRatio).toString(16).padStart(2, '0');
+    return `#${channel(read(from, 1), read(to, 1))}${channel(read(from, 3), read(to, 3))}${channel(read(from, 5), read(to, 5))}`;
+  }
+
+  function applyStageAppearance(themeKey, appearance) {
+    currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
+    if (!appearance) {
+      currentCustomAppearance = null;
+      currentTheme = THEMES[currentThemeKey];
+      return;
+    }
+
+    const background = appearance.background || {};
+    currentCustomAppearance = {
+      background: {
+        mode: ['theme', 'color', 'gradient'].includes(background.mode) ? background.mode : 'theme',
+        theme: currentThemeKey,
+        color: background.color,
+        gradient: { ...(background.gradient || {}) }
+      },
+      terrainColor: appearance.terrainColor,
+      decorationsEnabled: appearance.decorationsEnabled !== false
+    };
+    currentTheme = { ...THEMES[currentThemeKey], sky: THEMES[currentThemeKey].sky.slice() };
+
+    if (currentCustomAppearance.background.mode === 'color') {
+      const color = currentCustomAppearance.background.color;
+      currentTheme.sky = [color, color, color];
+    } else if (currentCustomAppearance.background.mode === 'gradient') {
+      const from = currentCustomAppearance.background.gradient.from;
+      const to = currentCustomAppearance.background.gradient.to;
+      currentTheme.sky = [from, mixHexColor(from, to, 0.5), to];
+    }
+
+    const terrainColor = currentCustomAppearance.terrainColor;
+    currentTheme.dirtTop = terrainColor;
+    currentTheme.dirtBottom = mixHexColor(terrainColor, '#000000', 0.58);
+    currentTheme.rim = mixHexColor(terrainColor, '#ffffff', 0.34);
+    currentTheme.rimShadow = mixHexColor(terrainColor, '#000000', 0.36);
+  }
 
   // 実体は不可視のオフスクリーンキャンバス(見た目)。塗り(source-over)で地面、destination-outで爆風の穴をあける
   const terrainCanvas = document.createElement('canvas');
@@ -2136,8 +2191,7 @@
   }
 
   function newTerrain(pattern) {
-    currentThemeKey = THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)];
-    currentTheme = THEMES[currentThemeKey];
+    applyStageAppearance(THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)], null);
     parallaxSeed = Math.random() * 10000;
     const r = generateTerrain(pattern);
     currentPattern = r.pattern;
@@ -2153,9 +2207,8 @@
   }
 
   // 中断データからの地形復元:未破壊の地形を作り直し、記録しておいたクレーターを同じ順で開け直す
-  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed, savedBridge) {
-    currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
-    currentTheme = THEMES[currentThemeKey];
+  function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed, savedBridge, appearance) {
+    applyStageAppearance(themeKey, pattern === 'custom' ? appearance : null);
     parallaxSeed = savedParallaxSeed || 0;
     currentPattern = pattern;
     rebuildArenaObstacles();
@@ -2522,7 +2575,7 @@
     return toX;
   }
 
-  const FALL_TRIGGER = 22; // px。移動先の地面がこれ以上下にある場合は歩いて追従させず落下扱いにする
+  const FALL_TRIGGER = globalThis.StageCore?.PHYSICS?.fallTrigger || 22; // px。移動先の地面がこれ以上下にある場合は歩いて追従させず落下扱いにする
   // 歩行中の接地追従:通常の緩やかな上り下りはそのまま歩けるが、崖や浮島の縁など大きな段差では
   // 自然に落下させる(常にYを地形に同期させてしまうと、足元が無くなっても「歩いて降りる」形になり
   // 場外判定が発生しない=落下自滅ができなくなるため)
@@ -2797,7 +2850,7 @@
   }
 
   // ===== 風 =====
-  const WIND_ACCEL_MAX = 260; // px/s^2
+  const WIND_ACCEL_MAX = globalThis.StageCore?.PHYSICS?.windAccelMax || 260; // px/s^2
   const CALM_WIND_CHANCE = 0.18; // 風が切り替わる区間ごとに無風になる確率
   const CALM_BATTLE_CHANCE = 0.06; // 対戦全体が無風になる確率
   let wind = { dir: 1, strength: 0 }; // strength: 0..1
@@ -2810,6 +2863,13 @@
   // 実際の対戦はランダム風のままだった。
   function activeFixedWind() {
     if (battleMode === 'free') {
+      if (selectedCustomAdapter && selectedCustomAdapter.wind) {
+        return {
+          key: 'custom',
+          dir: selectedCustomAdapter.wind.direction,
+          strength: selectedCustomAdapter.wind.strength
+        };
+      }
       const selected = WIND_OPTIONS[freeModeConfig.windIndex] || WIND_OPTIONS[0];
       return selected && selected.key !== 'random' ? selected : null;
     }
@@ -2866,9 +2926,9 @@
   }
 
   // ===== 弾道物理 =====
-  const GRAVITY = 650; // px/s^2
+  const GRAVITY = globalThis.StageCore?.PHYSICS?.gravity || 650; // px/s^2
   const MAX_DRAG = 130; // px
-  const VEL_SCALE = 7.8; // 横長ステージでも高角度砲撃が届くよう、旧値から約20%延長
+  const VEL_SCALE = globalThis.StageCore?.PHYSICS?.velocityScale || 7.8; // 横長ステージでも高角度砲撃が届くよう、旧値から約20%延長
   const FIRE_MIN_DRAG = 12;
 
   // 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果になる共通性能。
@@ -3510,6 +3570,13 @@
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'press' | 'breaking' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
   let battleMode = 'normal'; // 'normal' | 'free' | 'tutorial'
+  // 機能は依存モジュールがそろっている時だけ有効。公開後に不具合が見つかった場合も、
+  // StageCoreを外したりゲーム本体を書き換えたりせず、読み込み前に
+  // `globalThis.KATAMON_FEATURES = { customStages: false }` を置けば安全に停止できる。
+  const CUSTOM_STAGE_FEATURE_ENABLED = globalThis.KATAMON_FEATURES?.customStages !== false
+    && !!globalThis.StageCore;
+  let selectedCustomStage = null;
+  let selectedCustomAdapter = null;
   const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
   const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
   // おまけ曲の再生ボタン。演習(下端789)とRANKING(上端835)の隙間へ収める。
@@ -3743,12 +3810,21 @@
     };
     const property = `${kind}Index`;
     freeModeConfig[property] = wrapOptionIndex(freeModeConfig[property] + direction, lengths[kind]);
+    if (selectedCustomStage && ['terrain', 'wind', 'format'].includes(kind)) {
+      selectedCustomStage = null;
+      selectedCustomAdapter = null;
+    }
     playUiSound();
   }
 
-  function startFreeMatch() {
-    clearSuspendedMatch();
-    hasSuspendedSave = false;
+  function startFreeMatch(options) {
+    if (options?.preserveOfficialSuspend === true) {
+      clearCustomSuspendedMatch();
+      hasSuspendedSave = !!loadSuspendedMatch();
+    } else {
+      clearSuspendedMatch();
+      hasSuspendedSave = false;
+    }
     battleMode = 'free';
     const format = (FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0]).key;
     setMatchFormat(format);
@@ -4071,6 +4147,7 @@
 
   // ===== 中断/再開(ブラウザを閉じても続きから再開できる) =====
   const SUSPEND_KEY = 'katamon_suspend_v1';
+  const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1';
 
   const SNAPSHOT_VERSION = 4;
 
@@ -4091,6 +4168,9 @@
       v: SNAPSHOT_VERSION,
       battleMode,
       freeModeConfig: { ...freeModeConfig },
+      customStage: battleMode === 'free' && selectedCustomStage
+        ? globalThis.StageCore?.normalizeStage(selectedCustomStage)
+        : null,
       stageW: STAGE_W,
       segments: currentSegments,
       craters: craterHistory,
@@ -4140,19 +4220,66 @@
     return data;
   }
 
-  function saveSuspendedMatch() {
-    // 対人戦は片方だけ中断しても再開できないので保存しない(復帰はStage 4の課題)。
-    if (isOnline()) return;
-    try { localStorage.setItem(SUSPEND_KEY, JSON.stringify(buildSnapshot())); } catch (err) { /* 保存できなくても対戦は続行可能 */ }
+  function inspectCustomStageSnapshot(data) {
+    if (!data) {
+      return { valid: true, stage: null, adapter: null };
+    }
+    if (data.customStage == null) {
+      return data.pattern === 'custom'
+        ? { valid: false, message: 'カスタム地形に必要なステージ情報がありません。' }
+        : { valid: true, stage: null, adapter: null };
+    }
+    if (data.battleMode !== 'free' || data.pattern !== 'custom') {
+      return { valid: false, message: 'カスタムステージの対戦種別が不正です。' };
+    }
+    if (!CUSTOM_STAGE_FEATURE_ENABLED || !globalThis.StageCore?.verifyStageHashSync) {
+      return { valid: false, message: 'カスタムステージの整合性を確認できません。' };
+    }
+    if (isOnline()) {
+      return { valid: false, message: 'オンライン対戦ではカスタムステージを復元できません。' };
+    }
+    try {
+      assertCustomStageBattlePolicy(data.customStage);
+      const hash = globalThis.StageCore.verifyStageHashSync(data.customStage);
+      if (!hash.valid) {
+        return { valid: false, message: 'カスタムステージのcontentHashが一致しません。' };
+      }
+      const stage = globalThis.StageCore.normalizeStage(data.customStage);
+      // ステージ本体だけでなく、復元に使う未破壊地形もハッシュ対象の列と一致していることを確認する。
+      // ここを別々に信頼すると、localStorageのsegmentsだけを書き換えて検査を迂回できてしまう。
+      if (globalThis.StageCore.canonicalStringify(data.segments)
+          !== globalThis.StageCore.canonicalStringify(stage.terrain.columns)) {
+        return { valid: false, message: '保存された地形とカスタムステージの内容が一致しません。' };
+      }
+      return { valid: true, stage, adapter: globalThis.StageCore.toGameAdapter(stage) };
+    } catch (error) {
+      return { valid: false, message: error?.message || 'カスタムステージの復元データが不正です。' };
+    }
   }
 
-  function loadSuspendedMatch() {
+  function saveSuspendedMatch() {
+    // 対人戦は片方だけ中断しても再開できないので保存しない(復帰はStage 4の課題)。
+    if (isOnline()) return false;
+    const snapshot = buildSnapshot();
+    const key = snapshot.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY;
     try {
-      const raw = localStorage.getItem(SUSPEND_KEY);
+      localStorage.setItem(key, JSON.stringify(snapshot));
+      return true;
+    } catch (err) {
+      return false; // 保存できなくても対戦は続行可能
+    }
+  }
+
+  function loadSuspendedMatchFromKey(key) {
+    try {
+      const raw = localStorage.getItem(key);
       if (!raw) return null;
       const data = migrateSnapshot(JSON.parse(raw));
       // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
       if (!data || !Array.isArray(data.segments) || data.segments.length !== TERRAIN_COLS) return null;
+      if (key === CUSTOM_SUSPEND_KEY && data.customStage == null) return null;
+      if (key === SUSPEND_KEY && data.customStage != null) return null;
+      if (!inspectCustomStageSnapshot(data).valid) return null;
       // 人数が保存時の対戦形式と食い違うセーブは復元しない。
       // タイトルへ戻ると units は1vs1へ戻るので、現在の units.length ではなく
       // セーブ自身が名乗る形式と突き合わせる(そうしないと2vs2の中断が必ず捨てられる)。
@@ -4163,14 +4290,38 @@
     } catch (err) { return null; }
   }
 
-  function clearSuspendedMatch() {
-    try { localStorage.removeItem(SUSPEND_KEY); } catch (err) { /* noop */ }
+  function loadSuspendedMatch() {
+    return loadSuspendedMatchFromKey(CUSTOM_SUSPEND_KEY)
+      || loadSuspendedMatchFromKey(SUSPEND_KEY);
+  }
+
+  function clearCustomSuspendedMatch() {
+    try { localStorage.removeItem(CUSTOM_SUSPEND_KEY); } catch (err) { /* noop */ }
+  }
+
+  function clearSuspendedMatch(data) {
+    try {
+      if (data) {
+        localStorage.removeItem(data.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY);
+        return;
+      }
+      localStorage.removeItem(CUSTOM_SUSPEND_KEY);
+      localStorage.removeItem(SUSPEND_KEY);
+    } catch (err) { /* noop */ }
   }
 
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
   function applySnapshot(data) {
+    const customSnapshot = inspectCustomStageSnapshot(data);
+    if (!customSnapshot.valid) throw new Error(customSnapshot.message);
     battleMode = data.battleMode === 'free' ? 'free' : 'normal';
+    selectedCustomStage = null;
+    selectedCustomAdapter = null;
+    if (customSnapshot.stage) {
+      selectedCustomStage = customSnapshot.stage;
+      selectedCustomAdapter = customSnapshot.adapter;
+    }
     // 人数を先に合わせる。units の中身を作り替えるので、以降のループより必ず前に置く。
     // 旧セーブやv99以前のオンライン相手は matchFormat を持たないので1vs1として扱う。
     setMatchFormat(data.matchFormat === '2v2' ? '2v2' : '1v1');
@@ -4182,7 +4333,16 @@
       freeModeConfig.formatIndex = wrapOptionIndex(Number(data.freeModeConfig.formatIndex) || 0, FORMAT_OPTIONS.length);
     }
 
-    loadTerrainFromSave(data.segments, data.craters, data.pattern, data.startOnIsland, data.themeKey, data.parallaxSeed, data.bridge);
+    loadTerrainFromSave(
+      selectedCustomAdapter ? selectedCustomAdapter.segments : data.segments,
+      data.craters,
+      selectedCustomAdapter ? 'custom' : data.pattern,
+      selectedCustomAdapter ? false : data.startOnIsland,
+      selectedCustomAdapter ? selectedCustomAdapter.themeKey : data.themeKey,
+      selectedCustomAdapter ? selectedCustomAdapter.parallaxSeed : data.parallaxSeed,
+      selectedCustomAdapter ? null : data.bridge,
+      selectedCustomAdapter?.appearance
+    );
     // 途中まで溜まった物理の刻みは持ち越さない。ターン境界の状態から始め直す(Issue #9)。
     resetPhysicsClock();
     // 旧セーブには無いので0から。障害物の揺れが少しずれるだけで実害はない。
@@ -4281,8 +4441,8 @@
     gamePhase = 'battle';
     syncBgm({ restartStage: true });
 
-    clearSuspendedMatch();
-    hasSuspendedSave = false;
+    clearSuspendedMatch(data);
+    hasSuspendedSave = !!loadSuspendedMatch();
     updateDebug();
   }
 
@@ -7561,8 +7721,17 @@
 
     const playerKey = CHARACTER_LIST[freeModeConfig.playerIndex];
     const cpuKey = CHARACTER_LIST[freeModeConfig.cpuIndex];
-    const terrain = FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
-    const windOption = WIND_OPTIONS[freeModeConfig.windIndex];
+    const terrain = selectedCustomStage
+      ? { name: selectedCustomStage.title, sub: 'カスタムステージ・中央をタップして管理' }
+      : FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
+    const windOption = selectedCustomAdapter && selectedCustomAdapter.wind
+      ? {
+          name: selectedCustomAdapter.wind.strength
+            ? (selectedCustomAdapter.wind.direction < 0 ? '← カスタム風' : 'カスタム風 →')
+            : '無風',
+          sub: 'ステージファイルの設定'
+        }
+      : WIND_OPTIONS[freeModeConfig.windIndex];
     drawFreeRow(freeRows.player, 'YOUR MONSTER', CHARACTERS[playerKey].name, CHARACTERS[playerKey].role, 'player', playerKey);
     drawFreeRow(freeRows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     drawFreeRow(freeRows.terrain, 'STAGE FORM', terrain.name, terrain.sub, 'terrain');
@@ -8901,8 +9070,11 @@
   let skyArtKey = '';
   let skyArtBuilds = 0; // 焼き直した回数。毎フレーム増えていないことを検査で見る
   function skyArtSignature() {
-    // 焼いた絵が変わる条件はこの3つだけ。背景画像は後から読み終わるので必ず含める。
-    return `${currentThemeKey}|${parallaxSeed}|${getReadyStageBackground() ? 1 : 0}`;
+    // カスタム色と装飾設定も署名へ含め、同じテーマ・シード間の切替でも焼き直す。
+    const custom = currentCustomAppearance
+      ? `${currentCustomAppearance.background.mode}|${currentTheme.sky.join(',')}|${currentCustomAppearance.terrainColor}|${currentCustomAppearance.decorationsEnabled ? 1 : 0}`
+      : 'official';
+    return `${currentThemeKey}|${parallaxSeed}|${getReadyStageBackground() ? 1 : 0}|${custom}`;
   }
   function rebuildSkyArt() {
     const key = skyArtSignature();
@@ -8936,6 +9108,9 @@
     sky.addColorStop(1, currentTheme.sky[2]);
     g.fillStyle = sky;
     g.fillRect(0, 0, VW, VH);
+
+    // 装飾OFFはベースの空色だけを残す。天体・オーロラ・地平線の光は描かない。
+    if (currentCustomAppearance?.decorationsEnabled === false) return;
 
     // 背景写真がある時は、この上へ写真がそのままかぶる。天体やオーロラは出さない。
     if (getReadyStageBackground()) return;
@@ -8994,6 +9169,7 @@
 
   // 粒より手前に来る、動かない部分。読みやすさの陰と四隅の落ち。
   function drawSkyFrontArt(g) {
+    if (currentCustomAppearance?.decorationsEnabled === false) return;
     if (getReadyStageBackground()) {
       // HUD・弾道・キャラクターの視認性を保ちつつ、生成背景の色彩を残す。
       const readabilityShade = g.createLinearGradient(0, 0, 0, VH);
@@ -9012,6 +9188,7 @@
 
   // 星・火の粉・雪・砂埃をテーマ別に描き分ける。ここだけは毎フレーム動く。
   function drawSkyParticles() {
+    if (currentCustomAppearance?.decorationsEnabled === false) return;
     const fx = THEME_FX[currentThemeKey];
     const t = performance.now() * 0.001;
     for (let i = 0; i < 44; i++) {
@@ -9096,6 +9273,7 @@
   }
 
   function drawParallax() {
+    if (currentCustomAppearance?.decorationsEnabled === false) return;
     // 専用背景が読み込めたテーマでは、画像内の遠景を活かして二重の山・雲を描かない。
     if (getReadyStageBackground()) return;
     ctx.save();
@@ -10589,8 +10767,8 @@
     // resetMatch の末尾はステージBGMを鳴らし直すので、先にタイトルへ移してから呼ぶ。
     gamePhase = 'title';
     resetMatch(true);      // つぎの試合(ボス戦の判定・地形・キャラ・必殺チャージの持ち越し)を用意
-    saveSuspendedMatch();  // winStreak / runStats / isBossMatch ごと保存される
-    hasSuspendedSave = true;
+    const saved = saveSuspendedMatch();  // winStreak / runStats / isBossMatch ごと保存される
+    hasSuspendedSave = saved || !!loadSuspendedMatch();
     returnToTitleFromResult();
   }
 
@@ -12703,6 +12881,11 @@
       }
       for (const [kind, row] of Object.entries(freeRows)) {
         if (Math.abs(p0.y - (row.y + 7)) > row.h / 2) continue;
+        if (kind === 'terrain' && p0.x > 86 && p0.x < VW - 86 && globalThis.CustomStageManager) {
+          playUiSound();
+          globalThis.CustomStageManager.open();
+          return;
+        }
         if (p0.x <= 86) {
           changeFreeOption(kind, -1);
           return;
@@ -12763,10 +12946,10 @@
           exitOnlineFromMenu();
           return;
         }
-        saveSuspendedMatch();
+        const saved = saveSuspendedMatch();
         menuOpen = false;
         gamePhase = 'title';
-        hasSuspendedSave = true;
+        hasSuspendedSave = saved || !!loadSuspendedMatch();
         syncBgm(); // ステージ曲を止めてタイトル曲へ戻す判断はdirector側に任せる
         return;
       }
@@ -13052,7 +13235,20 @@
       : (isBossMatch
         ? 'tieredBasin'
         : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined));
-    newTerrain(selectedTerrain);
+    if (battleMode === 'free' && selectedCustomAdapter) {
+      loadTerrainFromSave(
+        selectedCustomAdapter.segments,
+        [],
+        'custom',
+        false,
+        selectedCustomAdapter.themeKey,
+        selectedCustomAdapter.parallaxSeed,
+        null,
+        selectedCustomAdapter.appearance
+      );
+    } else {
+      newTerrain(selectedTerrain);
+    }
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
     // 闘技場マップは外壁の天辺ではなく、左右から内側へ伸びる上段棚を開始位置にする。
@@ -13063,8 +13259,25 @@
       : { p1: 0.15, p2: 0.30, e1: 0.85, e2: 0.70 };
     const placed = [];
     for (const u of units) {
-      u.x = spawnXNear(STAGE_W * (spawnRatio[u.id] != null ? spawnRatio[u.id] : 0.5), placed);
-      initUnitOnGround(u);
+      const customSpawn = selectedCustomAdapter && selectedCustomAdapter.spawnMap
+        ? selectedCustomAdapter.spawnMap[u.id]
+        : null;
+      u.x = customSpawn
+        ? customSpawn.x
+        : spawnXNear(STAGE_W * (spawnRatio[u.id] != null ? spawnRatio[u.id] : 0.5), placed);
+      if (customSpawn) {
+        // 同じXに浮島と地面があるステージでは groundYAt() は常に最上面を返す。
+        // ファイルのYを基準に「その地点より下の最初の足場」へ吸着させることで、
+        // 下段へ置いた出撃地点が上の浮島へ移動してしまう食い違いを防ぐ。
+        const customGround = walkableGroundYAt(u.x, customSpawn.y + UNIT_RADIUS);
+        u.y = (customGround === null ? customSpawn.y + UNIT_RADIUS : customGround) - UNIT_RADIUS;
+        u.vy = 0;
+        u.grounded = true;
+        u.fallStartY = u.y;
+        u.facingLeft = spriteFlipForFacing(u, customSpawn.direction === 'left');
+      } else {
+        initUnitOnGround(u);
+      }
       placed.push(u);
     }
     projectiles = [];
@@ -13235,7 +13448,7 @@
   // 全か無かの判定を通って、勝敗の食い違いや座標364pxのズレになった(実機で再現)。
   // ここに載せてよいのは「両端末で完全に一致しなければならない計算」だけ。
   // カメラ・演出・入力・CPU思考は従来どおり描画フレーム基準のままにする。
-  const PHYSICS_DT = 1 / 120;      // 秒。全端末共通の刻み
+  const PHYSICS_DT = globalThis.StageCore?.PHYSICS?.fixedDt || 1 / 120; // 秒。全端末共通の刻み
   const MAX_PHYSICS_SUBSTEPS = 8;  // 1フレームで進める上限(gameLoop側のdt上限0.033で実質4)
   let physicsAccumulator = 0;
   // 進める刻み数だけを先に確定する。余りは破棄せず次フレームへ繰り越す
@@ -13380,11 +13593,16 @@
       p.prevX = prevX;
       p.prevY = prevY;
       const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * p.windMul;
-      p.vx += windAccel * dt;
       // gravityMulは0(無重力の電撃)を取り得るので、||でのフォールバックは使えない。
-      p.vy += GRAVITY * (p.gravityMul != null ? p.gravityMul : 1) * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+      const projectileGravity = GRAVITY * (p.gravityMul != null ? p.gravityMul : 1);
+      if (globalThis.StageCore?.stepProjectile) {
+        globalThis.StageCore.stepProjectile(p, dt, windAccel, projectileGravity);
+      } else {
+        p.vx += windAccel * dt;
+        p.vy += projectileGravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
 
       if (p.firework) p.fireworkTimer += dt;
       if (p.fireworkShard) {
@@ -13639,7 +13857,87 @@
       navigator.serviceWorker.register(`./sw.js?build=${BUILD_ID}`, { updateViaCache: 'none' }).catch(() => {});
     });
   }
+  function assertCustomStageBattlePolicy(stage) {
+    if (!CUSTOM_STAGE_FEATURE_ENABLED) throw new Error('カスタムステージ機能を利用できません。');
+    const validation = globalThis.StageCore.validateStage(stage);
+    if (!validation.valid) throw new Error(validation.errors[0]?.message || 'ステージが不正です。');
+    const format = stage.battleRules?.format;
+    const expectedSlots = format === '2v2' ? ['p1', 'e1', 'p2', 'e2'] : ['p1', 'e1'];
+    if (stage.battleRules?.maxPlayers !== expectedSlots.length
+        || !Array.isArray(stage.spawnPoints)
+        || stage.spawnPoints.length !== expectedSlots.length) {
+      throw new Error('対戦方式と出撃地点の人数が一致しません。');
+    }
+    const bySlot = new Map(stage.spawnPoints.map(spawn => [spawn.slot, spawn]));
+    const orders = new Set();
+    for (const slot of expectedSlots) {
+      const spawn = bySlot.get(slot);
+      const expectedTeam = slot.startsWith('p') ? 'player' : 'enemy';
+      if (!spawn || spawn.team !== expectedTeam) {
+        throw new Error('対戦方式に必要な出撃地点またはチーム設定が不正です。');
+      }
+      if (!Number.isInteger(spawn.order) || orders.has(spawn.order)) {
+        throw new Error('出撃地点の配置順が重複または不正です。');
+      }
+      orders.add(spawn.order);
+    }
+    return validation;
+  }
+
+  async function selectCustomStage(stage) {
+    assertCustomStageBattlePolicy(stage);
+    const sourceIdentity = globalThis.StageCore.createStageIdentity(stage);
+    const hash = await globalThis.StageCore.verifyStageHash(stage);
+    if (!hash.valid) throw new Error('contentHashが一致しません。変更または破損したステージです。');
+    const normalized = globalThis.StageCore.normalizeStage(stage);
+    const adapter = globalThis.StageCore.toGameAdapter(normalized);
+    const adapterIdentity = {
+      stageId: adapter.stageId,
+      schemaVersion: adapter.schemaVersion,
+      contentHash: adapter.contentHash,
+      gameCompatibility: adapter.gameCompatibility
+    };
+    const identityCheck = globalThis.StageCore.compareStageIdentity(sourceIdentity, adapterIdentity);
+    if (!identityCheck.match) throw new Error('ステージ識別情報を照合できません。' + identityCheck.reason);
+    selectedCustomStage = normalized;
+    selectedCustomAdapter = adapter;
+    const formatIndex = FORMAT_OPTIONS.findIndex(option => option.key === adapter.format);
+    freeModeConfig.formatIndex = formatIndex >= 0 ? formatIndex : 0;
+    if (gamePhase !== 'battle') gamePhase = 'freeSetup';
+    return adapter;
+  }
+
+  globalThis.KatamonCustomStageBridge = Object.freeze({
+    validateStage: assertCustomStageBattlePolicy,
+    selectStage: selectCustomStage,
+    async startSelectedStage(stage) {
+      // 初回起動の「タップして開始」を経由せず管理画面から始めても、
+      // ユーザー操作中にWeb Audioの経路だけは準備しておく。
+      ensureBgmGraph();
+      if (stage) await selectCustomStage(stage);
+      if (!selectedCustomStage) throw new Error('カスタムステージを選んでください。');
+      startFreeMatch({ preserveOfficialSuspend: true });
+    },
+    clearStage(stageId) {
+      if (!selectedCustomStage || selectedCustomStage.stageId !== stageId) return;
+      selectedCustomStage = null;
+      selectedCustomAdapter = null;
+    },
+    getSelectedStage() {
+      return selectedCustomStage ? globalThis.StageCore.normalizeStage(selectedCustomStage) : null;
+    },
+    getState() {
+      return {
+        gamePhase,
+        battleMode,
+        onlineActive: isOnline() || roomScreenOpen(),
+        featureEnabled: CUSTOM_STAGE_FEATURE_ENABLED,
+        selectedStageId: selectedCustomStage?.stageId || null
+      };
+    }
+  });
 })();
 </script>
+<script src="game-custom-stages.js?v=1"></script>
 </body>
 </html>
