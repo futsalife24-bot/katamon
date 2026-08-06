@@ -82,6 +82,12 @@ const HOOK = `
     setThemeForTest: (key) => { if (THEMES[key]) { currentThemeKey = key; currentTheme = THEMES[key]; } },
     setParallaxSeedForTest: (v) => { parallaxSeed = v; },
     skyArtSignature: () => skyArtSignature(),
+    appearanceForTest: () => ({
+      themeKey: currentThemeKey,
+      theme: { ...currentTheme, sky: currentTheme.sky.slice() },
+      custom: currentCustomAppearance ? JSON.parse(JSON.stringify(currentCustomAppearance)) : null,
+      usesOfficialThemeObject: currentTheme === THEMES[currentThemeKey]
+    }),
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
     setTerrain: (pattern) => { newTerrain(pattern); },

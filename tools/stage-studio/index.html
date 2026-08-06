@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="スマートフォンで対象ゲーム用ステージを作成・検証・共有できるオフライン対応ツール">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Stage Studio</title>
+</head>
+<body>
+  <div id="app" class="app" data-testid="stage-studio">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">対象ゲーム用ステージ作成ツール</p>
+        <h1>Stage Studio</h1>
+      </div>
+      <div class="header-actions">
+        <button id="undoGlobal" class="icon-button" type="button" aria-label="元に戻す" title="元に戻す">↶</button>
+        <button id="redoGlobal" class="icon-button" type="button" aria-label="やり直す" title="やり直す">↷</button>
+      </div>
+    </header>
+
+    <div class="notice-stack" aria-live="polite">
+      <div id="offlineNotice" class="notice notice-offline" hidden>オフラインです。編集と端末保存はそのまま利用できます。</div>
+      <div id="updateNotice" class="notice" hidden>
+        新しいバージョンを利用できます。
+        <button id="applyUpdate" type="button">下書きを保存して更新</button>
+      </div>
+    </div>
+
+    <main id="mainContent" class="screen-stack">
+      <section id="screen-home" class="screen is-active" data-screen="home" data-testid="screen-home" aria-labelledby="homeTitle">
+        <div class="screen-heading">
+          <div><span class="step-number">1 / 10</span><h2 id="homeTitle">ホーム</h2></div>
+          <span id="saveState" class="save-state" role="status">準備中…</span>
+        </div>
+
+        <div class="hero-card">
+          <p class="hero-kicker">スマートフォンだけで完結</p>
+          <h3>地形を作って、そのままバトルへ。</h3>
+          <p>外部AIやアカウントは不要です。作業内容はこの端末へ自動保存されます。</p>
+          <button id="newStageHome" class="primary wide" type="button" data-testid="new-stage">新しいステージを作る</button>
+          <button id="resumeDraftButton" class="secondary wide" type="button">下書きから再開</button>
+          <label class="button secondary wide file-button">
+            ステージをインポート
+            <input id="importFileHome" data-testid="import-file" type="file" accept=".json,.zip,.stage.json,.stage.zip,application/json,application/zip">
+          </label>
+        </div>
+
+        <div class="home-grid">
+          <article class="panel">
+            <div class="panel-title-row"><h3>最近作成したステージ</h3><button id="refreshDrafts" class="text-button" type="button">更新</button></div>
+            <div id="draftList" class="draft-list" data-testid="draft-list"><p class="muted">下書きを確認しています…</p></div>
+          </article>
+          <article class="panel stats-panel">
+            <h3>端末の状態</h3>
+            <dl>
+              <div><dt>保存済み</dt><dd id="savedCount">0件</dd></div>
+              <div><dt>使用量</dt><dd id="storageUsage">確認中</dd></div>
+              <div><dt>アプリ</dt><dd id="appVersion">—</dd></div>
+              <div><dt>通信</dt><dd>通常利用なし</dd></div>
+            </dl>
+            <label class="check-row low-power-setting"><input id="lowPowerMode" type="checkbox"><span>軽量表示（Canvas解像度・装飾を抑える）</span></label>
+            <p id="lowPowerHint" class="muted">端末性能を確認しています…</p>
+            <button id="installButton" class="secondary wide" type="button" hidden>アプリとしてインストール</button>
+            <details class="help-details">
+              <summary>利用方法</summary>
+              <ol>
+                <li>新規作成またはプリセット生成</li>
+                <li>地形・出撃地点・風を編集</li>
+                <li>テスト後に検証</li>
+                <li>JSONまたはZIPで共有</li>
+                <li>対象ゲームへインポート</li>
+              </ol>
+              <p id="installGuide">ブラウザのメニューからホーム画面へ追加できます。</p>
+            </details>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="new" aria-labelledby="newTitle">
+        <div class="screen-heading"><div><span class="step-number">2 / 10</span><h2 id="newTitle">新規作成</h2></div></div>
+        <div class="panel form-grid">
+          <label>ステージ名<input id="stageTitle" maxlength="48" value="サンプルステージ" autocomplete="off"></label>
+          <label>作成者表示名<input id="stageAuthor" maxlength="32" value="作成者" autocomplete="off"></label>
+          <label class="full">説明<textarea id="stageDescription" maxlength="500" rows="3" placeholder="ステージの特徴を入力"></textarea></label>
+        </div>
+        <div class="choice-grid">
+          <button id="startBlank" class="choice-card" type="button"><strong>白紙</strong><span>空の地形から描く</span></button>
+          <button id="startPreset" class="choice-card" type="button"><strong>プリセット</strong><span>型とシードから生成</span></button>
+          <button id="duplicateCurrent" class="choice-card" type="button"><strong>複製</strong><span>現在の下書きを複製</span></button>
+          <label class="choice-card file-button"><strong>ファイル</strong><span>JSON / ZIPを読み込む</span><input id="importFileNew" type="file" accept=".json,.zip,.stage.json,.stage.zip,application/json,application/zip"></label>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="generate" aria-labelledby="generateTitle">
+        <div class="screen-heading"><div><span class="step-number">3 / 10</span><h2 id="generateTitle">自動生成</h2></div></div>
+        <div class="panel form-grid compact">
+          <label>プリセット<select id="presetSelect" data-testid="preset-select"></select></label>
+          <label>シード<input id="seedInput" data-testid="seed-input" maxlength="64" value="stage-studio-001" inputmode="text" autocomplete="off"></label>
+          <label>ステージ幅<input id="stageWidth" type="number" value="1440" readonly aria-describedby="fixedSizeHelp"></label>
+          <label>編集領域の高さ<input id="stageHeight" type="number" value="660" readonly aria-describedby="fixedSizeHelp"></label>
+          <p id="fixedSizeHelp" class="muted full">MVPは対象ゲームと同じ固定サイズです。地形の下端は636pxです。</p>
+          <label>高低差 <output id="reliefOutput">55</output><input id="reliefRange" type="range" min="0" max="100" value="55"></label>
+          <label>滑らかさ <output id="smoothOutput">60</output><input id="smoothRange" type="range" min="0" max="100" value="60"></label>
+          <label>足場数 <output id="platformOutput">2</output><input id="platformRange" type="range" min="0" max="8" value="2"></label>
+          <label>地形密度 <output id="densityOutput">72</output>%<input id="densityRange" type="range" min="20" max="100" value="72"></label>
+          <label>谷の深さ <output id="valleyOutput">55</output>%<input id="valleyRange" type="range" min="0" max="100" value="55"></label>
+          <label>山の数 <output id="mountainOutput">2</output><input id="mountainRange" type="range" min="0" max="8" value="2"></label>
+          <label>空洞率 <output id="cavityOutput">15</output>%<input id="cavityRange" type="range" min="0" max="35" value="15"></label>
+          <label>出撃人数<select id="generationPlayerCount"><option value="2">2人（1対1）</option><option value="4">4人（2対2）</option></select></label>
+          <label>難易度 <output id="difficultyOutput">50</output>%<input id="difficultyRange" type="range" min="0" max="100" value="50"></label>
+          <label class="check-row"><input id="symmetryInput" type="checkbox"><span>左右対称</span></label>
+        </div>
+        <div class="sticky-actions">
+          <button id="randomizeSeed" class="secondary" type="button">シードを変える</button>
+          <button id="generateStage" class="primary" type="button" data-testid="generate-stage">この設定で生成</button>
+        </div>
+        <div id="generationProgress" class="progress-panel" hidden>
+          <div class="spinner" aria-hidden="true"></div><span id="generationProgressText">地形を生成しています… 10%</span><button id="cancelGeneration" type="button">中止</button>
+        </div>
+      </section>
+
+      <section class="screen editor-screen" data-screen="terrain" aria-labelledby="terrainTitle">
+        <div class="screen-heading"><div><span class="step-number">4 / 10</span><h2 id="terrainTitle">地形編集</h2></div><span class="gesture-hint">1本指: 編集 / 2本指: 移動・拡大</span></div>
+        <div class="canvas-card">
+          <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
+          <div class="canvas-zoom" aria-label="表示倍率">
+            <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+          </div>
+        </div>
+        <div class="tool-row" role="toolbar" aria-label="地形ツール">
+          <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw">描く</button>
+          <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase">削る</button>
+          <button id="toolLine" class="tool-button" type="button" data-tool="line">線</button>
+          <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle">四角</button>
+          <button id="toolCircle" class="tool-button" type="button" data-tool="circle">円</button>
+          <button id="toolFill" class="tool-button" type="button" data-tool="fill">塗りつぶし</button>
+          <button id="undoButton" class="tool-button" type="button" data-testid="undo">戻す</button>
+          <button id="redoButton" class="tool-button" type="button" data-testid="redo">やり直す</button>
+          <button id="clearTerrain" class="tool-button danger-outline" type="button">全消去</button>
+        </div>
+        <div class="terrain-operation-row" aria-label="地形の全体処理">
+          <button id="smoothTerrain" type="button">滑らか</button>
+          <button id="flattenTerrain" type="button">平坦化</button>
+          <button id="noiseTerrain" type="button">ノイズ</button>
+          <button id="mirrorTerrain" type="button">左右反転</button>
+          <button id="symmetrizeTerrain" type="button">左右対称化</button>
+        </div>
+        <div class="panel form-grid compact">
+          <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
+          <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
+          <label>地形素材<select id="terrainMaterial"><option value="destructible">通常（破壊可能）</option></select></label>
+          <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
+          <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
+          <label class="check-row"><input id="toolLock" type="checkbox"><span>ツールをロック</span></label>
+        </div>
+        <details class="help-details"><summary>追加編集ツールについて</summary><p>線・四角・円は始点から終点までドラッグします。滑らか・平坦化・ノイズ・左右反転・左右対称化は地形全体へ適用され、Undoで戻せます。多角形、範囲移動・コピー、上下反転、一部対称化は将来機能です。</p></details>
+      </section>
+
+      <section class="screen editor-screen" data-screen="spawns" aria-labelledby="spawnsTitle">
+        <div class="screen-heading"><div><span class="step-number">5 / 10</span><h2 id="spawnsTitle">出撃地点</h2></div><span class="gesture-hint">配置先を選び、地面をタップ</span></div>
+        <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas></div>
+        <div class="panel form-grid compact">
+          <label>出撃人数<select id="spawnCount"><option value="2">2人（1対1）</option><option value="4">4人（2対2）</option></select></label>
+          <button id="autoPlaceSpawns" class="secondary" type="button">安全な位置へ自動配置</button>
+          <button id="toggleSpawnFacing" class="secondary" type="button">選択中の向きを反転</button>
+        </div>
+        <div id="spawnCards" class="spawn-grid"></div>
+        <p id="spawnHint" class="notice-inline" role="status">赤チーム1の配置先をタップしてください。</p>
+      </section>
+
+      <section class="screen" data-screen="gimmicks" aria-labelledby="gimmicksTitle">
+        <div class="screen-heading"><div><span class="step-number">6 / 10</span><h2 id="gimmicksTitle">ギミック</h2></div></div>
+        <article class="panel feature-panel">
+          <div><span class="feature-icon" aria-hidden="true">風</span><div><h3>ステージ全体の風</h3><p>対象ゲームで対応済みのギミックです。</p></div></div>
+          <label class="switch-row"><span>風を有効にする</span><input id="windEnabled" type="checkbox" checked></label>
+          <label>風向き<select id="windDirection"><option value="-1">左向き</option><option value="1" selected>右向き</option></select></label>
+          <label>強さ <output id="windOutput">35</output>%<input id="windStrength" type="range" min="0" max="100" value="35"></label>
+        </article>
+        <article class="panel future-panel">
+          <h3>将来機能</h3>
+          <p>ワープ、回復地点、移動床、重力変化などは対象ゲーム側が未対応のため、MVPの出力には含めません。</p>
+        </article>
+      </section>
+
+      <section class="screen" data-screen="appearance" aria-labelledby="appearanceTitle">
+        <div class="screen-heading"><div><span class="step-number">7 / 10</span><h2 id="appearanceTitle">背景・見た目</h2></div></div>
+        <div class="panel form-grid">
+          <label>テーマ<select id="themeSelect"><option value="grass">草原</option><option value="desert">砂漠</option><option value="snow">雪原</option><option value="volcanic">火山</option></select></label>
+          <label>背景色（グラデーション上）<input id="backgroundColor" type="color" value="#8fd3ff"></label>
+          <label>地形色<input id="terrainColor" type="color" value="#476b38"></label>
+          <label>明るさ <output id="brightnessOutput">100</output>%<input id="brightnessRange" type="range" min="60" max="130" value="100"></label>
+          <label class="check-row"><input id="decorationsEnabled" type="checkbox" checked><span>背景装飾を表示</span></label>
+        </div>
+        <div id="appearancePreview" class="appearance-preview"><span>キャラクターの見やすさ確認</span><i class="preview-character red"></i><i class="preview-character blue"></i></div>
+      </section>
+
+      <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
+        <div class="screen-heading"><div><span class="step-number">8 / 10</span><h2 id="playtestTitle">テストプレイ</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
+        <div class="canvas-card"><canvas id="testCanvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
+        <div class="panel form-grid compact">
+          <label>砲撃角度 <output id="angleOutput">45</output>°<input id="shotAngle" type="range" min="5" max="175" value="45"></label>
+          <label>砲撃威力 <output id="powerOutput">65</output>%<input id="shotPower" type="range" min="10" max="100" value="65"></label>
+        </div>
+        <div class="test-controls">
+          <button id="moveTestLeft" type="button">← 移動</button>
+          <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
+          <button id="moveTestRight" type="button">移動 →</button>
+          <button id="resetTest" class="secondary" type="button">テストをリセット</button>
+        </div>
+        <p class="actor-status">キャラクター状態: <strong id="testActorStatus" data-state="grounded">接地</strong></p>
+        <p id="testResult" class="notice-inline" role="status">角度と威力を決めてテスト砲撃してください。</p>
+      </section>
+
+      <section class="screen" data-screen="validate" aria-labelledby="validateTitle">
+        <div class="screen-heading"><div><span class="step-number">9 / 10</span><h2 id="validateTitle">検証</h2></div></div>
+        <div id="validationSummary" class="validation-summary is-idle" data-testid="validation-summary">
+          <strong>まだ検証していません</strong><span>保存・共有前に確認してください。</span>
+        </div>
+        <button id="validateStage" class="primary wide" type="button" data-testid="validate-stage">ステージを自動検証</button>
+        <div class="validation-columns">
+          <article class="panel"><h3>エラー</h3><ul id="validationErrors" class="result-list"><li class="muted">検証後に表示します。</li></ul></article>
+          <article class="panel"><h3>警告・公平性の参考</h3><ul id="validationWarnings" class="result-list"><li class="muted">検証後に表示します。</li></ul></article>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="export" aria-labelledby="exportTitle">
+        <div class="screen-heading"><div><span class="step-number">10 / 10</span><h2 id="exportTitle">保存・共有</h2></div></div>
+        <article class="panel export-summary">
+          <h3 id="exportStageTitle">サンプルステージ</h3>
+          <dl><div><dt>作成者</dt><dd id="exportAuthor">作成者</dd></div><div><dt>形式</dt><dd>JSON / ZIP</dd></div><div><dt>推定容量</dt><dd id="exportFileSize">計算中</dd></div><div><dt>対応</dt><dd id="exportCompatibility">対象ゲーム</dd></div><div><dt>検証</dt><dd id="exportValidation">未検証</dd></div><div><dt>警告</dt><dd id="exportWarningCount">—</dd></div><div><dt>ハッシュ</dt><dd id="exportHash">未生成</dd></div></dl>
+        </article>
+        <div class="export-grid">
+          <button id="saveDraft" class="secondary" type="button">端末へ保存</button>
+          <button id="exportJson" class="primary" type="button" data-testid="export-json">JSONを書き出す</button>
+          <button id="exportZip" class="primary" type="button" data-testid="export-zip">ZIPを書き出す</button>
+          <button id="shareStage" class="secondary" type="button">共有シートを開く</button>
+          <button id="copyJson" class="secondary" type="button">JSONをコピー</button>
+          <label class="button secondary file-button">バックアップを復元<input id="importFileExport" type="file" accept=".json,.zip,.stage.json,.stage.zip,application/json,application/zip"></label>
+        </div>
+        <div id="shareCapabilities" class="notice-inline">この端末で利用できる共有方法を確認しています…</div>
+        <p class="backup-note">端末内データはOSやブラウザの都合で消える場合があります。定期的にJSONまたはZIPを保存してください。</p>
+      </section>
+    </main>
+
+    <nav class="step-nav" aria-label="作成手順">
+      <button class="step-tab is-active" type="button" data-step="home"><span>1</span>ホーム</button>
+      <button class="step-tab" type="button" data-step="new"><span>2</span>新規</button>
+      <button class="step-tab" type="button" data-step="generate"><span>3</span>生成</button>
+      <button class="step-tab" type="button" data-step="terrain"><span>4</span>地形</button>
+      <button class="step-tab" type="button" data-step="spawns" data-testid="spawn-step"><span>5</span>出撃</button>
+      <button class="step-tab" type="button" data-step="gimmicks"><span>6</span>風</button>
+      <button class="step-tab" type="button" data-step="appearance"><span>7</span>見た目</button>
+      <button class="step-tab" type="button" data-step="playtest"><span>8</span>テスト</button>
+      <button class="step-tab" type="button" data-step="validate"><span>9</span>検証</button>
+      <button class="step-tab" type="button" data-step="export"><span>10</span>共有</button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <form method="dialog"><h2 id="confirmTitle">確認</h2><p id="confirmMessage"></p><div><button value="cancel" class="secondary">キャンセル</button><button value="confirm" class="danger">実行する</button></div></form>
+  </dialog>
+
+  <script src="../../shared/stage-core.js" defer></script>
+  <script src="../../shared/stage-storage.js" defer></script>
+  <script src="../../shared/stage-zip.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

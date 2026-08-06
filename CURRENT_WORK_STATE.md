@@ -2,6 +2,21 @@
 
 更新日: 2026-08-06（JST）
 
+## Stage Studio MVP（featureブランチ）
+
+- 作業ブランチ: `feat/stage-studio-mvp`
+- 分離worktree: `.codex-worktrees/stage-studio-mvp`
+- 状態: モバイルでの「生成・編集 → 出撃地点/風/見た目 → 共有物理テスト → 検証 → JSON/ZIP出力 → ゲームへインポート → カスタムバトル開始」の縦導線を実装済み。
+- データ基盤: `column-segments-v1`、決定的seed生成、正規化JSON、SHA-256、厳格検証、公式/カスタム保存領域分離、JSON/ZIP往復を実装済み。
+- PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。
+- 最終自動確認: 既存ゲーム1,153件 + Stage基盤37件 = 1,190件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。JSON/ZIP双方でインポート、ゲーム再読込後の永続化、選択、実バトル開始まで確認済み。
+- 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
+- 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
+- 未公開: push、PR、マージ、GitHub Pages更新は未実施。公開操作前に実機QAとレビューを行う。
+- 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
+
+以下はStage Studio着手前から継続しているゲーム本体の版管理情報である。
+
 ## 引き継ぎ元
 
 - CodexセッションID: `019fbc4d-d158-75e3-9e62-bcdb3d408d10`

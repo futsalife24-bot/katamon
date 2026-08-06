@@ -1,8 +1,14 @@
-const CACHE_VERSION = 'katamon-pwa-v137';
+const CACHE_VERSION = 'katamon-pwa-v137-stage-studio-mvp';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './game-custom-stages.css',
+  './game-custom-stages.js',
+  './shared/stage-core.js',
+  './shared/stage-storage.js',
+  './shared/stage-repository.js',
+  './shared/stage-zip.js',
   './assets/favicon-32.png',
   './assets/apple-touch-icon.png',
   './assets/icon-192.png',
@@ -41,6 +47,10 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Stage Studioは子スコープのService Workerが管理する。ルートのオフライン
+  // フォールバックでゲーム本体index.htmlを返すと、編集画面がゲームへ化けるため除外する。
+  if (url.pathname.includes('/tools/stage-studio/')) return;
+
   // 音声・動画のRangeリクエストはブラウザに任せ、シークやループを壊さない。
   if (request.headers.has('range')) return;
 
@@ -61,7 +71,7 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request).then(cached => {
+    caches.match(request, { ignoreSearch: true }).then(cached => {
       if (cached) return cached;
       return fetch(request).then(response => {
         if (response.ok) {

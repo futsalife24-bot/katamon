@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Stage Studio">
+  <rect width="512" height="512" rx="112" fill="#111827"/>
+  <circle cx="386" cy="126" r="52" fill="#f6bb5f"/>
+  <path d="M52 337c52-69 104-92 157-69 45 20 75 15 111-43 38-61 84-54 140 9v176H52z" fill="#37b99c"/>
+  <path d="M52 389c78-37 136-33 190 1 54 35 124 31 218-19v39H52z" fill="#176e60"/>
+  <path d="M116 171h199M116 225h128" stroke="#edf4ff" stroke-width="30" stroke-linecap="round"/>
+</svg>
