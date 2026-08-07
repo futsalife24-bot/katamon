@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.1.1-mvp';
+  const APP_VERSION = '1.2.0-mvp';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -37,6 +37,10 @@
   const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'playtest', 'validate', 'export'];
   const SCREEN_ALIASES = Object.freeze({ gimmicks: 'playtest', appearance: 'terrain' });
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
+  const TERRAIN_TOOL_LABELS = Object.freeze({
+    draw: '描く', erase: '削る', guide: 'キャラ確認', fill: '塗りつぶし',
+    line: '線', rectangle: '四角', circle: '円'
+  });
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
     mountainCenter: '中央山', valley: '渓谷', grandCanyon: '大峡谷', centerHole: '中央穴',
@@ -919,6 +923,54 @@
     return null;
   }
 
+  function nearestSafeCharacterGuide(guide, grid) {
+    const minimumX = UNIT_HIT_RADIUS;
+    const maximumX = LIMITS.stageWidth - UNIT_HIT_RADIUS;
+    const originX = clamp(Number(guide.x) || LIMITS.stageWidth / 2, minimumX, maximumX);
+    const candidates = [originX];
+    for (let column = 0; column < LIMITS.terrainColumns; column++) {
+      const x = clamp(column * LIMITS.columnWidth + LIMITS.columnWidth / 2, minimumX, maximumX);
+      if (Math.abs(x - originX) > 0.001) candidates.push(x);
+    }
+    let best = null;
+    let bestDistance = Infinity;
+    for (const x of candidates) {
+      const surfaceY = surfaceYAtGrid(grid, x);
+      if (surfaceY >= LIMITS.stageHeight) continue;
+      const candidate = Object.assign({}, guide, { x, y: surfaceY - LIMITS.unitRadius });
+      if (characterCollision(candidate, grid)) continue;
+      const deltaX = x - Number(guide.x || 0);
+      const deltaY = candidate.y - Number(guide.y || 0);
+      const distance = deltaX * deltaX + deltaY * deltaY;
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  function snapInvalidCharacterGuides() {
+    if ($('toolLock').checked) return showToast('ツールロック中です。解除するとキャラクターを移動できます。');
+    const invalid = state.characterGuides
+      .map((guide, index) => ({ index, guide, collision: characterCollision(guide, state.grid) }))
+      .filter((item) => item.collision);
+    if (!invalid.length) return showToast('赤いキャラクターはありません。現在の配置で安全です。');
+    const placements = invalid.map((item) => ({ index: item.index, guide: nearestSafeCharacterGuide(item.guide, state.grid) }))
+      .filter((item) => item.guide);
+    if (!placements.length) return showToast('安全に乗せられる足場がありません。先に地形を描いてください。', 5000);
+    pushUndo();
+    for (const placement of placements) state.characterGuides[placement.index] = placement.guide;
+    state.activeGuideIndex = placements[0].index;
+    setActiveTool('guide');
+    renderTerrainCanvas();
+    markDirty();
+    const unresolved = invalid.length - placements.length;
+    showToast(unresolved
+      ? `${placements.length}体を最寄りの安全位置へ移動しました。${unresolved}体は足場を見つけられませんでした。`
+      : `${placements.length}体を最寄りの安全位置へ移動しました。Undoで戻せます。`, 5000);
+  }
+
   function drawCharacterAt(context, guide, grid, options) {
     const settings = options || {};
     const image = characterImages[guide.character] || characterImages.kyoryu;
@@ -1037,12 +1089,16 @@
       if (drawCharacterAt(context, guide, grid, { active: index === state.activeGuideIndex, ghost: true, team: index ? 'cpu' : 'player' })) warningCount += 1;
     });
     const hint = $('characterGuideHint');
+    const panel = $('characterGuidePanel');
+    const snapButton = $('snapCharacterGuides');
     if (hint) {
       hint.dataset.state = warningCount ? 'warning' : 'ok';
       hint.textContent = warningCount
-        ? `警告：${warningCount}体の当たり判定が地形または画面外と重なっています。赤いキャラクターをドラッグしてください。`
-        : '実ゲームと同じ寸法です。キャラ確認ツールでドラッグでき、重なると赤く警告します。';
+        ? `警告：${warningCount}体が地形または画面外と重なっています。ドラッグするか、安全位置へ移動できます。`
+        : '実ゲームと同じ寸法です。キャラ確認でドラッグでき、重なると赤く警告します。';
     }
+    if (panel) panel.dataset.state = warningCount ? 'warning' : 'ok';
+    if (snapButton) snapButton.disabled = !warningCount;
   }
 
   function drawStageScene(canvas, grid, options) {
@@ -2426,6 +2482,22 @@
       button.classList.toggle('is-selected', selected);
       button.setAttribute('aria-pressed', String(selected));
     });
+    const label = $('activeTerrainTool');
+    if (label) label.textContent = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
+  }
+
+  function setTerrainInspector(panelName) {
+    const supported = ['brush', 'shape', 'display', 'appearance'];
+    const selectedPanel = supported.includes(panelName) ? panelName : 'brush';
+    document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
+      const selected = button.dataset.terrainPanel === selectedPanel;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => {
+      panel.hidden = panel.dataset.terrainPanelContent !== selectedPanel;
+    });
   }
 
   function randomSeed() {
@@ -2598,6 +2670,10 @@
     $('toolCircle').addEventListener('click', () => setActiveTool('circle'));
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
     $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
+    $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
+    document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
+      button.addEventListener('click', () => setTerrainInspector(button.dataset.terrainPanel));
+    });
     $('undoButton').addEventListener('click', undo);
     $('redoButton').addEventListener('click', redo);
     $('undoGlobal').addEventListener('click', undo);
@@ -2703,6 +2779,7 @@
     setActiveTool('draw');
     updateLowPowerModeUi();
     updateHistoryButtons();
+    setTerrainInspector('brush');
     $('appVersion').textContent = `${APP_VERSION}${Core && Core.GENERATOR_VERSION ? ` / 生成器 ${Core.GENERATOR_VERSION}` : ''}`;
 
     if (coreReady()) {

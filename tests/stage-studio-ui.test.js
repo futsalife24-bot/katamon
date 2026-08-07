@@ -8,8 +8,8 @@ const test = require('node:test');
 const ROOT = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 const studioHtml = read('tools/stage-studio/index.html');
-const studioApp = read('tools/stage-studio/app-1.1.1-mvp.js');
-const studioCss = read('tools/stage-studio/styles-1.1.1-mvp.css');
+const studioApp = read('tools/stage-studio/app-1.2.0-mvp.js');
+const studioCss = read('tools/stage-studio/styles-1.2.0-mvp.css');
 const studioSw = read('tools/stage-studio/sw.js');
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -82,6 +82,29 @@ test('all editing canvases use game assets, terrain texture and real character d
   assert.match(studioApp, /drawStageScene\(\$\('testCanvas'\)/);
 });
 
+test('terrain editor uses a canvas-first workspace with contextual inspector and safe character recovery', () => {
+  const terrainStart = studioHtml.indexOf('data-screen="terrain"');
+  const terrainEnd = studioHtml.indexOf('data-screen="spawns"');
+  const terrainHtml = studioHtml.slice(terrainStart, terrainEnd);
+  const canvasIndex = terrainHtml.indexOf('data-testid="terrain-canvas"');
+  const toolsIndex = terrainHtml.indexOf('data-testid="terrain-tools"');
+  const recoveryIndex = terrainHtml.indexOf('id="snapCharacterGuides"');
+  const inspectorIndex = terrainHtml.indexOf('data-testid="terrain-inspector"');
+  assert.ok(canvasIndex >= 0 && canvasIndex < toolsIndex && toolsIndex < recoveryIndex && recoveryIndex < inspectorIndex);
+  for (const panel of ['brush', 'shape', 'display', 'appearance']) {
+    assert.match(terrainHtml, new RegExp(`data-terrain-panel="${panel}"`));
+    assert.match(terrainHtml, new RegExp(`data-terrain-panel-content="${panel}"`));
+  }
+  assert.match(studioCss, /\.terrain-workspace\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/);
+  assert.match(studioCss, /\.terrain-tool-row\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(studioCss, /\.terrain-inspector-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(studioApp, /function nearestSafeCharacterGuide\(/);
+  assert.match(studioApp, /function snapInvalidCharacterGuides\(/);
+  assert.match(studioApp, /\.filter\(\(item\) => item\.collision\)/);
+  assert.match(studioApp, /state\.characterGuides\[placement\.index\] = placement\.guide/);
+  assert.match(studioApp, /snapCharacterGuides.*snapInvalidCharacterGuides/);
+});
+
 test('steel remains a disabled future material and cannot enter exported state', () => {
   assert.match(studioHtml, /<option value="steel" disabled>壊れない鋼鉄（準備中）<\/option>/);
   assert.match(studioApp, /state\.stage\.materials = \[\{ id: 'terrain', type: 'destructible', destructible: true, color: \$\('terrainColor'\)\.value \}\];/);
@@ -92,11 +115,11 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /grid-template-columns:\s*repeat\(4,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.1\.1-mvp`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.2\.0-mvp`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
-  assert.match(studioHtml, /styles-1\.1\.1-mvp\.css/);
-  assert.match(studioHtml, /app-1\.1\.1-mvp\.js/);
+  assert.match(studioHtml, /styles-1\.2\.0-mvp\.css/);
+  assert.match(studioHtml, /app-1\.2\.0-mvp\.js/);
   assert.doesNotMatch(studioSw, /['"]\.\/(?:styles\.css|app\.js)['"]/);
   const gameBuild = read('index.html').match(/const BUILD_ID = '([^']+)'/)[1];
   const gameCache = read('sw.js').match(/const CACHE_VERSION = 'katamon-pwa-([^']+)'/)[1];
