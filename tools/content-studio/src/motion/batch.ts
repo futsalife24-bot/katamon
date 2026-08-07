@@ -50,7 +50,7 @@ const BASE_CLIPS: Readonly<Record<MotionClipId, ClipDefinition>> = Object.freeze
   },
   hit: {
     action: 'hit', preset: 'standard', loop: false,
-    parameters: { frameCount: 12, fps: 12, durationMs: 1000, moveX: -42, moveY: 58, scaleAmount: 0, squashAmount: 0, rotationDegrees: -112, idlePause: 0, intensity: 1 },
+    parameters: { frameCount: 12, fps: 12, durationMs: 1000, moveX: -128, moveY: 58, scaleAmount: 0, squashAmount: 0, rotationDegrees: -112, idlePause: 0, intensity: 1 },
   },
   land: {
     action: 'land', preset: 'heavy', loop: false,
@@ -65,10 +65,11 @@ export function motionClipParameters(
 ): MotionParameters {
   const direction = facing === 'right' ? 1 : -1;
   const definition = BASE_CLIPS[clipId];
+  const hitOutputScale = outputSize / 512;
   const directional = clipId === 'fire'
     ? { moveX: Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
     : clipId === 'hit'
-      ? { moveX: -Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: -Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
+      ? { moveX: -Math.abs(definition.parameters.moveX ?? 0) * hitOutputScale * direction, rotationDegrees: -Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
       : clipId === 'move-forward'
         ? { moveX: Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
         : clipId === 'move-backward'

@@ -52,8 +52,9 @@ describe('5モーション一括生成', () => {
     expect(motionClipParameters('move-backward', 'left', 128).moveX).toBeGreaterThan(0);
     expect(motionClipParameters('hit', 'right', 128).rotationDegrees).toBeLessThan(-90);
     expect(motionClipParameters('hit', 'left', 128).rotationDegrees).toBeGreaterThan(90);
-    expect(motionClipParameters('hit', 'right', 128).moveX).toBe(-42);
-    expect(motionClipParameters('hit', 'left', 128).moveX).toBe(42);
+    expect(motionClipParameters('hit', 'right', 128).moveX).toBe(-32);
+    expect(motionClipParameters('hit', 'left', 128).moveX).toBe(32);
+    expect(motionClipParameters('hit', 'right', 512).moveX).toBe(-128);
     expect(MOTION_CLIP_IDS.every((clip) => motionClipParameters(clip, 'right', 128).flipHorizontal === false)).toBe(true);
   });
 
@@ -84,8 +85,8 @@ describe('5モーション一括生成', () => {
     expect(hitBottom(6)).toBeLessThan(hitBottom(5));
     expect(Math.abs(hitBottom(7) - hitBottom(0))).toBeLessThanOrEqual(1);
     expect(Math.abs(hitBottom(8) - hitBottom(0))).toBeLessThanOrEqual(1);
-    expect(motions.hit.frameBounds[8].x).toBeLessThan(motions.hit.frameBounds[0].x - 20);
-    expect(motions.hit.transforms[9].translateX).toBeLessThan(-35);
+    expect(motions.hit.frameBounds[8].x).toBeLessThan(motions.hit.frameBounds[0].x - 15);
+    expect(motions.hit.transforms[9].translateX).toBeLessThan(-26);
     expect(Math.abs(motions.hit.transforms[10].rotationRadians)).toBeLessThan(Math.abs(motions.hit.transforms[9].rotationRadians));
     expect(motions.hit.metadata.collisionBounds).toEqual(suggestCollisionBounds(motions.hit.frameBounds[0]));
     expect(motions.hit.transforms.at(-1)?.rotationRadians).toBeCloseTo(0);
