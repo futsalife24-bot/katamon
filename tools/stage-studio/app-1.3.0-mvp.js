@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.2.0-mvp';
+  const APP_VERSION = '1.3.0-mvp';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -245,6 +245,9 @@
     appearanceBrightness: 1,
     deferredInstallPrompt: null,
     pwaUpdateRequested: false,
+    orientationLockActive: false,
+    orientationFullscreenEntered: false,
+    orientationGuideToken: 0,
     lowPowerMode: LOW_POWER_AUTO_DETECTED,
     lowPowerAutoDetected: LOW_POWER_AUTO_DETECTED,
     toastTimer: null,
@@ -263,6 +266,80 @@
     toast.hidden = false;
     clearTimeout(state.toastTimer);
     state.toastTimer = setTimeout(() => { toast.hidden = true; }, duration || 2600);
+  }
+
+  function isLandscapeViewport() {
+    return globalThis.innerWidth > globalThis.innerHeight;
+  }
+
+  function updateOrientationControls() {
+    const landscape = isLandscapeViewport();
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      const label = button.querySelector('[data-orientation-label]');
+      const icon = button.querySelector('[aria-hidden="true"]');
+      if (label) label.textContent = landscape ? '縦画面' : '横画面';
+      if (icon) icon.textContent = landscape ? '↕' : '↔';
+      button.dataset.orientation = landscape ? 'landscape' : 'portrait';
+      button.setAttribute('aria-label', landscape ? '縦画面へ戻す' : '横画面へ切り替える');
+    });
+    requestAnimationFrame(renderAllCanvases);
+  }
+
+  function showOrientationGuide(button) {
+    const card = button && button.closest('.canvas-card');
+    const guide = card && card.querySelector('[data-orientation-guide]');
+    const token = ++state.orientationGuideToken;
+    if (guide) {
+      guide.hidden = false;
+      setTimeout(() => {
+        if (token === state.orientationGuideToken && !isLandscapeViewport()) guide.hidden = false;
+      }, 180);
+    }
+    showToast('この端末では自動回転できません。画面回転ロックを解除して、端末を横向きにしてください。', 5600);
+  }
+
+  async function togglePreferredOrientation(button) {
+    const orientation = globalThis.screen && globalThis.screen.orientation;
+    if (isLandscapeViewport()) {
+      try { if (orientation && typeof orientation.unlock === 'function') orientation.unlock(); } catch (_) {}
+      state.orientationLockActive = false;
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      showToast('縦向きへ戻す場合は端末を縦にしてください。');
+      updateOrientationControls();
+      return;
+    }
+
+    if (!orientation || typeof orientation.lock !== 'function') {
+      showOrientationGuide(button);
+      return;
+    }
+
+    try {
+      if (!document.fullscreenElement && document.documentElement && typeof document.documentElement.requestFullscreen === 'function') {
+        try {
+          await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        } catch (_) {
+          await document.documentElement.requestFullscreen();
+        }
+        state.orientationFullscreenEntered = true;
+      }
+      await orientation.lock('landscape');
+      state.orientationLockActive = true;
+      state.orientationGuideToken += 1;
+      document.querySelectorAll('[data-orientation-guide]').forEach((guide) => { guide.hidden = true; });
+      showToast('横画面に切り替えました。');
+      updateOrientationControls();
+    } catch (_) {
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      state.orientationLockActive = false;
+      showOrientationGuide(button);
+    }
   }
 
   function readableError(error, fallback) {
@@ -2671,6 +2748,15 @@
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
     $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
     $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      button.addEventListener('click', () => togglePreferredOrientation(button));
+    });
+    document.querySelectorAll('[data-orientation-dismiss]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.orientationGuideToken += 1;
+        button.closest('[data-orientation-guide]').hidden = true;
+      });
+    });
     document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
       button.addEventListener('click', () => setTerrainInspector(button.dataset.terrainPanel));
     });
@@ -2751,6 +2837,9 @@
 
     globalThis.addEventListener('online', updateConnectivity);
     globalThis.addEventListener('offline', updateConnectivity);
+    globalThis.addEventListener('orientationchange', updateOrientationControls);
+    globalThis.addEventListener('resize', updateOrientationControls);
+    document.addEventListener('fullscreenchange', updateOrientationControls);
     globalThis.addEventListener('popstate', () => {
       const screen = location.hash.slice(1);
       navigate(normalizeScreen(screen), { fromHistory: true });
@@ -2780,6 +2869,7 @@
     updateLowPowerModeUi();
     updateHistoryButtons();
     setTerrainInspector('brush');
+    updateOrientationControls();
     $('appVersion').textContent = `${APP_VERSION}${Core && Core.GENERATOR_VERSION ? ` / 生成器 ${Core.GENERATOR_VERSION}` : ''}`;
 
     if (coreReady()) {

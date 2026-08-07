@@ -2,6 +2,17 @@
 
 更新日: 2026-08-07（JST）
 
+## Stage Studio 横画面フロート操作（公開前）
+
+- 作業ブランチ: `feat/stage-studio-landscape-controls`
+- 状態: Stage Studio `1.3.0-mvp`の公開候補。`master`やGitHub Pagesへは未反映。
+- UI: `地形 / 出撃 / テスト`の各マップ左上へ48pxの横画面ボタンをフロート配置した。横向きでは地形ツール、出撃設定、テスト操作をマップ右側へ並べ、縦向きでは従来どおりマップ直下へ置く。
+- 端末差: Screen Orientation APIとFullscreen APIを機能検出する。対応するAndroid/PWAでは横向き固定を試し、強制固定できないiPhone Safari等では画面回転ロック解除と手動回転の案内をマップ内へ表示する。非対応APIを必須にしない。
+- PWA: JS/CSSと子Service Workerキャッシュを`1.3.0-mvp`へ更新済み。下書きや正規ステージ形式、ゲーム本体ビルドは変更していない。
+- 自動確認: Stage基盤46/46件成功。既存ゲームは初回に既存ランダム地形検査が1件だけ一過性で失敗し、同じ回帰スイート再実行516/516件、残りの既存検査644/644件が成功した。モバイルE2EはiPhone相当WebKit 5/5、Android相当Chromium 5/5、合計10/10件成功。
+- 実画面確認: 390×844でボタンと回転案内がマップ内に収まり横はみ出し0。844×390で3画面すべてマップと操作を左右分割し、横はみ出し0。
+- 未確認: iPhone/Android実機、インストール済みPWAでのOS向き固定、端末の物理回転、safe-area実寸。公開はユーザー確認後にPR経由で行う。
+
 ## Stage Studio 地形編集ワークスペース改修（PR #69）
 
 - 作業ブランチ: `feat/stage-studio-terrain-workspace`

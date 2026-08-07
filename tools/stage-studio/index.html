@@ -10,7 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles-1.2.0-mvp.css">
+  <link rel="stylesheet" href="./styles-1.3.0-mvp.css">
   <title>Stage Studio</title>
 </head>
 <body>
@@ -136,9 +136,11 @@
         <div class="terrain-workspace" data-testid="terrain-workspace">
           <div class="canvas-card">
             <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
+            <button class="canvas-orientation-button" type="button" data-orientation-toggle data-testid="orientation-toggle"><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
             <div class="canvas-zoom" aria-label="表示倍率">
               <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
             </div>
+            <div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
           </div>
           <div class="terrain-editor-dock" data-testid="terrain-tools">
             <div class="terrain-tool-row" role="toolbar" aria-label="地形ツール">
@@ -206,7 +208,7 @@
 
       <section class="screen editor-screen" data-screen="spawns" aria-labelledby="spawnsTitle">
         <div class="screen-heading"><div><span class="step-number">5 / 8</span><h2 id="spawnsTitle">出撃地点</h2></div><span class="gesture-hint">配置先を選び、地面をタップ</span></div>
-        <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas></div>
+        <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas><button class="canvas-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button><div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div></div>
         <div class="panel form-grid compact">
           <label>出撃人数<select id="spawnCount"><option value="2">2人（1対1）</option><option value="4">4人（2対2）</option></select></label>
           <button id="autoPlaceSpawns" class="secondary" type="button">安全な位置へ自動配置</button>
@@ -219,7 +221,7 @@
       <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
         <div class="screen-heading"><div><span class="step-number">6 / 8</span><h2 id="playtestTitle">テスト・風</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
         <div class="playtest-stage-shell">
-          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
+          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas><button class="canvas-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button><div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div></div>
           <div class="playtest-control-dock" data-testid="playtest-controls" aria-label="テストプレイ操作">
             <div class="test-controls">
               <button id="moveTestLeft" type="button">← 移動</button>
@@ -294,6 +296,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app-1.2.0-mvp.js" defer></script>
+  <script src="./app-1.3.0-mvp.js" defer></script>
 </body>
 </html>
