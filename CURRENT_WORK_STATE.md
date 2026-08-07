@@ -2,7 +2,7 @@
 
 更新日: 2026-08-07（JST）
 
-## Stage Studio テスト操作帯改修（公開準備中）
+## Stage Studio テスト操作帯改修（PR #68）
 
 - 作業ブランチ: `feat/stage-studio-playtest-dock`
 - 分離worktree: `.codex-worktrees/stage-studio-mvp`
@@ -14,7 +14,7 @@
 - 最終自動確認: 既存ゲーム1,160件 + Stage基盤44件 = 1,204件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。移動・砲撃前後のマップ/操作帯同時表示、JSON/ZIP双方のインポート、ゲーム再読込後の永続化、選択、実バトル開始、下書き復元、PWAオフライン再表示まで確認済み。
 - 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
 - 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
-- 公開経路: `master`へ直接pushせず、今回もPR経由でマージしてGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
+- 公開経路: `master`へ直接pushせず、PR #68経由でGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
 - 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
 
 以下はゲーム本体の版管理情報である。
@@ -33,7 +33,7 @@
 - 作業中ブランチ: `feat/stage-studio-playtest-dock`（Stage Studioのテスト操作帯改修）
 - 現行公開ビルド: `v138-stage-studio-mvp`（初回Stage Studio MVP。PR #65）
 - 現行公開単位: `v138-stage-studio-ui` / Stage Studio `1.1.0-mvp`（PR #67）
-- 今回の公開候補: Stage Studio `1.1.1-mvp`（ゲーム本体のビルド番号・Service Workerは変更なし）
+- 今回の公開候補: Stage Studio `1.1.1-mvp`（PR #68。ゲーム本体のビルド番号・Service Workerは変更なし）
 - 次の候補: `v139`（必殺カットイン音を強化）
 - ひとつ前: `v133`（次の風を1区間先まで予報。PR #59）
 - その前: `v132`（タイトル画面の静止部分を1枚に焼く。PR #58）
@@ -47,7 +47,7 @@
 - セッション最終開発コミット: `14ea290`（跳躍・引き分け・演習機能）
 - 正本移行コミット: `dbfe3c6`
 - 統合実装計画: `docs/実装計画_統合版.md`（2026-08-02 ユーザー承認済み）
-- 現在の進行: **Stage Studioのテスト操作帯改修をPR経由で公開準備中。**
+- 現在の進行: **Stage Studioのテスト操作帯改修をPR #68で公開中。**
   既存1,160件とStage基盤44件、合計 **1,204件成功**。モバイル相当E2EはWebKit/Chromium合計8件成功。390×844と412×915のブラウザ目視でも移動・砲撃後にマップと操作帯が同時表示されることを確認した。
   公開確認後は v139（必殺カットイン音）へ戻る。その後、各キャラの必殺技調整の相談を続ける。差し込み前の残タスク順は Issue #5（対戦部屋内の戦績表示）→ Issue #6（ランキング改修）→ Issue #4（オンラインHPバーのずれ）。
   **2026-08-05、開発をCodexへ移管。**
