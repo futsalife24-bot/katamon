@@ -84,6 +84,14 @@ async function openTerrainInspector(page, panelName) {
   return inspector;
 }
 
+async function selectTerrainTool(page, selector) {
+  const menu = page.getByTestId('terrain-tool-menu');
+  if (await menu.isHidden()) await page.getByTestId('terrain-tool-menu-toggle').click();
+  await expect(menu).toBeVisible();
+  await page.locator(selector).click();
+  await expect(menu).toBeHidden();
+}
+
 async function tapCanvas(page, locator, xRatio, yRatio) {
   await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox();
@@ -158,26 +166,32 @@ async function assertTerrainWorkspaceVisible(page) {
     const workspace = document.querySelector('[data-testid="terrain-workspace"]');
     const map = document.querySelector('[data-testid="terrain-canvas"]').closest('.canvas-card');
     const tools = document.querySelector('[data-testid="terrain-tools"]');
+    const stageControls = document.querySelector('[data-testid="terrain-stage-controls"]');
     const recovery = document.querySelector('#characterGuidePanel');
     const rect = (element) => {
       const box = element.getBoundingClientRect();
       return { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height };
     };
     return {
-      screen: rect(screen), workspace: rect(workspace), map: rect(map), tools: rect(tools), recovery: rect(recovery),
-      draw: rect(document.querySelector('#toolDraw')),
-      erase: rect(document.querySelector('#toolErase')),
-      guide: rect(document.querySelector('#toolGuide')),
+      screen: rect(screen), workspace: rect(workspace), map: rect(map), tools: rect(tools), stageControls: rect(stageControls), recovery: rect(recovery),
+      toolToggle: rect(document.querySelector('[data-testid="terrain-tool-menu-toggle"]')),
+      undo: rect(document.querySelector('[data-testid="undo"]')),
+      redo: rect(document.querySelector('[data-testid="redo"]')),
       snap: rect(document.querySelector('#snapCharacterGuides')),
       orientation: rect(document.querySelector('[data-testid="orientation-toggle"]')),
       palette: rect(document.querySelector('[data-testid="terrain-palette-toggle"]')),
+      zoomOut: rect(document.querySelector('#zoomOut')),
+      zoomIn: rect(document.querySelector('#zoomIn')),
+      zoomReset: rect(document.querySelector('#zoomReset')),
+      mapButtonCount: map.querySelectorAll('button').length,
       noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
     };
   });
   expect(metrics.noHorizontalOverflow, '地形ワークスペースで横スクロールを発生させない').toBe(true);
+  expect(metrics.mapButtonCount, 'ステージ画像内へ操作ボタンを重ねない').toBe(0);
   expect(Math.abs(metrics.map.bottom - metrics.tools.top), 'ツールをCanvas直下へ接続する').toBeLessThanOrEqual(3);
   expect(Math.abs(metrics.tools.bottom - metrics.recovery.top), 'キャラ補正をツール直下へ接続する').toBeLessThanOrEqual(3);
-  for (const name of ['workspace', 'map', 'tools', 'recovery', 'draw', 'erase', 'guide', 'snap', 'orientation', 'palette']) {
+  for (const name of ['workspace', 'map', 'tools', 'stageControls', 'recovery', 'toolToggle', 'undo', 'redo', 'snap', 'orientation', 'palette', 'zoomOut', 'zoomIn', 'zoomReset']) {
     expect(metrics[name].left, `${name}を地形画面の左端より内側に保つ`).toBeGreaterThanOrEqual(metrics.screen.left - 1);
     expect(metrics[name].right, `${name}を地形画面の右端より内側に保つ`).toBeLessThanOrEqual(metrics.screen.right + 1);
   }
@@ -185,11 +199,9 @@ async function assertTerrainWorkspaceVisible(page) {
     expect(metrics[name].top, `${name}を地形画面の上端より下に保つ`).toBeGreaterThanOrEqual(metrics.screen.top - 1);
     expect(metrics[name].bottom, `${name}を下部ナビより上に保つ`).toBeLessThanOrEqual(metrics.screen.bottom + 1);
   }
-  expect(metrics.orientation.top).toBeGreaterThanOrEqual(metrics.map.top - 1);
-  expect(metrics.orientation.bottom).toBeLessThanOrEqual(metrics.map.bottom + 1);
-  expect(metrics.palette.top).toBeGreaterThanOrEqual(metrics.map.top - 1);
-  expect(metrics.palette.bottom).toBeLessThanOrEqual(metrics.map.bottom + 1);
-  for (const name of ['draw', 'erase', 'guide', 'snap', 'orientation', 'palette']) {
+  expect(metrics.orientation.top).toBeGreaterThanOrEqual(metrics.map.bottom - 1);
+  expect(metrics.palette.top).toBeGreaterThanOrEqual(metrics.map.bottom - 1);
+  for (const name of ['toolToggle', 'undo', 'redo', 'snap', 'orientation', 'palette', 'zoomOut', 'zoomIn', 'zoomReset']) {
     expect(metrics[name].height, `${name}のタップ領域は48px以上`).toBeGreaterThanOrEqual(47.9);
   }
 }
@@ -198,7 +210,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.3.0-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.4.0-mvp');
   await expect(page.locator('#updateNotice')).toBeHidden();
   await expect(page.locator('.step-tab')).toHaveCount(8);
   await expect(page.locator('.usage-panel')).toBeVisible();
@@ -259,15 +271,16 @@ async function createValidatedStage(page, options = {}) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect(page.getByTestId('terrain-inspector')).toBeHidden();
-  await page.getByTestId('tool-draw').click();
+  await expect(page.getByTestId('terrain-tool-menu')).toBeHidden();
+  await selectTerrainTool(page, '#toolDraw');
   await tapCanvas(page, terrainCanvas, 0.5, 0.62);
   await expect(page.getByTestId('undo')).toBeEnabled();
-  await page.getByTestId('tool-erase').click();
+  await selectTerrainTool(page, '#toolErase');
   await tapCanvas(page, terrainCanvas, 0.52, 0.62);
   await page.getByTestId('undo').click();
   await page.getByTestId('redo').click();
   if (options.advancedEditing) {
-    await page.locator('#toolLine').click();
+    await selectTerrainTool(page, '#toolLine');
     await dragCanvas(page, terrainCanvas, 0.22, 0.42, 0.36, 0.46);
     await openTerrainInspector(page, 'shape');
     await expect(page.locator('#terrainPanelShape')).toBeVisible();
@@ -289,7 +302,7 @@ async function createValidatedStage(page, options = {}) {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
-    await page.locator('#toolGuide').click();
+    await selectTerrainTool(page, '#toolGuide');
     await dragCanvas(page, terrainCanvas, 0.28, 0.5, 0.28, 0.72);
     await expect(page.locator('#characterGuideHint')).toHaveAttribute('data-state', 'warning');
     await expect(page.locator('#snapCharacterGuides')).toBeEnabled();
@@ -392,11 +405,13 @@ test.describe('Stage Studio モバイル作成フロー', () => {
       const map = root.querySelector('.canvas-card').getBoundingClientRect();
       const controls = root.querySelector(controlSelector).getBoundingClientRect();
       const orientation = root.querySelector('[data-orientation-toggle]').getBoundingClientRect();
+      const mapButtonCount = root.querySelector('.canvas-card').querySelectorAll('button').length;
       const screen = root.getBoundingClientRect();
       return {
         map: { left: map.left, right: map.right, top: map.top, bottom: map.bottom },
         controls: { left: controls.left, right: controls.right, top: controls.top, bottom: controls.bottom },
         orientation: { left: orientation.left, right: orientation.right, top: orientation.top, bottom: orientation.bottom, height: orientation.height },
+        mapButtonCount,
         screen: { left: screen.left, right: screen.right, top: screen.top, bottom: screen.bottom },
         noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
       };
@@ -404,11 +419,12 @@ test.describe('Stage Studio モバイル作成フロー', () => {
 
     const assertLandscapeLayout = (layout, label) => {
       expect(layout.noHorizontalOverflow, `${label}で横スクロールを出さない`).toBe(true);
+      expect(layout.mapButtonCount, `${label}のステージ画像内へ操作ボタンを重ねない`).toBe(0);
       expect(Math.abs(layout.map.right - layout.controls.left), `${label}の操作をマップ横へ接続する`).toBeLessThanOrEqual(12);
-      expect(layout.orientation.left, `${label}の回転ボタンをマップ内に置く`).toBeGreaterThanOrEqual(layout.map.left - 1);
-      expect(layout.orientation.right, `${label}の回転ボタンをマップ内に置く`).toBeLessThanOrEqual(layout.map.right + 1);
-      expect(layout.orientation.top).toBeGreaterThanOrEqual(layout.map.top - 1);
-      expect(layout.orientation.bottom).toBeLessThanOrEqual(layout.map.bottom + 1);
+      expect(layout.orientation.left, `${label}の回転ボタンを操作欄内に置く`).toBeGreaterThanOrEqual(layout.controls.left - 1);
+      expect(layout.orientation.right, `${label}の回転ボタンを操作欄内に置く`).toBeLessThanOrEqual(layout.controls.right + 1);
+      expect(layout.orientation.top).toBeGreaterThanOrEqual(layout.controls.top - 1);
+      expect(layout.orientation.bottom).toBeLessThanOrEqual(layout.controls.bottom + 1);
       expect(layout.orientation.height, `${label}の回転ボタンを48px以上にする`).toBeGreaterThanOrEqual(48);
     };
 

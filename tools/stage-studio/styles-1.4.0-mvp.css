@@ -287,31 +287,26 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 
 #terrainCanvas, #spawnCanvas { touch-action: none; }
 
-.canvas-zoom { position: absolute; right: 0.45rem; top: 0.45rem; display: flex; align-items: center; gap: 0.28rem; padding: 0.25rem; border: 1px solid rgba(199,131,53,.8); border-radius: 4px; background: rgba(7, 10, 12, 0.84); color: #fff5dc; backdrop-filter: blur(6px); }
-.canvas-zoom button { min-width: var(--tap); min-height: var(--tap); padding: 0.35rem; border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.1); color: #fff; }
-.canvas-zoom span { min-width: 3.1rem; font-size: 0.72rem; text-align: center; }
-
-.canvas-orientation-button {
-  position: absolute;
-  z-index: 4;
-  left: 0.45rem;
-  top: 0.45rem;
-  min-width: 88px;
+.stage-orientation-button, .stage-setting-button {
+  min-width: 68px;
   min-height: var(--tap);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.32rem;
-  padding: 0.42rem 0.58rem;
+  padding: 0.38rem 0.48rem;
   border-color: rgba(255,226,161,.82);
-  background: rgba(7,10,12,.84);
+  background: linear-gradient(#37464d, #1a252b 52%, #0a1115);
   color: #fff5dc;
   font-size: 0.72rem;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 4px 14px rgba(0,0,0,.32);
 }
-.canvas-orientation-button > span:first-child { font-size: 1rem; }
-.canvas-orientation-button[data-orientation="landscape"] { border-color: #9be08a; color: #d9ffd1; }
+.stage-orientation-button > span:first-child, .stage-setting-button > span:first-child { font-size: 1rem; }
+.stage-orientation-button[data-orientation="landscape"] { border-color: #9be08a; color: #d9ffd1; }
+.stage-setting-button[aria-expanded="true"] { background: linear-gradient(#ffd66e, #9b6029); color: #160d06; }
+.playtest-control-dock > .stage-orientation-button { width: 100%; margin-bottom: 0.4rem; }
+.stage-zoom { min-width: 0; display: grid; grid-template-columns: 48px minmax(38px, 1fr) 48px 52px; align-items: center; gap: 0.22rem; color: #fff5dc; }
+.stage-zoom button { min-width: 0; min-height: var(--tap); padding: 0.3rem; border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; }
+.stage-zoom span { min-width: 0; font-size: 0.72rem; text-align: center; }
 .orientation-guide {
   position: absolute;
   z-index: 5;
@@ -334,28 +329,6 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 .orientation-guide span { grid-column: 1; color: var(--muted); font-size: 0.68rem; line-height: 1.35; }
 .orientation-guide button { grid-column: 2; grid-row: 1 / span 2; min-width: 58px; min-height: var(--tap); padding: 0.35rem; font-size: 0.7rem; }
 
-.canvas-palette-button {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 4;
-  min-width: 88px;
-  min-height: var(--tap);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  padding: 0.38rem 0.62rem;
-  border-color: #ffe2a1;
-  background: rgba(7,10,12,.9);
-  box-shadow: 0 4px 14px rgba(0,0,0,.48);
-  color: #ffe2a1;
-  font-size: 0.72rem;
-  backdrop-filter: blur(7px);
-}
-.canvas-palette-button > span:first-child { font-size: 1rem; }
-.canvas-palette-button[aria-expanded="true"] { background: linear-gradient(#ffd66e, #9b6029); color: #160d06; }
-
 .terrain-workspace {
   position: sticky;
   top: 0;
@@ -365,15 +338,17 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 }
 .terrain-workspace > .canvas-card { border-radius: var(--radius) var(--radius) 0 0; }
 .terrain-editor-dock {
+  position: relative;
   padding: 0.45rem;
   border: 3px solid var(--primary);
   border-top: 0;
   background: linear-gradient(180deg, rgba(39,53,60,.98), rgba(8,14,18,.99));
   box-shadow: var(--shadow);
 }
-.terrain-tool-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.34rem; }
+.terrain-stage-controls { display: grid; grid-template-columns: minmax(68px, .72fr) minmax(190px, 1.8fr) minmax(68px, .72fr); gap: 0.34rem; }
+.stage-control-guide { position: static; margin-top: 0.36rem; }
 .tool-button, .tool-lock-button { min-width: 0; padding: 0.34rem 0.18rem; font-size: 0.72rem; }
-.terrain-tool-row .tool-button, .tool-lock-button {
+.terrain-tool-menu .tool-button, .tool-lock-button {
   min-height: 52px;
   display: flex;
   flex-direction: column;
@@ -381,8 +356,8 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
   justify-content: center;
   gap: 0.05rem;
 }
-.terrain-tool-row .tool-button > span, .tool-lock-button > span { font-size: 1rem; line-height: 1; }
-.terrain-tool-row small, .tool-lock-button small { font-size: 0.66rem; font-weight: 800; }
+.terrain-tool-menu .tool-button > span, .tool-lock-button > span { font-size: 1rem; line-height: 1; }
+.terrain-tool-menu small, .tool-lock-button small { font-size: 0.66rem; font-weight: 800; }
 .tool-lock-button {
   position: relative;
   border: 1px solid var(--line);
@@ -396,11 +371,15 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 .tool-lock-button:has(input:checked) { border-color: var(--accent); background: var(--primary-soft); color: #ffe2a1; }
 .tool-button.is-selected { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
 .tool-button.is-selected { box-shadow: inset 0 0 0 1px #ffe2a1, 0 0 12px rgba(199,131,53,.28); color: #ffe2a1; }
-.terrain-history-row { display: grid; grid-template-columns: 1fr minmax(88px, 1.05fr) 1fr; gap: 0.34rem; margin-top: 0.36rem; }
+.terrain-history-row { display: grid; grid-template-columns: 1fr minmax(112px, 1.18fr) 1fr; gap: 0.34rem; margin-top: 0.36rem; }
 .terrain-history-row button { min-height: 48px; }
-.active-tool-status { min-width: 0; display: grid; place-content: center; text-align: center; border: 1px solid rgba(255,226,161,.25); border-radius: 5px; background: #081015; }
+.active-tool-status { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-content: center; column-gap: 0.25rem; padding: 0.22rem 0.45rem; text-align: left; border: 1px solid #ffe2a1; border-radius: 5px; background: #081015; }
 .active-tool-status span { color: var(--muted); font-size: 0.58rem; }
-.active-tool-status strong { overflow: hidden; color: #ffe2a1; font-size: 0.77rem; text-overflow: ellipsis; white-space: nowrap; }
+.active-tool-status strong { grid-column: 1; overflow: hidden; color: #ffe2a1; font-size: 0.77rem; text-overflow: ellipsis; white-space: nowrap; }
+.active-tool-status .active-tool-chevron { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #ffe2a1; font-size: 0.72rem; transition: transform .18s ease; }
+.active-tool-status[aria-expanded="true"] .active-tool-chevron { transform: rotate(180deg); }
+.terrain-tool-menu { position: absolute; z-index: 14; left: 0.45rem; right: 0.45rem; top: calc(100% - 0.1rem); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.34rem; padding: 0.45rem; border: 2px solid #ffe2a1; border-radius: 0 0 var(--radius) var(--radius); background: rgba(7,10,12,.98); box-shadow: 0 14px 30px rgba(0,0,0,.65); }
+.terrain-tool-menu[hidden] { display: none; }
 .terrain-operation-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; margin: 0; }
 .terrain-operation-row button { min-width: 0; padding-inline: 0.45rem; font-size: 0.77rem; }
 
@@ -597,6 +576,9 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
     border-radius: var(--radius) 0 0 var(--radius);
   }
   .terrain-editor-dock { border-top: 3px solid var(--primary); border-left: 0; }
+  .terrain-stage-controls { grid-template-columns: 1fr 1fr; }
+  .terrain-stage-controls .stage-zoom { grid-column: 1 / -1; grid-row: 1; }
+  .terrain-stage-controls .stage-orientation-button, .terrain-stage-controls .stage-setting-button { grid-row: 2; }
   .character-guide-panel { border-top: 0; border-left: 0; border-radius: 0 0 var(--radius) 0; }
   .terrain-inspector { left: auto; right: max(0.6rem, env(safe-area-inset-right)); bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 0.45rem); width: min(300px, calc(100vw - 1.2rem)); height: min(68dvh, 280px); min-height: 180px; margin: 0; }
   [data-screen="spawns"].is-active {
@@ -647,7 +629,9 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 @media (max-width: 370px) {
   .screen { padding-inline: 0.72rem; }
   .step-tab { font-size: 0.59rem; }
-  .terrain-tool-row { gap: 0.25rem; }
+  .terrain-stage-controls { grid-template-columns: 1fr 1fr; }
+  .terrain-stage-controls .stage-zoom { grid-column: 1 / -1; }
+  .terrain-tool-menu { gap: 0.25rem; }
   .tool-button { font-size: 0.69rem; }
   .character-guide-panel { grid-template-columns: 1fr; }
   .gesture-hint { max-width: 8rem; }

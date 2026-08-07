@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.3.0-mvp';
+  const APP_VERSION = '1.4.0-mvp';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -288,8 +288,8 @@
   }
 
   function showOrientationGuide(button) {
-    const card = button && button.closest('.canvas-card');
-    const guide = card && card.querySelector('[data-orientation-guide]');
+    const controls = button && button.closest('.terrain-editor-dock, .panel, .playtest-control-dock, .screen');
+    const guide = controls && controls.querySelector('[data-orientation-guide]');
     const token = ++state.orientationGuideToken;
     if (guide) {
       guide.hidden = false;
@@ -375,7 +375,10 @@
     document.querySelectorAll('.screen').forEach((node) => node.classList.toggle('is-active', node.dataset.screen === screen));
     document.querySelectorAll('.step-tab').forEach((node) => node.classList.toggle('is-active', node.dataset.step === screen));
     state.currentScreen = screen;
-    if (screen !== 'terrain') collapseTerrainInspector();
+    if (screen !== 'terrain') {
+      collapseTerrainInspector();
+      collapseTerrainToolMenu();
+    }
     const active = document.querySelector(`.screen[data-screen="${screen}"]`);
     if (active) active.scrollTop = 0;
     if (!options || !options.fromHistory) {
@@ -2561,9 +2564,35 @@
       const selected = button.dataset.tool === state.activeTool;
       button.classList.toggle('is-selected', selected);
       button.setAttribute('aria-pressed', String(selected));
+      button.setAttribute('aria-checked', String(selected));
     });
     const label = $('activeTerrainTool');
-    if (label) label.textContent = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
+    const toolLabel = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
+    if (label) label.textContent = toolLabel;
+    const toggle = $('terrainToolMenuToggle');
+    if (toggle) toggle.setAttribute('aria-label', `選択中: ${toolLabel}。押して地形ツールを切り替える`);
+    collapseTerrainToolMenu();
+  }
+
+  function collapseTerrainToolMenu(options) {
+    const menu = $('terrainToolMenu');
+    const toggle = $('terrainToolMenuToggle');
+    if (!menu || !toggle) return;
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    if (options && options.focusToggle) {
+      try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+    }
+  }
+
+  function toggleTerrainToolMenu() {
+    const menu = $('terrainToolMenu');
+    const toggle = $('terrainToolMenuToggle');
+    if (!menu || !toggle) return;
+    if (!menu.hidden) return collapseTerrainToolMenu({ focusToggle: true });
+    collapseTerrainInspector();
+    menu.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
   }
 
   function collapseTerrainInspector(options) {
@@ -2607,7 +2636,10 @@
   function toggleTerrainInspector() {
     const inspector = $('terrainInspector');
     if (inspector && !inspector.hidden) collapseTerrainInspector();
-    else setTerrainInspector(state.terrainInspectorPanel || 'brush');
+    else {
+      collapseTerrainToolMenu();
+      setTerrainInspector(state.terrainInspectorPanel || 'brush');
+    }
   }
 
   function randomSeed() {
@@ -2780,6 +2812,8 @@
     $('toolCircle').addEventListener('click', () => setActiveTool('circle'));
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
     $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
+    $('terrainToolMenuToggle').addEventListener('click', toggleTerrainToolMenu);
+    $('toolLock').addEventListener('change', () => collapseTerrainToolMenu({ focusToggle: true }));
     $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
     document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
       button.addEventListener('click', () => togglePreferredOrientation(button));
@@ -2863,8 +2897,15 @@
     document.querySelectorAll('.terrain-operation-row button').forEach((button) => {
       button.addEventListener('click', () => collapseTerrainInspector());
     });
-    document.querySelectorAll('.terrain-tool-row .tool-button').forEach((button) => {
+    document.querySelectorAll('.terrain-tool-menu .tool-button').forEach((button) => {
       button.addEventListener('click', () => collapseTerrainInspector());
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('#terrainToolMenu, #terrainToolMenuToggle')) collapseTerrainToolMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !$('terrainToolMenu').hidden) collapseTerrainToolMenu({ focusToggle: true });
     });
 
     ['shotAngle', 'shotPower'].forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
