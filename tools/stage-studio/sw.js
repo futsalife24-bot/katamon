@@ -1,13 +1,13 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.1.0-mvp`;
+const CACHE_NAME = `${CACHE_PREFIX}1.1.1-mvp`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',
   './index.html',
-  './styles-1.1.0-mvp.css',
-  './app-1.1.0-mvp.js',
+  './styles-1.1.1-mvp.css',
+  './app-1.1.1-mvp.js',
   './generator-worker.js',
   './manifest.webmanifest',
   './icon.svg',

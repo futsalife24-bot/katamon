@@ -10,7 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles-1.1.0-mvp.css">
+  <link rel="stylesheet" href="./styles-1.1.1-mvp.css">
   <title>Stage Studio</title>
 </head>
 <body>
@@ -194,22 +194,28 @@
 
       <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
         <div class="screen-heading"><div><span class="step-number">6 / 8</span><h2 id="playtestTitle">テスト・風</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
-        <div class="canvas-card"><canvas id="testCanvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
-        <div class="panel form-grid compact">
-          <label>砲撃角度 <output id="angleOutput">45</output>°<input id="shotAngle" type="range" min="5" max="175" value="45"></label>
-          <label>砲撃威力 <output id="powerOutput">65</output>%<input id="shotPower" type="range" min="10" max="100" value="65"></label>
+        <div class="playtest-stage-shell">
+          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
+          <div class="playtest-control-dock" data-testid="playtest-controls" aria-label="テストプレイ操作">
+            <div class="test-controls">
+              <button id="moveTestLeft" type="button">← 移動</button>
+              <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
+              <button id="moveTestRight" type="button">移動 →</button>
+              <button id="resetTest" class="secondary" type="button" aria-label="テストをリセット">リセット</button>
+            </div>
+            <div class="playtest-aim-controls">
+              <label>砲撃角度 <span><output id="angleOutput">45</output>°</span><input id="shotAngle" type="range" min="5" max="175" value="45"></label>
+              <label>砲撃威力 <span><output id="powerOutput">65</output>%</span><input id="shotPower" type="range" min="10" max="100" value="65"></label>
+            </div>
+            <p class="actor-status">キャラクター状態: <strong id="testActorStatus" data-state="grounded">接地</strong></p>
+          </div>
+        </div>
+        <p id="testResult" class="notice-inline" role="status">角度と威力を決めてテスト砲撃してください。</p>
+        <div class="panel form-grid compact playtest-wind-settings">
           <label class="switch-row"><span>風を有効にする</span><input id="windEnabled" type="checkbox" checked></label>
           <label>風向き<select id="windDirection"><option value="-1">左向き</option><option value="1" selected>右向き</option></select></label>
           <label class="full">風の強さ <output id="windOutput">35</output>%<input id="windStrength" type="range" min="0" max="100" value="35"></label>
         </div>
-        <div class="test-controls">
-          <button id="moveTestLeft" type="button">← 移動</button>
-          <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
-          <button id="moveTestRight" type="button">移動 →</button>
-          <button id="resetTest" class="secondary" type="button">テストをリセット</button>
-        </div>
-        <p class="actor-status">キャラクター状態: <strong id="testActorStatus" data-state="grounded">接地</strong></p>
-        <p id="testResult" class="notice-inline" role="status">角度と威力を決めてテスト砲撃してください。</p>
         <details class="help-details"><summary>将来のギミック</summary><p>ワープ、回復地点、移動床、重力変化などは対象ゲーム側が未対応のため、現在の出力には含めません。</p></details>
       </section>
 
@@ -264,6 +270,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app-1.1.0-mvp.js" defer></script>
+  <script src="./app-1.1.1-mvp.js" defer></script>
 </body>
 </html>

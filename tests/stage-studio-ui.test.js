@@ -8,8 +8,8 @@ const test = require('node:test');
 const ROOT = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 const studioHtml = read('tools/stage-studio/index.html');
-const studioApp = read('tools/stage-studio/app-1.1.0-mvp.js');
-const studioCss = read('tools/stage-studio/styles-1.1.0-mvp.css');
+const studioApp = read('tools/stage-studio/app-1.1.1-mvp.js');
+const studioCss = read('tools/stage-studio/styles-1.1.1-mvp.css');
 const studioSw = read('tools/stage-studio/sw.js');
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -33,6 +33,28 @@ test('usage is always visible before device status, while appearance and wind ar
   assert.doesNotMatch(studioHtml.slice(usageIndex, deviceIndex), /<details/);
   assert.ok(studioHtml.indexOf('id="backgroundMode"') > terrainIndex && studioHtml.indexOf('id="backgroundMode"') < spawnIndex);
   assert.ok(studioHtml.indexOf('id="windEnabled"') > playtestIndex && studioHtml.indexOf('id="windEnabled"') < validateIndex);
+});
+
+test('playtest actions stay in a dock directly below the map while wind settings follow later', () => {
+  const playtestStart = studioHtml.indexOf('data-screen="playtest"');
+  const playtestEnd = studioHtml.indexOf('data-screen="validate"');
+  const playtestHtml = studioHtml.slice(playtestStart, playtestEnd);
+  const canvasIndex = playtestHtml.indexOf('data-testid="test-canvas"');
+  const dockStart = playtestHtml.indexOf('data-testid="playtest-controls"');
+  const dockEnd = playtestHtml.indexOf('</div>\n        </div>', dockStart);
+  const windIndex = playtestHtml.indexOf('id="windEnabled"');
+
+  assert.ok(canvasIndex >= 0 && canvasIndex < dockStart);
+  assert.ok(dockStart >= 0 && dockStart < dockEnd && dockEnd < windIndex);
+  for (const id of ['moveTestLeft', 'fireTest', 'moveTestRight', 'resetTest', 'shotAngle', 'shotPower']) {
+    const controlIndex = playtestHtml.indexOf(`id="${id}"`);
+    assert.ok(controlIndex > dockStart && controlIndex < dockEnd, `${id} must remain inside the map dock`);
+  }
+  assert.match(studioCss, /\.playtest-stage-shell\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/);
+  assert.match(studioCss, /\.test-controls\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(studioCss, /@media \(orientation:\s*landscape\)[\s\S]*?\.playtest-stage-shell\s*\{[^}]*position:\s*sticky;[^}]*grid-template-columns:[^}]*minmax\(300px,\s*1fr\);/);
+  assert.match(studioCss, /\.playtest-stage-shell > \.canvas-card\s*\{[^}]*max-width:\s*none;[^}]*border-radius:\s*var\(--radius\)\s*0\s*0\s*var\(--radius\);/);
+  assert.match(studioCss, /\.playtest-control-dock\s*\{[^}]*border-left:\s*0;[^}]*border-radius:\s*0\s*var\(--radius\)\s*var\(--radius\)\s*0;/);
 });
 
 test('all editing canvases use game assets, terrain texture and real character dimensions', () => {
@@ -70,11 +92,11 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /grid-template-columns:\s*repeat\(4,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.1\.0-mvp`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.1\.1-mvp`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
-  assert.match(studioHtml, /styles-1\.1\.0-mvp\.css/);
-  assert.match(studioHtml, /app-1\.1\.0-mvp\.js/);
+  assert.match(studioHtml, /styles-1\.1\.1-mvp\.css/);
+  assert.match(studioHtml, /app-1\.1\.1-mvp\.js/);
   assert.doesNotMatch(studioSw, /['"]\.\/(?:styles\.css|app\.js)['"]/);
   const gameBuild = read('index.html').match(/const BUILD_ID = '([^']+)'/)[1];
   const gameCache = read('sw.js').match(/const CACHE_VERSION = 'katamon-pwa-([^']+)'/)[1];
