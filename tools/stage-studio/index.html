@@ -10,7 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles-1.1.1-mvp.css">
+  <link rel="stylesheet" href="./styles-1.2.0-mvp.css">
   <title>Stage Studio</title>
 </head>
 <body>
@@ -133,49 +133,73 @@
 
       <section class="screen editor-screen" data-screen="terrain" aria-labelledby="terrainTitle">
         <div class="screen-heading"><div><span class="step-number">4 / 8</span><h2 id="terrainTitle">地形・見た目</h2></div><span class="gesture-hint">1本指: 編集 / 2本指: 移動・拡大</span></div>
-        <div class="canvas-card">
-          <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
-          <div class="canvas-zoom" aria-label="表示倍率">
-            <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+        <div class="terrain-workspace" data-testid="terrain-workspace">
+          <div class="canvas-card">
+            <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
+            <div class="canvas-zoom" aria-label="表示倍率">
+              <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+            </div>
+          </div>
+          <div class="terrain-editor-dock" data-testid="terrain-tools">
+            <div class="terrain-tool-row" role="toolbar" aria-label="地形ツール">
+              <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw"><span aria-hidden="true">●</span><small>描く</small></button>
+              <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase"><span aria-hidden="true">◇</span><small>削る</small></button>
+              <button id="toolGuide" class="tool-button" type="button" data-tool="guide"><span aria-hidden="true">♟</span><small>キャラ</small></button>
+              <button id="toolFill" class="tool-button" type="button" data-tool="fill"><span aria-hidden="true">▰</span><small>塗る</small></button>
+              <button id="toolLine" class="tool-button" type="button" data-tool="line"><span aria-hidden="true">╱</span><small>線</small></button>
+              <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle"><span aria-hidden="true">□</span><small>四角</small></button>
+              <button id="toolCircle" class="tool-button" type="button" data-tool="circle"><span aria-hidden="true">○</span><small>円</small></button>
+              <label class="tool-lock-button" title="誤操作を防ぐ"><input id="toolLock" type="checkbox"><span aria-hidden="true">🔒</span><small>ロック</small></label>
+            </div>
+            <div class="terrain-history-row" aria-label="編集履歴">
+              <button id="undoButton" class="tool-button" type="button" data-testid="undo">↶ 戻す</button>
+              <div class="active-tool-status"><span>選択中</span><strong id="activeTerrainTool">描く</strong></div>
+              <button id="redoButton" class="tool-button" type="button" data-testid="redo">進む ↷</button>
+            </div>
+          </div>
+          <div id="characterGuidePanel" class="character-guide-panel" data-state="ok">
+            <p id="characterGuideHint" role="status">キャラ確認を選ぶと、実ゲームと同じ寸法のキャラクターをドラッグできます。地形と当たり判定が重なると赤く警告します。</p>
+            <button id="snapCharacterGuides" class="secondary" type="button" disabled>赤いキャラを安全位置へ</button>
           </div>
         </div>
-        <div class="tool-row" role="toolbar" aria-label="地形ツール">
-          <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw">描く</button>
-          <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase">削る</button>
-          <button id="toolLine" class="tool-button" type="button" data-tool="line">線</button>
-          <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle">四角</button>
-          <button id="toolCircle" class="tool-button" type="button" data-tool="circle">円</button>
-          <button id="toolFill" class="tool-button" type="button" data-tool="fill">塗りつぶし</button>
-          <button id="toolGuide" class="tool-button" type="button" data-tool="guide">キャラ確認</button>
-          <button id="undoButton" class="tool-button" type="button" data-testid="undo">戻す</button>
-          <button id="redoButton" class="tool-button" type="button" data-testid="redo">やり直す</button>
-          <button id="clearTerrain" class="tool-button danger-outline" type="button">全消去</button>
-        </div>
-        <div class="terrain-operation-row" aria-label="地形の全体処理">
-          <button id="smoothTerrain" type="button">滑らか</button>
-          <button id="flattenTerrain" type="button">平坦化</button>
-          <button id="noiseTerrain" type="button">ノイズ</button>
-          <button id="mirrorTerrain" type="button">左右反転</button>
-          <button id="symmetrizeTerrain" type="button">左右対称化</button>
-        </div>
-        <div class="panel form-grid compact">
-          <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
-          <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
-          <label>地形素材<select id="terrainMaterial"><option value="destructible">通常（破壊可能）</option><option value="steel" disabled>壊れない鋼鉄（準備中）</option></select></label>
-          <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
-          <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
-          <label class="check-row"><input id="toolLock" type="checkbox"><span>ツールをロック</span></label>
-          <p class="muted full material-status">鋼鉄はゲーム本体の対応後に有効化します。現在の下書き・出力データには入りません。</p>
-        </div>
-        <p id="characterGuideHint" class="notice-inline character-guide-hint" role="status">キャラ確認を選ぶと、実ゲームと同じ寸法のキャラクターをドラッグできます。地形と当たり判定が重なると赤く警告します。</p>
-        <div class="panel form-grid appearance-settings">
-          <h3 class="full">背景と地面の見た目</h3>
-          <label>背景表示<select id="backgroundMode"><option value="theme">ゲーム背景</option><option value="gradient">グラデーション</option><option value="color">単色</option></select></label>
-          <label>テーマ<select id="themeSelect"><option value="grass">草原</option><option value="desert">砂漠</option><option value="snow">雪原</option><option value="volcanic">火山</option></select></label>
-          <label>背景色<input id="backgroundColor" type="color" value="#1a2340"></label>
-          <label>地形色<input id="terrainColor" type="color" value="#7a5a3a"></label>
-          <label>明るさ <output id="brightnessOutput">100</output>%<input id="brightnessRange" type="range" min="60" max="130" value="100"></label>
-          <label class="check-row"><input id="decorationsEnabled" type="checkbox" checked><span>ゲーム背景・装飾を表示</span></label>
+
+        <div class="terrain-inspector" data-testid="terrain-inspector">
+          <div class="terrain-inspector-tabs" role="tablist" aria-label="地形編集の設定">
+            <button id="terrainTabBrush" class="is-selected" type="button" role="tab" aria-selected="true" aria-controls="terrainPanelBrush" data-terrain-panel="brush">ブラシ</button>
+            <button id="terrainTabShape" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelShape" data-terrain-panel="shape">整形</button>
+            <button id="terrainTabDisplay" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelDisplay" data-terrain-panel="display">表示</button>
+            <button id="terrainTabAppearance" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelAppearance" data-terrain-panel="appearance">見た目</button>
+          </div>
+          <section id="terrainPanelBrush" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabBrush" data-terrain-panel-content="brush">
+            <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
+            <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
+            <label class="full">地形素材<select id="terrainMaterial"><option value="destructible">通常（破壊可能）</option><option value="steel" disabled>壊れない鋼鉄（準備中）</option></select></label>
+            <p class="muted full material-status">鋼鉄はゲーム本体の対応後に有効化します。現在の下書き・出力データには入りません。</p>
+          </section>
+          <section id="terrainPanelShape" class="terrain-inspector-panel panel" role="tabpanel" aria-labelledby="terrainTabShape" data-terrain-panel-content="shape" hidden>
+            <div class="terrain-operation-row" aria-label="地形の全体処理">
+              <button id="smoothTerrain" type="button">滑らか</button>
+              <button id="flattenTerrain" type="button">平坦化</button>
+              <button id="noiseTerrain" type="button">ノイズ</button>
+              <button id="mirrorTerrain" type="button">左右反転</button>
+              <button id="symmetrizeTerrain" type="button">左右対称化</button>
+              <button id="clearTerrain" class="danger-outline" type="button">全消去</button>
+            </div>
+          </section>
+          <section id="terrainPanelDisplay" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabDisplay" data-terrain-panel-content="display" hidden>
+            <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
+            <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
+            <p class="muted full">ズームと移動はCanvas上部のボタン、または二本指で操作できます。</p>
+          </section>
+          <section id="terrainPanelAppearance" class="terrain-inspector-panel panel form-grid appearance-settings" role="tabpanel" aria-labelledby="terrainTabAppearance" data-terrain-panel-content="appearance" hidden>
+            <h3 class="full">背景と地面の見た目</h3>
+            <label>背景表示<select id="backgroundMode"><option value="theme">ゲーム背景</option><option value="gradient">グラデーション</option><option value="color">単色</option></select></label>
+            <label>テーマ<select id="themeSelect"><option value="grass">草原</option><option value="desert">砂漠</option><option value="snow">雪原</option><option value="volcanic">火山</option></select></label>
+            <label>背景色<input id="backgroundColor" type="color" value="#1a2340"></label>
+            <label>地形色<input id="terrainColor" type="color" value="#7a5a3a"></label>
+            <label>明るさ <output id="brightnessOutput">100</output>%<input id="brightnessRange" type="range" min="60" max="130" value="100"></label>
+            <label class="check-row"><input id="decorationsEnabled" type="checkbox" checked><span>ゲーム背景・装飾を表示</span></label>
+          </section>
         </div>
         <details class="help-details"><summary>追加編集ツールについて</summary><p>線・四角・円は始点から終点までドラッグします。滑らか・平坦化・ノイズ・左右反転・左右対称化は地形全体へ適用され、Undoで戻せます。多角形、範囲移動・コピー、上下反転、一部対称化は将来機能です。</p></details>
       </section>
@@ -270,6 +294,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app-1.1.1-mvp.js" defer></script>
+  <script src="./app-1.2.0-mvp.js" defer></script>
 </body>
 </html>

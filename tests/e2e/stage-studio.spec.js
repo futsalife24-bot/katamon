@@ -144,11 +144,47 @@ async function assertPlaytestMapAndControlsVisible(page, expectedScrollTop = nul
   return metrics.screen.scrollTop;
 }
 
+async function assertTerrainWorkspaceVisible(page) {
+  const metrics = await page.evaluate(() => {
+    const screen = document.querySelector('[data-screen="terrain"]');
+    const workspace = document.querySelector('[data-testid="terrain-workspace"]');
+    const map = document.querySelector('[data-testid="terrain-canvas"]').closest('.canvas-card');
+    const tools = document.querySelector('[data-testid="terrain-tools"]');
+    const recovery = document.querySelector('#characterGuidePanel');
+    const rect = (element) => {
+      const box = element.getBoundingClientRect();
+      return { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height };
+    };
+    return {
+      screen: rect(screen), workspace: rect(workspace), map: rect(map), tools: rect(tools), recovery: rect(recovery),
+      draw: rect(document.querySelector('#toolDraw')),
+      erase: rect(document.querySelector('#toolErase')),
+      guide: rect(document.querySelector('#toolGuide')),
+      snap: rect(document.querySelector('#snapCharacterGuides')),
+      noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+    };
+  });
+  expect(metrics.noHorizontalOverflow, '地形ワークスペースで横スクロールを発生させない').toBe(true);
+  expect(Math.abs(metrics.map.bottom - metrics.tools.top), 'ツールをCanvas直下へ接続する').toBeLessThanOrEqual(3);
+  expect(Math.abs(metrics.tools.bottom - metrics.recovery.top), 'キャラ補正をツール直下へ接続する').toBeLessThanOrEqual(3);
+  for (const name of ['workspace', 'map', 'tools', 'recovery', 'draw', 'erase', 'guide', 'snap']) {
+    expect(metrics[name].left, `${name}を地形画面の左端より内側に保つ`).toBeGreaterThanOrEqual(metrics.screen.left - 1);
+    expect(metrics[name].right, `${name}を地形画面の右端より内側に保つ`).toBeLessThanOrEqual(metrics.screen.right + 1);
+  }
+  for (const name of ['map', 'tools', 'recovery']) {
+    expect(metrics[name].top, `${name}を地形画面の上端より下に保つ`).toBeGreaterThanOrEqual(metrics.screen.top - 1);
+    expect(metrics[name].bottom, `${name}を下部ナビより上に保つ`).toBeLessThanOrEqual(metrics.screen.bottom + 1);
+  }
+  for (const name of ['draw', 'erase', 'guide', 'snap']) {
+    expect(metrics[name].height, `${name}のタップ領域は48px以上`).toBeGreaterThanOrEqual(48);
+  }
+}
+
 async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.1.1-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.2.0-mvp');
   await expect(page.locator('#updateNotice')).toBeHidden();
   await expect(page.locator('.step-tab')).toHaveCount(8);
   await expect(page.locator('.usage-panel')).toBeVisible();
@@ -198,6 +234,8 @@ async function createValidatedStage(page, options = {}) {
 
   const terrainCanvas = page.getByTestId('terrain-canvas');
   await expect(terrainCanvas).toBeVisible();
+  await expect(page.getByTestId('terrain-tools')).toBeVisible();
+  await assertTerrainWorkspaceVisible(page);
   await page.getByTestId('tool-draw').click();
   await tapCanvas(page, terrainCanvas, 0.5, 0.62);
   await expect(page.getByTestId('undo')).toBeEnabled();
@@ -208,6 +246,8 @@ async function createValidatedStage(page, options = {}) {
   if (options.advancedEditing) {
     await page.locator('#toolLine').click();
     await dragCanvas(page, terrainCanvas, 0.22, 0.42, 0.36, 0.46);
+    await page.locator('#terrainTabShape').click();
+    await expect(page.locator('#terrainPanelShape')).toBeVisible();
     await page.locator('#smoothTerrain').click();
     await page.locator('#mirrorTerrain').click();
     await page.getByTestId('undo').click();
@@ -215,12 +255,23 @@ async function createValidatedStage(page, options = {}) {
   }
   await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
+  await page.locator('#terrainTabAppearance').click();
+  await expect(page.locator('#terrainPanelAppearance')).toBeVisible();
   await page.locator('#themeSelect').selectOption('grass');
   await page.locator('#brightnessRange').fill('100');
   if (options.advancedEditing) {
+    await page.locator('#terrainTabBrush').click();
+    await expect(page.locator('#terrainPanelBrush')).toBeVisible();
+    await expect(page.locator('#terrainPanelAppearance')).toBeHidden();
     await page.locator('#toolGuide').click();
     await dragCanvas(page, terrainCanvas, 0.28, 0.5, 0.28, 0.72);
     await expect(page.locator('#characterGuideHint')).toHaveAttribute('data-state', 'warning');
+    await expect(page.locator('#snapCharacterGuides')).toBeEnabled();
+    await page.locator('#snapCharacterGuides').click();
+    await expect(page.locator('#characterGuideHint')).toHaveAttribute('data-state', 'ok');
+    await expect(page.locator('#snapCharacterGuides')).toBeDisabled();
+    await expect(page.locator('#activeTerrainTool')).toHaveText('キャラ確認');
+    await assertTerrainWorkspaceVisible(page);
   }
 
   await goToStep(page, 'spawns');
@@ -270,15 +321,24 @@ async function exportStage(page, format, testInfo) {
   return savedPath;
 }
 
+async function openCustomStageManager(page) {
+  const launcher = page.getByTestId('custom-stage-button');
+  // The manager is intentionally available on the TAP TO START screen. Wait for
+  // its 250 ms bridge poll instead of tapping the canvas and entering the wall
+  // break animation, which would temporarily hide the launcher again.
+  await expect(launcher).toBeVisible({ timeout: 15_000 });
+  await launcher.click();
+}
+
 async function importIntoGameAndStart(page, filePath) {
   await page.goto(GAME_URL);
-  await page.getByTestId('custom-stage-button').click();
+  await openCustomStageManager(page);
   await page.getByTestId('custom-stage-import').setInputFiles(filePath);
 
   const list = page.getByTestId('custom-stage-list');
   await expect(list).toContainText(TITLE);
   await page.reload();
-  await page.getByTestId('custom-stage-button').click();
+  await openCustomStageManager(page);
   await expect(page.getByTestId('custom-stage-list')).toContainText(TITLE);
   const card = page.getByTestId('custom-stage-card').filter({ hasText: TITLE }).first();
   await expect(card).toContainText(/[a-f0-9]{12,64}/i);
@@ -289,6 +349,9 @@ async function importIntoGameAndStart(page, filePath) {
   await expect.poll(() => page.evaluate(() => (
     globalThis.KatamonCustomStageBridge?.getState().gamePhase
   ))).toBe('battle');
+  // Stop the game's continuous rendering/audio loops before Playwright closes
+  // the mobile WebKit context. This keeps teardown deterministic on Windows.
+  await page.goto('about:blank');
 }
 
 test.describe('Stage Studio モバイル縦フロー', () => {
