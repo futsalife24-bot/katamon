@@ -41,6 +41,7 @@
     draw: '描く', erase: '削る', guide: 'キャラ確認', fill: '塗りつぶし',
     line: '線', rectangle: '四角', circle: '円'
   });
+  const TERRAIN_PANEL_LABELS = Object.freeze({ brush: 'ブラシ', shape: '整形', display: '表示', appearance: '見た目' });
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
     mountainCenter: '中央山', valley: '渓谷', grandCanyon: '大峡谷', centerHole: '中央穴',
@@ -211,6 +212,7 @@
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
+    terrainInspectorPanel: 'brush',
     characterGuides: [],
     activeGuideIndex: 0,
     guideDrag: null,
@@ -373,6 +375,7 @@
     document.querySelectorAll('.screen').forEach((node) => node.classList.toggle('is-active', node.dataset.screen === screen));
     document.querySelectorAll('.step-tab').forEach((node) => node.classList.toggle('is-active', node.dataset.step === screen));
     state.currentScreen = screen;
+    if (screen !== 'terrain') collapseTerrainInspector();
     const active = document.querySelector(`.screen[data-screen="${screen}"]`);
     if (active) active.scrollTop = 0;
     if (!options || !options.fromHistory) {
@@ -2563,9 +2566,33 @@
     if (label) label.textContent = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
   }
 
-  function setTerrainInspector(panelName) {
+  function collapseTerrainInspector(options) {
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    if (!inspector || !toggle) return;
+    inspector.hidden = true;
+    inspector.dataset.open = 'false';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.classList.remove('is-open');
+    document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => { panel.hidden = true; });
+    if (options && options.focusToggle) {
+      try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+    }
+  }
+
+  function setTerrainInspector(panelName, options) {
     const supported = ['brush', 'shape', 'display', 'appearance'];
     const selectedPanel = supported.includes(panelName) ? panelName : 'brush';
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    const open = !options || options.open !== false;
+    state.terrainInspectorPanel = selectedPanel;
+    inspector.hidden = !open;
+    inspector.dataset.open = String(open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-label', open ? '編集設定を閉じる' : `${TERRAIN_PANEL_LABELS[selectedPanel]}設定を開く`);
+    $('terrainInspectorSummary').textContent = TERRAIN_PANEL_LABELS[selectedPanel];
     document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
       const selected = button.dataset.terrainPanel === selectedPanel;
       button.classList.toggle('is-selected', selected);
@@ -2573,8 +2600,14 @@
       button.tabIndex = selected ? 0 : -1;
     });
     document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => {
-      panel.hidden = panel.dataset.terrainPanelContent !== selectedPanel;
+      panel.hidden = !open || panel.dataset.terrainPanelContent !== selectedPanel;
     });
+  }
+
+  function toggleTerrainInspector() {
+    const inspector = $('terrainInspector');
+    if (inspector && !inspector.hidden) collapseTerrainInspector();
+    else setTerrainInspector(state.terrainInspectorPanel || 'brush');
   }
 
   function randomSeed() {
@@ -2760,6 +2793,8 @@
     document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
       button.addEventListener('click', () => setTerrainInspector(button.dataset.terrainPanel));
     });
+    $('terrainPaletteToggle').addEventListener('click', toggleTerrainInspector);
+    $('terrainInspectorClose').addEventListener('click', () => collapseTerrainInspector({ focusToggle: true }));
     $('undoButton').addEventListener('click', undo);
     $('redoButton').addEventListener('click', redo);
     $('undoGlobal').addEventListener('click', undo);
@@ -2822,6 +2857,16 @@
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
 
+    document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {
+      control.addEventListener('change', () => collapseTerrainInspector());
+    });
+    document.querySelectorAll('.terrain-operation-row button').forEach((button) => {
+      button.addEventListener('click', () => collapseTerrainInspector());
+    });
+    document.querySelectorAll('.terrain-tool-row .tool-button').forEach((button) => {
+      button.addEventListener('click', () => collapseTerrainInspector());
+    });
+
     ['shotAngle', 'shotPower'].forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('moveTestLeft').addEventListener('click', () => moveTestActor(-1));
     $('moveTestRight').addEventListener('click', () => moveTestActor(1));
@@ -2868,7 +2913,7 @@
     setActiveTool('draw');
     updateLowPowerModeUi();
     updateHistoryButtons();
-    setTerrainInspector('brush');
+    setTerrainInspector('brush', { open: false });
     updateOrientationControls();
     $('appVersion').textContent = `${APP_VERSION}${Core && Core.GENERATOR_VERSION ? ` / 生成器 ${Core.GENERATOR_VERSION}` : ''}`;
 

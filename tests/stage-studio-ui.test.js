@@ -105,6 +105,19 @@ test('terrain editor uses a canvas-first workspace with contextual inspector and
   assert.match(studioApp, /snapCharacterGuides.*snapInvalidCharacterGuides/);
 });
 
+test('terrain settings use a floating palette that collapses after choosing a value', () => {
+  assert.match(studioHtml, /data-testid="terrain-canvas"[\s\S]*?data-testid="terrain-palette-toggle"/);
+  assert.match(studioHtml, /id="terrainInspector"[^>]*data-open="false"[^>]*hidden/);
+  assert.match(studioHtml, /id="terrainInspectorClose"/);
+  assert.match(studioCss, /\.canvas-palette-button\s*\{[^}]*position:\s*absolute;[^}]*min-height:\s*var\(--tap\);/);
+  assert.match(studioCss, /\.terrain-inspector\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*30;/);
+  assert.match(studioCss, /\.terrain-inspector-panel\s*\{[^}]*overflow-y:\s*auto;/);
+  assert.match(studioApp, /function collapseTerrainInspector\(/);
+  assert.match(studioApp, /function toggleTerrainInspector\(/);
+  assert.match(studioApp, /\[data-terrain-panel-content\] input, \[data-terrain-panel-content\] select/);
+  assert.match(studioApp, /control\.addEventListener\('change', \(\) => collapseTerrainInspector\(\)\)/);
+});
+
 test('editing canvases expose a floating landscape control with a safe iOS fallback', () => {
   assert.equal((studioHtml.match(/data-orientation-toggle/g) || []).length, 3);
   assert.equal((studioHtml.match(/data-orientation-guide/g) || []).length, 3);

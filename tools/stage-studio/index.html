@@ -137,6 +137,7 @@
           <div class="canvas-card">
             <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
             <button class="canvas-orientation-button" type="button" data-orientation-toggle data-testid="orientation-toggle"><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+            <button id="terrainPaletteToggle" class="canvas-palette-button" type="button" data-testid="terrain-palette-toggle" aria-controls="terrainInspector" aria-expanded="false"><span aria-hidden="true">◈</span><span>設定</span></button>
             <div class="canvas-zoom" aria-label="表示倍率">
               <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
             </div>
@@ -165,7 +166,8 @@
           </div>
         </div>
 
-        <div class="terrain-inspector" data-testid="terrain-inspector">
+        <div id="terrainInspector" class="terrain-inspector" data-testid="terrain-inspector" data-open="false" hidden>
+          <div class="terrain-inspector-header"><strong>編集設定</strong><span id="terrainInspectorSummary">ブラシ</span><button id="terrainInspectorClose" type="button" aria-label="編集設定を閉じる">閉じる</button></div>
           <div class="terrain-inspector-tabs" role="tablist" aria-label="地形編集の設定">
             <button id="terrainTabBrush" class="is-selected" type="button" role="tab" aria-selected="true" aria-controls="terrainPanelBrush" data-terrain-panel="brush">ブラシ</button>
             <button id="terrainTabShape" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelShape" data-terrain-panel="shape">整形</button>
