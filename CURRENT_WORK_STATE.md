@@ -2,16 +2,17 @@
 
 更新日: 2026-08-07（JST）
 
-## Stage Studio コンパクト地形操作（公開前）
+## Stage Studio コンパクト地形操作（PR #72・公開済み）
 
 - 作業ブランチ: `feat/stage-studio-landscape-controls`
-- 状態: Stage Studio `1.4.0-mvp`の公開候補。`master`やGitHub Pagesへは未反映。
+- 状態: PR #72を`master`へマージし、Stage Studio `1.4.0-mvp`としてGitHub Pagesへ公開済み。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
 - 地形ツール: 常時表示していた`描く / 削る / キャラ / 塗る / 線 / 四角 / 円 / ロック`を、中央の`選択中`ボタンから開くツールメニューへ集約した。選択後は自動で閉じる。
 - マップ表示: 地形・出撃・テストのCanvas内から操作ボタンを撤去した。地形の`横画面 / 倍率 / 設定`、出撃・テストの`横画面`はマップ外の操作欄へ移した。
 - PWA: JS/CSSとService Workerキャッシュを`1.4.0-mvp`へ更新した。ステージ形式とゲーム本体は変更していない。
 - 自動確認: Stage基盤47/47件、iPhone相当WebKit 5/5件、Android相当Chromium 5/5件、モバイルE2E合計10/10件が成功。
 - 実画面確認: 390 × 844の縦画面と844 × 390の横画面で、Canvas内の操作ボタン0件、マップ外の倍率・横画面・設定操作、ツールメニューの開閉、横はみ出しなしを確認。
-- 未確認: iPhone/Android実機、公開反映。
+- 公開確認: GitHub PagesのHTMLが`styles-1.4.0-mvp.css`と`app-1.4.0-mvp.js`を参照し、公開JavaScriptのバージョンとツールメニュー処理が`1.4.0-mvp`であることを確認。
+- 未確認: iPhone/Android実機。
 
 ## Stage Studio 横画面・折りたたみ設定（PR #70・公開済み）
 
