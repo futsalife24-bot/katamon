@@ -329,9 +329,32 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
 .preview-character.red { background: #e44f5e; }
 .preview-character.blue { background: #3b82d4; }
 
-.test-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.7rem; }
-.test-controls button { min-width: 0; padding-inline: 0.42rem; font-size: 0.82rem; }
-.test-controls #resetTest { grid-column: 1 / -1; }
+.playtest-stage-shell {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding-bottom: 0.55rem;
+  background: linear-gradient(var(--bg) 0 calc(100% - 0.55rem), transparent 100%);
+}
+.playtest-stage-shell > .canvas-card { border-radius: var(--radius) var(--radius) 0 0; }
+.playtest-control-dock {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border: 3px solid var(--primary);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: linear-gradient(#26343b, #0a1115);
+  box-shadow: var(--shadow);
+}
+.test-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.42rem; margin: 0; }
+.test-controls button { min-width: 0; padding-inline: 0.2rem; font-size: 0.76rem; }
+.test-controls #resetTest { grid-column: auto; }
+.playtest-aim-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.playtest-aim-controls label { min-width: 0; display: grid; gap: 0.18rem; color: var(--muted); font-size: 0.74rem; font-weight: 750; }
+.playtest-aim-controls input[type="range"] { min-height: 24px; }
+.playtest-control-dock .actor-status { margin: 0; }
+.playtest-wind-settings { margin-top: 0.15rem; }
 .actor-status { margin: 0.7rem 0 0; color: var(--muted); font-size: 0.82rem; }
 .actor-status strong { display: inline-block; margin-inline-start: 0.35rem; padding: 0.28rem 0.56rem; border-radius: 999px; color: var(--primary); background: var(--primary-soft); }
 .actor-status strong[data-state="dead"] { color: #fff; background: #b32635; }
@@ -406,6 +429,26 @@ input[type="color"] { width: 100%; height: var(--tap); padding: 0.2rem; border: 
   .editor-screen .canvas-card { max-width: min(64vw, 720px); margin-inline: auto; }
   .canvas-card canvas { max-height: 46dvh; }
   .tool-row { max-width: min(64vw, 720px); margin-inline: auto; margin-block: 0.4rem; }
+  .playtest-stage-shell {
+    position: sticky;
+    top: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.68fr) minmax(300px, 1fr);
+    max-width: min(96vw, 900px);
+    margin-inline: auto;
+    padding-bottom: 0.4rem;
+  }
+  .playtest-stage-shell > .canvas-card {
+    max-width: none;
+    margin-inline: 0;
+    border-radius: var(--radius) 0 0 var(--radius);
+  }
+  .playtest-control-dock {
+    align-content: center;
+    border-top: 3px solid var(--primary);
+    border-left: 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
 }
 
 @media (max-width: 370px) {

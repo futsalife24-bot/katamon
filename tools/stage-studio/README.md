@@ -2,6 +2,8 @@
 
 Stage Studioは、対象ゲーム用のカスタムステージをスマートフォンで作成する静的Webアプリです。アカウント、サーバー、AI APIは使いません。地形生成・編集・検証・端末保存・JSON/ZIP出力までブラウザ内で完結します。
 
+現在のMVPバージョンは`1.1.1-mvp`です。
+
 公開版: https://futsalife24-bot.github.io/katamon/tools/stage-studio/
 
 ## 起動
@@ -44,6 +46,8 @@ python -m http.server 4173
 
 地形画面のキャラクター寸法ガイドはドラッグできます。当たり判定が地形へ重なる、または画面外へ出ると赤色で警告します。このガイドは編集補助専用で、正規のステージJSON、ZIP、ゲーム用データには含めません。
 
+`テスト`画面では、Canvas直下に左右移動、テスト砲撃、リセット、砲撃角度、威力をまとめた操作帯を置き、スマートフォン縦画面ではマップと一体で表示します。風の詳細設定は操作帯の下へ分離しているため、移動や砲撃の操作中もマップを確認できます。
+
 ## PWA
 
 - iPhone: Safariの共有ボタンから「ホーム画面に追加」
@@ -79,7 +83,7 @@ Stage Studio側で独自のゲーム物理を持たず、共有モジュール�
 JavaScriptの構文確認:
 
 ```powershell
-node --check tools/stage-studio/app-1.1.0-mvp.js
+node --check tools/stage-studio/app-1.1.1-mvp.js
 node --check tools/stage-studio/generator-worker.js
 node --check tools/stage-studio/sw.js
 ```

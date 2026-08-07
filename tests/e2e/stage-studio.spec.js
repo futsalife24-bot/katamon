@@ -103,11 +103,52 @@ async function dragCanvas(page, locator, fromXRatio, fromYRatio, toXRatio, toYRa
   await page.mouse.up();
 }
 
+async function assertPlaytestMapAndControlsVisible(page, expectedScrollTop = null) {
+  const metrics = await page.evaluate(() => {
+    const screen = document.querySelector('[data-screen="playtest"]');
+    const canvas = document.querySelector('[data-testid="test-canvas"]');
+    const dock = document.querySelector('[data-testid="playtest-controls"]');
+    const asRect = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width, height: rect.height };
+    };
+    return {
+      screen: { ...asRect(screen), scrollTop: screen.scrollTop },
+      map: asRect(canvas.closest('.canvas-card')),
+      dock: asRect(dock),
+      angle: asRect(document.querySelector('#shotAngle')),
+      power: asRect(document.querySelector('#shotPower')),
+      moveLeft: asRect(document.querySelector('#moveTestLeft')),
+      fire: asRect(document.querySelector('#fireTest')),
+      moveRight: asRect(document.querySelector('#moveTestRight')),
+      reset: asRect(document.querySelector('#resetTest')),
+      noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+    };
+  });
+
+  expect(metrics.noHorizontalOverflow, 'テスト操作帯で横スクロールを発生させない').toBe(true);
+  expect(Math.abs(metrics.map.bottom - metrics.dock.top), '操作帯をマップ直下へ隙間なく接続する').toBeLessThanOrEqual(2);
+  for (const name of ['map', 'dock', 'angle', 'power', 'moveLeft', 'fire', 'moveRight', 'reset']) {
+    const rect = metrics[name];
+    expect(rect.top, `${name}をテスト画面の上端より下に保つ`).toBeGreaterThanOrEqual(metrics.screen.top - 1);
+    expect(rect.bottom, `${name}を下部ナビより上に保つ`).toBeLessThanOrEqual(metrics.screen.bottom + 1);
+    expect(rect.left, `${name}を画面左端より内側に保つ`).toBeGreaterThanOrEqual(metrics.screen.left - 1);
+    expect(rect.right, `${name}を画面右端より内側に保つ`).toBeLessThanOrEqual(metrics.screen.right + 1);
+  }
+  for (const name of ['moveLeft', 'fire', 'moveRight', 'reset']) {
+    expect(metrics[name].height, `${name}のタップ領域は48px以上`).toBeGreaterThanOrEqual(48);
+  }
+  if (expectedScrollTop !== null) {
+    expect(Math.abs(metrics.screen.scrollTop - expectedScrollTop), '移動・砲撃でマップ位置を動かさない').toBeLessThanOrEqual(2);
+  }
+  return metrics.screen.scrollTop;
+}
+
 async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.1.0-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.1.1-mvp');
   await expect(page.locator('#updateNotice')).toBeHidden();
   await expect(page.locator('.step-tab')).toHaveCount(8);
   await expect(page.locator('.usage-panel')).toBeVisible();
@@ -188,13 +229,23 @@ async function createValidatedStage(page, options = {}) {
   await page.locator('#autoPlaceSpawns').click();
 
   await goToStep(page, 'playtest');
+  await expect(page.getByTestId('test-canvas')).toBeVisible();
+  await expect(page.getByTestId('playtest-controls')).toBeVisible();
+  await assertPlaytestMapAndControlsVisible(page);
   await page.locator('#windEnabled').check();
   await page.locator('#windDirection').selectOption('1');
   await page.locator('#windStrength').fill('35');
+  const playtestScrollTop = await assertPlaytestMapAndControlsVisible(page);
   await page.locator('#shotAngle').fill('45');
+  await assertPlaytestMapAndControlsVisible(page, playtestScrollTop);
   await page.locator('#shotPower').fill('65');
+  await assertPlaytestMapAndControlsVisible(page, playtestScrollTop);
+  await page.locator('#moveTestLeft').click();
+  await expect(page.locator('#testResult')).toContainText(/左右移動|落下/);
+  await assertPlaytestMapAndControlsVisible(page, playtestScrollTop);
   await page.getByTestId('test-play').click();
   await expect(page.locator('#testResult')).not.toContainText('角度と威力を決めて', { timeout: 15_000 });
+  await assertPlaytestMapAndControlsVisible(page, playtestScrollTop);
 
   await goToStep(page, 'validate');
   await page.getByTestId('validate-stage').click();
