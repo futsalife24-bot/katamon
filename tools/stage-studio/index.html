@@ -10,7 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles-1.3.0-mvp.css">
+  <link rel="stylesheet" href="./styles-1.4.0-mvp.css">
   <title>Stage Studio</title>
 </head>
 <body>
@@ -136,15 +136,22 @@
         <div class="terrain-workspace" data-testid="terrain-workspace">
           <div class="canvas-card">
             <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
-            <button class="canvas-orientation-button" type="button" data-orientation-toggle data-testid="orientation-toggle"><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
-            <button id="terrainPaletteToggle" class="canvas-palette-button" type="button" data-testid="terrain-palette-toggle" aria-controls="terrainInspector" aria-expanded="false"><span aria-hidden="true">◈</span><span>設定</span></button>
-            <div class="canvas-zoom" aria-label="表示倍率">
-              <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
-            </div>
-            <div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
           </div>
           <div class="terrain-editor-dock" data-testid="terrain-tools">
-            <div class="terrain-tool-row" role="toolbar" aria-label="地形ツール">
+            <div class="terrain-stage-controls" data-testid="terrain-stage-controls" aria-label="ステージ表示操作">
+              <button class="stage-orientation-button" type="button" data-orientation-toggle data-testid="orientation-toggle"><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+              <div class="stage-zoom" aria-label="表示倍率">
+                <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+              </div>
+              <button id="terrainPaletteToggle" class="stage-setting-button" type="button" data-testid="terrain-palette-toggle" aria-controls="terrainInspector" aria-expanded="false"><span aria-hidden="true">◈</span><span>設定</span></button>
+            </div>
+            <div class="orientation-guide stage-control-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
+            <div class="terrain-history-row" aria-label="編集履歴とツール選択">
+              <button id="undoButton" class="tool-button" type="button" data-testid="undo">↶ 戻す</button>
+              <button id="terrainToolMenuToggle" class="active-tool-status" type="button" data-testid="terrain-tool-menu-toggle" aria-controls="terrainToolMenu" aria-expanded="false"><span>選択中</span><strong id="activeTerrainTool">描く</strong><span class="active-tool-chevron" aria-hidden="true">▼</span></button>
+              <button id="redoButton" class="tool-button" type="button" data-testid="redo">進む ↷</button>
+            </div>
+            <div id="terrainToolMenu" class="terrain-tool-menu" role="menu" aria-label="地形ツールを選択" data-testid="terrain-tool-menu" hidden>
               <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw"><span aria-hidden="true">●</span><small>描く</small></button>
               <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase"><span aria-hidden="true">◇</span><small>削る</small></button>
               <button id="toolGuide" class="tool-button" type="button" data-tool="guide"><span aria-hidden="true">♟</span><small>キャラ</small></button>
@@ -153,11 +160,6 @@
               <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle"><span aria-hidden="true">□</span><small>四角</small></button>
               <button id="toolCircle" class="tool-button" type="button" data-tool="circle"><span aria-hidden="true">○</span><small>円</small></button>
               <label class="tool-lock-button" title="誤操作を防ぐ"><input id="toolLock" type="checkbox"><span aria-hidden="true">🔒</span><small>ロック</small></label>
-            </div>
-            <div class="terrain-history-row" aria-label="編集履歴">
-              <button id="undoButton" class="tool-button" type="button" data-testid="undo">↶ 戻す</button>
-              <div class="active-tool-status"><span>選択中</span><strong id="activeTerrainTool">描く</strong></div>
-              <button id="redoButton" class="tool-button" type="button" data-testid="redo">進む ↷</button>
             </div>
           </div>
           <div id="characterGuidePanel" class="character-guide-panel" data-state="ok">
@@ -193,7 +195,7 @@
           <section id="terrainPanelDisplay" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabDisplay" data-terrain-panel-content="display" hidden>
             <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
             <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
-            <p class="muted full">ズームと移動はCanvas上部のボタン、または二本指で操作できます。</p>
+            <p class="muted full">ズームはマップ下の倍率ボタン、移動は二本指で操作できます。</p>
           </section>
           <section id="terrainPanelAppearance" class="terrain-inspector-panel panel form-grid appearance-settings" role="tabpanel" aria-labelledby="terrainTabAppearance" data-terrain-panel-content="appearance" hidden>
             <h3 class="full">背景と地面の見た目</h3>
@@ -210,8 +212,10 @@
 
       <section class="screen editor-screen" data-screen="spawns" aria-labelledby="spawnsTitle">
         <div class="screen-heading"><div><span class="step-number">5 / 8</span><h2 id="spawnsTitle">出撃地点</h2></div><span class="gesture-hint">配置先を選び、地面をタップ</span></div>
-        <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas><button class="canvas-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button><div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div></div>
+        <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas></div>
         <div class="panel form-grid compact">
+          <button class="stage-orientation-button full" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+          <div class="orientation-guide stage-control-guide full" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
           <label>出撃人数<select id="spawnCount"><option value="2">2人（1対1）</option><option value="4">4人（2対2）</option></select></label>
           <button id="autoPlaceSpawns" class="secondary" type="button">安全な位置へ自動配置</button>
           <button id="toggleSpawnFacing" class="secondary" type="button">選択中の向きを反転</button>
@@ -223,8 +227,10 @@
       <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
         <div class="screen-heading"><div><span class="step-number">6 / 8</span><h2 id="playtestTitle">テスト・風</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
         <div class="playtest-stage-shell">
-          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas><button class="canvas-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button><div class="orientation-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div></div>
+          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
           <div class="playtest-control-dock" data-testid="playtest-controls" aria-label="テストプレイ操作">
+            <button class="stage-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+            <div class="orientation-guide stage-control-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
             <div class="test-controls">
               <button id="moveTestLeft" type="button">← 移動</button>
               <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
@@ -298,6 +304,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app-1.3.0-mvp.js" defer></script>
+  <script src="./app-1.4.0-mvp.js" defer></script>
 </body>
 </html>
