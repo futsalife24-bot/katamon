@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.2.0-mvp';
+  const APP_VERSION = '1.3.0-mvp';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -41,6 +41,7 @@
     draw: '描く', erase: '削る', guide: 'キャラ確認', fill: '塗りつぶし',
     line: '線', rectangle: '四角', circle: '円'
   });
+  const TERRAIN_PANEL_LABELS = Object.freeze({ brush: 'ブラシ', shape: '整形', display: '表示', appearance: '見た目' });
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
     mountainCenter: '中央山', valley: '渓谷', grandCanyon: '大峡谷', centerHole: '中央穴',
@@ -211,6 +212,7 @@
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
+    terrainInspectorPanel: 'brush',
     characterGuides: [],
     activeGuideIndex: 0,
     guideDrag: null,
@@ -245,6 +247,9 @@
     appearanceBrightness: 1,
     deferredInstallPrompt: null,
     pwaUpdateRequested: false,
+    orientationLockActive: false,
+    orientationFullscreenEntered: false,
+    orientationGuideToken: 0,
     lowPowerMode: LOW_POWER_AUTO_DETECTED,
     lowPowerAutoDetected: LOW_POWER_AUTO_DETECTED,
     toastTimer: null,
@@ -263,6 +268,80 @@
     toast.hidden = false;
     clearTimeout(state.toastTimer);
     state.toastTimer = setTimeout(() => { toast.hidden = true; }, duration || 2600);
+  }
+
+  function isLandscapeViewport() {
+    return globalThis.innerWidth > globalThis.innerHeight;
+  }
+
+  function updateOrientationControls() {
+    const landscape = isLandscapeViewport();
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      const label = button.querySelector('[data-orientation-label]');
+      const icon = button.querySelector('[aria-hidden="true"]');
+      if (label) label.textContent = landscape ? '縦画面' : '横画面';
+      if (icon) icon.textContent = landscape ? '↕' : '↔';
+      button.dataset.orientation = landscape ? 'landscape' : 'portrait';
+      button.setAttribute('aria-label', landscape ? '縦画面へ戻す' : '横画面へ切り替える');
+    });
+    requestAnimationFrame(renderAllCanvases);
+  }
+
+  function showOrientationGuide(button) {
+    const card = button && button.closest('.canvas-card');
+    const guide = card && card.querySelector('[data-orientation-guide]');
+    const token = ++state.orientationGuideToken;
+    if (guide) {
+      guide.hidden = false;
+      setTimeout(() => {
+        if (token === state.orientationGuideToken && !isLandscapeViewport()) guide.hidden = false;
+      }, 180);
+    }
+    showToast('この端末では自動回転できません。画面回転ロックを解除して、端末を横向きにしてください。', 5600);
+  }
+
+  async function togglePreferredOrientation(button) {
+    const orientation = globalThis.screen && globalThis.screen.orientation;
+    if (isLandscapeViewport()) {
+      try { if (orientation && typeof orientation.unlock === 'function') orientation.unlock(); } catch (_) {}
+      state.orientationLockActive = false;
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      showToast('縦向きへ戻す場合は端末を縦にしてください。');
+      updateOrientationControls();
+      return;
+    }
+
+    if (!orientation || typeof orientation.lock !== 'function') {
+      showOrientationGuide(button);
+      return;
+    }
+
+    try {
+      if (!document.fullscreenElement && document.documentElement && typeof document.documentElement.requestFullscreen === 'function') {
+        try {
+          await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        } catch (_) {
+          await document.documentElement.requestFullscreen();
+        }
+        state.orientationFullscreenEntered = true;
+      }
+      await orientation.lock('landscape');
+      state.orientationLockActive = true;
+      state.orientationGuideToken += 1;
+      document.querySelectorAll('[data-orientation-guide]').forEach((guide) => { guide.hidden = true; });
+      showToast('横画面に切り替えました。');
+      updateOrientationControls();
+    } catch (_) {
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      state.orientationLockActive = false;
+      showOrientationGuide(button);
+    }
   }
 
   function readableError(error, fallback) {
@@ -296,6 +375,7 @@
     document.querySelectorAll('.screen').forEach((node) => node.classList.toggle('is-active', node.dataset.screen === screen));
     document.querySelectorAll('.step-tab').forEach((node) => node.classList.toggle('is-active', node.dataset.step === screen));
     state.currentScreen = screen;
+    if (screen !== 'terrain') collapseTerrainInspector();
     const active = document.querySelector(`.screen[data-screen="${screen}"]`);
     if (active) active.scrollTop = 0;
     if (!options || !options.fromHistory) {
@@ -2486,9 +2566,33 @@
     if (label) label.textContent = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
   }
 
-  function setTerrainInspector(panelName) {
+  function collapseTerrainInspector(options) {
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    if (!inspector || !toggle) return;
+    inspector.hidden = true;
+    inspector.dataset.open = 'false';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.classList.remove('is-open');
+    document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => { panel.hidden = true; });
+    if (options && options.focusToggle) {
+      try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+    }
+  }
+
+  function setTerrainInspector(panelName, options) {
     const supported = ['brush', 'shape', 'display', 'appearance'];
     const selectedPanel = supported.includes(panelName) ? panelName : 'brush';
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    const open = !options || options.open !== false;
+    state.terrainInspectorPanel = selectedPanel;
+    inspector.hidden = !open;
+    inspector.dataset.open = String(open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-label', open ? '編集設定を閉じる' : `${TERRAIN_PANEL_LABELS[selectedPanel]}設定を開く`);
+    $('terrainInspectorSummary').textContent = TERRAIN_PANEL_LABELS[selectedPanel];
     document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
       const selected = button.dataset.terrainPanel === selectedPanel;
       button.classList.toggle('is-selected', selected);
@@ -2496,8 +2600,14 @@
       button.tabIndex = selected ? 0 : -1;
     });
     document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => {
-      panel.hidden = panel.dataset.terrainPanelContent !== selectedPanel;
+      panel.hidden = !open || panel.dataset.terrainPanelContent !== selectedPanel;
     });
+  }
+
+  function toggleTerrainInspector() {
+    const inspector = $('terrainInspector');
+    if (inspector && !inspector.hidden) collapseTerrainInspector();
+    else setTerrainInspector(state.terrainInspectorPanel || 'brush');
   }
 
   function randomSeed() {
@@ -2671,9 +2781,20 @@
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
     $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
     $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      button.addEventListener('click', () => togglePreferredOrientation(button));
+    });
+    document.querySelectorAll('[data-orientation-dismiss]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.orientationGuideToken += 1;
+        button.closest('[data-orientation-guide]').hidden = true;
+      });
+    });
     document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
       button.addEventListener('click', () => setTerrainInspector(button.dataset.terrainPanel));
     });
+    $('terrainPaletteToggle').addEventListener('click', toggleTerrainInspector);
+    $('terrainInspectorClose').addEventListener('click', () => collapseTerrainInspector({ focusToggle: true }));
     $('undoButton').addEventListener('click', undo);
     $('redoButton').addEventListener('click', redo);
     $('undoGlobal').addEventListener('click', undo);
@@ -2736,6 +2857,16 @@
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
 
+    document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {
+      control.addEventListener('change', () => collapseTerrainInspector());
+    });
+    document.querySelectorAll('.terrain-operation-row button').forEach((button) => {
+      button.addEventListener('click', () => collapseTerrainInspector());
+    });
+    document.querySelectorAll('.terrain-tool-row .tool-button').forEach((button) => {
+      button.addEventListener('click', () => collapseTerrainInspector());
+    });
+
     ['shotAngle', 'shotPower'].forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('moveTestLeft').addEventListener('click', () => moveTestActor(-1));
     $('moveTestRight').addEventListener('click', () => moveTestActor(1));
@@ -2751,6 +2882,9 @@
 
     globalThis.addEventListener('online', updateConnectivity);
     globalThis.addEventListener('offline', updateConnectivity);
+    globalThis.addEventListener('orientationchange', updateOrientationControls);
+    globalThis.addEventListener('resize', updateOrientationControls);
+    document.addEventListener('fullscreenchange', updateOrientationControls);
     globalThis.addEventListener('popstate', () => {
       const screen = location.hash.slice(1);
       navigate(normalizeScreen(screen), { fromHistory: true });
@@ -2779,7 +2913,8 @@
     setActiveTool('draw');
     updateLowPowerModeUi();
     updateHistoryButtons();
-    setTerrainInspector('brush');
+    setTerrainInspector('brush', { open: false });
+    updateOrientationControls();
     $('appVersion').textContent = `${APP_VERSION}${Core && Core.GENERATOR_VERSION ? ` / 生成器 ${Core.GENERATOR_VERSION}` : ''}`;
 
     if (coreReady()) {

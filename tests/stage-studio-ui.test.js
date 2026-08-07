@@ -8,8 +8,8 @@ const test = require('node:test');
 const ROOT = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 const studioHtml = read('tools/stage-studio/index.html');
-const studioApp = read('tools/stage-studio/app-1.2.0-mvp.js');
-const studioCss = read('tools/stage-studio/styles-1.2.0-mvp.css');
+const studioApp = read('tools/stage-studio/app-1.3.0-mvp.js');
+const studioCss = read('tools/stage-studio/styles-1.3.0-mvp.css');
 const studioSw = read('tools/stage-studio/sw.js');
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -105,6 +105,32 @@ test('terrain editor uses a canvas-first workspace with contextual inspector and
   assert.match(studioApp, /snapCharacterGuides.*snapInvalidCharacterGuides/);
 });
 
+test('terrain settings use a floating palette that collapses after choosing a value', () => {
+  assert.match(studioHtml, /data-testid="terrain-canvas"[\s\S]*?data-testid="terrain-palette-toggle"/);
+  assert.match(studioHtml, /id="terrainInspector"[^>]*data-open="false"[^>]*hidden/);
+  assert.match(studioHtml, /id="terrainInspectorClose"/);
+  assert.match(studioCss, /\.canvas-palette-button\s*\{[^}]*position:\s*absolute;[^}]*min-height:\s*var\(--tap\);/);
+  assert.match(studioCss, /\.terrain-inspector\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*30;/);
+  assert.match(studioCss, /\.terrain-inspector-panel\s*\{[^}]*overflow-y:\s*auto;/);
+  assert.match(studioApp, /function collapseTerrainInspector\(/);
+  assert.match(studioApp, /function toggleTerrainInspector\(/);
+  assert.match(studioApp, /\[data-terrain-panel-content\] input, \[data-terrain-panel-content\] select/);
+  assert.match(studioApp, /control\.addEventListener\('change', \(\) => collapseTerrainInspector\(\)\)/);
+});
+
+test('editing canvases expose a floating landscape control with a safe iOS fallback', () => {
+  assert.equal((studioHtml.match(/data-orientation-toggle/g) || []).length, 3);
+  assert.equal((studioHtml.match(/data-orientation-guide/g) || []).length, 3);
+  assert.match(studioHtml, /data-testid="terrain-canvas"[\s\S]*?data-testid="orientation-toggle"/);
+  assert.match(studioCss, /\.canvas-orientation-button\s*\{[^}]*position:\s*absolute;[^}]*min-height:\s*var\(--tap\);/);
+  assert.match(studioCss, /\.orientation-guide\s*\{[^}]*position:\s*absolute;/);
+  assert.match(studioApp, /function togglePreferredOrientation\(/);
+  assert.match(studioApp, /typeof orientation\.lock !== 'function'/);
+  assert.match(studioApp, /requestFullscreen\(\{ navigationUI: 'hide' \}\)/);
+  assert.match(studioApp, /画面回転ロックを解除して、端末を横向きにしてください/);
+  assert.match(studioApp, /addEventListener\('orientationchange', updateOrientationControls\)/);
+});
+
 test('steel remains a disabled future material and cannot enter exported state', () => {
   assert.match(studioHtml, /<option value="steel" disabled>壊れない鋼鉄（準備中）<\/option>/);
   assert.match(studioApp, /state\.stage\.materials = \[\{ id: 'terrain', type: 'destructible', destructible: true, color: \$\('terrainColor'\)\.value \}\];/);
@@ -115,11 +141,11 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /grid-template-columns:\s*repeat\(4,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.2\.0-mvp`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.3\.0-mvp`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
-  assert.match(studioHtml, /styles-1\.2\.0-mvp\.css/);
-  assert.match(studioHtml, /app-1\.2\.0-mvp\.js/);
+  assert.match(studioHtml, /styles-1\.3\.0-mvp\.css/);
+  assert.match(studioHtml, /app-1\.3\.0-mvp\.js/);
   assert.doesNotMatch(studioSw, /['"]\.\/(?:styles\.css|app\.js)['"]/);
   const gameBuild = read('index.html').match(/const BUILD_ID = '([^']+)'/)[1];
   const gameCache = read('sw.js').match(/const CACHE_VERSION = 'katamon-pwa-([^']+)'/)[1];

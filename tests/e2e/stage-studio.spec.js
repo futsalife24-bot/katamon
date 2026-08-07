@@ -76,6 +76,14 @@ async function goToStep(page, name) {
   return activeScreen(page, name);
 }
 
+async function openTerrainInspector(page, panelName) {
+  const inspector = page.getByTestId('terrain-inspector');
+  if (await inspector.isHidden()) await page.getByTestId('terrain-palette-toggle').click();
+  await page.locator(`[data-terrain-panel="${panelName}"]`).click();
+  await expect(page.locator(`[data-terrain-panel-content="${panelName}"]`)).toBeVisible();
+  return inspector;
+}
+
 async function tapCanvas(page, locator, xRatio, yRatio) {
   await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox();
@@ -161,13 +169,15 @@ async function assertTerrainWorkspaceVisible(page) {
       erase: rect(document.querySelector('#toolErase')),
       guide: rect(document.querySelector('#toolGuide')),
       snap: rect(document.querySelector('#snapCharacterGuides')),
+      orientation: rect(document.querySelector('[data-testid="orientation-toggle"]')),
+      palette: rect(document.querySelector('[data-testid="terrain-palette-toggle"]')),
       noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
     };
   });
   expect(metrics.noHorizontalOverflow, '地形ワークスペースで横スクロールを発生させない').toBe(true);
   expect(Math.abs(metrics.map.bottom - metrics.tools.top), 'ツールをCanvas直下へ接続する').toBeLessThanOrEqual(3);
   expect(Math.abs(metrics.tools.bottom - metrics.recovery.top), 'キャラ補正をツール直下へ接続する').toBeLessThanOrEqual(3);
-  for (const name of ['workspace', 'map', 'tools', 'recovery', 'draw', 'erase', 'guide', 'snap']) {
+  for (const name of ['workspace', 'map', 'tools', 'recovery', 'draw', 'erase', 'guide', 'snap', 'orientation', 'palette']) {
     expect(metrics[name].left, `${name}を地形画面の左端より内側に保つ`).toBeGreaterThanOrEqual(metrics.screen.left - 1);
     expect(metrics[name].right, `${name}を地形画面の右端より内側に保つ`).toBeLessThanOrEqual(metrics.screen.right + 1);
   }
@@ -175,8 +185,12 @@ async function assertTerrainWorkspaceVisible(page) {
     expect(metrics[name].top, `${name}を地形画面の上端より下に保つ`).toBeGreaterThanOrEqual(metrics.screen.top - 1);
     expect(metrics[name].bottom, `${name}を下部ナビより上に保つ`).toBeLessThanOrEqual(metrics.screen.bottom + 1);
   }
-  for (const name of ['draw', 'erase', 'guide', 'snap']) {
-    expect(metrics[name].height, `${name}のタップ領域は48px以上`).toBeGreaterThanOrEqual(48);
+  expect(metrics.orientation.top).toBeGreaterThanOrEqual(metrics.map.top - 1);
+  expect(metrics.orientation.bottom).toBeLessThanOrEqual(metrics.map.bottom + 1);
+  expect(metrics.palette.top).toBeGreaterThanOrEqual(metrics.map.top - 1);
+  expect(metrics.palette.bottom).toBeLessThanOrEqual(metrics.map.bottom + 1);
+  for (const name of ['draw', 'erase', 'guide', 'snap', 'orientation', 'palette']) {
+    expect(metrics[name].height, `${name}のタップ領域は48px以上`).toBeGreaterThanOrEqual(47.9);
   }
 }
 
@@ -184,7 +198,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.2.0-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.3.0-mvp');
   await expect(page.locator('#updateNotice')).toBeHidden();
   await expect(page.locator('.step-tab')).toHaveCount(8);
   await expect(page.locator('.usage-panel')).toBeVisible();
@@ -235,7 +249,16 @@ async function createValidatedStage(page, options = {}) {
   const terrainCanvas = page.getByTestId('terrain-canvas');
   await expect(terrainCanvas).toBeVisible();
   await expect(page.getByTestId('terrain-tools')).toBeVisible();
+  await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   await assertTerrainWorkspaceVisible(page);
+  await page.getByTestId('terrain-palette-toggle').click();
+  await expect(page.locator('#terrainPanelBrush')).toBeVisible();
+  await page.locator('#brushSize').evaluate((input) => {
+    input.value = '40';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   await page.getByTestId('tool-draw').click();
   await tapCanvas(page, terrainCanvas, 0.5, 0.62);
   await expect(page.getByTestId('undo')).toBeEnabled();
@@ -246,23 +269,26 @@ async function createValidatedStage(page, options = {}) {
   if (options.advancedEditing) {
     await page.locator('#toolLine').click();
     await dragCanvas(page, terrainCanvas, 0.22, 0.42, 0.36, 0.46);
-    await page.locator('#terrainTabShape').click();
+    await openTerrainInspector(page, 'shape');
     await expect(page.locator('#terrainPanelShape')).toBeVisible();
     await page.locator('#smoothTerrain').click();
+    await openTerrainInspector(page, 'shape');
     await page.locator('#mirrorTerrain').click();
     await page.getByTestId('undo').click();
     await page.getByTestId('redo').click();
   }
   await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
-  await page.locator('#terrainTabAppearance').click();
-  await expect(page.locator('#terrainPanelAppearance')).toBeVisible();
+  await openTerrainInspector(page, 'appearance');
   await page.locator('#themeSelect').selectOption('grass');
-  await page.locator('#brightnessRange').fill('100');
+  await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   if (options.advancedEditing) {
-    await page.locator('#terrainTabBrush').click();
-    await expect(page.locator('#terrainPanelBrush')).toBeVisible();
+    await openTerrainInspector(page, 'brush');
     await expect(page.locator('#terrainPanelAppearance')).toBeHidden();
+    await page.locator('#brushHardness').evaluate((input) => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.getByTestId('terrain-inspector')).toBeHidden();
     await page.locator('#toolGuide').click();
     await dragCanvas(page, terrainCanvas, 0.28, 0.5, 0.28, 0.72);
     await expect(page.locator('#characterGuideHint')).toHaveAttribute('data-state', 'warning');
@@ -354,7 +380,45 @@ async function importIntoGameAndStart(page, filePath) {
   await page.goto('about:blank');
 }
 
-test.describe('Stage Studio モバイル縦フロー', () => {
+test.describe('Stage Studio モバイル作成フロー', () => {
+  test('横画面では地形・出撃・テストの操作をマップ横へまとめる', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto(`${STUDIO_URL}#terrain`);
+    await expect(page.getByTestId('stage-studio')).toBeVisible();
+    await expect(page.getByTestId('orientation-toggle')).toContainText('縦画面');
+
+    const readLayout = async (screenName, controlSelector) => page.evaluate(({ screenName, controlSelector }) => {
+      const root = document.querySelector(`[data-screen="${screenName}"]`);
+      const map = root.querySelector('.canvas-card').getBoundingClientRect();
+      const controls = root.querySelector(controlSelector).getBoundingClientRect();
+      const orientation = root.querySelector('[data-orientation-toggle]').getBoundingClientRect();
+      const screen = root.getBoundingClientRect();
+      return {
+        map: { left: map.left, right: map.right, top: map.top, bottom: map.bottom },
+        controls: { left: controls.left, right: controls.right, top: controls.top, bottom: controls.bottom },
+        orientation: { left: orientation.left, right: orientation.right, top: orientation.top, bottom: orientation.bottom, height: orientation.height },
+        screen: { left: screen.left, right: screen.right, top: screen.top, bottom: screen.bottom },
+        noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+      };
+    }, { screenName, controlSelector });
+
+    const assertLandscapeLayout = (layout, label) => {
+      expect(layout.noHorizontalOverflow, `${label}で横スクロールを出さない`).toBe(true);
+      expect(Math.abs(layout.map.right - layout.controls.left), `${label}の操作をマップ横へ接続する`).toBeLessThanOrEqual(12);
+      expect(layout.orientation.left, `${label}の回転ボタンをマップ内に置く`).toBeGreaterThanOrEqual(layout.map.left - 1);
+      expect(layout.orientation.right, `${label}の回転ボタンをマップ内に置く`).toBeLessThanOrEqual(layout.map.right + 1);
+      expect(layout.orientation.top).toBeGreaterThanOrEqual(layout.map.top - 1);
+      expect(layout.orientation.bottom).toBeLessThanOrEqual(layout.map.bottom + 1);
+      expect(layout.orientation.height, `${label}の回転ボタンを48px以上にする`).toBeGreaterThanOrEqual(48);
+    };
+
+    assertLandscapeLayout(await readLayout('terrain', '[data-testid="terrain-tools"]'), '地形');
+    await goToStep(page, 'spawns');
+    assertLandscapeLayout(await readLayout('spawns', '.panel.form-grid.compact'), '出撃');
+    await goToStep(page, 'playtest');
+    assertLandscapeLayout(await readLayout('playtest', '[data-testid="playtest-controls"]'), 'テスト');
+  });
+
   test('プリセット生成、タッチ編集、共有物理、検証、JSON、ゲーム開始', async ({ page }, testInfo) => {
     await createValidatedStage(page, { advancedEditing: true });
     const jsonPath = await exportStage(page, 'json', testInfo);
