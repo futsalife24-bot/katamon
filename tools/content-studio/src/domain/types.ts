@@ -1,5 +1,5 @@
-export const DRAFT_SCHEMA_VERSION = 5 as const;
-export const GENERATOR_VERSION = '0.4.4';
+export const DRAFT_SCHEMA_VERSION = 6 as const;
+export const GENERATOR_VERSION = '0.5.0';
 
 export type WorkflowStep =
   | 'image'
@@ -27,6 +27,7 @@ export const WORKFLOW_STEPS: ReadonlyArray<{ id: WorkflowStep; label: string }> 
 export type MotionAction = 'idle' | 'move' | 'fire' | 'hit' | 'land';
 
 export type MotionClipId = 'move-forward' | 'move-backward' | 'fire' | 'hit' | 'land';
+export type MotionIntensityLevel = 'subtle' | 'standard' | 'strong';
 export type FacingDirection = 'left' | 'right';
 export type PublishMode = 'pr-only' | 'merge-after-ci';
 
@@ -244,6 +245,7 @@ export interface DraftRecord {
   motion: MotionParameters;
   partDetection: PartDetectionState;
   landmarks: MotionLandmarks;
+  motionIntensity: Record<MotionClipId, MotionIntensityLevel>;
   generatedClips: MotionClipId[];
   publishMode: PublishMode;
   preview: PreviewSettings;
@@ -252,6 +254,8 @@ export interface DraftRecord {
   historyStatus: 'clean' | 'dirty' | 'corrupt';
   mockScenario: MockScenario;
   sourceIdentity: { id: string; slug: string } | null;
+  /** Existing hand-written game character that receives motion references only. */
+  legacyTargetId: string | null;
 }
 
 export type ImageOperation =

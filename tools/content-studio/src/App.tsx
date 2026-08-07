@@ -13,7 +13,8 @@ import type {
   SpecialTemplate,
 } from './domain/types';
 import { WORKFLOW_STEPS } from './domain/types';
-import { ACTION_LABELS, getActionPreset, listActionPresets, MOTION_CLIP_IDS, MOTION_CLIP_LABELS } from './motion';
+import { LEGACY_CHARACTERS } from './domain/legacy-characters';
+import { ACTION_LABELS, getActionPreset, listActionPresets, MOTION_CLIP_IDS, MOTION_CLIP_LABELS, MOTION_INTENSITY_LABELS } from './motion';
 import type { PixelBuffer } from './image';
 import { ImageCanvas } from './components/ImageCanvas';
 import { MotionPreview } from './components/MotionPreview';
@@ -165,7 +166,9 @@ function Status({ value, good }: { value: string; good?: boolean }) {
 
 function Dashboard({ studio }: { studio: StudioController }) {
   const importRef = useRef<HTMLInputElement>(null);
+  const [legacyId, setLegacyId] = useState(LEGACY_CHARACTERS[0].id);
   const generatedCount = studio.drafts.filter((draft) => draft.generatedClips.length === 5).length;
+  const migratedLegacyCount = new Set(studio.publishedCharacters.map((record) => record.legacyTargetId).filter(Boolean)).size;
   return (
     <main className="dashboard" data-testid="dashboard">
       <header className="hero">
@@ -187,6 +190,17 @@ function Dashboard({ studio }: { studio: StudioController }) {
       <button className="primary hero-action" type="button" onClick={() => void studio.createNewDraft()} data-testid="add-character">
         <span aria-hidden="true">＋</span> キャラクターを追加
       </button>
+
+      <section className="card legacy-motion-card" data-testid="legacy-motion-card">
+        <div className="section-heading"><div><h2>既存キャラへモーション追加</h2><p>能力・技・元の静止画像は変更せず、1体ずつ5動作だけをPRで追加します。</p></div><Status value={`${migratedLegacyCount} / ${LEGACY_CHARACTERS.length}`} good={migratedLegacyCount > 0} /></div>
+        <Field label="対象キャラクター">
+          <select value={legacyId} onChange={(event) => setLegacyId(event.target.value as typeof legacyId)} data-testid="legacy-character-select">
+            {LEGACY_CHARACTERS.map((character) => <option key={character.id} value={character.id}>{character.displayName}</option>)}
+          </select>
+        </Field>
+        <button className="secondary full-width" type="button" onClick={() => void studio.editLegacyCharacter(legacyId)} data-testid="edit-legacy-character">このキャラのモーションを作る</button>
+        <p className="support-note">未対応キャラは従来の静止表示を継続します。一括上書きは行いません。</p>
+      </section>
 
       <section className="card connection-card motion-only-note">
         <div><h2>生成AI・外部送信なし</h2><p>通常の画像処理と固定プリセットだけで動きます。画像を外部サービスへ送りません。</p></div>
@@ -416,10 +430,21 @@ function MotionStep({ studio }: { studio: StudioController }) {
   const active = studio.motions[studio.selectedClip] ?? null;
   return (
     <section className="step-panel motion-batch-step" data-testid="step-motion">
-      <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>前進・後退・単発砲撃・被弾・着地だけを、固定設定で一括生成します。</p></div></div>
+      <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>各動作を「控えめ・標準・激しめ」の3段階だけで調整できます。</p></div></div>
       <div className="motion-batch-list" aria-label="生成するモーション">
         {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
-          <span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}約半身分後方へ反転着地・低くバウンド・遅れて復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong>
+          <div className="motion-card-heading"><span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}後方へ反転着地・低くバウンド・遅れて復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong></div>
+          <div className="motion-intensity-buttons" role="group" aria-label={`${MOTION_CLIP_LABELS[clipId]}の動きの強さ`}>
+            {(['subtle', 'standard', 'strong'] as const).map((level) => <button
+              type="button"
+              key={level}
+              className={draft.motionIntensity[clipId] === level ? 'active' : ''}
+              aria-pressed={draft.motionIntensity[clipId] === level}
+              disabled={studio.busy}
+              onClick={() => void studio.setMotionIntensity(clipId, level)}
+              data-testid={`intensity-${clipId}-${level}`}
+            >{MOTION_INTENSITY_LABELS[level]}</button>)}
+          </div>
         </article>)}
       </div>
       {generatedCount > 0 ? <>
@@ -449,6 +474,9 @@ function MotionStep({ studio }: { studio: StudioController }) {
 
 function CharacterStep({ studio }: { studio: StudioController }) {
   const character = studio.draft!.character;
+  const legacyTarget = studio.draft!.legacyTargetId
+    ? LEGACY_CHARACTERS.find(({ id }) => id === studio.draft!.legacyTargetId)
+    : null;
   const setDisplayName = (displayName: string) => studio.updateDraft((current) => ({
     ...current,
     title: displayName.trim() || current.title,
@@ -460,14 +488,15 @@ function CharacterStep({ studio }: { studio: StudioController }) {
   }));
   return (
     <section className="step-panel" data-testid="step-character">
-      <div className="step-intro"><span>4</span><div><h2>キャラクター名を入力</h2><p>技や能力は後回し。ゲームへ選択可能にする最小情報だけです。</p></div></div>
+      <div className="step-intro"><span>4</span><div><h2>{legacyTarget ? '既存情報を確認' : 'キャラクター名を入力'}</h2><p>{legacyTarget ? '既存情報を変更せず、モーション参照だけを追加します。' : '技や能力は後回し。ゲームへ選択可能にする最小情報だけです。'}</p></div></div>
       <MotionPreview sprite={studio.motions['move-forward'] ?? null} fallback={studio.processed?.normalized.pixels ?? null} settings={{ ...studio.draft!.preview, showAnchor: false, showCollision: false }} label="キャラクタープレビュー" />
-      <Field label="表示名" required><input data-testid="display-name" maxLength={40} enterKeyHint="next" value={character.displayName} onChange={(event) => setDisplayName(event.target.value)} /></Field>
+      {legacyTarget && <div className="read-only-card"><b>既存キャラクターへ追加中</b><span>{legacyTarget.displayName}</span><small>名前・能力・技は既存ゲーム側をそのまま保持し、5モーション参照だけを追加します。</small></div>}
+      <Field label="表示名" required><input data-testid="display-name" disabled={Boolean(legacyTarget)} maxLength={40} enterKeyHint="next" value={character.displayName} onChange={(event) => setDisplayName(event.target.value)} /></Field>
       <Field label="短いID" hint="小文字英字から開始。小文字英数字とハイフン、24文字以内" required>
         <input data-testid="character-id" disabled={Boolean(studio.draft!.sourceIdentity)} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={24} value={character.id} onChange={(event) => setId(event.target.value.toLowerCase())} />
       </Field>
-      <dl className="facts facts--compact"><div><dt>slug</dt><dd>{character.slug || 'IDから自動設定'}</dd></div><div><dt>通常技</dt><dd>標準弾</dd></div><div><dt>必殺技</dt><dd>未設定（ボタン無効）</dd></div><div><dt>向き</dt><dd>{studio.draft!.landmarks.facing === 'left' ? '左向き' : '右向き'}</dd></div></dl>
-      <p className="support-note">登録後すぐキャラクター一覧から選べます。必殺技ボタンは「未設定」と表示して押せない状態にします。</p>
+      <dl className="facts facts--compact"><div><dt>slug</dt><dd>{character.slug || 'IDから自動設定'}</dd></div><div><dt>通常技</dt><dd>{legacyTarget ? '既存設定を保持' : '標準弾'}</dd></div><div><dt>必殺技</dt><dd>{legacyTarget ? '既存設定を保持' : '未設定（ボタン無効）'}</dd></div><div><dt>向き</dt><dd>{studio.draft!.landmarks.facing === 'left' ? '左向き' : '右向き'}</dd></div></dl>
+      <p className="support-note">{legacyTarget ? '生成物は新しいモーション用ディレクトリへ追加し、元のキャラクターデータや画像を上書きしません。' : '登録後すぐキャラクター一覧から選べます。必殺技ボタンは「未設定」と表示して押せない状態にします。'}</p>
     </section>
   );
 }

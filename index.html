@@ -2343,12 +2343,31 @@
     }
   };
   // Content Studioの生成カタログは既存定義へ後付けする。既存16体は手書きのまま保持し、
-  // 生成データが壊れている場合はその項目だけ無視してゲーム本体を起動する。
+  // モーション移行時も能力・技・静止画像は上書きせず、検証済みの5動作参照だけを足す。
+  const CONTENT_STUDIO_MOTION_CLIPS = ['move-forward', 'move-backward', 'fire', 'hit', 'land'];
+  function safeGeneratedMotionPaths(value, extension) {
+    if (!value || typeof value !== 'object') return false;
+    return CONTENT_STUDIO_MOTION_CLIPS.every(clip => {
+      const path = value[clip];
+      return typeof path === 'string'
+        && path.startsWith('assets/content-studio/')
+        && !path.includes('..')
+        && path.endsWith(`/${clip}.${extension}`);
+    });
+  }
   function loadGeneratedCharacters(catalog) {
     if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.order) || !catalog.characters) return {};
     const accepted = {};
     for (const id of catalog.order) {
       const character = catalog.characters[id];
+      if (character && character.legacyTargetId === id && Object.prototype.hasOwnProperty.call(LEGACY_CHARACTERS, id)) {
+        if (character.key !== id) continue;
+        if (!safeGeneratedMotionPaths(character.motionSheets, 'png')) continue;
+        if (!safeGeneratedMotionPaths(character.motionMetadata, 'json')) continue;
+        LEGACY_CHARACTERS[id].motionSheets = Object.freeze({ ...character.motionSheets });
+        LEGACY_CHARACTERS[id].motionMetadata = Object.freeze({ ...character.motionMetadata });
+        continue;
+      }
       if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || !character || character.key !== id) continue;
       if (Object.prototype.hasOwnProperty.call(LEGACY_CHARACTERS, id)) continue;
       if (typeof character.name !== 'string' || typeof character.assetBase !== 'string') continue;

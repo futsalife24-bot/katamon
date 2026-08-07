@@ -112,6 +112,10 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
 
   await page.getByTestId('step-nav-motion').click();
   await expect(page.getByTestId('step-motion').locator('input[type="range"]')).toHaveCount(0);
+  await page.getByTestId('intensity-fire-strong').click();
+  await page.getByTestId('intensity-hit-subtle').click();
+  await expect(page.getByTestId('intensity-fire-strong')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('intensity-hit-subtle')).toHaveAttribute('aria-pressed', 'true');
   const generateButton = page.getByTestId('generate-motion');
   await expect(generateButton).toBeVisible();
   expect(await generateButton.evaluate((button) => {
@@ -187,4 +191,20 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
 
   expect(runtimeErrors).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('既存キャラクターは能力や技を触らずモーション追加用下書きへ読み込む', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await expect(page.getByTestId('legacy-motion-card')).toContainText('0 / 16');
+  await page.getByTestId('legacy-character-select').selectOption('kyoryu');
+  await page.getByTestId('edit-legacy-character').click();
+  await expect(page.getByTestId('step-image')).toBeVisible();
+  await expect(page.getByText('kyoryu.webp')).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId('step-nav-character').click();
+  await expect(page.getByText('名前・能力・技は既存ゲーム側をそのまま保持し')).toBeVisible();
+  await expect(page.getByText('既存設定を保持', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('元のキャラクターデータや画像を上書きしません。')).toBeVisible();
+  await expect(page.getByTestId('display-name')).toBeDisabled();
+  await expect(page.getByTestId('character-id')).toBeDisabled();
 });

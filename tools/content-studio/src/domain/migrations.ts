@@ -30,7 +30,7 @@ export function migrateDraft(input: unknown): DraftRecord {
   }
 
   const version = input.schemaVersion === undefined ? 0 : input.schemaVersion;
-  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== DRAFT_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== DRAFT_SCHEMA_VERSION) {
     throw new DraftMigrationError('未対応の下書きバージョンです');
   }
 
@@ -84,6 +84,9 @@ export function migrateDraft(input: unknown): DraftRecord {
           detectedAt: typeof input.landmarks.detectedAt === 'string' ? input.landmarks.detectedAt : null,
         }
       : base.landmarks,
+    motionIntensity: isRecord(input.motionIntensity)
+      ? mergeRecord(base.motionIntensity, input.motionIntensity)
+      : base.motionIntensity,
     generatedClips: Array.isArray(input.generatedClips)
       ? input.generatedClips as DraftRecord['generatedClips']
       : [],
@@ -100,6 +103,7 @@ export function migrateDraft(input: unknown): DraftRecord {
       && typeof input.sourceIdentity.slug === 'string'
       ? { id: input.sourceIdentity.id, slug: input.sourceIdentity.slug }
       : null,
+    legacyTargetId: typeof input.legacyTargetId === 'string' ? input.legacyTargetId : null,
     schemaVersion: DRAFT_SCHEMA_VERSION,
   };
 

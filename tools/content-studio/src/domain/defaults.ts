@@ -117,6 +117,13 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
       muzzle: { x: 0.8, y: 0.5 },
       detectedAt: null,
     },
+    motionIntensity: {
+      'move-forward': 'standard',
+      'move-backward': 'standard',
+      fire: 'standard',
+      hit: 'standard',
+      land: 'standard',
+    },
     generatedClips: [],
     publishMode: 'pr-only',
     preview: {
@@ -132,5 +139,6 @@ export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
     historyStatus: 'clean',
     mockScenario: 'success',
     sourceIdentity: null,
+    legacyTargetId: null,
   };
 }

@@ -7,6 +7,7 @@ export interface PullRequestBodyInput {
   files: readonly ArtifactFile[];
   issues: readonly ValidationIssue[];
   generatorVersion: string;
+  legacyTargetId?: string;
 }
 
 function escapeMarkdown(value: string): string {
@@ -35,9 +36,11 @@ export function buildPullRequestBody(input: PullRequestBodyInput): string {
     `- キャラクター名: ${escapeMarkdown(input.character.displayName)}`,
     `- 内部ID: \`${input.character.id}\``,
     `- slug: \`${input.character.slug}\``,
-    `- ステータス: HP ${input.character.maxHp} / 攻撃 ${input.character.attack} / 防御 ${input.character.defense} / 速度 ${input.character.speed} / 重量 ${input.character.weight}`,
-    `- 通常技: \`${input.character.normalSkillId}\`（既存共通・読み取り専用）`,
-    `- 必殺技: ${input.character.specialEnabled ? `${escapeMarkdown(input.character.specialName)} / \`${input.character.specialTemplate}\`` : '未設定（ゲーム内ボタン無効）'}`,
+    input.legacyTargetId
+      ? `- 更新対象: 既存キャラクター \`${input.legacyTargetId}\`（能力・技・静止画像は変更なし）`
+      : `- ステータス: HP ${input.character.maxHp} / 攻撃 ${input.character.attack} / 防御 ${input.character.defense} / 速度 ${input.character.speed} / 重量 ${input.character.weight}`,
+    input.legacyTargetId ? '- 通常技・必殺技: 既存設定を保持' : `- 通常技: \`${input.character.normalSkillId}\`（既存共通・読み取り専用）`,
+    ...(input.legacyTargetId ? [] : [`- 必殺技: ${input.character.specialEnabled ? `${escapeMarkdown(input.character.specialName)} / \`${input.character.specialTemplate}\`` : '未設定（ゲーム内ボタン無効）'}`]),
     `- モーション: 前進・後退・単発砲撃・被弾・着地 / 各${input.spriteMetadata.frameCount}フレーム`,
     `- 生成ツール: \`${input.generatorVersion}\``,
     '',
@@ -64,7 +67,7 @@ export function buildPullRequestBody(input: PullRequestBodyInput): string {
     '- 公開後のキャッシュ更新',
   ];
 
-  if (input.character.specialEnabled && !skill.autoRegistrable) {
+  if (!input.legacyTargetId && input.character.specialEnabled && !skill.autoRegistrable) {
     lines.push(
       '',
       '### カスタム実装が必要',

@@ -8,6 +8,7 @@ import type {
   ImageOperation,
   MockScenario,
   MotionClipId,
+  MotionIntensityLevel,
   PreparedChange,
   PullRequestResult,
   RepositoryGateway,
@@ -38,7 +39,7 @@ import {
 } from '../motion';
 import { acquireWakeLock, detectCapabilities, requestPersistentStorage, storageUsage, type Capabilities } from '../pwa/capabilities';
 import { consumeSharedImage } from '../pwa/share-target';
-import { fetchPublishedImage, loadPublishedContent } from '../game/published-content';
+import { fetchLegacyImage, fetchPublishedImage, loadPublishedContent } from '../game/published-content';
 import {
   addPublishHistory,
   deleteDraftBlob,
@@ -111,6 +112,7 @@ export interface StudioController {
   dismissNotice(): void;
   dismissError(): void;
   createNewDraft(): Promise<void>;
+  editLegacyCharacter(id: string): Promise<void>;
   editPublishedCharacter(slug: string): Promise<void>;
   openDraft(id: string): Promise<void>;
   backToDashboard(): Promise<void>;
@@ -136,6 +138,7 @@ export interface StudioController {
   detectParts(): Promise<void>;
   detectLandmarks(): Promise<void>;
   selectMotionClip(clipId: MotionClipId): void;
+  setMotionIntensity(clipId: MotionClipId, level: MotionIntensityLevel): Promise<void>;
   generateMotion(): Promise<void>;
   downloadMotionZip(): Promise<void>;
   downloadMotionMetadata(): Promise<void>;
@@ -294,7 +297,7 @@ async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchR
 }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.4.4';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.5.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -856,6 +859,55 @@ export function useStudioController(): StudioController {
     }
   }, [acceptFile, publishedCharacters, refreshLists, setBundle]);
 
+  const editLegacyCharacter = useCallback(async (id: string) => {
+    const record = LEGACY_CHARACTERS.find((item) => item.id === id);
+    if (!record) {
+      setError('既存キャラクターが見つかりませんでした。');
+      return;
+    }
+    try {
+      await autosaveRef.current.flush();
+      const next = createDraft();
+      const repositoryId = record.id === 'doRednote' ? 'do-rednote' : record.id;
+      next.title = `${record.displayName}へモーションを追加`;
+      next.character = {
+        ...next.character,
+        id: repositoryId,
+        slug: record.slug,
+        displayName: record.displayName,
+        sourceFacesLeft: record.facesLeft,
+        specialEnabled: false,
+        specialName: '既存設定を保持',
+      };
+      next.sourceIdentity = { id: repositoryId, slug: record.slug };
+      next.legacyTargetId = record.id;
+      next.landmarks = { ...next.landmarks, facing: record.facesLeft ? 'left' : 'right' };
+      next.lastStep = 'image';
+      const saved = await saveDraft(next);
+      hitOriginalBlobRef.current = null;
+      setDraft(saved);
+      draftRef.current = saved;
+      setProcessed(null);
+      setHitProcessed(null);
+      setSprite(null);
+      setMotions({});
+      setSelectedClip('move-forward');
+      setBundle(null);
+      setPrepared(null);
+      setPullRequest(null);
+      setRedo([]);
+      setView('workflow');
+      setSavedAt(saved.updatedAt);
+      setSaveState('saved');
+      window.history.pushState({ studio: true, step: 'image' }, '', '#image');
+      await acceptFile(await fetchLegacyImage(record));
+      setNotice('既存の能力・技・静止画像は変更せず、5モーションだけを追加する下書きを作りました。');
+      await refreshLists();
+    } catch (cause) {
+      setError(humanError(cause, '既存キャラクターを読み込めませんでした。'));
+    }
+  }, [acceptFile, refreshLists, setBundle]);
+
   const applyImageOperations = useCallback(async (operations?: ImageOperation[]) => {
     const current = draftRef.current;
     const source = originalBlobRef.current;
@@ -959,6 +1011,25 @@ export function useStudioController(): StudioController {
     setSprite(motions[clipId] ?? null);
   }, [motions]);
 
+  const setMotionIntensity = useCallback(async (clipId: MotionClipId, level: MotionIntensityLevel) => {
+    const current = draftRef.current;
+    if (!current || current.motionIntensity[clipId] === level) return;
+    setMotions({});
+    setSprite(null);
+    persistDraftState((active) => active.id === current.id
+      ? {
+        ...active,
+        motionIntensity: { ...active.motionIntensity, [clipId]: level },
+        generatedClips: [],
+      }
+      : active);
+    await Promise.all([
+      setAppMeta(`${current.id}:sprite-metadata`, null),
+      ...MOTION_CLIP_IDS.map((id) => setAppMeta(`${current.id}:motion:${id}:metadata`, null)),
+    ]);
+    setNotice('動きの強さを更新しました。下の固定ボタンから5種類を再生成してください。');
+  }, [persistDraftState]);
+
   const generateMotion = useCallback(async () => {
     const current = draftRef.current;
     const source = processed?.edited;
@@ -986,6 +1057,7 @@ export function useStudioController(): StudioController {
         sourceImage: 'normalized.png',
         landmarks,
         outputSize: current.motion.outputSize,
+        intensity: current.motionIntensity,
         sourcePlacement: {
           padding: current.editor.padding,
           offsetX: current.editor.offsetX,
@@ -1097,7 +1169,7 @@ export function useStudioController(): StudioController {
     }
     const existing = publishedCharacters.map(({ character }) => ({ id: character.id, slug: character.slug }));
     const issues = [
-      ...validateCharacter(current.character, { existing, current: current.sourceIdentity ?? undefined }),
+      ...validateCharacter(current.character, { existing, current: current.sourceIdentity ?? undefined, includeLegacy: !current.legacyTargetId }),
       ...validationExtras(current, processed, activeMotions),
     ];
     persistDraftState((item) => ({ ...item, validation: issues }));
@@ -1133,6 +1205,8 @@ export function useStudioController(): StudioController {
         existingCanonicalRecords: publishedCharacters.filter(({ character }) => (
           !current.sourceIdentity || character.id !== current.sourceIdentity.id || character.slug !== current.sourceIdentity.slug
         )),
+        currentCharacter: current.sourceIdentity ?? undefined,
+        legacyTargetId: current.legacyTargetId ?? undefined,
       });
       setBundle(nextBundle);
       return [...issues, ...nextBundle.issues];
@@ -1335,9 +1409,9 @@ export function useStudioController(): StudioController {
     appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, hitProcessed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
     repositoryStatus, capabilities, storage, saveState, savedAt, busy, progress, error, notice, redoCount: redo.length,
     installAvailable: Boolean(installEvent), installApp, dismissNotice: () => setNotice(null), dismissError: () => setError(null),
-    createNewDraft, editPublishedCharacter, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
+    createNewDraft, editLegacyCharacter, editPublishedCharacter, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
     goToStep, nextStep, previousStep, acceptFile, onFileInput, onHitFileInput, removeHitImage, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
-    addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, generateMotion,
+    addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, setMotionIntensity, generateMotion,
     downloadMotionZip, downloadMotionMetadata, downloadSpriteSheet, validateAndBuild, downloadZip, downloadJson,
     prepareChange, createPullRequest, retryOutbox, refreshRepositoryStatus, login, logout,
     cancelProcessing: () => {
@@ -1346,11 +1420,11 @@ export function useStudioController(): StudioController {
     },
   }), [
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
-    capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editPublishedCharacter,
+    capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editLegacyCharacter, editPublishedCharacter,
     detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
     nextStep, notice, onDrop, onFileInput, onHitFileInput, openDraft, outbox, prepareChange, prepared, previousStep, processed, hitProcessed, progress, removeHitImage,
     pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, repositoryStatus, retryOutbox, saveState, savedAt,
-    motions, publishedCharacters, publishedWarning, selectedClip, selectMotionClip, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
+    motions, publishedCharacters, publishedWarning, selectedClip, selectMotionClip, setMotionIntensity, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
   ]);
 
   return value;

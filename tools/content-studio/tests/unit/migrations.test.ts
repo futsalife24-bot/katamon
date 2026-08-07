@@ -40,6 +40,16 @@ describe('draft migrations', () => {
     expect(migrated.landmarks).not.toHaveProperty('eyes');
   });
 
+  it('v5下書きへ5動作の標準強度と既存キャラ対象なしを補う', () => {
+    const legacy = createDraft('55555555-5555-4555-8555-555555555555') as unknown as Record<string, unknown>;
+    legacy.schemaVersion = 5;
+    delete legacy.motionIntensity;
+    delete legacy.legacyTargetId;
+    const migrated = migrateDraft(legacy);
+    expect(Object.values(migrated.motionIntensity)).toEqual(['standard', 'standard', 'standard', 'standard', 'standard']);
+    expect(migrated.legacyTargetId).toBeNull();
+  });
+
   it('rejects future versions and dangerous fields', () => {
     expect(() => migrateDraft({ schemaVersion: 999 })).toThrow(DraftMigrationError);
     expect(() => migrateDraft({ schemaVersion: '1' })).toThrow(DraftMigrationError);

@@ -3,6 +3,7 @@ import type {
   FacingDirection,
   MotionAction,
   MotionClipId,
+  MotionIntensityLevel,
   MotionLandmarks,
   MotionParameters,
   MotionPreset,
@@ -26,6 +27,18 @@ export const MOTION_CLIP_LABELS: Readonly<Record<MotionClipId, string>> = Object
   fire: '単発砲撃',
   hit: '被弾',
   land: '着地',
+});
+
+export const MOTION_INTENSITY_LABELS: Readonly<Record<MotionIntensityLevel, string>> = Object.freeze({
+  subtle: '控えめ',
+  standard: '標準',
+  strong: '激しめ',
+});
+
+const MOTION_INTENSITY_SCALE: Readonly<Record<MotionIntensityLevel, number>> = Object.freeze({
+  subtle: 0.75,
+  standard: 1,
+  strong: 1.25,
 });
 
 interface ClipDefinition {
@@ -62,22 +75,34 @@ export function motionClipParameters(
   clipId: MotionClipId,
   facing: FacingDirection,
   outputSize: MotionParameters['outputSize'] = 512,
+  intensity: MotionIntensityLevel = 'standard',
 ): MotionParameters {
   const direction = facing === 'right' ? 1 : -1;
   const definition = BASE_CLIPS[clipId];
+  const amplitude = MOTION_INTENSITY_SCALE[intensity];
+  const parameters = {
+    ...definition.parameters,
+    moveX: (definition.parameters.moveX ?? 0) * amplitude,
+    moveY: (definition.parameters.moveY ?? 0) * amplitude,
+    scaleAmount: (definition.parameters.scaleAmount ?? 0) * amplitude,
+    squashAmount: (definition.parameters.squashAmount ?? 0) * amplitude,
+    rotationDegrees: clipId === 'hit'
+      ? (intensity === 'subtle' ? -96 : intensity === 'strong' ? -124 : -112)
+      : (definition.parameters.rotationDegrees ?? 0) * amplitude,
+  };
   const hitOutputScale = outputSize / 512;
   const directional = clipId === 'fire'
-    ? { moveX: Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
+    ? { moveX: Math.abs(parameters.moveX) * direction, rotationDegrees: Math.abs(parameters.rotationDegrees) * direction }
     : clipId === 'hit'
-      ? { moveX: -Math.abs(definition.parameters.moveX ?? 0) * hitOutputScale * direction, rotationDegrees: -Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
+      ? { moveX: -Math.abs(parameters.moveX) * hitOutputScale * direction, rotationDegrees: -Math.abs(parameters.rotationDegrees) * direction }
       : clipId === 'move-forward'
-        ? { moveX: Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
+        ? { moveX: Math.abs(parameters.moveX) * direction, rotationDegrees: Math.abs(parameters.rotationDegrees) * direction }
         : clipId === 'move-backward'
-          ? { moveX: -Math.abs(definition.parameters.moveX ?? 0) * direction, rotationDegrees: -Math.abs(definition.parameters.rotationDegrees ?? 0) * direction }
+          ? { moveX: -Math.abs(parameters.moveX) * direction, rotationDegrees: -Math.abs(parameters.rotationDegrees) * direction }
           : {};
   return {
     ...DEFAULT_MOTION,
-    ...definition.parameters,
+    ...parameters,
     ...directional,
     outputSize,
     canvasPadding: Math.max(DEFAULT_MOTION.canvasPadding, 32),
@@ -93,6 +118,7 @@ export interface MotionBatchGenerationRequest {
   sourceImage: string;
   landmarks: MotionLandmarks;
   outputSize?: MotionParameters['outputSize'];
+  intensity?: Partial<Record<MotionClipId, MotionIntensityLevel>>;
   sourcePlacement?: MotionGenerationRequest['sourcePlacement'];
   generatedAt?: string;
 }
@@ -126,7 +152,7 @@ export async function generateMotionBatch(
       source: clipId === 'hit' && request.hitSource ? request.hitSource : request.source,
       sourceImage: request.sourceImage,
       preset: definition.preset,
-      parameters: motionClipParameters(clipId, request.landmarks.facing, request.outputSize),
+      parameters: motionClipParameters(clipId, request.landmarks.facing, request.outputSize, request.intensity?.[clipId] ?? 'standard'),
       sourcePlacement: request.sourcePlacement,
       action: definition.action,
       actionPreset: definition.action === 'move' ? 'move-steady' : definition.action === 'fire' ? 'fire-recoil' : definition.action === 'hit' ? 'hit-light' : undefined,

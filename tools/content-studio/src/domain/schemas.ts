@@ -214,6 +214,7 @@ const previewSettingsSchema = z.object({
 
 const motionActionSchema = z.enum(['idle', 'move', 'fire', 'hit', 'land']);
 const motionClipIdSchema = z.enum(['move-forward', 'move-backward', 'fire', 'hit', 'land']);
+const motionIntensityLevelSchema = z.enum(['subtle', 'standard', 'strong']);
 const motionActionPresetSchema = z.enum([
   'idle-standard',
   'idle-heavy',
@@ -315,6 +316,13 @@ export const draftRecordSchema = z
     motion: motionParametersSchema,
     partDetection: partDetectionStateSchema,
     landmarks: motionLandmarksSchema,
+    motionIntensity: z.object({
+      'move-forward': motionIntensityLevelSchema,
+      'move-backward': motionIntensityLevelSchema,
+      fire: motionIntensityLevelSchema,
+      hit: motionIntensityLevelSchema,
+      land: motionIntensityLevelSchema,
+    }),
     generatedClips: z.array(motionClipIdSchema).max(5).superRefine((clips, context) => {
       if (new Set(clips).size !== clips.length) context.addIssue({ code: 'custom', message: '生成済みモーションが重複しています' });
     }),
@@ -325,6 +333,7 @@ export const draftRecordSchema = z
     historyStatus: z.enum(['clean', 'dirty', 'corrupt']),
     mockScenario: z.enum(['success', 'network-offline', 'tests-failed', 'conflict']),
     sourceIdentity: z.object({ id: safeIdentifierSchema, slug: safeIdentifierSchema }).nullable().default(null),
+    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami']).nullable().default(null),
   })
   .strict();
 

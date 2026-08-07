@@ -36,6 +36,7 @@ export interface BuildArtifactBundleInput {
   existingCanonicalRecords?: readonly CanonicalCharacterRecord[];
   expectedBaseSha?: string;
   currentCharacter?: CharacterIdentity;
+  legacyTargetId?: string;
 }
 
 const MIME_BY_IMAGE_KEY: Record<keyof Omit<ArtifactImages, 'sourceImage' | 'motionSpriteSheets'>, string> = {
@@ -104,6 +105,7 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
       ...(input.existingCanonicalRecords ?? []).map(({ character: existing }) => ({ id: existing.id, slug: existing.slug })),
     ],
     current: input.currentCharacter,
+    includeLegacy: !input.legacyTargetId,
   });
   const generatorVersion = input.generatorVersion ?? GENERATOR_VERSION;
   const createdAt = validateCreatedAt(input.createdAt ?? new Date().toISOString());
@@ -175,6 +177,7 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     assets: paths.assets,
     spriteMetadata,
     ...(normalizedMotionMetadata ? { motionMetadata: normalizedMotionMetadata } : {}),
+    ...(input.legacyTargetId ? { legacyTargetId: input.legacyTargetId } : {}),
     generatorVersion,
   }) as CanonicalCharacterRecord;
   const records = [
@@ -230,7 +233,7 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
   }
 
   const bundleId = await sha256Text(stableStringify(files.map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }))));
-  const partial = { character, spriteMetadata, files, issues, generatorVersion };
+  const partial = { character, spriteMetadata, files, issues, generatorVersion, legacyTargetId: input.legacyTargetId };
   return {
     bundleId,
     createdAt,

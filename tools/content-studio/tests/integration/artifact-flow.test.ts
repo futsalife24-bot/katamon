@@ -55,6 +55,28 @@ describe('artifact generation flow', () => {
     expect(bundle.issues.some(({ code }) => code === 'skill.custom_implementation_required')).toBe(true);
   });
 
+  it('maps a generated companion record onto an existing character identity', async () => {
+    const bundle = await sampleBundle();
+    const recordFile = bundle.files.find(({ kind }) => kind === 'character-data')!;
+    const record = canonicalCharacterRecordSchema.parse({
+      ...JSON.parse(recordFile.text!.replaceAll('sample-unit', 'kyoryu')),
+      legacyTargetId: 'kyoryu',
+    });
+    const catalog = buildCompatibilityCatalog([record]);
+    expect(catalog.order).toEqual(['kyoryu']);
+    expect(catalog.characters.kyoryu.legacyTargetId).toBe('kyoryu');
+    expect(catalog.characters.kyoryu.key).toBe('kyoryu');
+  });
+
+  it('rejects a companion record aimed at a different existing character', async () => {
+    const bundle = await sampleBundle();
+    const recordFile = bundle.files.find(({ kind }) => kind === 'character-data')!;
+    expect(canonicalCharacterRecordSchema.safeParse({
+      ...JSON.parse(recordFile.text!),
+      legacyTargetId: 'kyoryu',
+    }).success).toBe(false);
+  });
+
   it('rejects canonical records whose asset directory does not match the slug', async () => {
     const bundle = await sampleBundle();
     const recordFile = bundle.files.find(({ kind }) => kind === 'character-data')!;

@@ -1,4 +1,5 @@
 import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '../generation';
+import { LEGACY_CHARACTERS, type LegacyCharacter } from '../domain/legacy-characters';
 
 interface ContentManifest {
   schemaVersion: 1;
@@ -50,4 +51,20 @@ export async function fetchPublishedImage(record: CanonicalCharacterRecord, fetc
   const blob = await response.blob();
   if (blob.type !== 'image/png' || blob.size === 0 || blob.size > 20 * 1024 * 1024) throw new Error('公開済み画像の形式または容量が正しくありません。');
   return new File([blob], `${record.character.slug}.png`, { type: 'image/png', lastModified: Date.now() });
+}
+
+export async function fetchLegacyImage(record: LegacyCharacter, fetchImpl: typeof fetch = fetch): Promise<File> {
+  if (!LEGACY_CHARACTERS.some(({ id, asset }) => id === record.id && asset === record.asset)) {
+    throw new Error('既存キャラクターの画像参照が安全ではありません。');
+  }
+  for (const extension of ['webp', 'png'] as const) {
+    const response = await fetchImpl(new URL(`assets/${record.asset}.${extension}`, repositoryRootUrl()), { cache: 'no-store' });
+    if (response.status === 404) continue;
+    if (!response.ok) throw new Error('既存キャラクター画像を読み込めませんでした。');
+    const blob = await response.blob();
+    const mimeType = extension === 'webp' ? 'image/webp' : 'image/png';
+    if (blob.size === 0 || blob.size > 20 * 1024 * 1024) throw new Error('既存キャラクター画像の容量が正しくありません。');
+    return new File([blob], `${record.slug}.${extension}`, { type: mimeType, lastModified: Date.now() });
+  }
+  throw new Error('既存キャラクター画像が見つかりませんでした。');
 }

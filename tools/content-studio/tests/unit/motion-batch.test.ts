@@ -58,6 +58,19 @@ describe('5モーション一括生成', () => {
     expect(MOTION_CLIP_IDS.every((clip) => motionClipParameters(clip, 'right', 128).flipHorizontal === false)).toBe(true);
   });
 
+  it('5動作を控えめ・標準・激しめの3段階で安全に調整する', () => {
+    for (const clipId of MOTION_CLIP_IDS) {
+      const subtle = motionClipParameters(clipId, 'right', 512, 'subtle');
+      const standard = motionClipParameters(clipId, 'right', 512, 'standard');
+      const strong = motionClipParameters(clipId, 'right', 512, 'strong');
+      expect(Math.abs(subtle.moveY)).toBeLessThan(Math.abs(standard.moveY));
+      expect(Math.abs(strong.moveY)).toBeGreaterThan(Math.abs(standard.moveY));
+    }
+    expect(motionClipParameters('hit', 'right', 512, 'subtle').rotationDegrees).toBeLessThan(-90);
+    expect(motionClipParameters('hit', 'right', 512, 'strong').moveX).toBe(-160);
+    expect(motionClipParameters('fire', 'left', 512, 'strong').moveX).toBeLessThan(0);
+  });
+
   it('被弾だけ任意の別画像を使い、5種類を個別PNG/JSON入りZIPへまとめる', async () => {
     const progress: number[] = [];
     const motions = await generateMotionBatch({

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { characterFormSchema, spriteMetadataSchema } from '../domain/schemas.js';
+import { getLegacyRepositoryIdentity, type LegacyCharacterId } from '../domain/legacy-characters.js';
 import { convertSkillTemplate, NORMAL_SKILL_DEFINITION, type DeclarativeSkillDefinition } from '../domain/skills.js';
 import { GENERATOR_VERSION, type CharacterForm, type MotionClipId, type SpriteMetadata } from '../domain/types.js';
 import { isAllowedGeneratedPath } from '../domain/validation.js';
@@ -56,6 +57,7 @@ export const canonicalCharacterRecordSchema = z
     assets: generatedAssetPathsSchema,
     spriteMetadata: spriteMetadataSchema,
     motionMetadata: motionMetadataMapSchema.optional(),
+    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami']).optional(),
     generatorVersion: z.string().min(1).max(32),
   })
   .strict()
@@ -84,6 +86,16 @@ export const canonicalCharacterRecordSchema = z
     if (record.spriteMetadata.sourceImage !== record.assets.normalizedPng) {
       context.addIssue({ code: 'custom', path: ['spriteMetadata', 'sourceImage'], message: 'スプライトの元画像参照が一致しません' });
     }
+    if (record.legacyTargetId) {
+      const expectedIdentity = getLegacyRepositoryIdentity(record.legacyTargetId as LegacyCharacterId);
+      if (record.character.id !== expectedIdentity.id || record.character.slug !== expectedIdentity.slug) {
+        context.addIssue({
+          code: 'custom',
+          path: ['legacyTargetId'],
+          message: '既存キャラクターのIDとslugが更新対象に一致しません。',
+        });
+      }
+    }
     const clipIds = ['move-forward', 'move-backward', 'fire', 'hit', 'land'] as const;
     if (record.assets.motionSpriteSheets || record.assets.motionMetadataJson || record.motionMetadata) {
       if (!record.assets.motionSpriteSheets || !record.assets.motionMetadataJson || !record.motionMetadata) {
@@ -110,6 +122,7 @@ export interface CanonicalCharacterRecord {
   assets: GeneratedAssetPaths;
   spriteMetadata: SpriteMetadata;
   motionMetadata?: Record<MotionClipId, SpriteMetadata>;
+  legacyTargetId?: string;
   generatorVersion: string;
 }
 
@@ -148,6 +161,7 @@ export interface CompatibilityCharacter {
   normalSkill: typeof NORMAL_SKILL_DEFINITION;
   specialSkill: DeclarativeSkillDefinition | null;
   implementationVersion: string;
+  legacyTargetId?: string;
 }
 
 export interface CompatibilityCatalog {
@@ -162,7 +176,7 @@ export function createCompatibilityCharacter(record: CanonicalCharacterRecord): 
   if (record.character.specialEnabled && (!skill.autoRegistrable || !skill.definition)) return null;
   const character = record.character;
   return {
-    key: character.id,
+    key: record.legacyTargetId ?? character.id,
     slug: character.slug,
     name: character.displayName,
     role: character.classification,
@@ -196,6 +210,7 @@ export function createCompatibilityCharacter(record: CanonicalCharacterRecord): 
     normalSkill: NORMAL_SKILL_DEFINITION,
     specialSkill: character.specialEnabled ? skill.definition : null,
     implementationVersion: character.implementationVersion,
+    ...(record.legacyTargetId ? { legacyTargetId: record.legacyTargetId } : {}),
   };
 }
 
@@ -210,7 +225,7 @@ export function buildCompatibilityCatalog(
   const ids = new Set<string>();
   const slugs = new Set<string>();
   for (const record of sorted) {
-    const id = record.character.id.toLocaleLowerCase('en-US');
+    const id = (record.legacyTargetId ?? record.character.id).toLocaleLowerCase('en-US');
     const slug = record.character.slug.toLocaleLowerCase('en-US');
     if (ids.has(id) || slugs.has(slug)) throw new Error('互換カタログに重複したIDまたはslugがあります');
     ids.add(id);
@@ -220,7 +235,7 @@ export function buildCompatibilityCatalog(
   const entries: Array<[string, CompatibilityCharacter]> = [];
   for (const record of sorted) {
     const compatible = createCompatibilityCharacter(record);
-    if (compatible) entries.push([record.character.id, compatible]);
+    if (compatible) entries.push([compatible.key, compatible]);
   }
   return {
     schemaVersion: 1,
