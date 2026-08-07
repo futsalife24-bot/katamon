@@ -1,5 +1,5 @@
 import type { ContentBounds, MotionAction, MotionActionPreset, MotionParameters, MotionPreset } from '../domain/types';
-import { buildSpriteMetadata } from '../generation/sprite-metadata';
+import { buildSpriteMetadata, suggestCollisionBounds } from '../generation/sprite-metadata';
 import { findContentBounds, normalizeImage } from '../image/processing';
 import type { PixelBuffer } from '../image/types';
 import { assertPixelBuffer } from '../image/types';
@@ -13,9 +13,10 @@ import type {
 } from './types';
 
 const TWO_PI = Math.PI * 2;
-const HIT_TAKEOFF_END = 0.3;
-const HIT_LAND_START = 0.54;
-const HIT_BOUNCE_END = 0.78;
+const HIT_TAKEOFF_END = 0.28;
+const HIT_LAND_START = 0.45;
+const HIT_BOUNCE_END = 0.64;
+const HIT_RECOVER_START = 0.76;
 
 function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -36,7 +37,7 @@ function easeInOutCubic(value: number): number {
 function hitBounceLift(parameters: MotionParameters, progress: number): number {
   if (progress < HIT_LAND_START || progress >= HIT_BOUNCE_END) return 0;
   const bounceProgress = (progress - HIT_LAND_START) / (HIT_BOUNCE_END - HIT_LAND_START);
-  return Math.sin(Math.PI * bounceProgress) * Math.max(5, parameters.moveY * 0.14) * parameters.intensity;
+  return Math.sin(Math.PI * bounceProgress) * Math.max(2, parameters.moveY * 0.055) * parameters.intensity;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -95,11 +96,11 @@ export function motionTransformForFrame(
   }
 
   if (action === 'hit') {
-    // Take off, keep the overturned pose through landing and one small bounce,
-    // then stand back up. Negative rotation is counterclockwise on y-down canvas.
+    // Take off, keep the overturned pose through landing, a low bounce, and a
+    // grounded hold, then return. Negative rotation is counterclockwise on y-down canvas.
     const takeoff = easeOutCubic(progress / HIT_TAKEOFF_END);
-    const recover = easeInOutCubic((progress - HIT_BOUNCE_END) / (1 - HIT_BOUNCE_END));
-    const flip = progress <= HIT_TAKEOFF_END ? takeoff : progress < HIT_BOUNCE_END ? 1 : 1 - recover;
+    const recover = easeInOutCubic((progress - HIT_RECOVER_START) / (1 - HIT_RECOVER_START));
+    const flip = progress <= HIT_TAKEOFF_END ? takeoff : progress < HIT_RECOVER_START ? 1 : 1 - recover;
     const fall = easeInOutCubic((progress - HIT_TAKEOFF_END) / (HIT_LAND_START - HIT_TAKEOFF_END));
     const vertical = progress <= HIT_TAKEOFF_END
       ? -parameters.moveY * takeoff * intensity
@@ -338,6 +339,9 @@ export async function generateIdleSpriteSheet(
     if (control.yieldToMainThread) await yieldTask();
   }
   const contentBounds = unionBounds(frameBounds);
+  const collisionBounds = action === 'hit' && preparedBounds
+    ? suggestCollisionBounds(preparedBounds)
+    : undefined;
   const partMasks = validatePartMasks(request.partMasks ?? [], frameSize, frameSize);
   const metadata = buildSpriteMetadata({
     frameWidth: frameSize,
@@ -347,6 +351,7 @@ export async function generateIdleSpriteSheet(
     anchorX,
     anchorY,
     contentBounds,
+    collisionBounds,
     sourceImage: request.sourceImage,
     preset: request.preset,
     motionAction: action,

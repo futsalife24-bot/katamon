@@ -10,6 +10,7 @@ vi.mock('../../src/image/canvas-codec', () => ({
 
 import { createDraft } from '../../src/domain/defaults';
 import type { MotionLandmarks } from '../../src/domain/types';
+import { suggestCollisionBounds } from '../../src/generation/sprite-metadata';
 import type { PixelBuffer } from '../../src/image/types';
 import { generateMotionBatch, MOTION_CLIP_IDS, motionClipParameters } from '../../src/motion/batch';
 import { createMotionBatchPackage } from '../../src/motion/package';
@@ -51,6 +52,8 @@ describe('5モーション一括生成', () => {
     expect(motionClipParameters('move-backward', 'left', 128).moveX).toBeGreaterThan(0);
     expect(motionClipParameters('hit', 'right', 128).rotationDegrees).toBeLessThan(-90);
     expect(motionClipParameters('hit', 'left', 128).rotationDegrees).toBeGreaterThan(90);
+    expect(motionClipParameters('hit', 'right', 128).moveX).toBe(-42);
+    expect(motionClipParameters('hit', 'left', 128).moveX).toBe(42);
     expect(MOTION_CLIP_IDS.every((clip) => motionClipParameters(clip, 'right', 128).flipHorizontal === false)).toBe(true);
   });
 
@@ -76,10 +79,15 @@ describe('5モーション一括生成', () => {
     expect(Math.min(...motions.hit.transforms.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
     expect(Math.min(...motions.hit.transforms.map(({ translateY }) => translateY))).toBeLessThan(-40);
     const hitBottom = (index: number) => motions.hit.frameBounds[index].y + motions.hit.frameBounds[index].height;
-    expect(motions.hit.transforms[6].rotationRadians).toBeLessThan(-Math.PI / 2);
-    expect(Math.abs(hitBottom(6) - hitBottom(0))).toBeLessThanOrEqual(1);
-    expect(hitBottom(7)).toBeLessThan(hitBottom(6));
-    expect(Math.abs(motions.hit.transforms[10].rotationRadians)).toBeLessThan(Math.abs(motions.hit.transforms[8].rotationRadians));
+    expect(motions.hit.transforms[5].rotationRadians).toBeLessThan(-Math.PI / 2);
+    expect(Math.abs(hitBottom(5) - hitBottom(0))).toBeLessThanOrEqual(1);
+    expect(hitBottom(6)).toBeLessThan(hitBottom(5));
+    expect(Math.abs(hitBottom(7) - hitBottom(0))).toBeLessThanOrEqual(1);
+    expect(Math.abs(hitBottom(8) - hitBottom(0))).toBeLessThanOrEqual(1);
+    expect(motions.hit.frameBounds[8].x).toBeLessThan(motions.hit.frameBounds[0].x - 20);
+    expect(motions.hit.transforms[9].translateX).toBeLessThan(-35);
+    expect(Math.abs(motions.hit.transforms[10].rotationRadians)).toBeLessThan(Math.abs(motions.hit.transforms[9].rotationRadians));
+    expect(motions.hit.metadata.collisionBounds).toEqual(suggestCollisionBounds(motions.hit.frameBounds[0]));
     expect(motions.hit.transforms.at(-1)?.rotationRadians).toBeCloseTo(0);
     expect(motions.hit.transforms.at(-1)?.translateY).toBeCloseTo(0);
     expect(MOTION_CLIP_IDS.every((clip) => motions[clip].metadata.clipId === clip)).toBe(true);

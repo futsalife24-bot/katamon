@@ -67,10 +67,15 @@ describe('モーション専用フロー', () => {
     expect(Math.min(...frames.map(({ rotationRadians }) => rotationRadians))).toBeLessThan(-Math.PI / 2);
     expect(Math.min(...frames.map(({ translateY }) => translateY))).toBeLessThan(-40);
     expect(parameters.frameCount).toBe(12);
+    expect(parameters.moveX).toBe(-42);
     expect(frames[6].rotationRadians).toBeLessThan(-Math.PI / 2);
     expect(frames[7].rotationRadians).toBeLessThan(-Math.PI / 2);
-    expect(frames[7].translateY).toBeLessThan(frames[6].translateY);
-    expect(Math.abs(frames[10].rotationRadians)).toBeLessThan(Math.abs(frames[8].rotationRadians));
+    expect(frames[6].translateY).toBeLessThan(frames[5].translateY);
+    expect(frames[7].translateY).toBeGreaterThan(frames[6].translateY);
+    expect(Math.abs(frames[6].translateY)).toBeLessThan(4);
+    expect(frames[8].translateX).toBe(-42);
+    expect(frames[9].translateX).toBeLessThan(-35);
+    expect(Math.abs(frames[10].rotationRadians)).toBeLessThan(Math.abs(frames[9].rotationRadians));
     expect(frames[0].rotationRadians).toBeCloseTo(0);
     expect(frames.at(-1)?.rotationRadians).toBeCloseTo(0);
     expect(frames.at(-1)?.translateY).toBeCloseTo(0);

@@ -294,7 +294,7 @@ async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchR
 }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.4.2';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.4.3';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
