@@ -403,6 +403,43 @@ async function importIntoGameAndStart(page, filePath) {
   await page.goto('about:blank');
 }
 
+test.describe('対象ゲームの端末戻る操作', () => {
+  test('起動前とタイトルで、終了前に確認を表示する', async ({ page }) => {
+    await page.goto(GAME_URL);
+    const canvas = page.getByTestId('battle-canvas');
+    const confirm = page.locator('#deviceBackConfirm');
+    await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase)).toBe('press');
+    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+
+    await page.evaluate(() => history.back());
+    await expect(confirm).toBeVisible();
+    await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
+    const stayBox = await page.locator('#deviceBackStay').boundingBox();
+    const exitBox = await page.locator('#deviceBackExit').boundingBox();
+    expect(stayBox?.height || 0).toBeGreaterThanOrEqual(48);
+    expect(exitBox?.height || 0).toBeGreaterThanOrEqual(48);
+    await page.locator('#deviceBackStay').click();
+    await expect(confirm).toBeHidden();
+
+    await tapCanvas(page, canvas, 0.5, 0.5);
+    await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase), { timeout: 15_000 }).toBe('title');
+    await page.evaluate(() => history.back());
+    await expect(confirm).toBeVisible();
+    await page.locator('#deviceBackStay').click();
+    await page.goto('about:blank');
+  });
+
+  test('終了を選んだ時だけ前のページへ戻る', async ({ page }) => {
+    await page.goto(STUDIO_URL);
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+    await page.evaluate(() => history.back());
+    await expect(page.locator('#deviceBackConfirm')).toBeVisible();
+    await page.locator('#deviceBackExit').click();
+    await expect(page).toHaveURL(/\/tools\/stage-studio\/(?:#home)?$/, { timeout: 15_000 });
+  });
+});
+
 test.describe('Stage Studio モバイル作成フロー', () => {
   test('横画面では地形・出撃・テストの操作をマップ横へまとめる', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });

@@ -8,7 +8,9 @@ module.exports = defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Mobile WebKit can crash when the canvas-heavy game and Studio are loaded
+  // in parallel on Windows. CI already used one worker; keep local runs equal.
+  workers: 1,
   timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: process.env.CI
