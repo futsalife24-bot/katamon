@@ -106,6 +106,19 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     soundRoute && soundRoute.afterNormal === soundRoute.before + 1
       && soundRoute.afterSpecial === soundRoute.afterNormal,
     JSON.stringify(soundRoute));
+
+  let titleImpactRoute = null;
+  try {
+    kt.setNormalImpactBufferForTest();
+    const before = kt.decodedAudioStartsForTest();
+    kt.triggerTitleWallImpactForTest();
+    titleImpactRoute = { before, after: kt.decodedAudioStartsForTest() };
+  } catch (err) {
+    titleImpactRoute = { error: String(err && err.message || err) };
+  }
+  check('the TAP TO START cannonball uses the same decoded explosion sample at wall impact',
+    titleImpactRoute && titleImpactRoute.after === titleImpactRoute.before + 1,
+    JSON.stringify(titleImpactRoute));
   kt.clearProjectilesForTest();
 }
 

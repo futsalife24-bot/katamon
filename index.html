@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v143-katamon-font-system';
+  const BUILD_ID = 'v144-explosion-sfx';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1081,8 +1081,9 @@
   }
   let audioCtx = null;
   let sfxCompressor = null;
-  const NORMAL_IMPACT_SOUND_URL = 'assets/normal-impact-explosion.mp3?v=1';
-  const NORMAL_IMPACT_SOUND_GAIN = 0.72;
+  const NORMAL_IMPACT_SOUND_URL = 'assets/normal-impact-explosion.mp3?v=2';
+  const NORMAL_IMPACT_SOUND_GAIN = 0.34;
+  const TITLE_WALL_IMPACT_SOUND_GAIN = 0.26;
   let normalImpactBuffer = null;
   let normalImpactLoadPromise = null;
   function getAudioCtx() {
@@ -1204,7 +1205,7 @@
       });
     return normalImpactLoadPromise;
   }
-  function playNormalImpactSound() {
+  function playNormalImpactSound(sampleGain = NORMAL_IMPACT_SOUND_GAIN) {
     if (!sfxAudible()) return;
     if (!normalImpactBuffer) {
       // 読み込みが間に合わない初回や取得失敗でも、着弾が無音にはならない。
@@ -1216,7 +1217,7 @@
     const src = ac.createBufferSource();
     const gain = ac.createGain();
     src.buffer = normalImpactBuffer;
-    gain.gain.value = NORMAL_IMPACT_SOUND_GAIN;
+    gain.gain.value = sampleGain;
     src.connect(gain).connect(getSfxDestination(ac));
     src.start();
   }
@@ -8488,7 +8489,7 @@
     if (!wallBreak.banged && wallBreak.t >= WALL_IMPACT_SEC) {
       wallBreak.banged = true;
       triggerShake(9, 0.32);
-      playExplosionSound(1.6);
+      playNormalImpactSound(TITLE_WALL_IMPACT_SOUND_GAIN);
     }
     if (wallBreak.t >= WALL_BREAK_SEC) {
       wallBreak = null;
