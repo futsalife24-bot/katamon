@@ -324,10 +324,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /id="deviceBackConfirmCrest"/);
   assert.match(html, /id="deviceBackConfirmKicker">RETURN GATE/);
   assert.match(html, /#deviceBackConfirmNote\s*\{[\s\S]*linear-gradient\(145deg, #f0d49a/);
-  assert.match(html, /@font-face\s*\{[\s\S]*font-family:\s*"Kaisei Decol Exit"/);
-  assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*"Kaisei Decol Exit"/);
-  assert.match(html, /v141-kaisei-decol-exit-title/);
-  assert.match(serviceWorker, /assets\/fonts\/kaisei-decol-exit-title\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v141-kaisei-decol-exit-title/);
-  assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'kaisei-decol-exit-title.woff2')).size > 1000);
+  assert.match(html, /@font-face\s*\{[\s\S]*font-family:\s*"Reggae One Exit"/);
+  assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*"Reggae One Exit"/);
+  assert.match(html, /v142-reggae-one-exit-title/);
+  assert.match(serviceWorker, /assets\/fonts\/reggae-one-exit-title\.woff2/);
+  assert.match(serviceWorker, /katamon-pwa-v142-reggae-one-exit-title/);
+  assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-exit-title.woff2')).size > 1000);
 });

@@ -17,7 +17,7 @@
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
-<link rel="preload" as="font" href="assets/fonts/kaisei-decol-exit-title.woff2" type="font/woff2" crossorigin>
+<link rel="preload" as="font" href="assets/fonts/reggae-one-exit-title.woff2" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="assets/kyoryu.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/medama.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
@@ -26,10 +26,10 @@
 <link rel="stylesheet" href="game-custom-stages.css?v=4">
 <style>
   @font-face {
-    font-family: "Kaisei Decol Exit";
-    src: url("assets/fonts/kaisei-decol-exit-title.woff2") format("woff2");
+    font-family: "Reggae One Exit";
+    src: url("assets/fonts/reggae-one-exit-title.woff2") format("woff2");
     font-style: normal;
-    font-weight: 700;
+    font-weight: 400;
     font-display: swap;
   }
   html, body {
@@ -398,8 +398,8 @@
   }
   #deviceBackConfirmTitle {
     margin: 0 0 13px; color: #ffe6a8;
-    font: 700 25px/1.4 "Kaisei Decol Exit", "Yu Mincho", "Hiragino Mincho ProN", serif;
-    letter-spacing: .06em; text-shadow: 0 2px 0 #120904, 0 0 14px rgba(255,195,75,.24);
+    font: 400 24px/1.4 "Reggae One Exit", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    letter-spacing: .04em; text-shadow: 0 2px 0 #120904, 0 0 14px rgba(255,195,75,.24);
   }
   #deviceBackConfirmNote {
     position: relative; margin: 0 0 16px; padding: 14px 16px;
@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v141-kaisei-decol-exit-title';
+  const BUILD_ID = 'v142-reggae-one-exit-title';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {

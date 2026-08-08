@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v141-kaisei-decol-exit-title';
+const CACHE_VERSION = 'katamon-pwa-v142-reggae-one-exit-title';
 const APP_SHELL = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ const APP_SHELL = [
   './assets/icon-512.png',
   './assets/icon-maskable-512.png',
   './assets/loading-emblem.webp',
-  './assets/fonts/kaisei-decol-exit-title.woff2',
+  './assets/fonts/reggae-one-exit-title.woff2',
   './assets/title-logo.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
