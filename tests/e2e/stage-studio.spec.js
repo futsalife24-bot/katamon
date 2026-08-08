@@ -210,7 +210,11 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.4.0-mvp');
+  await expect(page.locator('#appVersion')).toContainText('1.5.0-font-system');
+  await expect(page.locator('body')).toHaveCSS('font-family', /RocknRoll One/);
+  await expect(page.locator('.app-header h1')).toHaveCSS('font-family', /Reggae One/);
+  await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One"'))).toBe(true);
   await expect(page.locator('#updateNotice')).toBeHidden();
   await expect(page.locator('.step-tab')).toHaveCount(8);
   await expect(page.locator('.usage-panel')).toBeVisible();
@@ -422,8 +426,10 @@ test.describe('対象ゲームの端末戻る操作', () => {
     await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
-    await expect(page.locator('#deviceBackConfirmTitle')).toHaveCSS('font-family', /Reggae One Exit/);
-    await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One Exit"'))).toBe(true);
+    await expect(page.locator('#deviceBackConfirm')).toHaveCSS('font-family', /RocknRoll One/);
+    await expect(page.locator('#deviceBackConfirmTitle')).toHaveCSS('font-family', /Reggae One/);
+    await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One"'))).toBe(true);
     await expect(page.locator('#deviceBackConfirmCrest')).toBeVisible();
     await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('RETURN GATE');
     await expect(confirm).toHaveCSS('background-image', /wall\.jpg/);

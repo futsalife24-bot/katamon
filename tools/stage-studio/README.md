@@ -2,9 +2,13 @@
 
 Stage Studioは、対象ゲーム用のカスタムステージをスマートフォンで作成する静的Webアプリです。アカウント、サーバー、AI APIは使いません。地形生成・編集・検証・端末保存・JSON/ZIP出力までブラウザ内で完結します。
 
-現在のMVPバージョンは`1.4.0-mvp`です。
+現在のMVPバージョンは`1.5.0-font-system`です。
 
 公開版: https://futsalife24-bot.github.io/katamon/tools/stage-studio/
+
+## フォント
+
+ゲーム本体と共通の2フォントを端末内で利用します。タイトル、工程名、ヒーロー見出しなど短く強く見せる文字はReggae One、ボタン、入力、説明、ステージ名など通常UIはRocknRoll Oneです。どちらも`assets/fonts/`から読み込むため、通常利用時に外部フォントサービスへ通信しません。
 
 ## 起動
 
