@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v138-device-back-confirm';
+const CACHE_VERSION = 'katamon-pwa-v140-game-styled-overlays';
 const APP_SHELL = [
   './',
   './index.html',
