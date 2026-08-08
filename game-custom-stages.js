@@ -10,6 +10,7 @@
   if (bootBridge && bootBridge.getState && bootBridge.getState().featureEnabled === false) return;
 
   var selectedStageId = null;
+  var managerMode = 'local';
   // MVPの保存先は必ず端末内provider。将来の投稿先はこの境界の実装を追加して切り替える。
   var repository = repositoryModule.createLocalProvider({ storageModule: storageModule });
   var launcher = document.createElement('button');
@@ -315,7 +316,11 @@
     }
   }
 
-  async function openManager() {
+  async function openManager(options) {
+    managerMode = options && options.mode === 'online' ? 'online' : 'local';
+    startButton.textContent = managerMode === 'online'
+      ? 'このステージをオンラインで使う'
+      : 'このステージでバトル開始';
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
     document.documentElement.style.overflow = 'hidden';
@@ -335,7 +340,12 @@
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
     document.documentElement.style.overflow = '';
-    launcher.focus();
+    if (managerMode === 'online') {
+      var onlineButton = document.getElementById('onlineCustomStage');
+      if (onlineButton) onlineButton.focus();
+    } else {
+      launcher.focus();
+    }
   }
 
   launcher.addEventListener('click', openManager);
@@ -350,7 +360,8 @@
           var gameBridge = bridge();
           if (!gameBridge) throw new Error('ゲームとの接続を確認できません。');
           setStatus('stageId・schemaVersion・contentHash・gameCompatibilityを再照合しています…');
-          await gameBridge.startSelectedStage(stage);
+          if (managerMode === 'online') await gameBridge.selectStage(stage);
+          else await gameBridge.startSelectedStage(stage);
           closeManager();
         }).catch(function (error) { setStatus(error.message, 'error'); });
       }

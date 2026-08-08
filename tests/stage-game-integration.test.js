@@ -195,7 +195,64 @@ test('changing a stage-owned free battle option clears the selected custom stage
   assert.equal(bridge.getState().selectedStageId, stage.stageId, 'character choice remains independent from stage data');
 });
 
-test('game integration remains isolated from official and online stage paths', () => {
+test('online custom battle transfers a canonical stage and rejects changed identity data', async () => {
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+  const identity = Core.createStageIdentity(stage);
+
+  await bridge.selectStage(stage);
+  kt.setBattleModeForTest('normal');
+  kt.stage3().setOnlineForLogTest({ kind: 'firebase', customStageIdentity: identity });
+  kt.stage3().resetMatchForTest();
+
+  const snapshot = kt.buildSnapshotForTest();
+  assert.equal(snapshot.battleMode, 'normal');
+  assert.equal(snapshot.customStage.stageId, stage.stageId);
+  assert.deepEqual(snapshot.customStageIdentity, identity);
+  assert.equal(kt.stage3().hasSafeSnapshot(snapshot), true, 'Firebase accepts a fully verified custom start snapshot');
+
+  const rtdbSnapshot = clone(snapshot);
+  delete rtdbSnapshot.customStage.gameCompatibility.maxBuild;
+  delete rtdbSnapshot.customStage.preview.mimeType;
+  delete rtdbSnapshot.customStage.preview.data;
+  delete rtdbSnapshot.customStageIdentity.gameCompatibility.maxBuild;
+  rtdbSnapshot.customStage.decorations.foreground = null;
+  rtdbSnapshot.customStage.decorations.background = null;
+  const restoredRtdbSnapshot = kt.stage3().normalizeFirebaseSnapshot(rtdbSnapshot);
+  assert.deepEqual(Core.normalizeStage(restoredRtdbSnapshot.customStage), Core.normalizeStage(snapshot.customStage));
+  assert.equal(
+    kt.stage3().snapshotValidationReason(restoredRtdbSnapshot),
+    '',
+    'Firebase null and empty-array normalization preserves the canonical stage'
+  );
+  kt.applySnapshotForTest(restoredRtdbSnapshot);
+
+  kt.applySnapshotForTest(snapshot);
+  assert.equal(bridge.getState().selectedStageId, stage.stageId);
+  assert.equal(bridge.getState().onlineStageSelection, false, 'a guest cannot edit the host stage selection');
+  const sampleX = stage.spawnPoints[0].x;
+  assert.equal(kt.isSolidAt(sampleX, 212), true, 'online snapshot loads the shared collision terrain');
+
+  const changedHash = clone(snapshot);
+  changedHash.customStage.title = '改ざんされたオンラインステージ';
+  assert.equal(kt.stage3().hasSafeSnapshot(changedHash), false, 'Firebase rejects a changed stage before applying it');
+  assert.throws(() => kt.applySnapshotForTest(changedHash), /contentHash/);
+
+  const changedIdentity = clone(snapshot);
+  changedIdentity.customStageIdentity.contentHash = '0'.repeat(64);
+  assert.throws(() => kt.applySnapshotForTest(changedIdentity), /一致|contentHash/);
+
+  const missingStage = clone(snapshot);
+  missingStage.customStage = null;
+  assert.throws(() => kt.applySnapshotForTest(missingStage), /本体データ|ステージ情報/);
+
+  kt.stage3().setOnlineForLogTest(null);
+  kt.startBattle();
+});
+
+test('game integration isolates official stages while online custom starts are identity-gated', () => {
   const root = path.join(__dirname, '..');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const manager = fs.readFileSync(path.join(root, 'game-custom-stages.js'), 'utf8');
@@ -203,9 +260,14 @@ test('game integration remains isolated from official and online stage paths', (
   const studioApp = fs.readFileSync(path.join(root, 'tools', 'stage-studio', 'app-1.4.0-mvp.js'), 'utf8');
   const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
-  assert.match(html, /battleMode === 'free' && selectedCustomAdapter/);
+  assert.match(html, /\(battleMode === 'free' \|\| onlineCustomStageActive\(\)\) && selectedCustomAdapter/);
   assert.match(html, /battleMode === 'normal' && online && online\.kind === 'firebase'/);
-  assert.match(html, /customStage: battleMode === 'free' && selectedCustomStage/);
+  assert.match(html, /const ONLINE_CUSTOM_STAGE_MAX_BYTES = 256 \* 1024/);
+  assert.match(html, /const includeCustomStage = !!\(selectedCustomStage && \(battleMode === 'free' \|\| onlineCustomStageActive\(\)\)\)/);
+  assert.match(html, /customStageIdentity: includeCustomStage \? customStageIdentity\(selectedCustomStage\) : null/);
+  assert.match(html, /StageCore\.compareStageIdentity\(identity, data\.customStageIdentity\)/);
+  assert.match(html, /firebaseOccupiedPlayerSeats\(\)\.every\(seat => seat === online\.seat \|\| online\.startAcks\[seat\]\)/);
+  assert.match(html, /CustomStageManager\.open\(\{ mode: 'online' \}\)/);
   assert.match(html, /onlineActive: isOnline\(\) \|\| roomScreenOpen\(\)/);
   assert.match(html, /StageCore\.stepProjectile\(p, dt, windAccel, projectileGravity\)/);
   assert.match(html, /loadTerrainFromSave\(\s*selectedCustomAdapter\.segments/);
@@ -242,6 +304,8 @@ test('game integration remains isolated from official and online stage paths', (
   assert.match(manager, /createStageBundle\(finalized\)/);
   assert.match(manager, /state\.onlineActive/);
   assert.match(manager, /state\.gamePhase !== 'freeSetup'/);
+  assert.match(manager, /managerMode === 'online'/);
+  assert.match(manager, /gameBridge\.selectStage\(stage\)/);
   assert.doesNotMatch(manager, /\['press', 'title', 'freeSetup'\]/);
   for (const field of ['stageId', 'schemaVersion', 'contentHash', 'gameCompatibility']) {
     assert.match(manager, new RegExp("label: '" + field + "'"));
