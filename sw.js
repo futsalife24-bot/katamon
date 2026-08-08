@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v138-custom-stage-online';
+const CACHE_VERSION = 'katamon-pwa-v138-device-back-confirm';
 const APP_SHELL = [
   './',
   './index.html',

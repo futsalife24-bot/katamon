@@ -1906,6 +1906,19 @@ function check(name, value) {
     /case 'start':[\s\S]{0,900}applySnapshot\(msg\.snap\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
   check('a spectator sees the same VS cut-in when the match starts',
     /function applyFirebaseSpectatorSnapshot\(msg\)[\s\S]{0,500}showBattleStartCutIn\(\);/.test(htmlText));
+
+  // 起動前・タイトル・ロビーで端末の戻る操作を押しても、確認なしでアプリを抜けない。
+  check('the device back trap stays armed outside battle too',
+    /function backTrapWanted\(\) \{\s*return exitBackSteps === 0;\s*\}/.test(htmlText));
+  check('non-battle screens and an open online room use the global exit confirmation',
+    /if \(gamePhase !== 'battle' \|\| roomScreenOpen\(\)\) \{\s*openDeviceBackConfirm\(\);/.test(htmlText));
+  check('the global exit confirmation is above every game overlay and has two explicit choices',
+    htmlText.includes('#deviceBackConfirm {')
+    && htmlText.includes('z-index: 200')
+    && htmlText.includes('id="deviceBackStay"')
+    && htmlText.includes('id="deviceBackExit"'));
+  check('only an explicit exit choice passes both guarded history entries',
+    /function confirmDeviceExit\(\)[\s\S]{0,220}exitBackSteps = 2;[\s\S]{0,160}continueConfirmedDeviceExit\(\);/.test(htmlText));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 

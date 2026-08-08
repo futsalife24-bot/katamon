@@ -330,6 +330,32 @@
      カスケードで確実に上書きするため、スタイルシートの最後に置く。 */
   #onlineLobby.leave-confirm #onlineLeave { display: none; }
   #onlineLobby.leave-confirm #onlineLeaveConfirm { display: flex; }
+  /* 端末の戻る操作による誤終了を、Canvasやオンラインロビーより手前で必ず確認する。 */
+  #deviceBackConfirm {
+    position: fixed; inset: 0; z-index: 200; display: none; box-sizing: border-box;
+    align-items: center; justify-content: center;
+    padding: max(20px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+      max(20px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    color: #fff5dc; background: rgba(2,4,7,.86);
+    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+  }
+  #deviceBackConfirm.open { display: flex; }
+  #deviceBackConfirmPanel {
+    width: min(390px, 100%); box-sizing: border-box; padding: 22px 18px 18px;
+    text-align: center; border: 2px solid #c78335; border-radius: 8px;
+    background: linear-gradient(180deg, #37464d, #16252b 52%, #070b0d);
+    box-shadow: 0 18px 60px rgba(0,0,0,.62), inset 0 0 0 5px rgba(255,226,161,.08);
+  }
+  #deviceBackConfirmTitle { margin: 0 0 8px; color: #ffe2a1; font-size: 21px; font-weight: 900; }
+  #deviceBackConfirmNote { margin: 0 0 18px; color: #cfe0ea; font-size: 13px; line-height: 1.65; }
+  #deviceBackConfirmActions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #deviceBackConfirmActions button {
+    min-height: 50px; padding: 10px 8px; border: 2px solid #c78335; border-radius: 5px;
+    color: #fff5dc; background: linear-gradient(180deg,#37464d,#091116);
+    font: 900 15px/1.3 "Yu Gothic UI", sans-serif; cursor: pointer;
+  }
+  #deviceBackStay { border-color: #ffd24a !important; color: #ffe2a1 !important; }
+  #deviceBackExit { border-color: #7d94a1 !important; color: #cfe0ea !important; }
 </style>
 </head>
 <body>
@@ -402,6 +428,16 @@
     </div>
   </div>
 </div>
+<div id="deviceBackConfirm" hidden aria-hidden="true">
+  <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
+    <h2 id="deviceBackConfirmTitle">アプリを閉じますか？</h2>
+    <p id="deviceBackConfirmNote">作業中の画面を終了します。ブラウザでは前のページへ戻ります。</p>
+    <div id="deviceBackConfirmActions">
+      <button id="deviceBackStay" type="button">このまま遊ぶ</button>
+      <button id="deviceBackExit" type="button">アプリを閉じる</button>
+    </div>
+  </div>
+</div>
 <audio id="titleBgm" preload="auto">
   <source src="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 </audio>
@@ -455,7 +491,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v138-custom-stage-online';
+  const BUILD_ID = 'v138-device-back-confirm';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -13548,10 +13584,40 @@
   });
 
   // ===== 端末の「戻る」操作 =====
-  // Androidの戻るボタンやiOSのスワイプバックは、そのままだとバトル中にアプリごと終了してしまう。
-  // 履歴にダミーを1つ積んでおき、戻る操作をpopstateで受け取ってメニュー表示に振り替える。
+  // Androidの戻るボタンやiOSのスワイプバックを、そのままアプリ終了へ流さない。
+  // 履歴にダミーを1つ積み、バトル中は既存メニュー、それ以外は共通の終了確認へ振り替える。
   let backTrapDepth = 0;     // 積んであるダミーの数(0か1)
   let ignoringBackPop = false; // 自分でhistory.back()した分のpopstateを無視するため
+  let exitBackSteps = 0;     // 終了確認後だけ、ガード→元の履歴の2段階を通過させる
+  let deviceBackReturnFocus = null;
+  const deviceBackConfirmEl = document.getElementById('deviceBackConfirm');
+  const deviceBackStayBtn = document.getElementById('deviceBackStay');
+  const deviceBackExitBtn = document.getElementById('deviceBackExit');
+
+  function deviceBackConfirmOpen() {
+    return !!(deviceBackConfirmEl && deviceBackConfirmEl.classList.contains('open'));
+  }
+
+  function openDeviceBackConfirm() {
+    if (!deviceBackConfirmEl || deviceBackConfirmOpen()) return;
+    deviceBackReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    deviceBackConfirmEl.hidden = false;
+    deviceBackConfirmEl.classList.add('open');
+    deviceBackConfirmEl.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => deviceBackStayBtn?.focus());
+    playUiSound();
+  }
+
+  function closeDeviceBackConfirm(restoreFocus = true) {
+    if (!deviceBackConfirmEl) return;
+    deviceBackConfirmEl.classList.remove('open');
+    deviceBackConfirmEl.hidden = true;
+    deviceBackConfirmEl.setAttribute('aria-hidden', 'true');
+    if (restoreFocus && deviceBackReturnFocus && document.contains(deviceBackReturnFocus)) {
+      deviceBackReturnFocus.focus();
+    }
+    deviceBackReturnFocus = null;
+  }
 
   function armBackTrap() {
     if (backTrapDepth > 0) return;
@@ -13570,10 +13636,10 @@
     } catch (err) { ignoringBackPop = false; }
   }
 
-  // バトル中と各選択画面で捕まえる。タイトルでは戻る操作でそのまま終了できるようにしておく。
+  // 起動前、タイトル、各選択、ランキング、オンラインロビーも含めて常に捕まえる。
+  // 明示的に「アプリを閉じる」を選んだ短い間だけ解除する。
   function backTrapWanted() {
-    return gamePhase === 'battle' || gamePhase === 'select'
-      || gamePhase === 'freeSetup' || gamePhase === 'ranking';
+    return exitBackSteps === 0;
   }
 
   function syncBackTrap() {
@@ -13581,29 +13647,67 @@
     else disarmBackTrap();
   }
 
+  function continueConfirmedDeviceExit() {
+    try {
+      history.back();
+    } catch (err) {
+      exitBackSteps = 0;
+      armBackTrap();
+      return;
+    }
+    // 履歴が無いブラウザではback()が何もせず、ページが残ることがある。その時だけ再武装する。
+    setTimeout(() => {
+      if (exitBackSteps > 0 && !document.hidden) {
+        exitBackSteps = 0;
+        armBackTrap();
+      }
+    }, 800);
+  }
+
+  function confirmDeviceExit() {
+    closeDeviceBackConfirm(false);
+    exitBackSteps = 2; // 現在のダミー履歴と、その下のアプリ本体履歴
+    backTrapDepth = 0;
+    ignoringBackPop = false;
+    continueConfirmedDeviceExit();
+  }
+
+  if (deviceBackStayBtn) deviceBackStayBtn.addEventListener('click', () => {
+    closeDeviceBackConfirm();
+    playUiSound();
+  });
+  if (deviceBackExitBtn) deviceBackExitBtn.addEventListener('click', confirmDeviceExit);
+  if (deviceBackConfirmEl) deviceBackConfirmEl.addEventListener('click', event => {
+    if (event.target === deviceBackConfirmEl) {
+      closeDeviceBackConfirm();
+      playUiSound();
+    }
+  });
+
   window.addEventListener('popstate', () => {
+    if (exitBackSteps > 0) {
+      exitBackSteps--;
+      if (exitBackSteps > 0) setTimeout(continueConfirmedDeviceExit, 0);
+      return;
+    }
     if (ignoringBackPop) { ignoringBackPop = false; return; }
     backTrapDepth = 0; // ブラウザ側でダミーが1つ消費された
     if (!backTrapWanted()) return;
     // 捕まえたら必ず積み直す。これを忘れると次の戻る操作でアプリが終了する。
     armBackTrap();
+    if (deviceBackConfirmOpen()) {
+      closeDeviceBackConfirm();
+      playUiSound();
+      return;
+    }
+    // ロビーや結果表示は内部状態がbattleのままでも、ユーザー視点ではバトル外画面。
+    if (gamePhase !== 'battle' || roomScreenOpen()) {
+      openDeviceBackConfirm();
+      return;
+    }
     if (confirmDialog) {
       confirmDialog = null;
       playUiSound();
-      return;
-    }
-    if (gamePhase === 'ranking') {
-      // 見るだけの画面なので、確認を挟まずそのままタイトルへ返す
-      gamePhase = 'title';
-      playUiSound();
-      return;
-    }
-    if (gamePhase === 'select') {
-      openConfirmDialog('メニューに戻りますか?', 'キャラクター選択をやめます', leaveSelectToTitle);
-      return;
-    }
-    if (gamePhase === 'freeSetup') {
-      openConfirmDialog('メニューに戻りますか?', 'フリーモードの設定をやめます', () => { gamePhase = 'title'; });
       return;
     }
     if (soundPanelOpen) {
