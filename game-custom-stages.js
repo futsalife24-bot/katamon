@@ -378,10 +378,10 @@
   setInterval(function () {
     var gameBridge = bridge();
     var state = gameBridge && gameBridge.getState ? gameBridge.getState() : null;
-    // 初回の「画面をタップ」待ちでもファイルを直接取り込めるようにする。
-    // 選択後はBridgeがfreeSetupへ遷移するため、音声開始演出を経由しなくても安全に遊べる。
+    // カスタムステージは演習設定の地形欄から使う。起動前やタイトルへ固定ボタンを
+    // 重ねると、本編の開始演出より先に見え続けるためfreeSetupだけで表示する。
     launcher.hidden = overlay.classList.contains('open') || !state || state.onlineActive
-      || ['press', 'title', 'freeSetup'].indexOf(state.gamePhase) < 0;
+      || state.gamePhase !== 'freeSetup';
   }, 250);
 
   globalThis.CustomStageManager = Object.freeze({
