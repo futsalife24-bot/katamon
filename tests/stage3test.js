@@ -705,7 +705,8 @@ function check(name, value) {
     && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
-    && htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });'));
+    && htmlText.includes('[onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });')
+    && htmlText.includes('onlineTerrainEl.disabled = !canEdit || hasCustomStage;'));
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
     && htmlText.includes("netSend({ t: 'ready', value: false });")
@@ -1292,7 +1293,7 @@ function check(name, value) {
   check('the room has no second way to start; the host just presses start and empty seats become CPUs',
     !htmlText.includes('onlineQuickCpu')
     && !htmlText.includes('CPUで始める')
-    && htmlText.includes("onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';"));
+    && /onlineStartBtn\.disabled = !isFirebaseHost\(\) \|\| !allFirebasePlayersReady\(\)[\s\S]{0,100}online\.phase !== 'lobby' \|\| !!onlineCustomStageSelectionError\(\)/.test(htmlText));
   check('the listing is withdrawn from the single place every exit path goes through',
     /function endOnline[\s\S]{0,600}if \(leaving\.kind === 'firebase' && leaving\.quickListed\) unpublishOpenRoom\(leaving\.room, leaving\.auth\);/.test(htmlText));
   check('a room still waiting is re-listed alongside the room lease, so it does not expire out of the index',
@@ -1411,7 +1412,7 @@ function check(name, value) {
   check('the empty seats are labelled as CPU in the lobby, not left looking vacant',
     htmlText.includes("state.textContent = 'CPUが担当';"));
   check('the start button follows the same all-ready rule the host code uses',
-    htmlText.includes("onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';")
+    /onlineStartBtn\.disabled = !isFirebaseHost\(\) \|\| !allFirebasePlayersReady\(\)[\s\S]{0,100}online\.phase !== 'lobby' \|\| !!onlineCustomStageSelectionError\(\)/.test(htmlText)
     && htmlText.includes("if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;"));
   check('a rematch clears every seat’s ready state, not just the two 1vs1 ones',
     htmlText.includes("online.selfReady = false; online.peerReady = false; online.seatReady = {};"));

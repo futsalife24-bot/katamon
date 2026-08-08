@@ -375,6 +375,11 @@ async function openCustomStageManager(page) {
 }
 
 async function importIntoGameAndStart(page, filePath) {
+  // Release the editor page before loading the game. Mobile WebKit can retain
+  // the large editor canvases when the same page is navigated directly.
+  const context = page.context();
+  await page.close();
+  page = await context.newPage();
   await page.goto(GAME_URL);
   await openCustomStageManager(page);
   await page.getByTestId('custom-stage-import').setInputFiles(filePath);
@@ -430,7 +435,8 @@ test.describe('Stage Studio モバイル作成フロー', () => {
       expect(layout.orientation.right, `${label}の回転ボタンを操作欄内に置く`).toBeLessThanOrEqual(layout.controls.right + 1);
       expect(layout.orientation.top).toBeGreaterThanOrEqual(layout.controls.top - 1);
       expect(layout.orientation.bottom).toBeLessThanOrEqual(layout.controls.bottom + 1);
-      expect(layout.orientation.height, `${label}の回転ボタンを48px以上にする`).toBeGreaterThanOrEqual(48);
+      // Chromium can report a CSS 48px box as 47.99998px after device-scale rounding.
+      expect(layout.orientation.height, `${label}の回転ボタンを48px相当にする`).toBeGreaterThanOrEqual(47.9);
     };
 
     assertLandscapeLayout(await readLayout('terrain', '[data-testid="terrain-tools"]'), '地形');
@@ -441,6 +447,9 @@ test.describe('Stage Studio モバイル作成フロー', () => {
   });
 
   test('プリセット生成、タッチ編集、共有物理、検証、JSON、ゲーム開始', async ({ page }, testInfo) => {
+    // WebKit のモバイルエミュレーションでは高度な編集操作が Chromium より遅い。
+    // この一連の実利用フローだけ余裕を持たせ、通常テストのタイムアウトは維持する。
+    test.setTimeout(150_000);
     await createValidatedStage(page, { advancedEditing: true });
     const jsonPath = await exportStage(page, 'json', testInfo);
     const stage = JSON.parse(await fs.readFile(jsonPath, 'utf8'));

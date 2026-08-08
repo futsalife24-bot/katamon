@@ -255,6 +255,13 @@
   .onlineSeatRow .seatReleaseBtn:active { background: #8c2e2a; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
+  #onlineCustomStage {
+    grid-column: 1 / -1; min-height: 42px; padding: 7px 9px; color: #ffe2a1;
+    font: 900 12px/1.35 "Yu Gothic UI", sans-serif; text-align: left; cursor: pointer;
+    border: 1px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#35434a,#10191f);
+  }
+  #onlineCustomStage[data-selected="true"] { border-color: #ffd24a; color: #fff5dc; }
+  #onlineCustomStage:disabled { cursor: default; opacity: .68; }
   /* フッタ:全幅の主導線を最下段=親指圏に固定する。 */
   #onlineLobbyButtons {
     flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
@@ -379,6 +386,7 @@
           <select id="onlineWind" aria-label="風"></select>
           <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
           <select id="onlineFormat" aria-label="対戦方式"><option value="1v1" selected>1 vs 1</option><option value="2v2">2 vs 2</option></select>
+          <button id="onlineCustomStage" type="button" data-selected="false">カスタムステージを選ぶ</button>
         </div>
       </div>
       <select id="onlineCharacter" aria-label="使用モンスター"></select>
@@ -447,7 +455,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v138-stage-studio-launcher';
+  const BUILD_ID = 'v138-custom-stage-online';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2874,6 +2882,13 @@
       return selected && selected.key !== 'random' ? selected : null;
     }
     if (online && online.kind === 'firebase' && online.settings) {
+      if (onlineCustomStageActive() && selectedCustomAdapter.wind) {
+        return {
+          key: 'custom',
+          dir: selectedCustomAdapter.wind.direction,
+          strength: selectedCustomAdapter.wind.strength
+        };
+      }
       const selected = WIND_OPTIONS.find(option => option.key === online.settings.wind);
       return selected && selected.key !== 'random' ? selected : null;
     }
@@ -4150,6 +4165,37 @@
   const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1';
 
   const SNAPSHOT_VERSION = 4;
+  // Firebaseの開始パケットへ載せる宣言型JSONの上限。通常の生成ステージは10KB前後だが、
+  // 編集量が多い場合も見越しつつ、巨大データで全員の開始処理を塞がない値に抑える。
+  const ONLINE_CUSTOM_STAGE_MAX_BYTES = 256 * 1024;
+
+  function customStageIdentity(stage) {
+    if (!stage || !globalThis.StageCore?.createStageIdentity) return null;
+    try { return globalThis.StageCore.createStageIdentity(stage); }
+    catch (_) { return null; }
+  }
+
+  function customStageJsonBytes(stage) {
+    if (!stage || !globalThis.StageCore?.canonicalStringify) return Infinity;
+    const json = globalThis.StageCore.canonicalStringify(stage);
+    return typeof TextEncoder === 'function' ? new TextEncoder().encode(json).byteLength : json.length * 3;
+  }
+
+  function onlineCustomStageActive() {
+    return !!(isOnline() && online && online.kind === 'firebase'
+      && selectedCustomStage && selectedCustomAdapter && online.customStageIdentity);
+  }
+
+  function onlineCustomStageSelectionError() {
+    if (!online?.customStageIdentity) return '';
+    if (!selectedCustomStage || !selectedCustomAdapter) return 'カスタムステージ本体を読み込めません。選び直してください。';
+    if (customStageJsonBytes(selectedCustomStage) > ONLINE_CUSTOM_STAGE_MAX_BYTES) return 'オンライン共有できるステージ容量（256KB）を超えています。';
+    if (selectedCustomAdapter.format !== online.settings?.format) return 'ステージの対応人数とロビーの対戦方式が一致しません。';
+    const identity = customStageIdentity(selectedCustomStage);
+    if (!identity) return 'カスタムステージの照合情報を作成できません。';
+    const match = globalThis.StageCore.compareStageIdentity(identity, online.customStageIdentity);
+    return match.match ? '' : 'カスタムステージの照合情報が変わりました。選び直してください。';
+  }
 
   function serializeUnit(u) {
     return {
@@ -4164,13 +4210,15 @@
   // 試合の状態を丸ごと1つのオブジェクトにする。中断セーブはこれをlocalStorageへ
   // 書くだけの薄い層で、オンライン対戦のターン境界の同期にもそのまま使える。
   function buildSnapshot() {
+    const includeCustomStage = !!(selectedCustomStage && (battleMode === 'free' || onlineCustomStageActive()));
     return {
       v: SNAPSHOT_VERSION,
       battleMode,
       freeModeConfig: { ...freeModeConfig },
-      customStage: battleMode === 'free' && selectedCustomStage
+      customStage: includeCustomStage
         ? globalThis.StageCore?.normalizeStage(selectedCustomStage)
         : null,
+      customStageIdentity: includeCustomStage ? customStageIdentity(selectedCustomStage) : null,
       stageW: STAGE_W,
       segments: currentSegments,
       craters: craterHistory,
@@ -4225,26 +4273,47 @@
       return { valid: true, stage: null, adapter: null };
     }
     if (data.customStage == null) {
+      if (isOnline() && online?.kind === 'firebase' && online.customStageIdentity) {
+        return { valid: false, message: 'ホストが選んだカスタムステージの本体データがありません。' };
+      }
       return data.pattern === 'custom'
         ? { valid: false, message: 'カスタム地形に必要なステージ情報がありません。' }
         : { valid: true, stage: null, adapter: null };
     }
-    if (data.battleMode !== 'free' || data.pattern !== 'custom') {
+    const localCustomBattle = data.battleMode === 'free' && !isOnline();
+    const onlineCustomBattle = data.battleMode === 'normal' && isOnline() && online?.kind === 'firebase';
+    if ((!localCustomBattle && !onlineCustomBattle) || data.pattern !== 'custom') {
       return { valid: false, message: 'カスタムステージの対戦種別が不正です。' };
     }
     if (!CUSTOM_STAGE_FEATURE_ENABLED || !globalThis.StageCore?.verifyStageHashSync) {
       return { valid: false, message: 'カスタムステージの整合性を確認できません。' };
     }
-    if (isOnline()) {
-      return { valid: false, message: 'オンライン対戦ではカスタムステージを復元できません。' };
-    }
     try {
       assertCustomStageBattlePolicy(data.customStage);
+      if (onlineCustomBattle && customStageJsonBytes(data.customStage) > ONLINE_CUSTOM_STAGE_MAX_BYTES) {
+        return { valid: false, message: 'オンライン共有できるステージ容量（256KB）を超えています。' };
+      }
       const hash = globalThis.StageCore.verifyStageHashSync(data.customStage);
       if (!hash.valid) {
         return { valid: false, message: 'カスタムステージのcontentHashが一致しません。' };
       }
       const stage = globalThis.StageCore.normalizeStage(data.customStage);
+      const identity = customStageIdentity(stage);
+      if (onlineCustomBattle) {
+        if (!data.customStageIdentity || !identity) {
+          return { valid: false, message: 'オンライン対戦用のステージ照合情報がありません。' };
+        }
+        const identityCheck = globalThis.StageCore.compareStageIdentity(identity, data.customStageIdentity);
+        if (!identityCheck.match) {
+          return { valid: false, message: '参加者間のステージ照合に失敗しました。' + identityCheck.reason };
+        }
+        if (online.customStageIdentity) {
+          const lobbyCheck = globalThis.StageCore.compareStageIdentity(online.customStageIdentity, identity);
+          if (!lobbyCheck.match) {
+            return { valid: false, message: '開始時のステージが確認済みデータと一致しません。' + lobbyCheck.reason };
+          }
+        }
+      }
       // ステージ本体だけでなく、復元に使う未破壊地形もハッシュ対象の列と一致していることを確認する。
       // ここを別々に信頼すると、localStorageのsegmentsだけを書き換えて検査を迂回できてしまう。
       if (globalThis.StageCore.canonicalStringify(data.segments)
@@ -4321,6 +4390,7 @@
     if (customSnapshot.stage) {
       selectedCustomStage = customSnapshot.stage;
       selectedCustomAdapter = customSnapshot.adapter;
+      if (isOnline() && online?.kind === 'firebase') online.customStageIdentity = customStageIdentity(customSnapshot.stage);
     }
     // 人数を先に合わせる。units の中身を作り替えるので、以降のループより必ず前に置く。
     // 旧セーブやv99以前のオンライン相手は matchFormat を持たないので1vs1として扱う。
@@ -4818,7 +4888,7 @@
   const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye', 'commit', 'reveal', 'ping', 'move']);
   const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'move', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
   function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
-  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin']);
+  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'custom']);
   // スナップショットに入るユニットの並び。setMatchFormat が units を作る順と必ず同じにする。
   // 2vs2は味方と敵が交互(p1→e1→p2→e2)で、この並びがそのまま手番の順になる。
   const SNAPSHOT_UNIT_IDS_1V1 = ['p1', 'e1'];
@@ -4847,6 +4917,29 @@
       && (unit.jumpAvailable == null || typeof unit.jumpAvailable === 'boolean')
       && (unit.facingLeft == null || typeof unit.facingLeft === 'boolean');
   }
+  function customStageSnapshotValidationReason(snap) {
+    const custom = snap.pattern === 'custom';
+    if (!custom) return snap.customStage == null && snap.customStageIdentity == null ? '' : 'snap.customStage.unexpected';
+    if (!snap.customStage || !snap.customStageIdentity) return 'snap.customStage.missing';
+    if (customStageJsonBytes(snap.customStage) > ONLINE_CUSTOM_STAGE_MAX_BYTES) return 'snap.customStage.size';
+    try {
+      assertCustomStageBattlePolicy(snap.customStage);
+      const hash = globalThis.StageCore?.verifyStageHashSync?.(snap.customStage);
+      if (!hash?.valid) return 'snap.customStage.contentHash';
+      const stage = globalThis.StageCore.normalizeStage(snap.customStage);
+      const identity = customStageIdentity(stage);
+      if (!identity || !globalThis.StageCore.compareStageIdentity(identity, snap.customStageIdentity).match) {
+        return 'snap.customStage.identity';
+      }
+      if (globalThis.StageCore.canonicalStringify(snap.segments)
+          !== globalThis.StageCore.canonicalStringify(stage.terrain.columns)) {
+        return 'snap.customStage.terrain';
+      }
+      return '';
+    } catch (_) {
+      return 'snap.customStage.invalid';
+    }
+  }
   function snapshotValidationReason(snap) {
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
     if (snap.v !== SNAPSHOT_VERSION) return 'snap.v';
@@ -4856,6 +4949,8 @@
     // 余白を許可しつつ、極端な座標は従来どおり通信境界で弾く。
     if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, STAGE_W + 600) && isFiniteIn(cr.y, -600, VH + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
     if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
+    const customStageReason = customStageSnapshotValidationReason(snap);
+    if (customStageReason) return customStageReason;
     if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
     // 人数と並びは対戦方式で決まる。ここを緩めて「好きな並びを送れる」ようにすると
     // 席とユニットの対応(なりすまし防止の要)が通信データ側から崩せてしまうので、
@@ -4906,6 +5001,49 @@
         if (!segments) return column;
         return segments.map(segment => normalizeRtdbDenseArray(segment) || segment);
       });
+    }
+    if (normalized.customStage && typeof normalized.customStage === 'object' && !Array.isArray(normalized.customStage)) {
+      const stage = { ...normalized.customStage };
+      const terrain = stage.terrain && typeof stage.terrain === 'object' ? { ...stage.terrain } : stage.terrain;
+      const stageColumns = terrain && normalizeRtdbDenseArray(terrain.columns);
+      if (terrain && stageColumns) {
+        terrain.columns = stageColumns.map(column => {
+          if (column === null) return [];
+          const segments = normalizeRtdbDenseArray(column);
+          return segments ? segments.map(segment => normalizeRtdbDenseArray(segment) || segment) : column;
+        });
+        stage.terrain = terrain;
+      }
+      for (const key of ['materials', 'spawnPoints', 'gimmicks']) {
+        const values = normalizeRtdbDenseArray(stage[key]);
+        if (values) stage[key] = values;
+        else if (stage[key] == null) stage[key] = [];
+      }
+      if (stage.decorations && typeof stage.decorations === 'object' && !Array.isArray(stage.decorations)) {
+        stage.decorations = { ...stage.decorations };
+        for (const key of ['foreground', 'background']) {
+          const values = normalizeRtdbDenseArray(stage.decorations[key]);
+          stage.decorations[key] = values || [];
+        }
+      }
+      if (stage.gameCompatibility && typeof stage.gameCompatibility === 'object' && !Array.isArray(stage.gameCompatibility)) {
+        stage.gameCompatibility = { ...stage.gameCompatibility, maxBuild: stage.gameCompatibility.maxBuild || null };
+      }
+      if (stage.preview && typeof stage.preview === 'object' && !Array.isArray(stage.preview)) {
+        stage.preview = { ...stage.preview, mimeType: stage.preview.mimeType || null, data: stage.preview.data || null };
+      }
+      normalized.customStage = stage;
+    }
+    if (normalized.customStageIdentity?.gameCompatibility
+        && typeof normalized.customStageIdentity.gameCompatibility === 'object'
+        && !Array.isArray(normalized.customStageIdentity.gameCompatibility)) {
+      normalized.customStageIdentity = {
+        ...normalized.customStageIdentity,
+        gameCompatibility: {
+          ...normalized.customStageIdentity.gameCompatibility,
+          maxBuild: normalized.customStageIdentity.gameCompatibility.maxBuild || null
+        }
+      };
     }
     return normalized;
   }
@@ -5954,6 +6092,7 @@
   const onlineWindEl = document.getElementById('onlineWind');
   const onlineTurnsEl = document.getElementById('onlineTurns');
   const onlineFormatEl = document.getElementById('onlineFormat');
+  const onlineCustomStageBtn = document.getElementById('onlineCustomStage');
   const onlineReadyBtn = document.getElementById('onlineReady');
   const onlineStartBtn = document.getElementById('onlineStart');
   const onlineRematchBtn = document.getElementById('onlineRematch');
@@ -6474,6 +6613,8 @@
       if (online && online.kind === 'firebase') rejectFirebaseMessage(err && err.message ? `通信を継続できません（${err.message}）` : '通信を継続できません');
     });
     if (!transport) throw new Error('このブラウザはオンライン通信に対応していません。');
+    selectedCustomStage = null;
+    selectedCustomAdapter = null;
     online = {
       kind: 'firebase', role, room: code, auth, transport, clientId: auth.uid,
       seat, peerSeat: seat === 'p1' ? 'e1' : 'p1',
@@ -6482,6 +6623,7 @@
       participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
+      customStageIdentity: null,
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
       peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
@@ -6686,6 +6828,8 @@
   async function maybeStartFirebaseMatch() {
     if (!online || online.kind !== 'firebase' || online.role !== 'host' || !firebaseRevealsReady() || !online.selfRevealed || online.matchStarted) return;
     try {
+      const stageError = onlineCustomStageSelectionError();
+      if (stageError) throw new Error(stageError);
       // 人数を先に合わせる。2vs2の p2/e2 はユニットが4体ある状態でないと存在しない。
       setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
       assignFirebaseMatchCharacters();
@@ -6712,7 +6856,7 @@
       // 通信保存を待っている間も gameLoop は進む。resetMatch 直後に出すと、
       // ロビーの裏で1.8秒を使い切るため、見える画面へ戻ってから開始する。
       showBattleStartCutIn();
-    } catch (_) { if (online) { online.protocolError = '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
+    } catch (error) { if (online) { online.protocolError = error?.message || '開始データを作れませんでした'; onlineLobbyStatus(online.protocolError); } }
   }
   async function applyFirebaseStart(msg) {
     if (!online || online.kind !== 'firebase' || online.participantRole !== 'player' || online.role === 'host' || online.phase === 'playing' || online.startVerifying || !firebaseRevealsReady()) return;
@@ -6736,7 +6880,7 @@
       netSend({ t: 'ready' });
       closeOnlineLobby();
       showBattleStartCutIn();
-    } catch (_) { if (online) { online.startVerifying = false; online.protocolError = '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
+    } catch (error) { if (online) { online.startVerifying = false; online.protocolError = error?.message || '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
   }
 
   // 席1行分のDOM要素を組み立てる。名前は相手端末の入力なので、ここは
@@ -6822,7 +6966,16 @@
     if (onlineWindEl) onlineWindEl.value = online.settings.wind;
     if (onlineTurnsEl) onlineTurnsEl.value = String(online.settings.turnsPerPlayer);
     if (onlineFormatEl) onlineFormatEl.value = online.settings.format;
-    [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });
+    const hasCustomStage = !!(online.customStageIdentity && selectedCustomStage && selectedCustomAdapter);
+    [onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });
+    if (onlineTerrainEl) onlineTerrainEl.disabled = !canEdit || hasCustomStage;
+    if (onlineCustomStageBtn) {
+      onlineCustomStageBtn.disabled = !canEdit;
+      onlineCustomStageBtn.dataset.selected = hasCustomStage ? 'true' : 'false';
+      onlineCustomStageBtn.textContent = hasCustomStage
+        ? `カスタム: ${selectedCustomStage.title}（タップで解除）`
+        : (canEdit ? 'カスタムステージを選ぶ' : 'カスタムステージはホストが選択できます');
+    }
     if (onlineCharacterEl) onlineCharacterEl.disabled = !isFirebasePlayer() || online.selfReady || online.phase !== 'lobby';
     if (onlineReadyBtn) {
       onlineReadyBtn.disabled = !isFirebasePlayer() || online.phase !== 'lobby';
@@ -6830,7 +6983,8 @@
       onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);
     }
     // 人が座っている対戦者席が全部そろって準備完了なら押せる。空席はCPUなので待たない。
-    if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady() || online.phase !== 'lobby';
+    if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady()
+      || online.phase !== 'lobby' || !!onlineCustomStageSelectionError();
     const hasResultVote = Object.prototype.hasOwnProperty.call(online.rematchVotes || {}, online.seat);
     if (onlineRematchBtn) onlineRematchBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
     if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
@@ -6904,7 +7058,13 @@
   }
   function applyFirebaseSpectatorSnapshot(msg) {
     if (!online || online.kind !== 'firebase' || !msg.snap) return;
-    applySnapshot(msg.snap);
+    try {
+      applySnapshot(msg.snap);
+    } catch (error) {
+      online.protocolError = error?.message || '観戦用ステージを確認できませんでした。';
+      onlineLobbyStatus(online.protocolError);
+      return;
+    }
     // 観戦者には操作権を与えない。ローカル席をp1へ戻して入力ガードで完全に止める。
     setOnlineSeat('p1');
     battleMode = 'normal'; gamePhase = 'battle'; online.phase = 'playing'; closeOnlineLobby();
@@ -6919,11 +7079,36 @@
     // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
     if (!isFirebaseHost() || online.phase !== 'lobby') return;
     const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, revision: (online.settings.revision || 0) + 1 });
+    if (online.customStageIdentity && selectedCustomAdapter && selectedCustomAdapter.format !== settings.format) {
+      online.customStageIdentity = null;
+      selectedCustomStage = null;
+      selectedCustomAdapter = null;
+      onlineLobbyStatus('対戦方式を変更したため、カスタムステージの選択を解除しました。');
+    }
     await firebaseRequest(`rooms/${online.room}/settings`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
     online.settings = settings; syncFirebaseParticipantRole(); netSend({ t: 'settings', settings }); renderFirebaseLobby();
   }
+
+  function toggleOnlineCustomStage() {
+    if (!isFirebaseHost() || online.phase !== 'lobby') return;
+    if (online.customStageIdentity) {
+      online.customStageIdentity = null;
+      selectedCustomStage = null;
+      selectedCustomAdapter = null;
+      onlineLobbyStatus('カスタムステージを解除しました。公式地形を選べます。');
+      renderFirebaseLobby();
+      return;
+    }
+    if (!globalThis.CustomStageManager?.open) {
+      onlineLobbyStatus('カスタムステージ管理を開けませんでした。');
+      return;
+    }
+    globalThis.CustomStageManager.open({ mode: 'online' });
+  }
   async function requestFirebaseStart() {
     if (!isFirebaseHost() || online.phase !== 'lobby' || !allFirebasePlayersReady()) return;
+    const stageError = onlineCustomStageSelectionError();
+    if (stageError) { onlineLobbyStatus(stageError); return; }
     // 人が座っている対戦者席ぶんの伏せ合いがそろってから開始する。
     if (!firebasePeersCommitted()) return;
     try {
@@ -11937,6 +12122,7 @@
   if (onlineLeaveConfirmNoButton) onlineLeaveConfirmNoButton.addEventListener('click', () => { cancelLeaveFirebaseLobbyConfirm(); });
   // 対戦方式もここに含めること。外すと選んでも送られず、次の描画で元へ戻るだけになる。
   [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
+  if (onlineCustomStageBtn) onlineCustomStageBtn.addEventListener('click', toggleOnlineCustomStage);
   if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }
     if (online) endOnline(true);
@@ -13235,7 +13421,7 @@
       : (isBossMatch
         ? 'tieredBasin'
         : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined));
-    if (battleMode === 'free' && selectedCustomAdapter) {
+    if ((battleMode === 'free' || onlineCustomStageActive()) && selectedCustomAdapter) {
       loadTerrainFromSave(
         selectedCustomAdapter.segments,
         [],
@@ -13899,11 +14085,27 @@
     };
     const identityCheck = globalThis.StageCore.compareStageIdentity(sourceIdentity, adapterIdentity);
     if (!identityCheck.match) throw new Error('ステージ識別情報を照合できません。' + identityCheck.reason);
+    if (isOnline()) {
+      if (!isFirebaseHost() || online.phase !== 'lobby') {
+        throw new Error('オンライン対戦のカスタムステージは、ロビーにいるホストだけが選べます。');
+      }
+      if (customStageJsonBytes(normalized) > ONLINE_CUSTOM_STAGE_MAX_BYTES) {
+        throw new Error('オンライン共有できるステージ容量（256KB）を超えています。');
+      }
+    }
     selectedCustomStage = normalized;
     selectedCustomAdapter = adapter;
     const formatIndex = FORMAT_OPTIONS.findIndex(option => option.key === adapter.format);
     freeModeConfig.formatIndex = formatIndex >= 0 ? formatIndex : 0;
-    if (gamePhase !== 'battle') gamePhase = 'freeSetup';
+    if (isOnline()) {
+      online.customStageIdentity = customStageIdentity(normalized);
+      if (onlineFormatEl) onlineFormatEl.value = adapter.format;
+      await updateFirebaseSettings();
+      onlineLobbyStatus(`「${normalized.title}」をオンライン対戦で共有します。全員の照合後に開始します。`);
+      renderFirebaseLobby();
+    } else if (gamePhase !== 'battle') {
+      gamePhase = 'freeSetup';
+    }
     return adapter;
   }
 
@@ -13916,12 +14118,17 @@
       ensureBgmGraph();
       if (stage) await selectCustomStage(stage);
       if (!selectedCustomStage) throw new Error('カスタムステージを選んでください。');
+      if (isOnline()) throw new Error('オンラインロビーへ戻り、「対戦開始」を押してください。');
       startFreeMatch({ preserveOfficialSuspend: true });
     },
     clearStage(stageId) {
       if (!selectedCustomStage || selectedCustomStage.stageId !== stageId) return;
       selectedCustomStage = null;
       selectedCustomAdapter = null;
+      if (isOnline() && online?.kind === 'firebase') {
+        online.customStageIdentity = null;
+        renderFirebaseLobby();
+      }
     },
     getSelectedStage() {
       return selectedCustomStage ? globalThis.StageCore.normalizeStage(selectedCustomStage) : null;
@@ -13932,12 +14139,13 @@
         battleMode,
         onlineActive: isOnline() || roomScreenOpen(),
         featureEnabled: CUSTOM_STAGE_FEATURE_ENABLED,
-        selectedStageId: selectedCustomStage?.stageId || null
+        selectedStageId: selectedCustomStage?.stageId || null,
+        onlineStageSelection: !!(isFirebaseHost() && online.phase === 'lobby')
       };
     }
   });
 })();
 </script>
-<script src="game-custom-stages.js?v=2"></script>
+<script src="game-custom-stages.js?v=3"></script>
 </body>
 </html>
