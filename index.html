@@ -22,7 +22,7 @@
 <link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/tori.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
-<link rel="stylesheet" href="game-custom-stages.css?v=1">
+<link rel="stylesheet" href="game-custom-stages.css?v=4">
 <style>
   html, body {
     margin: 0;
@@ -71,7 +71,9 @@
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(2, 5, 10, 0.82);
+    background:
+      radial-gradient(circle at 50% 42%, rgba(5, 12, 15, .2), rgba(2, 5, 10, .9) 70%),
+      url("assets/wall.jpg") center / cover;
     z-index: 20;
     padding: 16px;
   }
@@ -79,15 +81,20 @@
   #nameBox {
     width: min(360px, 100%);
     box-sizing: border-box;
-    padding: 22px 20px 18px;
-    background: linear-gradient(180deg, rgba(55,70,77,0.97), rgba(26,37,43,0.98) 55%, rgba(9,17,22,0.98));
-    border: 2px solid #c78335;
-    border-radius: 6px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    padding: 26px 20px 20px;
+    background:
+      linear-gradient(90deg, transparent 49%, rgba(255,255,255,.035) 50%, transparent 51%) 0 0 / 42px 100%,
+      linear-gradient(180deg, #46555a, #1b292f 50%, #091116);
+    border: 3px solid #9e672e;
+    border-radius: 10px 10px 18px 18px;
+    box-shadow: 0 0 0 2px #27170c, 0 16px 45px rgba(0,0,0,.72), inset 0 0 0 2px rgba(255,226,161,.12);
     font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
     text-align: center;
   }
-  #nameTitle { color: #fff5dc; font-size: 18px; font-weight: 900; }
+  #nameTitle {
+    color: #ffe4a3; font: 900 21px/1.35 "Yu Mincho", "Hiragino Mincho ProN", serif;
+    letter-spacing: .08em; text-shadow: 0 2px 0 #130b05, 0 0 12px rgba(255,194,79,.25);
+  }
   #nameNote { color: #d39b4b; font-size: 11px; margin-top: 6px; }
   #nameInput {
     width: 100%;
@@ -99,7 +106,7 @@
     color: #fff5dc;
     background: rgba(6,12,18,0.9);
     border: 2px solid rgba(199,131,53,0.7);
-    border-radius: 4px;
+    border-radius: 2px;
     outline: none;
   }
   #nameInput:focus { border-color: #ffd24a; }
@@ -113,21 +120,23 @@
     color: #fff5dc;
     background: linear-gradient(180deg, rgba(55,70,77,0.97), rgba(9,17,22,0.98));
     border: 2px solid #c78335;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
   }
   #nameButtons #nameOk { border-color: #ffd24a; color: #ffe2a1; }
   /* Firebase対戦ロビー。Canvas外の全画面DOMスクリーンとして重ねることで、スマホのIME・共有・コピーを素直に使える。 */
   #onlineLobby {
     position: fixed; inset: 0; display: none; z-index: 24;
-    background: #0b0d17;
+    background:
+      linear-gradient(rgba(2,6,9,.78), rgba(2,6,9,.92)),
+      url("assets/wall.jpg") center / cover;
     font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
   }
   #onlineLobby.open { display: flex; justify-content: center; }
   #onlineLobbyBox {
     width: 100%; max-width: 540px; height: 100%; box-sizing: border-box;
     display: flex; flex-direction: column; color: #fff5dc;
-    background: linear-gradient(180deg, #37464d, #16252b 46%, #070b0d);
+    background: linear-gradient(180deg, rgba(55,70,77,.95), rgba(22,37,43,.97) 46%, rgba(7,11,13,.98));
     border-left: 2px solid rgba(199,131,53,.55); border-right: 2px solid rgba(199,131,53,.55);
     box-shadow: 0 0 60px rgba(0,0,0,.5);
     overflow: hidden;
@@ -137,9 +146,15 @@
     flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: max(14px, env(safe-area-inset-top)) 16px 12px;
     border-bottom: 2px solid #c78335;
-    background: linear-gradient(180deg, rgba(55,70,77,.94), rgba(9,17,22,.6));
+    background:
+      linear-gradient(90deg, transparent 49%, rgba(255,229,172,.05) 50%, transparent 51%) 0 0 / 44px 100%,
+      linear-gradient(180deg, #4a3425, #25170e 55%, #100a06);
+    box-shadow: inset 0 -2px 0 rgba(31,15,5,.9), 0 5px 18px rgba(0,0,0,.35);
   }
-  #onlineLobbyTitle { font-weight: 900; font-size: 19px; letter-spacing: .04em; }
+  #onlineLobbyTitle {
+    font: 900 20px/1.2 "Arial Black", "Yu Gothic UI", sans-serif; letter-spacing: .09em;
+    color: #ffe2a1; text-shadow: 0 2px 0 #160b04, 0 0 10px rgba(255,190,60,.22);
+  }
   #onlineLobby.in-room #onlineLobbyTitle { display: none; }
   #onlineRoomCodeRow { display: none; align-items: center; justify-content: center; gap: 8px; }
   #onlineLobby.in-room #onlineRoomCodeRow { display: flex; }
@@ -336,26 +351,78 @@
     align-items: center; justify-content: center;
     padding: max(20px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
       max(20px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
-    color: #fff5dc; background: rgba(2,4,7,.86);
+    color: #fff5dc;
+    background:
+      radial-gradient(circle at 50% 40%, rgba(11,24,28,.22), rgba(1,3,5,.9) 72%),
+      linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,.62)),
+      url("assets/wall.jpg") center / cover;
     font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
   }
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
-    width: min(390px, 100%); box-sizing: border-box; padding: 22px 18px 18px;
-    text-align: center; border: 2px solid #c78335; border-radius: 8px;
-    background: linear-gradient(180deg, #37464d, #16252b 52%, #070b0d);
-    box-shadow: 0 18px 60px rgba(0,0,0,.62), inset 0 0 0 5px rgba(255,226,161,.08);
+    position: relative; isolation: isolate;
+    width: min(370px, 100%); box-sizing: border-box; padding: 50px 20px 20px;
+    text-align: center; border: 4px solid #8a5729; border-radius: 10px 10px 20px 20px;
+    background:
+      linear-gradient(90deg, transparent 48%, rgba(255,230,175,.045) 50%, transparent 52%) 0 0 / 48px 100%,
+      linear-gradient(180deg, #4b3424 0 44px, #25353a 45px, #0b1418 100%);
+    box-shadow: 0 0 0 2px #211107, 0 20px 70px rgba(0,0,0,.78), inset 0 0 0 2px rgba(255,220,142,.13);
+    filter: drop-shadow(0 5px 0 rgba(0,0,0,.28));
   }
-  #deviceBackConfirmTitle { margin: 0 0 8px; color: #ffe2a1; font-size: 21px; font-weight: 900; }
-  #deviceBackConfirmNote { margin: 0 0 18px; color: #cfe0ea; font-size: 13px; line-height: 1.65; }
-  #deviceBackConfirmActions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #deviceBackConfirmPanel::before,
+  #deviceBackConfirmPanel::after {
+    content: ""; position: absolute; top: 18px; width: 10px; height: 10px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, #fff0a0, #a96b24 42%, #301805 76%);
+    box-shadow: 0 1px 0 #000, 0 0 0 2px rgba(31,16,6,.75);
+  }
+  #deviceBackConfirmPanel::before { left: 17px; }
+  #deviceBackConfirmPanel::after { right: 17px; }
+  #deviceBackConfirmCrest {
+    position: absolute; z-index: 2; top: -44px; left: 50%; transform: translateX(-50%);
+    width: 82px; height: 82px; display: grid; place-items: center; border-radius: 50%;
+    background: radial-gradient(circle, #26383d 0 56%, #11191c 58% 63%, #b47728 65% 70%, #251207 72%);
+    filter: drop-shadow(0 7px 8px rgba(0,0,0,.65));
+  }
+  #deviceBackConfirmCrest img { width: 68px; height: 68px; object-fit: contain; }
+  #deviceBackConfirmKicker {
+    margin: 0 0 5px; color: #c88a3b; font: 900 10px/1 "Arial Black", sans-serif;
+    letter-spacing: .2em; text-transform: uppercase;
+  }
+  #deviceBackConfirmTitle {
+    margin: 0 0 13px; color: #ffe6a8;
+    font: 900 24px/1.35 "Yu Mincho", "Hiragino Mincho ProN", serif;
+    letter-spacing: .06em; text-shadow: 0 2px 0 #120904, 0 0 14px rgba(255,195,75,.24);
+  }
+  #deviceBackConfirmNote {
+    position: relative; margin: 0 0 16px; padding: 14px 16px;
+    color: #3a2414; font: 700 13px/1.65 "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    border: 2px solid #7a4a22; border-radius: 3px 3px 8px 8px;
+    background:
+      radial-gradient(circle at 14% 28%, rgba(117,69,25,.12) 0 1px, transparent 2px),
+      linear-gradient(145deg, #f0d49a, #d9ac63 58%, #bd7e38);
+    box-shadow: inset 0 0 18px rgba(92,48,14,.23), 0 4px 9px rgba(0,0,0,.35);
+  }
+  #deviceBackConfirmActions { display: grid; grid-template-columns: 1fr; gap: 9px; }
   #deviceBackConfirmActions button {
-    min-height: 50px; padding: 10px 8px; border: 2px solid #c78335; border-radius: 5px;
-    color: #fff5dc; background: linear-gradient(180deg,#37464d,#091116);
-    font: 900 15px/1.3 "Yu Gothic UI", sans-serif; cursor: pointer;
+    min-height: 50px; padding: 9px 12px; border: 2px solid #9b662e; border-radius: 4px 4px 9px 9px;
+    color: #fff5dc; background: linear-gradient(180deg,#3d4d52,#172329 55%,#081015);
+    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 0 #05090b, 0 6px 12px rgba(0,0,0,.28);
   }
-  #deviceBackStay { border-color: #ffd24a !important; color: #ffe2a1 !important; }
-  #deviceBackExit { border-color: #7d94a1 !important; color: #cfe0ea !important; }
+  #deviceBackConfirmActions button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 1px 0 #05090b; }
+  #deviceBackConfirmActions strong { display: block; font-size: 16px; line-height: 1.3; letter-spacing: .05em; }
+  #deviceBackConfirmActions small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .8; }
+  #deviceBackStay {
+    min-height: 58px !important; border-color: #ffe49a !important; color: #281609 !important;
+    background: linear-gradient(180deg,#ffe3a0,#efa62e 53%,#bd6716) !important;
+    text-shadow: 0 1px 0 rgba(255,255,255,.45);
+  }
+  #deviceBackExit { border-color: #667b84 !important; color: #bdc9ce !important; }
+  @media (max-height: 620px) {
+    #deviceBackConfirmPanel { padding-top: 38px; transform: scale(.92); }
+    #deviceBackConfirmCrest { top: -34px; width: 66px; height: 66px; }
+    #deviceBackConfirmCrest img { width: 54px; height: 54px; }
+  }
 </style>
 </head>
 <body>
@@ -430,11 +497,13 @@
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
+    <div id="deviceBackConfirmCrest" aria-hidden="true"><img src="assets/loading-emblem.webp" alt=""></div>
+    <p id="deviceBackConfirmKicker">RETURN GATE</p>
     <h2 id="deviceBackConfirmTitle">アプリを閉じますか？</h2>
     <p id="deviceBackConfirmNote">作業中の画面を終了します。ブラウザでは前のページへ戻ります。</p>
     <div id="deviceBackConfirmActions">
-      <button id="deviceBackStay" type="button">このまま遊ぶ</button>
-      <button id="deviceBackExit" type="button">アプリを閉じる</button>
+      <button id="deviceBackStay" type="button"><strong>このまま遊ぶ</strong><small>現在の画面へ戻る</small></button>
+      <button id="deviceBackExit" type="button"><strong>アプリを閉じる</strong><small>ブラウザの前のページへ戻る</small></button>
     </div>
   </div>
 </div>
@@ -491,7 +560,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v138-device-back-confirm';
+  const BUILD_ID = 'v140-game-styled-overlays';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -14250,6 +14319,6 @@
   });
 })();
 </script>
-<script src="game-custom-stages.js?v=3"></script>
+<script src="game-custom-stages.js?v=4"></script>
 </body>
 </html>

@@ -391,6 +391,14 @@ async function importIntoGameAndStart(page, filePath) {
   await expect(page.getByTestId('custom-stage-list')).toContainText(TITLE);
   const card = page.getByTestId('custom-stage-card').filter({ hasText: TITLE }).first();
   await expect(card).toContainText(/[a-f0-9]{12,64}/i);
+  await card.getByRole('button', { name: '名前変更', exact: true }).click();
+  await expect(page.locator('.custom-stage-action-overlay')).toBeVisible();
+  await expect(page.locator('#customStageActionTitle')).toHaveText('ステージ名を変更');
+  await page.locator('[data-action-dialog="cancel"]').click();
+  await expect(page.locator('.custom-stage-action-overlay')).toBeHidden();
+  await card.getByRole('button', { name: '削除', exact: true }).click();
+  await expect(page.locator('#customStageActionTitle')).toHaveText('ステージを削除しますか？');
+  await page.locator('[data-action-dialog="cancel"]').click();
   await card.getByTestId('custom-stage-select').click();
   await expect(page.getByTestId('custom-battle-start')).toBeEnabled();
   await page.getByTestId('custom-battle-start').click();
@@ -414,6 +422,9 @@ test.describe('対象ゲームの端末戻る操作', () => {
     await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
+    await expect(page.locator('#deviceBackConfirmCrest')).toBeVisible();
+    await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('RETURN GATE');
+    await expect(confirm).toHaveCSS('background-image', /wall\.jpg/);
     const stayBox = await page.locator('#deviceBackStay').boundingBox();
     const exitBox = await page.locator('#deviceBackExit').boundingBox();
     expect(stayBox?.height || 0).toBeGreaterThanOrEqual(48);

@@ -8,11 +8,12 @@
   min-height: 48px;
   padding: 10px 18px;
   border: 2px solid #c78335;
-  border-radius: 12px;
+  border-radius: 4px 4px 10px 10px;
   color: #fff5dc;
-  background: linear-gradient(#35434a, #111a20);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
-  font: 800 15px/1.2 "Yu Gothic UI", sans-serif;
+  background: linear-gradient(#4b3424, #25170e 58%, #100a06);
+  box-shadow: 0 0 0 1px #241307, 0 7px 0 rgba(0,0,0,.32), 0 12px 26px rgba(0,0,0,.5);
+  font: 900 15px/1.2 "Yu Mincho", "Hiragino Mincho ProN", serif;
+  letter-spacing: .08em;
   touch-action: manipulation;
 }
 
@@ -33,7 +34,10 @@
     calc(22px + env(safe-area-inset-bottom, 0px))
     max(14px, env(safe-area-inset-left, 0px));
   color: #f6ead3;
-  background: rgba(3, 7, 12, .96);
+  background:
+    radial-gradient(circle at 50% 18%, rgba(20,38,42,.24), rgba(2,5,8,.88) 58%),
+    linear-gradient(rgba(2,5,8,.76), rgba(2,5,8,.94)),
+    url("assets/wall.jpg") center / cover fixed;
   font-family: "Yu Gothic UI", sans-serif;
   -webkit-user-select: text;
   user-select: text;
@@ -45,6 +49,7 @@
   width: min(720px, 100%);
   min-height: 100%;
   margin: 0 auto;
+  filter: drop-shadow(0 14px 28px rgba(0,0,0,.42));
 }
 
 .custom-stage-header {
@@ -55,14 +60,28 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 0 14px;
-  background: linear-gradient(#03070c 78%, transparent);
+  padding: 13px 14px 15px;
+  border: 2px solid #9a632d;
+  border-radius: 7px 7px 15px 15px;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255,228,164,.045) 50%, transparent 51%) 0 0 / 45px 100%,
+    linear-gradient(#4b3424, #25170e 58%, #100a06);
+  box-shadow: 0 0 0 2px #241307, 0 8px 18px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,225,155,.1);
 }
+
+.custom-stage-heading { display: flex; align-items: center; min-width: 0; gap: 10px; }
+.custom-stage-emblem {
+  flex: 0 0 auto; width: 52px; height: 52px; object-fit: contain;
+  filter: drop-shadow(0 4px 5px rgba(0,0,0,.55));
+}
+.custom-stage-heading-copy { min-width: 0; }
 
 .custom-stage-header h2 {
   margin: 0;
-  color: #ffd07c;
-  font-size: clamp(22px, 6vw, 32px);
+  color: #ffe2a1;
+  font: 900 clamp(20px, 5.6vw, 29px)/1.2 "Yu Mincho", "Hiragino Mincho ProN", serif;
+  letter-spacing: .06em;
+  text-shadow: 0 2px 0 #150a04, 0 0 12px rgba(255,192,62,.2);
 }
 
 .custom-stage-close,
@@ -71,18 +90,20 @@
 .custom-stage-danger {
   min-height: 48px;
   border: 1px solid #8b653d;
-  border-radius: 10px;
+  border-radius: 3px 3px 8px 8px;
   padding: 10px 14px;
   color: #fff5dc;
-  background: #19252d;
+  background: linear-gradient(#3d4d52, #172329 58%, #081015);
   font: 700 14px/1.25 "Yu Gothic UI", sans-serif;
   touch-action: manipulation;
 }
 
 .custom-stage-primary {
-  border-color: #f0ac43;
-  color: #160d08;
-  background: #f0ac43;
+  border-color: #ffe49a;
+  color: #2b1708;
+  background: linear-gradient(#ffe3a0, #efa62e 54%, #bd6716);
+  text-shadow: 0 1px 0 rgba(255,255,255,.42);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 3px 0 #321a08;
 }
 
 .custom-stage-danger {
@@ -94,7 +115,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 12px 0;
+  margin: 16px 3px 14px;
 }
 
 .custom-stage-toolbar a {
@@ -112,6 +133,8 @@
   line-height: 1.55;
 }
 
+.custom-stage-note { color: #d8ae6f; }
+
 #customStageStatus[data-kind="error"] { color: #ff9f9f; }
 #customStageStatus[data-kind="success"] { color: #92e5ad; }
 
@@ -122,21 +145,39 @@
 }
 
 .custom-stage-empty {
-  padding: 32px 18px;
-  border: 1px dashed #6a604e;
-  border-radius: 14px;
+  position: relative;
+  padding: 38px 24px;
+  border: 3px solid #805020;
+  border-radius: 3px 3px 12px 12px;
   text-align: center;
-  color: #bdc8ca;
+  color: #3b2514;
+  font: 700 15px/1.7 "Yu Gothic UI", sans-serif;
+  background:
+    radial-gradient(circle at 14% 20%, rgba(102,55,17,.12) 0 1px, transparent 2px),
+    linear-gradient(145deg, #f0d49a, #d9ac63 58%, #bd7e38);
+  box-shadow: inset 0 0 28px rgba(87,43,10,.25), 0 7px 18px rgba(0,0,0,.36);
 }
+
+.custom-stage-empty::before,
+.custom-stage-empty::after {
+  content: ""; position: absolute; top: 12px; width: 11px; height: 11px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #e9c273, #73502d 50%, #201309 78%);
+  box-shadow: 0 1px 0 #000;
+}
+.custom-stage-empty::before { left: 14px; }
+.custom-stage-empty::after { right: 14px; }
 
 .custom-stage-card {
   display: grid;
   grid-template-columns: 144px minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
-  border: 1px solid #66563f;
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(42, 55, 62, .98), rgba(13, 21, 27, .98));
+  border: 2px solid #8b5c2c;
+  border-radius: 5px 5px 13px 13px;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255,255,255,.025) 50%, transparent 51%) 0 0 / 40px 100%,
+    linear-gradient(145deg, rgba(54,69,74,.98), rgba(13,21,27,.99));
+  box-shadow: 0 0 0 1px #1b1009, 0 6px 16px rgba(0,0,0,.34), inset 0 0 0 1px rgba(255,225,161,.08);
 }
 
 .custom-stage-card.selected {
@@ -147,7 +188,8 @@
 .custom-stage-preview {
   width: 144px;
   height: 96px;
-  border-radius: 8px;
+  border: 2px solid #6d4523;
+  border-radius: 2px 2px 7px 7px;
   background: #101b24;
 }
 
@@ -196,7 +238,11 @@
   padding: 10px max(14px, env(safe-area-inset-right, 0px))
     calc(10px + env(safe-area-inset-bottom, 0px))
     max(14px, env(safe-area-inset-left, 0px));
-  background: linear-gradient(transparent, #03070c 18%);
+  border-top: 2px solid #8b5c2c;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255,228,164,.035) 50%, transparent 51%) 0 0 / 45px 100%,
+    linear-gradient(#382517, #140c07);
+  box-shadow: 0 -8px 18px rgba(0,0,0,.4);
 }
 
 .custom-stage-footer small {
@@ -211,6 +257,36 @@
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+.custom-stage-action-overlay {
+  position: fixed; inset: 0; z-index: 12; display: none; place-items: center;
+  box-sizing: border-box; padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(1,3,5,.83);
+}
+.custom-stage-action-overlay.open { display: grid; }
+.custom-stage-action-panel {
+  position: relative; width: min(370px, 100%); box-sizing: border-box; padding: 24px 18px 18px;
+  border: 4px solid #835022; border-radius: 4px 4px 14px 14px; text-align: center;
+  color: #3a2414;
+  background:
+    radial-gradient(circle at 12% 22%, rgba(102,55,17,.12) 0 1px, transparent 2px),
+    linear-gradient(145deg, #f0d49a, #d9ac63 58%, #bd7e38);
+  box-shadow: 0 0 0 2px #241307, 0 18px 55px rgba(0,0,0,.7), inset 0 0 24px rgba(87,43,10,.22);
+}
+.custom-stage-action-panel h3 {
+  margin: 0 0 8px; color: #3b210e;
+  font: 900 23px/1.3 "Yu Mincho", "Hiragino Mincho ProN", serif; letter-spacing: .05em;
+}
+.custom-stage-action-panel p { margin: 0 0 14px; font-size: 13px; line-height: 1.6; }
+.custom-stage-action-panel input {
+  width: 100%; min-height: 50px; box-sizing: border-box; margin-bottom: 14px; padding: 10px 12px;
+  border: 2px solid #77471f; border-radius: 3px; color: #fff6df; background: #172329;
+  font: 800 17px/1.3 "Yu Gothic UI", sans-serif; outline: none;
+}
+.custom-stage-action-panel input:focus { border-color: #f3b947; box-shadow: 0 0 0 3px rgba(243,185,71,.25); }
+.custom-stage-action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.custom-stage-action-buttons button { min-height: 50px; }
 
 @media (max-width: 520px) {
   .custom-stage-card { grid-template-columns: 108px minmax(0, 1fr); }

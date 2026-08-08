@@ -26,7 +26,7 @@
   overlay.innerHTML =
     '<div class="custom-stage-dialog" role="dialog" aria-modal="true" aria-labelledby="customStageTitle">' +
       '<header class="custom-stage-header">' +
-        '<div><h2 id="customStageTitle">カスタムステージ</h2><div class="custom-stage-note">公式ステージとは別に、この端末だけへ保存されます。</div></div>' +
+        '<div class="custom-stage-heading"><img class="custom-stage-emblem" src="assets/loading-emblem.webp" alt="" aria-hidden="true"><div class="custom-stage-heading-copy"><h2 id="customStageTitle">カスタムステージ</h2><div class="custom-stage-note">公式ステージとは別に、この端末だけへ保存されます。</div></div></div>' +
         '<button class="custom-stage-close" type="button" data-action="close" aria-label="閉じる">閉じる</button>' +
       '</header>' +
       '<div class="custom-stage-toolbar">' +
@@ -40,6 +40,17 @@
         '<small id="customStageSelection">ステージを選んでください</small>' +
         '<button class="custom-stage-primary" type="button" data-action="start" data-testid="custom-battle-start" disabled>このステージでバトル開始</button>' +
       '</footer>' +
+      '<div class="custom-stage-action-overlay" aria-hidden="true">' +
+        '<div class="custom-stage-action-panel" role="dialog" aria-modal="true" aria-labelledby="customStageActionTitle" aria-describedby="customStageActionNote">' +
+          '<h3 id="customStageActionTitle"></h3>' +
+          '<p id="customStageActionNote"></p>' +
+          '<input id="customStageActionInput" type="text" maxlength="40" autocomplete="off">' +
+          '<div class="custom-stage-action-buttons">' +
+            '<button class="custom-stage-action" type="button" data-action-dialog="cancel">やめる</button>' +
+            '<button class="custom-stage-primary" type="button" data-action-dialog="confirm">決定</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(launcher);
   document.body.appendChild(overlay);
@@ -49,6 +60,42 @@
   var statusElement = overlay.querySelector('#customStageStatus');
   var selectionElement = overlay.querySelector('#customStageSelection');
   var startButton = overlay.querySelector('[data-action="start"]');
+  var actionOverlay = overlay.querySelector('.custom-stage-action-overlay');
+  var actionTitle = overlay.querySelector('#customStageActionTitle');
+  var actionNote = overlay.querySelector('#customStageActionNote');
+  var actionInput = overlay.querySelector('#customStageActionInput');
+  var actionConfirm = overlay.querySelector('[data-action-dialog="confirm"]');
+  var pendingAction = null;
+
+  function closeActionDialog() {
+    pendingAction = null;
+    actionOverlay.classList.remove('open');
+    actionOverlay.setAttribute('aria-hidden', 'true');
+    actionInput.value = '';
+  }
+
+  function openActionDialog(action, stage) {
+    pendingAction = { action: action, stageId: stage.stageId };
+    actionOverlay.classList.add('open');
+    actionOverlay.setAttribute('aria-hidden', 'false');
+    if (action === 'rename') {
+      actionTitle.textContent = 'ステージ名を変更';
+      actionNote.textContent = '一覧と共有ファイルに表示する名前を入力してください。';
+      actionInput.hidden = false;
+      actionInput.value = stage.title;
+      actionConfirm.textContent = '名前を変更';
+      actionConfirm.classList.remove('custom-stage-danger');
+      actionInput.focus();
+      actionInput.select();
+      return;
+    }
+    actionTitle.textContent = 'ステージを削除しますか？';
+    actionNote.textContent = '「' + stage.title + '」をこの端末から削除します。公式ステージには影響しません。';
+    actionInput.hidden = true;
+    actionConfirm.textContent = '削除する';
+    actionConfirm.classList.add('custom-stage-danger');
+    actionConfirm.focus();
+  }
 
   function bridge() {
     return globalThis.KatamonCustomStageBridge || null;
@@ -291,13 +338,7 @@
       return;
     }
     if (action === 'rename') {
-      var nextTitle = globalThis.prompt('新しいステージ名', stage.title);
-      if (nextTitle == null) return;
-      stage.title = String(nextTitle).trim();
-      stage = await core.finalizeStage(stage);
-      await repository.putCustom(stage);
-      setStatus('名前を変更しました。', 'success');
-      await render();
+      openActionDialog('rename', stage);
       return;
     }
     if (action === 'json' || action === 'zip') {
@@ -306,14 +347,34 @@
       return;
     }
     if (action === 'delete') {
-      if (!globalThis.confirm('「' + stage.title + '」をこの端末から削除しますか？公式ステージには影響しません。')) return;
-      await repository.deleteCustom(id);
-      if (selectedStageId === id) selectedStageId = null;
-      var currentBridge = bridge();
-      if (currentBridge) currentBridge.clearStage(id);
-      setStatus('カスタムステージを削除しました。', 'success');
-      await render();
+      openActionDialog('delete', stage);
     }
+  }
+
+  async function confirmActionDialog() {
+    if (!pendingAction) return;
+    var action = pendingAction.action;
+    var id = pendingAction.stageId;
+    var stage = await stageById(id);
+    if (!stage) throw new Error('保存済みステージを読み込めません。');
+    if (action === 'rename') {
+      var nextTitle = String(actionInput.value || '').trim();
+      if (!nextTitle) throw new Error('ステージ名を入力してください。');
+      stage.title = nextTitle;
+      stage = await core.finalizeStage(stage);
+      await repository.putCustom(stage);
+      closeActionDialog();
+      setStatus('名前を変更しました。', 'success');
+      await render();
+      return;
+    }
+    await repository.deleteCustom(id);
+    if (selectedStageId === id) selectedStageId = null;
+    var currentBridge = bridge();
+    if (currentBridge) currentBridge.clearStage(id);
+    closeActionDialog();
+    setStatus('カスタムステージを削除しました。', 'success');
+    await render();
   }
 
   async function openManager(options) {
@@ -337,6 +398,7 @@
   }
 
   function closeManager() {
+    if (actionOverlay.classList.contains('open')) closeActionDialog();
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
     document.documentElement.style.overflow = '';
@@ -350,6 +412,20 @@
 
   launcher.addEventListener('click', openManager);
   overlay.addEventListener('click', function (event) {
+    var dialogAction = event.target.closest('[data-action-dialog]');
+    if (dialogAction) {
+      if (dialogAction.dataset.actionDialog === 'cancel') closeActionDialog();
+      if (dialogAction.dataset.actionDialog === 'confirm') {
+        confirmActionDialog().catch(function (error) {
+          actionNote.textContent = error && error.message || '操作を完了できません。';
+        });
+      }
+      return;
+    }
+    if (event.target === actionOverlay) {
+      closeActionDialog();
+      return;
+    }
     var actionButton = event.target.closest('[data-action]');
     if (actionButton) {
       var action = actionButton.dataset.action;
@@ -383,7 +459,13 @@
     });
   });
   overlay.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeManager();
+    if (event.key === 'Escape' && actionOverlay.classList.contains('open')) closeActionDialog();
+    else if (event.key === 'Escape') closeManager();
+    if (event.key === 'Enter' && actionOverlay.classList.contains('open') && !actionInput.hidden) {
+      confirmActionDialog().catch(function (error) {
+        actionNote.textContent = error && error.message || '操作を完了できません。';
+      });
+    }
   });
 
   setInterval(function () {

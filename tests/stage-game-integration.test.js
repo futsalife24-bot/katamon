@@ -313,6 +313,15 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(manager, /identityLine\.textContent\s*=/);
   assert.match(manager, /バトル開始直前に4項目を再照合します/);
   assert.doesNotMatch(manager, /innerHTML\s*=\s*stage\.|insertAdjacentHTML\s*\(/);
+  assert.doesNotMatch(manager, /globalThis\.(prompt|confirm)\s*\(/);
+  assert.match(manager, /custom-stage-action-overlay/);
+  assert.match(manager, /openActionDialog\('rename', stage\)/);
+  assert.match(manager, /openActionDialog\('delete', stage\)/);
   assert.match(managerCss, /\.custom-stage-identity\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(managerCss, /#customStageSelection\s*\{[^}]*white-space:\s*pre-line/s);
+  assert.match(managerCss, /\.custom-stage-action-overlay\.open\s*\{\s*display:\s*grid/);
+  assert.match(managerCss, /url\("assets\/wall\.jpg"\)/);
+  assert.match(html, /id="deviceBackConfirmCrest"/);
+  assert.match(html, /id="deviceBackConfirmKicker">RETURN GATE/);
+  assert.match(html, /#deviceBackConfirmNote\s*\{[\s\S]*linear-gradient\(145deg, #f0d49a/);
 });
