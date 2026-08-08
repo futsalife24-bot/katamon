@@ -265,6 +265,6 @@ UIの安定した契約には`data-testid`を使う。表示文言だけに依�
 | Android実機Chrome | 未実施 |
 | Androidインストール済みPWA | 未実施 |
 
-Stage Studio `1.4.0-mvp`、ゲーム本体`v141-kaisei-decol-exit-title`として、従来の編集・出力・オンライン対応に加え、バトル外の端末戻る確認とゲーム外HTML画面の世界観統一を検査した。`アプリを閉じますか？`には端末依存フォントではなく、必要文字だけを同梱したKaisei Decolを使用し、Service Workerのオフライン用アプリシェルにも含めた。Node自動テスト1,212件、WebKit・ChromiumのモバイルE2E 14件が成功した。Android相当412×915の目視確認では、Kaisei Decolの読込、1行表示、パネル内の収まりを確認した。Canvas負荷の高いWebKitを安定して再現するため、E2EはCIとローカルの両方で1 workerの直列実行に統一する。PWA試験はテスト専用localhostサーバーを停止してService Workerキャッシュだけで再読込する。
+Stage Studio `1.4.0-mvp`、ゲーム本体`v142-reggae-one-exit-title`として、従来の編集・出力・オンライン対応に加え、バトル外の端末戻る確認とゲーム外HTML画面の世界観統一を検査した。`アプリを閉じますか？`には端末依存フォントではなく、必要文字だけを同梱したReggae Oneを使用し、Service Workerのオフライン用アプリシェルにも含めた。Node自動テスト1,212件、WebKit・ChromiumのモバイルE2E 14件が成功した。Android相当412×915の目視確認では、Reggae Oneの読込、1行表示、パネル内の収まりを確認した。Canvas負荷の高いWebKitを安定して再現するため、E2EはCIとローカルの両方で1 workerの直列実行に統一する。PWA試験はテスト専用localhostサーバーを停止してService Workerキャッシュだけで再読込する。
 
 自動テストが成功してもブラウザーエミュレーション結果であり、上表の4つの実機項目はすべて未確認である。実機で操作した日時・端末・OS・ブラウザを記録するまで、実機確認済みとは表現しない。

@@ -422,6 +422,8 @@ test.describe('対象ゲームの端末戻る操作', () => {
     await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
+    await expect(page.locator('#deviceBackConfirmTitle')).toHaveCSS('font-family', /Reggae One Exit/);
+    await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One Exit"'))).toBe(true);
     await expect(page.locator('#deviceBackConfirmCrest')).toBeVisible();
     await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('RETURN GATE');
     await expect(confirm).toHaveCSS('background-image', /wall\.jpg/);
