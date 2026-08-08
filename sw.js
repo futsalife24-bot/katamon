@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v143-katamon-font-system';
+const CACHE_VERSION = 'katamon-pwa-v144-explosion-sfx';
 const APP_SHELL = [
   './',
   './index.html',
@@ -21,7 +21,7 @@ const APP_SHELL = [
   './assets/title-logo.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
-  './assets/normal-impact-explosion.mp3?v=1'
+  './assets/normal-impact-explosion.mp3?v=2'
 ];
 
 self.addEventListener('install', event => {

@@ -331,17 +331,24 @@ function check(name, value) {
   let thirdPartyAudio = '';
   try { thirdPartyAudio = readRepoFile('assets/SOUND_LICENSES.md'); } catch (_) { /* 下の検査で不合格にする */ }
   check('the pinned Pixabay normal impact sound is present',
-    fileHash('assets/normal-impact-explosion.mp3') === 'df42418a2e76');
+    fileHash('assets/normal-impact-explosion.mp3') === 'f04c4419bda6');
   check('the normal impact sound is versioned in code and cached for offline play',
-    htmlForAudio.includes("assets/normal-impact-explosion.mp3?v=1")
-      && swText.includes("'./assets/normal-impact-explosion.mp3?v=1'")
+    htmlForAudio.includes("assets/normal-impact-explosion.mp3?v=2")
+      && swText.includes("'./assets/normal-impact-explosion.mp3?v=2'")
       && htmlForAudio.includes('normalImpactSound: !activateSpecial && !activateJump'));
+  const normalImpactGain = Number((/const NORMAL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
+  const titleWallImpactGain = Number((/const TITLE_WALL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
+  check('the requested explosion sample stays subdued, with the title wall hit quieter than battle impacts',
+    normalImpactGain > 0 && normalImpactGain <= 0.4
+      && titleWallImpactGain > 0 && titleWallImpactGain <= 0.3
+      && titleWallImpactGain < normalImpactGain,
+    JSON.stringify({ normalImpactGain, titleWallImpactGain }));
   check('the Pixabay source, creator, license and check date stay recorded with the asset',
-    thirdPartyAudio.includes('Animated Cartoon Explosion Impact')
-      && thirdPartyAudio.includes('Universfield')
-      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-animated-cartoon-explosion-impact-352744/')
+    thirdPartyAudio.includes('Loud Explosion')
+      && thirdPartyAudio.includes('DRAGON-STUDIO')
+      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-loud-explosion-425457/')
       && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
-      && thirdPartyAudio.includes('2026-08-06'));
+      && thirdPartyAudio.includes('2026-08-08'));
   const BONUS_TRACK_PINS = [
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
     { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },
