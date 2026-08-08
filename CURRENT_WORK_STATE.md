@@ -2,6 +2,17 @@
 
 更新日: 2026-08-08（JST）
 
+## カタモン全体の2フォント統一（公開候補）
+
+- 作業ブランチ: `ui/katamon-two-font-system`
+- 基本ルール: 短く大きく見せるタイトル・モード名・対戦開始・勝敗・必殺技名だけをReggae One、それ以外のメニュー・ボタン・名前・戦闘情報・説明・ダイアログはRocknRoll Oneへ統一した。
+- 対象: ゲームCanvas、ゲーム外HTML画面、カスタムステージ管理、Stage Studio。デバッグ表示や小型マップ内の補助情報もRocknRoll Oneへ揃え、従来の`monospace`等を通常画面から除いた。
+- 配信: 両フォントを`assets/fonts/`へ同梱し、外部フォント通信へ依存しない。各フォントはRegular 400を1ファイルだけ読み込み、太字が必要な通常UIはブラウザ・Canvasの合成ウェイトを利用する。
+- 軽量化: RocknRoll Oneはユーザー入力を含む日本語全文字を表示できる通常UI用TTF、Reggae Oneはゲーム内で強調表示する語句に絞ったWOFF2としている。
+- キャッシュ: ゲーム本体を`v143-katamon-font-system`、Stage Studioを`1.5.0-font-system`へ更新した。既存PWAでは更新案内から下書きを保存して安全に切り替える。
+- 実画面確認: iPhone相当390×844とAndroid相当412×915で両フォントの読込、横はみ出しなし、ボタン文字切れなしを確認した。
+- 未確認: iPhone/Android実機の字形、ホーム画面・インストール済みPWAでの初回フォント読込。
+
 ## 端末戻る確認タイトルをReggae Oneへ決定（公開候補）
 
 - 作業ブランチ: `ui/reggae-one-exit-title`

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.4.0-mvp';
+  const APP_VERSION = '1.5.0-font-system';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;

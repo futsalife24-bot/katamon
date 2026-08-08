@@ -11,6 +11,19 @@ const studioHtml = read('tools/stage-studio/index.html');
 const studioApp = read('tools/stage-studio/app-1.4.0-mvp.js');
 const studioCss = read('tools/stage-studio/styles-1.4.0-mvp.css');
 const studioSw = read('tools/stage-studio/sw.js');
+const fontCss = read('assets/fonts/katamon-fonts.css');
+
+test('Stage Studio shares the two-font Katamon hierarchy', () => {
+  assert.match(studioHtml, /assets\/fonts\/katamon-fonts\.css/);
+  assert.match(fontCss, /--katamon-font-ui:\s*"RocknRoll One"/);
+  assert.match(fontCss, /--katamon-font-display:\s*"Reggae One"/);
+  assert.match(studioCss, /:root\s*\{[\s\S]*font-family:\s*var\(--katamon-font-ui\)/);
+  assert.match(studioCss, /\.app-header h1\s*\{[^}]*var\(--katamon-font-display\)/);
+  assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
+  assert.match(studioSw, /rocknroll-one-regular\.ttf/);
+  assert.match(studioSw, /reggae-one-display\.woff2/);
+  assert.match(studioSw, /1\.5\.0-font-system/);
+});
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
   const screenNames = Array.from(studioHtml.matchAll(/<section\b[^>]*data-screen="([^"]+)"/g), (match) => match[1]);
@@ -150,7 +163,7 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /grid-template-columns:\s*repeat\(4,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.4\.0-mvp`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.5\.0-font-system`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);

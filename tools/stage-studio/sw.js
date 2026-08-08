@@ -1,7 +1,7 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.4.0-mvp`;
+const CACHE_NAME = `${CACHE_PREFIX}1.5.0-font-system`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',
@@ -13,6 +13,9 @@ const APP_SHELL = [
   './icon.svg',
   '../../assets/loading-emblem.webp',
   '../../assets/loading-emblem.png',
+  '../../assets/fonts/katamon-fonts.css',
+  '../../assets/fonts/rocknroll-one-regular.ttf',
+  '../../assets/fonts/reggae-one-display.woff2',
   '../../assets/stage-grass-bg.jpg',
   '../../assets/stage-desert-bg.jpg',
   '../../assets/stage-snow-bg.jpg',

@@ -17,21 +17,16 @@
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
-<link rel="preload" as="font" href="assets/fonts/reggae-one-exit-title.woff2" type="font/woff2" crossorigin>
+<link rel="preload" as="font" href="assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
+<link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="assets/kyoryu.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/medama.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/tori.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
-<link rel="stylesheet" href="game-custom-stages.css?v=4">
+<link rel="stylesheet" href="assets/fonts/katamon-fonts.css?v=1">
+<link rel="stylesheet" href="game-custom-stages.css?v=5">
 <style>
-  @font-face {
-    font-family: "Reggae One Exit";
-    src: url("assets/fonts/reggae-one-exit-title.woff2") format("woff2");
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-  }
   html, body {
     margin: 0;
     padding: 0;
@@ -43,7 +38,9 @@
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    font-family: var(--katamon-font-ui);
   }
+  button, input, select, textarea { font-family: inherit; }
   #stage {
     position: fixed;
     inset: 0;
@@ -65,7 +62,7 @@
     top: 4px;
     left: 4px;
     color: #9effa8;
-    font: 12px/1.4 monospace;
+    font: 12px/1.4 var(--katamon-font-ui);
     background: rgba(0,0,0,0.4);
     padding: 4px 8px;
     border-radius: 6px;
@@ -96,11 +93,11 @@
     border: 3px solid #9e672e;
     border-radius: 10px 10px 18px 18px;
     box-shadow: 0 0 0 2px #27170c, 0 16px 45px rgba(0,0,0,.72), inset 0 0 0 2px rgba(255,226,161,.12);
-    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-family: var(--katamon-font-ui);
     text-align: center;
   }
   #nameTitle {
-    color: #ffe4a3; font: 900 21px/1.35 "Yu Mincho", "Hiragino Mincho ProN", serif;
+    color: #ffe4a3; font: 400 21px/1.35 var(--katamon-font-display);
     letter-spacing: .08em; text-shadow: 0 2px 0 #130b05, 0 0 12px rgba(255,194,79,.25);
   }
   #nameNote { color: #d39b4b; font-size: 11px; margin-top: 6px; }
@@ -138,7 +135,7 @@
     background:
       linear-gradient(rgba(2,6,9,.78), rgba(2,6,9,.92)),
       url("assets/wall.jpg") center / cover;
-    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-family: var(--katamon-font-ui);
   }
   #onlineLobby.open { display: flex; justify-content: center; }
   #onlineLobbyBox {
@@ -160,7 +157,7 @@
     box-shadow: inset 0 -2px 0 rgba(31,15,5,.9), 0 5px 18px rgba(0,0,0,.35);
   }
   #onlineLobbyTitle {
-    font: 900 20px/1.2 "Arial Black", "Yu Gothic UI", sans-serif; letter-spacing: .09em;
+    font: 400 20px/1.2 var(--katamon-font-display); letter-spacing: .09em;
     color: #ffe2a1; text-shadow: 0 2px 0 #160b04, 0 0 10px rgba(255,190,60,.22);
   }
   #onlineLobby.in-room #onlineLobbyTitle { display: none; }
@@ -170,10 +167,10 @@
      別の合言葉になるため、待っている間こそ見せる。呼びたい相手へ直接伝えられる。 */
   /* 数字と英字の並びだけでは何なのか分からない、という指摘。見出しを1つ添える。 */
   #onlineRoomCodeLabel {
-    flex: 0 0 auto; font: 900 10px/1 "Yu Gothic UI", sans-serif; letter-spacing: .12em; color: #d39b4b;
+    flex: 0 0 auto; font: 400 10px/1 var(--katamon-font-ui); letter-spacing: .12em; color: #d39b4b;
     border: 1px solid rgba(199,131,53,.7); border-radius: 3px; padding: 4px 5px;
   }
-  #onlineRoomCode { color: #ffd24a; font: 900 22px/1 monospace; letter-spacing: .14em; }
+  #onlineRoomCode { color: #ffd24a; font: 400 22px/1 var(--katamon-font-ui); letter-spacing: .14em; }
   /* コピーは合言葉の真横に小さく置く。大きなボタンで場所を取らない。 */
   #onlineCopy {
     flex: 0 0 auto; width: 32px; height: 32px; min-height: 0; padding: 0; display: none;
@@ -184,7 +181,7 @@
   #onlineCopy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   /* 閉じる(入口)/退出(ルーム)はヘッダ右上に小さく置く。誤タップ圏外。 */
   #onlineCancel, #onlineLeave {
-    flex: 0 0 auto; min-height: 0; padding: 8px 12px; font: 900 12px "Yu Gothic UI", sans-serif;
+    flex: 0 0 auto; min-height: 0; padding: 8px 12px; font: 400 12px var(--katamon-font-ui);
     color: #ffe2a1; border: 2px solid #c78335; border-radius: 4px; cursor: pointer;
     background: linear-gradient(180deg,#37464d,#091116);
   }
@@ -194,7 +191,7 @@
   #onlineLobby.in-room.results #onlineLeave { display: none; }
   #onlineLeaveConfirm { display: none; flex: 0 0 auto; gap: 6px; }
   #onlineLeaveConfirmYes, #onlineLeaveConfirmNo {
-    flex: 0 0 auto; min-height: 0; padding: 8px 10px; font: 900 12px "Yu Gothic UI", sans-serif;
+    flex: 0 0 auto; min-height: 0; padding: 8px 10px; font: 400 12px var(--katamon-font-ui);
     border-radius: 4px; cursor: pointer; background: linear-gradient(180deg,#37464d,#091116);
   }
   #onlineLeaveConfirmYes { color: #ffe2a1; border: 2px solid #f06060; }
@@ -223,7 +220,7 @@
   #onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }
   #onlineRoomInput, #onlineCharacter {
     width: 100%; box-sizing: border-box; padding: 11px 10px; color: #fff5dc; text-align: center;
-    font: 700 17px "Yu Gothic UI", sans-serif; background: rgba(6,12,18,.92);
+    font: 400 17px var(--katamon-font-ui); background: rgba(6,12,18,.92);
     border: 2px solid rgba(199,131,53,.7); border-radius: 4px; outline: none; margin-top: 4px;
   }
   #onlineRoomInput:focus, #onlineCharacter:focus { border-color: #ffd24a; }
@@ -235,7 +232,7 @@
      合言葉モードでは実質の主ボタンなので、金色のアクセントも付ける。 */
   #onlineCreate, #onlineJoin {
     width: 100%; box-sizing: border-box; margin-top: 8px; min-height: 45px; padding: 10px 6px;
-    color: #ffe2a1; font: 900 15px "Yu Gothic UI", sans-serif; cursor: pointer;
+    color: #ffe2a1; font: 400 15px var(--katamon-font-ui); cursor: pointer;
     border: 2px solid #ffd24a; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116);
   }
   /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
@@ -280,7 +277,7 @@
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   #onlineCustomStage {
     grid-column: 1 / -1; min-height: 42px; padding: 7px 9px; color: #ffe2a1;
-    font: 900 12px/1.35 "Yu Gothic UI", sans-serif; text-align: left; cursor: pointer;
+    font: 400 12px/1.35 var(--katamon-font-ui); text-align: left; cursor: pointer;
     border: 1px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#35434a,#10191f);
   }
   #onlineCustomStage[data-selected="true"] { border-color: #ffd24a; color: #fff5dc; }
@@ -294,7 +291,7 @@
   }
   #onlineLobbyButtons button {
     width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 6px;
-    color: #fff5dc; font: 900 15px "Yu Gothic UI", sans-serif;
+    color: #fff5dc; font: 400 15px var(--katamon-font-ui);
     border: 2px solid #c78335; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116); cursor: pointer;
   }
   #onlineReady, #onlineStart, #onlineRematch, #onlineReturnLobby, #onlineLeave { display: none; }
@@ -338,7 +335,7 @@
   #onlineLobbyButtons button:disabled { opacity: .32; box-shadow: none; cursor: default; }
   #onlineCodeToggle {
     border: none !important; background: none !important; min-height: 0 !important; padding: 4px !important;
-    color: #d39b4b !important; font: 700 12px "Yu Gothic UI", sans-serif !important; letter-spacing: .04em; text-decoration: underline;
+    color: #d39b4b !important; font: 400 12px var(--katamon-font-ui) !important; letter-spacing: .04em; text-decoration: underline;
   }
   #onlineLobby.busy button { opacity: .56; pointer-events: none; }
   @media (max-height: 660px) {
@@ -364,7 +361,7 @@
       radial-gradient(circle at 50% 40%, rgba(11,24,28,.22), rgba(1,3,5,.9) 72%),
       linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,.62)),
       url("assets/wall.jpg") center / cover;
-    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-family: var(--katamon-font-ui);
   }
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
@@ -393,17 +390,17 @@
   }
   #deviceBackConfirmCrest img { width: 68px; height: 68px; object-fit: contain; }
   #deviceBackConfirmKicker {
-    margin: 0 0 5px; color: #c88a3b; font: 900 10px/1 "Arial Black", sans-serif;
+    margin: 0 0 5px; color: #c88a3b; font: 400 10px/1 var(--katamon-font-ui);
     letter-spacing: .2em; text-transform: uppercase;
   }
   #deviceBackConfirmTitle {
     margin: 0 0 13px; color: #ffe6a8;
-    font: 400 24px/1.4 "Reggae One Exit", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    font: 400 24px/1.4 var(--katamon-font-display);
     letter-spacing: .04em; text-shadow: 0 2px 0 #120904, 0 0 14px rgba(255,195,75,.24);
   }
   #deviceBackConfirmNote {
     position: relative; margin: 0 0 16px; padding: 14px 16px;
-    color: #3a2414; font: 700 13px/1.65 "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+    color: #3a2414; font: 400 13px/1.65 var(--katamon-font-ui);
     border: 2px solid #7a4a22; border-radius: 3px 3px 8px 8px;
     background:
       radial-gradient(circle at 14% 28%, rgba(117,69,25,.12) 0 1px, transparent 2px),
@@ -414,7 +411,7 @@
   #deviceBackConfirmActions button {
     min-height: 50px; padding: 9px 12px; border: 2px solid #9b662e; border-radius: 4px 4px 9px 9px;
     color: #fff5dc; background: linear-gradient(180deg,#3d4d52,#172329 55%,#081015);
-    font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif; cursor: pointer;
+    font-family: var(--katamon-font-ui); cursor: pointer;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 0 #05090b, 0 6px 12px rgba(0,0,0,.28);
   }
   #deviceBackConfirmActions button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 1px 0 #05090b; }
@@ -562,13 +559,16 @@
     ally: '#4fc3f7',
     enemy: '#ff6b6b'
   };
-  const UI_FONT = '"Yu Gothic UI", sans-serif';
-  const UI_FONT_HEAVY = '"Arial Black", "Yu Gothic UI", sans-serif';
+  // 通常UIはRocknRoll One、短い大見出しと演出だけReggae Oneを使う。
+  // どちらもRegular 400を1ファイルだけ内蔵し、太さはCanvas側で必要な時だけ合成する。
+  const UI_FONT = '"RocknRoll One", "Yu Gothic UI", sans-serif';
+  const UI_FONT_HEAVY = '"RocknRoll One", "Yu Gothic UI", sans-serif';
+  const UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif';
 
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v142-reggae-one-exit-title';
+  const BUILD_ID = 'v143-katamon-font-system';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -7740,7 +7740,7 @@
     ctx.fillStyle = UI.parchment;
     ctx.strokeStyle = '#090b0d';
     ctx.lineWidth = 5;
-    ctx.font = '900 23px ' + UI_FONT_HEAVY;
+    ctx.font = '400 23px ' + UI_FONT_DISPLAY;
     ctx.strokeText(label, button.x, button.y - 7);
     ctx.fillText(label, button.x, button.y - 7);
     // 案内文は、通常の説明より一段明るくして拾わせる。
@@ -7808,7 +7808,7 @@
       g.drawImage(titleLogoImage, cropX, cropY, cropW, cropH, logo.x, logo.y, logo.w, logo.h);
     } else {
       g.fillStyle = '#ffd24a';
-      g.font = 'bold 35px sans-serif';
+      g.font = '400 35px ' + UI_FONT_DISPLAY;
       g.textAlign = 'center';
       g.fillText('CATAMON PROJECT', VW / 2, logo.y + logo.h / 2);
     }
@@ -7833,7 +7833,7 @@
 
     // ボタン群の一番上に見出しを掲げる。文字幅を測って左右に真鍮ラインを添える(キャラ選択ヘッダと同じ色・太さ)。
     ctx.textAlign = 'center';
-    ctx.font = 'bold 10px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     const modeLabelText = 'SELECT A BATTLE MODE';
     const modeLabelHalfW = ctx.measureText(modeLabelText).width / 2;
     const modeLabelY = TITLE_MODE_LABEL_Y;
@@ -7893,7 +7893,7 @@
     ctx.textAlign = 'center';
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.38)';
-      ctx.font = '11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 18);
     }
     ctx.restore();
@@ -7946,7 +7946,7 @@
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#d39b4b';
-    ctx.font = '900 10px "Arial Black", "Yu Gothic UI", sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.fillText(label, labelX, labelY);
 
     if (compact) {
@@ -7954,11 +7954,11 @@
       ctx.fillStyle = '#fff5dc';
       ctx.strokeStyle = '#070a0c';
       ctx.lineWidth = 4;
-      ctx.font = '900 18px "Arial Black", "Yu Gothic UI", sans-serif';
+      ctx.font = '400 18px ' + UI_FONT;
       ctx.strokeText(value, VW / 2, row.y + 6);
       ctx.fillText(value, VW / 2, row.y + 6);
       ctx.fillStyle = 'rgba(220,232,231,0.72)';
-      ctx.font = '10px "Yu Gothic UI", sans-serif';
+      ctx.font = '400 10px ' + UI_FONT;
       ctx.fillText(sub, VW / 2, row.y + 21);
       // 矢印は当たり判定の中心(row.y + 7)に合わせる。ここがずれると押した所と反応がずれる。
       drawFreeArrow(48, row.y + 7, -1);
@@ -7984,11 +7984,11 @@
     ctx.fillStyle = '#fff5dc';
     ctx.strokeStyle = '#070a0c';
     ctx.lineWidth = 4;
-    ctx.font = `900 ${imageKey ? 21 : 20}px "Arial Black", "Yu Gothic UI", sans-serif`;
+    ctx.font = `400 ${imageKey ? 21 : 20}px ${UI_FONT}`;
     ctx.strokeText(value, valueX, row.y + 1);
     ctx.fillText(value, valueX, row.y + 1);
     ctx.fillStyle = 'rgba(220,232,231,0.72)';
-    ctx.font = '10px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.fillText(sub, valueX, row.y + 24);
 
     drawFreeArrow(48, row.y + 7, -1);
@@ -8010,11 +8010,11 @@
     ctx.fillStyle = '#f3ad47';
     ctx.strokeStyle = '#160d08';
     ctx.lineWidth = 7;
-    ctx.font = '900 38px "Arial Black", Impact, sans-serif';
+    ctx.font = '400 38px ' + UI_FONT_DISPLAY;
     ctx.strokeText('演習', VW / 2, 78);
     ctx.fillText('演習', VW / 2, 78);
     ctx.fillStyle = '#fff0cd';
-    ctx.font = 'bold 12px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 12px ' + UI_FONT;
     ctx.fillText('演習条件を選択せよ', VW / 2, 105);
 
     const playerKey = CHARACTER_LIST[freeModeConfig.playerIndex];
@@ -8046,11 +8046,11 @@
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = '#d6c6ad';
-    ctx.font = 'bold 13px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 13px ' + UI_FONT;
     ctx.fillText('‹  タイトルへ戻る', freeBackBtn.x, freeBackBtn.y + 5);
 
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
-    ctx.font = '10px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.fillText('左右の矢印で条件を切り替え', VW / 2, FREE_HINT_Y);
     ctx.restore();
   }
@@ -8537,17 +8537,17 @@
     ctx.textAlign = 'center';
     if (readyToStart) {
       ctx.fillStyle = titleStartPending ? 'rgba(255,255,255,0.78)' : `rgba(255,210,74,${Math.min(1, pulse + 0.18)})`;
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = '400 18px ' + UI_FONT_DISPLAY;
       ctx.fillText(titleStartPending ? 'STARTING BGM...' : 'TAP TO START', VW / 2, VH / 2 + 30);
       ctx.fillStyle = 'rgba(255,255,255,0.70)';
-      ctx.font = '11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.fillText(titleStartPending ? 'タイトルを準備しています' : (titleStartFailed ? 'BGMを開始できませんでした。もう一度タップしてください' : '画面をタップしてタイトルBGMを開始'), VW / 2, VH / 2 + 53);
     } else {
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 18px sans-serif';
+      ctx.font = '400 18px ' + UI_FONT_DISPLAY;
       ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 30);
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
-      ctx.font = '11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 2}`, VW / 2, VH / 2 + 53);
     }
     ctx.restore();
@@ -8753,7 +8753,7 @@
     ctx.lineJoin = 'round';
     ctx.strokeStyle = UI.ink;
     ctx.lineWidth = 5;
-    ctx.font = '900 25px ' + UI_FONT_HEAVY;
+    ctx.font = '400 25px ' + UI_FONT_DISPLAY;
     ctx.strokeText('出撃', 0, -4);
     ctx.fillStyle = UI.parchment;
     ctx.fillText('出撃', 0, -4);
@@ -8792,9 +8792,9 @@
     ctx.fill();
 
     ctx.textAlign = 'center';
-    drawOutlinedText('モンスターを選択', VW / 2, 78, { font: '900 24px ' + UI_FONT_HEAVY, color: UI.parchment });
+    drawOutlinedText('モンスターを選択', VW / 2, 78, { font: '400 24px ' + UI_FONT_DISPLAY, color: UI.parchment });
     ctx.fillStyle = 'rgba(255,245,220,0.62)';
-    ctx.font = '11px sans-serif';
+    ctx.font = '400 11px ' + UI_FONT;
     ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 111);
 
     angularPlatePath(selectBackBtn.x, selectBackBtn.y, selectBackBtn.w, selectBackBtn.h, 8);
@@ -8804,7 +8804,7 @@
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = '#ffe2a1';
-    ctx.font = 'bold 12px "Yu Gothic UI", sans-serif';
+    ctx.font = '400 12px ' + UI_FONT;
     ctx.fillText('‹  戻る', selectBackBtn.x, selectBackBtn.y + 4);
 
     if (hasSuspendedSave) {
@@ -8816,7 +8816,7 @@
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.fillStyle = UI.parchment;
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = '400 13px ' + UI_FONT;
       ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
     }
 
@@ -8869,16 +8869,16 @@
     const focusedIndex = getFocusedSelectIndex();
 
     ctx.fillStyle = 'rgba(255,255,255,0.52)';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = '400 11px ' + UI_FONT;
     ctx.textAlign = 'center';
     ctx.fillText('↑  上下にスワイプ  ↓', VW / 2, 856);
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = 'bold 10px monospace';
+    ctx.font = '700 10px ' + UI_FONT;
     ctx.fillText(`${String(focusedIndex + 1).padStart(2, '0')} / ${String(CHARACTER_LIST.length).padStart(2, '0')}`, VW / 2, 884);
 
     if (LAST_UPDATED_TEXT) {
       ctx.fillStyle = 'rgba(255,255,255,0.34)';
-      ctx.font = '10px sans-serif';
+      ctx.font = '400 10px ' + UI_FONT;
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 16);
     }
     ctx.restore();
@@ -9746,7 +9746,7 @@
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(255,95,95,0.95)';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.textAlign = 'center';
     ctx.fillText('DEAD LINE', VW / 2, y - 6);
     ctx.restore();
@@ -9996,7 +9996,7 @@
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.textAlign = 'center';
       ctx.fillText(u.label, 0, 4);
     }
@@ -10006,7 +10006,7 @@
     if (isBossUnit) {
       ctx.save();
       ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.textAlign = 'center';
       ctx.fillText('BOSS', a.x, imgTopAbs - 2);
       ctx.restore();
@@ -10023,7 +10023,7 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, 8);
     ctx.fillStyle = '#fff';
-    ctx.font = '10px sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.fillText(`${u.hp}/${u.maxHp}`, a.x, barY - 3);
   }
 
@@ -10332,7 +10332,7 @@
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = '400 10px ' + UI_FONT;
     ctx.textAlign = 'center';
     ctx.fillText('敵', ix + (onRight ? -14 : 14), iy + 4);
     ctx.restore();
@@ -10693,7 +10693,7 @@
     ctx.restore();
 
     drawOutlinedText('ランキング', VW / 2, 104, {
-      font: `900 26px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+      font: `400 26px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
     const periodLabel = rankingBoard ? `${rankingBoard.period} の記録` : '今月の記録';
     drawOutlinedText(periodLabel, VW / 2, 132, {
@@ -10847,7 +10847,7 @@
     ctx.translate(VW / 2, bandY + bandH / 2);
     ctx.scale(scale, scale);
     drawOutlinedText(matchEndReason, 0, -12, {
-      font: `900 40px ${UI_FONT_HEAVY}`, color: '#fff', lineWidth: 6
+      font: `400 40px ${UI_FONT_DISPLAY}`, color: '#fff', lineWidth: 6
     });
     drawOutlinedText(style.sub, 0, 26, {
       font: `900 14px ${UI_FONT_HEAVY}`, color: style.color, lineWidth: 4
@@ -10983,25 +10983,25 @@
 
     const foeName = foeUnit().control === 'cpu' ? 'CPU' : '相手';
     drawOutlinedText(draw ? '相討ち!' : won ? `${foeName}を撃破!` : 'あなたの負け...', VW / 2, VH / 2 - 70, {
-      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+      font: `400 25px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
 
     if (isOnline()) {
       // 対人戦は連勝にもランキングにも含めないので、連勝表示は出さない。
       drawOutlinedText(draw ? '引き分け' : won ? '対戦に勝利!' : '対戦に敗北', VW / 2, VH / 2 - 22, {
-        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+        font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
     } else if (battleMode === 'free') {
       drawOutlinedText(draw ? '演習引き分け' : won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
-        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+        font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
     } else if (draw) {
       drawOutlinedText('連勝維持', VW / 2, VH / 2 - 22, {
-        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+        font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
     } else if (won) {
       drawOutlinedText(`${winStreak}連勝!`, VW / 2, VH / 2 - 22, {
-        font: `900 42px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 6
+        font: `400 42px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 6
       });
       if (winStreak > 0 && winStreak % 10 === 0) {
         drawOutlinedText('節目達成の大金星!', VW / 2, VH / 2 + 4, {
@@ -11010,7 +11010,7 @@
       }
     } else {
       drawOutlinedText(`最終 ${lastRunStreak}連勝`, VW / 2, VH / 2 - 22, {
-        font: `900 31px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+        font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
     }
 
@@ -11338,7 +11338,7 @@
       ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.arc(x, y, 3.4, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff'; ctx.font = '400 8px ' + UI_FONT; ctx.textAlign = 'center';
       ctx.fillText(label, x, Math.max(innerY + 8, y - 6));
     };
     // 2vs2でも全員の位置が分かるよう、席の陣営で色を分けて全ユニットを打つ。
@@ -11355,7 +11355,7 @@
 
     const heightGap = Math.round(Math.abs(localUnit().y - foeUnit().y));
     ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.font = 'bold 8px monospace';
+    ctx.font = '700 8px ' + UI_FONT;
     ctx.textAlign = 'left';
     ctx.fillText('MAP', map.x + 7, map.y + 11);
     ctx.textAlign = 'right';
@@ -11585,7 +11585,7 @@
 
     // チュートリアルは対戦ではないので、見出しも「対戦開始」とは言わない。
     drawOutlinedText(battleMode === 'tutorial' ? 'TUTORIAL START!' : 'BATTLE START', VW / 2, 250, {
-      font: `900 25px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+      font: `400 25px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
 
     // 相手陣営を先に描き、自陣営を上に重ねる(見本と同じ重なり)。
@@ -11606,7 +11606,7 @@
         ctx.drawImage(badge, -bw / 2, -bh / 2, bw, bh);
       } else {
         drawOutlinedText('VS', 0, 16, {
-          font: `900 46px ${UI_FONT_HEAVY}`, color: '#ffb43c', lineWidth: 7
+          font: `400 46px ${UI_FONT_DISPLAY}`, color: '#ffb43c', lineWidth: 7
         });
       }
       ctx.restore();
@@ -11655,12 +11655,12 @@
     ctx.strokeRect(0, VH * 0.4, VW, 120);
     // 見出しは陣営の色で出す。文字を読む前に「自分側か相手側か」が分かる。
     ctx.fillStyle = cutIn.color || '#fff';
-    ctx.font = 'bold 30px sans-serif';
+    ctx.font = '400 30px ' + UI_FONT_DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText(cutIn.text, VW / 2, VH * 0.4 + 62);
     if (cutIn.sub) {
       ctx.fillStyle = '#ffd24a';
-      ctx.font = 'bold 17px sans-serif';
+      ctx.font = '400 17px ' + UI_FONT;
       ctx.fillText(cutIn.sub, VW / 2, VH * 0.4 + 92);
     }
     ctx.restore();
@@ -11674,7 +11674,7 @@
     ctx.fillStyle = 'rgba(60,10,10,0.65)';
     ctx.fillRect(0, VH * 0.32, VW, 70);
     ctx.fillStyle = '#ffd24a';
-    ctx.font = 'bold 26px sans-serif';
+    ctx.font = '400 26px ' + UI_FONT_DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText('強敵出現!', VW / 2, VH * 0.32 + 45);
     ctx.restore();
@@ -11960,21 +11960,21 @@
     ctx.lineWidth = 5;
     // 技名が長い時にはみ出さないよう、収まる大きさまで詰める
     let titleSize = 29;
-    ctx.font = `900 ${titleSize}px sans-serif`;
+    ctx.font = `400 ${titleSize}px ${UI_FONT_DISPLAY}`;
     const maxTitleW = VW - textLeft - 24;
     while (titleSize > 17 && ctx.measureText(specialFlash.text).width > maxTitleW) {
       titleSize -= 1;
-      ctx.font = `900 ${titleSize}px sans-serif`;
+      ctx.font = `400 ${titleSize}px ${UI_FONT_DISPLAY}`;
     }
     ctx.strokeText(specialFlash.text, textCx, bandY + 78);
     ctx.fillText(specialFlash.text, textCx, bandY + 78);
     ctx.shadowBlur = 0;
     ctx.fillStyle = color;
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = '400 11px ' + UI_FONT;
     ctx.fillText('SPECIAL ATTACK', textCx, bandY + 102);
     if (specialFlash.sub) {
       ctx.fillStyle = 'rgba(255,255,255,0.86)';
-      ctx.font = '11px sans-serif';
+      ctx.font = '400 11px ' + UI_FONT;
       ctx.fillText(specialFlash.sub, textCx, bandY + 124);
     }
     ctx.restore();
@@ -12747,7 +12747,7 @@
     // 見出しはプレートを敷かない(「プレート=押せる」と読めるようにするため)。
     // 代わりに真鍮の二重罫線で挟んでラベルだと分かるようにする。
     drawOutlinedText('メニュー', VW / 2, VH / 2 - 88, {
-      font: `900 26px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
+      font: `400 26px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
     ctx.save();
     for (const [dy, alpha] of [[-112, 0.85], [-72, 0.5]]) {
@@ -12793,7 +12793,7 @@
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = inCancel ? '#ff5a5a' : 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = '400 12px ' + UI_FONT;
     ctx.textAlign = 'center';
     ctx.fillText(inCancel ? 'ここで離すとキャンセル' : '', FIRE_BTN.x, FIRE_BTN.y - FIRE_BTN.r - 10);
     ctx.restore();

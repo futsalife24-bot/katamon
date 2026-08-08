@@ -1,0 +1,20 @@
+@font-face {
+  font-family: "RocknRoll One";
+  src: url("./rocknroll-one-regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Reggae One";
+  src: url("./reggae-one-display.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --katamon-font-ui: "RocknRoll One", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+  --katamon-font-display: "Reggae One", "RocknRoll One", "Yu Gothic UI", sans-serif;
+}
