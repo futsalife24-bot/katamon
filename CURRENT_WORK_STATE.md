@@ -2,7 +2,7 @@
 
 更新日: 2026-08-09（JST）
 
-## v145 Cartoon Explosionへの差し替え（実装済み・PR準備中）
+## v145 Cartoon Explosionへの差し替え（承認待ち・PR #82）
 
 - 作業ブランチ: `feat/v145-cartoon-explosion-sfx`。公開中の最新版master（v144・PR #81まで）から作成した。
 - 何を: 通常弾と `TAP TO START` の起動砲弾が壁へ当たる瞬間に共用している音源を、メロニキ指定のPixabay素材 `Cartoon Explosion`（作者: Universfield、1.411秒）へ差し替えた。ゲーム中の通常弾は音量0.34、起動時の壁着弾は0.26のまま変更していない。音源本体、配布元URL、直接取得URL、Pixabay Content License、確認日、SHA-256は `assets/SOUND_LICENSES.md` に記録した。
@@ -2530,7 +2530,7 @@ v101は「新クライアントが `seenAt` を送る → 旧ルールが未宣�
    - ローカルHTTPと実ブラウザで、v138表示、音源が `fetch` で読み込まれること、CPU戦で通常弾を発射して進行すること、ローカルページ由来のエラー・警告が0件であることを確認。
    - `database.rules.json` は変更なし。Firebase Console作業なし。
 22. ~~**v144 指定爆発音への差し替え、起動砲弾にも共用**~~ — 公開済み（PR #81）。実装・検査の詳細は冒頭のv144節を正本とする。
-23. **v145 Cartoon Explosionへの差し替え** — 実装済み・PR準備中。実装・検査の詳細は冒頭のv145節を正本とする。
+23. **v145 Cartoon Explosionへの差し替え** — 承認待ち（PR #82）。実装・検査の詳細は冒頭のv145節を正本とする。
 24. **v146 必殺カットイン音をスタイリッシュな音へ変更** — 未着手。
    - v144と同じく、必要ならPixabayから音源を取得し、配布元URLとライセンス確認日を記録する。
 25. Issue #5 対戦部屋内の戦績表示
