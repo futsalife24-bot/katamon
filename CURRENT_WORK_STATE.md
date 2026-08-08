@@ -2,6 +2,16 @@
 
 更新日: 2026-08-08（JST）
 
+## 端末戻る確認タイトルのKaisei Decol試用（公開候補）
+
+- 作業ブランチ: `ui/kaisei-decol-exit-title`
+- 対象: `アプリを閉じますか？`の見出しだけ。本文・ボタン・他画面のフォントは変更しないため、Reggae Oneとの比較判断がしやすい。
+- 実装: Kaisei Decol Bold 700を見出しに必要な文字だけ3.2KBのWOFF2へ絞り、`assets/fonts/`へ同梱した。外部フォント通信へ依存せず、iPhone・Android・PWAオフライン時も同じ書体を使う。
+- ライセンス: SIL Open Font License 1.1を`assets/fonts/Kaisei-Decol-OFL.txt`へ同梱した。
+- キャッシュ: ゲーム本体とService Workerを`v141-kaisei-decol-exit-title`へ更新した。
+- 自動確認: 既存ゲーム1,164件 + Stage基盤48件 = 1,212件成功、失敗0。iPhone相当WebKit 7/7、Android相当Chromium 7/7、合計14/14成功。Android相当412×915でフォント読込と1行表示を目視確認した。
+- 未確認: iPhone/Android実機での字形、Kaisei DecolとReggae Oneの最終比較。
+
 ## ゲーム外HTML画面の世界観統一（公開候補）
 
 - 作業ブランチ: `ui/game-styled-overlays`
