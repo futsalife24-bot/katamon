@@ -362,11 +362,16 @@ async function exportStage(page, format, testInfo) {
 
 async function openCustomStageManager(page) {
   const launcher = page.getByTestId('custom-stage-button');
-  // The manager is intentionally available on the TAP TO START screen. Wait for
-  // its 250 ms bridge poll instead of tapping the canvas and entering the wall
-  // break animation, which would temporarily hide the launcher again.
-  await expect(launcher).toBeVisible({ timeout: 15_000 });
-  await launcher.click();
+  const canvas = page.getByTestId('battle-canvas');
+  // 本編の開始演出より先に固定ボタンを見せない。タイトルにも常駐させず、
+  // 演習設定へ入った時だけカスタムステージ管理を出す。
+  await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase)).toBe('press');
+  await expect(launcher).toBeHidden();
+  await tapCanvas(page, canvas, 0.5, 0.5);
+  await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase), { timeout: 15_000 }).toBe('title');
+  await expect(launcher).toBeHidden();
+  await page.evaluate(() => globalThis.CustomStageManager.open());
+  await expect(page.locator('#customStageOverlay')).toBeVisible();
 }
 
 async function importIntoGameAndStart(page, filePath) {

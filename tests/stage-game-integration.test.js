@@ -241,6 +241,8 @@ test('game integration remains isolated from official and online stage paths', (
   assert.match(manager, /readStageBundle\(file\)/);
   assert.match(manager, /createStageBundle\(finalized\)/);
   assert.match(manager, /state\.onlineActive/);
+  assert.match(manager, /state\.gamePhase !== 'freeSetup'/);
+  assert.doesNotMatch(manager, /\['press', 'title', 'freeSetup'\]/);
   for (const field of ['stageId', 'schemaVersion', 'contentHash', 'gameCompatibility']) {
     assert.match(manager, new RegExp("label: '" + field + "'"));
   }

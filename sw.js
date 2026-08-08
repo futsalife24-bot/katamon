@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v138-stage-studio-ui';
+const CACHE_VERSION = 'katamon-pwa-v138-stage-studio-launcher';
 const APP_SHELL = [
   './',
   './index.html',
