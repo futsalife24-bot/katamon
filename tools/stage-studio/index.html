@@ -218,8 +218,10 @@
             <label>大きさ <output id="terrainTextSizeOutput">280</output>px<input id="terrainTextSize" type="range" min="80" max="480" step="10" value="280"></label>
             <label>補強 <output id="terrainTextThicknessOutput">16</output>px<input id="terrainTextThickness" type="range" min="4" max="40" step="2" value="16"></label>
             <label class="full">地形操作<select id="terrainTextOperation"><option value="add">文字を足す</option><option value="erase">文字の形で削る</option></select></label>
-            <button id="placeTextCenter" class="primary full" type="button">ステージ中央へ置く</button>
-            <p id="terrainTextHelp" class="muted full">設定後にマップをタップすると、その位置へ文字地形を置けます。出力時は文字ではなく安全な地形データへ変換されます。</p>
+            <label class="full">置き方<select id="terrainTextPlacementMode"><option value="move">移動して1個置く</option><option value="stamp">タップで連続配置</option></select></label>
+            <button id="placeTextCenter" class="secondary full" type="button">ステージ中央へ仮置き</button>
+            <button id="confirmTextPlacement" class="primary full" type="button">この位置で確定</button>
+            <p id="terrainTextHelp" class="muted full">半透明の文字を指で移動し、「この位置で確定」を押します。出力時は文字ではなく安全な地形データへ変換されます。</p>
             <p id="terrainTextStatus" class="notice-inline full" role="status">「ア」の半透明プレビューを表示中です。</p>
           </section>
         </div>
@@ -320,6 +322,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app-1.6.1.js" defer></script>
+  <script src="./app-1.7.0.js" defer></script>
 </body>
 </html>
