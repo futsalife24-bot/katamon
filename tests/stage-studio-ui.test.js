@@ -22,7 +22,7 @@ test('Stage Studio shares the two-font Katamon hierarchy', () => {
   assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
   assert.match(studioSw, /rocknroll-one-regular\.ttf/);
   assert.match(studioSw, /reggae-one-display\.woff2/);
-  assert.match(studioSw, /1\.5\.0-font-system/);
+  assert.match(studioSw, /1\.6\.0-text-terrain/);
 });
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -108,12 +108,12 @@ test('terrain editor uses a canvas-first workspace with contextual inspector and
     assert.match(terrainHtml, new RegExp(`data-terrain-panel-content="${panel}"`));
   }
   assert.match(studioCss, /\.terrain-workspace\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/);
-  assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*position:\s*absolute;[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*position:\s*absolute;[^}]*grid-template-columns:\s*repeat\(5,/);
   assert.match(terrainHtml, /id="terrainToolMenuToggle"[^>]*aria-expanded="false"/);
   assert.match(terrainHtml, /id="terrainToolMenu"[^>]*hidden/);
   assert.match(studioApp, /function toggleTerrainToolMenu\(/);
   assert.match(studioApp, /function collapseTerrainToolMenu\(/);
-  assert.match(studioCss, /\.terrain-inspector-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(studioCss, /\.terrain-inspector-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
   assert.match(studioApp, /function nearestSafeCharacterGuide\(/);
   assert.match(studioApp, /function snapInvalidCharacterGuides\(/);
   assert.match(studioApp, /\.filter\(\(item\) => item\.collision\)/);
@@ -134,7 +134,21 @@ test('terrain settings use a floating palette that collapses after choosing a va
   assert.match(studioApp, /function collapseTerrainInspector\(/);
   assert.match(studioApp, /function toggleTerrainInspector\(/);
   assert.match(studioApp, /\[data-terrain-panel-content\] input, \[data-terrain-panel-content\] select/);
-  assert.match(studioApp, /control\.addEventListener\('change', \(\) => collapseTerrainInspector\(\)\)/);
+  assert.match(studioApp, /control\.closest\('\[data-terrain-panel-content="text"\]'\)/);
+});
+
+test('text terrain converts safe text into the existing destructible grid', () => {
+  assert.match(studioHtml, /id="toolText"[^>]*data-tool="text"/);
+  assert.match(studioHtml, /id="terrainTextInput"[^>]*maxlength="8"/);
+  assert.match(studioHtml, /id="terrainTextFont"[\s\S]*value="rock"[\s\S]*value="reggae"/);
+  assert.match(studioHtml, /id="placeTextCenter"/);
+  assert.match(studioApp, /function textTerrainSettings\(/);
+  assert.match(studioApp, /function rasterizeTextTerrain\(/);
+  assert.match(studioApp, /document\.fonts\.load/);
+  assert.match(studioApp, /getImageData\(/);
+  assert.match(studioApp, /state\.grid\[index\] = next/);
+  assert.match(studioApp, /syncTerrainToStage\(\);[\s\S]*resetPlaytest\(false\);[\s\S]*markDirty\(\);/);
+  assert.match(studioApp, /replace\(\/\[\\u0000-\\u001f\\u007f\]\//);
 });
 
 test('editing canvases expose an external landscape control with a safe iOS fallback', () => {
@@ -162,8 +176,8 @@ test('steel remains a disabled future material and cannot enter exported state',
 test('game-style UI and PWA shell ship the new visual assets with a cache bump', () => {
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
-  assert.match(studioCss, /grid-template-columns:\s*repeat\(4,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.5\.0-font-system`/);
+  assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.6\.0-text-terrain`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);

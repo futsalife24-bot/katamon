@@ -1,7 +1,7 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.5.0-font-system`;
+const CACHE_NAME = `${CACHE_PREFIX}1.6.0-text-terrain`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',

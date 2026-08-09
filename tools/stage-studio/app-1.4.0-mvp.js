@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.5.0-font-system';
+  const APP_VERSION = '1.6.0-text-terrain';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -39,9 +39,13 @@
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
   const TERRAIN_TOOL_LABELS = Object.freeze({
     draw: '描く', erase: '削る', guide: 'キャラ確認', fill: '塗りつぶし',
-    line: '線', rectangle: '四角', circle: '円'
+    line: '線', rectangle: '四角', circle: '円', text: '文字'
   });
-  const TERRAIN_PANEL_LABELS = Object.freeze({ brush: 'ブラシ', shape: '整形', display: '表示', appearance: '見た目' });
+  const TERRAIN_PANEL_LABELS = Object.freeze({ brush: 'ブラシ', shape: '整形', display: '表示', appearance: '見た目', text: '文字' });
+  const TEXT_TERRAIN_FONTS = Object.freeze({
+    rock: '"RocknRoll One", sans-serif',
+    reggae: '"Reggae One", "RocknRoll One", sans-serif'
+  });
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
     mountainCenter: '中央山', valley: '渓谷', grandCanyon: '大峡谷', centerHole: '中央穴',
@@ -227,6 +231,8 @@
     lastWorldPoint: null,
     shapeStart: null,
     shapeBaseGrid: null,
+    textTerrainBusy: false,
+    textTerrainPreviewPoint: { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 },
     pinch: null,
     noiseCounter: 0,
     generationJob: null,
@@ -1244,6 +1250,18 @@
     context.stroke();
     context.setLineDash([]);
 
+    if (settings.editable && state.activeTool === 'text') {
+      const textSettings = textTerrainSettings();
+      if (textSettings.text) {
+        context.save();
+        context.globalAlpha = 0.5;
+        context.fillStyle = textSettings.solid ? '#ffe28a' : '#ff7777';
+        context.strokeStyle = textSettings.solid ? '#fff4bf' : '#ffb1b1';
+        drawTextTerrainGlyph(context, textSettings, state.textTerrainPreviewPoint || { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 });
+        context.restore();
+      }
+    }
+
     if (settings.guides) drawCharacterGuides(context, grid);
     if (settings.spawns === true) drawSpawnsOnContext(context, transform.scale, grid);
     if (Array.isArray(settings.testFallTrail) && settings.testFallTrail.length > 1) {
@@ -1470,6 +1488,121 @@
     return true;
   }
 
+  function textTerrainSettings() {
+    const input = $('terrainTextInput');
+    const cleaned = Array.from(String(input.value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim()).slice(0, 8).join('');
+    if (input.value !== cleaned) input.value = cleaned;
+    return {
+      text: cleaned,
+      fontKey: TEXT_TERRAIN_FONTS[$('terrainTextFont').value] ? $('terrainTextFont').value : 'rock',
+      style: $('terrainTextStyle').value === 'outline' ? 'outline' : 'solid',
+      size: clamp(Number($('terrainTextSize').value) || 280, 80, 480),
+      thickness: clamp(Number($('terrainTextThickness').value) || 16, 4, 40),
+      solid: $('terrainTextOperation').value !== 'erase'
+    };
+  }
+
+  function configureTextTerrainContext(context, settings) {
+    let size = settings.size;
+    const family = TEXT_TERRAIN_FONTS[settings.fontKey] || TEXT_TERRAIN_FONTS.rock;
+    context.font = `400 ${size}px ${family}`;
+    const measuredWidth = context.measureText(settings.text).width;
+    const maxWidth = LIMITS.stageWidth * 0.9;
+    if (measuredWidth > maxWidth) {
+      size = Math.max(40, size * maxWidth / measuredWidth);
+      context.font = `400 ${size}px ${family}`;
+    }
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = settings.style === 'outline' ? Math.max(10, settings.thickness) : settings.thickness;
+  }
+
+  function drawTextTerrainGlyph(context, settings, point) {
+    configureTextTerrainContext(context, settings);
+    if (settings.style === 'outline') {
+      context.strokeText(settings.text, point.x, point.y);
+      return;
+    }
+    context.strokeText(settings.text, point.x, point.y);
+    context.fillText(settings.text, point.x, point.y);
+  }
+
+  async function rasterizeTextTerrain(settings, point) {
+    const family = TEXT_TERRAIN_FONTS[settings.fontKey] || TEXT_TERRAIN_FONTS.rock;
+    if (document.fonts && typeof document.fonts.load === 'function') {
+      try { await document.fonts.load(`400 ${settings.size}px ${family}`, settings.text); } catch (_) { /* fallback font remains usable */ }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = LIMITS.stageWidth;
+    canvas.height = LIMITS.stageHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return 0;
+    context.fillStyle = '#fff';
+    context.strokeStyle = '#fff';
+    drawTextTerrainGlyph(context, settings, point);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let changed = 0;
+    const rowLimit = Math.min(LIMITS.terrainRows, Math.ceil(LIMITS.terrainBottomY / LIMITS.rowHeight));
+    for (let row = 0; row < rowLimit; row++) {
+      const startY = row * LIMITS.rowHeight;
+      for (let column = 0; column < LIMITS.terrainColumns; column++) {
+        const startX = column * LIMITS.columnWidth;
+        let covered = false;
+        for (let y = startY; y < Math.min(startY + LIMITS.rowHeight, canvas.height) && !covered; y++) {
+          for (let x = startX; x < Math.min(startX + LIMITS.columnWidth, canvas.width); x++) {
+            if (pixels[(y * canvas.width + x) * 4 + 3] >= 32) { covered = true; break; }
+          }
+        }
+        if (!covered) continue;
+        const index = row * LIMITS.terrainColumns + column;
+        const next = settings.solid ? 1 : 0;
+        if (state.grid[index] !== next) { state.grid[index] = next; changed += 1; }
+      }
+    }
+    canvas.width = 1;
+    canvas.height = 1;
+    enforceTerrainBounds(state.grid);
+    return changed;
+  }
+
+  async function placeTextTerrain(point) {
+    if (state.textTerrainBusy) return;
+    const settings = textTerrainSettings();
+    const status = $('terrainTextStatus');
+    if (!settings.text) {
+      status.textContent = '文字を1文字以上入力してください。';
+      showToast('文字を入力してください。');
+      return;
+    }
+    state.textTerrainBusy = true;
+    status.textContent = '文字を地形へ変換しています…';
+    pushUndo();
+    try {
+      const changed = await rasterizeTextTerrain(settings, {
+        x: clamp(point.x, 0, LIMITS.stageWidth),
+        y: clamp(point.y, 0, LIMITS.terrainBottomY)
+      });
+      if (!changed) {
+        state.undo.pop();
+        updateHistoryButtons();
+        status.textContent = 'この位置では地形が変わりませんでした。位置か操作を変えてください。';
+        showToast('地形が変わりませんでした。');
+        return;
+      }
+      syncTerrainToStage();
+      resetPlaytest(false);
+      renderAllCanvases();
+      markDirty();
+      status.textContent = `「${settings.text}」を地形へ${settings.solid ? '追加' : '型抜き'}しました（${changed}マス）。`;
+      collapseTerrainInspector();
+      showToast(`「${settings.text}」の文字地形を${settings.solid ? '置き' : '削り'}ました。`);
+    } finally {
+      state.textTerrainBusy = false;
+    }
+  }
+
   function beginTerrainPointer(event) {
     const canvas = $('terrainCanvas');
     try {
@@ -1480,6 +1613,12 @@
     state.pointerMap.set(event.pointerId, eventPoint(canvas, event));
     if (state.pointerMap.size === 1) {
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
+      if (state.activeTool === 'text') {
+        state.pointerMap.delete(event.pointerId);
+        state.textTerrainPreviewPoint = world;
+        void placeTextTerrain(world);
+        return;
+      }
       if (state.activeTool === 'guide') {
         let selectedIndex = -1;
         let selectedDistance = Infinity;
@@ -1910,6 +2049,8 @@
     $('angleOutput').textContent = $('shotAngle').value;
     $('powerOutput').textContent = $('shotPower').value;
     $('brightnessOutput').textContent = $('brightnessRange').value;
+    $('terrainTextSizeOutput').textContent = $('terrainTextSize').value;
+    $('terrainTextThicknessOutput').textContent = $('terrainTextThickness').value;
   }
 
   function generationParameters() {
@@ -2558,7 +2699,7 @@
   }
 
   function setActiveTool(tool) {
-    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill', 'guide'];
+    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill', 'guide', 'text'];
     state.activeTool = supported.includes(tool) ? tool : 'draw';
     document.querySelectorAll('[data-tool]').forEach((button) => {
       const selected = button.dataset.tool === state.activeTool;
@@ -2572,6 +2713,7 @@
     const toggle = $('terrainToolMenuToggle');
     if (toggle) toggle.setAttribute('aria-label', `選択中: ${toolLabel}。押して地形ツールを切り替える`);
     collapseTerrainToolMenu();
+    if (state.activeTool === 'text') setTerrainInspector('text');
   }
 
   function collapseTerrainToolMenu(options) {
@@ -2610,7 +2752,7 @@
   }
 
   function setTerrainInspector(panelName, options) {
-    const supported = ['brush', 'shape', 'display', 'appearance'];
+    const supported = ['brush', 'shape', 'display', 'appearance', 'text'];
     const selectedPanel = supported.includes(panelName) ? panelName : 'brush';
     const inspector = $('terrainInspector');
     const toggle = $('terrainPaletteToggle');
@@ -2812,6 +2954,7 @@
     $('toolCircle').addEventListener('click', () => setActiveTool('circle'));
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
     $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
+    $('toolText').addEventListener('click', () => setActiveTool('text'));
     $('terrainToolMenuToggle').addEventListener('click', toggleTerrainToolMenu);
     $('toolLock').addEventListener('change', () => collapseTerrainToolMenu({ focusToggle: true }));
     $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
@@ -2849,6 +2992,18 @@
     $('symmetrizeTerrain').addEventListener('click', () => runTerrainOperation('左右対称化', symmetrizeTerrainGrid));
     $('brushSize').addEventListener('input', updateRangeOutputs);
     $('brushHardness').addEventListener('input', updateRangeOutputs);
+    ['terrainTextSize', 'terrainTextThickness'].forEach((id) => $(id).addEventListener('input', () => {
+      updateRangeOutputs();
+      renderTerrainCanvas();
+    }));
+    ['terrainTextInput', 'terrainTextFont', 'terrainTextStyle', 'terrainTextOperation'].forEach((id) => $(id).addEventListener('input', () => {
+      textTerrainSettings();
+      renderTerrainCanvas();
+    }));
+    $('placeTextCenter').addEventListener('click', () => {
+      state.textTerrainPreviewPoint = { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 };
+      void placeTextTerrain(state.textTerrainPreviewPoint);
+    });
     $('showGrid').addEventListener('change', renderTerrainCanvas);
     $('showCollision').addEventListener('change', renderTerrainCanvas);
     $('zoomOut').addEventListener('click', () => setZoom(state.view.zoom / 1.25));
@@ -2892,13 +3047,17 @@
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
 
     document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {
-      control.addEventListener('change', () => collapseTerrainInspector());
+      control.addEventListener('change', () => {
+        if (!control.closest('[data-terrain-panel-content="text"]')) collapseTerrainInspector();
+      });
     });
     document.querySelectorAll('.terrain-operation-row button').forEach((button) => {
       button.addEventListener('click', () => collapseTerrainInspector());
     });
     document.querySelectorAll('.terrain-tool-menu .tool-button').forEach((button) => {
-      button.addEventListener('click', () => collapseTerrainInspector());
+      button.addEventListener('click', () => {
+        if (button.dataset.tool !== 'text') collapseTerrainInspector();
+      });
     });
 
     document.addEventListener('click', (event) => {
