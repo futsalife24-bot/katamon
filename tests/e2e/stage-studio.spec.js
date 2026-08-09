@@ -306,7 +306,9 @@ async function createValidatedStage(page, options = {}) {
     await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   }
-  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).not.toBeDisabled();
+  await page.locator('#terrainMaterial').selectOption('steel');
+  await expect(page.locator('#terrainMaterial')).toHaveValue('steel');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
   await openTerrainInspector(page, 'appearance');
   await page.locator('#themeSelect').selectOption('grass');
