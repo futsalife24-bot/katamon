@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v150-special-cutin-sfx';
+  const BUILD_ID = 'v151-training-options';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2700,11 +2700,15 @@
   const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX。新規挑戦は0、次戦へ残量を持ち越す
 
   function isSpecialReady(u) {
-    return u.specialCharge >= SPECIAL_CHARGE_MAX;
+    // 演習の「常時MAX」はここだけで判定する。本編・オンラインのゲージや通信値を
+    // 書き換えないので、対戦判定には混ざらない。
+    return freeTrainingRules().specialAlwaysFull || u.specialCharge >= SPECIAL_CHARGE_MAX;
   }
 
   function advanceSpecialCharge(u) {
-    u.specialCharge = Math.min(SPECIAL_CHARGE_MAX, u.specialCharge + 1);
+    u.specialCharge = freeTrainingRules().specialAlwaysFull
+      ? SPECIAL_CHARGE_MAX
+      : Math.min(SPECIAL_CHARGE_MAX, u.specialCharge + 1);
   }
 
   // ある程度以上の急斜面(崖)は歩いて登れない。上り方向にこの角度を超える段差があると足止めする
@@ -3049,8 +3053,7 @@
           strength: selectedCustomAdapter.wind.strength
         };
       }
-      const selected = WIND_OPTIONS[freeModeConfig.windIndex] || WIND_OPTIONS[0];
-      return selected && selected.key !== 'random' ? selected : null;
+      return selectedFreeWind();
     }
     if (online && online.kind === 'firebase' && online.settings) {
       if (onlineCustomStageActive() && selectedCustomAdapter.wind) {
@@ -3796,25 +3799,69 @@
     { key: '1v1', name: '1 vs 1', sub: '自分 vs CPU の一騎打ち' },
     { key: '2v2', name: '2 vs 2', sub: '自分＋味方CPU vs 敵CPU2体' }
   ];
+  // 演習専用の追加条件。本編・オンラインの設定とは共有しない。
+  // CPU停止でも手番は自動で渡すため、練習が途中で固まることはない。
+  const FREE_TRAINING_OPTIONS = Object.freeze({
+    special: [
+      { key: 'normal', name: '通常', sub: '4手番で必殺がたまる' },
+      { key: 'always', name: '常時MAX', sub: '毎ターン必殺技を使える' }
+    ],
+    jump: [
+      { key: 'once', name: '1試合に1回', sub: '通常ルール' },
+      { key: 'eachTurn', name: '毎ターン', sub: '自分の手番ごとに戻る' }
+    ],
+    cpuAi: [
+      { key: 'off', name: '停止', sub: 'CPUは手番を渡す' },
+      { key: 'weak', name: '弱', sub: 'あまり動かず外しやすい' },
+      { key: 'mid', name: '中', sub: '移動も使う標準CPU' },
+      { key: 'strong', name: '強', sub: '狙いと移動が正確' }
+    ],
+    windDirection: [
+      { key: 'random', name: 'ランダム', sub: '4ターンごとに変化' },
+      { key: 'left', name: '← 左向き', sub: '固定風' },
+      { key: 'calm', name: '無風', sub: '強さの指定は使わない' },
+      { key: 'right', name: '右向き →', sub: '固定風' }
+    ],
+    windStrength: [
+      { key: 'weak', name: '弱', sub: '風の強さ30%' },
+      { key: 'medium', name: '中', sub: '風の強さ60%' },
+      { key: 'strong', name: '強', sub: '風の強さ100%' }
+    ]
+  });
+  const FREE_TRAINING_INDEX_FIELD = Object.freeze({
+    special: 'specialIndex', jump: 'jumpIndex', cpuAi: 'cpuAiIndex',
+    windDirection: 'windDirectionIndex', windStrength: 'windStrengthIndex'
+  });
   const freeModeConfig = {
     playerIndex: 0,
     cpuIndex: 1,
     terrainIndex: FREE_TERRAIN_OPTIONS.findIndex(option => option.key === 'tieredBasin'),
+    // windIndex はv150以前の中断データを読むためだけに残す。新しい演習画面では
+    // 向きと強さを別々に選ぶ。
     windIndex: 0,
-    formatIndex: 0
+    formatIndex: 0,
+    specialIndex: 0,
+    jumpIndex: 0,
+    cpuAiIndex: 1,
+    windDirectionIndex: 0,
+    windStrengthIndex: 1
   };
-  // キャラの2行は画像があるので高いまま。地形/風/対戦方式は文字だけなので、
-  // 余っていた上下の余白を詰めて対戦方式の行ぶんの場所を作る(下のボタンはほぼ据え置き)。
+  // キャラの2行を少しだけ詰め、残りは演習専用の条件へ使う。全行の当たり判定は
+  // 上下で重ならず、開始ボタンの上にも余白を残す。
   const freeRows = {
-    player: { y: 220, h: 102 },
-    cpu: { y: 344, h: 102 },
-    terrain: { y: 452, h: 60 },
-    wind: { y: 540, h: 60 },
-    format: { y: 628, h: 52 }
+    player: { y: 180, h: 82 },
+    cpu: { y: 280, h: 82 },
+    terrain: { y: 366, h: 48 },
+    format: { y: 420, h: 48 },
+    wind: { y: 474, h: 48 },
+    windStrength: { y: 528, h: 48 },
+    special: { y: 582, h: 48 },
+    jump: { y: 636, h: 48 },
+    cpuAi: { y: 690, h: 48 }
   };
-  const freeStartBtn = { x: VW / 2, y: 716, w: 350, h: 64 };
-  const freeBackBtn = { x: VW / 2, y: 796, w: 210, h: 42 };
-  const FREE_HINT_Y = 846;
+  const freeStartBtn = { x: VW / 2, y: 764, w: 350, h: 58 };
+  const freeBackBtn = { x: VW / 2, y: 834, w: 210, h: 40 };
+  const FREE_HINT_Y = 874;
   const SELECT_WHEEL_CENTER_Y = 454;
   const SELECT_WHEEL_RADIUS_Y = 328;
   const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
@@ -3992,17 +4039,105 @@
     return ((value % length) + length) % length;
   }
 
+  function selectedFreeTrainingOption(kind) {
+    const options = FREE_TRAINING_OPTIONS[kind] || [];
+    const field = FREE_TRAINING_INDEX_FIELD[kind];
+    return options[wrapOptionIndex(freeModeConfig[field] || 0, options.length)] || options[0];
+  }
+
+  function setFreeTrainingOption(kind, key) {
+    const options = FREE_TRAINING_OPTIONS[kind] || [];
+    const field = FREE_TRAINING_INDEX_FIELD[kind];
+    const index = options.findIndex(option => option.key === key);
+    if (field && index >= 0) freeModeConfig[field] = index;
+  }
+
+  // 演習の追加設定を一箇所で読む。本編・オンラインでは必ず通常ルールになる。
+  function freeTrainingRules() {
+    const active = battleMode === 'free';
+    return {
+      specialAlwaysFull: active && selectedFreeTrainingOption('special').key === 'always',
+      jumpEachTurn: active && selectedFreeTrainingOption('jump').key === 'eachTurn',
+      cpuEnabled: !active || selectedFreeTrainingOption('cpuAi').key !== 'off',
+      cpuAi: active ? selectedFreeTrainingOption('cpuAi').key : null
+    };
+  }
+
+  function selectedFreeWind() {
+    const direction = selectedFreeTrainingOption('windDirection');
+    if (direction.key === 'random') return null;
+    if (direction.key === 'calm') return { key: 'calm', dir: 1, strength: 0 };
+    const strength = selectedFreeTrainingOption('windStrength');
+    const amount = strength.key === 'weak' ? 0.3 : strength.key === 'strong' ? 1 : 0.6;
+    return { key: `${direction.key}-${strength.key}`, dir: direction.key === 'left' ? -1 : 1, strength: amount };
+  }
+
+  // テストからも画面と同じ設定経路を通す。端末保存や通信状態へは書き込まない。
+  function setFreeTrainingForTest(values) {
+    if (!values || typeof values !== 'object') return { ...freeModeConfig };
+    for (const kind of Object.keys(FREE_TRAINING_OPTIONS)) {
+      if (typeof values[kind] === 'string') setFreeTrainingOption(kind, values[kind]);
+    }
+    return { ...freeModeConfig };
+  }
+
+  function refreshPracticeJumpForTest(id) {
+    const unit = unitById(id);
+    if (!unit) return null;
+    const before = activeIndex;
+    const next = turnOrder.indexOf(id);
+    if (next < 0) return null;
+    activeIndex = next;
+    unit.jumpAvailable = false;
+    startTurn();
+    activeIndex = before;
+    return unit.jumpAvailable === true;
+  }
+
+  function applyLegacyFreeWind(key) {
+    const selected = WIND_OPTIONS.find(option => option.key === key) || WIND_OPTIONS[0];
+    setFreeTrainingOption('windDirection', selected.key === 'left' ? 'left'
+      : selected.key === 'right' ? 'right' : selected.key === 'calm' ? 'calm' : 'random');
+    if (selected.strength >= 0.9) setFreeTrainingOption('windStrength', 'strong');
+    else if (selected.strength > 0 && selected.strength < 0.5) setFreeTrainingOption('windStrength', 'weak');
+    else setFreeTrainingOption('windStrength', 'medium');
+  }
+
   function changeFreeOption(kind, direction) {
     const lengths = {
       player: CHARACTER_LIST.length,
       cpu: CHARACTER_LIST.length,
       terrain: FREE_TERRAIN_OPTIONS.length,
       wind: WIND_OPTIONS.length,
-      format: FORMAT_OPTIONS.length
+      format: FORMAT_OPTIONS.length,
+      special: FREE_TRAINING_OPTIONS.special.length,
+      jump: FREE_TRAINING_OPTIONS.jump.length,
+      cpuAi: FREE_TRAINING_OPTIONS.cpuAi.length,
+      windStrength: FREE_TRAINING_OPTIONS.windStrength.length
     };
+    if (kind === 'wind') {
+      freeModeConfig.windIndex = wrapOptionIndex(freeModeConfig.windIndex + direction, lengths.wind);
+      applyLegacyFreeWind(WIND_OPTIONS[freeModeConfig.windIndex].key);
+      if (selectedCustomStage) {
+        selectedCustomStage = null;
+        selectedCustomAdapter = null;
+      }
+      playUiSound();
+      return;
+    }
+    if (FREE_TRAINING_INDEX_FIELD[kind]) {
+      const field = FREE_TRAINING_INDEX_FIELD[kind];
+      freeModeConfig[field] = wrapOptionIndex(freeModeConfig[field] + direction, lengths[kind]);
+      if (selectedCustomStage && ['windStrength'].includes(kind)) {
+        selectedCustomStage = null;
+        selectedCustomAdapter = null;
+      }
+      playUiSound();
+      return;
+    }
     const property = `${kind}Index`;
     freeModeConfig[property] = wrapOptionIndex(freeModeConfig[property] + direction, lengths[kind]);
-    if (selectedCustomStage && ['terrain', 'wind', 'format'].includes(kind)) {
+    if (selectedCustomStage && ['terrain', 'format'].includes(kind)) {
       selectedCustomStage = null;
       selectedCustomAdapter = null;
     }
@@ -4578,6 +4713,18 @@
       freeModeConfig.terrainIndex = wrapOptionIndex(Number(data.freeModeConfig.terrainIndex) || 0, FREE_TERRAIN_OPTIONS.length);
       freeModeConfig.windIndex = wrapOptionIndex(Number(data.freeModeConfig.windIndex) || 0, WIND_OPTIONS.length);
       freeModeConfig.formatIndex = wrapOptionIndex(Number(data.freeModeConfig.formatIndex) || 0, FORMAT_OPTIONS.length);
+      // v150までのセーブはwindIndexだけなので、従来の固定風を新しい向き/強さへ移す。
+      if (Object.prototype.hasOwnProperty.call(data.freeModeConfig, 'windDirectionIndex')) {
+        for (const kind of Object.keys(FREE_TRAINING_OPTIONS)) {
+          const field = FREE_TRAINING_INDEX_FIELD[kind];
+          freeModeConfig[field] = wrapOptionIndex(Number(data.freeModeConfig[field]) || 0, FREE_TRAINING_OPTIONS[kind].length);
+        }
+      } else {
+        applyLegacyFreeWind(WIND_OPTIONS[freeModeConfig.windIndex].key);
+        freeModeConfig.specialIndex = 0;
+        freeModeConfig.jumpIndex = 0;
+        freeModeConfig.cpuAiIndex = 1;
+      }
     }
 
     loadTerrainFromSave(
@@ -8086,20 +8233,33 @@
     const terrain = selectedCustomStage
       ? { name: selectedCustomStage.title, sub: 'カスタムステージ・中央をタップして管理' }
       : FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
-    const windOption = selectedCustomAdapter && selectedCustomAdapter.wind
+    const windDirection = selectedCustomAdapter && selectedCustomAdapter.wind
       ? {
           name: selectedCustomAdapter.wind.strength
             ? (selectedCustomAdapter.wind.direction < 0 ? '← カスタム風' : 'カスタム風 →')
             : '無風',
           sub: 'ステージファイルの設定'
         }
-      : WIND_OPTIONS[freeModeConfig.windIndex];
+      : selectedFreeTrainingOption('windDirection');
+    const windStrength = selectedCustomAdapter && selectedCustomAdapter.wind
+      ? {
+          name: selectedCustomAdapter.wind.strength ? `${Math.round(selectedCustomAdapter.wind.strength * 100)}%` : '指定なし',
+          sub: 'ステージファイルの設定'
+        }
+      : selectedFreeTrainingOption('windStrength');
+    const formatOption = FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0];
+    const specialOption = selectedFreeTrainingOption('special');
+    const jumpOption = selectedFreeTrainingOption('jump');
+    const cpuAiOption = selectedFreeTrainingOption('cpuAi');
     drawFreeRow(freeRows.player, 'YOUR MONSTER', CHARACTERS[playerKey].name, CHARACTERS[playerKey].role, 'player', playerKey);
     drawFreeRow(freeRows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     drawFreeRow(freeRows.terrain, 'STAGE FORM', terrain.name, terrain.sub, 'terrain');
-    drawFreeRow(freeRows.wind, 'WIND SETTING', windOption.name, windOption.sub, 'wind');
-    const formatOption = FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0];
     drawFreeRow(freeRows.format, 'MATCH FORMAT', formatOption.name, formatOption.sub, 'format');
+    drawFreeRow(freeRows.wind, 'WIND DIRECTION', windDirection.name, windDirection.sub, 'wind');
+    drawFreeRow(freeRows.windStrength, 'WIND STRENGTH', windStrength.name, windStrength.sub, 'windStrength');
+    drawFreeRow(freeRows.special, 'SPECIAL CHARGE', specialOption.name, specialOption.sub, 'special');
+    drawFreeRow(freeRows.jump, 'JUMP USE', jumpOption.name, jumpOption.sub, 'jump');
+    drawFreeRow(freeRows.cpuAi, 'CPU ACTION', cpuAiOption.name, cpuAiOption.sub, 'cpuAi');
 
     drawTitleModeButton(freeStartBtn, 'START BATTLE', 'この条件で演習開始', 'normal');
 
@@ -9276,6 +9436,9 @@
     if (battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
     acting.fuel = acting.fuelMax;
+    // 演習だけは「毎ターン」を選んだ時に、行動を始める直前で跳躍を戻す。
+    // 移動不能のデバフは発動可否側で引き続き優先される。
+    if (freeTrainingRules().jumpEachTurn) acting.jumpAvailable = true;
     focusCameraOn(acting.x);
     if (acting.control === 'cpu') beginCpuTurnPlan(acting);
   }
@@ -9283,6 +9446,15 @@
   // 試合中に落ちた席をCPUが引き継いだ時(段D)にも呼ぶ。どちらも startTurn を
   // 通らない場面なので、ここを通さないと行動計画が無いまま止まる/即撃ちする。
   function beginCpuTurnPlan(acting) {
+    if (!freeTrainingRules().cpuEnabled) {
+      // 停止でも手番は必ず渡す。CPUをlocalへ替えると操作ボタンが出てしまうため、
+      // CPUのまま短い待機後にendTurnへ進める。
+      cpuThinkTimer = CPU_THINK_MIN_SEC;
+      cpuMoveDir = 0;
+      cpuMoveRemaining = 0;
+      cpuPhase = 'skip';
+      return;
+    }
     cpuThinkTimer = CPU_THINK_MIN_SEC + Math.random() * CPU_THINK_RANGE_SEC;
     const plan = planCpuMove(acting);
     cpuMoveDir = plan.dir;
@@ -9322,13 +9494,24 @@
     return { name: 'perfect', jitter: 0.02 };
   }
 
+  // 演習中だけは連勝数ではなく、設定した強さを使う。本編の成長型CPUはそのまま。
+  function activeCpuAccuracyTier() {
+    if (battleMode !== 'free') return cpuAccuracyTier(winStreak);
+    const key = freeTrainingRules().cpuAi;
+    if (key === 'off') return null;
+    if (key === 'strong') return { name: 'high', jitter: 0.09 };
+    if (key === 'mid') return { name: 'mid', jitter: 0.20 };
+    return { name: 'low', jitter: 0.38 };
+  }
+
   // CPUの移動計画:危機回避(近すぎる)・攻撃調整(遠すぎる)の時だけ動く。むやみに動かない。
   let cpuMoveDir = 0;
   let cpuMoveRemaining = 0;
-  let cpuPhase = 'aim'; // 'move' | 'aim'
+  let cpuPhase = 'aim'; // 'move' | 'aim' | 'skip'
 
   function planCpuMove(self) {
-    const tier = cpuAccuracyTier(winStreak);
+    const tier = activeCpuAccuracyTier();
+    if (!tier) return { dir: 0, distance: 0 };
     if (self.moveLockTurns > 0) return { dir: 0, distance: 0 };
     if (tier.name === 'low') return { dir: 0, distance: 0 }; // 1〜3連勝は動かない
 
@@ -9403,7 +9586,8 @@
     const anchor = unitAnchor(self);
     const target = unitAnchor(foe);
     const def = CHARACTERS[self.character];
-    const tier = cpuAccuracyTier(winStreak);
+    const tier = activeCpuAccuracyTier();
+    if (!tier) return;
     const useSpecial = isSpecialReady(self) && (tier.name === 'high' || tier.name === 'perfect');
     const shotProfile = shotPhysicsProfile(def, useSpecial, false);
     const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * shotProfile.tBias;
@@ -11825,7 +12009,7 @@
     const me = localUnit();
     const ready = isSpecialReady(me);
     const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
-    const chargeRatio = me.specialCharge / SPECIAL_CHARGE_MAX;
+    const chargeRatio = ready ? 1 : me.specialCharge / SPECIAL_CHARGE_MAX;
     const def = CHARACTERS[me.character];
     ctx.save();
     // 台座の影
@@ -14276,7 +14460,10 @@
     // 開始カットインが終わるまでは、まだ誰の手番も始まっていない。
     // ここを通すと、カットインが出る前や明けた直後にCPUが撃ってしまう。
     if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && cpuActor.grounded && !projectiles.length) {
-      if (cpuPhase === 'move') {
+      if (cpuPhase === 'skip') {
+        cpuThinkTimer -= dt;
+        if (cpuThinkTimer <= 0) endTurn();
+      } else if (cpuPhase === 'move') {
         if (cpuMoveDir !== 0 && cpuMoveRemaining > 0 && cpuActor.fuel > 0) {
           const dist = Math.min(MOVE_SPEED * dt, cpuActor.fuel, cpuMoveRemaining);
           faceUnitTowardOpponent(cpuActor);

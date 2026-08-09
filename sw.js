@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v150-special-cutin-sfx';
+const CACHE_VERSION = 'katamon-pwa-v151-training-options';
 const APP_SHELL = [
   './',
   './index.html',
