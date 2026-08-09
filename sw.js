@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v145-cartoon-explosion-sfx';
+const CACHE_VERSION = 'katamon-pwa-v146-normal-attack-defense-unification';
 const APP_SHELL = [
   './',
   './index.html',

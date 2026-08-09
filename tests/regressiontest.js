@@ -75,6 +75,44 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
 }
 
+// v146: 通常弾そのものはv135で共通化したが、岩と騎士だけ被ダメージ軽減が残り、
+// 同じ通常弾を同じ位置へ当てても最終ダメージが揃っていなかった。HPと移動力は維持し、
+// 防御補正と、実際に生成された通常弾の命中結果が全16キャラで同じことを確認する。
+{
+  const defenseProfiles = kt.chars().map(key => ({ key, multiplier: kt.defenseMultiplierForTest(key) }));
+  check('全16キャラの防御補正は等倍で共通',
+    defenseProfiles.every(p => p.multiplier === 1), JSON.stringify(defenseProfiles));
+
+  const originalPositions = ['p1', 'e1'].map(id => {
+    const u = kt.unitById(id);
+    return { id, x: u.x, y: u.y };
+  });
+  const normalImpacts = [];
+  for (const key of kt.chars()) {
+    kt.setCharactersForTest('kyoryu', key);
+    const shooter = kt.unitById('p1');
+    const target = kt.unitById('e1');
+    // 地形を削った結果が後続の検査へ漏れないよう、画面外で同じ命中計算だけを通す。
+    shooter.x = 100; shooter.y = -300;
+    target.x = 700; target.y = -300;
+    kt.clearProjectilesForTest();
+    kt.fireForTest(100, -200, { unitId: 'p1' });
+    const projectile = kt.projectileProfilesForTest()[0];
+    const before = target.hp;
+    const detonated = kt.detonateProjectileForTest(0, target.x, target.y);
+    normalImpacts.push({ key, detonated, blastMul: projectile?.blastMul, damage: before - target.hp });
+  }
+  kt.clearProjectilesForTest();
+  kt.setCharactersForTest('kyoryu', 'kyoryu');
+  for (const pos of originalPositions) {
+    const u = kt.unitById(pos.id);
+    u.x = pos.x; u.y = pos.y;
+  }
+  check('同じ位置へ直撃した通常弾は全16キャラに同じ爆風と45ダメージ',
+    normalImpacts.every(hit => hit.detonated && hit.blastMul === 1 && hit.damage === 45),
+    JSON.stringify(normalImpacts));
+}
+
 // v138: Pixabayの爆発音は通常弾の着弾だけに使う。
 // 必殺技や跳躍まで同じ印を持たせると、それぞれ固有の着弾音まで通常弾の音に置き換わってしまう。
 {
