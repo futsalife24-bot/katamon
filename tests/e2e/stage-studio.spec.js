@@ -210,7 +210,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.5.0-font-system');
+  await expect(page.locator('#appVersion')).toContainText('1.6.0-text-terrain');
   await expect(page.locator('body')).toHaveCSS('font-family', /RocknRoll One/);
   await expect(page.locator('.app-header h1')).toHaveCSS('font-family', /Reggae One/);
   await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
@@ -293,6 +293,14 @@ async function createValidatedStage(page, options = {}) {
     await page.locator('#mirrorTerrain').click();
     await page.getByTestId('undo').click();
     await page.getByTestId('redo').click();
+    await selectTerrainTool(page, '#toolText');
+    await expect(page.locator('#terrainPanelText')).toBeVisible();
+    await page.locator('#terrainTextInput').fill('ア');
+    await page.locator('#terrainTextFont').selectOption('rock');
+    await page.locator('#terrainTextSize').fill('280');
+    await page.locator('#placeTextCenter').click();
+    await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
+    await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   }
   await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
@@ -460,6 +468,28 @@ test.describe('対象ゲームの端末戻る操作', () => {
 });
 
 test.describe('Stage Studio モバイル作成フロー', () => {
+  test('文字地形を配置してUndo・Redoできる', async ({ page }) => {
+    await page.goto(`${STUDIO_URL}#terrain`);
+    await expect(page.getByTestId('terrain-canvas')).toBeVisible();
+    await selectTerrainTool(page, '#toolText');
+    await expect(page.locator('#terrainPanelText')).toBeVisible();
+    await page.locator('#terrainTextInput').fill('ア');
+    await page.locator('#terrainTextFont').selectOption('reggae');
+    await page.locator('#terrainTextStyle').selectOption('solid');
+    await page.locator('#terrainTextSize').fill('300');
+    await page.locator('#terrainTextThickness').fill('18');
+    await expect(page.locator('#terrainTextSizeOutput')).toHaveText('300');
+    await expect(page.locator('#terrainTextThicknessOutput')).toHaveText('18');
+    await page.locator('#placeTextCenter').click();
+    await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
+    await expect(page.getByTestId('terrain-inspector')).toBeHidden();
+    await expect(page.getByTestId('undo')).toBeEnabled();
+    await page.getByTestId('undo').click();
+    await expect(page.getByTestId('redo')).toBeEnabled();
+    await page.getByTestId('redo').click();
+    await expect(page.locator('#activeTerrainTool')).toHaveText('文字');
+  });
+
   test('横画面では地形・出撃・テストの操作をマップ横へまとめる', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await page.goto(`${STUDIO_URL}#terrain`);
