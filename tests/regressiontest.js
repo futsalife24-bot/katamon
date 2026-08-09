@@ -210,8 +210,14 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('キャラ選択には選んだキャラの最大HPを描く',
     drawn.includes(`HP ${focused.maxHp}`),
     drawn.join('/'));
-  check('キャラ選択には必殺技の仮説明を描く',
-    drawn.includes('(仮)雰囲気解説'),
+  check('キャラ選択には選んだキャラらしい必殺技紹介を描く',
+    typeof focused.selectFlavor === 'string' && focused.selectFlavor.length > 0
+      && drawn.includes(focused.selectFlavor)
+      && !drawn.includes('(仮)雰囲気解説')
+      && kt.chars().every(key => {
+        const character = kt.character(key);
+        return typeof character.selectFlavor === 'string' && character.selectFlavor.length > 0;
+      }),
     drawn.join('/'));
   const presentation = kt.selectCardPresentation();
   check('キャラ選択カードは木板と紙札の意匠にする',
