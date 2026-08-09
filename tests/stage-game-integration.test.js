@@ -257,7 +257,7 @@ test('game integration isolates official stages while online custom starts are i
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const manager = fs.readFileSync(path.join(root, 'game-custom-stages.js'), 'utf8');
   const managerCss = fs.readFileSync(path.join(root, 'game-custom-stages.css'), 'utf8');
-  const studioApp = fs.readFileSync(path.join(root, 'tools', 'stage-studio', 'app-1.4.0-mvp.js'), 'utf8');
+  const studioApp = fs.readFileSync(path.join(root, 'tools', 'stage-studio', 'app-1.6.1.js'), 'utf8');
   const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
   assert.match(html, /\(battleMode === 'free' \|\| onlineCustomStageActive\(\)\) && selectedCustomAdapter/);

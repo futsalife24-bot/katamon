@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.6.0-text-terrain';
+  const APP_VERSION = '1.6.1-cache-refresh';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
