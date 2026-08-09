@@ -449,8 +449,8 @@ const HOOK = `
     matchFormat: () => matchFormat,
     is2v2: () => is2v2(),
     formatOptions: () => FORMAT_OPTIONS.map(o => o.key),
-    freeRows: () => JSON.parse(JSON.stringify(freeRows)),
-    freeStartBtn: () => ({ ...freeStartBtn }),
+    freeRows: () => JSON.parse(JSON.stringify(freeRows())),
+    freeStartBtn: () => ({ ...freeStartBtn() }),
     freeConfig: () => ({ ...freeModeConfig }),
     setFreeFormat: (key) => {
       freeModeConfig.formatIndex = Math.max(0, FORMAT_OPTIONS.findIndex(o => o.key === key));
