@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v151-training-options';
+const CACHE_VERSION = 'katamon-pwa-v152-training-setup-layout';
 const APP_SHELL = [
   './',
   './index.html',

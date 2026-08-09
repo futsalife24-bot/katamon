@@ -914,6 +914,20 @@ const spawn1v1 = kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000
 kt.setFreeFormat('2v2');
 kt.startFreeMatch();
 const vs2v2 = kt.matchupCutIn();
+const setup2v2Rows = kt.freeRows();
+const allyBefore = kt.freeConfig().allyIndex;
+const foe2Before = kt.freeConfig().foe2Index;
+kt.changeFreeOption('ally', 1);
+kt.changeFreeOption('foe2', 2);
+const setup2v2Config = kt.freeConfig();
+kt.startFreeMatch();
+check('2vs2の演習では追加2体も選択でき、全項目が同じ行レイアウトに収まる',
+  !!setup2v2Rows.ally && !!setup2v2Rows.foe2
+    && Object.values(setup2v2Rows).every(row => row.h === 42)
+    && kt.unitById('p2').character === kt.chars()[setup2v2Config.allyIndex]
+    && kt.unitById('e2').character === kt.chars()[setup2v2Config.foe2Index]
+    && setup2v2Config.allyIndex !== allyBefore && setup2v2Config.foe2Index !== foe2Before,
+  JSON.stringify({ rows: setup2v2Rows, config: setup2v2Config, p2: kt.unitById('p2').character, e2: kt.unitById('e2').character }));
 check('2vs2のVSカットインは p1＆p2 vs e1＆e2 の順',
   vs2v2
     && vs2v2.left.map(entry => entry.id).join(',') === 'p1,p2'
@@ -1158,12 +1172,13 @@ check('演習の各行の当たり判定が重なっていない',
 // 実際に左右の矢印を押して対戦方式が切り替わること。
 kt.setPhase('freeSetup');
 kt.setFreeFormat('1v1');
-const arrowY = fr.format.y + 7;
+const arrowY = kt.freeRows().format.y;
 up(down(500, arrowY), 500, arrowY); // 右矢印
 check('演習画面の右矢印で1vs1→2vs2へ切り替わる',
   kt.formatOptions()[kt.freeConfig().formatIndex] === '2v2',
   kt.formatOptions()[kt.freeConfig().formatIndex]);
-up(down(40, arrowY), 40, arrowY);  // 左矢印
+const secondArrowY = kt.freeRows().format.y;
+up(down(190, secondArrowY), 190, secondArrowY);  // 左矢印
 check('演習画面の左矢印で2vs2→1vs1へ戻る',
   kt.formatOptions()[kt.freeConfig().formatIndex] === '1v1',
   kt.formatOptions()[kt.freeConfig().formatIndex]);
