@@ -309,6 +309,7 @@ const HOOK = `
     pending: () => !!pendingShot,
     specialBtn: () => ({ ...specialBtn }),
     specialReady: () => isSpecialReady(localUnit()),
+    specialReadyForTest: (id) => isSpecialReady(unitById(id)),
     charges: () => units.map(u => u.specialCharge),
     fillCharges: () => { for (const u of units) u.specialCharge = SPECIAL_CHARGE_MAX; },
     specialSequenceForTest: () => ({
@@ -450,6 +451,9 @@ const HOOK = `
     is2v2: () => is2v2(),
     formatOptions: () => FORMAT_OPTIONS.map(o => o.key),
     freeRows: () => JSON.parse(JSON.stringify(freeRows())),
+    freeTrainingMenuRows: () => (typeof freeTrainingMenuRows === 'function'
+      ? JSON.parse(JSON.stringify(freeTrainingMenuRows()))
+      : null),
     freeStartBtn: () => ({ ...freeStartBtn() }),
     freeConfig: () => ({ ...freeModeConfig }),
     setFreeFormat: (key) => {

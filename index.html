@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v152-training-setup-layout';
+  const BUILD_ID = 'v153-training-battle-options';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2702,11 +2702,11 @@
   function isSpecialReady(u) {
     // 演習の「常時MAX」はここだけで判定する。本編・オンラインのゲージや通信値を
     // 書き換えないので、対戦判定には混ざらない。
-    return freeTrainingRules().specialAlwaysFull || u.specialCharge >= SPECIAL_CHARGE_MAX;
+    return practiceSpecialAlwaysFullFor(u) || u.specialCharge >= SPECIAL_CHARGE_MAX;
   }
 
   function advanceSpecialCharge(u) {
-    u.specialCharge = freeTrainingRules().specialAlwaysFull
+    u.specialCharge = practiceSpecialAlwaysFullFor(u)
       ? SPECIAL_CHARGE_MAX
       : Math.min(SPECIAL_CHARGE_MAX, u.specialCharge + 1);
   }
@@ -3651,6 +3651,16 @@
   const menuSuspendBtn = { x: VW / 2, y: VH / 2 + 42, w: 260, h: 50 };
   const menuSuspendFreeBtn = { x: VW / 2, y: VH / 2 + 108, w: 260, h: 50 };
   let menuOpen = false;
+  function activeMenuButtons() {
+    if (battleMode === 'free') {
+      return {
+        resume: { x: VW / 2, y: 564, w: 260, h: 50 },
+        restart: { x: VW / 2, y: 630, w: 260, h: 50 },
+        exit: { x: VW / 2, y: 696, w: 260, h: 50 }
+      };
+    }
+    return { resume: menuResumeBtn, restart: menuRestartBtn, exit: menuSuspendBtn };
+  }
   function canOpenMenu() {
     return gamePhase === 'battle' && !awaitingResolve && !cutIn && !matchOver;
   }
@@ -3804,7 +3814,8 @@
   const FREE_TRAINING_OPTIONS = Object.freeze({
     special: [
       { key: 'normal', name: '通常', sub: '4手番で必殺がたまる' },
-      { key: 'always', name: '常時MAX', sub: '毎ターン必殺技を使える' }
+      { key: 'always', name: '全員MAX', sub: 'CPUも毎ターン必殺技を使える' },
+      { key: 'player', name: '自分MAX', sub: '自分だけ毎ターン必殺技を使える' }
     ],
     jump: [
       { key: 'once', name: '1試合に1回', sub: '通常ルール' },
@@ -3848,28 +3859,38 @@
     windDirectionIndex: 0,
     windStrengthIndex: 1
   };
-  // 2vs2でだけ追加キャラ2体を間に差し込む。全行を同じ高さの「項目名 | ← 値 →」に
-  // 統一し、1vs1では不要な空白も作らない。
-  const FREE_ROW_H = 42;
-  const FREE_ROW_FIRST_Y = 152;
-  const FREE_ROW_STEP = 47;
+  // 演習前は「誰と・どこで・何人で」だけに絞る。風や必殺など、試しながら変えたい
+  // 条件は戦闘中のメニューへ置く。2vs2でだけ追加キャラ2体を間に差し込む。
+  const FREE_CHARACTER_ROW_H = 82;
+  const FREE_SETTING_ROW_H = 48;
   function freeSetupIs2v2() {
     return (FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0]).key === '2v2';
   }
   function freeRows() {
-    const keys = ['player', 'cpu'];
-    if (freeSetupIs2v2()) keys.push('ally', 'foe2');
-    keys.push('terrain', 'format', 'wind', 'windStrength', 'special', 'jump', 'cpuAi');
-    return Object.fromEntries(keys.map((key, index) => [key, { y: FREE_ROW_FIRST_Y + index * FREE_ROW_STEP, h: FREE_ROW_H }]));
+    const characterKeys = ['player', 'cpu'];
+    if (freeSetupIs2v2()) characterKeys.push('ally', 'foe2');
+    // 1vs1は中央寄せ、2vs2は見出しに重ならない高さから始める。
+    const firstCharacterY = characterKeys.length === 4 ? 162 : 230;
+    const rows = Object.fromEntries(characterKeys.map((key, index) => [key, {
+      y: firstCharacterY + index * 90,
+      h: FREE_CHARACTER_ROW_H
+    }]));
+    const lastCharacterY = firstCharacterY + (characterKeys.length - 1) * 90;
+    rows.terrain = { y: lastCharacterY + 78, h: FREE_SETTING_ROW_H };
+    rows.format = { y: rows.terrain.y + 56, h: FREE_SETTING_ROW_H };
+    return rows;
   }
   function freeStartBtn() {
-    const count = Object.keys(freeRows()).length;
-    return { x: VW / 2, y: FREE_ROW_FIRST_Y + count * FREE_ROW_STEP + 12, w: 350, h: 58 };
+    return { x: VW / 2, y: freeRows().format.y + 76, w: 350, h: 58 };
   }
   function freeBackBtn() {
     return { x: VW / 2, y: freeStartBtn().y + 70, w: 210, h: 40 };
   }
   function freeHintY() { return freeBackBtn().y + 40; }
+  function freeTrainingMenuRows() {
+    const keys = ['special', 'jump', 'cpuAi', 'windDirection', 'windStrength'];
+    return Object.fromEntries(keys.map((key, index) => [key, { y: 300 + index * 45, h: 38 }]));
+  }
   const SELECT_WHEEL_CENTER_Y = 454;
   const SELECT_WHEEL_RADIUS_Y = 328;
   const SELECT_WHEEL_ANGLE_STEP = (Math.PI * 2) / CHARACTER_LIST.length;
@@ -4065,10 +4086,18 @@
     const active = battleMode === 'free';
     return {
       specialAlwaysFull: active && selectedFreeTrainingOption('special').key === 'always',
+      specialPlayerAlwaysFull: active && selectedFreeTrainingOption('special').key === 'player',
       jumpEachTurn: active && selectedFreeTrainingOption('jump').key === 'eachTurn',
       cpuEnabled: !active || selectedFreeTrainingOption('cpuAi').key !== 'off',
       cpuAi: active ? selectedFreeTrainingOption('cpuAi').key : null
     };
+  }
+
+  // 「自分MAX」は人が操作するp1だけ。2vs2の味方CPUまで満タンにしたい時は
+  // 「全員MAX」を選ぶため、演習のCPU挙動も意図どおり比較できる。
+  function practiceSpecialAlwaysFullFor(unit) {
+    const rules = freeTrainingRules();
+    return rules.specialAlwaysFull || (rules.specialPlayerAlwaysFull && unit?.control === 'local');
   }
 
   function selectedFreeWind() {
@@ -4078,6 +4107,34 @@
     const strength = selectedFreeTrainingOption('windStrength');
     const amount = strength.key === 'weak' ? 0.3 : strength.key === 'strong' ? 1 : 0.6;
     return { key: `${direction.key}-${strength.key}`, dir: direction.key === 'left' ? -1 : 1, strength: amount };
+  }
+
+  // 戦闘中メニューで風を変えた時は、次の切替まで古い風が残らないよう現在と予報を
+  // 同時に更新する。カスタムステージの固定風だけはファイル側を優先する。
+  function applyFreeTrainingWindNow() {
+    if (battleMode !== 'free' || selectedCustomAdapter?.wind) return;
+    const fixed = selectedFreeWind();
+    if (fixed) {
+      calmBattle = fixed.key === 'calm';
+      const value = fixedWindValue(fixed);
+      applyWindValue(value);
+      nextWind = { ...value };
+      return;
+    }
+    calmBattle = false;
+    applyWindValue(rollWindValue());
+    nextWind = rollWindValue();
+  }
+
+  function applyFreeTrainingMenuChange(kind) {
+    if (kind === 'windDirection' || kind === 'windStrength') applyFreeTrainingWindNow();
+    if (kind === 'special') {
+      for (const unit of units) {
+        if (practiceSpecialAlwaysFullFor(unit)) unit.specialCharge = SPECIAL_CHARGE_MAX;
+      }
+    }
+    if (kind === 'jump' && freeTrainingRules().jumpEachTurn && activeUnit()) activeUnit().jumpAvailable = true;
+    if (kind === 'cpuAi' && activeUnit()?.control === 'cpu') beginCpuTurnPlan(activeUnit());
   }
 
   // テストからも画面と同じ設定経路を通す。端末保存や通信状態へは書き込まない。
@@ -4142,6 +4199,7 @@
         selectedCustomStage = null;
         selectedCustomAdapter = null;
       }
+      applyFreeTrainingMenuChange(kind);
       playUiSound();
       return;
     }
@@ -8121,24 +8179,24 @@
     ctx.restore();
   }
 
-  function drawFreeArrow(x, y, direction) {
+  function drawFreeArrow(x, y, direction, width = 48, height = 54) {
     ctx.save();
     ctx.fillStyle = 'rgba(16,27,34,0.96)';
     ctx.strokeStyle = '#c78335';
     ctx.lineWidth = 2;
-    angularPlatePath(x, y, 48, 54, 9);
+    angularPlatePath(x, y, width, height, Math.min(9, width * 0.2));
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#ffe2a1';
     ctx.beginPath();
     if (direction < 0) {
-      ctx.moveTo(x + 6, y - 11);
-      ctx.lineTo(x - 9, y);
-      ctx.lineTo(x + 6, y + 11);
+      ctx.moveTo(x + width * 0.125, y - height * 0.21);
+      ctx.lineTo(x - width * 0.19, y);
+      ctx.lineTo(x + width * 0.125, y + height * 0.21);
     } else {
-      ctx.moveTo(x - 6, y - 11);
-      ctx.lineTo(x + 9, y);
-      ctx.lineTo(x - 6, y + 11);
+      ctx.moveTo(x - width * 0.125, y - height * 0.21);
+      ctx.lineTo(x + width * 0.19, y);
+      ctx.lineTo(x - width * 0.125, y + height * 0.21);
     }
     ctx.closePath();
     ctx.fill();
@@ -8159,31 +8217,47 @@
     ctx.lineWidth = 3;
     ctx.stroke();
 
+    const hasCharacterArt = !!imageKey;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#d39b4b';
     ctx.font = '400 10px ' + UI_FONT;
-    ctx.fillText(label, 34, row.y + 4);
-    ctx.strokeStyle = 'rgba(193,137,69,0.42)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(158, row.y - row.h / 2 + 5);
-    ctx.lineTo(158, row.y + row.h / 2 - 5);
-    ctx.stroke();
+    ctx.fillText(label, hasCharacterArt ? 60 : 34, hasCharacterArt ? row.y - row.h / 2 + 20 : row.y + 4);
 
-    const valueX = 348;
+    if (hasCharacterArt) {
+      const img = charImages[imageKey];
+      if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        // 正方形へ押し込まず、元画像の縦横比のまま置く。カードだけの縮尺を変えない。
+        const imageH = row.h - 26;
+        const imageW = imageH * (img.naturalWidth / img.naturalHeight);
+        ctx.save();
+        ctx.translate(126, row.y + 8);
+        if (kind === 'cpu' || kind === 'foe2') ctx.scale(-1, 1);
+        ctx.drawImage(img, -imageW / 2, -imageH / 2, imageW, imageH);
+        ctx.restore();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(193,137,69,0.42)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(158, row.y - row.h / 2 + 5);
+      ctx.lineTo(158, row.y + row.h / 2 - 5);
+      ctx.stroke();
+    }
+
+    const valueX = hasCharacterArt ? 306 : 348;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff5dc';
     ctx.strokeStyle = '#070a0c';
-    ctx.lineWidth = 3;
-    ctx.font = '400 17px ' + UI_FONT;
-    ctx.strokeText(value, valueX, row.y + 2);
-    ctx.fillText(value, valueX, row.y + 2);
+    ctx.lineWidth = hasCharacterArt ? 4 : 3;
+    ctx.font = `400 ${hasCharacterArt ? 21 : 17}px ${UI_FONT}`;
+    ctx.strokeText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
+    ctx.fillText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
     ctx.fillStyle = 'rgba(220,232,231,0.72)';
-    ctx.font = '400 9px ' + UI_FONT;
-    ctx.fillText(sub, valueX, row.y + 16);
+    ctx.font = '400 10px ' + UI_FONT;
+    ctx.fillText(sub, valueX, hasCharacterArt ? row.y + 24 : row.y + 16);
 
-    drawFreeArrow(190, row.y, -1);
-    drawFreeArrow(506, row.y, 1);
+    drawFreeArrow(hasCharacterArt ? 48 : 190, hasCharacterArt ? row.y + 7 : row.y, -1);
+    drawFreeArrow(hasCharacterArt ? VW - 48 : 506, hasCharacterArt ? row.y + 7 : row.y, 1);
     ctx.restore();
   }
 
@@ -8216,35 +8290,13 @@
     const terrain = selectedCustomStage
       ? { name: selectedCustomStage.title, sub: 'カスタムステージ・中央をタップして管理' }
       : FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
-    const windDirection = selectedCustomAdapter && selectedCustomAdapter.wind
-      ? {
-          name: selectedCustomAdapter.wind.strength
-            ? (selectedCustomAdapter.wind.direction < 0 ? '← カスタム風' : 'カスタム風 →')
-            : '無風',
-          sub: 'ステージファイルの設定'
-        }
-      : selectedFreeTrainingOption('windDirection');
-    const windStrength = selectedCustomAdapter && selectedCustomAdapter.wind
-      ? {
-          name: selectedCustomAdapter.wind.strength ? `${Math.round(selectedCustomAdapter.wind.strength * 100)}%` : '指定なし',
-          sub: 'ステージファイルの設定'
-        }
-      : selectedFreeTrainingOption('windStrength');
     const formatOption = FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0];
-    const specialOption = selectedFreeTrainingOption('special');
-    const jumpOption = selectedFreeTrainingOption('jump');
-    const cpuAiOption = selectedFreeTrainingOption('cpuAi');
     drawFreeRow(rows.player, 'YOUR MONSTER', CHARACTERS[playerKey].name, CHARACTERS[playerKey].role, 'player', playerKey);
     drawFreeRow(rows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     if (rows.ally) drawFreeRow(rows.ally, 'ALLY CPU', CHARACTERS[allyKey].name, CHARACTERS[allyKey].role, 'ally', allyKey);
     if (rows.foe2) drawFreeRow(rows.foe2, 'ENEMY CPU', CHARACTERS[foe2Key].name, CHARACTERS[foe2Key].role, 'foe2', foe2Key);
     drawFreeRow(rows.terrain, 'STAGE', terrain.name, terrain.sub, 'terrain');
     drawFreeRow(rows.format, 'FORMAT', formatOption.name, formatOption.sub, 'format');
-    drawFreeRow(rows.wind, 'WIND', windDirection.name, windDirection.sub, 'wind');
-    drawFreeRow(rows.windStrength, 'WIND POWER', windStrength.name, windStrength.sub, 'windStrength');
-    drawFreeRow(rows.special, 'SPECIAL', specialOption.name, specialOption.sub, 'special');
-    drawFreeRow(rows.jump, 'JUMP', jumpOption.name, jumpOption.sub, 'jump');
-    drawFreeRow(rows.cpuAi, 'CPU AI', cpuAiOption.name, cpuAiOption.sub, 'cpuAi');
 
     drawTitleModeButton(freeStartBtn(), 'START BATTLE', 'この条件で演習開始', 'normal');
 
@@ -8261,7 +8313,7 @@
 
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
     ctx.font = '400 10px ' + UI_FONT;
-    ctx.fillText('項目の右側にある矢印で条件を切り替え', VW / 2, freeHintY());
+    ctx.fillText('風・必殺・跳躍・CPUは戦闘中のメニューで変更できます', VW / 2, freeHintY());
     ctx.restore();
   }
 
@@ -13048,6 +13100,68 @@
     }
   }
 
+  function freeTrainingMenuOption(kind) {
+    if (selectedCustomAdapter?.wind && (kind === 'windDirection' || kind === 'windStrength')) {
+      const customWind = selectedCustomAdapter.wind;
+      if (kind === 'windDirection') {
+        return {
+          option: {
+            name: customWind.strength ? (customWind.direction < 0 ? '← カスタム風' : 'カスタム風 →') : '無風',
+            sub: 'ステージファイルの設定'
+          },
+          locked: true
+        };
+      }
+      return {
+        option: { name: customWind.strength ? `${Math.round(customWind.strength * 100)}%` : '指定なし', sub: 'ステージファイルの設定' },
+        locked: true
+      };
+    }
+    return { option: selectedFreeTrainingOption(kind), locked: false };
+  }
+
+  function drawFreeTrainingMenuRow(row, label, option, locked) {
+    ctx.save();
+    angularPlatePath(VW / 2, row.y, 440, row.h, 8);
+    const fill = ctx.createLinearGradient(0, row.y - row.h / 2, 0, row.y + row.h / 2);
+    fill.addColorStop(0, 'rgba(55,70,77,0.98)');
+    fill.addColorStop(1, 'rgba(9,17,22,0.98)');
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = '#8c5b2c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#d39b4b';
+    ctx.textAlign = 'left';
+    ctx.font = '400 10px ' + UI_FONT;
+    ctx.fillText(label, 64, row.y + 4);
+    ctx.strokeStyle = 'rgba(193,137,69,0.42)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(178, row.y - row.h / 2 + 5);
+    ctx.lineTo(178, row.y + row.h / 2 - 5);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = locked ? '#c8bc9d' : '#fff5dc';
+    ctx.strokeStyle = '#070a0c';
+    ctx.lineWidth = 3;
+    ctx.font = '400 16px ' + UI_FONT;
+    ctx.strokeText(option.name, 346, row.y + 2);
+    ctx.fillText(option.name, 346, row.y + 2);
+    ctx.fillStyle = 'rgba(220,232,231,0.72)';
+    ctx.font = '400 8px ' + UI_FONT;
+    ctx.fillText(option.sub, 346, row.y + 14);
+    if (locked) {
+      ctx.fillStyle = 'rgba(255,230,169,0.72)';
+      ctx.font = '400 10px ' + UI_FONT;
+      ctx.fillText('固定', 490, row.y + 4);
+    } else {
+      drawFreeArrow(203, row.y, -1, 34, 34);
+      drawFreeArrow(489, row.y, 1, 34, 34);
+    }
+    ctx.restore();
+  }
+
   function drawMenuOverlay() {
     if (!menuOpen) return;
     ctx.save();
@@ -13057,26 +13171,41 @@
 
     // 見出しはプレートを敷かない(「プレート=押せる」と読めるようにするため)。
     // 代わりに真鍮の二重罫線で挟んでラベルだと分かるようにする。
-    drawOutlinedText('メニュー', VW / 2, VH / 2 - 88, {
+    const freePracticeMenu = battleMode === 'free';
+    const menuTitleY = freePracticeMenu ? 174 : VH / 2 - 88;
+    drawOutlinedText(freePracticeMenu ? '演習オプション' : 'メニュー', VW / 2, menuTitleY, {
       font: `400 26px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
     ctx.save();
-    for (const [dy, alpha] of [[-112, 0.85], [-72, 0.5]]) {
+    for (const [dy, alpha] of (freePracticeMenu ? [[-24, 0.85], [16, 0.5]] : [[-112, 0.85], [-72, 0.5]])) {
       const rule = ctx.createLinearGradient(VW / 2 - 120, 0, VW / 2 + 120, 0);
       rule.addColorStop(0, 'rgba(199,131,53,0)');
       rule.addColorStop(0.5, `rgba(240,200,128,${alpha})`);
       rule.addColorStop(1, 'rgba(199,131,53,0)');
       ctx.fillStyle = rule;
-      ctx.fillRect(VW / 2 - 120, VH / 2 + dy, 240, 2);
+      ctx.fillRect(VW / 2 - 120, freePracticeMenu ? menuTitleY + dy : VH / 2 + dy, 240, 2);
     }
     ctx.restore();
 
-    const exitButton = battleMode === 'free' ? menuSuspendFreeBtn : menuSuspendBtn;
+    if (freePracticeMenu) {
+      const labels = {
+        special: 'SPECIAL', jump: 'JUMP', cpuAi: 'CPU AI', windDirection: 'WIND', windStrength: 'WIND POWER'
+      };
+      for (const [kind, row] of Object.entries(freeTrainingMenuRows())) {
+        const setting = freeTrainingMenuOption(kind);
+        drawFreeTrainingMenuRow(row, labels[kind], setting.option, setting.locked);
+      }
+      drawOutlinedText('左右の矢印で、今すぐ演習条件を変更できます', VW / 2, 526, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    }
+
+    const buttons = activeMenuButtons();
     const items = [
-      [menuResumeBtn, 'ゲームに戻る', '']
+      [buttons.resume, 'ゲームに戻る', '']
     ];
-    if (battleMode === 'free') items.push([menuRestartBtn, 'リスタート', '演習を最初からやり直します']);
-    items.push([exitButton, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']);
+    if (freePracticeMenu) items.push([buttons.restart, 'リスタート', '演習を最初からやり直します']);
+    items.push([buttons.exit, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']);
     for (const [b, label, sub] of items) {
       drawIronPlate(b.x, b.y, b.w, b.h, {
         cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
@@ -13491,16 +13620,17 @@
       }
       for (const [kind, row] of Object.entries(freeRows())) {
         if (Math.abs(p0.y - row.y) > row.h / 2) continue;
+        const characterRow = ['player', 'cpu', 'ally', 'foe2'].includes(kind);
         if (kind === 'terrain' && p0.x > 238 && p0.x < 458 && globalThis.CustomStageManager) {
           playUiSound();
           globalThis.CustomStageManager.open();
           return;
         }
-        if (p0.x >= 164 && p0.x <= 230) {
+        if ((characterRow && p0.x <= 86) || (!characterRow && p0.x >= 164 && p0.x <= 230)) {
           changeFreeOption(kind, -1);
           return;
         }
-        if (p0.x >= 466) {
+        if ((characterRow && p0.x >= VW - 86) || (!characterRow && p0.x >= 466)) {
           changeFreeOption(kind, 1);
           return;
         }
@@ -13540,8 +13670,17 @@
     }
 
     if (menuOpen) {
-      if (hitRect(p0, menuResumeBtn)) { menuOpen = false; return; }
-      if (battleMode === 'free' && hitRect(p0, menuRestartBtn)) {
+      const buttons = activeMenuButtons();
+      if (hitRect(p0, buttons.resume)) { menuOpen = false; return; }
+      if (battleMode === 'free') {
+        for (const [kind, row] of Object.entries(freeTrainingMenuRows())) {
+          if (Math.abs(p0.y - row.y) > row.h / 2) continue;
+          if (freeTrainingMenuOption(kind).locked) return;
+          if (p0.x >= 180 && p0.x <= 226) { changeFreeOption(kind, -1); return; }
+          if (p0.x >= 466 && p0.x <= 512) { changeFreeOption(kind, 1); return; }
+        }
+      }
+      if (battleMode === 'free' && hitRect(p0, buttons.restart)) {
         playUiSound();
         menuOpen = false;
         gamePhase = 'battle';
@@ -13550,8 +13689,7 @@
         resetMatch(false);
         return;
       }
-      const exitButton = battleMode === 'free' ? menuSuspendFreeBtn : menuSuspendBtn;
-      if (hitRect(p0, exitButton)) {
+      if (hitRect(p0, buttons.exit)) {
         if (isOnline()) {
           exitOnlineFromMenu();
           return;
