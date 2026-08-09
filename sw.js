@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v146-normal-attack-defense-unification';
+const CACHE_VERSION = 'katamon-pwa-v147-character-card-wood-design';
 const APP_SHELL = [
   './',
   './index.html',

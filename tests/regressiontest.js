@@ -197,7 +197,7 @@ check('キャラ選択は手前の最大7枚だけを描画する',
 }
 
 // v134: キャラ選択の紹介文・型・性能目盛りはゲーム内容と合っていないため出さない。
-// 一旦はキャラ名と必殺技名だけで選べる画面にする。
+// v147: 最大HPと、今後内容を決める必殺技の仮説明欄だけを加える。
 {
   kt.setPhase('select');
   kt.resetDrawnText();
@@ -207,13 +207,26 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('キャラ選択にはキャラ名と必殺技名を描く',
     drawn.includes(focused.name) && drawn.includes('必殺技') && drawn.includes(focused.special),
     drawn.join('/'));
+  check('キャラ選択には選んだキャラの最大HPを描く',
+    drawn.includes(`HP ${focused.maxHp}`),
+    drawn.join('/'));
+  check('キャラ選択には必殺技の仮説明を描く',
+    drawn.includes('(仮)雰囲気解説'),
+    drawn.join('/'));
+  const presentation = kt.selectCardPresentation();
+  check('キャラ選択カードは木板と紙札の意匠にする',
+    !!presentation
+      && presentation.cardMaterial === 'wood'
+      && presentation.descriptionMaterial === 'parchment'
+      && presentation.neonAccent === false,
+    JSON.stringify(presentation));
   check('キャラ選択には型と性能目盛りを描かない',
     !drawn.includes('耐久') && !drawn.includes('火力') && !drawn.includes('機動')
       && !kt.chars().map(key => kt.character(key)).some(d => drawn.includes(d.role) || drawn.includes(d.roleEn)),
     drawn.join('/'));
   const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
   const selectCard = /function drawWheelSelectCard\(card, def\) \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  function drawFixedSelectSortieButton/.exec(html);
-  check('キャラ選択には紹介文と必殺技の説明文を描かない',
+  check('キャラ選択には古い紹介文と古い必殺技説明を描かない',
     !!selectCard && !/def\.(?:desc|specialDesc|selectStats|role|roleEn)\b/.test(selectCard[1]),
     selectCard ? '古い情報の参照が残っています' : 'カード描画関数が見つかりません');
 }
