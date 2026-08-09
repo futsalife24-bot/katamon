@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v146-normal-attack-defense-unification';
+  const BUILD_ID = 'v147-character-card-wood-design';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3769,6 +3769,14 @@
   const SELECT_WHEEL_DRAG_STEP = 150;
   const SELECT_WHEEL_DEPTH_SHIFT_X = 89;
   const SELECT_WHEEL_DEPTH_LIFT_Y = 18;
+  // 選択カードは戦場の装備箱に留めた木札という位置づけ。キャラ色を発光させる
+  // ネオン表現へ戻さず、説明は貼り付けた紙札として読み分ける。
+  const SELECT_CARD_PRESENTATION = Object.freeze({
+    cardMaterial: 'wood',
+    descriptionMaterial: 'parchment',
+    neonAccent: false,
+    placeholder: '(仮)雰囲気解説'
+  });
   const selectFocusedMainCard = { x: 187, y: SELECT_WHEEL_CENTER_Y, w: 338, h: 200 };
   const selectSortieBtn = { x: 438, y: SELECT_WHEEL_CENTER_Y, w: 168, h: 200 };
   let selectWheelPosition = 0;
@@ -8586,27 +8594,69 @@
 
     ctx.save();
     ctx.globalAlpha = card.alpha;
-    ctx.shadowColor = card.focused ? `${def.color}aa` : 'rgba(0,0,0,0.72)';
-    ctx.shadowBlur = card.focused ? 28 : 16;
-    ctx.shadowOffsetY = card.focused ? 0 : 7;
-    selectRoundedRect(left, top, main.w, main.h, 18);
-    // ネオン紺地をやめて黒鉄プレート(UI.plateTop→Mid→Bottom)へ。キャラ色は右下角だけ弱く残すアクセント。
-    const cardFill = ctx.createLinearGradient(left, top, left + main.w, top + main.h);
-    cardFill.addColorStop(0, UI.plateTop);
-    cardFill.addColorStop(0.5, UI.plateMid);
-    cardFill.addColorStop(0.85, UI.plateBottom);
-    cardFill.addColorStop(1, `${def.color}2e`);
+    ctx.shadowColor = 'rgba(0,0,0,0.82)';
+    ctx.shadowBlur = card.focused ? 22 : 12;
+    ctx.shadowOffsetY = card.focused ? 8 : 6;
+    selectRoundedRect(left, top, main.w, main.h, 14);
+    const cardFill = ctx.createLinearGradient(left, top, left, top + main.h);
+    cardFill.addColorStop(0, '#81542b');
+    cardFill.addColorStop(0.18, '#67401f');
+    cardFill.addColorStop(0.62, '#4b2b17');
+    cardFill.addColorStop(1, '#2b170e');
     ctx.fillStyle = cardFill;
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = card.focused ? UI.gold : UI.brass;
+    ctx.strokeStyle = card.focused ? '#efc578' : '#815329';
     ctx.lineWidth = card.focused ? 3 : 2;
     ctx.stroke();
 
-    selectRoundedRect(left + 5, top + 5, main.w - 10, main.h - 10, 14);
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    // 木目は毎回同じ線を描く。乱数を混ぜるとカードが静止中もちらついて見える。
+    ctx.save();
+    selectRoundedRect(left + 3, top + 3, main.w - 6, main.h - 6, 11);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(37,17,8,0.34)';
+    ctx.lineWidth = 1;
+    for (let grain = 0; grain < 7; grain++) {
+      const grainY = top + 18 + grain * 26;
+      ctx.beginPath();
+      ctx.moveTo(left + 7, grainY);
+      ctx.bezierCurveTo(
+        left + 82, grainY - 8 + (grain % 3) * 4,
+        left + 228, grainY + 9 - (grain % 2) * 6,
+        left + main.w - 7, grainY - 2
+      );
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(242,188,102,0.10)';
+    ctx.beginPath();
+    ctx.moveTo(left + 8, top + 67);
+    ctx.lineTo(left + main.w - 8, top + 67);
+    ctx.moveTo(left + 8, top + 134);
+    ctx.lineTo(left + main.w - 8, top + 134);
+    ctx.stroke();
+    ctx.restore();
+
+    selectRoundedRect(left + 5, top + 5, main.w - 10, main.h - 10, 10);
+    ctx.strokeStyle = 'rgba(245,207,139,0.20)';
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // 四隅の黒鉄金具と真鍮鋲。選択中だけ縁を明るくし、発光は使わない。
+    const cornerXs = [left + 11, left + main.w - 11];
+    const cornerYs = [top + 11, top + main.h - 11];
+    for (const cornerX of cornerXs) {
+      for (const cornerY of cornerYs) {
+        const strap = ctx.createRadialGradient(cornerX - 2, cornerY - 2, 1, cornerX, cornerY, 13);
+        strap.addColorStop(0, '#788088');
+        strap.addColorStop(0.42, '#34383d');
+        strap.addColorStop(1, '#111417');
+        ctx.fillStyle = strap;
+        ctx.beginPath();
+        ctx.arc(cornerX, cornerY, 8, 0, Math.PI * 2);
+        ctx.fill();
+        drawRivet(cornerX, cornerY, 3.1);
+      }
+    }
 
     // 左側のキャラクター表示枠
     const imageBox = { x: left + 10, y: top + 10, w: 112, h: main.h - 20 };
@@ -8615,12 +8665,13 @@
       imageBox.x + imageBox.w / 2, imageBox.y + 72, 5,
       imageBox.x + imageBox.w / 2, imageBox.y + 72, 82
     );
-    imageGlow.addColorStop(0, `${def.color}48`);
-    imageGlow.addColorStop(0.62, 'rgba(8,17,31,0.78)');
-    imageGlow.addColorStop(1, 'rgba(3,7,16,0.96)');
+    imageGlow.addColorStop(0, 'rgba(255,220,151,0.28)');
+    imageGlow.addColorStop(0.58, 'rgba(43,30,20,0.82)');
+    imageGlow.addColorStop(1, 'rgba(13,12,11,0.97)');
     ctx.fillStyle = imageGlow;
     ctx.fill();
-    ctx.strokeStyle = `${def.color}88`;
+    ctx.strokeStyle = '#b1844b';
+    ctx.lineWidth = card.focused ? 2 : 1.5;
     ctx.stroke();
 
     const cImg = charImages[card.key];
@@ -8648,37 +8699,71 @@
     }
 
     // ゲーム内容と合っていなかった型・紹介文・性能目盛りは表示しない。
-    // 選択画面は、キャラクター名と必殺技名だけを確実に読める形に絞る。
+    // 今は最大HPと必殺技名、今後の文章用の仮説明だけを載せる。
     const textX = left + 132;
     const contentRight = left + main.w - 12;
     const contentW = contentRight - textX;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff';
-    ctx.font = `900 ${def.name.length >= 5 ? 17 : 22}px ${UI_FONT_HEAVY}`;
-    ctx.fillText(def.name, textX, top + 43);
+    ctx.fillStyle = '#fff1cf';
+    ctx.font = `900 ${def.name.length >= 5 ? 16 : 21}px ${UI_FONT_HEAVY}`;
+    ctx.fillText(def.name, textX, top + 34);
 
-    ctx.strokeStyle = `${def.color}70`;
+    const hpW = 68;
+    selectRoundedRect(contentRight - hpW, top + 12, hpW, 28, 7);
+    const hpFill = ctx.createLinearGradient(0, top + 12, 0, top + 40);
+    hpFill.addColorStop(0, '#3d3023');
+    hpFill.addColorStop(1, '#191713');
+    ctx.fillStyle = hpFill;
+    ctx.fill();
+    ctx.strokeStyle = '#a37b43';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#f5d797';
+    ctx.font = `900 11px ${UI_FONT_HEAVY}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`HP ${def.maxHp}`, contentRight - hpW / 2, top + 31);
+
+    ctx.strokeStyle = 'rgba(235,190,112,0.46)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(textX, top + 58);
-    ctx.lineTo(contentRight, top + 58);
+    ctx.moveTo(textX, top + 50);
+    ctx.lineTo(contentRight, top + 50);
     ctx.stroke();
 
-    selectRoundedRect(textX, top + 73, contentW, 96, 12);
-    const specialFill = ctx.createLinearGradient(textX, top + 73, contentRight, top + 169);
-    specialFill.addColorStop(0, 'rgba(255,210,74,0.12)');
-    specialFill.addColorStop(1, `${def.color}1f`);
+    // 必殺技の木彫り銘板。
+    selectRoundedRect(textX, top + 58, contentW, 53, 9);
+    const specialFill = ctx.createLinearGradient(0, top + 58, 0, top + 111);
+    specialFill.addColorStop(0, '#3a2415');
+    specialFill.addColorStop(1, '#1e140e');
     ctx.fillStyle = specialFill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,210,74,0.58)';
+    ctx.strokeStyle = '#936332';
     ctx.stroke();
-    ctx.fillStyle = '#ffd24a';
+    ctx.fillStyle = '#d7a85b';
     ctx.font = '900 10px ' + UI_FONT_HEAVY;
     ctx.textAlign = 'center';
-    ctx.fillText('必殺技', textX + contentW / 2, top + 101);
-    ctx.fillStyle = '#fff4cf';
-    ctx.font = `900 ${def.special.length >= 7 ? 14 : 17}px ${UI_FONT_HEAVY}`;
-    ctx.fillText(def.special, textX + contentW / 2, top + 137);
+    ctx.fillText('必殺技', textX + contentW / 2, top + 76);
+    ctx.fillStyle = '#fff0c7';
+    ctx.font = `900 ${def.special.length >= 7 ? 13 : 16}px ${UI_FONT_HEAVY}`;
+    ctx.fillText(def.special, textX + contentW / 2, top + 100);
+
+    // 今後の正式説明を入れる紙札。木地と同色にせず、欄があることを一目で分ける。
+    selectRoundedRect(textX, top + 119, contentW, 61, 6);
+    const parchmentFill = ctx.createLinearGradient(textX, top + 119, contentRight, top + 180);
+    parchmentFill.addColorStop(0, '#f1dfb1');
+    parchmentFill.addColorStop(0.5, '#dbc28c');
+    parchmentFill.addColorStop(1, '#b88f58');
+    ctx.fillStyle = parchmentFill;
+    ctx.fill();
+    ctx.strokeStyle = '#6e4825';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#553719';
+    ctx.font = `900 9px ${UI_FONT_HEAVY}`;
+    ctx.fillText('必殺技の解説', textX + contentW / 2, top + 139);
+    ctx.fillStyle = '#2f2116';
+    ctx.font = `900 12px ${UI_FONT_HEAVY}`;
+    ctx.fillText(SELECT_CARD_PRESENTATION.placeholder, textX + contentW / 2, top + 164);
 
     ctx.restore();
   }

@@ -178,6 +178,11 @@ const HOOK = `
         focusedKey: focused ? focused.key : null
       };
     },
+    // v147: 見た目の意図を色コードの偶然一致ではなく、素材の役割として固定する。
+    // 実装前にもハーネス自体は止めず、検査結果をFAILとして出せるようtypeofで包む。
+    selectCardPresentation: () => typeof SELECT_CARD_PRESENTATION === 'undefined'
+      ? null
+      : { ...SELECT_CARD_PRESENTATION },
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
       moveActive: isLocalTurn() && localUnit().moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn,
