@@ -104,6 +104,7 @@ const HOOK = `
     chars: () => CHARACTER_LIST.slice(),
     deathGate: () => ({ range: DEATH_GATE_RANGE, speed: DEATH_GATE_SPEED, bottomRadius: DEATH_GATE_CARVE_RADIUS_BOTTOM, topRadius: DEATH_GATE_CARVE_RADIUS_TOP, curvePower: DEATH_GATE_CARVE_CURVE_POWER, stride: DEATH_GATE_CARVE_STRIDE, startDepth: DEATH_GATE_START_DEPTH }),
     character: key => ({ ...CHARACTERS[key] }),
+    defenseMultiplierForTest: key => CHARACTERS[key]?.damageTakenMul || 1,
     shotPhysicsProfileForTest: (key, useSpecial, useJump) => {
       const def = CHARACTERS[key];
       // v135より前にも検査だけを先に差し込み、壊れた実装で落ちることを確認できるようにする。
@@ -124,6 +125,12 @@ const HOOK = `
       blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
       normalImpactSound: !!p.normalImpactSound
     })),
+    detonateProjectileForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p) return false;
+      explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+      return true;
+    },
     clearProjectilesForTest: () => { projectiles.length = 0; },
     deathGateTestX: () => {
       for (let x = Math.round(STAGE_W * 0.2); x <= Math.round(STAGE_W * 0.8); x += 12) {
