@@ -535,6 +535,7 @@ let practiceWind = null;
 let practiceSpecialReady = false;
 let practiceJumpReady = null;
 let normalSpecialUnaffected = false;
+let practicePlayerOnlySpecial = false;
 if (freeTrainingOptions) {
   kt.setFreeTrainingForTest({
     special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: 'strong'
@@ -548,6 +549,12 @@ if (freeTrainingOptions) {
   kt.setBattleModeForTest('normal');
   normalSpecialUnaffected = !kt.specialReady();
   kt.setBattleModeForTest('free');
+  kt.setFreeTrainingForTest({ special: 'player' });
+  kt.startFreeMatch();
+  kt.unitById('p1').specialCharge = 0;
+  kt.unitById('e1').specialCharge = 0;
+  practicePlayerOnlySpecial = kt.specialReady()
+    && !kt.specialReadyForTest(SEAT === 'p1' ? 'e1' : 'p1');
   kt.setFreeTrainingForTest({
     special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: 'medium'
   });
@@ -561,8 +568,16 @@ check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して�
     && trainingRules?.cpuEnabled === false
     && practiceWind?.dir === 1 && practiceWind?.strength === 1
     && practiceSpecialReady === true && practiceJumpReady === true
-    && normalSpecialUnaffected === true,
-  JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected }));
+    && normalSpecialUnaffected === true
+    && practicePlayerOnlySpecial === true,
+  JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
+const setupRowsBeforeBattle = kt.freeRows();
+const trainingMenuRows = kt.freeTrainingMenuRows();
+check('演習前はキャラ・地形・人数だけを選び、練習条件は戦闘メニューにまとめる',
+  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,format'
+    && !!trainingMenuRows
+    && Object.keys(trainingMenuRows).join(',') === 'special,jump,cpuAi,windDirection,windStrength',
+  JSON.stringify({ setupRowsBeforeBattle, trainingMenuRows }));
 let freeThrew = null;
 try { playMatch(60000); } catch (e) { freeThrew = e; }
 check('フリーモードも例外なく決着', !freeThrew && kt.state().matchOver === true,
@@ -921,9 +936,10 @@ kt.changeFreeOption('ally', 1);
 kt.changeFreeOption('foe2', 2);
 const setup2v2Config = kt.freeConfig();
 kt.startFreeMatch();
-check('2vs2の演習では追加2体も選択でき、全項目が同じ行レイアウトに収まる',
+check('2vs2の演習では追加2体も選択でき、キャラ行と設定行がそれぞれ揃う',
   !!setup2v2Rows.ally && !!setup2v2Rows.foe2
-    && Object.values(setup2v2Rows).every(row => row.h === 42)
+    && ['player', 'cpu', 'ally', 'foe2'].every(key => setup2v2Rows[key].h === 82)
+    && setup2v2Rows.terrain.h === 48 && setup2v2Rows.format.h === 48
     && kt.unitById('p2').character === kt.chars()[setup2v2Config.allyIndex]
     && kt.unitById('e2').character === kt.chars()[setup2v2Config.foe2Index]
     && setup2v2Config.allyIndex !== allyBefore && setup2v2Config.foe2Index !== foe2Before,
