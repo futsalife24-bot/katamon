@@ -210,7 +210,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.6.1-cache-refresh');
+  await expect(page.locator('#appVersion')).toContainText('1.7.0-text-placement');
   await expect(page.locator('body')).toHaveCSS('font-family', /RocknRoll One/);
   await expect(page.locator('.app-header h1')).toHaveCSS('font-family', /Reggae One/);
   await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
@@ -299,6 +299,10 @@ async function createValidatedStage(page, options = {}) {
     await page.locator('#terrainTextFont').selectOption('rock');
     await page.locator('#terrainTextSize').fill('280');
     await page.locator('#placeTextCenter').click();
+    await expect(page.locator('#terrainTextStatus')).toContainText('中央へ仮置き');
+    await dragCanvas(page, terrainCanvas, 0.5, 0.42, 0.62, 0.5);
+    await expect(page.locator('#terrainTextStatus')).toContainText('位置を調整');
+    await page.locator('#confirmTextPlacement').click();
     await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   }
@@ -468,7 +472,7 @@ test.describe('対象ゲームの端末戻る操作', () => {
 });
 
 test.describe('Stage Studio モバイル作成フロー', () => {
-  test('文字地形を配置してUndo・Redoできる', async ({ page }) => {
+  test('文字地形を移動配置・連続配置してUndoできる', async ({ page }) => {
     await page.goto(`${STUDIO_URL}#terrain`);
     await expect(page.getByTestId('terrain-canvas')).toBeVisible();
     await selectTerrainTool(page, '#toolText');
@@ -480,7 +484,12 @@ test.describe('Stage Studio モバイル作成フロー', () => {
     await page.locator('#terrainTextThickness').fill('18');
     await expect(page.locator('#terrainTextSizeOutput')).toHaveText('300');
     await expect(page.locator('#terrainTextThicknessOutput')).toHaveText('18');
+    await expect(page.locator('#terrainTextPlacementMode')).toHaveValue('move');
     await page.locator('#placeTextCenter').click();
+    await expect(page.locator('#terrainTextStatus')).toContainText('中央へ仮置き');
+    await dragCanvas(page, page.getByTestId('terrain-canvas'), 0.5, 0.4, 0.64, 0.48);
+    await expect(page.locator('#terrainTextStatus')).toContainText('位置を調整');
+    await page.locator('#confirmTextPlacement').click();
     await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
     await expect(page.getByTestId('undo')).toBeEnabled();
@@ -488,6 +497,19 @@ test.describe('Stage Studio モバイル作成フロー', () => {
     await expect(page.getByTestId('redo')).toBeEnabled();
     await page.getByTestId('redo').click();
     await expect(page.locator('#activeTerrainTool')).toHaveText('文字');
+
+    await page.getByTestId('terrain-palette-toggle').click();
+    await page.locator('#terrainTabText').click();
+    await page.locator('#terrainTextPlacementMode').selectOption('stamp');
+    await expect(page.locator('#confirmTextPlacement')).toBeHidden();
+    await page.locator('#placeTextCenter').click();
+    await expect(page.getByTestId('terrain-inspector')).toBeHidden();
+    await tapCanvas(page, page.getByTestId('terrain-canvas'), 0.3, 0.42);
+    await expect(page.locator('#terrainTextStatus')).toContainText('連続配置: 1個目');
+    await tapCanvas(page, page.getByTestId('terrain-canvas'), 0.72, 0.42);
+    await expect(page.locator('#terrainTextStatus')).toContainText('連続配置: 2個目');
+    await page.getByTestId('undo').click();
+    await expect(page.getByTestId('redo')).toBeEnabled();
   });
 
   test('横画面では地形・出撃・テストの操作をマップ横へまとめる', async ({ page }) => {

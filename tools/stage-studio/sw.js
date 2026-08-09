@@ -1,13 +1,13 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.6.1-cache-refresh`;
+const CACHE_NAME = `${CACHE_PREFIX}1.7.0-text-placement`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',
   './index.html',
   './styles-1.4.0-mvp.css',
-  './app-1.6.1.js',
+  './app-1.7.0.js',
   './generator-worker.js',
   './manifest.webmanifest',
   './icon.svg',
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => fetch(request).then((response) => {
+      caches.open(CACHE_NAME).then((cache) => fetch(request, { cache: 'no-cache' }).then((response) => {
         if (!response || !response.ok) throw new Error('navigation failed');
         return Promise.all([
           cache.delete(OFFLINE_MARKER),
@@ -79,7 +79,7 @@ self.addEventListener('fetch', (event) => {
     || url.pathname.endsWith('.webmanifest');
   if (isVersionedAppAsset) {
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => fetch(request).then((response) => {
+      caches.open(CACHE_NAME).then((cache) => fetch(request, { cache: 'no-cache' }).then((response) => {
         if (!response || !response.ok) throw new Error('asset update failed');
         return cache.put(request, response.clone()).then(() => response);
       }).catch(() => cache.match(request, { ignoreSearch: true })).then((response) => (

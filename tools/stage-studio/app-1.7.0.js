@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.6.1-cache-refresh';
+  const APP_VERSION = '1.7.0-text-placement';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -233,6 +233,9 @@
     shapeBaseGrid: null,
     textTerrainBusy: false,
     textTerrainPreviewPoint: { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 },
+    textTerrainPreviewActive: true,
+    textTerrainDragActive: false,
+    textTerrainStampCount: 0,
     pinch: null,
     noiseCounter: 0,
     generationJob: null,
@@ -1250,7 +1253,7 @@
     context.stroke();
     context.setLineDash([]);
 
-    if (settings.editable && state.activeTool === 'text') {
+    if (settings.editable && state.activeTool === 'text' && state.textTerrainPreviewActive) {
       const textSettings = textTerrainSettings();
       if (textSettings.text) {
         context.save();
@@ -1502,6 +1505,42 @@
     };
   }
 
+  function textTerrainPlacementMode() {
+    const input = $('terrainTextPlacementMode');
+    return input && input.value === 'stamp' ? 'stamp' : 'move';
+  }
+
+  function updateTextTerrainPlacementUi(options) {
+    const mode = textTerrainPlacementMode();
+    const centerButton = $('placeTextCenter');
+    const confirmButton = $('confirmTextPlacement');
+    const help = $('terrainTextHelp');
+    const status = $('terrainTextStatus');
+    if (!centerButton || !confirmButton || !help || !status) return;
+    const resetPreview = !options || options.resetPreview !== false;
+    if (mode === 'move') {
+      centerButton.textContent = 'ステージ中央へ仮置き';
+      centerButton.classList.remove('primary');
+      centerButton.classList.add('secondary');
+      confirmButton.hidden = false;
+      help.textContent = '半透明の文字を指で移動し、「この位置で確定」を押します。出力時は安全な地形データへ変換されます。';
+      state.textTerrainPreviewActive = true;
+      state.textTerrainStampCount = 0;
+      if (resetPreview) state.textTerrainPreviewPoint = { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 };
+      status.textContent = '半透明の文字をドラッグして、置く位置を決めてください。';
+    } else {
+      centerButton.textContent = '連続配置を始める';
+      centerButton.classList.remove('secondary');
+      centerButton.classList.add('primary');
+      confirmButton.hidden = true;
+      help.textContent = '「連続配置を始める」を押したあと、マップをタップするたびに同じ文字を追加できます。';
+      state.textTerrainPreviewActive = false;
+      state.textTerrainStampCount = 0;
+      status.textContent = '連続配置を始めると、マップをタップして何個でも置けます。';
+    }
+    renderTerrainCanvas();
+  }
+
   function configureTextTerrainContext(context, settings) {
     let size = settings.size;
     const family = TEXT_TERRAIN_FONTS[settings.fontKey] || TEXT_TERRAIN_FONTS.rock;
@@ -1567,7 +1606,7 @@
     return changed;
   }
 
-  async function placeTextTerrain(point) {
+  async function placeTextTerrain(point, options) {
     if (state.textTerrainBusy) return;
     const settings = textTerrainSettings();
     const status = $('terrainTextStatus');
@@ -1595,8 +1634,14 @@
       resetPlaytest(false);
       renderAllCanvases();
       markDirty();
-      status.textContent = `「${settings.text}」を地形へ${settings.solid ? '追加' : '型抜き'}しました（${changed}マス）。`;
-      collapseTerrainInspector();
+      if (options && options.continuous) {
+        state.textTerrainStampCount += 1;
+        status.textContent = `連続配置: ${state.textTerrainStampCount}個目の「${settings.text}」を${settings.solid ? '追加' : '型抜き'}しました。`;
+      } else {
+        state.textTerrainPreviewActive = false;
+        status.textContent = `「${settings.text}」を地形へ${settings.solid ? '追加' : '型抜き'}しました（${changed}マス）。`;
+        collapseTerrainInspector();
+      }
       showToast(`「${settings.text}」の文字地形を${settings.solid ? '置き' : '削り'}ました。`);
     } finally {
       state.textTerrainBusy = false;
@@ -1614,9 +1659,16 @@
     if (state.pointerMap.size === 1) {
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
       if (state.activeTool === 'text') {
-        state.pointerMap.delete(event.pointerId);
         state.textTerrainPreviewPoint = world;
-        void placeTextTerrain(world);
+        if (textTerrainPlacementMode() === 'stamp') {
+          state.pointerMap.delete(event.pointerId);
+          void placeTextTerrain(world, { continuous: true });
+        } else {
+          state.textTerrainPreviewActive = true;
+          state.textTerrainDragActive = true;
+          $('terrainTextStatus').textContent = '文字を移動中です。指を離してから「この位置で確定」を押してください。';
+          renderTerrainCanvas();
+        }
         return;
       }
       if (state.activeTool === 'guide') {
@@ -1672,6 +1724,7 @@
         updateHistoryButtons();
       }
       state.strokeActive = false;
+      state.textTerrainDragActive = false;
       state.guideDrag = null;
       state.shapeStart = null;
       state.shapeBaseGrid = null;
@@ -1702,6 +1755,12 @@
       renderAllCanvases();
       return;
     }
+    if (state.pointerMap.size === 1 && state.activeTool === 'text' && state.textTerrainDragActive
+      && textTerrainPlacementMode() === 'move') {
+      state.textTerrainPreviewPoint = screenToWorld(canvas, event.clientX, event.clientY, true);
+      renderTerrainCanvas();
+      return;
+    }
     if (state.pointerMap.size === 1 && state.strokeActive && (event.buttons || event.pointerType === 'touch' || event.pointerType === 'pen')) {
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
       if (state.activeTool === 'guide' && state.guideDrag) {
@@ -1723,6 +1782,11 @@
     state.pointerMap.delete(event.pointerId);
     if (state.pointerMap.size < 2) state.pinch = null;
     if (!state.pointerMap.size) {
+      if (state.textTerrainDragActive) {
+        state.textTerrainDragActive = false;
+        $('terrainTextStatus').textContent = '位置を調整しました。「この位置で確定」を押すと地形になります。';
+        renderTerrainCanvas();
+      }
       if (state.strokeActive) {
         state.strokeActive = false;
         state.lastWorldPoint = null;
@@ -2713,7 +2777,13 @@
     const toggle = $('terrainToolMenuToggle');
     if (toggle) toggle.setAttribute('aria-label', `選択中: ${toolLabel}。押して地形ツールを切り替える`);
     collapseTerrainToolMenu();
-    if (state.activeTool === 'text') setTerrainInspector('text');
+    if (state.activeTool === 'text') {
+      updateTextTerrainPlacementUi({ resetPreview: true });
+      setTerrainInspector('text');
+    } else {
+      state.textTerrainPreviewActive = false;
+      state.textTerrainDragActive = false;
+    }
   }
 
   function collapseTerrainToolMenu(options) {
@@ -3000,10 +3070,22 @@
       textTerrainSettings();
       renderTerrainCanvas();
     }));
+    $('terrainTextPlacementMode').addEventListener('change', () => updateTextTerrainPlacementUi({ resetPreview: true }));
     $('placeTextCenter').addEventListener('click', () => {
+      if (textTerrainPlacementMode() === 'stamp') {
+        state.textTerrainStampCount = 0;
+        state.textTerrainPreviewActive = false;
+        $('terrainTextStatus').textContent = '連続配置中です。マップをタップすると文字を追加できます。';
+        collapseTerrainInspector();
+        showToast('マップをタップして文字を置けます。');
+        return;
+      }
       state.textTerrainPreviewPoint = { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 };
-      void placeTextTerrain(state.textTerrainPreviewPoint);
+      state.textTerrainPreviewActive = true;
+      $('terrainTextStatus').textContent = '中央へ仮置きしました。文字を指で好きな位置へ移動できます。';
+      renderTerrainCanvas();
     });
+    $('confirmTextPlacement').addEventListener('click', () => void placeTextTerrain(state.textTerrainPreviewPoint));
     $('showGrid').addEventListener('change', renderTerrainCanvas);
     $('showCollision').addEventListener('change', renderTerrainCanvas);
     $('zoomOut').addEventListener('click', () => setZoom(state.view.zoom / 1.25));

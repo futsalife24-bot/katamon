@@ -8,7 +8,7 @@ const test = require('node:test');
 const ROOT = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 const studioHtml = read('tools/stage-studio/index.html');
-const studioApp = read('tools/stage-studio/app-1.6.1.js');
+const studioApp = read('tools/stage-studio/app-1.7.0.js');
 const studioCss = read('tools/stage-studio/styles-1.4.0-mvp.css');
 const studioSw = read('tools/stage-studio/sw.js');
 const fontCss = read('assets/fonts/katamon-fonts.css');
@@ -22,7 +22,7 @@ test('Stage Studio shares the two-font Katamon hierarchy', () => {
   assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
   assert.match(studioSw, /rocknroll-one-regular\.ttf/);
   assert.match(studioSw, /reggae-one-display\.woff2/);
-  assert.match(studioSw, /1\.6\.1-cache-refresh/);
+  assert.match(studioSw, /1\.7\.0-text-placement/);
 });
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -142,7 +142,12 @@ test('text terrain converts safe text into the existing destructible grid', () =
   assert.match(studioHtml, /id="terrainTextInput"[^>]*maxlength="8"/);
   assert.match(studioHtml, /id="terrainTextFont"[\s\S]*value="rock"[\s\S]*value="reggae"/);
   assert.match(studioHtml, /id="placeTextCenter"/);
+  assert.match(studioHtml, /id="terrainTextPlacementMode"/);
+  assert.match(studioHtml, /id="confirmTextPlacement"/);
   assert.match(studioApp, /function textTerrainSettings\(/);
+  assert.match(studioApp, /function textTerrainPlacementMode\(/);
+  assert.match(studioApp, /textTerrainDragActive/);
+  assert.match(studioApp, /continuous: true/);
   assert.match(studioApp, /function rasterizeTextTerrain\(/);
   assert.match(studioApp, /document\.fonts\.load/);
   assert.match(studioApp, /getImageData\(/);
@@ -177,12 +182,12 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.6\.1-cache-refresh`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.7\.0-text-placement`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);
-  assert.match(studioHtml, /app-1\.6\.1\.js/);
-  assert.match(studioSw, /request\.destination === 'script'[\s\S]*fetch\(request\)[\s\S]*cache\.match\(request/);
+  assert.match(studioHtml, /app-1\.7\.0\.js/);
+  assert.match(studioSw, /request\.destination === 'script'[\s\S]*fetch\(request, \{ cache: 'no-cache' \}\)[\s\S]*cache\.match\(request/);
   assert.doesNotMatch(studioSw, /['"]\.\/(?:styles\.css|app\.js|app-1\.4\.0-mvp\.js)['"]/);
   const gameBuild = read('index.html').match(/const BUILD_ID = '([^']+)'/)[1];
   const gameCache = read('sw.js').match(/const CACHE_VERSION = 'katamon-pwa-([^']+)'/)[1];
