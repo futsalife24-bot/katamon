@@ -203,7 +203,7 @@ test('changing a stage-owned free battle option clears the selected custom stage
   const bridge = globalThis.KatamonCustomStageBridge;
   const stage = await lowerPlatformStage();
 
-  for (const kind of ['format', 'wind', 'terrain']) {
+  for (const kind of ['format', 'wind', 'windStrength', 'terrain']) {
     await bridge.selectStage(stage);
     assert.equal(bridge.getState().selectedStageId, stage.stageId);
     kt.changeFreeOption(kind, 1);
@@ -296,7 +296,9 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /StageCore\.compareStageIdentity\(sourceIdentity, adapterIdentity\)/);
   assert.match(html, /StageCore\?\.PHYSICS\?\.deadLineY/);
   assert.match(html, /StageCore\?\.PHYSICS\?\.fallTrigger/);
-  assert.match(html, /\['terrain', 'wind', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /if \(kind === 'wind'\) \{[\s\S]*?selectedCustomStage = null/);
+  assert.match(html, /\['terrain', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /\['windStrength'\]\.includes\(kind\)/);
   assert.match(html, /const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1'/);
   assert.match(html, /startFreeMatch\(\{ preserveOfficialSuspend: true \}\)/);
 
@@ -352,10 +354,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v150-special-cutin-sfx/);
+  assert.match(html, /v151-training-options/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v150-special-cutin-sfx/);
+  assert.match(serviceWorker, /katamon-pwa-v151-training-options/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });

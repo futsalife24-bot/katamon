@@ -529,6 +529,40 @@ check('フリーモードのキャラ設定が反映される',
   kt.unitById('p1').character === kt.chars()[fc.playerIndex] &&
   kt.unitById('e1').character === kt.chars()[fc.cpuIndex],
   `${kt.unitById('p1').character}/${kt.unitById('e1').character}`);
+const freeTrainingOptions = kt.freeTrainingOptions();
+let trainingRules = null;
+let practiceWind = null;
+let practiceSpecialReady = false;
+let practiceJumpReady = null;
+let normalSpecialUnaffected = false;
+if (freeTrainingOptions) {
+  kt.setFreeTrainingForTest({
+    special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: 'strong'
+  });
+  kt.startFreeMatch();
+  kt.unitById('p1').specialCharge = 0;
+  trainingRules = kt.practiceRulesForTest();
+  practiceWind = kt.wind();
+  practiceSpecialReady = kt.specialReady();
+  practiceJumpReady = kt.refreshPracticeJumpForTest('p1');
+  kt.setBattleModeForTest('normal');
+  normalSpecialUnaffected = !kt.specialReady();
+  kt.setBattleModeForTest('free');
+  kt.setFreeTrainingForTest({
+    special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: 'medium'
+  });
+  kt.startFreeMatch();
+}
+check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して切り替えられる',
+  !!freeTrainingOptions
+    && Object.keys(freeTrainingOptions).join(',') === 'special,jump,cpuAi,windDirection,windStrength'
+    && trainingRules?.specialAlwaysFull === true
+    && trainingRules?.jumpEachTurn === true
+    && trainingRules?.cpuEnabled === false
+    && practiceWind?.dir === 1 && practiceWind?.strength === 1
+    && practiceSpecialReady === true && practiceJumpReady === true
+    && normalSpecialUnaffected === true,
+  JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected }));
 let freeThrew = null;
 try { playMatch(60000); } catch (e) { freeThrew = e; }
 check('フリーモードも例外なく決着', !freeThrew && kt.state().matchOver === true,
@@ -1108,9 +1142,11 @@ check('演習に対戦方式の行が増えている',
   !!kt.freeRows().format && kt.formatOptions().join(',') === '1v1,2v2',
   JSON.stringify(kt.freeRows().format) + ' ' + kt.formatOptions().join(','));
 const fr = kt.freeRows();
+const freeStart = kt.freeStartBtn();
 check('対戦方式の行は開始ボタンと重ならない',
-  fr.format.y + fr.format.h / 2 < 716 - 64 / 2 && fr.format.y - fr.format.h / 2 > fr.wind.y + fr.wind.h / 2,
-  JSON.stringify(fr));
+  fr.format.y + fr.format.h / 2 < freeStart.y - freeStart.h / 2
+    && fr.format.y - fr.format.h / 2 > fr.terrain.y + fr.terrain.h / 2,
+  JSON.stringify({ format: fr.format, terrain: fr.terrain, freeStart }));
 // 行ごとの当たり判定(中心 row.y+7、高さ row.h)が上下の行と食い合わないこと。
 const rowBands = Object.entries(fr)
   .map(([k, r]) => ({ k, top: r.y + 7 - r.h / 2, bottom: r.y + 7 + r.h / 2 }))

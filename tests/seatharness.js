@@ -258,6 +258,18 @@ const HOOK = `
     stats: () => ({ ...runStats }),
     mode: () => battleMode,
     freeConfig: () => ({ ...freeModeConfig }),
+    freeTrainingOptions: () => (typeof FREE_TRAINING_OPTIONS === 'object'
+      ? JSON.parse(JSON.stringify(FREE_TRAINING_OPTIONS))
+      : null),
+    practiceRulesForTest: () => (typeof freeTrainingRules === 'function' ? freeTrainingRules() : null),
+    setFreeTrainingForTest: (values) => {
+      if (typeof setFreeTrainingForTest === 'function') return setFreeTrainingForTest(values);
+      return null;
+    },
+    refreshPracticeJumpForTest: (id) => {
+      if (typeof refreshPracticeJumpForTest === 'function') return refreshPracticeJumpForTest(id);
+      return null;
+    },
     startFree: () => { startFreeMatch(); },
     resultTitleBtn: () => ({ ...resultTitleBtn, shift: resultButtonShift() }),
     continueBtn: () => ({ ...continueBtn, shift: resultButtonShift() }),
@@ -438,12 +450,14 @@ const HOOK = `
     is2v2: () => is2v2(),
     formatOptions: () => FORMAT_OPTIONS.map(o => o.key),
     freeRows: () => JSON.parse(JSON.stringify(freeRows)),
+    freeStartBtn: () => ({ ...freeStartBtn }),
     freeConfig: () => ({ ...freeModeConfig }),
     setFreeFormat: (key) => {
       freeModeConfig.formatIndex = Math.max(0, FORMAT_OPTIONS.findIndex(o => o.key === key));
     },
     setFreeWindForTest: (key) => {
       freeModeConfig.windIndex = Math.max(0, WIND_OPTIONS.findIndex(o => o.key === key));
+      if (typeof applyLegacyFreeWind === 'function') applyLegacyFreeWind(key);
     },
     changeFreeOption: (kind, dir) => changeFreeOption(kind, dir),
     startFreeMatch: () => startFreeMatch(),
