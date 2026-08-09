@@ -77,12 +77,12 @@
     }),
     steel: Object.freeze({
       id: 'steel',
-      label: '鋼鉄',
+      label: '壊れない鋼鉄',
       type: 'indestructible',
       destructible: false,
-      enabled: false,
-      exportable: false,
-      requiresGameFeature: 'indestructible-terrain-v1'
+      enabled: true,
+      exportable: true,
+      requiresGameFeature: null
     })
   });
   var SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
@@ -176,15 +176,30 @@
         minItems: 1,
         maxItems: 1,
         items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['id', 'type', 'destructible'],
-          properties: {
-            id: { const: 'terrain' },
-            type: { const: 'destructible' },
-            destructible: { const: true },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
-          }
+          anyOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'type', 'destructible'],
+              properties: {
+                id: { const: 'terrain' },
+                type: { const: 'destructible' },
+                destructible: { const: true },
+                color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+              }
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'type', 'destructible'],
+              properties: {
+                id: { const: 'steel' },
+                type: { const: 'indestructible' },
+                destructible: { const: false },
+                color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+              }
+            }
+          ]
         }
       },
       spawnPoints: {
@@ -785,6 +800,7 @@
 
   function carveCircle(stage, x, y, radius) {
     var next = normalizeStage(stage);
+    if (next.materials[0] && next.materials[0].destructible !== true) return next;
     var grid = segmentsToGrid(next);
     paintCircle(grid, x, y, radius, false);
     next.terrain.columns = gridToSegments(grid);
@@ -1042,9 +1058,10 @@
 
     var materials = Array.isArray(input.materials) ? input.materials : [];
     if (materials.length !== 1 || materials.some(function (material) {
-      return !material || material.id !== MATERIAL_CATALOG.terrain.id || material.type !== MATERIAL_CATALOG.terrain.type || material.destructible !== MATERIAL_CATALOG.terrain.destructible;
+      var expected = material && MATERIAL_CATALOG[material.id];
+      return !expected || !expected.enabled || material.type !== expected.type || material.destructible !== expected.destructible;
     })) {
-      errors.push(issue('unsupported_material', '$.materials', '未対応の地形素材が含まれています。MVPは破壊可能地形だけに対応します。'));
+      errors.push(issue('unsupported_material', '$.materials', '地形素材の種類と壊れ方の組み合わせが正しくありません。'));
     }
     var gimmicks = Array.isArray(input.gimmicks) ? input.gimmicks : [];
     if (gimmicks.length > LIMITS.maxGimmicks) errors.push(issue('gimmick_limit', '$.gimmicks', 'ギミック数が上限を超えています。'));
@@ -1141,7 +1158,8 @@
     base.materials = (Array.isArray(input.materials) ? input.materials : base.materials).slice(0, 4).map(function (material) {
       return {
         id: safeText(material && material.id, 32, 'terrain').replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'terrain',
-        type: material && material.type === 'destructible' ? 'destructible' : safeText(material && material.type, 32, 'destructible'),
+        type: material && (material.type === 'destructible' || material.type === 'indestructible')
+          ? material.type : safeText(material && material.type, 32, 'destructible'),
         destructible: material && material.destructible === true,
         color: safeColor(material && material.color, '#7A5435')
       };
@@ -1442,6 +1460,7 @@
       format: normalized.battleRules.format,
       appearance: {
         background: clone(normalized.background),
+        terrainMaterial: normalized.materials[0] && normalized.materials[0].id === 'steel' ? 'steel' : 'terrain',
         terrainColor: normalized.materials[0] && normalized.materials[0].color
           ? normalized.materials[0].color
           : '#7A5435',

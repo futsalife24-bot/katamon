@@ -184,8 +184,8 @@
           <section id="terrainPanelBrush" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabBrush" data-terrain-panel-content="brush">
             <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
             <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
-            <label class="full">地形素材<select id="terrainMaterial"><option value="destructible">通常（破壊可能）</option><option value="steel" disabled>壊れない鋼鉄（準備中）</option></select></label>
-            <p class="muted full material-status">鋼鉄はゲーム本体の対応後に有効化します。現在の下書き・出力データには入りません。</p>
+            <label class="full">地形素材<select id="terrainMaterial"><option value="terrain">通常（破壊可能）</option><option value="steel">壊れない鋼鉄</option></select></label>
+            <p class="muted full material-status">鋼鉄は弾が当たっても削れません。キャラクターは通常どおり乗れます。</p>
           </section>
           <section id="terrainPanelShape" class="terrain-inspector-panel panel" role="tabpanel" aria-labelledby="terrainTabShape" data-terrain-panel-content="shape" hidden>
             <div class="terrain-operation-row" aria-label="地形の全体処理">

@@ -22,7 +22,7 @@ test('Stage Studio shares the two-font Katamon hierarchy', () => {
   assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
   assert.match(studioSw, /rocknroll-one-regular\.ttf/);
   assert.match(studioSw, /reggae-one-display\.woff2/);
-  assert.match(studioSw, /1\.7\.0-text-placement/);
+  assert.match(studioSw, /1\.8\.0-steel-terrain/);
 });
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -172,17 +172,17 @@ test('editing canvases expose an external landscape control with a safe iOS fall
   assert.match(studioApp, /addEventListener\('orientationchange', updateOrientationControls\)/);
 });
 
-test('steel remains a disabled future material and cannot enter exported state', () => {
-  assert.match(studioHtml, /<option value="steel" disabled>壊れない鋼鉄（準備中）<\/option>/);
-  assert.match(studioApp, /state\.stage\.materials = \[\{ id: 'terrain', type: 'destructible', destructible: true, color: \$\('terrainColor'\)\.value \}\];/);
-  assert.doesNotMatch(studioApp, /id:\s*['"]steel['"]/);
+test('Stage Studio offers the whole-stage steel material and exports its indestructible declaration', () => {
+  assert.match(studioHtml, /<option value="steel">壊れない鋼鉄<\/option>/);
+  assert.match(studioApp, /function selectedTerrainMaterial\(\)/);
+  assert.match(studioApp, /id: 'steel', type: 'indestructible', destructible: false/);
 });
 
 test('game-style UI and PWA shell ship the new visual assets with a cache bump', () => {
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.7\.0-text-placement`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.8\.0-steel-terrain`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
   assert.match(studioSw, /kyoryu\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);

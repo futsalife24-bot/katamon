@@ -171,7 +171,8 @@
     gradient.addColorStop(1, to);
     context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
-    context.fillStyle = stage.materials && stage.materials[0] ? stage.materials[0].color : '#7A5435';
+    var material = stage.materials && stage.materials[0] || {};
+    context.fillStyle = material.id === 'steel' ? '#3d4955' : (material.color || '#7A5435');
     var columns = stage.terrain && stage.terrain.columns || [];
     var scaleX = width / core.LIMITS.stageWidth;
     var scaleY = height / core.LIMITS.stageHeight;
@@ -180,6 +181,14 @@
         context.fillRect(columnIndex * core.LIMITS.columnWidth * scaleX, segment[0] * scaleY, Math.max(1, core.LIMITS.columnWidth * scaleX + 1), (segment[1] - segment[0]) * scaleY);
       });
     });
+    if (material.id === 'steel') {
+      context.save();
+      context.globalCompositeOperation = 'source-atop';
+      context.strokeStyle = 'rgba(4,8,12,.72)';
+      context.lineWidth = 1;
+      for (var y = 8; y < height; y += 12) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+      context.restore();
+    }
     (stage.spawnPoints || []).forEach(function (spawn) {
       context.beginPath();
       context.fillStyle = spawn.team === 'enemy' ? '#ff6b6b' : '#4fc3f7';

@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v147-character-card-wood-design';
+  const BUILD_ID = 'v148-indestructible-steel-terrain';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1402,6 +1402,8 @@
   // 公式ステージのTHEMESは共有定数のまま保持し、カスタムステージだけ複製した配色へ上書きする。
   // これにより、カスタム地形色を適用した後も通常バトルの見た目は一切変わらない。
   let currentCustomAppearance = null;
+  // カスタムステージだけが選べる地形素材。公式地形は従来どおり壊れる土のままにする。
+  let currentTerrainMaterial = 'terrain';
   let parallaxSeed = 0; // 遠景の山の形を試合ごとに変えるための位相オフセット
 
   function mixHexColor(from, to, ratio) {
@@ -1415,6 +1417,7 @@
     currentThemeKey = themeKey && THEMES[themeKey] ? themeKey : 'grass';
     if (!appearance) {
       currentCustomAppearance = null;
+      currentTerrainMaterial = 'terrain';
       currentTheme = THEMES[currentThemeKey];
       return;
     }
@@ -1427,9 +1430,11 @@
         color: background.color,
         gradient: { ...(background.gradient || {}) }
       },
+      terrainMaterial: appearance.terrainMaterial === 'steel' ? 'steel' : 'terrain',
       terrainColor: appearance.terrainColor,
       decorationsEnabled: appearance.decorationsEnabled !== false
     };
+    currentTerrainMaterial = currentCustomAppearance.terrainMaterial;
     currentTheme = { ...THEMES[currentThemeKey], sky: THEMES[currentThemeKey].sky.slice() };
 
     if (currentCustomAppearance.background.mode === 'color') {
@@ -1804,7 +1809,12 @@
     terrainCtx.clearRect(0, 0, STAGE_W, VH);
     terrainCtx.globalCompositeOperation = 'source-over';
     const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, TERRAIN_BOTTOM_Y);
-    if (currentPattern === 'tieredBasin') {
+    if (currentTerrainMaterial === 'steel') {
+      grad.addColorStop(0, '#71808c');
+      grad.addColorStop(0.16, '#39444f');
+      grad.addColorStop(0.64, '#1d252e');
+      grad.addColorStop(1, '#090e14');
+    } else if (currentPattern === 'tieredBasin') {
       grad.addColorStop(0, '#4c535d');
       grad.addColorStop(0.35, '#2c323b');
       grad.addColorStop(1, '#11151b');
@@ -1833,6 +1843,36 @@
     terrainCtx.fillRect(0, 0, STAGE_W, VH);
     terrainCtx.restore();
     drawTerrainDetails();
+    if (currentTerrainMaterial === 'steel') {
+      // 闘技場の鉄球と同じ黒鉄寄りの板金感。地形の形はそのまま、表面だけを鋼鉄にする。
+      terrainCtx.save();
+      terrainCtx.globalCompositeOperation = 'source-atop';
+      terrainCtx.strokeStyle = 'rgba(7,11,16,0.74)';
+      terrainCtx.lineWidth = 2;
+      for (let y = 18; y < TERRAIN_BOTTOM_Y; y += 30) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(0, y);
+        terrainCtx.lineTo(STAGE_W, y);
+        terrainCtx.stroke();
+      }
+      terrainCtx.strokeStyle = 'rgba(194,211,222,0.16)';
+      terrainCtx.lineWidth = 1;
+      for (let x = 18; x < STAGE_W; x += 54) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(x, 0);
+        terrainCtx.lineTo(x - 14, TERRAIN_BOTTOM_Y);
+        terrainCtx.stroke();
+      }
+      terrainCtx.fillStyle = 'rgba(235,194,97,0.72)';
+      for (let y = 30; y < TERRAIN_BOTTOM_Y; y += 60) {
+        for (let x = 27; x < STAGE_W; x += 108) {
+          terrainCtx.beginPath();
+          terrainCtx.arc(x, y, 2, 0, Math.PI * 2);
+          terrainCtx.fill();
+        }
+      }
+      terrainCtx.restore();
+    }
     rebuildBridgeDecoration();
     rebuildArenaDecoration();
     if (refreshRim) rebuildTerrainRim();
@@ -1853,6 +1893,7 @@
 
   // 着弾クレーターの実処理:見た目(キャンバス)と判定(グリッド)の両方を円形にくり抜く
   function carveCraterInternal(cx, cy, radius, refreshRim = true) {
+    if (currentTerrainMaterial === 'steel') return false;
     markTerrainArtDirty();
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'destination-out';
@@ -1890,12 +1931,12 @@
     if (refreshRim) rebuildTerrainRim();
     // ミニマップの地形は地形が変わった時だけ描き直す。毎フレームの全グリッド走査を避ける。
     minimapTerrainDirty = true;
+    return true;
   }
 
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
   function carveCrater(cx, cy, radius) {
-    carveCraterInternal(cx, cy, radius);
-    craterHistory.push({ x: cx, y: cy, r: radius });
+    if (carveCraterInternal(cx, cy, radius)) craterHistory.push({ x: cx, y: cy, r: radius });
   }
 
   function groundYAt(x) {
@@ -3241,8 +3282,7 @@
   // 拡散弾の爆発。地形の縁の再構築だけは呼び出し側で1フレームに1回へまとめる。
   function fireworkShardExplode(p, blastMul, x, y) {
     const radius = 44 * blastMul;
-    carveCraterInternal(x, y, radius, false);
-    craterHistory.push({ x, y, r: radius });
+    if (carveCraterInternal(x, y, radius, false)) craterHistory.push({ x, y, r: radius });
     spawnExplosion(x, y, blastMul * 0.5);
     playCrackleSound(blastMul);
     for (const u of units) {
@@ -3304,8 +3344,7 @@
 
   function carveDeathGate(p, x, y, distance) {
     const radius = deathGateCarveRadius(distance, p.maxDistance);
-    carveCraterInternal(x, y, radius, false);
-    craterHistory.push({ x, y, r: radius });
+    if (carveCraterInternal(x, y, radius, false)) craterHistory.push({ x, y, r: radius });
   }
 
   // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。

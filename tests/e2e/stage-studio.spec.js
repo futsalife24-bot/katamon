@@ -210,7 +210,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.7.0-text-placement');
+  await expect(page.locator('#appVersion')).toContainText('1.8.0-steel-terrain');
   await expect(page.locator('body')).toHaveCSS('font-family', /RocknRoll One/);
   await expect(page.locator('.app-header h1')).toHaveCSS('font-family', /Reggae One/);
   await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
@@ -306,7 +306,8 @@ async function createValidatedStage(page, options = {}) {
     await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   }
-  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).not.toBeDisabled();
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveText('壊れない鋼鉄');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
   await openTerrainInspector(page, 'appearance');
   await page.locator('#themeSelect').selectOption('grass');

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.7.0-text-placement';
+  const APP_VERSION = '1.8.0-steel-terrain';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -475,6 +475,13 @@
     state.stage.terrain.columns = columnsFromGrid(state.grid);
   }
 
+  function selectedTerrainMaterial() {
+    if ($('terrainMaterial').value === 'steel') {
+      return { id: 'steel', type: 'indestructible', destructible: false, color: $('terrainColor').value };
+    }
+    return { id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value };
+  }
+
   function syncMetadataFromForm() {
     if (!state.stage) return;
     state.stage.title = $('stageTitle').value.trim().slice(0, LIMITS.maxTitleLength || 48) || 'ステージ';
@@ -511,6 +518,7 @@
     const editableBackground = background.mode === 'gradient' && background.gradient ? background.gradient.from : background.color;
     $('backgroundColor').value = /^#[0-9a-f]{6}$/i.test(editableBackground || '') ? editableBackground : THEME_COLORS[$('themeSelect').value].sky;
     $('terrainColor').value = state.stage.materials && /^#[0-9a-f]{6}$/i.test(state.stage.materials[0] && state.stage.materials[0].color || '') ? state.stage.materials[0].color : THEME_COLORS[$('themeSelect').value].terrain;
+    $('terrainMaterial').value = state.stage.materials && state.stage.materials[0] && state.stage.materials[0].id === 'steel' ? 'steel' : 'terrain';
     $('brightnessRange').value = Math.round(clamp(state.appearanceBrightness || 1, 0.6, 1.3) * 100);
     $('decorationsEnabled').checked = state.stage.decorations ? state.stage.decorations.enabled !== false : true;
     $('spawnCount').value = state.stage.spawnPoints && state.stage.spawnPoints.length >= 4 ? '4' : '2';
@@ -1112,7 +1120,7 @@
     return collision;
   }
 
-  function drawTerrain(context, columns, theme, terrainTop, showCollision) {
+  function drawTerrain(context, columns, theme, terrainTop, showCollision, steel) {
     const gradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
     gradient.addColorStop(0, terrainTop);
     gradient.addColorStop(1, theme.dirtBottom);
@@ -1134,6 +1142,18 @@
       context.clip();
       context.fillStyle = context.createPattern(terrainNoiseTile, 'repeat');
       context.fillRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
+      if (steel) {
+        context.strokeStyle = 'rgba(5,10,15,.78)';
+        context.lineWidth = 2;
+        for (let y = 18; y < LIMITS.terrainBottomY; y += 30) {
+          context.beginPath(); context.moveTo(0, y); context.lineTo(LIMITS.stageWidth, y); context.stroke();
+        }
+        context.strokeStyle = 'rgba(210,225,234,.18)';
+        context.lineWidth = 1;
+        for (let x = 18; x < LIMITS.stageWidth; x += 54) {
+          context.beginPath(); context.moveTo(x, 0); context.lineTo(x - 14, LIMITS.terrainBottomY); context.stroke();
+        }
+      }
       context.lineCap = 'round';
       context.strokeStyle = theme.strata;
       context.lineWidth = 2;
@@ -1225,13 +1245,14 @@
 
     const columns = columnsFromGrid(grid);
     const material = state.stage.materials && state.stage.materials[0] || {};
-    const terrainTop = /^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop;
+    const steel = material.id === 'steel';
+    const terrainTop = steel ? '#71808C' : (/^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop);
     const terrainTheme = Object.assign({}, theme, {
       dirtBottom: mixHexColor(terrainTop, '#000000', 0.58),
       rim: mixHexColor(terrainTop, '#ffffff', 0.34),
       rimShadow: mixHexColor(terrainTop, '#000000', 0.36)
     });
-    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision);
+    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision, steel);
 
     if (!state.lowPowerMode && settings.showGrid && transform.scale * 24 >= 10) {
       context.strokeStyle = 'rgba(255,255,255,.22)';
@@ -2057,7 +2078,7 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
+    state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     updateAppearance();
     renderAllCanvases();
@@ -2158,7 +2179,8 @@
       mode: 'theme', theme: themeKey, color: theme.gradient[0],
       gradient: { from: theme.gradient[0], to: theme.gradient[1] }
     };
-    if (stage.materials && stage.materials[0]) stage.materials[0].color = theme.terrain;
+    stage.materials = [selectedTerrainMaterial()];
+    stage.materials[0].color = $('terrainColor').value || theme.terrain;
     state.generationJob = null;
     setGenerationBusy(false);
     setStage(stage);
@@ -2454,11 +2476,15 @@
     state.testTrajectory = Array.isArray(result.points) ? result.points : [];
     state.testImpact = result.hit || result.impact || null;
     if (state.testImpact) {
-      paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
-      enforceTerrainBounds(state.testGrid);
-      const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
       const impactMessage = `着弾 x ${Math.round(state.testImpact.x)} / y ${Math.round(state.testImpact.y)}。爆発範囲と地形破壊を反映しました。`;
-      $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      if (testStage.materials && testStage.materials[0] && testStage.materials[0].destructible === false) {
+        $('testResult').textContent = `${impactMessage} 鋼鉄なので地形は削れません。`;
+      } else {
+        paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
+        enforceTerrainBounds(state.testGrid);
+        const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
+        $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      }
     } else {
       $('testResult').textContent = '砲弾は地形へ当たらず画面外へ出ました。角度や威力を調整してください。';
     }
@@ -2477,7 +2503,7 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
+    state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     return clone(state.stage);
   }
@@ -3126,6 +3152,7 @@
     $('backgroundMode').addEventListener('change', () => applyAppearanceFromForm(true));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('input', updateAppearance));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
+    $('terrainMaterial').addEventListener('change', () => applyAppearanceFromForm(true));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
 
     document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {
