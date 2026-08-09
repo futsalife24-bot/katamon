@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v149-character-special-descriptions';
+  const BUILD_ID = 'v150-special-cutin-sfx';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1233,16 +1233,32 @@
     playFilteredNoise(0.09, 0.1 * power, 'bandpass', 780, 0.004, 0.002, 1.1);
   }
   function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
+  // 必殺カットイン専用。通常弾の「ドン」と区別するため、低音のため→上昇→決め音の順で鳴らす。
+  // 外部ファイルを増やさず、端末ごとの読込待ちやオフライン時の無音を作らない。
+  const SPECIAL_CUTIN_SOUND_PROFILE = Object.freeze({
+    duckMs: 920,
+    durationSec: 0.86,
+    bassStartHz: 68,
+    bassEndHz: 106,
+    riseStartHz: 240,
+    riseEndHz: 1880,
+    impactHz: 1320
+  });
   function playSpecialSound() {
-    // 通常砲撃よりも「溜め → 解放」がはっきり分かる、短い必殺専用ジングル。
-    // BGMは少しだけ退避させ、低域の衝撃と高域のきらめきを重ねる。
-    duckStageBgm(720);
-    playTone(190, 0.16, 'sawtooth', 0.075, 460, 0, 0.006);
-    playTone(460, 0.34, 'triangle', 0.14, 1240, 0.045, 0.009);
-    playTone(990, 0.18, 'sine', 0.08, 1760, 0.12, 0.004);
-    playFilteredNoise(0.12, 0.095, 'bandpass', 1650, 0.09, 0.004, 1.25);
-    playFilteredNoise(0.30, 0.16, 'lowpass', 410, 0.15, 0.003, 0.72);
-    playTone(72, 0.31, 'sine', 0.18, 40, 0.16, 0.004);
+    const s = SPECIAL_CUTIN_SOUND_PROFILE;
+    // オーラの直後に、BGMを一呼吸だけ引かせてカットインを前へ出す。
+    duckStageBgm(s.duckMs);
+    // 足元からせり上がるような太い低音。着弾音の爆発とは混ぜない。
+    playTone(s.bassStartHz, 0.62, 'sine', 0.23, s.bassEndHz, 0, 0.018);
+    playTone(118, 0.52, 'triangle', 0.10, 188, 0.06, 0.012);
+    // 画面を切り替える間に、音も一本の上昇線になるよう重ねる。
+    playTone(s.riseStartHz, 0.70, 'sawtooth', 0.12, 960, 0.08, 0.025);
+    playTone(520, 0.56, 'triangle', 0.115, s.riseEndHz, 0.18, 0.016);
+    playFilteredNoise(0.50, 0.10, 'bandpass', 2100, 0.24, 0.014, 1.4);
+    // 末尾だけ明るく締める。長い爆発音にせず、発射直前の余白を残す。
+    playTone(s.impactHz, 0.22, 'triangle', 0.17, 780, 0.61, 0.004);
+    playTone(82, 0.30, 'sine', 0.20, 44, 0.58, 0.004);
+    playFilteredNoise(0.25, 0.11, 'highpass', 3200, 0.62, 0.004, 1.1);
   }
   function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
   function playVictorySound() {

@@ -193,6 +193,17 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     indexHtml.includes('function drawSpecialAura(u, a)')
       && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
     'drawSpecialAuraの描画順が見つかりません');
+  const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
+    ? kt.specialCutInSoundProfile()
+    : null;
+  check('必殺カットイン音は重低音から立ち上がる専用の長いジングルを使う',
+    !!specialCutInSound
+      && specialCutInSound.duckMs >= 850
+      && specialCutInSound.durationSec >= 0.7
+      && specialCutInSound.bassStartHz <= 90
+      && specialCutInSound.riseEndHz >= 1600
+      && /function playSpecialSound\(\) \{[\s\S]{0,1400}SPECIAL_CUTIN_SOUND_PROFILE/.test(indexHtml),
+    JSON.stringify(specialCutInSound));
   kt.clearProjectilesForTest();
 }
 
