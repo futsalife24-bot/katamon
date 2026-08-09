@@ -97,15 +97,30 @@
       "minItems": 1,
       "maxItems": 1,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "type", "destructible"],
-        "properties": {
-          "id": { "const": "terrain" },
-          "type": { "const": "destructible" },
-          "destructible": { "const": true },
-          "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
-        }
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "destructible"],
+            "properties": {
+              "id": { "const": "terrain" },
+              "type": { "const": "destructible" },
+              "destructible": { "const": true },
+              "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "destructible"],
+            "properties": {
+              "id": { "const": "steel" },
+              "type": { "const": "indestructible" },
+              "destructible": { "const": false },
+              "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+            }
+          }
+        ]
       }
     },
     "spawnPoints": {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v147-character-card-wood-design';
+const CACHE_VERSION = 'katamon-pwa-v148-indestructible-steel-terrain';
 const APP_SHELL = [
   './',
   './index.html',
