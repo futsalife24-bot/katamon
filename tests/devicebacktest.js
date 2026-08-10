@@ -81,6 +81,14 @@ function makeEnvironmentWithCode(options, code) {
     ['deviceBackExit', new HTMLElementStub('deviceBackExit')]
   ]);
   const historyLog = [];
+  const currentUrl = options?.currentUrl || 'https://example.test/katamon/index.html';
+  const navigationUrls = options?.navigationUrls || [currentUrl];
+  const navigationEntries = navigationUrls.map((url, index) => ({ url, index }));
+  const navigationStub = {
+    entries: () => navigationEntries.slice(),
+    currentEntry: navigationEntries[navigationEntries.length - 1] || null
+  };
+  const locationStub = { href: currentUrl };
 
   class CloseWatcherStub extends EventHost {
     constructor() {
@@ -110,12 +118,20 @@ function makeEnvironmentWithCode(options, code) {
   CloseWatcherStub.instances = [];
   const activeWatcherCount = () => CloseWatcherStub.instances.filter(watcher => watcher.active).length;
   const historyStub = {
-    state: null,
+    state: options?.historyState || null,
+    length: options?.historyLength ?? navigationEntries.length,
     pushState(state) { this.state = state; historyLog.push({ type: 'pushState', activeWatchers: activeWatcherCount() }); },
     replaceState(state) { this.state = state; historyLog.push({ type: 'replaceState', activeWatchers: activeWatcherCount() }); },
-    back() { historyLog.push({ type: 'back', activeWatchers: activeWatcherCount() }); }
+    back() { historyLog.push({ type: 'back', activeWatchers: activeWatcherCount() }); },
+    go(delta) { historyLog.push({ type: 'go', delta, activeWatchers: activeWatcherCount() }); }
   };
   if (closeWatcher) windowStub.CloseWatcher = CloseWatcherStub;
+  windowStub.navigation = navigationStub;
+  windowStub.navigator = { standalone: !!options?.navigatorStandalone };
+  windowStub.close = () => historyLog.push({ type: 'close', activeWatchers: activeWatcherCount() });
+  windowStub.matchMedia = query => ({
+    matches: query === '(display-mode: standalone)' && !!options?.standalone
+  });
   const documentStub = {
     hidden: false,
     activeElement: null,
@@ -123,7 +139,7 @@ function makeEnvironmentWithCode(options, code) {
     contains: element => [...elements.values()].includes(element)
   };
   const buildApi = new Function(
-    'window', 'document', 'history', 'HTMLElement', 'requestAnimationFrame', 'setTimeout',
+    'window', 'document', 'history', 'navigation', 'location', 'HTMLElement', 'requestAnimationFrame', 'setTimeout',
     'playUiSound', 'saveAudioSettings', 'roomScreenOpen', 'canOpenMenu', 'initialPhase',
     `${code}\nreturn {
       syncBackTrap,
@@ -133,7 +149,7 @@ function makeEnvironmentWithCode(options, code) {
     };`
   );
   const api = buildApi(
-    windowStub, documentStub, historyStub, HTMLElementStub,
+    windowStub, documentStub, historyStub, navigationStub, locationStub, HTMLElementStub,
     callback => callback(),
     callback => { timers.push(callback); return timers.length; },
     () => {}, () => {}, () => roomOpen, () => true, phase
@@ -171,16 +187,73 @@ check('このまま遊ぶでは画面とWatcherを維持する', () => {
   assert.equal(h.historyLog.filter(item => item.type === 'back').length, 0);
 });
 
-check('アプリを閉じるではWatcherを先に破棄し、history.backを1回だけ呼ぶ', () => {
-  const h = env();
+check('アプリを閉じるではWatcherを先に破棄し、履歴移動を1回だけ呼ぶ', () => {
+  const h = env({
+    navigationUrls: [
+      'https://example.test/katamon/tools/stage-studio/',
+      'https://example.test/katamon/index.html'
+    ],
+    historyLength: 2
+  });
   h.api.syncBackTrap();
   const watcher = h.CloseWatcher.instances[0];
   watcher.requestBack(true);
   h.elements.get('deviceBackExit').fire('click');
-  const backs = h.historyLog.filter(item => item.type === 'back');
+  const moves = h.historyLog.filter(item => item.type === 'go');
   assert.equal(watcher.active, false);
-  assert.equal(backs.length, 1);
-  assert.equal(backs[0].activeWatchers, 0);
+  assert.equal(moves.length, 1);
+  assert.equal(moves[0].delta, -1);
+  assert.equal(moves[0].activeWatchers, 0);
+});
+
+check('古い同一URLガードが3枚あっても、終了1回でまとめてカタモンの外へ戻る', () => {
+  const h = env({
+    currentUrl: 'https://example.test/katamon/?v=v165&refresh=4',
+    navigationUrls: [
+      'https://example.test/katamon/tools/stage-studio/',
+      'https://example.test/katamon/',
+      'https://example.test/katamon/?v=v140&refresh=1',
+      'https://example.test/katamon/index.html?v=v150&refresh=2',
+      'https://example.test/katamon/?v=v165&refresh=4'
+    ],
+    historyLength: 5
+  });
+  h.api.syncBackTrap();
+  h.CloseWatcher.instances[0].requestBack(true);
+  h.elements.get('deviceBackExit').fire('click');
+  assert.deepEqual(
+    h.historyLog.filter(item => item.type === 'go').map(item => item.delta),
+    [-4]
+  );
+  assert.equal(h.historyLog.filter(item => item.type === 'back').length, 0);
+});
+
+check('戻り先が無いホーム画面PWAは、履歴移動ではなくウィンドウを閉じる', () => {
+  const h = env({ standalone: true, historyLength: 1 });
+  h.api.syncBackTrap();
+  h.CloseWatcher.instances[0].requestBack(true);
+  h.elements.get('deviceBackExit').fire('click');
+  assert.equal(h.historyLog.filter(item => item.type === 'close').length, 1);
+  assert.equal(h.historyLog.filter(item => item.type === 'back' || item.type === 'go').length, 0);
+});
+
+check('古いガードが残るホーム画面PWAも、終了1回でウィンドウを閉じに行く', () => {
+  const h = env({
+    standalone: true,
+    currentUrl: 'https://example.test/katamon/?refresh=3',
+    navigationUrls: [
+      'https://example.test/katamon/',
+      'https://example.test/katamon/?refresh=1',
+      'https://example.test/katamon/index.html?refresh=2',
+      'https://example.test/katamon/?refresh=3'
+    ],
+    historyLength: 4
+  });
+  h.api.syncBackTrap();
+  h.CloseWatcher.instances[0].requestBack(true);
+  h.elements.get('deviceBackExit').fire('click');
+  assert.equal(h.historyLog.filter(item => item.type === 'close').length, 1);
+  assert.deepEqual(h.historyLog.filter(item => item.type === 'go').map(item => item.delta), [-4]);
 });
 
 check('対応環境でpopstateが届いても履歴を積み直して往復させない', () => {
@@ -195,20 +268,27 @@ check('CloseWatcher未対応環境だけは従来の履歴ガードで確認を�
   const h = env({ closeWatcher: false });
   h.api.syncBackTrap();
   assert.equal(h.historyLog.filter(item => item.type === 'pushState').length, 1);
+  h.history.state = null;
   h.window.fire('popstate');
   assert.equal(h.historyLog.filter(item => item.type === 'pushState').length, 2);
   assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), true);
 });
 
-check('未対応環境の明示終了はガードと元履歴の2段だけを通る', () => {
-  const h = env({ closeWatcher: false });
+check('未対応環境の再読み込みで既存ガードを重ねない', () => {
+  const h = env({ closeWatcher: false, historyState: { katamonGuard: true } });
   h.api.syncBackTrap();
+  assert.equal(h.historyLog.filter(item => item.type === 'pushState').length, 0);
+  assert.equal(h.api.state().backTrapDepth, 1);
+});
+
+check('未対応環境の明示終了はガードと元履歴の2段だけを通る', () => {
+  const h = env({ closeWatcher: false, historyLength: 3 });
+  h.api.syncBackTrap();
+  h.history.state = null;
   h.window.fire('popstate');
   h.elements.get('deviceBackExit').fire('click');
-  assert.equal(h.historyLog.filter(item => item.type === 'back').length, 1);
-  h.window.fire('popstate');
-  h.runTimers();
-  assert.equal(h.historyLog.filter(item => item.type === 'back').length, 2);
+  assert.deepEqual(h.historyLog.filter(item => item.type === 'go').map(item => item.delta), [-2]);
+  assert.equal(h.historyLog.filter(item => item.type === 'back').length, 0);
 });
 
 check('バトル中の戻る要求は終了確認ではなく既存メニューを開く', () => {

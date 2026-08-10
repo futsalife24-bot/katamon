@@ -615,7 +615,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v165-closewatcher-back';
+  const BUILD_ID = 'v166-single-exit';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -14752,7 +14752,7 @@
   // それ以外は共通の終了確認へ振り替える。
   let backTrapDepth = 0;       // 未対応環境で積んであるダミーの数(0か1)
   let ignoringBackPop = false; // 未対応環境で自分がhistory.back()した分を無視する
-  let exitBackSteps = 0;       // CloseWatcherは1、履歴フォールバックは2段階で終了する
+  let exitBackSteps = 0;       // 明示終了のために履歴移動を要求している間だけ1
   let deviceBackCloseWatcher = null;
   let deviceBackCloseWatcherFailed = false;
   let deviceBackPageActive = true;
@@ -14870,6 +14870,11 @@
   function armBackTrap() {
     if (armCloseWatcherBackTrap()) return;
     if (backTrapDepth > 0) return;
+    // 未対応ブラウザで再読み込みしても、既にあるガードへ同じものを重ねない。
+    if (history.state && history.state.katamonGuard === true) {
+      backTrapDepth = 1;
+      return;
+    }
     try {
       history.pushState({ katamonGuard: true }, '');
       backTrapDepth = 1;
@@ -14902,15 +14907,45 @@
     else disarmBackTrap();
   }
 
-  function continueConfirmedDeviceExit() {
+  function normalizedDeviceBackAppLocation(rawUrl) {
     try {
-      history.back();
+      const url = new URL(rawUrl, location.href);
+      let path = url.pathname.replace(/\/index\.html$/i, '/');
+      if (!path.endsWith('/')) path += '/';
+      return `${url.origin}${path}`;
     } catch (err) {
-      exitBackSteps = 0;
-      syncBackTrap();
-      return;
+      return '';
     }
-    // 履歴が無いブラウザではback()が何もせず、ページが残ることがある。その時だけ再武装する。
+  }
+
+  // 旧版が残した同一ページのダミー履歴を数え、アプリ外まで一度で抜ける距離を返す。
+  function confirmedDeviceExitHistoryDelta() {
+    const fallback = closeWatcherBackTrapAvailable() ? 1 : Math.max(1, backTrapDepth + 1);
+    const navigationApi = window.navigation;
+    if (!navigationApi || typeof navigationApi.entries !== 'function' || !navigationApi.currentEntry) {
+      return fallback;
+    }
+    try {
+      const entries = navigationApi.entries();
+      const currentEntry = navigationApi.currentEntry;
+      let currentIndex = entries.indexOf(currentEntry);
+      if (currentIndex < 0 && Number.isInteger(currentEntry.index)) currentIndex = currentEntry.index;
+      if (currentIndex < 0 || currentIndex >= entries.length) return fallback;
+      const appLocation = normalizedDeviceBackAppLocation(location.href);
+      if (!appLocation) return fallback;
+      let delta = 1;
+      for (let index = currentIndex - 1; index >= 0; index--) {
+        if (normalizedDeviceBackAppLocation(entries[index].url) !== appLocation) break;
+        delta++;
+      }
+      return Math.max(fallback, delta);
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function scheduleConfirmedDeviceExitRecovery() {
+    // 戻り先が無い・close()を拒否された時だけ、残った画面で戻る受付を復旧する。
     setTimeout(() => {
       if (exitBackSteps > 0 && !document.hidden) {
         exitBackSteps = 0;
@@ -14919,16 +14954,42 @@
     }, 800);
   }
 
+  function continueConfirmedDeviceExit(historyDelta = 1) {
+    try {
+      if (typeof history.go === 'function') history.go(-Math.max(1, historyDelta));
+      else history.back();
+    } catch (err) {
+      exitBackSteps = 0;
+      syncBackTrap();
+      return;
+    }
+    scheduleConfirmedDeviceExitRecovery();
+  }
+
+  function closeStandaloneDeviceBackWindow() {
+    const standalone = !!(
+      (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches)
+      || (window.navigator && window.navigator.standalone === true)
+    );
+    const noBackEntry = Number(history.length) <= 1;
+    if (!standalone && !noBackEntry) return false;
+    try { window.close(); } catch (err) { /* 閉じられない時は履歴移動か復旧へ任せる */ }
+    return noBackEntry;
+  }
+
   function confirmDeviceExit() {
     closeDeviceBackConfirm(false);
-    const closeWatcherExit = closeWatcherBackTrapAvailable();
-    // CloseWatcher経路にはダミー履歴が無いので、Watcherを先に破棄して1回だけ戻る。
-    // 未対応環境だけは、現在のダミー履歴とその下のアプリ本体履歴を通る。
-    exitBackSteps = closeWatcherExit ? 1 : 2;
+    const historyDelta = confirmedDeviceExitHistoryDelta();
+    // Watcherを先に破棄し、旧ガードが何枚あっても履歴移動は一度だけ要求する。
+    exitBackSteps = 1;
     destroyDeviceBackCloseWatcher();
     backTrapDepth = 0;
     ignoringBackPop = false;
-    continueConfirmedDeviceExit();
+    if (closeStandaloneDeviceBackWindow()) {
+      scheduleConfirmedDeviceExitRecovery();
+      return;
+    }
+    continueConfirmedDeviceExit(historyDelta);
   }
 
   if (deviceBackStayBtn) deviceBackStayBtn.addEventListener('click', () => {
@@ -14951,8 +15012,7 @@
       return;
     }
     if (exitBackSteps > 0) {
-      exitBackSteps--;
-      if (exitBackSteps > 0) setTimeout(continueConfirmedDeviceExit, 0);
+      exitBackSteps = 0;
       return;
     }
     if (ignoringBackPop) { ignoringBackPop = false; return; }
