@@ -32,6 +32,39 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+// v171: 上端にあった横長の中断再開ボタンを出撃ギアの下へ移し、
+// 空いた場所では「カタモンを選択」を主役として見せる。
+{
+  const info = kt.selectScreenInfo();
+  const drawnWithSave = kt.drawSelectForTest(true);
+  check('キャラ選択の見出しは「カタモンを選択」を大きく描く',
+    info.heading === 'カタモンを選択'
+      && info.headingFontSize >= 30
+      && drawnWithSave.includes('カタモンを選択')
+      && !drawnWithSave.includes('モンスターを選択'),
+    JSON.stringify({ info, drawnWithSave }));
+  check('中断再開は出撃より小さい下側ギアとして噛み合わせる',
+    Number.isFinite(info.sortie.outerRadius)
+      && Number.isFinite(info.resume.outerRadius)
+      && info.resume.y > info.sortie.y
+      && info.resume.outerRadius < info.sortie.outerRadius
+      && info.resume.y - info.sortie.y < info.resume.outerRadius + info.sortie.outerRadius,
+    JSON.stringify(info));
+  check('中断再開ギアは丸い見た目と同じ範囲だけ押せる',
+    kt.selectResumeHitForTest(info.resume.x, info.resume.y)
+      && !kt.selectResumeHitForTest(info.resume.x + info.resume.w / 2 - 1, info.resume.y + info.resume.h / 2 - 1),
+    JSON.stringify(info.resume));
+  check('中断データがある時は小型ギアに再開と表示する',
+    drawnWithSave.includes('再開')
+      && drawnWithSave.includes('中断対戦')
+      && !drawnWithSave.includes('▶ 中断した対戦を再開'),
+    drawnWithSave.join('/'));
+  const drawnWithoutSave = kt.drawSelectForTest(false);
+  check('中断データが無い時は再開ギアを表示しない',
+    !drawnWithoutSave.includes('再開') && !drawnWithoutSave.includes('中断対戦'),
+    drawnWithoutSave.join('/'));
+}
+
 // v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。
 // 必殺技と跳躍は通常弾ではないため、従来のキャラ固有値を残す。
 {

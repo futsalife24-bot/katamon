@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v170-title-visual-tuning';
+const CACHE_VERSION = 'katamon-pwa-v171-select-resume-gear';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
