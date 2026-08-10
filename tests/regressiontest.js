@@ -585,8 +585,12 @@ check('演習前はキャラ・地形・ステージサイズ・人数だけを�
 // 大型を選んだ時だけ、実戦の地形・保存データまで大型寸法へ切り替わること。
 // 旧実装では stageSize を受け取らず、ここは常に標準 (1440 / 660 / 480列) のままになる。
 kt.changeFreeOption('stageSize', 1);
+// 以前に標準サイズで「遠」を選んでいた端末でも、大型へ切り替えたら
+// 縦に余白だらけの全景にはならないこと。
+kt.setCameraZoomForTest(0.38);
 kt.startFreeMatch();
 const largeFreeSnapshot = kt.buildSnapshotForTest();
+const largeFreeCamera = kt.cameraForTest();
 check('演習で大型を選ぶと2160×960・720列の戦場になる',
   largeFreeSnapshot.stageW === 2160
     && largeFreeSnapshot.stageH === 960
@@ -598,6 +602,10 @@ check('演習で大型を選ぶと2160×960・720列の戦場になる',
     columns: largeFreeSnapshot.segments.length,
     units: largeFreeSnapshot.units.length
   }));
+check('大型へ切り替えると、保存済みの遠い視点でも縦の余白を作らない',
+  largeFreeCamera.zoom >= kt.controlPanelY() / 960
+    && largeFreeCamera.visibleHeight <= 960,
+  JSON.stringify(largeFreeCamera));
 // 以降の既存ケースは標準サイズ前提なので、ここで元へ戻す。
 kt.changeFreeOption('stageSize', -1);
 kt.startFreeMatch();

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v156-stage-size-select';
+const CACHE_VERSION = 'katamon-pwa-v157-large-stage-camera';
 const APP_SHELL = [
   './',
   './index.html',
