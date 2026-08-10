@@ -1695,16 +1695,34 @@ kt.setLocalSeat('p1');
   // 高さ54の小ボタンへ高さ64の大ボタンと同じ文字位置を使うと、23pxの見出しが上枠へ食い込む。
   // 実際に描画された座標を見て、左右どちらも小ボタン専用の位置になっていることを固定する。
   kt.setPhase('title');
+  kt.setTitleWoodUiReadyForTest();
   kt.resetDrawnText();
   kt.render();
   const titleText = kt.drawnTextDetails();
   const tutorialLabel = titleText.find(entry => entry.text === 'チュートリアル');
   const freeLabel = titleText.find(entry => entry.text === '演習');
-  check('タイトルの「チュートリアル」「演習」の見出しが上枠へ食い込まない位置にある',
+  const tutorialSub = titleText.find(entry => entry.text === 'もう一度おさらい');
+  const freeSub = titleText.find(entry => entry.text === '条件を組んで開始');
+  check('タイトルの「チュートリアル」「演習」は見出しを上げ、説明との間隔を広げる',
     tutorialLabel && freeLabel
-      && tutorialLabel.y >= b.tutorial.y - 1
-      && freeLabel.y >= b.free.y - 1,
-    JSON.stringify({ tutorialLabel, freeLabel, tutorial: b.tutorial, free: b.free }));
+      && tutorialSub && freeSub
+      && tutorialLabel.y <= b.tutorial.y - 4
+      && freeLabel.y <= b.free.y - 4
+      && tutorialSub.y - tutorialLabel.y >= 14
+      && freeSub.y - freeLabel.y >= 14,
+    JSON.stringify({ tutorialLabel, tutorialSub, freeLabel, freeSub, tutorial: b.tutorial, free: b.free }));
+  check('羊皮紙の文字は茶色ではなく深い青緑で読み分けられる',
+    tutorialLabel && freeLabel
+      && tutorialLabel.fillStyle === '#123f3d'
+      && freeLabel.fillStyle === '#123f3d',
+    JSON.stringify({ tutorialLabel, freeLabel }));
+  const bonusLabel = titleText.find(entry => entry.text === 'おまけ');
+  const bonusSub = titleText.find(entry => entry.text === 'BGMを聴く');
+  check('おまけの見出しと説明は盾の上側へ揃う',
+    bonusLabel && bonusSub
+      && bonusLabel.y <= b.bonus.y - 15
+      && bonusSub.y <= b.bonus.y + 8,
+    JSON.stringify({ bonusLabel, bonusSub, bonus: b.bonus }));
 
   // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
   // 画像名だけ置いて実際の配置が旧UIのまま、という実装を通さない。
@@ -1732,6 +1750,19 @@ kt.setLocalSeat('p1');
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),
       JSON.stringify(woodUi.imageRects));
+    check('木枠と中のボタン素材を同じ割合で一回り大きくする',
+      woodUi.board.w >= 450 && woodUi.board.h >= 430
+        && woodUi.imageRects.cpu.w >= 295 && woodUi.imageRects.cpu.h >= 80
+        && woodUi.imageRects.tutorial.w >= 185 && woodUi.imageRects.tutorial.h >= 50
+        && woodUi.imageRects.bonus.w >= 120 && woodUi.imageRects.bonus.h >= 110,
+      JSON.stringify({ board: woodUi.board, imageRects: woodUi.imageRects }));
+    check('中断データがあっても黄色い選択囲いを出さない',
+      woodUi.selectionOutline === false, String(woodUi.selectionOutline));
+    check('RANKINGは左上へ寄せ、矢尻だけがチュートリアル付近へ届く',
+      woodUi.imageRects.ranking.x < woodUi.imageRects.tutorial.x
+        && woodUi.imageRects.ranking.y - woodUi.imageRects.ranking.h / 2
+          <= woodUi.imageRects.tutorial.y + woodUi.imageRects.tutorial.h / 2 + 12,
+      JSON.stringify({ ranking: woodUi.imageRects.ranking, tutorial: woodUi.imageRects.tutorial }));
     check('木板内はCPU→ONLINE、中央はチュートリアル→演習、下段はRANKING→おまけの順で、更新ボタンは木枠の外にある',
       woodUi.buttons.cpu.y < woodUi.buttons.online.y
         && woodUi.buttons.online.y < woodUi.buttons.tutorial.y

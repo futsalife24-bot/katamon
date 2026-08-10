@@ -69,12 +69,23 @@ const HOOK = `
       assets: Object.fromEntries(Object.entries(titleWoodUiImages).map(([key, image]) => [key, image.src])),
       board: { ...TITLE_WOOD_BOARD_RECT },
       imageRects: JSON.parse(JSON.stringify(TITLE_WOOD_IMAGE_RECTS)),
+      selectionOutline: typeof TITLE_WOOD_SELECTION_OUTLINE === 'undefined'
+        ? true : TITLE_WOOD_SELECTION_OUTLINE,
       buttons: {
         cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn },
         tutorial: { ...titleTutorialBtn }, free: { ...titleFreeBtn },
         bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
       }
     }),
+    setTitleWoodUiReadyForTest: () => {
+      if (typeof titleWoodUiImages === 'undefined') return false;
+      for (const image of Object.values(titleWoodUiImages)) {
+        image.complete = true;
+        image.naturalWidth = 1000;
+        image.naturalHeight = 800;
+      }
+      return true;
+    },
     setTitleArtReadyForTest: () => {
       if (typeof titleArtBuilds === 'undefined') return false;
       titleTimeBackgroundReady = true;
@@ -456,7 +467,10 @@ const HOOK = `
       showTitleNotice: (text) => showTitleNotice(text),
       titleNotice: () => activeTitleNotice(),
       titleNoticeBand: () => ({ top: TITLE_NOTICE_Y - TITLE_NOTICE_H / 2, bottom: TITLE_NOTICE_Y + TITLE_NOTICE_H / 2 }),
-      saveBubbleBand: () => ({ top: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, bottom: SAVE_BUBBLE_CY + SAVE_BUBBLE_RY }),
+      saveBubbleBand: () => {
+        const box = suspendedSaveBubbleRect(120);
+        return { top: box.y, bottom: box.y + box.h };
+      },
       titleModeLabelY: () => TITLE_MODE_LABEL_Y,
       // ---- マッチメイキング(Issue #23) ----
       pickOpenCandidates: (listing, selfUid, format, now) => pickOpenCandidates(listing, selfUid, format, now),
@@ -633,7 +647,10 @@ function makeCtx() {
   // 小さい枠へ文字が食い込んでいないかも同じ描画結果から検査する。
   ctx.fillText = (text, x, y) => {
     globalThis.__ktTextLog.push(String(text));
-    globalThis.__ktTextDrawLog.push({ text: String(text), x, y, font: ctx.font });
+    globalThis.__ktTextDrawLog.push({
+      text: String(text), x, y, font: ctx.font,
+      fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle, lineWidth: ctx.lineWidth
+    });
   };
   // 最後に指示された座標変換。キャンバスの画素数と食い違うと、絵が画面から
   // はみ出すか小さく寄る。大きさだけ見ていると気づけないので記録する。
