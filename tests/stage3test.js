@@ -487,6 +487,16 @@ function check(name, value) {
     && htmlText.includes('await registration.update();')
     && htmlText.includes("key.startsWith('katamon-pwa-')")
     && htmlText.includes("latestUrl.searchParams.set('refresh', Date.now().toString());"));
+  const serviceWorkerText = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8').replace(/\r\n/g, '\n');
+  check('a newly activated worker refreshes a stale page only after it is safely back on the title',
+    serviceWorkerText.includes("type: 'KATAMON_UPDATE_READY'")
+    && serviceWorkerText.includes("self.clients.matchAll({ type: 'window', includeUncontrolled: true })")
+    && serviceWorkerText.includes("fetch(request, { cache: 'no-store' })")
+    && htmlText.includes("navigator.serviceWorker.addEventListener('message'")
+    && htmlText.includes('function queueGameUpdateReload(build)')
+    && htmlText.includes("if (gamePhase !== 'title') return;")
+    && htmlText.includes('if (roomScreenOpen() || confirmDialog) return;')
+    && htmlText.includes('applyPendingGameUpdateIfSafe();'));
   const firebaseLeaveStart = htmlText.indexOf('function leaveFirebaseLobby()');
   const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
   const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart

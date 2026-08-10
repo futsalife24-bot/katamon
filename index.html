@@ -569,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v157-large-stage-camera';
+  const BUILD_ID = 'v158-stale-page-refresh';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3871,6 +3871,8 @@
   const titleRankingBtn = { x: VW / 2, y: 856, w: 382, h: 42 };
   const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };
   let updateRequestInFlight = false;
+  let pendingGameUpdateBuild = '';
+  let safeUpdateReloadStarted = false;
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
   const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
@@ -13039,6 +13041,24 @@
     location.replace(latestUrl.href);
   }
 
+  // ページ本体が古いままでも、裏でService Workerだけ先に更新されることがある。
+  // 対戦は中断せず、通常のタイトルへ安全に戻った時だけ古いページ本体を入れ替える。
+  function queueGameUpdateReload(build) {
+    if (typeof build !== 'string' || !build || build === BUILD_ID) return;
+    pendingGameUpdateBuild = build;
+  }
+
+  function applyPendingGameUpdateIfSafe() {
+    if (!pendingGameUpdateBuild || safeUpdateReloadStarted) return;
+    if (gamePhase !== 'title') return;
+    if (roomScreenOpen() || confirmDialog) return;
+    safeUpdateReloadStarted = true;
+    const latestUrl = new URL(location.href);
+    latestUrl.searchParams.set('v', pendingGameUpdateBuild);
+    latestUrl.searchParams.set('refresh', Date.now().toString());
+    location.replace(latestUrl.href);
+  }
+
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
     const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && localUnit().grounded;
@@ -14800,6 +14820,7 @@
     if (!lastTime) lastTime = ts;
     const dt = Math.min(0.033, (ts - lastTime) / 1000);
     lastTime = ts;
+    applyPendingGameUpdateIfSafe();
     syncBackTrap();
     update(dt);
     render();
@@ -14819,6 +14840,10 @@
   // GitHub PagesなどHTTPS環境では、ホーム画面追加とオフライン起動を有効にする。
   if ('serviceWorker' in navigator
       && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.type !== 'KATAMON_UPDATE_READY') return;
+      queueGameUpdateReload(event.data.build);
+    });
     window.addEventListener('load', () => {
       navigator.serviceWorker.register(`./sw.js?build=${BUILD_ID}`, { updateViaCache: 'none' }).catch(() => {});
     });
