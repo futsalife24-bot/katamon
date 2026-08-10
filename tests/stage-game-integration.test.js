@@ -40,6 +40,26 @@ async function lowerPlatformStage() {
   return Core.finalizeStage(stage, { touchUpdatedAt: false });
 }
 
+async function largePlatformStage() {
+  const stage = Core.generateStage({
+    size: 'large',
+    preset: 'mountainCenter',
+    seed: 'game-integration-large-stage',
+    title: '大型テストステージ',
+    format: '2v2',
+    generationParameters: { playerCount: 4 }
+  });
+  const limits = Core.getStageLimits(stage);
+  for (const spawn of stage.spawnPoints) {
+    const center = Math.floor(spawn.x / limits.columnWidth);
+    for (let column = center - 8; column <= center + 8; column += 1) {
+      stage.terrain.columns[column] = [[320, 352], [760, limits.terrainBottom]];
+    }
+    spawn.y = 760 - limits.unitRadius;
+  }
+  return Core.finalizeStage(stage, { touchUpdatedAt: false });
+}
+
 test('custom stage adapter starts an actual local battle with terrain, lower spawn and wind', async () => {
   // seatharnessはindex.htmlの本体スクリプトをCanvas/DOMスタブ上で実行する。
   // StageCoreを先にglobalThisへ公開すると、実ブラウザと同じ共有モジュール経路になる。
@@ -130,6 +150,33 @@ test('custom stage adapter starts an actual local battle with terrain, lower spa
 
   kt.applySnapshotForTest(resumableSnapshot);
   assert.equal(kt.appearanceForTest().custom.decorationsEnabled, false, 'snapshot restore reapplies custom appearance');
+});
+
+test('large custom stage uses the 2160x960 field, upper terrain and four-player spawn map in battle', async () => {
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const stage = await largePlatformStage();
+  const bridge = globalThis.KatamonCustomStageBridge;
+
+  const adapter = await bridge.selectStage(stage);
+  assert.equal(adapter.stageSize, 'large');
+  assert.equal(adapter.stageWidth, 2160);
+  assert.equal(adapter.stageHeight, 960);
+
+  await bridge.startSelectedStage(stage);
+  const snapshot = kt.buildSnapshotForTest();
+  assert.equal(snapshot.stageW, 2160);
+  assert.equal(snapshot.stageH, 960);
+  assert.equal(snapshot.segments.length, 720);
+  assert.equal(snapshot.units.length, 4);
+  const upperX = stage.spawnPoints[0].x;
+  assert.equal(kt.isSolidAt(upperX, 332), true, 'large-stage upper platform reaches the real collision mask');
+
+  kt.applySnapshotForTest(snapshot);
+  const restored = kt.buildSnapshotForTest();
+  assert.equal(restored.stageW, 2160, 'large dimensions survive a snapshot restore');
+  assert.equal(restored.segments.length, 720, 'large terrain columns survive a snapshot restore');
 });
 
 test('custom steel stage keeps real game collision after an explosion', async () => {
@@ -297,7 +344,7 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /StageCore\?\.PHYSICS\?\.deadLineY/);
   assert.match(html, /StageCore\?\.PHYSICS\?\.fallTrigger/);
   assert.match(html, /if \(kind === 'wind'\) \{[\s\S]*?selectedCustomStage = null/);
-  assert.match(html, /\['terrain', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /\['terrain', 'stageSize', 'format'\]\.includes\(kind\)/);
   assert.match(html, /\['windStrength'\]\.includes\(kind\)/);
   assert.match(html, /const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1'/);
   assert.match(html, /startFreeMatch\(\{ preserveOfficialSuspend: true \}\)/);
@@ -322,6 +369,7 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(manager, /createLocalProvider/);
   assert.doesNotMatch(manager, /storageModule\.open\(/);
   assert.match(manager, /verifyStageHash\(migrated\)/);
+  assert.match(manager, /core\.getStageLimits \? core\.getStageLimits\(stage\) : core\.LIMITS/);
   assert.match(manager, /readStageBundle\(file\)/);
   assert.match(manager, /createStageBundle\(finalized\)/);
   assert.match(manager, /state\.onlineActive/);
@@ -354,10 +402,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v155-special-cutin-volume/);
+  assert.match(html, /v156-stage-size-select/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v155-special-cutin-volume/);
+  assert.match(serviceWorker, /katamon-pwa-v156-stage-size-select/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });

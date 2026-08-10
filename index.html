@@ -484,6 +484,7 @@
           <select id="onlineWind" aria-label="風"></select>
           <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
           <select id="onlineFormat" aria-label="対戦方式"><option value="1v1" selected>1 vs 1</option><option value="2v2">2 vs 2</option></select>
+          <select id="onlineStageSize" aria-label="ステージサイズ"><option value="standard" selected>標準ステージ</option><option value="large">大型ステージ</option></select>
           <button id="onlineCustomStage" type="button" data-selected="false">カスタムステージを選ぶ</button>
         </div>
       </div>
@@ -535,7 +536,7 @@
   // 下部コントローラパネルの境界と死線。地形の生成側(GROUND_MAX_Y/TERRAIN_BOTTOM_Y)が
   // 参照するため、パネル描画の定義より前に置く。値の意味は変えていない。
   const CONTROL_PANEL_Y = 660; // 旧比1.5倍の高さ(960-660=300)
-  const DEAD_LINE_Y = globalThis.StageCore?.PHYSICS?.deadLineY || CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
+  let DEAD_LINE_Y = globalThis.StageCore?.PHYSICS?.deadLineY || CONTROL_PANEL_Y - 24; // キャラ下端が触れた時点で場外負け
 
   // ===== UI意匠トークン(真鍮×黒鉄) =====
   // タイトル/フリーモード画面で確立した「重厚な鉄板に真鍮の縁と鋲」の意匠を、
@@ -568,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v155-special-cutin-volume';
+  const BUILD_ID = 'v156-stage-size-select';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -580,8 +581,9 @@
 
   // ===== ステージ(横長)とカメラ =====
   // 通常はキャラ周辺を見せ、ミニマップとピンチインで全景を確認する。
-  const STAGE_W = 1440;
-  const MIN_CAMERA_ZOOM = VW / STAGE_W;
+  let STAGE_W = 1440;
+  let STAGE_H = 660;
+  let MIN_CAMERA_ZOOM = VW / STAGE_W;
   const DEFAULT_CAMERA_ZOOM = 0.78;
   const MAX_CAMERA_ZOOM = 1;
   const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';
@@ -598,12 +600,17 @@
   }
   let cameraZoom = loadCameraZoom();
   let cameraX = 0;
+  let cameraY = 0;
   let cameraTargetX = null;
+  let cameraTargetY = null;
   function clampCameraZoom(zoom) {
     return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
   }
   function visibleWorldWidth() {
     return VW / cameraZoom;
+  }
+  function visibleWorldHeight() {
+    return CONTROL_PANEL_Y / cameraZoom;
   }
   function clampCameraX(x) {
     return Math.min(Math.max(0, STAGE_W - visibleWorldWidth()), Math.max(0, x));
@@ -611,25 +618,36 @@
   function centerCameraOn(worldX) {
     return clampCameraX(worldX - visibleWorldWidth() / 2);
   }
-  function focusCameraOn(worldX, immediate = false) {
+  function clampCameraY(y) {
+    const min = Math.min(0, STAGE_H - visibleWorldHeight());
+    const max = Math.max(0, STAGE_H - visibleWorldHeight());
+    return Math.min(max, Math.max(min, y));
+  }
+  function centerCameraYOn(worldY) {
+    return clampCameraY(worldY - visibleWorldHeight() / 2);
+  }
+  function focusCameraOn(worldX, immediate = false, worldY = null) {
     const target = centerCameraOn(worldX);
+    const targetY = Number.isFinite(worldY) ? centerCameraYOn(worldY) : clampCameraY(STAGE_H - visibleWorldHeight());
     if (immediate) {
       cameraX = target;
+      cameraY = targetY;
       cameraTargetX = null;
+      cameraTargetY = null;
     } else {
       cameraTargetX = target;
+      cameraTargetY = targetY;
     }
   }
   function applyWorldCamera(parallaxFactor = 1) {
-    ctx.translate(0, CONTROL_PANEL_Y);
     ctx.scale(cameraZoom, cameraZoom);
-    ctx.translate(-cameraX * parallaxFactor, -CONTROL_PANEL_Y);
+    ctx.translate(-cameraX * parallaxFactor, -cameraY);
   }
   function worldToScreenX(worldX) {
     return (worldX - cameraX) * cameraZoom;
   }
   function worldToScreenY(worldY) {
-    return CONTROL_PANEL_Y + (worldY - CONTROL_PANEL_Y) * cameraZoom;
+    return (worldY - cameraY) * cameraZoom;
   }
 
   const canvas = document.getElementById('game');
@@ -1345,20 +1363,20 @@
   }
 
   // ===== 地形生成(ピクセル単位のマスク方式:キャンバスに地形を描いて円形にくり抜く) =====
-  const TERRAIN_COLS = Math.ceil(STAGE_W / 3); // 約3px刻みを保ち、横長化しても判定を粗くしない
-  const COL_W = STAGE_W / TERRAIN_COLS;
+  let TERRAIN_COLS = Math.ceil(STAGE_W / 3); // 約3px刻みを保ち、横長化しても判定を粗くしない
+  let COL_W = STAGE_W / TERRAIN_COLS;
   const ROW_H = 4; // 縦方向の判定グリッド刻み
-  const ROWS = Math.ceil(VH / ROW_H);
-  const GROUND_MIN_Y = 300;   // 地形が取りうる最も高い(浅い)位置
-  const GROUND_MAX_Y = 516;   // 地形が取りうる最も低い(深い)位置
-  const FLOOR_Y = VH;         // 「その列に地面が無い」ことを表す番兵。実在の地形の底ではない
+  let ROWS = Math.ceil(STAGE_H / ROW_H);
+  let GROUND_MIN_Y = 300;   // 地形が取りうる最も高い(浅い)位置
+  let GROUND_MAX_Y = 516;   // 地形が取りうる最も低い(深い)位置
+  let FLOOR_Y = STAGE_H;         // 「その列に地面が無い」ことを表す番兵。実在の地形の底ではない
   // 地形の底。DEAD LINEより下には地面を置かない。こうすると「床が抜けたか」が
   // 目で見て分かるようになり、見えない数pxの差で生死が反転しなくなる。
   // 闘技場(tieredBasin)は元からこの作りで、外壁の底625・棚の底387/468/549はすべてこの上。
   // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。共通化した通常弾のクレーター半径は
   // 44pxなので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
   // (「地形大破壊」という技の役割どおりの挙動として意図的に許容する)。
-  const TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
+  let TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
 
   // ===== ステージの見た目テーマ(空・地形・草・遠景の配色セット。試合ごとにランダムで選ぶ) =====
   const THEMES = {
@@ -1568,6 +1586,40 @@
   terrainArtCanvas.width = STAGE_W;
   terrainArtCanvas.height = VH;
   const terrainArtCtx = terrainArtCanvas.getContext('2d');
+  function setStageDimensions(width, height) {
+    const large = Number(width) === 2160 && Number(height) === 960;
+    STAGE_W = large ? 2160 : 1440;
+    STAGE_H = large ? 960 : 660;
+    DEAD_LINE_Y = large ? 924 : (globalThis.StageCore?.PHYSICS?.deadLineY || 636);
+    TERRAIN_COLS = Math.ceil(STAGE_W / 3);
+    COL_W = STAGE_W / TERRAIN_COLS;
+    ROWS = Math.ceil(STAGE_H / ROW_H);
+    FLOOR_Y = STAGE_H;
+    TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
+    const terrainHeightRatio = STAGE_H / 660;
+    GROUND_MIN_Y = 300 * terrainHeightRatio;
+    GROUND_MAX_Y = 516 * terrainHeightRatio;
+    MIN_CAMERA_ZOOM = VW / STAGE_W;
+    cameraZoom = clampCameraZoom(cameraZoom);
+    cameraX = clampCameraX(cameraX);
+    cameraY = clampCameraY(cameraY);
+    [terrainCanvas, terrainRimCanvas, terrainRimLayer, bridgeCanvas, arenaDecorationCanvas, terrainArtCanvas].forEach((layer) => {
+      layer.width = STAGE_W;
+      layer.height = VH;
+    });
+    solidGrid = new Uint8Array(TERRAIN_COLS * ROWS);
+    surfaceY = new Float64Array(TERRAIN_COLS).fill(FLOOR_Y);
+    terrainArtDirty = true;
+  }
+  // StageCoreは通常は先に読み込まれるが、通信切れ時やテスト用の軽量環境でも
+  // サイズ選択だけは標準へ黙って戻さない。寸法の正本は選択値／保存値である。
+  function stageDimensionsFor(input) {
+    const limits = globalThis.StageCore?.getStageLimits ? globalThis.StageCore.getStageLimits(input) : null;
+    if (limits) return limits;
+    const large = input?.size === 'large' || input?.stageSize === 'large'
+      || (Number(input?.stageWidth) === 2160 && Number(input?.stageHeight) === 960);
+    return large ? { stageWidth: 2160, stageHeight: 960 } : { stageWidth: 1440, stageHeight: 660 };
+  }
   let terrainArtDirty = true;
   let terrainArtBuilds = 0; // 束ね直した回数。毎フレーム増えていないことを検査で見る
   function markTerrainArtDirty() { terrainArtDirty = true; }
@@ -2009,7 +2061,7 @@
     // 上端より上は元から早期returnしていた経路。ここに壁の判定を1つ足すだけなので、
     // 通常の飛行中や地上付近では比較が1つも増えない。
     if (y < 0) return arenaWallSolidAbove(x, y);
-    if (y >= VH) return false;
+    if (y >= STAGE_H) return false;
     const c = Math.min(TERRAIN_COLS - 1, Math.max(0, Math.floor(x / COL_W)));
     const r = Math.min(ROWS - 1, Math.max(0, Math.floor(y / ROW_H)));
     return solidGrid[r * TERRAIN_COLS + c] === 1;
@@ -3277,7 +3329,7 @@
     }
     // 発動した手番の終了時に1段階減るため、次の自分の手番を丸ごと封印する。
     u.moveLockTurns = Math.max(u.moveLockTurns || 0, 2);
-    if (u.id === localUnitId) focusCameraOn(u.x, true);
+    if (u.id === localUnitId) focusCameraOn(u.x, true, u.y);
     faceUnitTowardOpponent(u);
     pushFloatText(u.x, u.y - UNIT_RADIUS - 12, '跳躍!', '#8ee7ff', 20);
   }
@@ -3841,6 +3893,10 @@
     { key: '1v1', name: '1 vs 1', sub: '自分 vs CPU の一騎打ち' },
     { key: '2v2', name: '2 vs 2', sub: '自分＋味方CPU vs 敵CPU2体' }
   ];
+  const STAGE_SIZE_OPTIONS = [
+    { key: 'standard', name: '標準', sub: '横1440・高さ660の戦場' },
+    { key: 'large', name: '大型', sub: '横2160・高さ960の高低差戦場' }
+  ];
   // 演習専用の追加条件。本編・オンラインの設定とは共有しない。
   // CPU停止でも手番は自動で渡すため、練習が途中で固まることはない。
   const FREE_TRAINING_OPTIONS = Object.freeze({
@@ -3885,6 +3941,7 @@
     // 向きと強さを別々に選ぶ。
     windIndex: 0,
     formatIndex: 0,
+    stageSizeIndex: 0,
     specialIndex: 0,
     jumpIndex: 0,
     cpuAiIndex: 1,
@@ -3909,7 +3966,8 @@
     }]));
     const lastCharacterY = firstCharacterY + (characterKeys.length - 1) * 90;
     rows.terrain = { y: lastCharacterY + 78, h: FREE_SETTING_ROW_H };
-    rows.format = { y: rows.terrain.y + 56, h: FREE_SETTING_ROW_H };
+    rows.stageSize = { y: rows.terrain.y + 56, h: FREE_SETTING_ROW_H };
+    rows.format = { y: rows.stageSize.y + 56, h: FREE_SETTING_ROW_H };
     return rows;
   }
   function freeStartBtn() {
@@ -4207,6 +4265,7 @@
       ally: CHARACTER_LIST.length,
       foe2: CHARACTER_LIST.length,
       terrain: FREE_TERRAIN_OPTIONS.length,
+      stageSize: STAGE_SIZE_OPTIONS.length,
       wind: WIND_OPTIONS.length,
       format: FORMAT_OPTIONS.length,
       special: FREE_TRAINING_OPTIONS.special.length,
@@ -4237,7 +4296,7 @@
     }
     const property = `${kind}Index`;
     freeModeConfig[property] = wrapOptionIndex(freeModeConfig[property] + direction, lengths[kind]);
-    if (selectedCustomStage && ['terrain', 'format'].includes(kind)) {
+    if (selectedCustomStage && ['terrain', 'stageSize', 'format'].includes(kind)) {
       selectedCustomStage = null;
       selectedCustomAdapter = null;
     }
@@ -4631,6 +4690,7 @@
         : null,
       customStageIdentity: includeCustomStage ? customStageIdentity(selectedCustomStage) : null,
       stageW: STAGE_W,
+      stageH: STAGE_H,
       segments: currentSegments,
       craters: craterHistory,
       pattern: currentPattern,
@@ -4646,7 +4706,7 @@
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
       nextWind: nextWind ? { ...nextWind } : { dir: wind.dir, strength: wind.strength, calmWind },
       winStreak, runStats, isBossMatch,
-      camera: { x: cameraX, zoom: cameraZoom }
+      camera: { x: cameraX, y: cameraY, zoom: cameraZoom }
     };
   }
 
@@ -4756,7 +4816,11 @@
       if (!raw) return null;
       const data = migrateSnapshot(JSON.parse(raw));
       // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
-      if (!data || !Array.isArray(data.segments) || data.segments.length !== TERRAIN_COLS) return null;
+      const savedLimits = globalThis.StageCore?.getStageLimits
+        ? globalThis.StageCore.getStageLimits(data?.customStage || { stageWidth: data?.stageW, stageHeight: data?.stageH })
+        : null;
+      const expectedColumns = savedLimits?.terrainColumns || (data?.stageW === 2160 && data?.stageH === 960 ? 720 : 480);
+      if (!data || !Array.isArray(data.segments) || data.segments.length !== expectedColumns) return null;
       if (key === CUSTOM_SUSPEND_KEY && data.customStage == null) return null;
       if (key === SUSPEND_KEY && data.customStage != null) return null;
       if (!inspectCustomStageSnapshot(data).valid) return null;
@@ -4814,6 +4878,7 @@
       freeModeConfig.terrainIndex = wrapOptionIndex(Number(data.freeModeConfig.terrainIndex) || 0, FREE_TERRAIN_OPTIONS.length);
       freeModeConfig.windIndex = wrapOptionIndex(Number(data.freeModeConfig.windIndex) || 0, WIND_OPTIONS.length);
       freeModeConfig.formatIndex = wrapOptionIndex(Number(data.freeModeConfig.formatIndex) || 0, FORMAT_OPTIONS.length);
+      freeModeConfig.stageSizeIndex = wrapOptionIndex(Number(data.freeModeConfig.stageSizeIndex) || 0, STAGE_SIZE_OPTIONS.length);
       // v150までのセーブはwindIndexだけなので、従来の固定風を新しい向き/強さへ移す。
       if (Object.prototype.hasOwnProperty.call(data.freeModeConfig, 'windDirectionIndex')) {
         for (const kind of Object.keys(FREE_TRAINING_OPTIONS)) {
@@ -4827,6 +4892,9 @@
         freeModeConfig.cpuAiIndex = 1;
       }
     }
+
+    const snapshotStageLimits = stageDimensionsFor(selectedCustomAdapter || { stageWidth: data.stageW, stageHeight: data.stageH });
+    setStageDimensions(snapshotStageLimits.stageWidth, snapshotStageLimits.stageHeight);
 
     loadTerrainFromSave(
       selectedCustomAdapter ? selectedCustomAdapter.segments : data.segments,
@@ -4920,11 +4988,13 @@
     if (isOnline()) {
       // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。
       // 開始時・ターン境界では、左右の席に関係なく行動キャラを映す。
-      focusCameraOn(activeUnit().x, true);
+      focusCameraOn(activeUnit().x, true, activeUnit().y);
     } else {
       cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
       cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(localUnit().x));
+      cameraY = clampCameraY(data.camera && Number.isFinite(data.camera.y) ? data.camera.y : centerCameraYOn(localUnit().y));
       cameraTargetX = null;
+      cameraTargetY = null;
     }
   }
 
@@ -5318,26 +5388,40 @@
   // 2vs2は味方と敵が交互(p1→e1→p2→e2)で、この並びがそのまま手番の順になる。
   const SNAPSHOT_UNIT_IDS_1V1 = ['p1', 'e1'];
   const SNAPSHOT_UNIT_IDS_2V2 = ['p1', 'e1', 'p2', 'e2'];
-  function hasSafeTerrainSegments(segments) {
+  function snapshotLimits(snap) {
+    const size = snap?.customStage || { stageWidth: snap?.stageW, stageHeight: snap?.stageH };
+    return globalThis.StageCore?.getStageLimits
+      ? globalThis.StageCore.getStageLimits(size)
+      : (snap?.stageW === 2160 && snap?.stageH === 960
+        ? { stageWidth: 2160, stageHeight: 960, terrainColumns: 720, terrainBottom: 924 }
+        : { stageWidth: 1440, stageHeight: 660, terrainColumns: 480, terrainBottom: 636 });
+  }
+  function hasSafeTerrainSegments(segments, limits = null) {
     // buildTerrainMask は全列を前提に segments[c] を反復する。形と上限をここで固定する。
-    return Array.isArray(segments) && segments.length === TERRAIN_COLS && segments.every(column =>
+    const terrainColumns = limits?.terrainColumns || TERRAIN_COLS;
+    const terrainBottom = limits?.terrainBottom || DEAD_LINE_Y;
+    return Array.isArray(segments) && segments.length === terrainColumns && segments.every(column =>
       Array.isArray(column) && column.length <= 8 && column.every(segment =>
         Array.isArray(segment) && segment.length === 2
-        && isFiniteIn(segment[0], 0, VH) && isFiniteIn(segment[1], 0, VH) && segment[1] > segment[0]
+        && isFiniteIn(segment[0], 0, terrainBottom) && isFiniteIn(segment[1], 0, terrainBottom) && segment[1] > segment[0]
       )
     );
   }
-  function hasSafeBridge(bridge) {
+  function hasSafeBridge(bridge, limits = null) {
+    const stageWidth = limits?.stageWidth || STAGE_W;
+    const stageHeight = limits?.stageHeight || STAGE_H;
     if (bridge == null) return true;
     return typeof bridge === 'object' && !Array.isArray(bridge)
-      && isFiniteIn(bridge.startX, 0, STAGE_W) && isFiniteIn(bridge.endX, 0, STAGE_W) && bridge.endX > bridge.startX
-      && isFiniteIn(bridge.y, 0, VH) && (bridge.style === 'timber' || bridge.style === 'rope') && isFiniteIn(bridge.seed, 0, 10000);
+      && isFiniteIn(bridge.startX, 0, stageWidth) && isFiniteIn(bridge.endX, 0, stageWidth) && bridge.endX > bridge.startX
+      && isFiniteIn(bridge.y, 0, stageHeight) && (bridge.style === 'timber' || bridge.style === 'rope') && isFiniteIn(bridge.seed, 0, 10000);
   }
-  function hasSafeUnitSnapshot(unit, id) {
+  function hasSafeUnitSnapshot(unit, id, limits = null) {
+    const stageWidth = limits?.stageWidth || STAGE_W;
+    const stageHeight = limits?.stageHeight || STAGE_H;
     return unit && typeof unit === 'object' && !Array.isArray(unit) && unit.id === id && CHARACTER_LIST.includes(unit.character)
       && isFiniteIn(unit.hp, 0, 200) && isFiniteIn(unit.maxHp, 1, 200) && unit.hp <= unit.maxHp
       && isFiniteIn(unit.fuel, 0, 10000) && isFiniteIn(unit.fuelMax, 0, 10000) && unit.fuel <= unit.fuelMax
-      && isFiniteIn(unit.x, UNIT_RADIUS, STAGE_W - UNIT_RADIUS) && isFiniteIn(unit.y, -UNIT_RADIUS, VH)
+      && isFiniteIn(unit.x, UNIT_RADIUS, stageWidth - UNIT_RADIUS) && isFiniteIn(unit.y, -UNIT_RADIUS, stageHeight)
       && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 2)
       && (unit.jumpAvailable == null || typeof unit.jumpAvailable === 'boolean')
       && (unit.facingLeft == null || typeof unit.facingLeft === 'boolean');
@@ -5369,25 +5453,26 @@
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
     if (snap.v !== SNAPSHOT_VERSION) return 'snap.v';
     if (snap.battleMode !== 'normal') return 'snap.battleMode';
-    if (!hasSafeTerrainSegments(snap.segments)) return 'snap.segments';
+    const limits = snapshotLimits(snap);
+    if (!hasSafeTerrainSegments(snap.segments, limits)) return 'snap.segments';
     // 着弾中心は弾の当たり判定で画面端を少し越えうる。最大クレーター半径のぶんだけ
     // 余白を許可しつつ、極端な座標は従来どおり通信境界で弾く。
-    if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, STAGE_W + 600) && isFiniteIn(cr.y, -600, VH + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
+    if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, limits.stageWidth + 600) && isFiniteIn(cr.y, -600, limits.stageHeight + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
     if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
     const customStageReason = customStageSnapshotValidationReason(snap);
     if (customStageReason) return customStageReason;
-    if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
+    if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge, limits) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
     // 人数と並びは対戦方式で決まる。ここを緩めて「好きな並びを送れる」ようにすると
     // 席とユニットの対応(なりすまし防止の要)が通信データ側から崩せてしまうので、
     // 形式ごとに1通りだけを認める。形式を持たない相手(v102以前)は1vs1として読む。
     if (snap.matchFormat != null && snap.matchFormat !== '1v1' && snap.matchFormat !== '2v2') return 'snap.matchFormat';
     const unitIds = snap.matchFormat === '2v2' ? SNAPSHOT_UNIT_IDS_2V2 : SNAPSHOT_UNIT_IDS_1V1;
-    if (!Array.isArray(snap.units) || snap.units.length !== unitIds.length || !unitIds.every((id, i) => hasSafeUnitSnapshot(snap.units[i], id))) return 'snap.units';
+    if (!Array.isArray(snap.units) || snap.units.length !== unitIds.length || !unitIds.every((id, i) => hasSafeUnitSnapshot(snap.units[i], id, limits))) return 'snap.units';
     if (!Array.isArray(snap.turnOrder) || snap.turnOrder.length !== unitIds.length || !unitIds.every((id, i) => snap.turnOrder[i] === id) || !isFiniteIn(snap.activeIndex, 0, unitIds.length - 1) || !isFiniteIn(snap.turnCount, 0, 10000)) return 'snap.turn';
     if (!snap.wind || typeof snap.wind !== 'object' || !isFiniteIn(snap.wind.dir, -1, 1) || !isFiniteIn(snap.wind.strength, 0, 2) || typeof snap.wind.calmWind !== 'boolean' || typeof snap.wind.calmBattle !== 'boolean') return 'snap.wind';
     if (!snap.nextWind || typeof snap.nextWind !== 'object' || (snap.nextWind.dir !== -1 && snap.nextWind.dir !== 1) || !isFiniteIn(snap.nextWind.strength, 0, 1) || typeof snap.nextWind.calmWind !== 'boolean') return 'snap.nextWind';
     if (!isFiniteIn(snap.winStreak, 0, 100000) || !snap.runStats || typeof snap.runStats !== 'object' || !isFiniteIn(snap.runStats.damageDealt, 0, 1000000) || !isFiniteIn(snap.runStats.shots, 0, 1000000) || typeof snap.isBossMatch !== 'boolean') return 'snap.stats';
-    if (!snap.camera || typeof snap.camera !== 'object' || !isFiniteIn(snap.camera.x, 0, STAGE_W) || !isFiniteIn(snap.camera.zoom, 0.1, 8)) return 'snap.camera';
+    if (!snap.camera || typeof snap.camera !== 'object' || !isFiniteIn(snap.camera.x, 0, limits.stageWidth) || !isFiniteIn(snap.camera.y == null ? 0 : snap.camera.y, -1000, limits.stageHeight) || !isFiniteIn(snap.camera.zoom, 0.1, 8)) return 'snap.camera';
     return '';
   }
   function normalizeRtdbDenseArray(value) {
@@ -6517,6 +6602,7 @@
   const onlineWindEl = document.getElementById('onlineWind');
   const onlineTurnsEl = document.getElementById('onlineTurns');
   const onlineFormatEl = document.getElementById('onlineFormat');
+  const onlineStageSizeEl = document.getElementById('onlineStageSize');
   const onlineCustomStageBtn = document.getElementById('onlineCustomStage');
   const onlineReadyBtn = document.getElementById('onlineReady');
   const onlineStartBtn = document.getElementById('onlineStart');
@@ -6569,7 +6655,7 @@
   function selectedOnlineCharacter() {
     return onlineCharacterEl && CHARACTER_LIST.includes(onlineCharacterEl.value) ? onlineCharacterEl.value : CHARACTER_LIST[0];
   }
-  function defaultLobbySettings() { return { terrain: 'random', wind: 'random', turnsPerPlayer: 15, revision: 1 }; }
+  function defaultLobbySettings() { return { terrain: 'random', wind: 'random', turnsPerPlayer: 15, format: '1v1', stageSize: 'standard', revision: 1 }; }
   function normalizeLobbySettings(value) {
     const raw = value && typeof value === 'object' ? value : {};
     const terrain = FREE_TERRAIN_OPTIONS.some(x => x.key === raw.terrain) ? raw.terrain : 'random';
@@ -6577,7 +6663,8 @@
     const turnsPerPlayer = [10, 15, 20].includes(Number(raw.turnsPerPlayer)) ? Number(raw.turnsPerPlayer) : 15;
     // 対戦方式はロビーで共有する。持っていない相手(v102以前)は1vs1として扱う。
     const format = raw.format === '2v2' ? '2v2' : '1v1';
-    return { terrain, wind, turnsPerPlayer, format, revision: Math.max(1, Number(raw.revision) || 1) };
+    const stageSize = raw.stageSize === 'large' ? 'large' : 'standard';
+    return { terrain, wind, turnsPerPlayer, format, stageSize, revision: Math.max(1, Number(raw.revision) || 1) };
   }
   function firebaseRoundId() { return secureNonce(); }
   // 席と試合中のキャラの対応。ここを設定で動かせるようにすると、ルールの
@@ -7263,7 +7350,7 @@
       const firstIndex = await firebaseFirstUnitIndex();
       if (!online || online.kind !== 'firebase') return;
       activeIndex = firstIndex;
-      focusCameraOn(activeUnit().x, true);
+      focusCameraOn(activeUnit().x, true, activeUnit().y);
       // resetMatch はCPU戦の前提でユニットを組み直す。オンラインでは席を貼り直す必要がある。
       setOnlineSeat(online.seat);
       logSeatAssignment('hostStart');
@@ -7391,8 +7478,9 @@
     if (onlineWindEl) onlineWindEl.value = online.settings.wind;
     if (onlineTurnsEl) onlineTurnsEl.value = String(online.settings.turnsPerPlayer);
     if (onlineFormatEl) onlineFormatEl.value = online.settings.format;
+    if (onlineStageSizeEl) onlineStageSizeEl.value = online.settings.stageSize;
     const hasCustomStage = !!(online.customStageIdentity && selectedCustomStage && selectedCustomAdapter);
-    [onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });
+    [onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.disabled = !canEdit; });
     if (onlineTerrainEl) onlineTerrainEl.disabled = !canEdit || hasCustomStage;
     if (onlineCustomStageBtn) {
       onlineCustomStageBtn.disabled = !canEdit;
@@ -7503,8 +7591,8 @@
   async function updateFirebaseSettings() {
     // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
     if (!isFirebaseHost() || online.phase !== 'lobby') return;
-    const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, revision: (online.settings.revision || 0) + 1 });
-    if (online.customStageIdentity && selectedCustomAdapter && selectedCustomAdapter.format !== settings.format) {
+    const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, stageSize: onlineStageSizeEl && onlineStageSizeEl.value, revision: (online.settings.revision || 0) + 1 });
+    if (online.customStageIdentity && selectedCustomAdapter && (selectedCustomAdapter.format !== settings.format || selectedCustomAdapter.stageSize !== settings.stageSize)) {
       online.customStageIdentity = null;
       selectedCustomStage = null;
       selectedCustomAdapter = null;
@@ -8323,11 +8411,15 @@
       ? { name: selectedCustomStage.title, sub: 'カスタムステージ・中央をタップして管理' }
       : FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex];
     const formatOption = FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0];
+    const sizeOption = selectedCustomAdapter
+      ? (selectedCustomAdapter.stageSize === 'large' ? STAGE_SIZE_OPTIONS[1] : STAGE_SIZE_OPTIONS[0])
+      : (STAGE_SIZE_OPTIONS[freeModeConfig.stageSizeIndex] || STAGE_SIZE_OPTIONS[0]);
     drawFreeRow(rows.player, 'YOUR MONSTER', CHARACTERS[playerKey].name, CHARACTERS[playerKey].role, 'player', playerKey);
     drawFreeRow(rows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     if (rows.ally) drawFreeRow(rows.ally, 'ALLY CPU', CHARACTERS[allyKey].name, CHARACTERS[allyKey].role, 'ally', allyKey);
     if (rows.foe2) drawFreeRow(rows.foe2, 'ENEMY CPU', CHARACTERS[foe2Key].name, CHARACTERS[foe2Key].role, 'foe2', foe2Key);
     drawFreeRow(rows.terrain, 'STAGE', terrain.name, terrain.sub, 'terrain');
+    drawFreeRow(rows.stageSize, 'SIZE', sizeOption.name, sizeOption.sub, 'stageSize');
     drawFreeRow(rows.format, 'FORMAT', formatOption.name, formatOption.sub, 'format');
 
     drawTitleModeButton(freeStartBtn(), 'START BATTLE', 'この条件で演習開始', 'normal');
@@ -9509,7 +9601,7 @@
     // 演習だけは「毎ターン」を選んだ時に、行動を始める直前で跳躍を戻す。
     // 移動不能のデバフは発動可否側で引き続き優先される。
     if (freeTrainingRules().jumpEachTurn) acting.jumpAvailable = true;
-    focusCameraOn(acting.x);
+    focusCameraOn(acting.x, false, acting.y);
     if (acting.control === 'cpu') beginCpuTurnPlan(acting);
   }
   // CPUの手番の入り口。startTurn だけでなく、開始カットインが明けた時(v121)と、
@@ -11599,7 +11691,7 @@
     if (snapToMarker) {
       for (const unit of units) {
         if (Math.hypot(point.x - toMapX(unit.x), point.y - toMapY(unit.y)) <= 18) {
-          focusCameraOn(unit.x, true);
+          focusCameraOn(unit.x, true, unit.y);
           return;
         }
       }
@@ -12629,7 +12721,7 @@
   if (onlineLeaveConfirmYesButton) onlineLeaveConfirmYesButton.addEventListener('click', () => { if (!onlineLobbyBusy) leaveFirebaseLobby(); });
   if (onlineLeaveConfirmNoButton) onlineLeaveConfirmNoButton.addEventListener('click', () => { cancelLeaveFirebaseLobbyConfirm(); });
   // 対戦方式もここに含めること。外すと選んでも送られず、次の描画で元へ戻るだけになる。
-  [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
+  [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
   if (onlineCustomStageBtn) onlineCustomStageBtn.addEventListener('click', toggleOnlineCustomStage);
   if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }
@@ -14006,6 +14098,13 @@
     calmBattle = freeWind ? freeWind.key === 'calm' : Math.random() < CALM_BATTLE_CHANCE;
     calmWind = false;
     nextWind = null; // 前の試合で表示していた予報を再戦へ持ち越さない。
+    const requestedStageSize = selectedCustomAdapter
+      ? selectedCustomAdapter.stageSize
+      : (battleMode === 'free'
+        ? (STAGE_SIZE_OPTIONS[freeModeConfig.stageSizeIndex] || STAGE_SIZE_OPTIONS[0]).key
+        : (lobbySettings?.stageSize || 'standard'));
+    const requestedLimits = stageDimensionsFor({ size: requestedStageSize });
+    setStageDimensions(requestedLimits.stageWidth, requestedLimits.stageHeight);
     const freeTerrain = battleMode === 'free' ? FREE_TERRAIN_OPTIONS[freeModeConfig.terrainIndex]
       : (lobbySettings ? FREE_TERRAIN_OPTIONS.find(option => option.key === lobbySettings.terrain) : null);
     // チュートリアルの地形は固定する。ランダムだと闘技場のように中央が奈落の地形を引き、
@@ -14101,7 +14200,7 @@
     pendingShot = null;
     confirmDialog = null;
     cutIn = null;
-    focusCameraOn(localUnit().x, true);
+    focusCameraOn(localUnit().x, true, localUnit().y);
     menuOpen = false;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
@@ -14339,13 +14438,23 @@
     // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
     if (projectiles.length) {
       const target = centerCameraOn(projectiles[0].x);
+      const targetY = centerCameraYOn(projectiles[0].y);
       cameraX += (target - cameraX) * Math.min(1, dt * 5);
+      cameraY += (targetY - cameraY) * Math.min(1, dt * 5);
       cameraTargetX = null;
+      cameraTargetY = null;
     } else if (cameraTargetX !== null) {
       cameraX += (cameraTargetX - cameraX) * Math.min(1, dt * 6);
       if (Math.abs(cameraTargetX - cameraX) < 0.5) {
         cameraX = cameraTargetX;
         cameraTargetX = null;
+      }
+      if (cameraTargetY !== null) {
+        cameraY += (cameraTargetY - cameraY) * Math.min(1, dt * 6);
+        if (Math.abs(cameraTargetY - cameraY) < 0.5) {
+          cameraY = cameraTargetY;
+          cameraTargetY = null;
+        }
       }
     }
 
@@ -14573,7 +14682,7 @@
         if (p.lightning) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
-      } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > VH + 60) {
+      } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > STAGE_H + 60) {
         projectiles.splice(i, 1); // 画面外(誤爆なしで消滅)
       }
     }
@@ -14766,6 +14875,7 @@
     if (isOnline()) {
       online.customStageIdentity = customStageIdentity(normalized);
       if (onlineFormatEl) onlineFormatEl.value = adapter.format;
+      if (onlineStageSizeEl) onlineStageSizeEl.value = adapter.stageSize;
       await updateFirebaseSettings();
       onlineLobbyStatus(`「${normalized.title}」をオンライン対戦で共有します。全員の照合後に開始します。`);
       renderFirebaseLobby();

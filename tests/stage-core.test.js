@@ -119,6 +119,28 @@ test('all generated presets stay in bounds and non-blank presets validate', () =
   }
 });
 
+test('large stages use the 2160x960 terrain grid and keep 2v2 spawns valid', () => {
+  const stage = makeStage({
+    size: 'large',
+    preset: 'mountainCenter',
+    seed: 'large-stage-grid',
+    generationParameters: { playerCount: 4, elevation: 0.72, mountainCount: 4 }
+  });
+  const limits = core.getStageLimits(stage);
+  assert.equal(stage.stageWidth, 2160);
+  assert.equal(stage.stageHeight, 960);
+  assert.equal(stage.terrain.columns.length, 720);
+  assert.equal(limits.terrainBottom, 924);
+  assert.equal(stage.spawnPoints.length, 4);
+  assert.equal(core.validateStage(stage).valid, true);
+
+  const grid = core.segmentsToGrid(stage);
+  assert.equal(grid.length, 720 * 240);
+  const restored = core.gridToSegments(grid, stage);
+  assert.equal(restored.length, 720);
+  assert.equal(core.isSolidAt(stage, stage.spawnPoints[0].x, stage.spawnPoints[0].y + 16), true);
+});
+
 test('terrain grid editing round-trips and circle painting changes collision', () => {
   const stage = makeStage({ preset: 'flat' });
   const grid = core.segmentsToGrid(stage);

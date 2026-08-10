@@ -719,7 +719,7 @@ function check(name, value) {
     && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
-    && htmlText.includes('[onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });')
+    && htmlText.includes('[onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.disabled = !canEdit; });')
     && htmlText.includes('onlineTerrainEl.disabled = !canEdit || hasCustomStage;'));
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
@@ -842,8 +842,8 @@ function check(name, value) {
     && !firebaseBeginSrc.includes('clearSuspendedMatch();'));
   check('online snapshots keep each camera local and focus the acting unit',
     htmlText.includes("if (isOnline()) {\n      // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。")
-    && htmlText.includes('focusCameraOn(activeUnit().x, true);')
-    && htmlText.includes('activeIndex = firstIndex;\n      focusCameraOn(activeUnit().x, true);'));
+    && htmlText.includes('focusCameraOn(activeUnit().x, true, activeUnit().y);')
+    && htmlText.includes('activeIndex = firstIndex;\n      focusCameraOn(activeUnit().x, true, activeUnit().y);'));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('the battle view-distance slider changes only the local camera and never sends a network message',
@@ -1382,8 +1382,10 @@ function check(name, value) {
     h.normalizeLobbySettings({}).format === '1v1'
     && h.normalizeLobbySettings({ format: '2v2' }).format === '2v2'
     && h.normalizeLobbySettings({ format: 'nonsense' }).format === '1v1');
-  check('rules accept the format field in settings and nothing else new',
+  check('rules accept format and stage size in settings and nothing else new',
     rules.settings.format['.validate'] === "newData.val() === '1v1' || newData.val() === '2v2'"
+    && rules.settings.stageSize['.validate'] === "newData.val() === 'standard' || newData.val() === 'large'"
+    && rules.settings['.validate'].includes("'stageSize'")
     && rules.settings.$other['.validate'] === false);
   check('only the host can still change the settings, format included',
     rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
@@ -1855,7 +1857,7 @@ function check(name, value) {
   // 対戦方式のドロップダウンだけ change が繋がっておらず、2vs2を選んでも一切送られて
   // いなかった。次の描画で `1 vs 1` へ戻るだけで、席の名前も1vs1のままだった。
   check('the match-format dropdown actually sends the change, like the other settings',
-    htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener(\'change\''));
+    htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.addEventListener(\'change\''));
   // ほかに人が座っていない2vs2(1人＋CPU3体)では、検証する相手の公開が届かない。
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',

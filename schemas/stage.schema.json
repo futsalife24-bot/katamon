@@ -49,8 +49,8 @@
         "maxBuild": { "type": ["string", "null"], "pattern": "^v[0-9]{1,9}$", "maxLength": 40 }
       }
     },
-    "stageWidth": { "const": 1440 },
-    "stageHeight": { "const": 660 },
+    "stageWidth": { "enum": [1440, 2160] },
+    "stageHeight": { "enum": [660, 960] },
     "coordinateSystem": {
       "type": "object",
       "additionalProperties": false,
@@ -73,15 +73,15 @@
         "columns": {
           "type": "array",
           "minItems": 480,
-          "maxItems": 480,
+          "maxItems": 720,
           "items": {
             "type": "array",
             "maxItems": 32,
             "items": {
               "type": "array",
               "prefixItems": [
-                { "type": "number", "minimum": 0, "maximum": 636 },
-                { "type": "number", "minimum": 0, "maximum": 636 }
+                { "type": "number", "minimum": 0, "maximum": 924 },
+                { "type": "number", "minimum": 0, "maximum": 924 }
               ],
               "minItems": 2,
               "maxItems": 2
@@ -136,8 +136,8 @@
           "slot": { "enum": ["p1", "e1", "p2", "e2"] },
           "team": { "enum": ["player", "enemy"] },
           "order": { "type": "integer", "minimum": 1, "maximum": 4 },
-          "x": { "type": "number", "minimum": 0, "maximum": 1440 },
-          "y": { "type": "number", "minimum": -64, "maximum": 660 },
+          "x": { "type": "number", "minimum": 0, "maximum": 2160 },
+          "y": { "type": "number", "minimum": -64, "maximum": 960 },
           "direction": { "enum": ["left", "right"] }
         }
       }

@@ -6,7 +6,7 @@
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
   const RAW_LIMITS = Core && Core.LIMITS ? Core.LIMITS : {};
-  const LIMITS = Object.assign({}, RAW_LIMITS, {
+  let LIMITS = Object.assign({}, RAW_LIMITS, {
     stageWidth: RAW_LIMITS.stageWidth || 1440,
     stageHeight: RAW_LIMITS.stageHeight || 660,
     terrainBottomY: RAW_LIMITS.terrainBottomY || RAW_LIMITS.terrainBottom || 636,
@@ -24,7 +24,7 @@
   });
   /* Fallback properties above deliberately mirror the shared module's fixed game dimensions. */
   const RAW_PHYSICS = Core && Core.PHYSICS ? Core.PHYSICS : {};
-  const PHYSICS = Object.assign({}, RAW_PHYSICS, {
+  let PHYSICS = Object.assign({}, RAW_PHYSICS, {
     fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
     gravity: RAW_PHYSICS.gravity || 650,
     windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
@@ -34,6 +34,41 @@
     deadLineY: Number.isFinite(RAW_PHYSICS.deadLineY) ? RAW_PHYSICS.deadLineY : LIMITS.terrainBottomY,
     fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
   });
+  function normalizedLimits(raw) {
+    raw = raw || RAW_LIMITS;
+    return Object.assign({}, raw, {
+      stageWidth: raw.stageWidth || 1440,
+      stageHeight: raw.stageHeight || 660,
+      terrainBottomY: raw.terrainBottomY || raw.terrainBottom || 636,
+      columnWidth: raw.columnWidth || 3,
+      rowHeight: raw.rowHeight || 4,
+      terrainColumns: raw.terrainColumns || raw.columns || 480,
+      terrainRows: raw.terrainRows || raw.rows || 165,
+      unitRadius: raw.unitRadius || 18,
+      maxSpawnPoints: raw.maxSpawnPoints || raw.maxSpawns || 4,
+      maxJsonBytes: raw.maxJsonBytes || raw.maxFileBytes || 2 * 1024 * 1024,
+      maxZipBytes: raw.maxZipBytes || 6 * 1024 * 1024,
+      maxTitleLength: raw.maxTitleLength || 48,
+      maxDescriptionLength: raw.maxDescriptionLength || 500,
+      maxAuthorLength: raw.maxAuthorLength || 32
+    });
+  }
+  function setRuntimeLimits(stage) {
+    const raw = Core && typeof Core.getStageLimits === 'function'
+      ? Core.getStageLimits(stage || { size: $('stageSize') && $('stageSize').value })
+      : RAW_LIMITS;
+    LIMITS = normalizedLimits(raw);
+    PHYSICS = Object.assign({}, RAW_PHYSICS, {
+      fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
+      gravity: RAW_PHYSICS.gravity || 650,
+      windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
+      velocityScale: RAW_PHYSICS.velocityScale || 7.8,
+      projectileRadius: RAW_PHYSICS.projectileRadius || 5,
+      normalBlastRadius: RAW_PHYSICS.normalBlastRadius || RAW_PHYSICS.defaultExplosionRadius || 44,
+      deadLineY: LIMITS.terrainBottomY,
+      fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
+    });
+  }
   const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'playtest', 'validate', 'export'];
   const SCREEN_ALIASES = Object.freeze({ gimmicks: 'playtest', appearance: 'terrain' });
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
@@ -434,7 +469,7 @@
 
   function gridFromTerrain(terrain) {
     if (Core && typeof Core.gridFromTerrain === 'function') return Core.gridFromTerrain(terrain);
-    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain);
+    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain, state.stage);
     const grid = new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows);
     const columns = terrain && Array.isArray(terrain.columns) ? terrain.columns : [];
     for (let c = 0; c < Math.min(columns.length, LIMITS.terrainColumns); c++) {
@@ -450,7 +485,7 @@
   function columnsFromGrid(grid) {
     if (Core && typeof Core.terrainFromGrid === 'function') return Core.terrainFromGrid(grid);
     if (Core && typeof Core.gridToSegments === 'function') {
-      return Core.gridToSegments(grid).map((segments) => segments
+      return Core.gridToSegments(grid, state.stage).map((segments) => segments
         .map((segment) => [clamp(segment[0], 0, LIMITS.terrainBottomY), clamp(segment[1], 0, LIMITS.terrainBottomY)])
         .filter((segment) => segment[1] > segment[0]));
     }
@@ -491,6 +526,9 @@
 
   function syncStageToForm() {
     if (!state.stage) return;
+    $('stageSize').value = state.stage.stageWidth === 2160 && state.stage.stageHeight === 960 ? 'large' : 'standard';
+    $('stageWidth').value = state.stage.stageWidth || LIMITS.stageWidth;
+    $('stageHeight').value = state.stage.stageHeight || LIMITS.stageHeight;
     $('stageTitle').value = state.stage.title || 'ステージ';
     $('stageAuthor').value = state.stage.authorDisplayName || '作成者';
     $('stageDescription').value = state.stage.description || '';
@@ -551,6 +589,7 @@
     clearTimeout(state.autosaveTimer);
     state.dirty = false;
     state.stage = clone(stage);
+    setRuntimeLimits(state.stage);
     state.grid = gridFromTerrain(state.stage.terrain);
     state.characterGuides = defaultCharacterGuides(state.grid);
     state.activeGuideIndex = 0;
@@ -971,7 +1010,7 @@
   }
 
   function paintCircle(grid, x, y, radius, solid) {
-    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid);
+    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid, state.stage);
     const minColumn = clamp(Math.floor((x - radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const maxColumn = clamp(Math.ceil((x + radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const minRow = clamp(Math.floor((y - radius) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
@@ -2160,7 +2199,8 @@
       title: $('stageTitle').value.trim() || 'ステージ',
       description: $('stageDescription').value.trim(),
       authorDisplayName: $('stageAuthor').value.trim() || '作成者',
-      theme: $('themeSelect').value
+      theme: $('themeSelect').value,
+      size: $('stageSize').value === 'large' ? 'large' : 'standard'
     };
   }
 
@@ -3040,6 +3080,11 @@
     ['reliefRange', 'smoothRange', 'platformRange', 'densityRange', 'valleyRange', 'mountainRange', 'cavityRange', 'difficultyRange']
       .forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('randomizeSeed').addEventListener('click', () => { $('seedInput').value = randomSeed(); });
+    $('stageSize').addEventListener('change', () => {
+      const limits = Core && typeof Core.getStageLimits === 'function' ? Core.getStageLimits({ size: $('stageSize').value }) : RAW_LIMITS;
+      $('stageWidth').value = limits.stageWidth || 1440;
+      $('stageHeight').value = limits.stageHeight || 660;
+    });
     $('generateStage').addEventListener('click', startGeneration);
     $('cancelGeneration').addEventListener('click', cancelGeneration);
 
