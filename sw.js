@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v161-large-arena-layout';
+const CACHE_VERSION = 'katamon-pwa-v162-room-rival-record';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
