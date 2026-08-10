@@ -392,6 +392,20 @@ const HOOK = `
           parts: row.children.map(c => c.tagName + ':' + c.className + ':' + c.textContent)
         }));
       },
+      // ---- v164: 部屋内モンスター選択の全身画像 ----
+      // 実装前にも検査側が例外で止まらず、機能なしとしてFAILを出せるようtypeofで包む。
+      onlineCharacterPreviewForTest: key => {
+        if (typeof updateOnlineCharacterPreview !== 'function' || !onlineCharacterEl || !onlineCharacterPreviewEl) return null;
+        populateOnlineCharacters();
+        onlineCharacterEl.value = key;
+        onlineCharacterEl.dispatchEvent({ type: 'change' });
+        return {
+          character: onlineCharacterPreviewEl.dataset.character || '',
+          src: onlineCharacterPreviewEl.src || '',
+          alt: onlineCharacterPreviewEl.alt || '',
+          options: onlineCharacterEl.children.length
+        };
+      },
       // ---- v162: 端末内の対人戦績(Issue #5) ----
       // 実装前にもハーネス自体は例外で止めず、検査をFAILとして表示できるようtypeofで包む。
       battleRecordFeature: () => typeof recordMatchResultOnce !== 'function' ? null : ({
@@ -647,6 +661,9 @@ elements.set('game', gameCanvas);
 for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel', 'onlineSlots', 'onlineBattleRecord']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
+elements.set('onlineCharacterPicker', makeElement('div'));
+elements.set('onlineCharacter', makeElement('select'));
+elements.set('onlineCharacterPreview', makeElement('img'));
 
 const store = new Map();
 globalThis.localStorage = {

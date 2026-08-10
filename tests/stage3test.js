@@ -802,8 +802,21 @@ function check(name, value) {
     && h.validateFirebaseMessage(firebasePacket('presence'))
     && !h.validateFirebaseMessage(firebasePacket('presence', { name: 'あ'.repeat(13) })));
   check('the character picker is hidden until you are actually in a room',
-    htmlText.includes('#onlineCharacter { display: none; }')
-    && htmlText.includes('#onlineLobby.in-room #onlineCharacter { display: block; }'));
+    htmlText.includes('#onlineCharacterPicker { display: none; }')
+    && htmlText.includes('#onlineLobby.in-room #onlineCharacterPicker { display: flex; }'));
+  check('the room character picker shows the whole monster without cropping it',
+    htmlText.includes('id="onlineCharacterPreview"')
+    && /#onlineCharacterPreview\s*\{[^}]*object-fit:\s*contain;[^}]*\}/.test(htmlText)
+    && !/#onlineCharacterPreview\s*\{[^}]*object-fit:\s*cover;[^}]*\}/.test(htmlText));
+  const sumoeruRoomPreview = h.onlineCharacterPreviewForTest('sumoeru');
+  const medamaRoomPreview = h.onlineCharacterPreviewForTest('medama');
+  check('changing the room character updates its image, name and all sixteen choices',
+    sumoeruRoomPreview && medamaRoomPreview
+    && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
+    && sumoeruRoomPreview.alt === 'スモエル'
+    && medamaRoomPreview.character === 'medama' && /medama\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
+    && medamaRoomPreview.alt === '目玉'
+    && medamaRoomPreview.options === 16);
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')
