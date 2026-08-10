@@ -568,7 +568,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v153-training-battle-options';
+  const BUILD_ID = 'v154-edm-zap-cutin';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -846,6 +846,7 @@
     // 最初のタップ(確実なユーザー操作)のうちにWebAudio経路を用意しておく
     ensureBgmGraph();
     primeNormalImpactSound();
+    primeSpecialCutinSound();
     titleStartPending = true;
     titleStartFailed = false;
     // 通常は実際の再生開始と同時にタイトルへ進む。端末側の音源準備が停止しても、
@@ -1084,8 +1085,12 @@
   const NORMAL_IMPACT_SOUND_URL = 'assets/normal-impact-explosion.mp3?v=3';
   const NORMAL_IMPACT_SOUND_GAIN = 0.34;
   const TITLE_WALL_IMPACT_SOUND_GAIN = 0.26;
+  const SPECIAL_CUTIN_SOUND_URL = 'assets/special-cutin-edm-zap.mp3?v=1';
+  const SPECIAL_CUTIN_SOUND_GAIN = 0.38;
   let normalImpactBuffer = null;
   let normalImpactLoadPromise = null;
+  let specialCutinBuffer = null;
+  let specialCutinLoadPromise = null;
   function getAudioCtx() {
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -1221,6 +1226,33 @@
     src.connect(gain).connect(getSfxDestination(ac));
     src.start();
   }
+  // 必殺カットイン用の指定素材も、最初の操作で先読みする。オフラインでもSWのキャッシュから鳴らせる。
+  function primeSpecialCutinSound() {
+    if (specialCutinBuffer) return Promise.resolve(specialCutinBuffer);
+    if (specialCutinLoadPromise) return specialCutinLoadPromise;
+    let ac;
+    try {
+      ac = getAudioCtx();
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+    specialCutinLoadPromise = fetch(SPECIAL_CUTIN_SOUND_URL)
+      .then(response => {
+        if (!response.ok) throw new Error('special cut-in sound fetch failed');
+        return response.arrayBuffer();
+      })
+      .then(bytes => ac.decodeAudioData(bytes))
+      .then(buffer => {
+        specialCutinBuffer = buffer;
+        return buffer;
+      })
+      .catch(() => {
+        // 通信が一時的に失敗しても、次のユーザー操作で読み直せるようにする。
+        specialCutinLoadPromise = null;
+        return null;
+      });
+    return specialCutinLoadPromise;
+  }
   // 花火の拡散弾用の軽い破裂音。爆発音は音源が9本もあり、0.5秒に24発鳴らすと
   // 音が潰れるうえ負荷も跳ねるので、専用の軽い音にしたうえで鳴らす数を間引く。
   let lastCrackleAt = -1e9;
@@ -1233,32 +1265,32 @@
     playFilteredNoise(0.09, 0.1 * power, 'bandpass', 780, 0.004, 0.002, 1.1);
   }
   function playDeadLineSound() { playTone(150, 0.22, 'sawtooth', 0.22, 60); }
-  // 必殺カットイン専用。通常弾の「ドン」と区別するため、低音のため→上昇→決め音の順で鳴らす。
-  // 外部ファイルを増やさず、端末ごとの読込待ちやオフライン時の無音を作らない。
+  // 必殺カットイン専用。指定されたEDM Zapをオーラ直後のカットイン開始へ当てる。
+  // 読込が間に合わない時だけ短い代替音を鳴らし、初回の必殺を無音にしない。
   const SPECIAL_CUTIN_SOUND_PROFILE = Object.freeze({
-    duckMs: 920,
-    durationSec: 0.86,
-    bassStartHz: 68,
-    bassEndHz: 106,
-    riseStartHz: 240,
-    riseEndHz: 1880,
-    impactHz: 1320
+    duckMs: 460,
+    sampleGain: SPECIAL_CUTIN_SOUND_GAIN,
+    fallbackStartHz: 1760,
+    fallbackEndHz: 840
   });
   function playSpecialSound() {
     const s = SPECIAL_CUTIN_SOUND_PROFILE;
-    // オーラの直後に、BGMを一呼吸だけ引かせてカットインを前へ出す。
+    // オーラの直後だけBGMを引かせ、鋭いカットイン音を前へ出す。
     duckStageBgm(s.duckMs);
-    // 足元からせり上がるような太い低音。着弾音の爆発とは混ぜない。
-    playTone(s.bassStartHz, 0.62, 'sine', 0.23, s.bassEndHz, 0, 0.018);
-    playTone(118, 0.52, 'triangle', 0.10, 188, 0.06, 0.012);
-    // 画面を切り替える間に、音も一本の上昇線になるよう重ねる。
-    playTone(s.riseStartHz, 0.70, 'sawtooth', 0.12, 960, 0.08, 0.025);
-    playTone(520, 0.56, 'triangle', 0.115, s.riseEndHz, 0.18, 0.016);
-    playFilteredNoise(0.50, 0.10, 'bandpass', 2100, 0.24, 0.014, 1.4);
-    // 末尾だけ明るく締める。長い爆発音にせず、発射直前の余白を残す。
-    playTone(s.impactHz, 0.22, 'triangle', 0.17, 780, 0.61, 0.004);
-    playTone(82, 0.30, 'sine', 0.20, 44, 0.58, 0.004);
-    playFilteredNoise(0.25, 0.11, 'highpass', 3200, 0.62, 0.004, 1.1);
+    if (!sfxAudible()) return;
+    if (!specialCutinBuffer) {
+      primeSpecialCutinSound();
+      playTone(s.fallbackStartHz, 0.14, 'square', 0.13, s.fallbackEndHz, 0, 0.002);
+      playFilteredNoise(0.09, 0.07, 'highpass', 4200, 0.006, 0.002, 1.2);
+      return;
+    }
+    const ac = getAudioCtx();
+    const src = ac.createBufferSource();
+    const gain = ac.createGain();
+    src.buffer = specialCutinBuffer;
+    gain.gain.value = s.sampleGain;
+    src.connect(gain).connect(getSfxDestination(ac));
+    src.start();
   }
   function playUiSound() { playTone(600, 0.08, 'sine', 0.12, 800); }
   function playVictorySound() {
@@ -13485,6 +13517,7 @@
     }
     ensureBgmGraph();
     primeNormalImpactSound();
+    primeSpecialCutinSound();
     syncBgm();
     retryBgmOnUserGesture();
 

@@ -196,14 +196,19 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
     ? kt.specialCutInSoundProfile()
     : null;
-  check('必殺カットイン音は重低音から立ち上がる専用の長いジングルを使う',
+  const specialCutInSoundAsset = typeof kt.specialCutInSoundAsset === 'function'
+    ? kt.specialCutInSoundAsset()
+    : null;
+  check('必殺カットイン音はEDM Zapの短く鋭い音源を効果音設定の経路で鳴らす',
     !!specialCutInSound
-      && specialCutInSound.duckMs >= 850
-      && specialCutInSound.durationSec >= 0.7
-      && specialCutInSound.bassStartHz <= 90
-      && specialCutInSound.riseEndHz >= 1600
-      && /function playSpecialSound\(\) \{[\s\S]{0,1400}SPECIAL_CUTIN_SOUND_PROFILE/.test(indexHtml),
-    JSON.stringify(specialCutInSound));
+      && specialCutInSound.duckMs >= 350
+      && specialCutInSound.duckMs <= 600
+      && specialCutInSound.sampleGain > 0
+      && specialCutInSound.sampleGain <= 0.5
+      && specialCutInSoundAsset
+      && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3?v=1'
+      && /function playSpecialSound\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
+    JSON.stringify({ specialCutInSound, specialCutInSoundAsset }));
   kt.clearProjectilesForTest();
 }
 
