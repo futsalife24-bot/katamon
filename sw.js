@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v154-edm-zap-cutin';
+const CACHE_VERSION = 'katamon-pwa-v155-special-cutin-volume';
 const APP_SHELL = [
   './',
   './index.html',

@@ -203,8 +203,7 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     !!specialCutInSound
       && specialCutInSound.duckMs >= 350
       && specialCutInSound.duckMs <= 600
-      && specialCutInSound.sampleGain > 0
-      && specialCutInSound.sampleGain <= 0.5
+      && specialCutInSound.sampleGain === 0.28
       && specialCutInSoundAsset
       && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3?v=1'
       && /function playSpecialSound\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
