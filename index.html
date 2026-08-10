@@ -619,7 +619,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v169-title-menu-layout';
+  const BUILD_ID = 'v170-title-visual-tuning';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4043,23 +4043,25 @@
   let selectedCustomAdapter = null;
   // メロニキが組んだ見本どおり、木板の上を「羊皮紙2段 → 羊皮紙2列 →
   // 吊り看板と盾」の順にする。当たり判定は影やロープを除いた本体側へ置く。
-  const TITLE_WOOD_BOARD_RECT = { x: 67, y: 500, w: 406, h: 390 };
+  const TITLE_WOOD_BOARD_RECT = { x: 42, y: 456, w: 456, h: 438 };
   const TITLE_WOOD_IMAGE_RECTS = {
-    cpu: { asset: 'parchment', x: 270, y: 582, w: 268, h: 73 },
-    online: { asset: 'parchment', x: 270, y: 653, w: 268, h: 73 },
-    tutorial: { asset: 'parchment', x: 180, y: 726, w: 168, h: 46 },
-    free: { asset: 'parchment', x: 363, y: 726, w: 168, h: 46 },
-    ranking: { asset: 'hangingSign', x: 197, y: 817, w: 168, h: 106 },
-    bonus: { asset: 'shield', x: 365, y: 819, w: 111, h: 100 }
+    cpu: { asset: 'parchment', x: 270, y: 538, w: 301, h: 82 },
+    online: { asset: 'parchment', x: 270, y: 619, w: 301, h: 82 },
+    tutorial: { asset: 'parchment', x: 169, y: 700, w: 189, h: 52 },
+    free: { asset: 'parchment', x: 374, y: 700, w: 189, h: 52 },
+    ranking: { asset: 'hangingSign', x: 165, y: 787, w: 189, h: 119 },
+    bonus: { asset: 'shield', x: 378, y: 813, w: 125, h: 112 }
   };
-  const titleVsCpuBtn = { x: 270, y: 582, w: 252, h: 56 };
-  const titleOnlineBtn = { x: 270, y: 653, w: 252, h: 56 };
-  const titleTutorialBtn = { x: 180, y: 726, w: 156, h: 38 };
-  const titleFreeBtn = { x: 363, y: 726, w: 156, h: 38 };
-  const titleRankingBtn = { x: 197, y: 846, w: 154, h: 42 };
-  const titleBonusBtn = { x: 365, y: 823, w: 88, h: 72 };
+  const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
+  const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
+  const titleTutorialBtn = { x: 169, y: 700, w: 175, h: 43 };
+  const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
+  const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
+  const titleBonusBtn = { x: 378, y: 811, w: 99, h: 81 };
+  // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
+  const TITLE_WOOD_SELECTION_OUTLINE = false;
   // 保守用の更新ボタンだけは、見本どおり木枠の外へ置いて従来の鉄板を残す。
-  const titleUpdateBtn = { x: VW / 2, y: 911, w: 250, h: 30 };
+  const titleUpdateBtn = { x: VW / 2, y: 914, w: 250, h: 30 };
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
   let safeUpdateReloadStarted = false;
@@ -8476,9 +8478,8 @@
   // マンガの吹き出しに寄せ、白地に黒縁の楕円+尻尾にしてある。ここだけ浮いて見えるのは
   // 意図した結果なので、「他と揃っていない」という理由で直さないこと。
   //
-  // 置けるのはロゴとモードラベルの間の帯だけ(ボタンの上下は12px、左右の余白は79pxで
-  // 文字が入らない)。尻尾は CPU BATTLE の文字へ向けて左下へ伸ばす。
-  // 数値を触るならこの4つ。SAVE_BUBBLE_CY を下げすぎるとモードラベルに被る。
+  // CPU BATTLE の右側へ小さく添え、尻尾はそのボタンへ左下向きに差す。
+  // ボタンの上へ大きく浮かせるとロゴと木枠の間を圧迫するので戻さないこと。
   const SAVE_BUBBLE_TEXT = '中断データあり';
   // タイトルへ戻された理由を、戻った先で読めるように持ち越す帯。
   // ロビーの赤帯は退出と同時に消えてしまうので、それだけだと何が起きたのか分からない。
@@ -8514,42 +8515,34 @@
     ctx.restore();
   }
 
-  const TITLE_MODE_LABEL_Y = 520;     // 画像が読めない時の代替見出し。木板の焼き込み見出しと同じ高さ
-  const SAVE_BUBBLE_CY = 471;         // 木枠の直前。楕円はロゴ下端から始める
-  const SAVE_BUBBLE_RY = 26;          // 楕円の縦半径
-  const SAVE_BUBBLE_TAIL_AT = 0.42 * Math.PI;   // 尻尾が出る位置(楕円上の角度。0.5πが真下、それ未満で右寄り)
-  const SAVE_BUBBLE_TAIL_SPREAD = 0.09 * Math.PI; // 付け根の広さ
-  const SAVE_BUBBLE_TAIL_LEN = 68;    // 木枠の見出しだけを横切り、CPUの上枠へ届かせる
-  const SAVE_BUBBLE_TAIL_DIR = { x: -0.452, y: 0.892 }; // 伸びる向き(左下・CPU BATTLEの文字side)
+  const TITLE_MODE_LABEL_Y = 476;     // 画像が読めない時の代替見出し。木板の焼き込み見出しと同じ高さ
+  const SAVE_BUBBLE_RY = 15;
+  const SAVE_BUBBLE_TAIL_AT = 0.72 * Math.PI;   // 左下側からCPUボタンへ向ける
+  const SAVE_BUBBLE_TAIL_SPREAD = 0.07 * Math.PI;
   // 位置とサイズは描画と検査で同じものを使う。画面外へ出ていないか、ボタンやロゴに
   // 被っていないかは、目で見られない代わりに resulttest 側で数値として押さえている。
   function suspendedSaveBubbleRect(textW) {
-    // 右端をボタンの右端に合わせ、幅は左の余白(18px)を割らない範囲までしか広げない。
-    // 幅だけを VW 基準で丸めると、文言が長い時に左へはみ出す(検査で捕まえた)。
-    const right = Math.min(VW - 18, titleVsCpuBtn.x + titleVsCpuBtn.w / 2);
-    const w = Math.min(textW + 48, right - 18);
-    return { x: right - w, y: SAVE_BUBBLE_CY - SAVE_BUBBLE_RY, w, h: SAVE_BUBBLE_RY * 2 };
+    const w = Math.min(Math.max(textW + 24, 96), 120);
+    const right = VW - 8;
+    return { x: right - w, y: titleVsCpuBtn.y - 27, w, h: SAVE_BUBBLE_RY * 2 };
   }
   // 尻尾の付け根と先端。楕円上の角度で取るので、大きさを変えても付け根がずれない。
   function suspendedSaveBubbleTail(box) {
     const rx = box.w / 2;
     const cx = box.x + rx;
-    const cy = SAVE_BUBBLE_CY;
+    const cy = box.y + box.h / 2;
     const at = [SAVE_BUBBLE_TAIL_AT - SAVE_BUBBLE_TAIL_SPREAD, SAVE_BUBBLE_TAIL_AT + SAVE_BUBBLE_TAIL_SPREAD];
     const mouth = at.map(t => ({ x: cx + rx * Math.cos(t), y: cy + SAVE_BUBBLE_RY * Math.sin(t) }));
     const base = { x: (mouth[0].x + mouth[1].x) / 2, y: (mouth[0].y + mouth[1].y) / 2 };
     return {
       cx, cy, rx, at, base,
-      tip: {
-        x: base.x + SAVE_BUBBLE_TAIL_DIR.x * SAVE_BUBBLE_TAIL_LEN,
-        y: base.y + SAVE_BUBBLE_TAIL_DIR.y * SAVE_BUBBLE_TAIL_LEN
-      }
+      tip: { x: titleVsCpuBtn.x + titleVsCpuBtn.w / 2 - 4, y: titleVsCpuBtn.y + 4 }
     };
   }
   function drawSuspendedSaveBubble() {
     if (!hasSuspendedSave) return;
     ctx.save();
-    ctx.font = '900 16px ' + UI_FONT;
+    ctx.font = '900 12px ' + UI_FONT;
     const box = suspendedSaveBubbleRect(ctx.measureText(SAVE_BUBBLE_TEXT).width);
     const t = suspendedSaveBubbleTail(box);
     const INK = '#7a4412';
@@ -8623,9 +8616,8 @@
     }
     ctx.fillStyle = steel;
     ctx.fill();
-    // 中断データがある時だけ縁を明るくして光らせる。色を変えるのではなく光らせるだけなので、
-    // ボタンの見た目の系統は崩れない。
-    if (highlight) {
+    // 木板版と同様、状態表示を「選択中」に見せる黄色い囲いは出さない。
+    if (TITLE_WOOD_SELECTION_OUTLINE && highlight) {
       ctx.save();
       ctx.shadowColor = 'rgba(255,210,74,0.85)';
       ctx.shadowBlur = 16;
@@ -8668,7 +8660,7 @@
 
   function drawTitleWoodButtonText(button, label, sub, kind, highlight = false) {
     ctx.save();
-    if (highlight) {
+    if (TITLE_WOOD_SELECTION_OUTLINE && highlight) {
       ctx.save();
       ctx.shadowColor = 'rgba(255,210,74,0.95)';
       ctx.shadowBlur = 18;
@@ -8686,42 +8678,44 @@
     ctx.lineJoin = 'round';
 
     if (kind === 'shield') {
-      ctx.font = '400 18px ' + UI_FONT_DISPLAY;
+      ctx.strokeStyle = '#123f3d';
+      ctx.fillStyle = '#fff3ce';
+      ctx.font = '400 20px ' + UI_FONT_DISPLAY;
       ctx.lineWidth = 5;
-      ctx.strokeText(label, button.x, button.y - 10);
-      ctx.fillText(label, button.x, button.y - 10);
-      ctx.font = '900 8px ' + UI_FONT_HEAVY;
+      ctx.strokeText(label, button.x, button.y - 18);
+      ctx.fillText(label, button.x, button.y - 18);
+      ctx.font = '900 9px ' + UI_FONT_HEAVY;
       ctx.lineWidth = 3;
-      ctx.strokeText(sub, button.x, button.y + 18);
-      ctx.fillStyle = highlight ? '#ffe37a' : '#e8bd70';
-      ctx.fillText(sub, button.x, button.y + 18);
+      ctx.strokeText(sub, button.x, button.y + 7);
+      ctx.fillStyle = '#fff0bd';
+      ctx.fillText(sub, button.x, button.y + 7);
     } else if (kind === 'hanging') {
-      // ロープではなく看板本体の中央へ置く。羊皮紙なので濃い茶色で読ませる。
-      ctx.strokeStyle = '#f1c57e';
-      ctx.fillStyle = '#4a250d';
-      ctx.font = '400 16px ' + UI_FONT_DISPLAY;
-      ctx.lineWidth = 2;
-      ctx.strokeText(label, button.x, button.y);
-      ctx.fillText(label, button.x, button.y);
-      ctx.font = '900 8px ' + UI_FONT_HEAVY;
-      ctx.lineWidth = 2;
-      ctx.strokeText(sub, button.x, button.y + 14);
-      ctx.fillStyle = highlight ? '#9d510d' : '#6c3a16';
-      ctx.fillText(sub, button.x, button.y + 14);
+      // ロープではなく看板本体の中央へ置き、木目と同化しない青緑で読ませる。
+      ctx.strokeStyle = '#fff0bd';
+      ctx.fillStyle = '#123f3d';
+      ctx.font = '400 18px ' + UI_FONT_DISPLAY;
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, button.x, button.y - 5);
+      ctx.fillText(label, button.x, button.y - 5);
+      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.lineWidth = 3;
+      ctx.strokeText(sub, button.x, button.y + 12);
+      ctx.fillStyle = '#235f59';
+      ctx.fillText(sub, button.x, button.y + 12);
     } else {
       const compact = kind === 'parchmentSmall';
-      const labelY = compact ? button.y : button.y - 7;
-      const subY = button.y + (compact ? 12 : 15);
-      ctx.strokeStyle = '#f1c57e';
-      ctx.fillStyle = '#4a250d';
-      ctx.font = `400 ${compact ? 16 : 20}px ${UI_FONT_DISPLAY}`;
-      ctx.lineWidth = 2;
+      const labelY = compact ? button.y - 6 : button.y - 9;
+      const subY = button.y + (compact ? 10 : 17);
+      ctx.strokeStyle = '#fff0bd';
+      ctx.fillStyle = '#123f3d';
+      ctx.font = `400 ${compact ? 17 : 22}px ${UI_FONT_DISPLAY}`;
+      ctx.lineWidth = 3;
       ctx.strokeText(label, button.x, labelY);
       ctx.fillText(label, button.x, labelY);
-      ctx.font = `900 ${compact ? 8 : 9}px ${UI_FONT_HEAVY}`;
-      ctx.lineWidth = 2;
+      ctx.font = `900 ${compact ? 9 : 10}px ${UI_FONT_HEAVY}`;
+      ctx.lineWidth = 3;
       ctx.strokeText(sub, button.x, subY);
-      ctx.fillStyle = highlight ? '#9d510d' : '#6c3a16';
+      ctx.fillStyle = '#235f59';
       ctx.fillText(sub, button.x, subY);
     }
     ctx.restore();

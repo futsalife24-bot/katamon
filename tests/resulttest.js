@@ -185,23 +185,25 @@ check('告知は吹き出しが担い、説明文は通常のまま', !kt.titleC
   kt.titleCpuButtonSub());
 check('吹き出しの文面が中断を知らせている', kt.saveBubbleText().includes('中断'), kt.saveBubbleText());
 
-// 尻尾は短い出っ張り。CPU BATTLE の側(左下)へ向くが、ボタンまでは届かせない。
+// v170: 吹き出し本体はCPUの右へ小さく置き、左下の角をCPUへ向ける。
 {
   const btn = kt.titleCpuBtn();
   const box = kt.saveBubbleRect(120);
   const t = kt.saveBubbleTail(box);
-  check('尻尾は吹き出しより下へ出る', t.tip.y > box.y + box.h, `先端y=${t.tip.y} 下端=${box.y + box.h}`);
-  // 枠に軽くかかるのが狙い。届かないと繋がって見えず、入りすぎると CPU BATTLE の
-  // 文字(button.y - 7)に被って読めなくなる。
-  check('尻尾の先がボタン枠に軽くかかる',
-    t.tip.y > btn.y - btn.h / 2 && t.tip.y < btn.y - 14,
-    `先端y=${t.tip.y.toFixed(0)} 枠上端=${btn.y - btn.h / 2} 文字=${btn.y - 7}`);
-  // 見るのは先端の絶対位置ではなく伸びる向き。付け根が右寄りなので、左下へ伸びても
-  // 先端は中心より右に来る。ここを中心と比べると、正しい向きなのに落ちる。
-  check('尻尾はCPU BATTLEの側(左下)へ伸びる', t.tip.x < t.base.x && t.tip.y > t.base.y,
+  const btnRight = btn.x + btn.w / 2;
+  check('小さい吹き出し本体はCPU BATTLEの右側に置く',
+    box.x >= btnRight && box.w <= 120 && box.h <= 32,
+    `吹き出し=${JSON.stringify(box)} ボタン右=${btnRight}`);
+  check('右側の吹き出しはCPU BATTLEと同じ高さに並ぶ',
+    box.y < btn.y + btn.h / 2 && box.y + box.h > btn.y - btn.h / 2,
+    `吹き出し=${box.y}〜${box.y + box.h} ボタン=${btn.y - btn.h / 2}〜${btn.y + btn.h / 2}`);
+  check('尻尾の先はCPU BATTLEの右端へ届く',
+    t.tip.x >= btnRight - 8 && t.tip.x <= btnRight + 4
+      && t.tip.y > btn.y - btn.h / 2 && t.tip.y < btn.y + btn.h / 2,
+    `先端=(${t.tip.x.toFixed(0)},${t.tip.y.toFixed(0)}) ボタン右=${btnRight}`);
+  check('尻尾はCPU BATTLEへ向かって左下へ伸びる', t.tip.x < t.base.x && t.tip.y > t.base.y,
     `付け根=(${t.base.x.toFixed(0)},${t.base.y.toFixed(0)}) 先端=(${t.tip.x.toFixed(0)},${t.tip.y.toFixed(0)})`);
-  // 付け根が真下より右にあること。ここが左へ回ると、尻尾が吹き出しの下を横切る形になる。
-  check('付け根は吹き出しの中央よりやや右', (t.at[0] + t.at[1]) / 2 < Math.PI / 2,
+  check('尻尾の付け根は吹き出しの左下側にある', (t.at[0] + t.at[1]) / 2 > Math.PI / 2,
     `角度=${((t.at[0] + t.at[1]) / 2 / Math.PI).toFixed(2)}π`);
 }
 
@@ -212,14 +214,12 @@ for (const textW of [120, 220, 320, 460]) {
   const box = kt.saveBubbleRect(textW);
   check(`吹き出しが画面内に収まる(文字幅${textW})`, box.x >= 0 && box.x + box.w <= kt.viewW(),
     `x=${box.x} w=${box.w} VW=${kt.viewW()}`);
-  check(`吹き出しがCPUボタンに被らない(文字幅${textW})`, box.y + box.h <= cpuBtn.y - cpuBtn.h / 2,
-    `下端=${box.y + box.h} ボタン上端=${cpuBtn.y - cpuBtn.h / 2}`);
-  check(`吹き出しがロゴに被らない(文字幅${textW})`, box.y >= 445,
-    `上端=${box.y}`);
-  // 下げすぎると SELECT A BATTLE MODE の帯に楕円が乗る。尻尾が横切るのは想定内だが、
-  // 本体が被ると文字が読めなくなる。
-  check(`吹き出しがモードラベルに乗らない(文字幅${textW})`, box.y + box.h < kt.modeLabelY() - 4,
-    `下端=${box.y + box.h} ラベル=${kt.modeLabelY()}`);
+  check(`吹き出し本体がCPUの右側からはみ出さない(文字幅${textW})`,
+    box.x >= cpuBtn.x + cpuBtn.w / 2 && box.w <= 120,
+    `x=${box.x} w=${box.w} ボタン右=${cpuBtn.x + cpuBtn.w / 2}`);
+  check(`吹き出しがCPUと同じ高さに収まる(文字幅${textW})`,
+    box.y >= cpuBtn.y - cpuBtn.h / 2 && box.y + box.h <= cpuBtn.y + cpuBtn.h / 2,
+    `吹き出し=${box.y}〜${box.y + box.h} ボタン=${cpuBtn.y - cpuBtn.h / 2}〜${cpuBtn.y + cpuBtn.h / 2}`);
 }
 // 光らせる側は新しい描画経路なので、実際にタイトルを描かせて例外が出ないことも見る。
 kt.setPhase('title');
