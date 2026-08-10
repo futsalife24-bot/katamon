@@ -615,7 +615,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v164-lobby-monster-images';
+  const BUILD_ID = 'v165-closewatcher-back';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -14747,11 +14747,15 @@
   });
 
   // ===== 端末の「戻る」操作 =====
-  // Androidの戻るボタンやiOSのスワイプバックを、そのままアプリ終了へ流さない。
-  // 履歴にダミーを1つ積み、バトル中は既存メニュー、それ以外は共通の終了確認へ振り替える。
-  let backTrapDepth = 0;     // 積んであるダミーの数(0か1)
-  let ignoringBackPop = false; // 自分でhistory.back()した分のpopstateを無視するため
-  let exitBackSteps = 0;     // 終了確認後だけ、ガード→元の履歴の2段階を通過させる
+  // CloseWatcher対応環境ではAndroidの戻るジェスチャーを履歴遷移より先に受ける。
+  // 未対応環境だけは従来のダミー履歴を使い、バトル中は既存メニュー、
+  // それ以外は共通の終了確認へ振り替える。
+  let backTrapDepth = 0;       // 未対応環境で積んであるダミーの数(0か1)
+  let ignoringBackPop = false; // 未対応環境で自分がhistory.back()した分を無視する
+  let exitBackSteps = 0;       // CloseWatcherは1、履歴フォールバックは2段階で終了する
+  let deviceBackCloseWatcher = null;
+  let deviceBackCloseWatcherFailed = false;
+  let deviceBackPageActive = true;
   let deviceBackReturnFocus = null;
   const deviceBackConfirmEl = document.getElementById('deviceBackConfirm');
   const deviceBackStayBtn = document.getElementById('deviceBackStay');
@@ -14782,82 +14786,19 @@
     deviceBackReturnFocus = null;
   }
 
-  function armBackTrap() {
-    if (backTrapDepth > 0) return;
-    try {
-      history.pushState({ katamonGuard: true }, '');
-      backTrapDepth = 1;
-    } catch (err) { /* 履歴を触れない環境では戻る操作の制御を諦める */ }
+  function closeWatcherBackTrapAvailable() {
+    return !deviceBackCloseWatcherFailed && typeof window.CloseWatcher === 'function';
   }
 
-  function disarmBackTrap() {
-    if (backTrapDepth <= 0) return;
-    backTrapDepth = 0;
-    ignoringBackPop = true;
-    try {
-      history.back();
-    } catch (err) { ignoringBackPop = false; }
+  function destroyDeviceBackCloseWatcher() {
+    const watcher = deviceBackCloseWatcher;
+    deviceBackCloseWatcher = null;
+    if (!watcher) return;
+    try { watcher.destroy(); } catch (err) { /* 破棄済みなら何もしない */ }
   }
 
-  // 起動前、タイトル、各選択、ランキング、オンラインロビーも含めて常に捕まえる。
-  // 明示的に「アプリを閉じる」を選んだ短い間だけ解除する。
-  function backTrapWanted() {
-    return exitBackSteps === 0;
-  }
-
-  function syncBackTrap() {
-    if (backTrapWanted()) armBackTrap();
-    else disarmBackTrap();
-  }
-
-  function continueConfirmedDeviceExit() {
-    try {
-      history.back();
-    } catch (err) {
-      exitBackSteps = 0;
-      armBackTrap();
-      return;
-    }
-    // 履歴が無いブラウザではback()が何もせず、ページが残ることがある。その時だけ再武装する。
-    setTimeout(() => {
-      if (exitBackSteps > 0 && !document.hidden) {
-        exitBackSteps = 0;
-        armBackTrap();
-      }
-    }, 800);
-  }
-
-  function confirmDeviceExit() {
-    closeDeviceBackConfirm(false);
-    exitBackSteps = 2; // 現在のダミー履歴と、その下のアプリ本体履歴
-    backTrapDepth = 0;
-    ignoringBackPop = false;
-    continueConfirmedDeviceExit();
-  }
-
-  if (deviceBackStayBtn) deviceBackStayBtn.addEventListener('click', () => {
-    closeDeviceBackConfirm();
-    playUiSound();
-  });
-  if (deviceBackExitBtn) deviceBackExitBtn.addEventListener('click', confirmDeviceExit);
-  if (deviceBackConfirmEl) deviceBackConfirmEl.addEventListener('click', event => {
-    if (event.target === deviceBackConfirmEl) {
-      closeDeviceBackConfirm();
-      playUiSound();
-    }
-  });
-
-  window.addEventListener('popstate', () => {
-    if (exitBackSteps > 0) {
-      exitBackSteps--;
-      if (exitBackSteps > 0) setTimeout(continueConfirmedDeviceExit, 0);
-      return;
-    }
-    if (ignoringBackPop) { ignoringBackPop = false; return; }
-    backTrapDepth = 0; // ブラウザ側でダミーが1つ消費された
+  function handleDeviceBackRequest() {
     if (!backTrapWanted()) return;
-    // 捕まえたら必ず積み直す。これを忘れると次の戻る操作でアプリが終了する。
-    armBackTrap();
     if (deviceBackConfirmOpen()) {
       closeDeviceBackConfirm();
       playUiSound();
@@ -14890,7 +14831,151 @@
       return;
     }
     // 発射中やカットイン中はメニューを開けない。握りつぶすだけにして終了だけは防ぐ。
+  }
+
+  function armCloseWatcherBackTrap() {
+    if (!closeWatcherBackTrapAvailable()) return false;
+    if (deviceBackCloseWatcher) return true;
+    try {
+      const watcher = new window.CloseWatcher();
+      let cancelHandled = false;
+      watcher.addEventListener('cancel', event => {
+        cancelHandled = true;
+        // Androidの履歴遷移が始まる前に止め、同じ場でゲーム内確認を開く。
+        if (event.cancelable) event.preventDefault();
+        handleDeviceBackRequest();
+        // preventDefaultでWatcherが残った時は、次の戻る要求を新しい1回として扱う。
+        setTimeout(() => {
+          if (deviceBackCloseWatcher === watcher) cancelHandled = false;
+        }, 0);
+      });
+      watcher.addEventListener('close', () => {
+        const alreadyHandled = cancelHandled;
+        if (deviceBackCloseWatcher === watcher) deviceBackCloseWatcher = null;
+        // 履歴操作の権限が無くcancelを止められない時も、CloseWatcher自身が
+        // 戻る要求を消費する。確認は維持し、次の要求へ向けてWatcherだけ張り直す。
+        if (!alreadyHandled) handleDeviceBackRequest();
+        if (backTrapWanted()) setTimeout(syncBackTrap, 0);
+      });
+      deviceBackCloseWatcher = watcher;
+      return true;
+    } catch (err) {
+      // API名だけ存在して生成できない環境は、未対応環境と同じ安全な経路へ落とす。
+      deviceBackCloseWatcher = null;
+      deviceBackCloseWatcherFailed = true;
+      return false;
+    }
+  }
+
+  function armBackTrap() {
+    if (armCloseWatcherBackTrap()) return;
+    if (backTrapDepth > 0) return;
+    try {
+      history.pushState({ katamonGuard: true }, '');
+      backTrapDepth = 1;
+    } catch (err) { /* 履歴を触れない環境では戻る操作の制御を諦める */ }
+  }
+
+  function disarmBackTrap() {
+    destroyDeviceBackCloseWatcher();
+    if (backTrapDepth <= 0) return;
+    backTrapDepth = 0;
+    ignoringBackPop = true;
+    try {
+      history.back();
+    } catch (err) { ignoringBackPop = false; }
+  }
+
+  // 起動前、タイトル、各選択、ランキング、オンラインロビーも含めて常に捕まえる。
+  // 明示的に「アプリを閉じる」を選んだ短い間だけ解除する。
+  function backTrapWanted() {
+    return exitBackSteps === 0;
+  }
+
+  function syncBackTrap() {
+    // pagehide後にゲームループの最終フレームが来ても、Watcherや履歴を作り直さない。
+    if (!deviceBackPageActive) {
+      destroyDeviceBackCloseWatcher();
+      return;
+    }
+    if (backTrapWanted()) armBackTrap();
+    else disarmBackTrap();
+  }
+
+  function continueConfirmedDeviceExit() {
+    try {
+      history.back();
+    } catch (err) {
+      exitBackSteps = 0;
+      syncBackTrap();
+      return;
+    }
+    // 履歴が無いブラウザではback()が何もせず、ページが残ることがある。その時だけ再武装する。
+    setTimeout(() => {
+      if (exitBackSteps > 0 && !document.hidden) {
+        exitBackSteps = 0;
+        syncBackTrap();
+      }
+    }, 800);
+  }
+
+  function confirmDeviceExit() {
+    closeDeviceBackConfirm(false);
+    const closeWatcherExit = closeWatcherBackTrapAvailable();
+    // CloseWatcher経路にはダミー履歴が無いので、Watcherを先に破棄して1回だけ戻る。
+    // 未対応環境だけは、現在のダミー履歴とその下のアプリ本体履歴を通る。
+    exitBackSteps = closeWatcherExit ? 1 : 2;
+    destroyDeviceBackCloseWatcher();
+    backTrapDepth = 0;
+    ignoringBackPop = false;
+    continueConfirmedDeviceExit();
+  }
+
+  if (deviceBackStayBtn) deviceBackStayBtn.addEventListener('click', () => {
+    closeDeviceBackConfirm();
+    playUiSound();
   });
+  if (deviceBackExitBtn) deviceBackExitBtn.addEventListener('click', confirmDeviceExit);
+  if (deviceBackConfirmEl) deviceBackConfirmEl.addEventListener('click', event => {
+    if (event.target === deviceBackConfirmEl) {
+      closeDeviceBackConfirm();
+      playUiSound();
+    }
+  });
+
+  window.addEventListener('popstate', () => {
+    // CloseWatcher対応環境では、popstate後にpushState/forwardで画面を往復させない。
+    // 明示終了が同一文書内の履歴へ戻った時だけ、終了中の印を片付ける。
+    if (closeWatcherBackTrapAvailable()) {
+      if (exitBackSteps > 0) exitBackSteps = 0;
+      return;
+    }
+    if (exitBackSteps > 0) {
+      exitBackSteps--;
+      if (exitBackSteps > 0) setTimeout(continueConfirmedDeviceExit, 0);
+      return;
+    }
+    if (ignoringBackPop) { ignoringBackPop = false; return; }
+    backTrapDepth = 0; // ブラウザ側でダミーが1つ消費された
+    if (!backTrapWanted()) return;
+    // 捕まえたら必ず積み直す。これを忘れると次の戻る操作でアプリが終了する。
+    armBackTrap();
+    handleDeviceBackRequest();
+  });
+
+  // bfcacheやページ破棄で古いWatcherを残さず、戻ってきた時だけ1つ張り直す。
+  function suspendDeviceBackTrap() {
+    deviceBackPageActive = false;
+    destroyDeviceBackCloseWatcher();
+  }
+  window.addEventListener('pagehide', suspendDeviceBackTrap);
+  window.addEventListener('beforeunload', suspendDeviceBackTrap);
+  window.addEventListener('pageshow', () => {
+    deviceBackPageActive = true;
+    if (backTrapWanted()) syncBackTrap();
+  });
+  // 最初の描画フレームより先に戻る操作が来ても、履歴へ流さない。
+  syncBackTrap();
 
   // ===== ゲームループ =====
   let lastTime = 0;

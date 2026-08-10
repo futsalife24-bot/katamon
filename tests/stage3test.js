@@ -2102,8 +2102,10 @@ function check(name, value) {
     && htmlText.includes('z-index: 200')
     && htmlText.includes('id="deviceBackStay"')
     && htmlText.includes('id="deviceBackExit"'));
-  check('only an explicit exit choice passes both guarded history entries',
-    /function confirmDeviceExit\(\)[\s\S]{0,220}exitBackSteps = 2;[\s\S]{0,160}continueConfirmedDeviceExit\(\);/.test(htmlText));
+  check('CloseWatcher cancels the close request before showing the in-game confirmation',
+    /new window\.CloseWatcher\(\)[\s\S]{0,500}addEventListener\('cancel',[\s\S]{0,240}event\.preventDefault\(\);[\s\S]{0,160}handleDeviceBackRequest\(\);/.test(htmlText));
+  check('explicit exit destroys CloseWatcher and uses one back, while fallback keeps two steps',
+    /function confirmDeviceExit\(\)[\s\S]{0,360}exitBackSteps = closeWatcherExit \? 1 : 2;[\s\S]{0,120}destroyDeviceBackCloseWatcher\(\);[\s\S]{0,160}continueConfirmedDeviceExit\(\);/.test(htmlText));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 
