@@ -1705,6 +1705,41 @@ kt.setLocalSeat('p1');
       && tutorialLabel.y >= b.tutorial.y - 1
       && freeLabel.y >= b.free.y - 1,
     JSON.stringify({ tutorialLabel, freeLabel, tutorial: b.tutorial, free: b.free }));
+
+  // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
+  // 画像名だけ置いて実際の配置が旧UIのまま、という実装を通さない。
+  const woodUi = kt.titleWoodUiInfo();
+  const expectedWoodAssets = [
+    'assets/title-mode-board.webp',
+    'assets/title-shield-button.webp',
+    'assets/title-hanging-sign.webp',
+    'assets/title-parchment-button.webp'
+  ];
+  check('タイトルが提供された4種類の木板UI素材を使う',
+    !!woodUi && expectedWoodAssets.every(src => (
+      Object.values(woodUi.assets).includes(src)
+        && require('fs').existsSync(require('path').join(__dirname, '..', src))
+    )),
+    woodUi ? JSON.stringify(woodUi.assets) : '木板UIなし');
+  if (woodUi) {
+    check('主対戦2ボタンは盾、練習2ボタンは吊り看板、補助2ボタンは羊皮紙に揃う',
+      woodUi.imageRects.shields.length === 2
+        && woodUi.imageRects.hangingSigns.length === 2
+        && woodUi.imageRects.parchments.length === 2,
+      JSON.stringify(woodUi.imageRects));
+    check('木板と全ボタンがタイトル画面内に収まり、押せる場所が重ならない',
+      woodUi.board.x >= 0 && woodUi.board.y >= 0
+        && woodUi.board.x + woodUi.board.w <= kt.viewW()
+        && woodUi.board.y + woodUi.board.h <= kt.viewH()
+        && Object.values(woodUi.buttons).every(button => (
+          button.x - button.w / 2 >= 0 && button.x + button.w / 2 <= kt.viewW()
+            && button.y - button.h / 2 >= 0 && button.y + button.h / 2 <= kt.viewH()
+        ))
+        && Object.values(woodUi.buttons).every((button, index, all) => (
+          all.slice(index + 1).every(other => !rectsOverlap(button, other))
+        )),
+      JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
+  }
 }
 
 // ===== 描き直しの節約(v129) =====

@@ -482,7 +482,7 @@ function check(name, value) {
   // (揃えないと、コードは正しいのにチェックアウトの仕方だけで落ちる)
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   check('title offers an in-game force-update action that refreshes the worker and clears old app caches',
-    htmlText.includes("const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };")
+    /const titleUpdateBtn = \{ x: VW \/ 2, y: \d+, w: 250, h: 30 \};/.test(htmlText)
     && htmlText.includes('async function forceGameUpdate()')
     && htmlText.includes('await registration.update();')
     && htmlText.includes("key.startsWith('katamon-pwa-')")
@@ -1818,10 +1818,11 @@ function check(name, value) {
     && htmlText.includes('#onlineRoomCodeLabel {')
     && htmlText.includes('placeholder="相手の部屋ID 8文字"')
     && !htmlText.includes('>合言葉を使う</button>'));
-  // タイトルの CPU BATTLE と ONLINE BATTLE が同じ鋼色で、文字を読むまで見分けが付かなかった。
-  // 位置と大きさは変えていない(タイトルの配置は別のテストが固定している)。
-  check('the title tells its two battle buttons apart by colour, without moving them',
-    /kind === 'online'[\s\S]{0,300}steel\.addColorStop\(0, '#6a5a3a'\)/.test(htmlText));
+  // v168では主対戦を同じ盾意匠で一段に並べ、CPU／ONLINEを位置と文字で見分ける。
+  check('the title presents CPU and ONLINE as separate side-by-side shield controls',
+    htmlText.includes("shield: loadArtImage('title-shield-button'")
+    && htmlText.includes("drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE'")
+    && htmlText.includes("drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE'"));
 
   // ---- 4人ぶんの伏せ合い(Issue #26 段C) ----
   // 実際の受信経路(netReceiveInner)へ commit / reveal を流し、席ごとに覚えられるか見る。

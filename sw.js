@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v167-title-button-labels';
+const CACHE_VERSION = 'katamon-pwa-v168-title-wood-ui';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -20,6 +20,10 @@ const APP_SHELL = [
   './assets/fonts/rocknroll-one-regular.ttf',
   './assets/fonts/reggae-one-display.woff2',
   './assets/title-logo.webp',
+  './assets/title-mode-board.webp',
+  './assets/title-shield-button.webp',
+  './assets/title-hanging-sign.webp',
+  './assets/title-parchment-button.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
   './assets/normal-impact-explosion.mp3?v=3',
