@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v168-title-wood-ui';
+const CACHE_VERSION = 'katamon-pwa-v169-title-menu-layout';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
