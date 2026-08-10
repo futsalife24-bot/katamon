@@ -429,14 +429,23 @@ async function importIntoGameAndStart(page, filePath) {
 }
 
 test.describe('対象ゲームの端末戻る操作', () => {
-  test('起動前とタイトルで、終了前に確認を表示する', async ({ page }) => {
+  test('起動前とタイトルで、終了前に確認を表示する', async ({ page }, testInfo) => {
     await page.goto(GAME_URL);
     const canvas = page.getByTestId('battle-canvas');
     const confirm = page.locator('#deviceBackConfirm');
     await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase)).toBe('press');
-    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+    const closeWatcherSupported = await page.evaluate(() => typeof window.CloseWatcher === 'function');
+    if (testInfo.project.name.startsWith('android-chromium')) {
+      expect(closeWatcherSupported).toBe(true);
+    }
+    if (closeWatcherSupported) {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(false);
+    } else {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+    }
 
-    await page.evaluate(() => history.back());
+    if (closeWatcherSupported) await page.keyboard.press('Escape');
+    else await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
     await expect(page.locator('#deviceBackConfirm')).toHaveCSS('font-family', /RocknRoll One/);
@@ -455,7 +464,8 @@ test.describe('対象ゲームの端末戻る操作', () => {
 
     await tapCanvas(page, canvas, 0.5, 0.5);
     await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase), { timeout: 15_000 }).toBe('title');
-    await page.evaluate(() => history.back());
+    if (closeWatcherSupported) await page.keyboard.press('Escape');
+    else await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await page.locator('#deviceBackStay').click();
     await page.goto('about:blank');
@@ -464,8 +474,14 @@ test.describe('対象ゲームの端末戻る操作', () => {
   test('終了を選んだ時だけ前のページへ戻る', async ({ page }) => {
     await page.goto(STUDIO_URL);
     await page.goto(GAME_URL);
-    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
-    await page.evaluate(() => history.back());
+    const closeWatcherSupported = await page.evaluate(() => typeof window.CloseWatcher === 'function');
+    if (closeWatcherSupported) {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(false);
+      await page.keyboard.press('Escape');
+    } else {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+      await page.evaluate(() => history.back());
+    }
     await expect(page.locator('#deviceBackConfirm')).toBeVisible();
     await page.locator('#deviceBackExit').click();
     await expect(page).toHaveURL(/\/tools\/stage-studio\/(?:#home)?$/, { timeout: 15_000 });
