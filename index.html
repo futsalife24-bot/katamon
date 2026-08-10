@@ -254,7 +254,8 @@
   /* 在席の●は席の種別で色分け:対戦者=真鍮系、観戦=控えめなグレー。 */
   .onlineSeatRow.occupied.player .seatMark { color: #ffd24a; }
   .onlineSeatRow.occupied.spectator .seatMark { color: #9fb0bd; }
-  .onlineSeatRow .seatLabel { flex: 0 0 auto; min-width: 62px; font-weight: 900; color: #d39b4b; }
+  /* 役名の文字数が違っても、その次の名前／空席は必ず同じ位置から始める。 */
+  .onlineSeatRow .seatLabel { flex: 0 0 64px; width: 64px; font-weight: 900; color: #d39b4b; }
   .onlineSeatRow .seatName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .onlineSeatRow .seatBadgeYou {
     flex: 0 0 auto; font-size: 10px; font-weight: 900; color: #0b0d17;
@@ -587,7 +588,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v162-room-rival-record';
+  const BUILD_ID = 'v163-lobby-seat-order';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6807,11 +6808,25 @@
   function firebaseLobbyIs2v2() { return !!(online && online.settings && online.settings.format === '2v2'); }
   // 2vs2では観戦席が無くなり、4席すべてが対戦者席になる(決定8)。
   function firebasePlayerSeats() { return firebaseLobbyIs2v2() ? FIREBASE_SEATS.slice() : FIREBASE_PLAYER_SEATS.slice(); }
+  // 2vs2の名簿は端末ごとに「自分→味方→敵1→敵2」で見せる。
+  // これは画面上の並びだけで、Firebaseの席ID・チーム・手番順は一切動かさない。
+  function firebaseLobbySeatOrder() {
+    if (!firebaseLobbyIs2v2() || !online || !FIREBASE_SEAT_TEAM[online.seat]) return FIREBASE_SEATS.slice();
+    const ownSeat = online.seat;
+    const ownTeam = FIREBASE_SEAT_TEAM[ownSeat];
+    const allies = FIREBASE_SEATS.filter(seat => seat !== ownSeat && FIREBASE_SEAT_TEAM[seat] === ownTeam);
+    const enemies = FIREBASE_SEATS.filter(seat => FIREBASE_SEAT_TEAM[seat] !== ownTeam);
+    return [ownSeat, ...allies, ...enemies];
+  }
   function firebaseSeatLabel(seat) {
+    if (firebaseLobbyIs2v2()) {
+      const relativeIndex = firebaseLobbySeatOrder().indexOf(seat);
+      return ['P1 自分', 'P2 味方', 'E1 敵1', 'E2 敵2'][relativeIndex] || '対戦者';
+    }
     if (seat === 'p1') return 'P1 ホスト';
-    if (seat === 'e1') return firebaseLobbyIs2v2() ? 'E1 敵チーム' : 'P2 対戦者';
-    if (seat === 's1') return firebaseLobbyIs2v2() ? 'P2 味方' : 'S1 観戦';
-    return firebaseLobbyIs2v2() ? 'E2 敵チーム' : 'S2 観戦';
+    if (seat === 'e1') return 'P2 対戦者';
+    if (seat === 's1') return 'S1 観戦';
+    return 'S2 観戦';
   }
   function firebaseSeatIsPlayer(seat) { return firebasePlayerSeats().includes(seat); }
   // 対戦方式はホストから後から届く。2vs2だと分かった時点で、s1/s2に座っている人は
@@ -7878,7 +7893,7 @@
     const slots = online.slots || {};
     if (onlineSlotsEl) {
       while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);
-      FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));
+      firebaseLobbySeatOrder().forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));
     }
     renderFirebaseBattleRecord();
     // 相手が準備完了でもホストは設定を変えられる。変えられたら相手は準備完了を取り消して選び直せる。
