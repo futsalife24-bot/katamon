@@ -111,9 +111,10 @@
         <div class="panel form-grid compact">
           <label>プリセット<select id="presetSelect" data-testid="preset-select"></select></label>
           <label>シード<input id="seedInput" data-testid="seed-input" maxlength="64" value="stage-studio-001" inputmode="text" autocomplete="off"></label>
+          <label>ステージサイズ<select id="stageSize"><option value="standard">標準（1440 × 660）</option><option value="large">大型（2160 × 960）</option></select></label>
           <label>ステージ幅<input id="stageWidth" type="number" value="1440" readonly aria-describedby="fixedSizeHelp"></label>
           <label>編集領域の高さ<input id="stageHeight" type="number" value="660" readonly aria-describedby="fixedSizeHelp"></label>
-          <p id="fixedSizeHelp" class="muted full">MVPは対象ゲームと同じ固定サイズです。地形の下端は636pxです。</p>
+          <p id="fixedSizeHelp" class="muted full">大型は横に広く、上の足場を活かせます。地形の下端は標準636px・大型924pxです。</p>
           <label>高低差 <output id="reliefOutput">55</output><input id="reliefRange" type="range" min="0" max="100" value="55"></label>
           <label>滑らかさ <output id="smoothOutput">60</output><input id="smoothRange" type="range" min="0" max="100" value="60"></label>
           <label>足場数 <output id="platformOutput">2</output><input id="platformRange" type="range" min="0" max="8" value="2"></label>

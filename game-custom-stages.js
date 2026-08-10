@@ -174,11 +174,12 @@
     var material = stage.materials && stage.materials[0] || {};
     context.fillStyle = material.id === 'steel' ? '#3d4955' : (material.color || '#7A5435');
     var columns = stage.terrain && stage.terrain.columns || [];
-    var scaleX = width / core.LIMITS.stageWidth;
-    var scaleY = height / core.LIMITS.stageHeight;
+    var limits = core.getStageLimits ? core.getStageLimits(stage) : core.LIMITS;
+    var scaleX = width / limits.stageWidth;
+    var scaleY = height / limits.stageHeight;
     columns.forEach(function (segments, columnIndex) {
       segments.forEach(function (segment) {
-        context.fillRect(columnIndex * core.LIMITS.columnWidth * scaleX, segment[0] * scaleY, Math.max(1, core.LIMITS.columnWidth * scaleX + 1), (segment[1] - segment[0]) * scaleY);
+        context.fillRect(columnIndex * limits.columnWidth * scaleX, segment[0] * scaleY, Math.max(1, limits.columnWidth * scaleX + 1), (segment[1] - segment[0]) * scaleY);
       });
     });
     if (material.id === 'steel') {

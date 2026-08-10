@@ -577,11 +577,31 @@ check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して�
   JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
 const setupRowsBeforeBattle = kt.freeRows();
 const trainingMenuRows = kt.freeTrainingMenuRows();
-check('演習前はキャラ・地形・人数だけを選び、練習条件は戦闘メニューにまとめる',
-  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,format'
+check('演習前はキャラ・地形・ステージサイズ・人数だけを選び、練習条件は戦闘メニューにまとめる',
+  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,stageSize,format'
     && !!trainingMenuRows
     && Object.keys(trainingMenuRows).join(',') === 'special,jump,cpuAi,windDirection,windStrength',
   JSON.stringify({ setupRowsBeforeBattle, trainingMenuRows }));
+// 大型を選んだ時だけ、実戦の地形・保存データまで大型寸法へ切り替わること。
+// 旧実装では stageSize を受け取らず、ここは常に標準 (1440 / 660 / 480列) のままになる。
+kt.changeFreeOption('stageSize', 1);
+kt.startFreeMatch();
+const largeFreeSnapshot = kt.buildSnapshotForTest();
+check('演習で大型を選ぶと2160×960・720列の戦場になる',
+  largeFreeSnapshot.stageW === 2160
+    && largeFreeSnapshot.stageH === 960
+    && largeFreeSnapshot.segments.length === 720
+    && largeFreeSnapshot.units.length === 2,
+  JSON.stringify({
+    stageW: largeFreeSnapshot.stageW,
+    stageH: largeFreeSnapshot.stageH,
+    columns: largeFreeSnapshot.segments.length,
+    units: largeFreeSnapshot.units.length
+  }));
+// 以降の既存ケースは標準サイズ前提なので、ここで元へ戻す。
+kt.changeFreeOption('stageSize', -1);
+kt.startFreeMatch();
+
 let freeThrew = null;
 try { playMatch(60000); } catch (e) { freeThrew = e; }
 check('フリーモードも例外なく決着', !freeThrew && kt.state().matchOver === true,

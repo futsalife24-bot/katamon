@@ -29,11 +29,12 @@
 
         "settings": {
           ".write": "auth != null && data.parent().child('slots').child('p1').child('uid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('round').child('status').val() === 'lobby'",
-          ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','revision'])",
+          ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','format','stageSize','revision'])",
           "terrain": { ".validate": "newData.val() === 'random' || newData.val() === 'plateauLeft' || newData.val() === 'plateauRight' || newData.val() === 'mountainCenter' || newData.val() === 'valley' || newData.val() === 'rolling' || newData.val() === 'bridge' || newData.val() === 'tieredBasin'" },
           "wind": { ".validate": "newData.val() === 'random' || newData.val() === 'left' || newData.val() === 'calm' || newData.val() === 'right'" },
           "turnsPerPlayer": { ".validate": "newData.val() === 10 || newData.val() === 15 || newData.val() === 20" },
           "format": { ".validate": "newData.val() === '1v1' || newData.val() === '2v2'" },
+          "stageSize": { ".validate": "newData.val() === 'standard' || newData.val() === 'large'" },
           "revision": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100000" },
           "$other": { ".validate": false }
         },
@@ -89,7 +90,7 @@
                 "status": { ".validate": "newData.isString() && newData.val().length <= 16" },
                 "nextRoundId": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
                 "autoReady": { ".validate": "newData.isBoolean()" },
-                "settings": { ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','revision'])" },
+                "settings": { ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','format','stageSize','revision'])" },
                 "slots": { ".validate": "newData.hasChildren()" },
                 "vote": { ".validate": "newData.isBoolean()" },
                 "value": { ".validate": "newData.isBoolean()" },
