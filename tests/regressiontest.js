@@ -582,25 +582,25 @@ check('演習前はキャラ・地形・ステージサイズ・人数だけを�
     && !!trainingMenuRows
     && Object.keys(trainingMenuRows).join(',') === 'special,jump,cpuAi,windDirection,windStrength',
   JSON.stringify({ setupRowsBeforeBattle, trainingMenuRows }));
-// 最遠視点でも、HUDで隠れる上側を戦場に数えず、ミニマップの下から操作盤までへ
-// ステージ全高を収めること。旧実装は横幅だけを基準に38%まで縮めるため、
-// 標準ステージが縦に小さく潰れていた。
+// 「最遠」はステージの横幅を端から端まで見渡せる全景であること。
+// v159はHUD下から操作盤までへステージ全高を収める倍率を「最遠」としたため、
+// 標準でも横幅の約51%しか見えず、スライダーを端まで動かしても全景にできなかった。
 kt.setCameraZoomForTest(0.38);
 kt.startFreeMatch();
 const standardFreeCamera = kt.cameraForTest();
 const oneOnOneBattleTop = 176;
 const standardWidthCoverage = standardFreeCamera.visibleWidth / 1440;
-check('標準の最遠視点はHUD下から操作盤までへ戦場全高を収める',
-  Math.abs(standardFreeCamera.stageTopY - oneOnOneBattleTop) <= 1
+check('標準の最遠視点はマップ横幅100%を見渡せる',
+  Math.abs(standardWidthCoverage - 1) <= 0.001
     && Math.abs(standardFreeCamera.stageBottomY - kt.controlPanelY()) <= 1
-    && standardFreeCamera.zoom > 0.7,
-  JSON.stringify(standardFreeCamera));
+    && standardFreeCamera.stageTopY >= oneOnOneBattleTop
+    && Math.abs(standardFreeCamera.zoom - 540 / 1440) <= 0.001,
+  JSON.stringify({ standardFreeCamera, standardWidthCoverage }));
 
 // 大型を選んだ時だけ、実戦の地形・保存データまで大型寸法へ切り替わること。
 // 旧実装では stageSize を受け取らず、ここは常に標準 (1440 / 660 / 480列) のままになる。
 kt.changeFreeOption('stageSize', 1);
-// 大型も同じ安全領域へ全高を収める。ただし旧修正のように画面全高660pxを基準に
-// 69%へ拡大して右半分を隠さず、標準とほぼ同じ割合の横幅が見えること。
+// 大型でも同じ「最遠」の意味を守り、横幅を全部表示すること。
 // 標準の「最遠」から切り替えた時も、生の倍率ではなくスライダー上の距離を引き継ぐ。
 kt.startFreeMatch();
 const largeFreeSnapshot = kt.buildSnapshotForTest();
@@ -617,12 +617,13 @@ check('演習で大型を選ぶと2160×960・720列の戦場になる',
     columns: largeFreeSnapshot.segments.length,
     units: largeFreeSnapshot.units.length
   }));
-check('大型の最遠視点もHUD下へ全高を収め、標準と同じ広さで見せる',
-  Math.abs(largeFreeCamera.stageTopY - oneOnOneBattleTop) <= 1
+check('大型の最遠視点もマップ横幅100%を見渡せる',
+  Math.abs(largeWidthCoverage - 1) <= 0.001
     && Math.abs(largeFreeCamera.stageBottomY - kt.controlPanelY()) <= 1
-    && largeFreeCamera.zoom < kt.controlPanelY() / 960
+    && largeFreeCamera.stageTopY >= oneOnOneBattleTop
+    && Math.abs(largeFreeCamera.zoom - 540 / 2160) <= 0.001
     && Math.abs(largeFreeCamera.sliderValue - standardFreeCamera.sliderValue) <= 0.01
-    && Math.abs(largeWidthCoverage - standardWidthCoverage) <= 0.03,
+    && Math.abs(largeWidthCoverage - standardWidthCoverage) <= 0.001,
   JSON.stringify({ standardFreeCamera, largeFreeCamera, standardWidthCoverage, largeWidthCoverage }));
 // v157/v158は大型の遠い保存値を自動で660/960（表示69%）へ補正していた。
 // 新しい距離設定がまだ無い端末でこの値を生倍率として読むと、修正版でも大型だけ
@@ -634,15 +635,20 @@ check('旧版が大型へ保存した69%は、新しい最遠視点へ移行す�
   migratedLegacyLargeCamera.sliderValue <= 0.01
     && Math.abs(migratedLegacyLargeCamera.zoom - largeFreeCamera.zoom) <= 0.01,
   JSON.stringify({ largeFreeCamera, migratedLegacyLargeCamera }));
-// 最遠から拡大しても、見ていた場所が横へ滑らないこと。旧実装は倍率だけを変えて
-// cameraXを据え置くため、大型では手番キャラが中央から右端近くへ飛んでいた。
+// 最遠からスライダーで拡大した時は、地図中央ではなく手番キャラへ縦横とも寄ること。
+// 全景は中央しか基準にできないため、その中心を保つと両端のキャラが画面外へ消えてしまう。
+// 大型の上段にいるキャラは地面固定のままだと縦にも消えるため、地面の接地は全景中だけ。
 const largeCameraCenterBeforeZoom = kt.cameraForTest();
+const largeActingXBeforeZoom = kt.activeUnit().x;
+const largeActingYBeforeZoom = kt.activeUnit().y;
 kt.setCameraSliderValueForTest(1);
 const largeCameraCenterAfterZoom = kt.cameraForTest();
-check('倍率を変えても、画面中央で見ていた地点を保つ',
-  Math.abs(largeCameraCenterAfterZoom.centerWorldX - largeCameraCenterBeforeZoom.centerWorldX) <= 1
-    && Math.abs(largeCameraCenterAfterZoom.centerWorldY - largeCameraCenterBeforeZoom.centerWorldY) <= 1,
-  JSON.stringify({ before: largeCameraCenterBeforeZoom, after: largeCameraCenterAfterZoom }));
+check('全景から拡大すると手番キャラへ縦横とも寄る',
+  largeActingXBeforeZoom >= largeCameraCenterAfterZoom.x
+    && largeActingXBeforeZoom <= largeCameraCenterAfterZoom.x + largeCameraCenterAfterZoom.visibleWidth
+    && largeActingYBeforeZoom >= largeCameraCenterAfterZoom.y
+    && largeActingYBeforeZoom <= largeCameraCenterAfterZoom.y + largeCameraCenterAfterZoom.visibleHeight,
+  JSON.stringify({ actingX: largeActingXBeforeZoom, actingY: largeActingYBeforeZoom, before: largeCameraCenterBeforeZoom, after: largeCameraCenterAfterZoom }));
 // 以降の既存ケースは標準サイズ前提なので、ここで元へ戻す。
 kt.changeFreeOption('stageSize', -1);
 kt.startFreeMatch();

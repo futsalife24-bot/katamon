@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v159-camera-framing';
+const CACHE_VERSION = 'katamon-pwa-v160-full-map-overview';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
