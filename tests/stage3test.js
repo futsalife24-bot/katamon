@@ -781,7 +781,7 @@ function check(name, value) {
     && (seatRowSrc.match(/\.textContent = /g) || []).length >= 3);
   check('the seat board renders four seat rows by clearing and re-appending, not string concatenation',
     htmlText.includes('while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);')
-    && htmlText.includes('FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));'));
+    && htmlText.includes('firebaseLobbySeatOrder().forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));'));
   check('each seat row marks occupied/empty with a filled/hollow dot and colors it by seat kind (brass for players, gray for spectators)',
     seatRowSrc.includes("mark.textContent = occupied ? '●' : '○';")
     && htmlText.includes('.onlineSeatRow.occupied.player .seatMark { color: #ffd24a; }')
@@ -1366,9 +1366,9 @@ function check(name, value) {
   h.setOnlineForLogTest(lobbyWith('2v2'));
   check('a 2vs2 lobby turns every seat into a player seat',
     h.firebasePlayerSeats().join() === 'p1,e1,s1,s2' && h.firebaseLobbyIs2v2());
-  check('the 2vs2 seat labels say which team each seat is on',
+  check('the 2vs2 seat labels are relative to the local player',
     [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('s1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s2')].join('/')
-      === 'P1 ホスト/P2 味方/E1 敵チーム/E2 敵チーム');
+      === 'P1 自分/P2 味方/E1 敵1/E2 敵2');
   // 対戦方式はホストから後から届く。届いた時点で s1 の人は観戦者から対戦者へ変わる。
   const late = lobbyWith('1v1', 's1');
   h.setOnlineForLogTest(late);
@@ -1413,6 +1413,42 @@ function check(name, value) {
     for (const seat of ['p1', 'e1', 's1', 's2']) slots[seat] = seats.includes(seat) ? { uid: 'uid-' + seat } : null;
     return slots;
   }
+  // v162までは全端末が p1,e1,s1,s2 の固定順だったため、ホスト以外では自分の行が
+  // 先頭にならず、味方と敵の表示までホスト視点のままだった。実際のDOMを4席それぞれで
+  // 組み立て、自分→味方→敵1→敵2の順と、その行に載る人物が一致することを固定する。
+  function rendered2v2RowsFor(seat) {
+    const o = lobbyWith('2v2', seat);
+    o.slots = seated('p1', 'e1', 's1', 's2');
+    o.seatNames = { p1: 'NAME-p1', e1: 'NAME-e1', s1: 'NAME-s1', s2: 'NAME-s2' };
+    o.selfReady = false;
+    o.seatReady = {};
+    h.setOnlineForLogTest(o);
+    return h.renderLobbySeats();
+  }
+  function renderedSeatPart(row, className) {
+    const part = row.parts.find(text => text.includes(`:${className}:`));
+    return part ? part.slice(part.indexOf(`:${className}:`) + className.length + 2) : '';
+  }
+  const relativeSeatTails = {
+    p1: ['NAME-s1', 'NAME-e1', 'NAME-s2'],
+    s1: ['NAME-p1', 'NAME-e1', 'NAME-s2'],
+    e1: ['NAME-s2', 'NAME-p1', 'NAME-s1'],
+    s2: ['NAME-e1', 'NAME-p1', 'NAME-s1']
+  };
+  for (const seat of ['p1', 's1', 'e1', 's2']) {
+    const rows = rendered2v2RowsFor(seat);
+    const labels = rows.map(row => renderedSeatPart(row, 'seatLabel'));
+    const names = rows.map(row => renderedSeatPart(row, 'seatName'));
+    check(`2vs2 ${seat} sees self, ally, enemy 1, enemy 2 in that order`,
+      rows[0].cls.includes(' mine')
+      && labels.join('/') === 'P1 自分/P2 味方/E1 敵1/E2 敵2'
+      && names.slice(1).join('/') === relativeSeatTails[seat].join('/'));
+  }
+  const seatLabelCss = (htmlText.match(/\.onlineSeatRow \.seatLabel\s*\{([^}]*)\}/) || [])[1] || '';
+  check('every occupied name and empty-seat label starts at the same horizontal position',
+    /flex:\s*0 0 \d+px/.test(seatLabelCss)
+    && /width:\s*\d+px/.test(seatLabelCss)
+    && !/min-width:\s*\d+px/.test(seatLabelCss));
   function readyLobby(format, occupied, readySeats) {
     const o = lobbyWith(format, 'p1');
     o.slots = seated(...occupied);
