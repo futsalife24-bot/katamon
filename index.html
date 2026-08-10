@@ -615,7 +615,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v166-single-exit';
+  const BUILD_ID = 'v167-title-button-labels';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -8606,8 +8606,11 @@
     ctx.strokeStyle = '#090b0d';
     ctx.lineWidth = 5;
     ctx.font = '400 23px ' + UI_FONT_DISPLAY;
-    ctx.strokeText(label, button.x, button.y - 7);
-    ctx.fillText(label, button.x, button.y - 7);
+    // 「あそび方」「演習」は横並びにするため高さ54。高さ64の大ボタンと同じ -7px では、
+    // 23pxの見出しの上端が枠へ食い込む。小ボタンだけ6px下げ、画像・枠・当たり判定は動かさない。
+    const labelY = button.y + (button.h <= 54 ? -1 : -7);
+    ctx.strokeText(label, button.x, labelY);
+    ctx.fillText(label, button.x, labelY);
     // 案内文は、通常の説明より一段明るくして拾わせる。
     ctx.fillStyle = highlight ? '#ffe2a1' : UI.brassLabel;
     ctx.font = (highlight ? 'bold 11px ' : 'bold 10px ') + UI_FONT;

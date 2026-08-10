@@ -1691,6 +1691,20 @@ kt.setLocalSeat('p1');
     others.every(o => !rectsOverlap(b.tutorial, o)), JSON.stringify(b.tutorial));
   check('「あそび方」ボタンが画面内に収まっている',
     b.tutorial.y - b.tutorial.h / 2 > 0 && b.tutorial.y + b.tutorial.h / 2 < kt.viewH());
+
+  // 高さ54の小ボタンへ高さ64の大ボタンと同じ文字位置を使うと、23pxの見出しが上枠へ食い込む。
+  // 実際に描画された座標を見て、左右どちらも小ボタン専用の位置になっていることを固定する。
+  kt.setPhase('title');
+  kt.resetDrawnText();
+  kt.render();
+  const titleText = kt.drawnTextDetails();
+  const tutorialLabel = titleText.find(entry => entry.text === 'あそび方');
+  const freeLabel = titleText.find(entry => entry.text === '演習');
+  check('タイトルの「あそび方」「演習」の見出しが上枠へ食い込まない位置にある',
+    tutorialLabel && freeLabel
+      && tutorialLabel.y >= b.tutorial.y - 1
+      && freeLabel.y >= b.free.y - 1,
+    JSON.stringify({ tutorialLabel, freeLabel, tutorial: b.tutorial, free: b.free }));
 }
 
 // ===== 描き直しの節約(v129) =====

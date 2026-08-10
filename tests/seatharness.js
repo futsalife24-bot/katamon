@@ -28,7 +28,11 @@ const HOOK = `
     state: () => ({ gamePhase, matchOver, winner, awaitingResolve, turnCount, activeIndex, turnOrder: turnOrder.slice() }),
     panels: () => __panelLog.slice(),
     drawnText: () => globalThis.__ktTextLog.slice(),
-    resetDrawnText: () => { globalThis.__ktTextLog.length = 0; },
+    drawnTextDetails: () => globalThis.__ktTextDrawLog.map(entry => ({ ...entry })),
+    resetDrawnText: () => {
+      globalThis.__ktTextLog.length = 0;
+      globalThis.__ktTextDrawLog.length = 0;
+    },
     resetPanels: () => { __panelLog.length = 0; },
     render: () => render(),
     // 描く細かさ(v131)。画面の実画素とキャンバスの画素が一致しているかを見る。
@@ -591,6 +595,7 @@ const noop = () => {};
 // 描かれた文字の記録。ctxのスタブはこのファイルのスコープなので globalThis に置き、
 // ゲーム側スコープのフックからも同じ配列を見られるようにする。
 globalThis.__ktTextLog = [];
+globalThis.__ktTextDrawLog = [];
 globalThis.__ktDecodedAudioStarts = 0;
 function makeCtx() {
   const ctx = {
@@ -606,9 +611,12 @@ function makeCtx() {
     'fillText','strokeText','translate','rotate','scale','transform','setTransform','resetTransform',
     'drawImage','putImageData','setLineDash','getLineDash'];
   for (const k of methods) ctx[k] = noop;
-  // 描かれた文字を控える。「画像が無くても名前は出るか」のような、
-  // 位置ではなく結果を見る検査に使う。
-  ctx.fillText = (text) => { globalThis.__ktTextLog.push(String(text)); };
+  // 描かれた文字と座標を控える。「画像が無くても名前は出るか」に加え、
+  // 小さい枠へ文字が食い込んでいないかも同じ描画結果から検査する。
+  ctx.fillText = (text, x, y) => {
+    globalThis.__ktTextLog.push(String(text));
+    globalThis.__ktTextDrawLog.push({ text: String(text), x, y, font: ctx.font });
+  };
   // 最後に指示された座標変換。キャンバスの画素数と食い違うと、絵が画面から
   // はみ出すか小さく寄る。大きさだけ見ていると気づけないので記録する。
   ctx.setTransform = (a, b, c, d, e, f) => { globalThis.__ktTransform = [a, b, c, d, e, f]; };
