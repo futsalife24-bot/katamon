@@ -477,6 +477,12 @@ test.describe('対象ゲームの端末戻る操作', () => {
     const closeWatcherSupported = await page.evaluate(() => typeof window.CloseWatcher === 'function');
     if (closeWatcherSupported) {
       await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(false);
+      // v138〜v164の再読み込みなどで同じゲームURLのガードが3枚残った実機状態を再現する。
+      await page.evaluate(() => {
+        history.pushState({ legacyKatamonGuard: 1 }, '', '?legacy-guard=1');
+        history.pushState({ legacyKatamonGuard: 2 }, '', '?legacy-guard=2');
+        history.pushState({ legacyKatamonGuard: 3 }, '', '?legacy-guard=3');
+      });
       await page.keyboard.press('Escape');
     } else {
       await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);

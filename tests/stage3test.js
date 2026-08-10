@@ -2104,8 +2104,14 @@ function check(name, value) {
     && htmlText.includes('id="deviceBackExit"'));
   check('CloseWatcher cancels the close request before showing the in-game confirmation',
     /new window\.CloseWatcher\(\)[\s\S]{0,500}addEventListener\('cancel',[\s\S]{0,240}event\.preventDefault\(\);[\s\S]{0,160}handleDeviceBackRequest\(\);/.test(htmlText));
-  check('explicit exit destroys CloseWatcher and uses one back, while fallback keeps two steps',
-    /function confirmDeviceExit\(\)[\s\S]{0,360}exitBackSteps = closeWatcherExit \? 1 : 2;[\s\S]{0,120}destroyDeviceBackCloseWatcher\(\);[\s\S]{0,160}continueConfirmedDeviceExit\(\);/.test(htmlText));
+  check('explicit exit counts legacy same-app entries and requests only one history traversal',
+    /function confirmedDeviceExitHistoryDelta\(\)[\s\S]{0,1400}normalizedDeviceBackAppLocation\(entries\[index\]\.url\)/.test(htmlText)
+    && /function continueConfirmedDeviceExit\(historyDelta = 1\)[\s\S]{0,260}history\.go\(-Math\.max\(1, historyDelta\)\)/.test(htmlText)
+    && /function confirmDeviceExit\(\)[\s\S]{0,300}exitBackSteps = 1;[\s\S]{0,120}destroyDeviceBackCloseWatcher\(\);[\s\S]{0,300}continueConfirmedDeviceExit\(historyDelta\);/.test(htmlText));
+  check('standalone launch attempts window close instead of relying on a missing back entry',
+    /function closeStandaloneDeviceBackWindow\(\)[\s\S]{0,500}window\.close\(\);[\s\S]{0,450}if \(closeStandaloneDeviceBackWindow\(\)\)/.test(htmlText));
+  check('fallback reload reuses an existing Katamon guard instead of stacking another one',
+    /function armBackTrap\(\)[\s\S]{0,220}history\.state && history\.state\.katamonGuard === true[\s\S]{0,100}backTrapDepth = 1;/.test(htmlText));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 
