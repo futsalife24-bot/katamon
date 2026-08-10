@@ -625,6 +625,42 @@ check('大型の最遠視点もマップ横幅100%を見渡せる',
     && Math.abs(largeFreeCamera.sliderValue - standardFreeCamera.sliderValue) <= 0.01
     && Math.abs(largeWidthCoverage - standardWidthCoverage) <= 0.001,
   JSON.stringify({ standardFreeCamera, largeFreeCamera, standardWidthCoverage, largeWidthCoverage }));
+
+// 大型闘技場は横幅だけ2160へ広がっても、三段棚・外壁・吊り障害物が標準用のY座標に
+// 残っていた。そのため全景にすると上側へ固まり、下半分がほぼ空になっていた。
+// 標準(660高)の構図を大型(960高)へ同比率で広げ、縦の空間も使うことを固定する。
+kt.setTerrain('tieredBasin');
+const largeArenaLayout = kt.arenaLayoutForTest();
+const largeArenaScale = 960 / 660;
+const expectedLargeShelves = [
+  { y: 365 * largeArenaScale, bottom: 387 * largeArenaScale, reach: 0.205 },
+  { y: 445 * largeArenaScale, bottom: 468 * largeArenaScale, reach: 0.235 },
+  { y: 525 * largeArenaScale, bottom: 549 * largeArenaScale, reach: 0.265 }
+];
+const sameNumber = (actual, expected) => Math.abs(actual - expected) <= 1e-9;
+check('大型闘技場は外壁と三段足場を高さ960へ広げる',
+  sameNumber(largeArenaLayout.wallBottom, 625 * largeArenaScale)
+    && largeArenaLayout.shelves.length === expectedLargeShelves.length
+    && largeArenaLayout.shelves.every((shelf, index) => (
+      sameNumber(shelf.y, expectedLargeShelves[index].y)
+        && sameNumber(shelf.bottom, expectedLargeShelves[index].bottom)
+        && shelf.reach === expectedLargeShelves[index].reach
+    )),
+  JSON.stringify(largeArenaLayout));
+check('大型闘技場の吊り障害物も高さ960の範囲へ広げる',
+  largeArenaLayout.obstacles.length >= 2
+    && largeArenaLayout.obstacles.every(obstacle => (
+      obstacle.anchorY >= 92 * largeArenaScale
+        && obstacle.anchorY < 126 * largeArenaScale
+        && obstacle.y >= 238 * largeArenaScale
+        && obstacle.y < 426 * largeArenaScale
+    )),
+  JSON.stringify(largeArenaLayout.obstacles));
+const largeArenaLeftSpawn = kt.placeOnGround('p1', kt.stageW() * 0.18);
+const largeArenaRightSpawn = kt.placeOnGround('e1', kt.stageW() * 0.82);
+check('大型闘技場の出撃位置は広げた上段足場に乗る',
+  largeArenaLeftSpawn.y > 480 && largeArenaRightSpawn.y > 480,
+  JSON.stringify({ largeArenaLeftSpawn, largeArenaRightSpawn }));
 // v157/v158は大型の遠い保存値を自動で660/960（表示69%）へ補正していた。
 // 新しい距離設定がまだ無い端末でこの値を生倍率として読むと、修正版でも大型だけ
 // 途中の距離から始まるため、旧版が作った69%は「最遠」として一度だけ移行する。
@@ -652,6 +688,20 @@ check('全景から拡大すると手番キャラへ縦横とも寄る',
 // 以降の既存ケースは標準サイズ前提なので、ここで元へ戻す。
 kt.changeFreeOption('stageSize', -1);
 kt.startFreeMatch();
+kt.setTerrain('tieredBasin');
+const standardArenaLayout = kt.arenaLayoutForTest();
+check('標準闘技場の従来配置は変えない',
+  standardArenaLayout.wallBottom === 625
+    && JSON.stringify(standardArenaLayout.shelves) === JSON.stringify([
+      { y: 365, bottom: 387, reach: 0.205 },
+      { y: 445, bottom: 468, reach: 0.235 },
+      { y: 525, bottom: 549, reach: 0.265 }
+    ])
+    && standardArenaLayout.obstacles.every(obstacle => (
+      obstacle.anchorY >= 92 && obstacle.anchorY < 126
+        && obstacle.y >= 238 && obstacle.y < 426
+    )),
+  JSON.stringify(standardArenaLayout));
 
 let freeThrew = null;
 try { playMatch(60000); } catch (e) { freeThrew = e; }

@@ -569,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v160-full-map-overview';
+  const BUILD_ID = 'v161-large-arena-layout';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1414,7 +1414,8 @@
   let FLOOR_Y = STAGE_H;         // 「その列に地面が無い」ことを表す番兵。実在の地形の底ではない
   // 地形の底。DEAD LINEより下には地面を置かない。こうすると「床が抜けたか」が
   // 目で見て分かるようになり、見えない数pxの差で生死が反転しなくなる。
-  // 闘技場(tieredBasin)は元からこの作りで、外壁の底625・棚の底387/468/549はすべてこの上。
+  // 闘技場(tieredBasin)は元からこの作りで、標準時の外壁の底625・棚の底387/468/549はすべてこの上。
+  // 大型時は arenaScaleY() で960高へ同比率に広げるため、同じ余白比率を保ったまま死線より上で完結する。
   // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。共通化した通常弾のクレーター半径は
   // 44pxなので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
   // (「地形大破壊」という技の役割どおりの挙動として意図的に許容する)。
@@ -1739,7 +1740,7 @@
       arenaDecorationCtx.restore();
     };
 
-    for (const shelf of ARENA_SHELVES) {
+    for (const shelf of arenaShelves()) {
       const shelfEdge = STAGE_W * shelf.reach;
       // 中央側はキャラ1体分以上あけ、柵の切れ目から能動的に一段下へ降りられる見た目にする。
       const exitGap = 54;
@@ -1882,7 +1883,7 @@
       }
 
       // 三段棚の上面は真鍮の縁と鋲で補強する。
-      for (const shelf of ARENA_SHELVES) {
+      for (const shelf of arenaShelves()) {
         terrainCtx.fillStyle = 'rgba(202,143,58,0.72)';
         terrainCtx.fillRect(0, shelf.y, STAGE_W, 4);
         terrainCtx.fillStyle = 'rgba(246,192,91,0.82)';
@@ -2251,18 +2252,31 @@
   }
 
   const ARENA_WALL_RATIO = 0.095;
-  const ARENA_SHELVES = Object.freeze([
+  const ARENA_STANDARD_HEIGHT = 660;
+  const ARENA_STANDARD_WALL_BOTTOM = 625;
+  const ARENA_STANDARD_SHELVES = Object.freeze([
     Object.freeze({ y: 365, bottom: 387, reach: 0.205 }),
     Object.freeze({ y: 445, bottom: 468, reach: 0.235 }),
     Object.freeze({ y: 525, bottom: 549, reach: 0.265 })
   ]);
+  function arenaScaleY(y) {
+    return y * STAGE_H / ARENA_STANDARD_HEIGHT;
+  }
+  function arenaShelves() {
+    return ARENA_STANDARD_SHELVES.map(shelf => ({
+      y: arenaScaleY(shelf.y),
+      bottom: arenaScaleY(shelf.bottom),
+      reach: shelf.reach
+    }));
+  }
 
   // 左右の外壁から3本ずつ棚が内側へ伸び、中央下部は完全な奈落になる闘技場マップ。
   // 高さ1本のハイトマップでは庇の下の空間を表現できないため、列ごとの複数区間で専用構築する。
   function buildMortarShelfTerrain(segments, hm) {
     // 外壁は画面上端より先まで続くため、上に乗れる「台座」にはならない。
     const wallTop = 0;
-    const wallBottom = 625;
+    const wallBottom = arenaScaleY(ARENA_STANDARD_WALL_BOTTOM);
+    const shelves = arenaShelves();
     // 上段＜中段＜下段の順で少しずつ長くし、中央へ歩けば一段下の棚へ降りられるようにする。
 
     for (let c = 0; c < TERRAIN_COLS; c++) {
@@ -2274,7 +2288,7 @@
         // 外壁は画面上端から底まで一枚の塊。ここへ各棚が横からつながる。
         columnSegments.push([wallTop, wallBottom]);
       } else {
-        for (const shelf of ARENA_SHELVES) {
+        for (const shelf of shelves) {
           if (edgeDistance <= shelf.reach) columnSegments.push([shelf.y, shelf.bottom]);
         }
       }
@@ -2465,8 +2479,10 @@
       arenaObstacles.push({
         x,
         anchorX: x + (random() - 0.5) * 70,
-        anchorY: 92 + random() * 34,
-        y: 238 + random() * 188,
+        // 標準と大型で、全景にした時の縦構図を同じにする。半径や揺れ幅は
+        // ゲーム内の実寸なので拡大せず、吊るす高さと本体の高さだけを広げる。
+        anchorY: arenaScaleY(92 + random() * 34),
+        y: arenaScaleY(238 + random() * 188),
         radius: 22 + Math.floor(random() * 7),
         sway: 9 + random() * 9,
         phase: random() * Math.PI * 2,

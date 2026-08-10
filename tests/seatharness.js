@@ -94,6 +94,22 @@ const HOOK = `
     cpuStepIsSafe: (u, toX) => cpuStepIsSafe(u, toX),
     placeOnGround: (id, x) => { const u = unitById(id); if (Number.isFinite(x)) u.x = x; initUnitOnGround(u); return { x: u.x, y: u.y }; },
     stageW: () => STAGE_W,
+    arenaLayoutForTest: () => {
+      const shelves = typeof arenaShelves === 'function'
+        ? arenaShelves()
+        : (typeof ARENA_SHELVES === 'undefined' ? [] : ARENA_SHELVES);
+      return {
+        stageHeight: STAGE_H,
+        wallBottom: currentPattern === 'tieredBasin'
+          ? currentSegments?.[0]?.[0]?.[1] ?? null
+          : null,
+        shelves: shelves.map(shelf => ({ ...shelf })),
+        obstacles: arenaObstacles.map(obstacle => ({
+          anchorY: obstacle.anchorY,
+          y: obstacle.y
+        }))
+      };
+    },
     arenaWallExtension: () => ARENA_WALL_SKY_EXTENSION,
     arenaWallRatio: () => ARENA_WALL_RATIO,
     isSolidAt: (x, y) => isSolidAt(x, y),
