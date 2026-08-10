@@ -349,6 +349,13 @@ function check(name, value) {
       && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-cartoon-explosion-567193/')
       && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
       && thirdPartyAudio.includes('2026-08-09'));
+  check('the EDM Zap special cut-in sound is pinned, versioned, cached and licensed',
+    fileHash('assets/special-cutin-edm-zap.mp3') === 'dc50a111cbea'
+      && htmlForAudio.includes("assets/special-cutin-edm-zap.mp3?v=1")
+      && swText.includes("'./assets/special-cutin-edm-zap.mp3?v=1'")
+      && thirdPartyAudio.includes('EDM Zap')
+      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/edm-zap-246568/')
+      && thirdPartyAudio.includes('2026-08-10'));
   const BONUS_TRACK_PINS = [
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
     { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },
