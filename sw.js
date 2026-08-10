@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v158-stale-page-refresh';
+const CACHE_VERSION = 'katamon-pwa-v159-camera-framing';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

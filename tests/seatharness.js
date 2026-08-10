@@ -99,8 +99,23 @@ const HOOK = `
     isSolidAt: (x, y) => isSolidAt(x, y),
     minCameraZoom: () => MIN_CAMERA_ZOOM,
     controlPanelY: () => CONTROL_PANEL_Y,
-    cameraForTest: () => ({ zoom: cameraZoom, x: cameraX, y: cameraY, visibleHeight: visibleWorldHeight() }),
-    setCameraZoomForTest: (zoom) => { cameraZoom = Number(zoom); },
+    cameraForTest: () => ({
+      zoom: cameraZoom,
+      x: cameraX,
+      y: cameraY,
+      visibleWidth: visibleWorldWidth(),
+      visibleHeight: visibleWorldHeight(),
+      stageTopY: worldToScreenY(0),
+      stageBottomY: worldToScreenY(STAGE_H),
+      centerWorldX: cameraX + visibleWorldWidth() / 2,
+      centerWorldY: cameraY + visibleWorldHeight() / 2,
+      sliderValue: cameraSliderValue()
+    }),
+    setCameraZoomForTest: (zoom) => { cameraZoom = Number(zoom); cameraDistanceSetting = null; },
+    setCameraSliderValueForTest: (value) => setCameraZoomFromSlider({
+      x: CAMERA_SLIDER.x + CAMERA_SLIDER.w * Number(value),
+      y: CAMERA_SLIDER.y
+    }),
     deadLineY: () => DEAD_LINE_Y,
     groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
