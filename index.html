@@ -235,9 +235,28 @@
     color: #ffe2a1; font: 400 15px var(--katamon-font-ui); cursor: pointer;
     border: 2px solid #ffd24a; border-radius: 4px; background: linear-gradient(180deg,#37464d,#091116);
   }
-  /* キャラ選択はルームに入ってから。合言葉を打つ画面では選ぶ意味がない。 */
-  #onlineCharacter { display: none; }
-  #onlineLobby.in-room #onlineCharacter { display: block; }
+  /* キャラ選択はルームに入ってから。全身絵も見せ、名前だけで選ばせない。 */
+  #onlineCharacterPicker { display: none; }
+  #onlineLobby.in-room #onlineCharacterPicker { display: flex; }
+  #onlineCharacterPicker {
+    width: 100%; box-sizing: border-box; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px;
+    border: 1px solid rgba(199,131,53,.72); border-radius: 5px;
+    background: linear-gradient(180deg,rgba(51,62,66,.96),rgba(8,17,22,.97));
+    box-shadow: inset 0 0 0 1px rgba(255,226,161,.08), 0 3px 10px rgba(0,0,0,.28);
+  }
+  #onlineCharacterPortrait {
+    flex: 0 0 82px; width: 82px; height: 72px; display: flex; align-items: center; justify-content: center;
+    border-right: 1px solid rgba(255,210,74,.28); padding-right: 9px;
+  }
+  #onlineCharacterPreview {
+    display: block; width: 100%; height: 100%; object-fit: contain; object-position: center;
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,.72));
+  }
+  #onlineCharacterChoice { flex: 1 1 auto; min-width: 0; }
+  #onlineCharacterChoice label {
+    display: block; color: #ffd56a; font: 900 10px/1.2 var(--katamon-font-ui); letter-spacing: .08em; text-align: left;
+  }
+  #onlineCharacter { display: block; margin-top: 4px; padding: 8px 7px; font-size: 16px; }
   #onlineLobby.in-room #onlineRoomPanel { display: block; }
   #onlineLobby.in-room #onlineCreate, #onlineLobby.in-room #onlineJoin { display: none; }
   #onlineRoomPanel { display: none; margin-top: 2px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); text-align: left; }
@@ -290,7 +309,7 @@
   .battleRecordNote { margin-top: 4px; color: #8fb6c8; font-size: 10px; line-height: 1.45; }
   /* 結果ロビーでは変更できない設定とキャラ欄を畳み、更新後の戦績を主役にする。 */
   #onlineLobby.in-room.results #onlineSettings,
-  #onlineLobby.in-room.results #onlineCharacter { display: none; }
+  #onlineLobby.in-room.results #onlineCharacterPicker { display: none; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   #onlineCustomStage {
@@ -507,7 +526,15 @@
           <button id="onlineCustomStage" type="button" data-selected="false">カスタムステージを選ぶ</button>
         </div>
       </div>
-      <select id="onlineCharacter" aria-label="使用モンスター"></select>
+      <div id="onlineCharacterPicker">
+        <div id="onlineCharacterPortrait">
+          <img id="onlineCharacterPreview" alt="" draggable="false">
+        </div>
+        <div id="onlineCharacterChoice">
+          <label for="onlineCharacter">YOUR MONSTER</label>
+          <select id="onlineCharacter" aria-label="使用モンスター"></select>
+        </div>
+      </div>
       <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・演習は遊べます。</div>
     </div>
     <div id="onlineLobbyButtons">
@@ -588,7 +615,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v163-lobby-seat-order';
+  const BUILD_ID = 'v164-lobby-monster-images';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -6726,6 +6753,7 @@
   const onlineRoomInput = document.getElementById('onlineRoomInput');
   const onlineRoomCodeEl = document.getElementById('onlineRoomCode');
   const onlineCharacterEl = document.getElementById('onlineCharacter');
+  const onlineCharacterPreviewEl = document.getElementById('onlineCharacterPreview');
   const onlineLobbyStatusEl = document.getElementById('onlineLobbyStatus');
   const onlineCopyBtn = document.getElementById('onlineCopy');
   const onlineSlotsEl = document.getElementById('onlineSlots');
@@ -6750,12 +6778,14 @@
   }
   function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); syncBgm(); }
   function populateOnlineCharacters() {
-    if (!onlineCharacterEl || onlineCharacterEl.dataset.ready) return;
-    for (const key of CHARACTER_LIST) {
-      const option = document.createElement('option'); option.value = key; option.textContent = CHARACTERS[key].name;
-      onlineCharacterEl.appendChild(option);
+    if (!onlineCharacterEl) return;
+    if (!onlineCharacterEl.dataset.ready) {
+      for (const key of CHARACTER_LIST) {
+        const option = document.createElement('option'); option.value = key; option.textContent = CHARACTERS[key].name;
+        onlineCharacterEl.appendChild(option);
+      }
+      onlineCharacterEl.dataset.ready = '1';
     }
-    onlineCharacterEl.dataset.ready = '1';
     if (onlineTerrainEl && !onlineTerrainEl.dataset.ready) {
       FREE_TERRAIN_OPTIONS.forEach(option => { const el = document.createElement('option'); el.value = option.key; el.textContent = `地形: ${option.name}`; onlineTerrainEl.appendChild(el); });
       onlineTerrainEl.dataset.ready = '1';
@@ -6764,6 +6794,7 @@
       WIND_OPTIONS.forEach(option => { const el = document.createElement('option'); el.value = option.key; el.textContent = `風: ${option.name}`; onlineWindEl.appendChild(el); });
       onlineWindEl.dataset.ready = '1';
     }
+    updateOnlineCharacterPreview();
   }
   function openOnlineLobby() {
     if (!onlineLobbyEl) return;
@@ -6786,6 +6817,15 @@
   }
   function selectedOnlineCharacter() {
     return onlineCharacterEl && CHARACTER_LIST.includes(onlineCharacterEl.value) ? onlineCharacterEl.value : CHARACTER_LIST[0];
+  }
+  function updateOnlineCharacterPreview() {
+    if (!onlineCharacterPreviewEl) return;
+    const key = selectedOnlineCharacter();
+    const character = CHARACTERS[key];
+    const art = charImages[key];
+    onlineCharacterPreviewEl.dataset.character = key;
+    onlineCharacterPreviewEl.alt = character ? character.name : '';
+    if (art && art.src && onlineCharacterPreviewEl.src !== art.src) onlineCharacterPreviewEl.src = art.src;
   }
   function defaultLobbySettings() { return { terrain: 'random', wind: 'random', turnsPerPlayer: 15, format: '1v1', stageSize: 'standard', revision: 1 }; }
   function normalizeLobbySettings(value) {
@@ -13153,6 +13193,7 @@
     } catch (_) { onlineLobbyStatus(`合言葉: ${code}（長押しでコピーしてください）`); }
   });
   if (onlineReadyBtn) onlineReadyBtn.addEventListener('click', () => { if (!onlineLobbyBusy) commitOwnCharacter(); });
+  if (onlineCharacterEl) onlineCharacterEl.addEventListener('change', updateOnlineCharacterPreview);
   if (onlineStartBtn) onlineStartBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseStart(); });
   if (onlineRematchBtn) onlineRematchBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseRematch(); });
   if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseReturnLobby(); });
