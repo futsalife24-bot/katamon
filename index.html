@@ -273,6 +273,23 @@
     background: #6d2320; border: 1px solid #e08a72; border-radius: 3px; padding: 3px 7px; cursor: pointer;
   }
   .onlineSeatRow .seatReleaseBtn:active { background: #8c2e2a; }
+  /* 対人戦績はFirebaseへ保存せず、この端末だけに残す。部屋では設定より先に見える位置へ置く。 */
+  #onlineBattleRecord {
+    margin: 8px 0 6px; padding: 9px 10px; border: 1px solid rgba(199,131,53,.52);
+    border-radius: 4px; background: linear-gradient(180deg, rgba(52,40,24,.55), rgba(8,14,18,.78));
+    box-shadow: inset 0 1px 0 rgba(255,226,161,.08);
+  }
+  .battleRecordHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+  .battleRecordTitle { color: #ffe2a1; font-size: 12px; font-weight: 900; letter-spacing: .04em; }
+  .battleRecordLocal { color: #8fa0aa; font-size: 9px; white-space: nowrap; }
+  .battleRecordLine { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 11px; line-height: 1.45; }
+  .battleRecordLine + .battleRecordLine { border-top: 1px solid rgba(255,255,255,.045); }
+  .battleRecordLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c7d1d7; }
+  .battleRecordValue { flex: 0 0 auto; color: #ffd24a; font-weight: 900; }
+  .battleRecordNote { margin-top: 4px; color: #8fb6c8; font-size: 10px; line-height: 1.45; }
+  /* 結果ロビーでは変更できない設定とキャラ欄を畳み、更新後の戦績を主役にする。 */
+  #onlineLobby.in-room.results #onlineSettings,
+  #onlineLobby.in-room.results #onlineCharacter { display: none; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
   #onlineCustomStage {
@@ -479,6 +496,7 @@
       <button id="onlineJoin" type="button">部屋に入る</button>
       <div id="onlineRoomPanel">
         <div id="onlineSlots"></div>
+        <div id="onlineBattleRecord" aria-label="この端末の対人戦績"></div>
         <div id="onlineSettings">
           <select id="onlineTerrain" aria-label="地形"></select>
           <select id="onlineWind" aria-label="風"></select>
@@ -569,7 +587,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v161-large-arena-layout';
+  const BUILD_ID = 'v162-room-rival-record';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -5131,6 +5149,7 @@
   const FIREBASE_SEATS = ['p1', 'e1', 's1', 's2'];
   const FIREBASE_PLAYER_SEATS = ['p1', 'e1'];
   const FIREBASE_ROUND_RE = /^[0-9a-f]{48}$/;
+  const FIREBASE_RIVAL_ID_RE = /^[0-9a-f]{64}$/;
   const LOOPBACK_ROOM = 'katamon-loopback';
   // v101までの「すぐ対戦」は世界にこの1部屋しか無く、3人目は必ず弾かれていた。
   // v102からは open インデックス経由のマッチメイキングへ移行したので、もう使わない。
@@ -5675,6 +5694,10 @@
     // name はランキングの表示名。未登録なら省略される。
     if ((msg.t === 'lobbyState' || msg.t === 'presence') && msg.name != null
         && (typeof msg.name !== 'string' || msg.name.length > MAX_PLAYER_NAME_LENGTH)) return { ok: false, reason: `${msg.t}.name` };
+    // rivalId は端末IDそのものではなく、用途を分けてSHA-256化した匿名の照合値。
+    // 名前だけで同一人物扱いはせず、この2種の入室通知以外へも載せない。
+    if (msg.rivalId != null && ((msg.t !== 'lobbyState' && msg.t !== 'presence')
+        || typeof msg.rivalId !== 'string' || !FIREBASE_RIVAL_ID_RE.test(msg.rivalId))) return { ok: false, reason: `${msg.t}.rivalId` };
     if (msg.t === 'lobbyState') return typeof msg.status === 'string' && msg.status.length <= 16 && (!msg.nextRoundId || FIREBASE_ROUND_RE.test(msg.nextRoundId)) && (msg.autoReady == null || typeof msg.autoReady === 'boolean') ? { ok: true } : { ok: false, reason: 'lobbyState.status' };
     if (msg.t === 'settings') return msg.settings && typeof msg.settings === 'object' ? { ok: true } : { ok: false, reason: 'settings.payload' };
     // ready は準備完了の取り消しも運ぶ。value 省略は旧形式で「準備完了」の意味。
@@ -6408,7 +6431,8 @@
         }
         break;
       case 'presence':
-        rememberFirebaseName(msg);
+        rememberFirebaseIdentity(msg);
+        renderFirebaseLobby();
         if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);
         break;
       case 'join':
@@ -6558,6 +6582,7 @@
           winner = msg.winner;
           beginMatchEnd(msg.reason);
           online.phase = 'results';
+          recordFirebaseMatchResultOnce();
           scheduleFirebaseResultsLobby();
           break;
         }
@@ -6687,6 +6712,7 @@
     }
     online.resultSent = true;
     online.phase = online.kind === 'firebase' ? 'results' : 'ended';
+    if (online.kind === 'firebase') recordFirebaseMatchResultOnce();
     logOnlineEvent({ type: 'sendResult', ok: true, winner, reason, seat: online.seat, hadAction: !!actionId });
     const result = { t: 'result', winner, reason, units: units.map(u => ({ id: u.id, hp: u.hp })), ...(actionId ? { actionId, unitId: actionUnitId } : {}) };
     // 決着は再送しても受信側がphaseで一度しか適用しない。1通落ちても片方だけ残さない。
@@ -6702,6 +6728,7 @@
   const onlineLobbyStatusEl = document.getElementById('onlineLobbyStatus');
   const onlineCopyBtn = document.getElementById('onlineCopy');
   const onlineSlotsEl = document.getElementById('onlineSlots');
+  const onlineBattleRecordEl = document.getElementById('onlineBattleRecord');
   const onlineTerrainEl = document.getElementById('onlineTerrain');
   const onlineWindEl = document.getElementById('onlineWind');
   const onlineTurnsEl = document.getElementById('onlineTurns');
@@ -6832,15 +6859,289 @@
   }
   // ランキングと同じ名前をルームでも見せる。未登録なら何も出さない。
   const MAX_PLAYER_NAME_LENGTH = 12; // gas/ranking.gs の MAX_NAME_LENGTH と揃える
-  function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
-  function rememberFirebaseName(msg) {
-    if (!online || !msg || !msg.seat || typeof msg.name !== 'string') return;
-    if (!online.seatNames) online.seatNames = {};
-    online.seatNames[msg.seat] = msg.name.slice(0, MAX_PLAYER_NAME_LENGTH);
+  const BATTLE_RECORD_KEY = 'katamon_battle_record_v1';
+  const BATTLE_RECORD_VERSION = 1;
+  const BATTLE_RECORD_MAX_RECENT = 20;
+  const BATTLE_RECORD_MAX_PROCESSED = 500;
+  const BATTLE_RECORD_MAX_RIVALS = 100;
+  const RIVAL_ID_PURPOSE = 'katamon-rival-v1:';
+
+  function emptyBattleCounts() { return { wins: 0, losses: 0, draws: 0 }; }
+  function emptyBattleRecord() {
+    return { version: BATTLE_RECORD_VERSION, total: emptyBattleCounts(), characters: {}, rivals: {}, recent: [], processedRoundIds: [] };
   }
+  let battleRecord = emptyBattleRecord();
+
+  function safeBattleCount(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 999999) : 0;
+  }
+  function normalizeBattleCounts(value) {
+    return {
+      wins: safeBattleCount(value && value.wins),
+      losses: safeBattleCount(value && value.losses),
+      draws: safeBattleCount(value && value.draws)
+    };
+  }
+  function normalizeBattleName(value) {
+    return typeof value === 'string' ? value.replace(/[\r\n\t]/g, ' ').trim().slice(0, MAX_PLAYER_NAME_LENGTH) : '';
+  }
+  // 保存内容はユーザーが手で書き換えられる。読めない項目だけ捨て、ゲーム本体まで止めない。
+  function normalizeBattleRecord(value) {
+    const clean = emptyBattleRecord();
+    if (!value || typeof value !== 'object') return clean;
+    clean.total = normalizeBattleCounts(value.total);
+    if (value.characters && typeof value.characters === 'object') {
+      for (const key of CHARACTER_LIST) {
+        if (value.characters[key] && typeof value.characters[key] === 'object') clean.characters[key] = normalizeBattleCounts(value.characters[key]);
+      }
+    }
+    if (value.rivals && typeof value.rivals === 'object') {
+      for (const [id, row] of Object.entries(value.rivals)) {
+        if (!FIREBASE_RIVAL_ID_RE.test(id) || !row || typeof row !== 'object') continue;
+        clean.rivals[id] = {
+          name: normalizeBattleName(row.name),
+          ...normalizeBattleCounts(row),
+          lastPlayedAt: Number.isFinite(row.lastPlayedAt) && row.lastPlayedAt >= 0 ? Math.floor(row.lastPlayedAt) : 0
+        };
+      }
+    }
+    if (Array.isArray(value.recent)) {
+      clean.recent = value.recent.slice(0, BATTLE_RECORD_MAX_RECENT).flatMap(row => {
+        if (!row || !FIREBASE_ROUND_RE.test(row.matchId || '') || !['win', 'loss', 'draw'].includes(row.outcome)
+            || !CHARACTER_LIST.includes(row.character) || !Array.isArray(row.rivals)) return [];
+        const rivals = [...new Set(row.rivals.filter(id => FIREBASE_RIVAL_ID_RE.test(id)))].slice(0, 2);
+        if (!rivals.length) return [];
+        return [{
+          matchId: row.matchId, outcome: row.outcome, character: row.character, rivals,
+          reason: typeof row.reason === 'string' ? row.reason.slice(0, 120) : '',
+          playedAt: Number.isFinite(row.playedAt) && row.playedAt >= 0 ? Math.floor(row.playedAt) : 0
+        }];
+      });
+    }
+    if (Array.isArray(value.processedRoundIds)) {
+      clean.processedRoundIds = [...new Set(value.processedRoundIds.filter(id => FIREBASE_ROUND_RE.test(id)))].slice(-BATTLE_RECORD_MAX_PROCESSED);
+    }
+    return clean;
+  }
+  function loadBattleRecord() {
+    try {
+      const raw = localStorage.getItem(BATTLE_RECORD_KEY);
+      battleRecord = raw ? normalizeBattleRecord(JSON.parse(raw)) : emptyBattleRecord();
+    } catch (_) {
+      battleRecord = emptyBattleRecord();
+    }
+    return battleRecord;
+  }
+  function saveBattleRecord() {
+    try { localStorage.setItem(BATTLE_RECORD_KEY, JSON.stringify(battleRecord)); return true; }
+    catch (_) { return false; } // 容量不足でも対戦そのものは止めない。
+  }
+  function resetBattleRecordForTest() {
+    battleRecord = emptyBattleRecord();
+    try { localStorage.removeItem(BATTLE_RECORD_KEY); } catch (_) { /* テスト用。保存不可でもメモリは戻す */ }
+  }
+  function incrementBattleCounts(counts, outcome) {
+    if (outcome === 'win') counts.wins = safeBattleCount(counts.wins + 1);
+    else if (outcome === 'loss') counts.losses = safeBattleCount(counts.losses + 1);
+    else counts.draws = safeBattleCount(counts.draws + 1);
+  }
+  function opponentRecordKey(rivalId) { return FIREBASE_RIVAL_ID_RE.test(rivalId || '') ? rivalId : ''; }
+  // 同じroundIdのresult再送は何回来ても一度だけ。相手が全員CPUなら対人戦績には入れない。
+  function recordMatchResultOnce(detail) {
+    if (!detail || !FIREBASE_ROUND_RE.test(detail.matchId || '') || !['win', 'loss', 'draw'].includes(detail.outcome)
+        || !CHARACTER_LIST.includes(detail.character) || battleRecord.processedRoundIds.includes(detail.matchId)) return false;
+    const rivals = [];
+    for (const candidate of Array.isArray(detail.rivals) ? detail.rivals : []) {
+      const id = opponentRecordKey(candidate && candidate.id);
+      if (!id || rivals.some(row => row.id === id)) continue;
+      rivals.push({ id, name: normalizeBattleName(candidate.name) });
+    }
+    if (!rivals.length) return false;
+    const playedAt = Number.isFinite(detail.playedAt) && detail.playedAt >= 0 ? Math.floor(detail.playedAt) : Date.now();
+    incrementBattleCounts(battleRecord.total, detail.outcome);
+    if (!battleRecord.characters[detail.character]) battleRecord.characters[detail.character] = emptyBattleCounts();
+    incrementBattleCounts(battleRecord.characters[detail.character], detail.outcome);
+    for (const rival of rivals) {
+      if (!battleRecord.rivals[rival.id]) battleRecord.rivals[rival.id] = { name: '', ...emptyBattleCounts(), lastPlayedAt: 0 };
+      const row = battleRecord.rivals[rival.id];
+      if (rival.name) row.name = rival.name;
+      incrementBattleCounts(row, detail.outcome);
+      row.lastPlayedAt = playedAt;
+    }
+    // 友だち以外の部屋へ大量に入ってもlocalStorageを膨らませ続けない。
+    const rivalIds = Object.keys(battleRecord.rivals);
+    if (rivalIds.length > BATTLE_RECORD_MAX_RIVALS) {
+      rivalIds.sort((a, b) => battleRecord.rivals[b].lastPlayedAt - battleRecord.rivals[a].lastPlayedAt)
+        .slice(BATTLE_RECORD_MAX_RIVALS).forEach(id => { delete battleRecord.rivals[id]; });
+    }
+    battleRecord.recent.unshift({
+      matchId: detail.matchId, outcome: detail.outcome, character: detail.character,
+      rivals: rivals.map(row => row.id), reason: typeof detail.reason === 'string' ? detail.reason.slice(0, 120) : '', playedAt
+    });
+    battleRecord.recent = battleRecord.recent.slice(0, BATTLE_RECORD_MAX_RECENT);
+    battleRecord.processedRoundIds.push(detail.matchId);
+    battleRecord.processedRoundIds = battleRecord.processedRoundIds.slice(-BATTLE_RECORD_MAX_PROCESSED);
+    saveBattleRecord();
+    return true;
+  }
+
+  function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
+  async function deriveRivalId(deviceId) {
+    if (typeof deviceId !== 'string' || !deviceId) return '';
+    return sha256Hex(`${RIVAL_ID_PURPOSE}${deviceId}`);
+  }
+  async function firebaseIdentityFieldsForDevice(deviceId, name) {
+    const fields = { name: normalizeBattleName(name) };
+    const rivalId = await deriveRivalId(deviceId);
+    if (FIREBASE_RIVAL_ID_RE.test(rivalId)) fields.rivalId = rivalId;
+    return fields;
+  }
+  let localRivalIdSource = '';
+  let localRivalIdValue = '';
+  let localRivalIdPromise = null;
+  function localRivalId() {
+    const source = rankingProfile && typeof rankingProfile.deviceId === 'string' ? rankingProfile.deviceId : '';
+    if (source !== localRivalIdSource) {
+      localRivalIdSource = source;
+      localRivalIdValue = '';
+      localRivalIdPromise = null;
+    }
+    if (FIREBASE_RIVAL_ID_RE.test(localRivalIdValue)) return Promise.resolve(localRivalIdValue);
+    if (!localRivalIdPromise) {
+      localRivalIdPromise = deriveRivalId(source).then(value => {
+        if (source === localRivalIdSource && FIREBASE_RIVAL_ID_RE.test(value)) localRivalIdValue = value;
+        return source === localRivalIdSource ? localRivalIdValue : '';
+      }).catch(() => '');
+    }
+    return localRivalIdPromise;
+  }
+  // 既存のpresence / lobbyStateへ匿名IDを1項目足すだけ。戦績の数値は一切ここへ渡さない。
+  async function sendFirebaseIdentityPacket(packet) {
+    const session = online;
+    let identity = { name: localPlayerName() };
+    try { identity = await firebaseIdentityFieldsForDevice(rankingProfile && rankingProfile.deviceId, localPlayerName()); }
+    catch (_) { /* SHAが使えない環境でも名前だけで入室は続ける */ }
+    if (!session || online !== session || session.kind !== 'firebase') return false;
+    return netSend({ ...packet, ...identity });
+  }
+  function firebaseRivalsForSeats(seats) {
+    if (!online) return [];
+    const rows = [];
+    for (const seat of seats || []) {
+      const id = online.seatRivalIds && online.seatRivalIds[seat];
+      if (!FIREBASE_RIVAL_ID_RE.test(id || '') || id === localRivalIdValue || rows.some(row => row.id === id)) continue;
+      rows.push({ id, name: firebaseSeatName(seat), seat });
+    }
+    return rows;
+  }
+  function rememberFirebaseIdentity(msg) {
+    if (!online || !msg || !FIREBASE_SEATS.includes(msg.seat || '')) return;
+    if (typeof msg.name === 'string') {
+      if (!online.seatNames) online.seatNames = {};
+      online.seatNames[msg.seat] = normalizeBattleName(msg.name);
+    }
+    if (FIREBASE_RIVAL_ID_RE.test(msg.rivalId || '')) {
+      if (!online.seatRivalIds) online.seatRivalIds = {};
+      online.seatRivalIds[msg.seat] = msg.rivalId;
+      // 開始直前に通知が前後しても、開始時に座っていた相手だけは結果へ結び直す。
+      if (Array.isArray(online.roundOpponentSeats) && online.roundOpponentSeats.includes(msg.seat)) {
+        online.roundRivals = firebaseRivalsForSeats(online.roundOpponentSeats);
+      }
+      // resultが先、identityが後でも取りこぼさない。同じroundIdは保存側で必ず一度に畳まれる。
+      if (online.phase === 'results' && matchOver) recordFirebaseMatchResultOnce();
+    }
+  }
+  // 既存テストと古い呼び出し名を残しつつ、名前と匿名IDを同じ入口で覚える。
+  function rememberFirebaseName(msg) { rememberFirebaseIdentity(msg); }
   function firebaseSeatName(seat) {
     if (seat === online.seat) return localPlayerName();
     return (online.seatNames && online.seatNames[seat]) || '';
+  }
+  function firebaseOpponentHumanSeats() {
+    if (!online || !FIREBASE_SEAT_TEAM[online.seat]) return [];
+    const ownTeam = FIREBASE_SEAT_TEAM[online.seat];
+    return firebasePlayerSeats().filter(seat => seat !== online.seat && FIREBASE_SEAT_TEAM[seat] !== ownTeam && firebaseSeatOccupied(seat));
+  }
+  function freezeFirebaseRoundRivals() {
+    if (!online || online.kind !== 'firebase' || online.participantRole !== 'player') return [];
+    online.roundOpponentSeats = firebaseOpponentHumanSeats();
+    online.roundRivals = firebaseRivalsForSeats(online.roundOpponentSeats);
+    return online.roundRivals;
+  }
+  function firebaseDisplayedRivals() {
+    if (!online || online.kind !== 'firebase') return [];
+    if (online.phase !== 'lobby' && Array.isArray(online.roundRivals)) return online.roundRivals.slice();
+    return firebaseRivalsForSeats(firebaseOpponentHumanSeats());
+  }
+  function firebaseBattleRecordCharacterKey() {
+    if (!online) return CHARACTER_LIST[0];
+    const unitId = FIREBASE_SEAT_UNIT[online.seat];
+    const started = unitId && online.unitCharacters && online.unitCharacters[unitId];
+    return CHARACTER_LIST.includes(started) ? started : (CHARACTER_LIST.includes(online.selfCharacter) ? online.selfCharacter : CHARACTER_LIST[0]);
+  }
+  function firebaseOutcomeForSeat(resultWinner, seat) {
+    if (resultWinner === 'draw') return 'draw';
+    const ownTeam = FIREBASE_SEAT_TEAM[seat];
+    if (!ownTeam || (resultWinner !== 'player' && resultWinner !== 'cpu')) return '';
+    return resultWinner === ownTeam ? 'win' : 'loss';
+  }
+  function recordFirebaseMatchResultOnce() {
+    if (!online || online.kind !== 'firebase' || online.participantRole !== 'player') return false;
+    const rivals = Array.isArray(online.roundRivals) ? online.roundRivals : firebaseRivalsForSeats(firebaseOpponentHumanSeats());
+    return recordMatchResultOnce({
+      matchId: online.currentRoundId,
+      outcome: firebaseOutcomeForSeat(winner, online.seat),
+      character: firebaseBattleRecordCharacterKey(),
+      rivals,
+      reason: matchEndReason,
+      playedAt: Date.now()
+    });
+  }
+  function battleRecordCountText(counts, includeMatches = true) {
+    const safe = normalizeBattleCounts(counts);
+    const matches = safe.wins + safe.losses + safe.draws;
+    return `${includeMatches ? `${matches}戦 ` : ''}${safe.wins}勝 ${safe.losses}敗 ${safe.draws}分`;
+  }
+  function firebaseBattleRecordResultRows() {
+    if (!online || online.kind !== 'firebase' || online.participantRole !== 'player') return [];
+    const rows = [`通算 ${battleRecordCountText(battleRecord.total, false)}`];
+    const opponents = Array.isArray(online.roundOpponentSeats) ? online.roundOpponentSeats : firebaseOpponentHumanSeats();
+    const rivals = Array.isArray(online.roundRivals) ? online.roundRivals : firebaseRivalsForSeats(opponents);
+    if (!opponents.length) rows.push('相手が全員CPUのため対人戦績には記録しません');
+    else if (!rivals.length) rows.push('相手別戦績は匿名IDを確認できた対戦から記録します');
+    else for (const rival of rivals.slice(0, 2)) {
+      rows.push(`vs ${rival.name || '対戦相手'} ${battleRecordCountText(battleRecord.rivals[rival.id], false)}`);
+    }
+    return rows;
+  }
+  function appendBattleRecordLine(labelText, valueText) {
+    const line = document.createElement('div'); line.className = 'battleRecordLine';
+    const label = document.createElement('span'); label.className = 'battleRecordLabel'; label.textContent = labelText;
+    const value = document.createElement('span'); value.className = 'battleRecordValue'; value.textContent = valueText;
+    line.appendChild(label); line.appendChild(value); onlineBattleRecordEl.appendChild(line);
+  }
+  function renderFirebaseBattleRecord() {
+    if (!onlineBattleRecordEl || !online || online.kind !== 'firebase') return;
+    while (onlineBattleRecordEl.firstChild) onlineBattleRecordEl.removeChild(onlineBattleRecordEl.firstChild);
+    const head = document.createElement('div'); head.className = 'battleRecordHead';
+    const title = document.createElement('span'); title.className = 'battleRecordTitle'; title.textContent = 'この端末の対人戦績';
+    const local = document.createElement('span'); local.className = 'battleRecordLocal'; local.textContent = '端末内だけに保存';
+    head.appendChild(title); head.appendChild(local); onlineBattleRecordEl.appendChild(head);
+    appendBattleRecordLine('通算', battleRecordCountText(battleRecord.total));
+    const character = firebaseBattleRecordCharacterKey();
+    appendBattleRecordLine(CHARACTERS[character].name, battleRecordCountText(battleRecord.characters[character]));
+    const opponents = online.phase !== 'lobby' && Array.isArray(online.roundOpponentSeats) ? online.roundOpponentSeats : firebaseOpponentHumanSeats();
+    const rivals = firebaseDisplayedRivals();
+    for (const rival of rivals.slice(0, 2)) {
+      appendBattleRecordLine(`vs ${rival.name || '対戦相手'}`, battleRecordCountText(battleRecord.rivals[rival.id]));
+    }
+    if (!rivals.length) {
+      const note = document.createElement('div'); note.className = 'battleRecordNote';
+      note.textContent = opponents.length
+        ? '相手の匿名IDを確認中です。戦績の数値は相手へ送信しません。'
+        : (firebaseLobbyIs2v2() ? '相手チームが全員CPUなら、対人戦績には記録しません。' : '対戦相手が入ると、相手別戦績を表示します。');
+      onlineBattleRecordEl.appendChild(note);
+    }
   }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && firebasePlayerSeats().includes(online.seat)); }
@@ -7239,6 +7540,7 @@
       participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
       settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
+      seatNames: {}, seatRivalIds: {}, roundOpponentSeats: null, roundRivals: null,
       customStageIdentity: null,
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
@@ -7283,7 +7585,7 @@
     scheduleFirebaseRoomLease();
     scheduleFirebaseSeatHeartbeat();
     renderFirebaseLobby();
-    if (seat !== 'p1') netSend({ t: 'presence', name: localPlayerName() });
+    if (seat !== 'p1') sendFirebaseIdentityPacket({ t: 'presence' }).catch(() => false);
     if (online.participantRole === 'spectator' && room && room.round && room.round.latestSnapshot) {
       applyFirebaseSpectatorSnapshot({ snap: normalizeFirebaseSnapshot(room.round.latestSnapshot) });
     }
@@ -7458,6 +7760,7 @@
       // resetMatch はCPU戦の前提でユニットを組み直す。オンラインでは席を貼り直す必要がある。
       setOnlineSeat(online.seat);
       logSeatAssignment('hostStart');
+      freezeFirebaseRoundRivals();
       online.phase = 'starting';
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'playing' }) });
       const snap = buildSnapshot();
@@ -7490,6 +7793,7 @@
       applySnapshot(msg.snap);
       setOnlineSeat(online.seat);
       logSeatAssignment('guestStart');
+      freezeFirebaseRoundRivals();
       battleMode = 'normal'; gamePhase = 'battle'; syncBgm({ restartStage: true });
       online.phase = 'playing';
       online.startVerifying = false;
@@ -7576,6 +7880,7 @@
       while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);
       FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));
     }
+    renderFirebaseBattleRecord();
     // 相手が準備完了でもホストは設定を変えられる。変えられたら相手は準備完了を取り消して選び直せる。
     const canEdit = isFirebaseHost() && online.phase === 'lobby';
     if (onlineTerrainEl) onlineTerrainEl.value = online.settings.terrain;
@@ -7642,6 +7947,7 @@
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
+    online.roundOpponentSeats = null; online.roundRivals = null;
     online.startAcks = {};
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
     online.matchStarted = false; online.resultSent = false; online.remoteAction = null; online.localAction = null; online.pendingStart = null; online.startVerifying = false; online.pendingRemoteDamage = null;
@@ -7662,7 +7968,7 @@
       syncFirebaseParticipantRole();
       syncQuickMatchListing();
       if (!online) return;
-      if (broadcast && isFirebaseHost()) netSend({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings, name: localPlayerName() });
+      if (broadcast && isFirebaseHost()) await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
       renderFirebaseLobby();
     } catch (_) { /* SSEは継続し、次のpresenceで再試行する */ }
   }
@@ -7737,7 +8043,7 @@
       // 1vs1は相手が居ないと始まらない。2vs2は空席をCPUが埋めるので人数は問わない。
       if (!firebaseLobbyIs2v2() && !players.e1) { onlineLobbyStatus('対戦者の入室を確認できません。'); return; }
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'revealing', players }) });
-      online.phase = 'revealing'; netSend({ t: 'lobbyState', status: 'revealing', slots: online.slots, settings: online.settings }); maybeRevealCharacter(); renderFirebaseLobby();
+      online.phase = 'revealing'; sendFirebaseIdentityPacket({ t: 'lobbyState', status: 'revealing', slots: online.slots, settings: online.settings }).catch(() => false); maybeRevealCharacter(); renderFirebaseLobby();
     } catch (_) { onlineLobbyStatus('開始状態を更新できませんでした。'); }
   }
   async function requestFirebaseRematch() {
@@ -11184,8 +11490,12 @@
   function submitResultVisible() {
     return matchOver && winner !== 'player' && battleMode !== 'free' && submitState !== 'idle';
   }
+  function firebaseBattleRecordResultShift() {
+    const rows = firebaseBattleRecordResultRows();
+    return rows.length ? 15 + rows.length * 15 : 0;
+  }
   function resultButtonShift() {
-    return submitResultVisible() ? RESULT_BUTTON_SHIFT : 0;
+    return (submitResultVisible() ? RESULT_BUTTON_SHIFT : 0) + firebaseBattleRecordResultShift();
   }
 
   function drawResultButton(rawButton, label, primary) {
@@ -11612,6 +11922,16 @@
       : (won ? currentEfficiency() : lastRunEfficiency);
     drawOutlinedText(`与ダメ効率: ${effShown} / 発射`, VW / 2, VH / 2 + 20, {
       font: `900 13px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
+    });
+
+    // 対戦直後は、この端末に加算された通算と相手別の数字をその場で確認できる。
+    // 最大2人ぶんに絞り、2vs2でもボタンへ重ならないぶんだけ下へ送る。
+    const battleRecordRows = firebaseBattleRecordResultRows();
+    battleRecordRows.forEach((text, index) => {
+      drawOutlinedText(text, VW / 2, VH / 2 + 42 + index * 15, {
+        font: `900 ${index === 0 ? 11 : 10}px ${UI_FONT_HEAVY}`,
+        color: index === 0 ? UI.brassLight : 'rgba(207,220,226,0.9)', lineWidth: 3
+      });
     });
 
     if (!won && !draw && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
@@ -14933,6 +15253,9 @@
 
   newTerrain(); // 選択画面の背景として地形だけ先に用意
   loadRankingProfile();
+  loadBattleRecord();
+  // 部屋へ入る前に匿名IDを作り始める。送信時にも待ち直すので、未完了でも生IDへ戻すことはない。
+  localRivalId().catch(() => '');
   // 前回オフラインで送れなかった記録があれば、起動時に送り直す
   flushPendingScore();
 

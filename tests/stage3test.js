@@ -761,8 +761,9 @@ function check(name, value) {
     !htmlText.includes("onlineCopyBtn.style.display"));
   // ルームにいるのが誰なのか分かるよう、ランキングと同じ表示名を出す。
   check('the ranking name is broadcast with presence and lobbyState',
-    htmlText.includes("netSend({ t: 'presence', name: localPlayerName() })")
-    && htmlText.includes("settings: online.settings, name: localPlayerName() }"));
+    htmlText.includes("sendFirebaseIdentityPacket({ t: 'presence' })")
+    && htmlText.includes("sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings })")
+    && /async function sendFirebaseIdentityPacket\(packet\)[\s\S]{0,500}name: localPlayerName\(\)/.test(htmlText));
   check('received names are remembered per seat and shown in the roster',
     htmlText.includes('function rememberFirebaseName(msg)')
     && htmlText.includes('function firebaseSeatName(seat)')
@@ -1925,6 +1926,110 @@ function check(name, value) {
     check('the CPU badge appears only where a CPU really takes over',
       (twoVsTwo.match(/CPUが担当/g) || []).length === 3
       && !oneVsOne.includes('CPUが担当'));
+  }
+
+  // ---- 端末内の相手別戦績(Issue #5 / v162) ----
+  // まずこの入口だけを追加した状態で現行版を走らせ、機能が無いので実際にFAILすることを確認する。
+  // 以降は実装が存在する時だけ進め、古い版でもハーネスの例外で出力全体が消えないようにする。
+  const battle = h.battleRecordFeature();
+  check('the device-local rival record feature exists', !!battle);
+  if (battle) {
+    battle.reset();
+    const rawDeviceId = 'local-device-id-1234';
+    const rivalId = await battle.deriveRivalId(rawDeviceId);
+    const expectedRivalId = require('crypto').createHash('sha256').update(`katamon-rival-v1:${rawDeviceId}`).digest('hex');
+    const identity = await battle.identityFields(rawDeviceId, 'メロニキ');
+    check('rivalId is a purpose-separated SHA-256 value, never the raw device ID',
+      rivalId === expectedRivalId && /^[0-9a-f]{64}$/.test(rivalId)
+      && identity.rivalId === rivalId && identity.name === 'メロニキ'
+      && !JSON.stringify(identity).includes(rawDeviceId));
+    check('only presence and lobbyState accept a well-formed rivalId',
+      h.validateFirebaseMessage(firebasePacket('presence', { rivalId, seat: 'e1' }))
+      && h.validateFirebaseMessage(firebasePacket('lobbyState', { rivalId, status: 'lobby' }))
+      && !h.validateFirebaseMessage(firebasePacket('presence', { rivalId: 'bad', seat: 'e1' }))
+      && !h.validateFirebaseMessage(firebasePacket('ready', { rivalId })));
+
+    const rivalA = 'a'.repeat(64);
+    const rivalB = 'b'.repeat(64);
+    const winRound = '1'.repeat(48);
+    check('a win is recorded once and an identical result resend is ignored',
+      battle.record({ matchId: winRound, outcome: 'win', character: 'kyoryu', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '撃破', playedAt: 1000 })
+      && !battle.record({ matchId: winRound, outcome: 'win', character: 'kyoryu', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '撃破', playedAt: 1001 }));
+    check('a rematch with a new round ID is counted, including a timeout loss',
+      battle.record({ matchId: '2'.repeat(48), outcome: 'loss', character: 'medama', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '時間切れ', playedAt: 2000 }));
+    check('a draw against another opponent is kept separately',
+      battle.record({ matchId: '3'.repeat(48), outcome: 'draw', character: 'kyoryu', rivals: [{ id: rivalB, name: 'ライバルB' }], reason: '相討ち', playedAt: 3000 }));
+    const recorded = battle.snapshot();
+    check('lifetime, character and opponent totals all use the local player perspective',
+      recorded.total.wins === 1 && recorded.total.losses === 1 && recorded.total.draws === 1
+      && recorded.characters.kyoryu.wins === 1 && recorded.characters.kyoryu.draws === 1
+      && recorded.characters.medama.losses === 1
+      && recorded.rivals[rivalA].wins === 1 && recorded.rivals[rivalA].losses === 1
+      && recorded.rivals[rivalB].draws === 1);
+    battle.reload();
+    const afterReload = battle.snapshot();
+    check('the same browser profile keeps its records after a reload',
+      afterReload.total.wins === 1 && afterReload.total.losses === 1 && afterReload.total.draws === 1
+      && afterReload.rivals[rivalA].name === 'ライバルA');
+    check('host and guest read the same team result from opposite perspectives',
+      battle.outcomeForSeat('player', 'p1') === 'win'
+      && battle.outcomeForSeat('player', 's1') === 'win'
+      && battle.outcomeForSeat('player', 'e1') === 'loss'
+      && battle.outcomeForSeat('player', 's2') === 'loss'
+      && battle.outcomeForSeat('draw', 'e1') === 'draw');
+    const beforeCpuOnly = JSON.stringify(battle.snapshot());
+    check('an all-CPU opponent team creates no pretend human record',
+      !battle.record({ matchId: '4'.repeat(48), outcome: 'win', character: 'kyoryu', rivals: [], reason: '撃破', playedAt: 4000 })
+      && JSON.stringify(battle.snapshot()) === beforeCpuOnly);
+
+    const lobby = seatedLobby('1v1', 'p1', ['p1', 'e1']);
+    lobby.seatNames = { e1: 'ライバルA' };
+    lobby.seatRivalIds = { e1: rivalA };
+    lobby.selfCharacter = 'kyoryu';
+    lobby.roundRivals = null;
+    lobby.roundOpponentSeats = null;
+    h.setOnlineForLogTest(lobby);
+    const roomRecordText = battle.renderLobbyText();
+    check('the room shows lifetime, selected-monster and opponent records without sending their values',
+      roomRecordText.includes('この端末の対人戦績')
+      && roomRecordText.includes('通算')
+      && roomRecordText.includes('恐竜')
+      && roomRecordText.includes('ライバルA')
+      && roomRecordText.includes('1勝') && roomRecordText.includes('1敗'));
+    battle.freezeRoundRivals();
+    lobby.phase = 'results';
+    const resultRows = battle.resultRows();
+    check('the result screen has both the lifetime and current-opponent records',
+      resultRows.some(row => row.includes('通算'))
+      && resultRows.some(row => row.includes('ライバルA')));
+
+    localStorage.setItem(battle.key(), '{broken json');
+    battle.reload();
+    const recovered = battle.snapshot();
+    check('a corrupted local record recovers to an empty safe shape',
+      recovered.total.wins === 0 && recovered.total.losses === 0 && recovered.total.draws === 0
+      && Object.keys(recovered.rivals).length === 0 && recovered.processedRoundIds.length === 0);
+    const lateIdentityLobby = seatedLobby('1v1', 'p1', ['p1', 'e1']);
+    lateIdentityLobby.phase = 'results';
+    lateIdentityLobby.currentRoundId = '5'.repeat(48);
+    lateIdentityLobby.roundOpponentSeats = ['e1'];
+    lateIdentityLobby.roundRivals = [];
+    lateIdentityLobby.unitCharacters = { p1: 'kyoryu', e1: 'medama' };
+    h.setOnlineForLogTest(lateIdentityLobby);
+    battle.setResultState('player', '撃破');
+    battle.rememberIdentity({ seat: 'e1', rivalId: rivalA, name: '遅れて届いた相手' });
+    const lateRecorded = battle.snapshot();
+    check('an identity packet arriving after the result still records that round once',
+      lateRecorded.total.wins === 1 && lateRecorded.rivals[rivalA]?.wins === 1);
+    battle.setResultState(null, '', false);
+    check('Firebase Rules accept only a 64-character lowercase rivalId on identity packets',
+      rulesText.includes('"rivalId": { ".validate": "(newData.parent().child(\'t\').val() === \'presence\' || newData.parent().child(\'t\').val() === \'lobbyState\')')
+      && rulesText.includes('newData.val().matches(/^[0-9a-f]{64}$/)'));
+    check('record values never appear in any Firebase packet path',
+      !/netSend\(\{[^}]*\b(?:wins|losses|draws|battleRecord)\b/.test(htmlText)
+      && !rulesText.includes('"wins"') && !rulesText.includes('"losses"') && !rulesText.includes('"draws"'));
+    check('the Canvas result banner actually draws the record rows',
+      /function drawResultBanner\(\)[\s\S]{0,4200}firebaseBattleRecordResultRows\(\)/.test(htmlText));
   }
   // v119: 開始データを受け取る側にもVSカットインを出す。
   // resetMatch を通るのはホストだけなので、ここを落とすとタブ2つのQAで

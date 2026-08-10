@@ -392,6 +392,31 @@ const HOOK = `
           parts: row.children.map(c => c.tagName + ':' + c.className + ':' + c.textContent)
         }));
       },
+      // ---- v162: 端末内の対人戦績(Issue #5) ----
+      // 実装前にもハーネス自体は例外で止めず、検査をFAILとして表示できるようtypeofで包む。
+      battleRecordFeature: () => typeof recordMatchResultOnce !== 'function' ? null : ({
+        key: () => BATTLE_RECORD_KEY,
+        deriveRivalId: deviceId => deriveRivalId(deviceId),
+        identityFields: (deviceId, name) => firebaseIdentityFieldsForDevice(deviceId, name),
+        reset: () => resetBattleRecordForTest(),
+        reload: () => loadBattleRecord(),
+        snapshot: () => JSON.parse(JSON.stringify(battleRecord)),
+        record: detail => recordMatchResultOnce(detail),
+        outcomeForSeat: (resultWinner, seat) => firebaseOutcomeForSeat(resultWinner, seat),
+        rememberIdentity: msg => rememberFirebaseIdentity(msg),
+        setResultState: (resultWinner, reason, over = true) => {
+          winner = resultWinner;
+          matchEndReason = reason;
+          matchOver = over;
+        },
+        freezeRoundRivals: () => freezeFirebaseRoundRivals(),
+        resultRows: () => firebaseBattleRecordResultRows(),
+        renderLobbyText: () => {
+          renderFirebaseLobby();
+          const collect = node => !node ? [] : [node.textContent || '', ...node.children.flatMap(collect)];
+          return collect(onlineBattleRecordEl).filter(Boolean).join(' | ');
+        }
+      }),
       showTitleNotice: (text) => showTitleNotice(text),
       titleNotice: () => activeTitleNotice(),
       titleNoticeBand: () => ({ top: TITLE_NOTICE_Y - TITLE_NOTICE_H / 2, bottom: TITLE_NOTICE_Y + TITLE_NOTICE_H / 2 }),
@@ -618,8 +643,8 @@ function makeElement(tag) {
 const elements = new Map();
 const gameCanvas = makeCanvas();
 elements.set('game', gameCanvas);
-// onlineSlots はロビーの席ボード。組み立てたDOMを検査したいので実体を持たせる。
-for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel', 'onlineSlots']) {
+// onlineSlots / onlineBattleRecord はロビー内で組み立てたDOMを検査したいので実体を持たせる。
+for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel', 'onlineSlots', 'onlineBattleRecord']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
 
