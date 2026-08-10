@@ -64,6 +64,17 @@ const HOOK = `
       height: titleArtCanvas.height,
       signature: titleArtSignature()
     }),
+    // タイトル木板UI(v168)。未実装版でもハーネスを止めず、検査結果として失敗させる。
+    titleWoodUiInfo: () => typeof titleWoodUiImages === 'undefined' ? null : ({
+      assets: Object.fromEntries(Object.entries(titleWoodUiImages).map(([key, image]) => [key, image.src])),
+      board: { ...TITLE_WOOD_BOARD_RECT },
+      imageRects: JSON.parse(JSON.stringify(TITLE_WOOD_IMAGE_RECTS)),
+      buttons: {
+        cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn },
+        tutorial: { ...titleTutorialBtn }, free: { ...titleFreeBtn },
+        bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
+      }
+    }),
     setTitleArtReadyForTest: () => {
       if (typeof titleArtBuilds === 'undefined') return false;
       titleTimeBackgroundReady = true;
@@ -73,6 +84,13 @@ const HOOK = `
       titleLogoImage.complete = true;
       titleLogoImage.naturalWidth = 1530;
       titleLogoImage.naturalHeight = 1170;
+      if (typeof titleWoodUiImages !== 'undefined') {
+        for (const image of Object.values(titleWoodUiImages)) {
+          image.complete = true;
+          image.naturalWidth = 1000;
+          image.naturalHeight = 800;
+        }
+      }
       return true;
     },
     terrainArtDirty: () => terrainArtDirty,

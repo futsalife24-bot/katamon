@@ -17,6 +17,10 @@
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-mode-board.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-hanging-sign.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-parchment-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="font" href="assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
 <link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="assets/kyoryu.webp" type="image/webp">
@@ -615,7 +619,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v167-title-button-labels';
+  const BUILD_ID = 'v168-title-wood-ui';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2799,11 +2803,15 @@
     const titleSettled = titleLogoReady || titleLogoFailed;
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
     const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
-    return titleSettled && charactersSettled && timeBackgroundSettled;
+    const woodUiSettled = titleWoodUiReady + titleWoodUiFailed >= Object.keys(titleWoodUiImages).length;
+    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled;
   }
 
   function getCoreImageProgress() {
-    return characterImagesReady + characterImagesFailed + ((titleLogoReady || titleLogoFailed) ? 1 : 0) + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
+    return characterImagesReady + characterImagesFailed
+      + titleWoodUiReady + titleWoodUiFailed
+      + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
+      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
   let loadingEmblemReady = false;
@@ -2820,6 +2828,35 @@
     onReady: () => { titleLogoReady = true; },
     onFailed: () => { titleLogoFailed = true; }
   });
+  // メロニキ提供の透過素材。元の4096x5150 PNGは余白が大きいため、見える範囲だけを
+  // 同じ縦横比で切り出したWebPへ軽量化して使う。黒い余白を画像の一部として扱わないこと。
+  let titleWoodUiReady = 0;
+  let titleWoodUiFailed = 0;
+  const titleWoodUiImages = {
+    board: loadArtImage('title-mode-board', {
+      highPriority: true,
+      onReady: () => { titleWoodUiReady++; },
+      onFailed: () => { titleWoodUiFailed++; }
+    }),
+    shield: loadArtImage('title-shield-button', {
+      highPriority: true,
+      onReady: () => { titleWoodUiReady++; },
+      onFailed: () => { titleWoodUiFailed++; }
+    }),
+    hangingSign: loadArtImage('title-hanging-sign', {
+      highPriority: true,
+      onReady: () => { titleWoodUiReady++; },
+      onFailed: () => { titleWoodUiFailed++; }
+    }),
+    parchment: loadArtImage('title-parchment-button', {
+      highPriority: true,
+      onReady: () => { titleWoodUiReady++; },
+      onFailed: () => { titleWoodUiFailed++; }
+    })
+  };
+  function areTitleWoodUiImagesReady() {
+    return Object.values(titleWoodUiImages).every(image => image.complete && image.naturalWidth > 0);
+  }
   // 起動した端末のローカル時刻で、タイトル背景を朝・昼・夕・夜に切り替える。
   function getTitleTimeTheme(hour) {
     if (hour >= 4 && hour < 10) return 'morning';
@@ -4004,23 +4041,36 @@
     && !!globalThis.StageCore;
   let selectedCustomStage = null;
   let selectedCustomAdapter = null;
-  const titleVsCpuBtn = { x: VW / 2, y: 610, w: 382, h: 64 };
-  const titleOnlineBtn = { x: VW / 2, y: 686, w: 382, h: 64 };
-  // おまけ曲の再生ボタン。演習(下端789)とRANKING(上端835)の隙間へ収める。
-  const titleBonusBtn = { x: VW / 2, y: 812, w: 382, h: 36 };
-  // ランキングは対戦モードではないので、2つのモードボタンより控えめな細い帯にする。
-  const titleRankingBtn = { x: VW / 2, y: 856, w: 382, h: 42 };
-  const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };
+  // 木板の上を「盾2枚 → 吊り看板2枚 → 羊皮紙2枚」で左右に整理する。
+  // 当たり判定は絵の影やロープを含めず、隣と重ならない実体部分だけに置く。
+  const TITLE_WOOD_BOARD_RECT = { x: 4, y: 530, w: 532, h: 405 };
+  const TITLE_WOOD_IMAGE_RECTS = {
+    shields: [
+      { x: 141, y: 638, w: 218, h: 196 },
+      { x: 399, y: 638, w: 218, h: 196 }
+    ],
+    hangingSigns: [
+      { x: 141, y: 752, w: 230, h: 145 },
+      { x: 399, y: 752, w: 230, h: 145 }
+    ],
+    parchments: [
+      { x: 141, y: 843, w: 230, h: 63 },
+      { x: 399, y: 843, w: 230, h: 63 }
+    ]
+  };
+  const titleVsCpuBtn = { x: 141, y: 638, w: 218, h: 170 };
+  const titleOnlineBtn = { x: 399, y: 638, w: 218, h: 170 };
+  const titleTutorialBtn = { x: 141, y: 770, w: 220, h: 72 };
+  const titleFreeBtn = { x: 399, y: 770, w: 220, h: 72 };
+  const titleBonusBtn = { x: 141, y: 843, w: 220, h: 50 };
+  const titleRankingBtn = { x: 399, y: 843, w: 220, h: 50 };
+  const titleUpdateBtn = { x: VW / 2, y: 898, w: 250, h: 30 };
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
   let safeUpdateReloadStarted = false;
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
   const rankingRetryBtn = { x: VW / 2, y: VH / 2 + 40, w: 200, h: 46 };
-  // 演習の段を左右に割り、左をチュートリアルにする。どちらも「練習」なので同じ段に置く。
-  // 下は「おまけ」まで詰まっていて新しい段を足す余白が無い(タイトルは921まで使っている)。
-  const titleTutorialBtn = { x: VW / 2 - 97, y: 762, w: 188, h: 54 };
-  const titleFreeBtn = { x: VW / 2 + 97, y: 762, w: 188, h: 54 };
   const FREE_TERRAIN_OPTIONS = [
     { key: 'random', name: 'ランダム', sub: '毎回ちがう戦場' },
     { key: 'plateauLeft', name: '左高台', sub: '左から右へ下る地形' },
@@ -8606,15 +8656,74 @@
     ctx.strokeStyle = '#090b0d';
     ctx.lineWidth = 5;
     ctx.font = '400 23px ' + UI_FONT_DISPLAY;
-    // 「あそび方」「演習」は横並びにするため高さ54。高さ64の大ボタンと同じ -7px では、
-    // 23pxの見出しの上端が枠へ食い込む。小ボタンだけ6px下げ、画像・枠・当たり判定は動かさない。
-    const labelY = button.y + (button.h <= 54 ? -1 : -7);
+    // 「あそび方」「演習」は横並びの低い看板。対戦ボタンと同じ -7px では、
+    // 23pxの見出しの上端が枠へ食い込むため、この2つだけ中央へ置く。
+    const labelY = (kind === 'tutorial' || kind === 'free') ? button.y : button.y - 7;
     ctx.strokeText(label, button.x, labelY);
     ctx.fillText(label, button.x, labelY);
     // 案内文は、通常の説明より一段明るくして拾わせる。
     ctx.fillStyle = highlight ? '#ffe2a1' : UI.brassLabel;
     ctx.font = (highlight ? 'bold 11px ' : 'bold 10px ') + UI_FONT;
     ctx.fillText(sub, button.x, button.y + 18);
+    ctx.restore();
+  }
+
+  function drawTitleWoodFrame(g, image, rect) {
+    g.drawImage(image, rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h);
+  }
+
+  function drawTitleWoodButtonText(button, label, sub, kind, highlight = false) {
+    ctx.save();
+    if (highlight) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,210,74,0.95)';
+      ctx.shadowBlur = 18;
+      angularPlatePath(button.x, button.y, button.w - 10, button.h - 10, 14);
+      ctx.strokeStyle = '#ffd76a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#130b06';
+    ctx.fillStyle = '#fff0bd';
+    ctx.lineJoin = 'round';
+
+    if (kind === 'shield') {
+      ctx.font = '400 19px ' + UI_FONT_DISPLAY;
+      ctx.lineWidth = 5;
+      ctx.strokeText(label, button.x, button.y - 10);
+      ctx.fillText(label, button.x, button.y - 10);
+      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.lineWidth = 3;
+      ctx.strokeText(sub, button.x, button.y + 20);
+      ctx.fillStyle = highlight ? '#ffe37a' : '#e8bd70';
+      ctx.fillText(sub, button.x, button.y + 20);
+    } else if (kind === 'hanging') {
+      // v167で直した「上枠へ文字が乗る」不具合を戻さない。看板本体の中央より少し下へ置く。
+      ctx.font = '400 20px ' + UI_FONT_DISPLAY;
+      ctx.lineWidth = 5;
+      ctx.strokeText(label, button.x, button.y);
+      ctx.fillText(label, button.x, button.y);
+      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.lineWidth = 3;
+      ctx.strokeText(sub, button.x, button.y + 22);
+      ctx.fillStyle = highlight ? '#ffe37a' : '#6c3a16';
+      ctx.fillText(sub, button.x, button.y + 22);
+    } else {
+      ctx.font = '900 15px ' + UI_FONT_HEAVY;
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, button.x, button.y - 7);
+      ctx.fillStyle = kind === 'bonus' && bonusBgmTrack ? '#f5a623' : '#5a2d10';
+      ctx.fillText(label, button.x, button.y - 7);
+      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.lineWidth = 3;
+      ctx.strokeText(sub, button.x, button.y + 12);
+      ctx.fillStyle = kind === 'bonus' && bonusBgmTrack ? '#bd681b' : '#865020';
+      ctx.fillText(sub, button.x, button.y + 12);
+    }
     ctx.restore();
   }
 
@@ -8643,7 +8752,12 @@
     const logo = logoReady
       ? `${titleLogoImage.naturalWidth}x${titleLogoImage.naturalHeight}`
       : 'fallback';
-    return `${background}|${logo}`;
+    const woodUi = Object.entries(titleWoodUiImages).map(([key, image]) => (
+      image.complete && image.naturalWidth > 0
+        ? `${key}:${image.naturalWidth}x${image.naturalHeight}`
+        : `${key}:fallback`
+    )).join(',');
+    return `${background}|${logo}|${woodUi}`;
   }
 
   function drawTitleStaticArt(g) {
@@ -8681,6 +8795,27 @@
       g.fillText('CATAMON PROJECT', VW / 2, logo.y + logo.h / 2);
     }
     g.restore();
+
+    // 動かない木板と各ボタン素材も、背景・ロゴと同じ2倍解像度の1枚絵へ焼く。
+    // 毎コマ4種類を何枚も貼ると、タイトル軽量化(v132)を逆戻りさせてしまう。
+    if (areTitleWoodUiImagesReady()) {
+      g.save();
+      g.shadowColor = 'rgba(0,0,0,0.76)';
+      g.shadowBlur = 10;
+      g.shadowOffsetY = 6;
+      const board = TITLE_WOOD_BOARD_RECT;
+      g.drawImage(titleWoodUiImages.board, board.x, board.y, board.w, board.h);
+      for (const rect of TITLE_WOOD_IMAGE_RECTS.shields) {
+        drawTitleWoodFrame(g, titleWoodUiImages.shield, rect);
+      }
+      for (const rect of TITLE_WOOD_IMAGE_RECTS.hangingSigns) {
+        drawTitleWoodFrame(g, titleWoodUiImages.hangingSign, rect);
+      }
+      for (const rect of TITLE_WOOD_IMAGE_RECTS.parchments) {
+        drawTitleWoodFrame(g, titleWoodUiImages.parchment, rect);
+      }
+      g.restore();
+    }
     g.restore();
   }
 
@@ -8699,56 +8834,68 @@
     rebuildTitleArt();
     ctx.drawImage(titleArtCanvas, 0, 0, VW, VH);
 
-    // ボタン群の一番上に見出しを掲げる。文字幅を測って左右に真鍮ラインを添える(キャラ選択ヘッダと同じ色・太さ)。
-    ctx.textAlign = 'center';
-    ctx.font = '400 10px ' + UI_FONT;
-    const modeLabelText = 'SELECT A BATTLE MODE';
-    const modeLabelHalfW = ctx.measureText(modeLabelText).width / 2;
-    const modeLabelY = TITLE_MODE_LABEL_Y;
-    ctx.strokeStyle = 'rgba(255,210,74,0.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(VW / 2 - modeLabelHalfW - 84, modeLabelY);
-    ctx.lineTo(VW / 2 - modeLabelHalfW - 14, modeLabelY);
-    ctx.moveTo(VW / 2 + modeLabelHalfW + 14, modeLabelY);
-    ctx.lineTo(VW / 2 + modeLabelHalfW + 84, modeLabelY);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,225,169,0.62)';
-    ctx.fillText(modeLabelText, VW / 2, modeLabelY);
+    const woodUiReady = areTitleWoodUiImagesReady();
+    if (woodUiReady) {
+      drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'shield', hasSuspendedSave);
+      drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE', 'オンライン対戦・観戦', 'shield');
+      drawTitleWoodButtonText(titleTutorialBtn, 'あそび方',
+        tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'hanging',
+        tutorialIsRecommended());
+      drawTitleWoodButtonText(titleFreeBtn, '演習', '条件を組んで開始', 'hanging');
+      drawTitleWoodButtonText(titleBonusBtn, 'おまけ',
+        bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', 'bonus');
+      drawTitleWoodButtonText(titleRankingBtn, 'RANKING', '連勝記録', 'parchment');
+    } else {
+      // 画像を読めない古い環境では、操作不能にせず従来の描画へ戻す。
+      ctx.textAlign = 'center';
+      ctx.font = '400 10px ' + UI_FONT;
+      const modeLabelText = 'SELECT A BATTLE MODE';
+      const modeLabelHalfW = ctx.measureText(modeLabelText).width / 2;
+      const modeLabelY = TITLE_MODE_LABEL_Y;
+      ctx.strokeStyle = 'rgba(255,210,74,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(VW / 2 - modeLabelHalfW - 84, modeLabelY);
+      ctx.lineTo(VW / 2 - modeLabelHalfW - 14, modeLabelY);
+      ctx.moveTo(VW / 2 + modeLabelHalfW + 14, modeLabelY);
+      ctx.lineTo(VW / 2 + modeLabelHalfW + 84, modeLabelY);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,225,169,0.62)';
+      ctx.fillText(modeLabelText, VW / 2, modeLabelY);
 
-    // 再開そのものはキャラ選択画面のボタンに任せる。タイトルから直接再開させると、
-    // 押し間違いで意図せず中断データを消費してしまうため、ここでは知らせるだけ。
-    drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
-    drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
-    // まだ通していない人には「はじめての方へ」と添える。押すかどうかは本人が決める。
-    drawTitleModeButton(titleTutorialBtn, 'あそび方',
-      tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
-      tutorialIsRecommended());
-    drawTitleModeButton(titleFreeBtn, '演習', '条件を組んで開始', 'free');
+      drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
+      drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
+      drawTitleModeButton(titleTutorialBtn, 'あそび方',
+        tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
+        tutorialIsRecommended());
+      drawTitleModeButton(titleFreeBtn, '演習', '条件を組んで開始', 'free');
+    }
     // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
     drawSuspendedSaveBubble();
     drawTitleNotice();
     ctx.restore();
 
-    drawIronPlate(titleBonusBtn.x, titleBonusBtn.y, titleBonusBtn.w, titleBonusBtn.h, {
-      cut: 9, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 2.6
-    });
-    drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
-      font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
-    });
-    drawOutlinedText(bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
-      font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
-    });
+    if (!woodUiReady) {
+      drawIronPlate(titleBonusBtn.x, titleBonusBtn.y, titleBonusBtn.w, titleBonusBtn.h, {
+        cut: 9, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 2.6
+      });
+      drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
+        font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
+      });
+      drawOutlinedText(bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
+      });
 
-    drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
-      cut: 10, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 3
-    });
-    drawOutlinedText('RANKING', titleRankingBtn.x - 34, titleRankingBtn.y + 5, {
-      font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
-    });
-    drawOutlinedText('連勝記録', titleRankingBtn.x + 58, titleRankingBtn.y + 5, {
-      font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
-    });
+      drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
+        cut: 10, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 3
+      });
+      drawOutlinedText('RANKING', titleRankingBtn.x - 34, titleRankingBtn.y + 5, {
+        font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+      });
+      drawOutlinedText('連勝記録', titleRankingBtn.x + 58, titleRankingBtn.y + 5, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    }
 
     drawIronPlate(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w, titleUpdateBtn.h, {
       cut: 8, lineWidth: 1.5, rivets: false
@@ -9402,7 +9549,7 @@
       ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 30);
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
       ctx.font = '400 11px ' + UI_FONT;
-      ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 2}`, VW / 2, VH / 2 + 53);
+      ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 6}`, VW / 2, VH / 2 + 53);
     }
     ctx.restore();
   }
