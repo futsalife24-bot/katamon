@@ -569,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v159-camera-framing';
+  const BUILD_ID = 'v160-full-map-overview';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -638,11 +638,21 @@
   function cameraViewportHeight() {
     return CONTROL_PANEL_Y - cameraViewportTop();
   }
+  function cameraShowsEntireStageHeight() {
+    return STAGE_H * cameraZoom <= cameraViewportHeight() + 1e-6;
+  }
+  function cameraStageScreenTop() {
+    // 全景では小さくなったステージを画面上へ浮かせず、地面側を操作盤へ接地する。
+    // 拡大して安全領域より高くなった時だけ、従来どおりHUD下を表示上端にする。
+    return cameraShowsEntireStageHeight()
+      ? CONTROL_PANEL_Y - STAGE_H * cameraZoom
+      : cameraViewportTop();
+  }
   function visibleWorldWidth() {
     return VW / cameraZoom;
   }
   function visibleWorldHeight() {
-    return cameraViewportHeight() / cameraZoom;
+    return Math.min(STAGE_H, cameraViewportHeight() / cameraZoom);
   }
   function clampCameraX(x) {
     return Math.min(Math.max(0, STAGE_W - visibleWorldWidth()), Math.max(0, x));
@@ -671,7 +681,7 @@
     }
   }
   function applyWorldCamera(parallaxFactor = 1) {
-    ctx.translate(0, cameraViewportTop());
+    ctx.translate(0, cameraStageScreenTop());
     ctx.scale(cameraZoom, cameraZoom);
     ctx.translate(-cameraX * parallaxFactor, -cameraY);
   }
@@ -679,7 +689,7 @@
     return (worldX - cameraX) * cameraZoom;
   }
   function worldToScreenY(worldY) {
-    return cameraViewportTop() + (worldY - cameraY) * cameraZoom;
+    return cameraStageScreenTop() + (worldY - cameraY) * cameraZoom;
   }
 
   const canvas = document.getElementById('game');
@@ -1631,12 +1641,10 @@
     const terrainHeightRatio = STAGE_H / 660;
     GROUND_MIN_Y = 300 * terrainHeightRatio;
     GROUND_MAX_Y = 516 * terrainHeightRatio;
-    // 横幅だけを基準にすると、縦長画面では戦場が小さく潰れてしまう。
-    // 反対に操作盤より上の660px全部を基準にすると、HUDの裏まで見える扱いになり
-    // 大型だけ69%へ寄りすぎる。両サイズとも、HUD下の実表示領域へ全高を収める。
+    // 「最遠」はステージの端から端まで見渡せる全景。縦の空きは倍率を上げる理由にせず、
+    // 全景中のステージ下端を操作盤へ接地して使う。寄せた時だけHUD下から縦に追従する。
     const widthFitZoom = VW / STAGE_W;
-    const safeHeightFitZoom = cameraViewportHeight() / STAGE_H;
-    MIN_CAMERA_ZOOM = Math.max(widthFitZoom, safeHeightFitZoom);
+    MIN_CAMERA_ZOOM = widthFitZoom;
     // 標準↔大型、1vs1↔2vs2で最小倍率は変わる。生の倍率ではなく
     // 「最遠〜最寄のどこを選んだか」を保ち、切替だけで勝手に寄らないようにする。
     if (Number.isFinite(cameraDistanceSetting)) {
@@ -3741,6 +3749,7 @@
   let inputMode = null; // 'moveL' | 'moveR' | 'aim' | 'pan' | 'pinch' | 'cameraSlider' | 'volumeSlider'
   let inputPointerId = null;
   let volumeDragKey = null; // 音量スライダーをドラッグ中の対象('bgm' | 'sfx')
+  let cameraSliderFocus = null;
 
   // ===== 視点距離スライダー: ピンチ操作が難しい端末でも、自分の画面だけを確実に調整できる =====
   // コントローラー部の左上。右上の必殺ボタンと向かい合い、移動・発射には触れない位置。
@@ -3768,10 +3777,19 @@
     const value = Math.max(0, Math.min(1, (point.x - CAMERA_SLIDER.x) / CAMERA_SLIDER.w));
     const centerWorldX = cameraX + visibleWorldWidth() / 2;
     const centerWorldY = cameraY + visibleWorldHeight() / 2;
+    const fullOverview = visibleWorldWidth() >= STAGE_W - 1e-6 && cameraShowsEntireStageHeight();
+    const acting = activeUnit();
+    if (!cameraSliderFocus) {
+      // 全景から寄る時だけは地図中央ではなく手番キャラを入口にする。
+      // ドラッグ中は同じ地点を保持し、小刻みに動かしても途中で中央へ戻さない。
+      cameraSliderFocus = fullOverview && acting
+        ? { x: acting.x, y: acting.y }
+        : { x: centerWorldX, y: centerWorldY };
+    }
     cameraZoom = clampCameraZoom(MIN_CAMERA_ZOOM + (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM) * value);
     saveCameraZoom();
-    cameraX = centerCameraOn(centerWorldX);
-    cameraY = centerCameraYOn(centerWorldY);
+    cameraX = centerCameraOn(cameraSliderFocus.x);
+    cameraY = centerCameraYOn(cameraSliderFocus.y);
     cameraTargetX = null;
     cameraTargetY = null;
   }
@@ -13673,7 +13691,7 @@
       startDistance: distance,
       startZoom: cameraZoom,
       anchorWorldX: cameraX + midpointX / cameraZoom,
-      anchorWorldY: cameraY + (midpointY - cameraViewportTop()) / cameraZoom
+      anchorWorldY: cameraY + (midpointY - cameraStageScreenTop()) / cameraZoom
     };
     return true;
   }
@@ -13966,6 +13984,7 @@
     if (isInCameraSlider(p0)) {
       inputMode = 'cameraSlider';
       inputPointerId = e.pointerId;
+      cameraSliderFocus = null;
       canvas.setPointerCapture(e.pointerId);
       setCameraZoomFromSlider(p0);
       return;
@@ -14041,7 +14060,7 @@
         cameraZoom = clampCameraZoom(pinchState.startZoom * distance / pinchState.startDistance);
         saveCameraZoom();
         cameraX = clampCameraX(pinchState.anchorWorldX - midpointX / cameraZoom);
-        cameraY = clampCameraY(pinchState.anchorWorldY - (midpointY - cameraViewportTop()) / cameraZoom);
+        cameraY = clampCameraY(pinchState.anchorWorldY - (midpointY - cameraStageScreenTop()) / cameraZoom);
         cameraTargetX = null;
         cameraTargetY = null;
       }
@@ -14163,6 +14182,7 @@
     } else if (inputMode === 'moveL' || inputMode === 'moveR') {
       moveDir = 0;
     }
+    if (inputMode === 'cameraSlider') cameraSliderFocus = null;
     inputMode = null;
     inputPointerId = null;
   }
