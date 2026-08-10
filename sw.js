@@ -1,4 +1,5 @@
-const CACHE_VERSION = 'katamon-pwa-v157-large-stage-camera';
+const CACHE_VERSION = 'katamon-pwa-v158-stale-page-refresh';
+const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
   './index.html',
@@ -33,6 +34,10 @@ self.addEventListener('install', event => {
   );
 });
 
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
+});
+
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
@@ -42,6 +47,11 @@ self.addEventListener('activate', event => {
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then(clients => Promise.all(clients.map(client => client.postMessage({
+        type: 'KATAMON_UPDATE_READY',
+        build: BUILD_ID
+      }))))
   );
 });
 
@@ -61,7 +71,7 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
