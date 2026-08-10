@@ -619,7 +619,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v170-title-visual-tuning';
+  const BUILD_ID = 'v171-select-resume-gear';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4185,6 +4185,13 @@
   const SELECT_WHEEL_DRAG_STEP = 150;
   const SELECT_WHEEL_DEPTH_SHIFT_X = 89;
   const SELECT_WHEEL_DEPTH_LIFT_Y = 18;
+  const SELECT_SCREEN_HEADING = 'カタモンを選択';
+  const SELECT_SCREEN_HEADING_Y = 57;
+  const SELECT_SCREEN_HEADING_FONT_SIZE = 31;
+  const SELECT_SORTIE_GEAR_RADIUS = 66;
+  const SELECT_SORTIE_OUTER_RADIUS = SELECT_SORTIE_GEAR_RADIUS + 13;
+  const SELECT_RESUME_GEAR_RADIUS = 35;
+  const SELECT_RESUME_OUTER_RADIUS = SELECT_RESUME_GEAR_RADIUS + 11;
   // 選択カードは戦場の装備箱に留めた木札という位置づけ。キャラ色を発光させる
   // ネオン表現へ戻さず、説明は貼り付けた紙札として読み分ける。
   const SELECT_CARD_PRESENTATION = Object.freeze({
@@ -4291,7 +4298,15 @@
     selectWheelPosition = wrapSelectWheelPosition(selectWheelPosition + delta * Math.min(1, dt * 11));
     if (Math.abs(delta) < 0.001) selectWheelPosition = targetIndex;
   }
-  const resumeBtn = { x: VW / 2, y: 32, w: 280, h: 34 };
+  const resumeBtn = {
+    x: selectSortieBtn.x + 38,
+    y: selectSortieBtn.y + 108,
+    w: SELECT_RESUME_OUTER_RADIUS * 2,
+    h: SELECT_RESUME_OUTER_RADIUS * 2
+  };
+  function hitSelectResumeGear(p) {
+    return Math.hypot(p.x - resumeBtn.x, p.y - resumeBtn.y) <= SELECT_RESUME_OUTER_RADIUS;
+  }
   // 中断データがある状態で新しく出撃しようとした時の確認。
   // selectCharacterAndStart() は入口で clearSuspendedMatch() を呼ぶので、押した瞬間に
   // 中断データは消えて復元できない。画面上端の再開ボタンは気づかれにくいという指摘も
@@ -9750,7 +9765,7 @@
 
   function drawFixedSelectSortieButton() {
     const sortie = selectSortieBtn;
-    const gearR = 66;
+    const gearR = SELECT_SORTIE_GEAR_RADIUS;
     ctx.save();
 
     // カードへ伸びる発射レバー(三角の矢印)は削除した。ギア単体で押せると分かるうえ、
@@ -9833,12 +9848,72 @@
     ctx.restore();
   }
 
+  function drawSelectResumeGear() {
+    if (!hasSuspendedSave) return;
+    const b = resumeBtn;
+    const gearR = SELECT_RESUME_GEAR_RADIUS;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+
+    // 出撃ギアの歯と噛み合って見えるよう、少し逆向きに回した小型ギアにする。
+    ctx.save();
+    ctx.rotate(-selectWheelPosition * (Math.PI * 2 / 10) + Math.PI / 10);
+    ctx.fillStyle = '#765027';
+    for (let i = 0; i < 10; i++) {
+      ctx.save();
+      ctx.rotate((Math.PI * 2 * i) / 10);
+      selectRoundedRect(-5, -gearR - 11, 10, 19, 3);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+
+    ctx.shadowColor = 'rgba(255,190,62,0.32)';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(0, 0, gearR, 0, Math.PI * 2);
+    const gearFill = ctx.createRadialGradient(-10, -12, 3, 0, 0, gearR);
+    gearFill.addColorStop(0, '#e0a84c');
+    gearFill.addColorStop(0.45, '#8a5928');
+    gearFill.addColorStop(1, '#202632');
+    ctx.fillStyle = gearFill;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#f6d487';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 27, 0, Math.PI * 2);
+    const hubFill = ctx.createLinearGradient(0, -27, 0, 27);
+    hubFill.addColorStop(0, UI.plateMid);
+    hubFill.addColorStop(1, UI.plateBottom);
+    ctx.fillStyle = hubFill;
+    ctx.fill();
+    ctx.strokeStyle = UI.brassDark;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = UI.ink;
+    ctx.lineWidth = 4;
+    ctx.font = '400 18px ' + UI_FONT_DISPLAY;
+    ctx.strokeText('再開', 0, 1);
+    ctx.fillStyle = UI.parchment;
+    ctx.fillText('再開', 0, 1);
+    ctx.fillStyle = UI.gold;
+    ctx.font = '900 8px ' + UI_FONT_HEAVY;
+    ctx.fillText('中断対戦', 0, 17);
+    ctx.restore();
+  }
+
   function drawCharacterSelect() {
     ctx.save();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, VW, VH);
 
-    const headerGlow = ctx.createRadialGradient(VW / 2, 78, 0, VW / 2, 78, 260);
+    const headerGlow = ctx.createRadialGradient(VW / 2, SELECT_SCREEN_HEADING_Y, 0, VW / 2, SELECT_SCREEN_HEADING_Y, 260);
     headerGlow.addColorStop(0, 'rgba(255,210,74,0.10)');
     headerGlow.addColorStop(1, 'rgba(255,210,74,0)');
     ctx.fillStyle = headerGlow;
@@ -9847,21 +9922,21 @@
     ctx.strokeStyle = 'rgba(255,210,74,0.55)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(42, 88);
-    ctx.lineTo(152, 88);
-    ctx.moveTo(VW - 152, 88);
-    ctx.lineTo(VW - 42, 88);
+    ctx.moveTo(42, 73);
+    ctx.lineTo(145, 73);
+    ctx.moveTo(VW - 145, 73);
+    ctx.lineTo(VW - 42, 73);
     ctx.stroke();
     ctx.fillStyle = '#ffd24a';
     ctx.beginPath();
-    ctx.arc(VW / 2, 88, 3, 0, Math.PI * 2);
+    ctx.arc(VW / 2, 73, 3, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.textAlign = 'center';
-    drawOutlinedText('モンスターを選択', VW / 2, 78, { font: '400 24px ' + UI_FONT_DISPLAY, color: UI.parchment });
+    drawOutlinedText(SELECT_SCREEN_HEADING, VW / 2, SELECT_SCREEN_HEADING_Y, { font: `400 ${SELECT_SCREEN_HEADING_FONT_SIZE}px ${UI_FONT_DISPLAY}`, color: UI.parchment });
     ctx.fillStyle = 'rgba(255,245,220,0.62)';
     ctx.font = '400 11px ' + UI_FONT;
-    ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 111);
+    ctx.fillText('上下に回して、手前へ来た相棒を選ぼう', VW / 2, 101);
 
     angularPlatePath(selectBackBtn.x, selectBackBtn.y, selectBackBtn.w, selectBackBtn.h, 8);
     ctx.fillStyle = 'rgba(18,24,29,0.96)';
@@ -9872,19 +9947,6 @@
     ctx.fillStyle = '#ffe2a1';
     ctx.font = '400 12px ' + UI_FONT;
     ctx.fillText('‹  戻る', selectBackBtn.x, selectBackBtn.y + 4);
-
-    if (hasSuspendedSave) {
-      const b = resumeBtn;
-      selectRoundedRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 12);
-      ctx.fillStyle = 'rgba(18,24,29,0.96)';
-      ctx.fill();
-      ctx.strokeStyle = '#ffd24a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = UI.parchment;
-      ctx.font = '400 13px ' + UI_FONT;
-      ctx.fillText('▶ 中断した対戦を再開', b.x, b.y + 5);
-    }
 
     // 手前左から出撃ギアの背後へ回り込む、横角度のついた楕円水車軌道。
     ctx.save();
@@ -9930,6 +9992,7 @@
     }
     ctx.restore();
     drawFixedSelectSortieButton();
+    drawSelectResumeGear();
 
     // 出撃ボタンは固定。手前で止まったカードへ矢印だけがぴったり接続する。
     const focusedIndex = getFocusedSelectIndex();
@@ -14415,7 +14478,7 @@
         leaveSelectToTitle();
         return;
       }
-      if (hasSuspendedSave && hitRect(p0, resumeBtn)) {
+      if (hasSuspendedSave && hitSelectResumeGear(p0)) {
         resumeSuspendedMatch();
         return;
       }

@@ -249,6 +249,32 @@ const HOOK = `
     selectCardPresentation: () => typeof SELECT_CARD_PRESENTATION === 'undefined'
       ? null
       : { ...SELECT_CARD_PRESENTATION },
+    // v171: キャラ選択の見出しと、出撃ギアへ噛み合わせる中断再開ギア。
+    // 旧実装へ検査だけを先に入れても例外で止まらず、FAILとして数が出るようにする。
+    selectScreenInfo: () => ({
+      heading: typeof SELECT_SCREEN_HEADING === 'undefined' ? null : SELECT_SCREEN_HEADING,
+      headingY: typeof SELECT_SCREEN_HEADING_Y === 'undefined' ? null : SELECT_SCREEN_HEADING_Y,
+      headingFontSize: typeof SELECT_SCREEN_HEADING_FONT_SIZE === 'undefined' ? null : SELECT_SCREEN_HEADING_FONT_SIZE,
+      sortie: {
+        ...selectSortieBtn,
+        outerRadius: typeof SELECT_SORTIE_OUTER_RADIUS === 'undefined' ? null : SELECT_SORTIE_OUTER_RADIUS
+      },
+      resume: {
+        ...resumeBtn,
+        outerRadius: typeof SELECT_RESUME_OUTER_RADIUS === 'undefined' ? null : SELECT_RESUME_OUTER_RADIUS
+      }
+    }),
+    selectResumeHitForTest: (x, y) => typeof hitSelectResumeGear === 'function'
+      ? hitSelectResumeGear({ x, y })
+      : hitRect({ x, y }, resumeBtn),
+    drawSelectForTest: (withSave) => {
+      gamePhase = 'select';
+      hasSuspendedSave = !!withSave;
+      globalThis.__ktTextLog.length = 0;
+      globalThis.__ktTextDrawLog.length = 0;
+      drawCharacterSelect();
+      return globalThis.__ktTextLog.slice();
+    },
     hud: () => ({
       fireActive: isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && localUnit().grounded,
       moveActive: isLocalTurn() && localUnit().moveLockTurns <= 0 && !awaitingResolve && !matchOver && !cutIn,
