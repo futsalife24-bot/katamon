@@ -569,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v156-stage-size-select';
+  const BUILD_ID = 'v157-large-stage-camera';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -1599,7 +1599,12 @@
     const terrainHeightRatio = STAGE_H / 660;
     GROUND_MIN_Y = 300 * terrainHeightRatio;
     GROUND_MAX_Y = 516 * terrainHeightRatio;
-    MIN_CAMERA_ZOOM = VW / STAGE_W;
+    // 大型で横幅全体まで引くと、縦の見える範囲が戦場より大きくなり、
+    // 上下に空白を足した縮小画面になってしまう。大型だけは操作盤より上の
+    // 高さを超えて引けないようにして、横はミニマップと追従カメラで見る。
+    const widthFitZoom = VW / STAGE_W;
+    const largeHeightFitZoom = CONTROL_PANEL_Y / STAGE_H;
+    MIN_CAMERA_ZOOM = large ? Math.max(widthFitZoom, largeHeightFitZoom) : widthFitZoom;
     cameraZoom = clampCameraZoom(cameraZoom);
     cameraX = clampCameraX(cameraX);
     cameraY = clampCameraY(cameraY);
