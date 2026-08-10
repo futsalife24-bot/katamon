@@ -861,6 +861,11 @@ function check(name, value) {
     && htmlText.includes('function setCameraZoomFromSlider(point)')
     && htmlText.includes("if (inputMode === 'cameraSlider') {")
     && htmlText.includes('drawCameraSlider();'));
+  check('camera readouts distinguish view distance from the visible field width',
+    htmlText.includes('function cameraDistanceLabel()')
+    && htmlText.includes('function cameraWidthCoveragePercent()')
+    && htmlText.includes('`視点距離 ${cameraDistanceLabel()}`')
+    && htmlText.includes('`横 ${cameraWidthCoveragePercent()}%`'));
   const resetMatchSrc = htmlText.match(/function resetMatch\(carrySpecialCharge\) \{[\s\S]*?\n  \}/)?.[0] || '';
   check('the battle view distance is remembered instead of resetting on a new turn or rematch',
     htmlText.includes("const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';")

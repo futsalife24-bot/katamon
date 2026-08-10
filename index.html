@@ -569,7 +569,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v158-stale-page-refresh';
+  const BUILD_ID = 'v159-camera-framing';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -586,7 +586,28 @@
   let MIN_CAMERA_ZOOM = VW / STAGE_W;
   const DEFAULT_CAMERA_ZOOM = 0.78;
   const MAX_CAMERA_ZOOM = 1;
+  // 名前カード・風表示・ミニマップの下から操作盤までが、実際に戦場を読める範囲。
+  // 2vs2では名前カードが2段になり、ターン帯とミニマップも34px下がる。
+  // HUDの裏まで「見えている高さ」に数えると、標準は小さく潰れ、大型は逆に寄りすぎる。
+  const CAMERA_VIEW_TOP_1V1 = 176;
+  const CAMERA_VIEW_TOP_2V2 = 210;
   const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';
+  const CAMERA_DISTANCE_KEY = 'katamon_camera_distance_v2';
+  // v157/v158が大型の「最遠」として自動保存した生倍率。新しい距離設定への移行用。
+  const LEGACY_LARGE_FAR_ZOOM = CONTROL_PANEL_Y / 960;
+  function clampCameraDistance(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+  function loadCameraDistance() {
+    try {
+      const raw = localStorage.getItem(CAMERA_DISTANCE_KEY);
+      if (raw == null) return null;
+      const value = Number(raw);
+      return Number.isFinite(value) ? clampCameraDistance(value) : null;
+    } catch (err) {
+      return null;
+    }
+  }
   function loadCameraZoom() {
     try {
       const value = Number(localStorage.getItem(CAMERA_ZOOM_KEY));
@@ -596,8 +617,13 @@
     }
   }
   function saveCameraZoom() {
-    try { localStorage.setItem(CAMERA_ZOOM_KEY, String(cameraZoom)); } catch (err) { /* 保存できなくても視点操作は続行可能 */ }
+    cameraDistanceSetting = clampCameraDistance(cameraSliderValue());
+    try {
+      localStorage.setItem(CAMERA_ZOOM_KEY, String(cameraZoom));
+      localStorage.setItem(CAMERA_DISTANCE_KEY, String(cameraDistanceSetting));
+    } catch (err) { /* 保存できなくても視点操作は続行可能 */ }
   }
+  let cameraDistanceSetting = loadCameraDistance();
   let cameraZoom = loadCameraZoom();
   let cameraX = 0;
   let cameraY = 0;
@@ -606,11 +632,17 @@
   function clampCameraZoom(zoom) {
     return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
   }
+  function cameraViewportTop() {
+    return is2v2() ? CAMERA_VIEW_TOP_2V2 : CAMERA_VIEW_TOP_1V1;
+  }
+  function cameraViewportHeight() {
+    return CONTROL_PANEL_Y - cameraViewportTop();
+  }
   function visibleWorldWidth() {
     return VW / cameraZoom;
   }
   function visibleWorldHeight() {
-    return CONTROL_PANEL_Y / cameraZoom;
+    return cameraViewportHeight() / cameraZoom;
   }
   function clampCameraX(x) {
     return Math.min(Math.max(0, STAGE_W - visibleWorldWidth()), Math.max(0, x));
@@ -619,9 +651,8 @@
     return clampCameraX(worldX - visibleWorldWidth() / 2);
   }
   function clampCameraY(y) {
-    const min = Math.min(0, STAGE_H - visibleWorldHeight());
     const max = Math.max(0, STAGE_H - visibleWorldHeight());
-    return Math.min(max, Math.max(min, y));
+    return Math.min(max, Math.max(0, y));
   }
   function centerCameraYOn(worldY) {
     return clampCameraY(worldY - visibleWorldHeight() / 2);
@@ -640,6 +671,7 @@
     }
   }
   function applyWorldCamera(parallaxFactor = 1) {
+    ctx.translate(0, cameraViewportTop());
     ctx.scale(cameraZoom, cameraZoom);
     ctx.translate(-cameraX * parallaxFactor, -cameraY);
   }
@@ -647,7 +679,7 @@
     return (worldX - cameraX) * cameraZoom;
   }
   function worldToScreenY(worldY) {
-    return (worldY - cameraY) * cameraZoom;
+    return cameraViewportTop() + (worldY - cameraY) * cameraZoom;
   }
 
   const canvas = document.getElementById('game');
@@ -1599,13 +1631,26 @@
     const terrainHeightRatio = STAGE_H / 660;
     GROUND_MIN_Y = 300 * terrainHeightRatio;
     GROUND_MAX_Y = 516 * terrainHeightRatio;
-    // 大型で横幅全体まで引くと、縦の見える範囲が戦場より大きくなり、
-    // 上下に空白を足した縮小画面になってしまう。大型だけは操作盤より上の
-    // 高さを超えて引けないようにして、横はミニマップと追従カメラで見る。
+    // 横幅だけを基準にすると、縦長画面では戦場が小さく潰れてしまう。
+    // 反対に操作盤より上の660px全部を基準にすると、HUDの裏まで見える扱いになり
+    // 大型だけ69%へ寄りすぎる。両サイズとも、HUD下の実表示領域へ全高を収める。
     const widthFitZoom = VW / STAGE_W;
-    const largeHeightFitZoom = CONTROL_PANEL_Y / STAGE_H;
-    MIN_CAMERA_ZOOM = large ? Math.max(widthFitZoom, largeHeightFitZoom) : widthFitZoom;
+    const safeHeightFitZoom = cameraViewportHeight() / STAGE_H;
+    MIN_CAMERA_ZOOM = Math.max(widthFitZoom, safeHeightFitZoom);
+    // 標準↔大型、1vs1↔2vs2で最小倍率は変わる。生の倍率ではなく
+    // 「最遠〜最寄のどこを選んだか」を保ち、切替だけで勝手に寄らないようにする。
+    if (Number.isFinite(cameraDistanceSetting)) {
+      cameraZoom = MIN_CAMERA_ZOOM + (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM) * clampCameraDistance(cameraDistanceSetting);
+    } else {
+      // v158以前の保存値は生の倍率だけ。大型で自動補正された69%以下は
+      // ユーザーが寄せた値ではなく旧版の「最遠」なので、新しい最遠へ移す。
+      // それより近い保存値だけは見た目を可能な範囲で引き継ぐ。
+      cameraZoom = cameraZoom <= LEGACY_LARGE_FAR_ZOOM + 1e-6
+        ? MIN_CAMERA_ZOOM
+        : clampCameraZoom(cameraZoom);
+    }
     cameraZoom = clampCameraZoom(cameraZoom);
+    saveCameraZoom();
     cameraX = clampCameraX(cameraX);
     cameraY = clampCameraY(cameraY);
     [terrainCanvas, terrainRimCanvas, terrainRimLayer, bridgeCanvas, arenaDecorationCanvas, terrainArtCanvas].forEach((layer) => {
@@ -3701,7 +3746,19 @@
   // コントローラー部の左上。右上の必殺ボタンと向かい合い、移動・発射には触れない位置。
   const CAMERA_SLIDER = { x: 60, y: CONTROL_PANEL_Y + 31, w: 110 };
   function cameraSliderValue() {
-    return (cameraZoom - MIN_CAMERA_ZOOM) / (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM);
+    const range = MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM;
+    return range > 0 ? clampCameraDistance((cameraZoom - MIN_CAMERA_ZOOM) / range) : 1;
+  }
+  function cameraDistanceLabel() {
+    const value = cameraSliderValue();
+    if (value <= 0.08) return '最遠';
+    if (value < 0.42) return '遠';
+    if (value < 0.75) return '中';
+    if (value < 0.94) return '近';
+    return '最寄';
+  }
+  function cameraWidthCoveragePercent() {
+    return Math.round(Math.min(1, visibleWorldWidth() / STAGE_W) * 100);
   }
   function isInCameraSlider(p) {
     return p.x >= CAMERA_SLIDER.x - 16 && p.x <= CAMERA_SLIDER.x + CAMERA_SLIDER.w + 16
@@ -3709,10 +3766,14 @@
   }
   function setCameraZoomFromSlider(point) {
     const value = Math.max(0, Math.min(1, (point.x - CAMERA_SLIDER.x) / CAMERA_SLIDER.w));
+    const centerWorldX = cameraX + visibleWorldWidth() / 2;
+    const centerWorldY = cameraY + visibleWorldHeight() / 2;
     cameraZoom = clampCameraZoom(MIN_CAMERA_ZOOM + (MAX_CAMERA_ZOOM - MIN_CAMERA_ZOOM) * value);
     saveCameraZoom();
-    cameraX = clampCameraX(cameraX);
+    cameraX = centerCameraOn(centerWorldX);
+    cameraY = centerCameraYOn(centerWorldY);
     cameraTargetX = null;
+    cameraTargetY = null;
   }
 
   // ===== 発射ボタン(画面下部中央・固定アンカー式スリング。ここから引っ張って離すと発射) =====
@@ -4998,6 +5059,8 @@
       focusCameraOn(activeUnit().x, true, activeUnit().y);
     } else {
       cameraZoom = clampCameraZoom(data.camera && Number.isFinite(data.camera.zoom) ? data.camera.zoom : DEFAULT_CAMERA_ZOOM);
+      cameraDistanceSetting = cameraSliderValue();
+      saveCameraZoom();
       cameraX = clampCameraX(data.camera && Number.isFinite(data.camera.x) ? data.camera.x : centerCameraOn(localUnit().x));
       cameraY = clampCameraY(data.camera && Number.isFinite(data.camera.y) ? data.camera.y : centerCameraYOn(localUnit().y));
       cameraTargetX = null;
@@ -11856,7 +11919,7 @@
     ctx.fillText(`ΔH ${heightGap}`, map.x + map.w - 7, map.y + 11);
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${Math.round(cameraZoom * 100)}%`, map.x + map.w / 2, map.y + map.h - 6);
+    ctx.fillText(`横 ${cameraWidthCoveragePercent()}%`, map.x + map.w / 2, map.y + map.h - 6);
     ctx.restore();
   }
 
@@ -12984,7 +13047,7 @@
     const labelY = slider.y - 13;
 
     ctx.save();
-    drawOutlinedText(`視点距離 ${Math.round(cameraZoom * 100)}%`, slider.x, labelY, {
+    drawOutlinedText(`視点距離 ${cameraDistanceLabel()}`, slider.x, labelY, {
       align: 'left', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
     drawOutlinedText('遠', slider.x - 14, slider.y + 4, {
@@ -13598,6 +13661,7 @@
     const distance = Math.hypot(b.x - a.x, b.y - a.y);
     if (distance < 12) return false;
     const midpointX = (a.x + b.x) / 2;
+    const midpointY = (a.y + b.y) / 2;
 
     // 1本目で始まっていたパンを2本指ズームへ切り替える。
     if (inputMode === 'aim') aimState = null;
@@ -13608,7 +13672,8 @@
       ids: [first[0], second[0]],
       startDistance: distance,
       startZoom: cameraZoom,
-      anchorWorldX: cameraX + midpointX / cameraZoom
+      anchorWorldX: cameraX + midpointX / cameraZoom,
+      anchorWorldY: cameraY + (midpointY - cameraViewportTop()) / cameraZoom
     };
     return true;
   }
@@ -13972,10 +14037,13 @@
       if (a && b) {
         const distance = Math.max(12, Math.hypot(b.x - a.x, b.y - a.y));
         const midpointX = (a.x + b.x) / 2;
+        const midpointY = (a.y + b.y) / 2;
         cameraZoom = clampCameraZoom(pinchState.startZoom * distance / pinchState.startDistance);
         saveCameraZoom();
         cameraX = clampCameraX(pinchState.anchorWorldX - midpointX / cameraZoom);
+        cameraY = clampCameraY(pinchState.anchorWorldY - (midpointY - cameraViewportTop()) / cameraZoom);
         cameraTargetX = null;
+        cameraTargetY = null;
       }
       return;
     }
