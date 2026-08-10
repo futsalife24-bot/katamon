@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v166-single-exit';
+const CACHE_VERSION = 'katamon-pwa-v167-title-button-labels';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
