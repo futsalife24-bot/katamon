@@ -1683,13 +1683,13 @@ kt.setLocalSeat('p1');
   check('一度通すか飛ばすと、タイトルで勧めなくなる', kt.tutorialRecommended() === false);
 }
 
-// タイトルの「あそび方」は、ほかのボタンと重ならないこと。
+// タイトルの「チュートリアル」は、ほかのボタンと重ならないこと。
 {
   const b = kt.titleBtnRects();
   const others = [b.cpu, b.online, b.free, b.bonus, b.ranking, b.update];
-  check('「あそび方」ボタンが他のタイトルボタンと重ならない',
+  check('「チュートリアル」ボタンが他のタイトルボタンと重ならない',
     others.every(o => !rectsOverlap(b.tutorial, o)), JSON.stringify(b.tutorial));
-  check('「あそび方」ボタンが画面内に収まっている',
+  check('「チュートリアル」ボタンが画面内に収まっている',
     b.tutorial.y - b.tutorial.h / 2 > 0 && b.tutorial.y + b.tutorial.h / 2 < kt.viewH());
 
   // 高さ54の小ボタンへ高さ64の大ボタンと同じ文字位置を使うと、23pxの見出しが上枠へ食い込む。
@@ -1698,9 +1698,9 @@ kt.setLocalSeat('p1');
   kt.resetDrawnText();
   kt.render();
   const titleText = kt.drawnTextDetails();
-  const tutorialLabel = titleText.find(entry => entry.text === 'あそび方');
+  const tutorialLabel = titleText.find(entry => entry.text === 'チュートリアル');
   const freeLabel = titleText.find(entry => entry.text === '演習');
-  check('タイトルの「あそび方」「演習」の見出しが上枠へ食い込まない位置にある',
+  check('タイトルの「チュートリアル」「演習」の見出しが上枠へ食い込まない位置にある',
     tutorialLabel && freeLabel
       && tutorialLabel.y >= b.tutorial.y - 1
       && freeLabel.y >= b.free.y - 1,
@@ -1722,11 +1722,27 @@ kt.setLocalSeat('p1');
     )),
     woodUi ? JSON.stringify(woodUi.assets) : '木板UIなし');
   if (woodUi) {
-    check('主対戦2ボタンは盾、練習2ボタンは吊り看板、補助2ボタンは羊皮紙に揃う',
-      woodUi.imageRects.shields.length === 2
-        && woodUi.imageRects.hangingSigns.length === 2
-        && woodUi.imageRects.parchments.length === 2,
+    const expectedKinds = {
+      cpu: 'parchment', online: 'parchment',
+      tutorial: 'parchment', free: 'parchment',
+      ranking: 'hangingSign', bonus: 'shield'
+    };
+    check('指定どおりCPU／ONLINE／チュートリアル／演習は羊皮紙、RANKINGは吊り看板、おまけは盾を使う',
+      Object.entries(expectedKinds).every(([role, asset]) => (
+        woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
+      )),
       JSON.stringify(woodUi.imageRects));
+    check('木板内はCPU→ONLINE、中央はチュートリアル→演習、下段はRANKING→おまけの順で、更新ボタンは木枠の外にある',
+      woodUi.buttons.cpu.y < woodUi.buttons.online.y
+        && woodUi.buttons.online.y < woodUi.buttons.tutorial.y
+        && woodUi.buttons.tutorial.y === woodUi.buttons.free.y
+        && woodUi.buttons.tutorial.x < woodUi.buttons.free.x
+        && woodUi.buttons.tutorial.w < woodUi.buttons.cpu.w
+        && woodUi.buttons.ranking.y > woodUi.buttons.tutorial.y
+        && woodUi.buttons.bonus.y > woodUi.buttons.free.y
+        && woodUi.buttons.ranking.x < woodUi.buttons.bonus.x
+        && woodUi.buttons.update.y - woodUi.buttons.update.h / 2 > woodUi.board.y + woodUi.board.h,
+      JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
     check('木板と全ボタンがタイトル画面内に収まり、押せる場所が重ならない',
       woodUi.board.x >= 0 && woodUi.board.y >= 0
         && woodUi.board.x + woodUi.board.w <= kt.viewW()
