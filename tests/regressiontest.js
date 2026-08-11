@@ -363,11 +363,13 @@ const shinigami = kt.character('shinigami');
     vs.slots.ally1.length === 1 && vs.slots.foe1.length === 1
     && vs.slots.ally2.length === 2 && vs.slots.foe2.length === 2,
     JSON.stringify(Object.entries(vs.slots).map(([k, v]) => k + ':' + v.length)));
-  check('VS紋章は4人の砲弾カードより後ろに描かれ、顔と名前を隠さない',
-    matchupBody.indexOf('const badge = vsPlateImages.badge;') >= 0
-    && matchupBody.indexOf('const badge = vsPlateImages.badge;') < matchupBody.indexOf('drawVsPlate(cutIn.right, true, foeSlide, flash);')
-    && matchupBody.indexOf('const badge = vsPlateImages.badge;') < matchupBody.indexOf('drawVsPlate(cutIn.left, false, allySlide, flash);'),
-    matchupBody.slice(matchupBody.indexOf('drawVsPlate(cutIn.right'), matchupBody.indexOf('drawVsPlate(cutIn.right') + 260));
+  check('VS紋章は前面、上下の砲弾カードは中央から離れて4人を読める',
+    matchupBody.indexOf('const badge = vsPlateImages.badge;') > matchupBody.indexOf('drawVsPlate(cutIn.right, true, foeSlide, flash);')
+    && matchupBody.indexOf('const badge = vsPlateImages.badge;') > matchupBody.indexOf('drawVsPlate(cutIn.left, false, allySlide, flash);')
+    && html.includes('const VS_ALLY_OFFSET = { x: -48, y: -84 };')
+    && html.includes('const VS_FOE_OFFSET = { x: 40, y: 70 };')
+    && html.includes('const VS_BADGE_W = 104;'),
+    matchupBody.slice(matchupBody.indexOf('drawVsPlate(cutIn.right'), matchupBody.indexOf('drawVsPlate(cutIn.right') + 540));
   // 窓は絵に対する比率で持つ。0〜1を外れると、顔が砲弾からはみ出す。
   check('窓の位置は絵に対する比率で、必ず絵の内側に収まる',
     Object.values(vs.slots).every(list => list.every(([x0, y0, x1, y1]) =>
