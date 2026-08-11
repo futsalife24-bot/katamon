@@ -1008,8 +1008,9 @@ check('頂点が近すぎる水平撃ちは空中で開かない(自爆しない
   `半径=${craterRadii(fwFlat.craters).join(',')}`);
 
 // ===== タイトルの「おまけ」ボタン =====
-// 押すたび 1曲目 → 2曲目 → 停止 を繰り返す。BGMの切り替えは syncBgm へ一本化して
-// あるので、ここでも「いま鳴るべき曲(desired)」が正しく変わることで確認する。
+// 曲が終わるたび 1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目… と自動で送り、
+// 手動タップの次曲／停止も残す。BGMの切り替えは syncBgm へ一本化しているので、
+// ここでも「いま鳴るべき曲(desired)」が正しく変わることで確認する。
 const btns = kt.titleBtnRects();
 function rectsOverlap(a, b) {
   return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
@@ -1021,6 +1022,9 @@ check('おまけボタンが他のタイトルボタンと重ならない',
 check('おまけボタンが画面内に収まっている',
   btns.bonus.y - btns.bonus.h / 2 > 0 && btns.bonus.y + btns.bonus.h / 2 < kt.viewH(),
   JSON.stringify(btns.bonus));
+check('おまけの盾と押せる範囲を従来より上へ寄せる',
+  btns.bonus.y <= 800,
+  JSON.stringify(btns.bonus));
 
 kt.setPhase('title');
 const bonusBtn = kt.bonusBtn();
@@ -1029,17 +1033,23 @@ function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x
 const bonusTrackCount = kt.bonusTrackCount();
 check('おまけ曲が4曲登録されている', bonusTrackCount === 4, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
-// 曲数ぶん押すと1曲ずつ進み、最後にもう一度押すと停止してタイトル曲へ戻る。
-let cycleNg = [];
-for (let n = 1; n <= bonusTrackCount; n++) {
-  tapBonus();
-  if (kt.bgm().bonusTrack !== n) cycleNg.push(`${n}回目=${kt.bgm().bonusTrack}`);
-  if (kt.bgm().desired !== 'bonus') cycleNg.push(`${n}回目のdesired=${kt.bgm().desired}`);
-}
-check('押すたびに1曲ずつ進み、どの曲でもおまけ曲が鳴るべき曲になる',
-  cycleNg.length === 0, cycleNg.join(', '));
 tapBonus();
-check('最後まで進めてもう一度押すと停止してタイトル曲へ戻る',
+check('おまけを押すと1曲目を再生する',
+  kt.bgm().bonusTrack === 1 && kt.bgm().desired === 'bonus',
+  `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+let autoAdvanceNg = [];
+for (const expected of [2, 3, 4, 1]) {
+  const advanced = kt.finishBonusTrackForTest();
+  if (advanced !== true || kt.bgm().bonusTrack !== expected || kt.bgm().desired !== 'bonus') {
+    autoAdvanceNg.push(`終了後=${kt.bgm().bonusTrack}/${kt.bgm().desired}`);
+  }
+}
+check('おまけ曲は終わるたび次曲へ進み、4曲目の後は1曲目へ戻る',
+  autoAdvanceNg.length === 0, autoAdvanceNg.join(', '));
+// 手動タップも従来どおり、次曲を選んで最後に停止できる。
+for (let n = 2; n <= bonusTrackCount; n++) tapBonus();
+tapBonus();
+check('手動で最後まで進めてもう一度押すと停止してタイトル曲へ戻る',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
 // 曲ごとに録音レベルが違うので、体感音量を揃えるための基準音量を個別に持つ。
@@ -1783,6 +1793,9 @@ kt.setLocalSeat('p1');
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),
       JSON.stringify(woodUi.imageRects));
+    check('おまけの盾素材も少し上へ寄せる',
+      woodUi.imageRects.bonus.y <= 805,
+      JSON.stringify(woodUi.imageRects.bonus));
     check('木枠と中のボタン素材を同じ割合で一回り大きくする',
       woodUi.board.w >= 450 && woodUi.board.h >= 430
         && woodUi.imageRects.cpu.w >= 295 && woodUi.imageRects.cpu.h >= 80

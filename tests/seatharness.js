@@ -579,6 +579,9 @@ const HOOK = `
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
     bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),
+    finishBonusTrackForTest: () => (
+      typeof advanceBonusBgmAfterEnd === 'function' ? advanceBonusBgmAfterEnd() : false
+    ),
     titleBgmBaseVolume: () => TITLE_BGM_BASE_VOLUME,
     syncBgm: () => syncBgm(),
     controls: () => units.map(u => u.id + ':' + u.control).join(','),

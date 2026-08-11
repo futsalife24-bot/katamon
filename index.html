@@ -574,7 +574,7 @@
 <audio id="stageBgm" preload="none"></audio>
 <audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3?v=1"></audio>
 <!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
-<audio id="bonusBgm" preload="none" loop></audio>
+<audio id="bonusBgm" preload="none"></audio>
 
 <script src="shared/stage-core.js?v=1"></script>
 <script src="shared/stage-storage.js?v=1"></script>
@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v172-exit-dialog-wood';
+  const BUILD_ID = 'v173-title-bonus-polish';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -997,7 +997,7 @@
   // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
   const roomBgm = document.getElementById('roomBgm');
   roomBgm.volume = ROOM_BGM_BASE_VOLUME;
-  // タイトルの「おまけ」ボタンで鳴らす曲。押すたびに 1曲目 → 2曲目 → 停止 と切り替える。
+  // タイトルの「おまけ」ボタンで鳴らす曲。曲が終わると次の曲へ自動で切り替える。
   // srcは押されるまで入れない。タイトル表示のために数MBを先読みさせないため。
   const bonusBgm = document.getElementById('bonusBgm');
   bonusBgm.volume = BONUS_BGM_BASE_VOLUME;
@@ -1084,7 +1084,7 @@
     roomBgm.pause();
     if (reset && roomBgm.readyState > HTMLMediaElement.HAVE_NOTHING) roomBgm.currentTime = 0;
   }
-  // おまけ曲。ループはloop属性任せ。曲を切り替える時だけsrcを差し替える。
+  // おまけ曲。曲を切り替える時だけsrcを差し替える。
   function playBonusBgm() {
     if (!bgmAudible() || !bonusBgmTrack) return;
     const track = BONUS_BGM_TRACKS[bonusBgmTrack];
@@ -1100,6 +1100,15 @@
     const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
     promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = bonusBgm; });
   }
+  // おまけ曲は曲末で止めず、1 → 2 → 3 → 4 → 1… と次曲へ送る。
+  // 戦闘・ルームへ移った後に遅れて届くendedは、タイトル曲を勝手に戻さないよう無視する。
+  function advanceBonusBgmAfterEnd() {
+    if (!bonusBgmTrack || gamePhase === 'battle' || roomScreenOpen()) return false;
+    bonusBgmTrack = bonusBgmTrack >= BONUS_BGM_TRACKS.length - 1 ? 1 : bonusBgmTrack + 1;
+    syncBgm();
+    return true;
+  }
+  bonusBgm.addEventListener('ended', advanceBonusBgmAfterEnd);
   function stopBonusBgm(reset = true) {
     bonusBgm.pause();
     if (reset && bonusBgm.readyState > HTMLMediaElement.HAVE_NOTHING) bonusBgm.currentTime = 0;
@@ -4055,14 +4064,14 @@
     tutorial: { asset: 'parchment', x: 169, y: 700, w: 189, h: 52 },
     free: { asset: 'parchment', x: 374, y: 700, w: 189, h: 52 },
     ranking: { asset: 'hangingSign', x: 165, y: 787, w: 189, h: 119 },
-    bonus: { asset: 'shield', x: 378, y: 813, w: 125, h: 112 }
+    bonus: { asset: 'shield', x: 378, y: 801, w: 125, h: 112 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
   const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
   const titleTutorialBtn = { x: 169, y: 700, w: 175, h: 43 };
   const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
   const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
-  const titleBonusBtn = { x: 378, y: 811, w: 99, h: 81 };
+  const titleBonusBtn = { x: 378, y: 799, w: 99, h: 81 };
   // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
   const TITLE_WOOD_SELECTION_OUTLINE = false;
   // 保守用の更新ボタンだけは、見本どおり木枠の外へ置いて従来の鉄板を残す。
@@ -14397,7 +14406,7 @@
         playUiSound();
         // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
         ensureBgmGraph();
-        // 押すたび 1曲目 → 2曲目 → 停止(タイトル曲へ戻る) を繰り返す。
+        // 手動でも次曲を選べる。曲末はadvanceBonusBgmAfterEndが自動で次へ送る。
         bonusBgmTrack = (bonusBgmTrack + 1) % BONUS_BGM_TRACKS.length;
         syncBgm();
       } else if (hitRect(p0, titleRankingBtn)) {
