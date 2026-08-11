@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v171-select-resume-gear';
+const CACHE_VERSION = 'katamon-pwa-v172-exit-dialog-wood';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
