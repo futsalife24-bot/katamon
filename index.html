@@ -407,67 +407,73 @@
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
     position: relative; isolation: isolate;
-    width: min(370px, 100%); box-sizing: border-box; padding: 50px 20px 20px;
-    text-align: center; border: 4px solid #8a5729; border-radius: 10px 10px 20px 20px;
+    width: min(382px, 100%); box-sizing: border-box; padding: 48px 21px 22px;
+    text-align: center; border: 4px solid #6c4322; border-radius: 5px 5px 13px 13px;
     background:
-      linear-gradient(90deg, transparent 48%, rgba(255,230,175,.045) 50%, transparent 52%) 0 0 / 48px 100%,
-      linear-gradient(180deg, #4b3424 0 44px, #25353a 45px, #0b1418 100%);
-    box-shadow: 0 0 0 2px #211107, 0 20px 70px rgba(0,0,0,.78), inset 0 0 0 2px rgba(255,220,142,.13);
-    filter: drop-shadow(0 5px 0 rgba(0,0,0,.28));
+      repeating-linear-gradient(176deg, rgba(255,204,123,.06) 0 2px, transparent 2px 26px),
+      linear-gradient(90deg, rgba(18,9,4,.46), transparent 14%, transparent 86%, rgba(18,9,4,.46)),
+      linear-gradient(180deg, #5d371c, #301a0d 55%, #1c0d06);
+    box-shadow: 0 0 0 2px #1b0c04, 0 19px 48px rgba(0,0,0,.78), inset 0 0 0 2px rgba(248,190,102,.14);
   }
   #deviceBackConfirmPanel::before,
   #deviceBackConfirmPanel::after {
-    content: ""; position: absolute; top: 18px; width: 10px; height: 10px; border-radius: 50%;
+    content: ""; position: absolute; top: 16px; width: 10px; height: 10px; border-radius: 50%;
     background: radial-gradient(circle at 34% 30%, #fff0a0, #a96b24 42%, #301805 76%);
     box-shadow: 0 1px 0 #000, 0 0 0 2px rgba(31,16,6,.75);
   }
   #deviceBackConfirmPanel::before { left: 17px; }
   #deviceBackConfirmPanel::after { right: 17px; }
-  #deviceBackConfirmCrest {
-    position: absolute; z-index: 2; top: -44px; left: 50%; transform: translateX(-50%);
-    width: 82px; height: 82px; display: grid; place-items: center; border-radius: 50%;
-    background: radial-gradient(circle, #26383d 0 56%, #11191c 58% 63%, #b47728 65% 70%, #251207 72%);
-    filter: drop-shadow(0 7px 8px rgba(0,0,0,.65));
-  }
-  #deviceBackConfirmCrest img { width: 68px; height: 68px; object-fit: contain; }
   #deviceBackConfirmKicker {
-    margin: 0 0 5px; color: #c88a3b; font: 400 10px/1 var(--katamon-font-ui);
-    letter-spacing: .2em; text-transform: uppercase;
+    position: absolute; top: -28px; left: 50%; transform: translateX(-50%); z-index: 2;
+    width: min(258px, 78vw); box-sizing: border-box; margin: 0; padding: 12px 14px 10px;
+    color: #ffe2a1; font: 400 16px/1 var(--katamon-font-display); letter-spacing: .06em;
+    background: linear-gradient(180deg, #714722, #3a1e0c 62%, #241006);
+    border: 3px solid #3a210f; border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255,220,152,.28), 0 4px 0 #170904, 0 7px 12px rgba(0,0,0,.55);
   }
   #deviceBackConfirmTitle {
-    margin: 0 0 13px; color: #ffe6a8;
-    font: 400 24px/1.4 var(--katamon-font-display);
-    letter-spacing: .04em; text-shadow: 0 2px 0 #120904, 0 0 14px rgba(255,195,75,.24);
+    margin: 0 0 8px; color: #fff0c9;
+    font: 400 22px/1.4 var(--katamon-font-display);
+    letter-spacing: .04em; text-shadow: 0 2px 0 #170904;
   }
   #deviceBackConfirmNote {
-    position: relative; margin: 0 0 16px; padding: 14px 16px;
-    color: #3a2414; font: 400 13px/1.65 var(--katamon-font-ui);
-    border: 2px solid #7a4a22; border-radius: 3px 3px 8px 8px;
-    background:
-      radial-gradient(circle at 14% 28%, rgba(117,69,25,.12) 0 1px, transparent 2px),
-      linear-gradient(145deg, #f0d49a, #d9ac63 58%, #bd7e38);
-    box-shadow: inset 0 0 18px rgba(92,48,14,.23), 0 4px 9px rgba(0,0,0,.35);
+    margin: 0 0 17px; padding: 0 8px;
+    color: #e2c391; font: 400 12px/1.55 var(--katamon-font-ui);
+    text-shadow: 0 1px 0 #180a04;
   }
-  #deviceBackConfirmActions { display: grid; grid-template-columns: 1fr; gap: 9px; }
-  #deviceBackConfirmActions button {
-    min-height: 50px; padding: 9px 12px; border: 2px solid #9b662e; border-radius: 4px 4px 9px 9px;
-    color: #fff5dc; background: linear-gradient(180deg,#3d4d52,#172329 55%,#081015);
-    font-family: var(--katamon-font-ui); cursor: pointer;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 0 #05090b, 0 6px 12px rgba(0,0,0,.28);
+  #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  #deviceBackConfirmActions .deviceBackLever {
+    position: relative; min-height: 56px; padding: 9px 18px 9px 50px; overflow: hidden;
+    border: 3px solid #24130a; border-radius: 5px; color: #fff5dc;
+    font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 0 rgba(0,0,0,.28), 0 4px 0 #130804, 0 8px 12px rgba(0,0,0,.3);
   }
-  #deviceBackConfirmActions button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 1px 0 #05090b; }
-  #deviceBackConfirmActions strong { display: block; font-size: 16px; line-height: 1.3; letter-spacing: .05em; }
-  #deviceBackConfirmActions small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .8; }
+  #deviceBackConfirmActions .deviceBackLever::before {
+    content: ""; position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 29%, #ffe7a0, #bd7427 38%, #48230d 72%);
+    box-shadow: 0 0 0 3px rgba(24,12,6,.8), 0 1px 2px #000;
+  }
+  #deviceBackConfirmActions .deviceBackLever::after {
+    content: ""; position: absolute; left: 23px; top: 50%; width: 23px; height: 7px;
+    transform: translateY(-50%); transform-origin: left center; border-radius: 7px;
+    background: linear-gradient(180deg, #c0c6bc, #53605d 48%, #15201e 52%);
+    box-shadow: 0 1px 1px rgba(0,0,0,.65);
+  }
+  #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.25), 0 1px 0 #130804; }
+  #deviceBackConfirmActions .deviceBackLever:active::after { transform: translateY(-50%) rotate(18deg); }
+  #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 16px; line-height: 1.25; letter-spacing: .04em; }
+  #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .82; }
   #deviceBackStay {
-    min-height: 58px !important; border-color: #ffe49a !important; color: #281609 !important;
-    background: linear-gradient(180deg,#ffe3a0,#efa62e 53%,#bd6716) !important;
-    text-shadow: 0 1px 0 rgba(255,255,255,.45);
+    background: linear-gradient(180deg, #416864, #203e3e 58%, #102625) !important;
+    border-color: #173331 !important;
   }
-  #deviceBackExit { border-color: #667b84 !important; color: #bdc9ce !important; }
+  #deviceBackExit {
+    background: linear-gradient(180deg, #69423b, #382420 58%, #211310) !important;
+    border-color: #24130f !important; color: #f1d9c7 !important;
+  }
   @media (max-height: 620px) {
-    #deviceBackConfirmPanel { padding-top: 38px; transform: scale(.92); }
-    #deviceBackConfirmCrest { top: -34px; width: 66px; height: 66px; }
-    #deviceBackConfirmCrest img { width: 54px; height: 54px; }
+    #deviceBackConfirmPanel { padding-top: 42px; transform: scale(.92); }
   }
 </style>
 </head>
@@ -553,13 +559,12 @@
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
-    <div id="deviceBackConfirmCrest" aria-hidden="true"><img src="assets/loading-emblem.webp" alt=""></div>
-    <p id="deviceBackConfirmKicker">RETURN GATE</p>
-    <h2 id="deviceBackConfirmTitle">アプリを閉じますか？</h2>
-    <p id="deviceBackConfirmNote">作業中の画面を終了します。ブラウザでは前のページへ戻ります。</p>
-    <div id="deviceBackConfirmActions">
-      <button id="deviceBackStay" type="button"><strong>このまま遊ぶ</strong><small>現在の画面へ戻る</small></button>
-      <button id="deviceBackExit" type="button"><strong>アプリを閉じる</strong><small>ブラウザの前のページへ戻る</small></button>
+    <p id="deviceBackConfirmKicker">対戦を中断する？</p>
+    <h2 id="deviceBackConfirmTitle">今はここまでにする？</h2>
+    <p id="deviceBackConfirmNote">中断しても次回はここから続けられるで。</p>
+    <div id="deviceBackConfirmActions" class="deviceBackLevers">
+      <button id="deviceBackStay" class="deviceBackLever deviceBackLever--stay" type="button"><strong>このまま遊ぶ</strong><small>いまの画面へ戻る</small></button>
+      <button id="deviceBackExit" class="deviceBackLever deviceBackLever--exit" type="button"><strong>アプリを閉じる</strong><small>ブラウザの前のページへ戻る</small></button>
     </div>
   </div>
 </div>
@@ -619,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v171-select-resume-gear';
+  const BUILD_ID = 'v172-exit-dialog-wood';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
