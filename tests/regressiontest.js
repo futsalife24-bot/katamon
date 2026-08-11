@@ -368,7 +368,9 @@ const shinigami = kt.character('shinigami');
     && matchupBody.indexOf('const badge = vsPlateImages.badge;') > matchupBody.indexOf('drawVsPlate(cutIn.left, false, allySlide, flash);')
     && html.includes('const VS_ALLY_OFFSET = { x: -48, y: -84 };')
     && html.includes('const VS_FOE_OFFSET = { x: 40, y: 70 };')
-    && html.includes('const VS_BADGE_W = 104;'),
+    && html.includes('const VS_BADGE_W = 104;')
+    && html.includes('const VS_BADGE_OFFSET_Y = -6;')
+    && matchupBody.includes('ctx.translate(VW / 2, VS_CENTER_Y + VS_BADGE_OFFSET_Y);'),
     matchupBody.slice(matchupBody.indexOf('drawVsPlate(cutIn.right'), matchupBody.indexOf('drawVsPlate(cutIn.right') + 540));
   // 窓は絵に対する比率で持つ。0〜1を外れると、顔が砲弾からはみ出す。
   check('窓の位置は絵に対する比率で、必ず絵の内側に収まる',
