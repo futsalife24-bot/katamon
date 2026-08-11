@@ -454,7 +454,8 @@ test.describe('対象ゲームの端末戻る操作', () => {
     await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One"'))).toBe(true);
     await expect(page.locator('#deviceBackConfirmCrest')).toHaveCount(0);
     await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('カタモンを閉じる？');
-    await expect(page.locator('#deviceBackConfirmNote')).toHaveText('閉じると、ブラウザの前のページへ戻るで。');
+    await expect(page.locator('#deviceBackConfirmNote')).toHaveText('終了すると、カタモンを閉じます。');
+    await expect(page.locator('#deviceBackExit small')).toHaveText('カタモンを終了する');
     await expect(page.locator('#deviceBackConfirmActions')).toHaveClass(/deviceBackLevers/);
     await expect(page.locator('#deviceBackStay')).toHaveClass(/deviceBackLever--stay/);
     await expect(page.locator('#deviceBackExit')).toHaveClass(/deviceBackLever--exit/);

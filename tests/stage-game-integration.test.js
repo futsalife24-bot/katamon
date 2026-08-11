@@ -393,7 +393,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(managerCss, /url\("assets\/wall\.jpg"\)/);
   assert.doesNotMatch(html, /id="deviceBackConfirmCrest"/);
   assert.match(html, /id="deviceBackConfirmKicker">カタモンを閉じる？/);
-  assert.match(html, /id="deviceBackConfirmNote">閉じると、ブラウザの前のページへ戻るで。/);
+  assert.match(html, /id="deviceBackConfirmNote">終了すると、カタモンを閉じます。/);
+  assert.match(html, /id="deviceBackExit"[\s\S]*カタモンを終了する/);
   assert.match(html, /id="deviceBackConfirmActions" class="deviceBackLevers"/);
   assert.match(html, /id="deviceBackStay" class="deviceBackLever deviceBackLever--stay"/);
   assert.match(html, /id="deviceBackExit" class="deviceBackLever deviceBackLever--exit"/);
@@ -407,10 +408,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v174-exit-copy/);
+  assert.match(html, /v175-standard-game-copy/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v174-exit-copy/);
+  assert.match(serviceWorker, /katamon-pwa-v175-standard-game-copy/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });
