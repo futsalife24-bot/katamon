@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v173-title-bonus-polish';
+const CACHE_VERSION = 'katamon-pwa-v174-exit-copy';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
