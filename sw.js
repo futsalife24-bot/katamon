@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v177-vs-card-spacing';
+const CACHE_VERSION = 'katamon-pwa-v178-vs-badge-rise';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
