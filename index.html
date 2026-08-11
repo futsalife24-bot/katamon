@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v175-standard-game-copy';
+  const BUILD_ID = 'v176-vs-crest-layer';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -12559,7 +12559,8 @@
   // 左右にずらして、VSの紋章が顔ではなく窓と窓の境目へ落ちるようにする。
   const VS_ALLY_OFFSET = { x: -42, y: -68 };
   const VS_FOE_OFFSET = { x: 30, y: 54 };
-  const VS_BADGE_W = 104;
+  // 2vs2では4人ぶんの窓を最優先に読ませる。VSは後ろから支える紋章として少し小さくする。
+  const VS_BADGE_W = 92;
   const VS_FLY_SEC = 0.42;            // 飛んでくる時間。ここを過ぎた瞬間が衝突
   const VS_EXIT_SEC = 0.52;           // 最後にお互いを撃ち抜けて画面の外へ出るまで
 
@@ -12769,11 +12770,7 @@
       font: `400 25px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
     });
 
-    // 相手陣営を先に描き、自陣営を上に重ねる(見本と同じ重なり)。
-    drawVsPlate(cutIn.right, true, foeSlide, flash);
-    drawVsPlate(cutIn.left, false, allySlide, flash);
-
-    // VSの紋章。ぶつかった瞬間に大きく出て、少し縮んで落ち着く。
+    // VSの紋章。4人の顔・名前を最優先にするため、砲弾カードより先に背景として描く。
     if (sinceHit >= -0.02) {
       const pop = Math.min(1, Math.max(0, (sinceHit + 0.02) / 0.2));
       const scale = 0.4 + 0.75 * (1 - Math.pow(1 - pop, 3)) + Math.sin(pop * Math.PI) * 0.16;
@@ -12792,6 +12789,11 @@
       }
       ctx.restore();
     }
+
+    // 相手陣営を先に描き、自陣営を上に重ねる(見本と同じ重なり)。
+    // VS紋章より後に描くので、2vs2でも全員の顔と名前が隠れない。
+    drawVsPlate(cutIn.right, true, foeSlide, flash);
+    drawVsPlate(cutIn.left, false, allySlide, flash);
 
     // 火花。ぶつかった直後だけ、中央から散る。
     if (flash > 0) {

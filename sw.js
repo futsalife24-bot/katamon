@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v175-standard-game-copy';
+const CACHE_VERSION = 'katamon-pwa-v176-vs-crest-layer';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
