@@ -285,6 +285,17 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     selectCard ? '古い情報の参照が残っています' : 'カード描画関数が見つかりません');
 }
 
+// v180: キャラクターの表示名を、種族名から固有名へ更新する。
+const EXPECTED_CHARACTER_NAMES = {
+  kyoryu: 'ディラノ', medama: 'アイボルト', iwa: 'ゴーロッカ', tori: 'フェニーチェ',
+  barugerukan: 'バルゲルカン', nisenmono: 'オベリスク', burumutan: 'ブルームタン', sumoeru: 'スモエル',
+  doRednote: 'ドレッドアロー', mocchario: 'モッチャリオ', mecha: 'クロムギア', akuma: 'ルビデビ',
+  jinba: 'アスタウロス', kishi: 'パラディエ', neko: 'にゃんタンク', shinigami: 'ヨミガマ'
+};
+check('全キャラクターの表示名が確定した名前になっている',
+  Object.entries(EXPECTED_CHARACTER_NAMES).every(([key, name]) => kt.character(key).name === name),
+  JSON.stringify(Object.fromEntries(Object.keys(EXPECTED_CHARACTER_NAMES).map(key => [key, kt.character(key).name]))));
+
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
 // 別の種類として持たせないと、4体の顔ぶれを描き分けられない。
 check('VSカットインの状態を検査できる', typeof kt.matchupCutIn === 'function');
