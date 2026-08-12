@@ -815,7 +815,7 @@ function check(name, value) {
     && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
     && sumoeruRoomPreview.alt === 'スモエル'
     && medamaRoomPreview.character === 'medama' && /medama\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
-    && medamaRoomPreview.alt === '目玉'
+    && medamaRoomPreview.alt === 'アイボルト'
     && medamaRoomPreview.options === 16);
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
@@ -2043,7 +2043,7 @@ function check(name, value) {
     check('the room shows lifetime, selected-monster and opponent records without sending their values',
       roomRecordText.includes('この端末の対人戦績')
       && roomRecordText.includes('通算')
-      && roomRecordText.includes('恐竜')
+      && roomRecordText.includes('ディラノ')
       && roomRecordText.includes('ライバルA')
       && roomRecordText.includes('1勝') && roomRecordText.includes('1敗'));
     battle.freezeRoundRivals();
