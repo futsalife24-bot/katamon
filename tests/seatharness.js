@@ -627,6 +627,24 @@ const HOOK = `
       updateWallBreak(WALL_IMPACT_SEC);
     },
     fireworkShardExplodeForTest: (x, y, ownerId) => fireworkShardExplode({ owner: ownerId }, 1, x, y),
+    fireworkConfigForTest: () => ({
+      proximityRadius: typeof FIREWORK_PROXIMITY_RADIUS === 'undefined' ? null : FIREWORK_PROXIMITY_RADIUS,
+      armDistance: typeof FIREWORK_ARM_DISTANCE === 'undefined' ? null : FIREWORK_ARM_DISTANCE,
+      shardSpeed: typeof FIREWORK_SHARD_SPEED === 'undefined' ? null : FIREWORK_SHARD_SPEED,
+      shardBlasts: typeof FIREWORK_SHARD_BLASTS === 'undefined' ? [] : FIREWORK_SHARD_BLASTS.slice()
+    }),
+    fireworkProximityProbeForTest: (ownerId, targetId, offset, travelDistance) => {
+      if (typeof fireworkProximityTarget !== 'function') return null;
+      const target = unitById(targetId);
+      if (!target) return null;
+      const a = unitHitCenter(target);
+      const hit = fireworkProximityTarget({
+        owner: ownerId,
+        x: a.x - Number(offset || 0), y: a.y,
+        travelDistance: Number(travelDistance || 0)
+      });
+      return hit ? hit.id : null;
+    },
     projectileOwnerKind: () => projectiles.map(p => typeof p.owner),
     damageTexts: () => floatTexts.map(t => t.text),
     clearDamageTexts: () => { floatTexts.length = 0; },

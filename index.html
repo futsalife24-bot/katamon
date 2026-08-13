@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v181-character-assets';
+  const BUILD_ID = 'v183-sumo-proximity-firework';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2679,7 +2679,7 @@
     sumoeru: {
       key: 'sumoeru', name: 'スモエル', asset: 'sumoeru', role: '爆発型', roleEn: 'BURST',
       desc: '花火筒を背負うお祭り砲撃戦車。爆風で地形ごと一気に崩す。',
-      selectStats: [3, 4, 2], specialDesc: '着弾または時間経過で8方向へ散る花火', selectFlavor: '夜空と地面を染める大花火。',
+      selectStats: [3, 4, 2], specialDesc: '敵へ近づくと8方向へゆっくり散る花火', selectFlavor: '夜空と地面を染める大花火。',
       maxHp: 100, blastMul: 1.15, windMul: 1.1, fuelMul: 0.9, velScaleMul: 0.9, specialVelocityMul: 1.0, tBias: 1.1,
       color: '#b277ff', special: '八方向花火', facesLeft: true
     },
@@ -3425,11 +3425,7 @@
       blastMul: opts.blastMul || 1,
       windMul,
       gravityMul,
-      // 花火は「いつ・どこで開くか」を発射時に確定させる。飛行中の通信も、
-      // フレームごとの積み上げも使わないので両端末で必ず一致する。
-      apexBurst: opts.firework && !opts.fireworkShard
-        ? fireworkApexBurst(anchor, vx, vy, wind.dir * wind.strength * WIND_ACCEL_MAX * windMul, GRAVITY * gravityMul)
-        : null,
+      // 花火の接近信管も固定刻みの物理内で判定し、両端末で一致させる。
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
       normalImpactSound: !!opts.normalImpactSound,
       pierce: !!opts.pierce,
@@ -3444,7 +3440,6 @@
       fireworkShard: !!opts.fireworkShard,
       deathGateMarker: !!opts.deathGateMarker,
       deathGateScythe: !!opts.deathGateScythe,
-      fireworkTimer: 0,
       travelDistance: 0,
       shardBlasts: 0,          // 拡散弾が起こし終えた爆発の回数
       deathGateCarves: 0,
@@ -3516,28 +3511,31 @@
   }
 
   // ===== 花火(スモエルの必殺)=====
-  const FIREWORK_SHARD_BLASTS = [0.5, 0.34, 0.22];  // 拡散弾が進みながら起こす爆発。大→中→小
+  const FIREWORK_PROXIMITY_RADIUS = 90;             // 敵の当たり判定中心へ近づくと空中炸裂
+  const FIREWORK_ARM_DISTANCE = 120;                // 発射直後の近距離誤作動を防ぐ起動距離
+  const FIREWORK_SHARD_SPEED = 180;                 // 従来360の半速で花火をゆっくり開く
+  const FIREWORK_SHARD_BLASTS = [0.72, 0.56, 0.24]; // 各方向の根元2発は中弾、先端1発は小弾
   const FIREWORK_SHARD_RANGE = 180;                 // 拡散弾が進む距離
   const FIREWORK_SHARD_DAMAGE_MUL = 0.18;           // 拡散弾1発ぶんのダメージは小さく
   const FIREWORK_BURST_DAMAGE_CAP = 22;             // 1炸裂でユニット1体が拡散弾から受ける合計上限
   let fireworkBurstDamage = null;
 
-  // 花火の空中炸裂点。発射条件だけから数式で求めるので、端末のフレームレートにも
-  // 通信の遅れにも左右されず、両端末で必ず同じ場所になる(風は飛行中変わらない)。
-  // 上へ撃った時だけ弧の頂点で開く。頂点が近すぎる(自分の拡散弾が届く範囲)場合と、
-  // 水平・下向きに撃った場合は空中で開かず、従来どおり着弾して開く。
-  function fireworkApexBurst(anchor, vx0, vy0, windAccel, gravity) {
-    if (!(vy0 < 0) || !(gravity > 0)) return null;
-    const t = -vy0 / gravity;
-    const x = anchor.x + vx0 * t + 0.5 * windAccel * t * t;
-    const y = anchor.y + vy0 * t + 0.5 * gravity * t * t;
-    const dx = x - anchor.x, dy = y - anchor.y;
-    if (dx * dx + dy * dy < FIREWORK_SHARD_RANGE * FIREWORK_SHARD_RANGE) return null;
-    return { t, x, y };
+  // 発射点から一定距離を飛んだ後、敵へ近づいた時だけ接近信管を作動させる。
+  // 味方には反応せず、固定刻みの位置だけを見るので端末の描画速度にも左右されない。
+  function fireworkProximityTarget(p) {
+    if (p.travelDistance < FIREWORK_ARM_DISTANCE) return null;
+    const ownerTeam = teamOfOwner(p.owner);
+    const radiusSq = FIREWORK_PROXIMITY_RADIUS * FIREWORK_PROXIMITY_RADIUS;
+    for (const u of units) {
+      if (unitDefeated(u) || u.team === ownerTeam) continue;
+      const a = unitHitCenter(u);
+      const dx = a.x - p.x, dy = a.y - p.y;
+      if (dx * dx + dy * dy <= radiusSq) return u;
+    }
+    return null;
   }
 
   function spawnFireworkBurst(p) {
-    const speed = 360;
     // 8方向は弾の進行方向ではなく世界の絶対角を基準にする。進行方向基準だと
     // 速度のわずかな差で扇の向きが変わり、端末ごとに削れ方がずれる。
     // 打ち上げ花火は飛んできた向きに関係なく丸く開くので、見た目もこちらが自然。
@@ -3548,7 +3546,7 @@
     spawnExplosion(p.x, p.y, 0.55);
     for (let i = 0; i < 8; i++) {
       const angle = baseAngle + (Math.PI * 2 * i) / 8;
-      fireProjectile(p.owner, { x: p.x, y: p.y }, Math.cos(angle) * speed, Math.sin(angle) * speed, {
+      fireProjectile(p.owner, { x: p.x, y: p.y }, Math.cos(angle) * FIREWORK_SHARD_SPEED, Math.sin(angle) * FIREWORK_SHARD_SPEED, {
         windMul: 0,
         gravityMul: 0,
         pierce: true,
@@ -3704,8 +3702,8 @@
         gravityMul: def.gravityMul
       });
     } else if (activateSpecial && def.key === 'sumoeru') {
-      // スモエルの必殺: 着弾・手動起爆・3秒経過のいずれかで8方向へ散る花火。
-      // 本体の威力は通常弾と同じ。細かく削るのは拡散弾側の役目。
+      // スモエルの必殺: 敵へ近づくと接近信管が作動し、8方向へ散る花火。
+      // 接触・障害物・地形への着弾でも開き、手動起爆と頂点起爆は使わない。
       fireProjectile(owner, anchor, vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
@@ -11460,22 +11458,19 @@
       ctx.fill();
     }
 
-    // 花火は弧の頂点で開く。どこで開くかがそのまま狙う場所なので、撃つ前に見せる。
-    // 印が出ない時は空中で開かず、着弾して開く(頂点が近すぎる/水平・下向きに撃った)。
-    // 実際の炸裂と同じ関数で求めるので、表示と結果がずれることはない。
+    // 接近信管が反応する範囲を敵の周囲へ表示する。
     if (specialArmed && isSpecialReady(me) && def.key === 'sumoeru') {
-      const burst = fireworkApexBurst(anchor, vx0, vy0, windAccel, gravity);
-      if (burst) {
-        ctx.strokeStyle = 'rgba(255,214,120,0.95)';
-        ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,214,120,0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([9, 7]);
+      for (const u of units) {
+        if (unitDefeated(u) || u.team === me.team) continue;
+        const target = unitHitCenter(u);
         ctx.beginPath();
-        ctx.arc(burst.x, burst.y, 11, 0, Math.PI * 2);
+        ctx.arc(target.x, target.y, FIREWORK_PROXIMITY_RADIUS, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(burst.x, burst.y, 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,214,120,0.95)';
-        ctx.fill();
       }
+      ctx.setLineDash([]);
     }
     ctx.restore();
   }
@@ -15437,7 +15432,11 @@
         p.y += p.vy * dt;
       }
 
-      if (p.firework) p.fireworkTimer += dt;
+      if (p.firework && !p.fireworkShard) {
+        const stepX = p.x - prevX;
+        const stepY = p.y - prevY;
+        p.travelDistance += Math.sqrt(stepX * stepX + stepY * stepY);
+      }
       if (p.fireworkShard) {
         const stepX = p.vx * dt;
         const stepY = p.vy * dt;
@@ -15479,8 +15478,14 @@
         }
       }
 
-      // 空中炸裂は発射時に確定した頂点の時刻で起こす。
-      const fireworkDue = p.firework && !p.fireworkShard && p.apexBurst && p.fireworkTimer >= p.apexBurst.t;
+      const fireworkDue = p.firework && !p.fireworkShard && fireworkProximityTarget(p);
+
+      if (fireworkDue) {
+        spawnFireworkBurst(p);
+        teleportOwnerToImpact(p, p.x, p.y);
+        projectiles.splice(i, 1);
+        continue;
+      }
 
       let hit = false;
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
@@ -15531,17 +15536,6 @@
         }
         triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
-        projectiles.splice(i, 1);
-        continue;
-      }
-
-      if (fireworkDue) {
-        // 刻みの都合で頂点を数px通り過ぎていることがある。炸裂位置は必ず
-        // 発射時に確定した頂点そのものへ合わせる。
-        p.x = p.apexBurst.x;
-        p.y = p.apexBurst.y;
-        spawnFireworkBurst(p);
-        teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
         continue;
       }
