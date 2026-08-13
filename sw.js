@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v184-nyan-turn-skip';
+const CACHE_VERSION = 'katamon-pwa-v185-action-skip-effects';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
