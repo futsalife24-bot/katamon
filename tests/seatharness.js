@@ -627,6 +627,12 @@ const HOOK = `
       hitFlashDuration: ACTION_SKIP_HIT_FLASH_DURATION,
       effectDurationMultiplier: ACTION_SKIP_EFFECT_DURATION_MULTIPLIER
     }),
+    actionSkipSequenceForTest: () => cutIn && cutIn.kind === 'actionSkip' ? ({
+      waitingForHitFlash: !!(cutIn.waitForSpecialFlash && specialFlash.timer > 0),
+      presentationVisible: !(cutIn.waitForSpecialFlash && specialFlash.timer > 0),
+      timer: cutIn.timer,
+      duration: cutIn.duration
+    }) : null,
     // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
     explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound) => (

@@ -1096,19 +1096,43 @@ check('行動不能の付与演出と手番の震えは従来の1.5倍にする'
   JSON.stringify(nyanStunConfig));
 const nyanTurnBefore = kt.state().turnCount;
 kt.endTurnForTest();
+const nyanSequenceStart = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('猫だまし命中の結果表示中は行動不能の震え演出を開始しない',
+  nyanSequenceStart?.waitingForHitFlash === true
+    && nyanSequenceStart?.presentationVisible === false
+    && nyanSequenceStart?.timer === nyanSequenceStart?.duration,
+  JSON.stringify(nyanSequenceStart));
 check('行動不能の手番へ一度移り、震え演出中は状態をまだ消費しない',
   kt.state().turnOrder[kt.state().activeIndex] === 'e1'
     && kt.state().turnCount === nyanTurnBefore + 1
     && kt.turnEffectForTest('e1').actionSkipTurns === 1
     && kt.hasCutIn(),
   JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
-kt.step(1.3);
+for (let i = 0; i < 78; i++) kt.step(1 / 60); // 1.3秒。命中結果は1.68秒なのでまだ表示中。
+const nyanSequenceDuringHit = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('命中結果を見せている1.3秒間は行動不能演出の時間を消費しない',
+  kt.specialFlashForTest()?.timer > 0
+    && nyanSequenceDuringHit?.presentationVisible === false
+    && nyanSequenceDuringHit?.timer === nyanSequenceDuringHit?.duration,
+  JSON.stringify({ flash: kt.specialFlashForTest(), sequence: nyanSequenceDuringHit }));
+for (let i = 0; i < 24; i++) kt.step(1 / 60); // 合計1.7秒。命中結果が終わり、ここから震え始める。
+const nyanSequenceAfterHit = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('猫だまし命中の結果表示が消えてから行動不能の震え演出を開始する',
+  !kt.specialFlashForTest()
+    && nyanSequenceAfterHit?.waitingForHitFlash === false
+    && nyanSequenceAfterHit?.presentationVisible === true
+    && nyanSequenceAfterHit?.timer < nyanSequenceAfterHit?.duration,
+  JSON.stringify({ flash: kt.specialFlashForTest(), sequence: nyanSequenceAfterHit }));
+for (let i = 0; i < 78; i++) kt.step(1 / 60); // 震え開始から約1.3秒。
 check('従来の震え時間を過ぎても1.5倍の演出中はまだスキップしない',
   kt.state().turnOrder[kt.state().activeIndex] === 'e1'
     && kt.turnEffectForTest('e1').actionSkipTurns === 1
     && kt.hasCutIn(),
   JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
-kt.step(0.6);
+for (let i = 0; i < 36; i++) kt.step(1 / 60); // 残り約0.6秒を見せ切る。
 check('行動不能になったキャラの次の手番は操作させず自動で飛ばす',
   kt.state().turnOrder[kt.state().activeIndex] === 'p1'
     && kt.state().turnCount === nyanTurnBefore + 2

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v186-action-skip-duration';
+const CACHE_VERSION = 'katamon-pwa-v187-action-skip-sequence';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
