@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v186-action-skip-duration';
+  const BUILD_ID = 'v187-action-skip-sequence';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -10344,6 +10344,7 @@
   function showActionSkipTurn(unit, onDone) {
     cutIn = {
       kind: 'actionSkip', timer: ACTION_SKIP_STUN_DURATION, duration: ACTION_SKIP_STUN_DURATION,
+      waitForSpecialFlash: specialFlash.timer > 0,
       unitId: unit.id,
       text: `${CHARACTERS[unit.character]?.name || unit.label}は行動不能!`,
       sub: '動けない… 手番をスキップ', color: '#ffe14d', onDone
@@ -11028,6 +11029,7 @@
 
   function actionSkipShakeOffset(u) {
     if (!cutIn || cutIn.kind !== 'actionSkip' || cutIn.unitId !== u.id) return 0;
+    if (cutIn.waitForSpecialFlash && specialFlash.timer > 0) return 0;
     const elapsed = Math.max(0, cutIn.duration - cutIn.timer);
     const progress = Math.min(1, elapsed / cutIn.duration);
     const envelope = Math.sin(progress * Math.PI);
@@ -12944,6 +12946,8 @@
 
   function drawCutIn() {
     if (!cutIn) return;
+    // 猫だましの命中結果を見せ切るまでは、行動不能の帯を重ねず震えも始めない。
+    if (cutIn.kind === 'actionSkip' && cutIn.waitForSpecialFlash && specialFlash.timer > 0) return;
     if (cutIn.kind === 'matchup') {
       drawMatchupCutIn();
       return;
@@ -15509,6 +15513,10 @@
     }
 
     if (cutIn) {
+      if (cutIn.kind === 'actionSkip' && cutIn.waitForSpecialFlash) {
+        if (specialFlash.timer > 0) return;
+        cutIn.waitForSpecialFlash = false;
+      }
       cutIn.timer -= dt;
       if (cutIn.timer <= 0) {
         const done = cutIn.onDone;
