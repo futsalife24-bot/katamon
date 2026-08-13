@@ -64,10 +64,17 @@ function submit(api, id, streak, efficiency, character, name = 'メロニキ') {
 }
 
 let passed = 0;
+let failed = 0;
 function check(label, fn) {
-  fn();
-  passed++;
-  console.log(`PASS ${label}`);
+  try {
+    fn();
+    passed++;
+    console.log(`PASS ${label}`);
+  } catch (error) {
+    failed++;
+    console.error(`FAIL ${label}`);
+    console.error(error && error.stack ? error.stack : error);
+  }
 }
 
 const api = loadRanking([['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character']]);
@@ -108,4 +115,14 @@ check('旧形式のcharacter空欄行を読み、次の記録を追加できる'
   assert.equal(board.top.find(row => row.streak === 6).character, 'sumoeru');
 });
 
-console.log(`RESULT ${passed}/4 passed`);
+check('数式として解釈される先頭記号を名前の文字列として保存する', () => {
+  const formula = loadRanking();
+  const names = ['=1+1', '+SUM(A1:A2)', '-10+20', '@IMPORTDATA'];
+  assert.deepEqual(
+    names.map(name => formula.context.sanitizeName(name)),
+    names.map(name => `'${name}`)
+  );
+});
+
+console.log(`RESULT ${passed}/${passed + failed} passed`);
+if (failed) process.exitCode = 1;
