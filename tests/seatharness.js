@@ -189,8 +189,44 @@ const HOOK = `
     ),
     projectileProfilesForTest: () => projectiles.map(p => ({
       blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
-      normalImpactSound: !!p.normalImpactSound
+      normalImpactSound: !!p.normalImpactSound,
+      noTerrain: !!p.noTerrain,
+      ignoreObstacles: !!p.ignoreObstacles,
+      lightning: !!p.lightning,
+      directHitOnly: !!p.directHitOnly,
+      damageMul: p.damageMul
     })),
+    fireSpecialImmediateForTest: (key, vx0, vy0) => {
+      const u = localUnit();
+      applyCharacter(u, key);
+      launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
+      return projectiles.length - 1;
+    },
+    resolveProjectileUnitImpactForTest: (index, unitId) => {
+      const p = projectiles[index];
+      const target = unitById(unitId);
+      if (!p || !target) return false;
+      if (typeof resolveProjectileUnitImpact === 'function') {
+        resolveProjectileUnitImpact(p, target, p.x, p.y);
+      } else {
+        explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+      }
+      return true;
+    },
+    resolveProjectileSurfaceImpactForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p) return false;
+      if (typeof resolveProjectileSurfaceImpact === 'function') {
+        resolveProjectileSurfaceImpact(p, x, y);
+      } else {
+        explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+      }
+      return true;
+    },
+    impactVisualCountsForTest: () => ({
+      explosions: particles.length,
+      lightningRemnants: lightningBeams.length
+    }),
     detonateProjectileForTest: (index, x, y) => {
       const p = projectiles[index];
       if (!p) return false;
