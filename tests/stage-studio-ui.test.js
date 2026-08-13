@@ -22,7 +22,7 @@ test('Stage Studio shares the two-font Katamon hierarchy', () => {
   assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
   assert.match(studioSw, /rocknroll-one-regular\.ttf/);
   assert.match(studioSw, /reggae-one-display\.woff2/);
-  assert.match(studioSw, /1\.8\.0-steel-terrain/);
+  assert.match(studioSw, /1\.8\.1-character-assets/);
 });
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -72,7 +72,7 @@ test('playtest actions stay in a dock directly below the map while wind settings
 test('all editing canvases use game assets, terrain texture and real character dimensions', () => {
   for (const asset of [
     'stage-grass-bg.jpg', 'stage-desert-bg.jpg', 'stage-snow-bg.jpg', 'stage-volcanic-bg.jpg',
-    'kyoryu.webp', 'medama.webp', 'tori.webp', 'iwa.webp'
+    'dirano.webp', 'eyebolt.webp', 'fenice.webp', 'gorocca.webp'
   ]) assert.match(studioApp, new RegExp(asset.replace('.', '\\.')));
   assert.match(studioApp, /const SPRITE_SIZE = 78;/);
   assert.match(studioApp, /const UNIT_HIT_RADIUS = 30;/);
@@ -182,9 +182,9 @@ test('game-style UI and PWA shell ship the new visual assets with a cache bump',
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.8\.0-steel-terrain`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.8\.1-character-assets`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
-  assert.match(studioSw, /kyoryu\.webp/);
+  assert.match(studioSw, /characters\/runtime\/dirano\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);
   assert.match(studioHtml, /app-1\.7\.0\.js/);
   assert.match(studioSw, /request\.destination === 'script'[\s\S]*fetch\(request, \{ cache: 'no-cache' \}\)[\s\S]*cache\.match\(request/);

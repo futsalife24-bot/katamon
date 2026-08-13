@@ -23,10 +23,10 @@
 <link rel="preload" as="image" href="assets/title-parchment-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="font" href="assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
 <link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
-<link rel="preload" as="image" href="assets/kyoryu.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/medama.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/iwa.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/tori.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/characters/runtime/dirano.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/characters/runtime/eyebolt.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
+<link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css?v=1">
 <link rel="stylesheet" href="game-custom-stages.css?v=5">
@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v180-character-names';
+  const BUILD_ID = 'v181-character-assets';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2628,112 +2628,112 @@
   // ===== キャラクター =====
   const CHARACTERS = {
     kyoryu: {
-      key: 'kyoryu', name: 'ディラノ', role: 'バランス型', roleEn: 'BALANCE',
+      key: 'kyoryu', name: 'ディラノ', asset: 'dirano', role: 'バランス型', roleEn: 'BALANCE',
       desc: '弾道ガイドが長く、風にも少し強い。初めてでも扱いやすい王道タイプ。',
       selectStats: [3, 3, 3], specialDesc: '高威力・大爆風の万能砲撃', selectFlavor: '地響きを呼ぶ、豪快な一撃。',
       maxHp: 100, blastMul: 1.0, windMul: 0.9, fuelMul: 1.0, velScaleMul: 1.0, guideMul: 1.15, specialVelocityMul: 1.0, tBias: 1.0,
       color: '#76d64b', special: '強化砲弾'
     },
     medama: {
-      key: 'medama', name: 'アイボルト', role: 'トリッキー型', roleEn: 'TRICKY',
+      key: 'medama', name: 'アイボルト', asset: 'eyebolt', role: 'トリッキー型', roleEn: 'TRICKY',
       desc: '風に強い軽快な弾と電磁波で相手の移動を封じる。読み合いで翻弄する技巧派。',
       selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じる電磁波', selectFlavor: '電磁波で相手の足を止める。',
       maxHp: 90, blastMul: 0.9, windMul: 0.75, fuelMul: 1.1, velScaleMul: 1.05, empRadius: 90, specialVelocityMul: 1.0, tBias: 0.9,
       color: '#ffd24a', special: '電磁波'
     },
     iwa: {
-      key: 'iwa', name: 'ゴーロッカ', role: '重戦車型', roleEn: 'HEAVY',
+      key: 'iwa', name: 'ゴーロッカ', asset: 'gorocca', role: '重戦車型', roleEn: 'HEAVY',
       desc: '高耐久と巨大な爆風が強み。風に流されにくく、地形を豪快に崩す。',
       selectStats: [5, 5, 2], specialDesc: '超巨大クレーターを生成', selectFlavor: '大地を砕き、戦場を変える。',
       maxHp: 130, blastMul: 1.35, windMul: 0.7, fuelMul: 0.85, velScaleMul: 0.82, specialVelocityMul: 1.0, tBias: 1.25,
       color: '#9a9086', special: '地形大破壊'
     },
     tori: {
-      key: 'tori', name: 'フェニーチェ', role: 'スピード型', roleEn: 'SPEED',
+      key: 'tori', name: 'フェニーチェ', asset: 'fenice', role: 'スピード型', roleEn: 'SPEED',
       desc: '最高クラスの移動力と高速弾で先手を取る。風と重力にも強い。',
       selectStats: [2, 2, 5], specialDesc: '風と重力に強い超高速ロケット', selectFlavor: '空を切り裂く、疾風の一矢。',
       maxHp: 75, blastMul: 0.8, windMul: 0.45, fuelMul: 1.3, velScaleMul: 1.2, gravityMul: 0.45, specialVelocityMul: 1.45, tBias: 0.85,
       color: '#ff8c3a', special: '高速ロケット'
     },
     barugerukan: {
-      key: 'barugerukan', name: 'バルゲルカン', role: '連射型', roleEn: 'RAPID',
+      key: 'barugerukan', name: 'バルゲルカン', asset: 'barugerukan', role: '連射型', roleEn: 'RAPID',
       desc: '水弾をばらまく軽快なヘリ戦車。高い機動力と連射で相手を追い詰める。',
       selectStats: [2, 3, 5], specialDesc: '5発の水弾を扇状に一斉発射', selectFlavor: '水弾の雨で逃げ道を奪う。',
       maxHp: 82, blastMul: 0.78, windMul: 0.9, fuelMul: 1.2, velScaleMul: 1.05, specialVelocityMul: 1.0, tBias: 0.9,
       color: '#59c9ff', special: 'スライム掃射'
     },
     nisenmono: {
-      key: 'nisenmono', name: 'オベリスク', role: '防御型', roleEn: 'GUARD',
+      key: 'nisenmono', name: 'オベリスク', asset: 'obelisk', role: '防御型', roleEn: 'GUARD',
       desc: '圧倒的な耐久で戦線を支える石像戦車。重く遅いが風には強い。',
       selectStats: [5, 3, 1], specialDesc: '高速・貫通する光線弾を放つ', selectFlavor: '光の一閃で遠くを射抜く。',
       maxHp: 140, blastMul: 1.0, windMul: 0.55, fuelMul: 0.72, velScaleMul: 0.9, specialVelocityMul: 1.8, tBias: 1.2,
       color: '#a7aab8', special: 'プリズム狙撃'
     },
     burumutan: {
-      key: 'burumutan', name: 'ブルームタン', role: '支援型', roleEn: 'SUPPORT',
+      key: 'burumutan', name: 'ブルームタン', asset: 'bloom-tan', role: '支援型', roleEn: 'SUPPORT',
       desc: '花の力で持久戦を制する支援戦車。耐久と回復でじわじわ勝つ。',
       selectStats: [4, 2, 3], specialDesc: '自身のHPを30回復して砲撃', selectFlavor: '花の力で傷を癒やし、咲く。',
       maxHp: 110, blastMul: 0.9, windMul: 0.85, fuelMul: 1.0, velScaleMul: 0.95, specialVelocityMul: 1.0, tBias: 1.1,
       color: '#f56f9a', special: '再生ブルーム'
     },
     sumoeru: {
-      key: 'sumoeru', name: 'スモエル', role: '爆発型', roleEn: 'BURST',
+      key: 'sumoeru', name: 'スモエル', asset: 'sumoeru', role: '爆発型', roleEn: 'BURST',
       desc: '花火筒を背負うお祭り砲撃戦車。爆風で地形ごと一気に崩す。',
       selectStats: [3, 4, 2], specialDesc: '着弾または時間経過で8方向へ散る花火', selectFlavor: '夜空と地面を染める大花火。',
       maxHp: 100, blastMul: 1.15, windMul: 1.1, fuelMul: 0.9, velScaleMul: 0.9, specialVelocityMul: 1.0, tBias: 1.1,
       color: '#b277ff', special: '八方向花火', facesLeft: true
     },
     doRednote: {
-      key: 'doRednote', name: 'ドレッドアロー', role: '狙撃型', roleEn: 'SNIPER',
+      key: 'doRednote', name: 'ドレッドアロー', asset: 'dread-arrow', role: '狙撃型', roleEn: 'SNIPER',
       desc: '弩で超高速の矢弾を放つ狙撃戦車。遠距離から正確に仕留める。',
       selectStats: [3, 4, 3], specialDesc: '高速で地形を貫く一撃', selectFlavor: '一点を貫く、静かな必殺矢。',
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 2.15, tBias: 0.8,
-      color: '#f14b46', special: '貫通狙撃', asset: 'do-rednote', facesLeft: true
+      color: '#f14b46', special: '貫通狙撃', facesLeft: true
     },
     mocchario: {
-      key: 'mocchario', name: 'モッチャリオ', role: '砲撃型', roleEn: 'CANNON',
+      key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
       desc: '口から高火力砲を放つ重量級。機動力を捨てて爆風で制圧する。',
       selectStats: [4, 4, 2], specialDesc: '大爆風の高威力レーザー砲', selectFlavor: '満開の一発で敵を吹き飛ばす。',
       maxHp: 110, blastMul: 1.25, windMul: 1.05, fuelMul: 0.85, velScaleMul: 0.92, specialVelocityMul: 1.1, tBias: 1.15,
       color: '#ff84aa', special: 'さくら砲'
     },
     mecha: {
-      key: 'mecha', name: 'クロムギア', role: '斉射型', roleEn: 'SALVO',
+      key: 'mecha', name: 'クロムギア', asset: 'chrome-gear', role: '斉射型', roleEn: 'SALVO',
       desc: '三連装砲を備えた機械戦車。まとまった弾幕で確実に削り取る。',
       selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に高速斉射', selectFlavor: '機械の砲火で隙間なく迫る。',
       maxHp: 98, blastMul: 0.95, windMul: 0.8, fuelMul: 1.0, velScaleMul: 1.1, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#e8d48a', special: '三連装砲'
     },
     akuma: {
-      key: 'akuma', name: 'ルビデビ', role: '雷撃型', roleEn: 'BOLT',
+      key: 'akuma', name: 'ルビデビ', asset: 'rubidevi', role: '雷撃型', roleEn: 'BOLT',
       desc: '雷を直線で叩き込む魔導バイク。軽く速いがHPは薄い。',
       selectStats: [2, 5, 4], specialDesc: '重力・風・障害物を無視して直進する電撃', selectFlavor: '稲妻となって一直線に駆ける。',
       maxHp: 84, blastMul: 1.1, windMul: 0.95, fuelMul: 1.15, velScaleMul: 1.12, specialVelocityMul: 2.0, tBias: 0.9,
       color: '#ff3b5c', special: 'ライトニング', facesLeft: true
     },
     jinba: {
-      key: 'jinba', name: 'アスタウロス', role: '突撃型', roleEn: 'CHARGE',
+      key: 'jinba', name: 'アスタウロス', asset: 'astauros', role: '突撃型', roleEn: 'CHARGE',
       desc: '槍と肩砲を備えた四脚戦車。走り回りながら高速弾で圧をかける。',
       selectStats: [4, 3, 4], specialDesc: '地形を貫き大爆発する突撃槍', selectFlavor: '槍を掲げ、一直線に突き抜ける。',
       maxHp: 108, blastMul: 0.95, windMul: 0.6, fuelMul: 1.25, velScaleMul: 1.15, specialVelocityMul: 1.3, tBias: 0.9,
       color: '#3fd6b0', special: 'Dスマッシュ'
     },
     kishi: {
-      key: 'kishi', name: 'パラディエ', role: '重装型', roleEn: 'FORTRESS',
+      key: 'kishi', name: 'パラディエ', asset: 'paladier', role: '重装型', roleEn: 'FORTRESS',
       desc: '盾と大槍で固めた白銀の重装戦車。鈍いが硬く、一撃が重い。',
       selectStats: [5, 4, 2], specialDesc: '自分のHPを15払い超高威力の一撃', selectFlavor: '己を削り、勝負を決める一閃。',
       maxHp: 132, blastMul: 1.15, windMul: 0.65, fuelMul: 0.8, velScaleMul: 0.88, specialVelocityMul: 1.0, tBias: 1.2,
       color: '#f2c94c', special: '最終奥義', facesLeft: true
     },
     neko: {
-      key: 'neko', name: 'にゃんタンク', role: '翻弄型', roleEn: 'TRICK',
+      key: 'neko', name: 'にゃんタンク', asset: 'nyan-tank', role: '翻弄型', roleEn: 'TRICK',
       desc: '肉球砲を構えた身軽な猫戦車。逃げ回りながら相手の足を止める。',
       selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし移動を1手封じる', selectFlavor: '大爆風の猫だましで翻弄する。',
       maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
       color: '#ffe14d', special: '猫だまし爆弾', facesLeft: true
     },
     shinigami: {
-      key: 'shinigami', name: 'ヨミガマ', role: '地形工作型', roleEn: 'TERRAIN',
+      key: 'shinigami', name: 'ヨミガマ', asset: 'yomigama', role: '地形工作型', roleEn: 'TERRAIN',
       desc: '大鎌の呪いで足場を断つ技巧派。必殺は地面を縦に削り、相手を死線へ誘う。',
       selectStats: [3, 2, 4], specialDesc: '着弾地点の真下から縦穴を削る冥府の鎌', selectFlavor: '足場を断ち、死線へいざなう。',
       maxHp: 92, blastMul: 0.9, windMul: 0.82, fuelMul: 1.1, velScaleMul: 1.02, specialVelocityMul: 1.0, tBias: 0.95,
@@ -2780,17 +2780,19 @@
     img.decoding = 'async';
     if (opts.highPriority) img.fetchPriority = 'high';
     const suffix = opts.version ? `?v=${opts.version}` : '';
+    const webpBase = opts.webpBase || `assets/${baseName}`;
+    const pngBase = opts.pngBase || `assets/${baseName}`;
     let triedPng = false;
     img.onload = () => { if (opts.onReady) opts.onReady(); };
     img.onerror = () => {
       if (!triedPng) {
         triedPng = true;
-        img.src = `assets/${baseName}.png${suffix}`;
+        img.src = `${pngBase}.png${suffix}`;
         return;
       }
       if (opts.onFailed) opts.onFailed();
     };
-    img.src = `assets/${baseName}.webp${suffix}`;
+    img.src = `${webpBase}.webp${suffix}`;
     return img;
   }
 
@@ -2806,8 +2808,11 @@
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
-    charImages[key] = loadArtImage(CHARACTERS[key].asset || key, {
+    const assetStem = CHARACTERS[key].asset;
+    charImages[key] = loadArtImage(assetStem, {
       highPriority: true,
+      webpBase: `assets/characters/runtime/${assetStem}`,
+      pngBase: `assets/characters/master/${assetStem}`,
       version: CHARACTER_ASSET_VERSION[key],
       onReady: () => { characterImagesReady++; },
       onFailed: () => { characterImagesFailed++; }

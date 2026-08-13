@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v180-character-names';
+const CACHE_VERSION = 'katamon-pwa-v181-character-assets';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

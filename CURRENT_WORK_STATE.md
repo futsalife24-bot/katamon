@@ -1,6 +1,19 @@
 # カタモン 現在作業状態
 
-更新日: 2026-08-11（JST）
+更新日: 2026-08-13（JST）
+
+## v181 キャラクター画像の正本・配信用ディレクトリ整理（作業中）
+
+- 作業ブランチ: `feat/v181-character-assets`。origin/master（v180、PR #125マージ済み）から、キャラクター画像32点の配置とファイル名だけを整理する。画像内容、内部キー、キャラ性能、必殺技、ゲーム進行、ランキング、オンライン通信、Firebaseルールは変更しない。
+- 何を変えたか: 16体のPNGを`assets/characters/master/`、軽量WebPを`assets/characters/runtime/`へ分離し、`dirano`、`eyebolt`、`gorocca`、`fenice`、`obelisk`、`dread-arrow`、`chrome-gear`、`rubidevi`、`astauros`、`paladier`、`nyan-tank`、`yomigama`など正式表示名から判別できる英字名へ揃えた。全16体の内部キー・表示名・ファイル名の対応と差し替え手順を`assets/characters/README.md`へ記録した。ゲーム本体とStage StudioのWebP優先・PNGフォールバック参照、先読み、オフラインキャッシュも新配置へ追従させた。
+- なぜ変えたか: これまでは`kyoryu.png`や`medama.webp`など旧仮名の32点が`assets/`直下へ混在し、正式名決定後にどの画像がどのキャラの正本か判別しにくかったため。PNG正本と実行時WebPを用途別に分け、今後の画像差し替えで片方だけ更新する事故も防ぎやすくする。
+- 画像内容: ファイルの移動・改名だけで、PNG/WebPの中身は加工していない。既存の全32ハッシュが移動後も一致している。`master`は「リポジトリ内にある現在のPNG正本兼フォールバック」を指し、画像生成時の未加工・高解像度原画が別にある場合の代替とは扱わない。
+- やってはいけないこと: `kyoryu`、`medama`、`doRednote`などの内部キーを表示名や画像名へ置き換えない。PNGとWebPの片方だけを差し替えない。画像内容を変えたのに`CHARACTER_ASSET_VERSION`とハッシュを据え置かない。旧パスを互換用に二重保持しない。今回へ画像加工、キャラ性能、表示レイアウト、通信、GAS、Firebase変更、ほかの素材・ディレクトリ整理を混ぜない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テスト: `tests/stage3test.js`へ、全16体が正式名ベースの`master/runtime`対で存在する検査を実装より先に追加した。旧v180では **433/434成功・1失敗**となり、新しい配置検査だけが実際に落ち、例外で出力が消えず件数まで出ることを確認してから移動した。
+- 最終テスト: `npm test`でseat 20件×2、regression 297件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング4件、Stage Studio 53件、合計 **1,342件すべて成功**。`loopbacktest`も単独再実行し、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4173/`）＋実Chromeで起動からキャラ選択まで操作し、一覧を4区間へ回して16体すべての正式名と画像が欠けずに描画されることを確認した。ページ警告・エラーは0件。Stage Studioも同じHTTPから開き、`1.8.1-character-assets / 生成器 1.0.0`表示と警告・エラー0件を確認した。`file://`は使っていない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v181-character-assets`へ更新した。Stage Studioもアプリ表示とService Workerキャッシュを`1.8.1-character-assets`へ更新した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
 
 ## v180 キャラクター表示名を正式名称へ更新（作業中）
 
