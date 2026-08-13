@@ -995,7 +995,7 @@ function check(name, value) {
   check('the turn does not advance while waiting for the peer to declare the result',
     // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと手番が二度と進まない。
     htmlText.includes("const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));")
-    && htmlText.includes('if (!waitingForPeerResult) endTurn();'));
+    && htmlText.includes('if (!waitingForPeerResult) endTurn(() => netSyncTurn(acted));'));
   check('the remote action is still marked resolved while waiting, so the result correlates',
     /waitingForPeerResult[\s\S]{0,400}online\.remoteAction\.resolved = true;/.test(htmlText));
   check('rules keep the per-round message log append-only', msg['.write'].includes('!data.exists()'));

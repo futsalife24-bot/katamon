@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v184-nyan-turn-skip';
+  const BUILD_ID = 'v185-action-skip-effects';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -10318,8 +10318,8 @@
     cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
   }
 
-  function endTurn() {
-    if (matchOver) return;
+  function endTurn(onAdvanced) {
+    if (matchOver) { if (onAdvanced) onAdvanced(); return; }
     const acting = activeUnit();
     if (acting.moveLockTurns > 0) acting.moveLockTurns--;
     // そのキャラが1手番を終えるごとに1段階。使用した手番の終了時から再充填を始める。
@@ -10327,39 +10327,49 @@
     turnCount++;
     // チュートリアルは時間切れで終わらせない。当てるまで何度でも撃たせる。
     if (battleMode !== 'tutorial' && turnCount >= maxTurnsTotal()) {
+      if (onAdvanced) onAdvanced();
       showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
       return;
     }
-    // 倒れたユニットと、猫だましで行動不能になったユニットの手番を飛ばす。
-    // 行動不能の手番も総ターン数と必殺チャージでは1手として数える。
-    const skippedByNyan = [];
-    for (let i = 0; i < turnOrder.length * 2; i++) {
+    advanceToNextPlayableTurn(onAdvanced);
+  }
+
+  function showActionSkipTurn(unit, onDone) {
+    cutIn = {
+      kind: 'actionSkip', timer: ACTION_SKIP_STUN_DURATION, duration: ACTION_SKIP_STUN_DURATION,
+      unitId: unit.id,
+      text: `${CHARACTERS[unit.character]?.name || unit.label}は行動不能!`,
+      sub: '動けない… 手番をスキップ', color: '#ffe14d', onDone
+    };
+  }
+
+  function advanceToNextPlayableTurn(onAdvanced) {
+    // 倒れたユニットは即座に飛ばす。行動不能は対象の手番へいったん移し、
+    // 星と電撃を残したまま震える姿を見せてから1手を消費する。
+    for (let i = 0; i < turnOrder.length; i++) {
       activeIndex = (activeIndex + 1) % turnOrder.length;
       const next = activeUnit();
       if (next.hp <= 0) continue;
       if (next.actionSkipTurns > 0) {
-        next.actionSkipTurns--;
-        if (next.moveLockTurns > 0) next.moveLockTurns--;
-        advanceSpecialCharge(next);
-        turnCount++;
-        skippedByNyan.push(next);
-        if (battleMode !== 'tutorial' && turnCount >= maxTurnsTotal()) {
-          showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
-          return;
-        }
-        continue;
+        showActionSkipTurn(next, () => {
+          next.actionSkipTurns--;
+          if (next.moveLockTurns > 0) next.moveLockTurns--;
+          advanceSpecialCharge(next);
+          turnCount++;
+          if (battleMode !== 'tutorial' && turnCount >= maxTurnsTotal()) {
+            if (onAdvanced) onAdvanced();
+            showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
+            return;
+          }
+          advanceToNextPlayableTurn(onAdvanced);
+        });
+        return;
       }
-      break;
-    }
-    startTurn();
-    const lines = turnCutInLines(activeUnit());
-    if (skippedByNyan.length) {
-      const skipped = skippedByNyan[0];
-      showCutIn(`${CHARACTERS[skipped.character]?.name || skipped.label}は行動不能!`, '手番をスキップ', TURN_CUTIN_DURATION, () => {
-        showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
-      }, '#ffe14d');
-    } else {
+      startTurn();
+      const lines = turnCutInLines(next);
       showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
+      if (onAdvanced) onAdvanced();
+      return;
     }
   }
 
@@ -11001,6 +11011,73 @@
     return { turns: u.moveLockTurns, effect: 'chain', placement: 'feet', icon: 'padlock' };
   }
 
+  const ACTION_SKIP_STUN_DURATION = 1.25;
+  const ACTION_SKIP_SHAKE_PX = 4.5;
+
+  function actionSkipStatus(u) {
+    if (unitDefeated(u) || !(u.actionSkipTurns > 0)) return null;
+    return { turns: u.actionSkipTurns, effect: 'stunned', placement: 'head', icon: 'stars', electric: true };
+  }
+
+  function actionSkipShakeOffset(u) {
+    if (!cutIn || cutIn.kind !== 'actionSkip' || cutIn.unitId !== u.id) return 0;
+    const elapsed = Math.max(0, cutIn.duration - cutIn.timer);
+    const progress = Math.min(1, elapsed / cutIn.duration);
+    const envelope = Math.sin(progress * Math.PI);
+    return Math.sin(elapsed * Math.PI * 24) * ACTION_SKIP_SHAKE_PX * envelope;
+  }
+
+  function drawActionSkipStar(x, y, radius, rotation) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? radius : radius * 0.43;
+      const angle = rotation - Math.PI / 2 + i * Math.PI / 5;
+      const px = x + Math.cos(angle) * r;
+      const py = y + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawActionSkipEffects(u, a, imgTopAbs) {
+    if (!actionSkipStatus(u)) return;
+    // 星は頭上をゆっくり公転、電撃は体の左右で細かく明滅させる。
+    // Date.now() は描画だけに使い、手番スキップの時間や通信判定には使わない。
+    const phase = (Date.now() % 1400) / 1400 * Math.PI * 2;
+    const orbitY = imgTopAbs - 25;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#ffe14d';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#ffe14d';
+    ctx.strokeStyle = '#7b4b00';
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < 3; i++) {
+      const angle = phase + i * Math.PI * 2 / 3;
+      drawActionSkipStar(a.x + Math.cos(angle) * 24, orbitY + Math.sin(angle) * 7, 6.5, -angle * 0.7);
+    }
+
+    ctx.shadowColor = '#72efff';
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = '#baf8ff';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    for (let side = -1; side <= 1; side += 2) {
+      const flicker = Math.sin(phase * 5 + side) * 3;
+      const x = a.x + side * (UNIT_RADIUS + 8);
+      const y = a.y - 12 + flicker;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 16);
+      ctx.lineTo(x - side * 7, y - 6);
+      ctx.lineTo(x + side * 2, y);
+      ctx.lineTo(x - side * 6, y + 14);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawMoveLockChainLink(x, y, angle) {
     // 外側の濃い線と内側の金属色を重ね、どの背景でも鎖の輪郭が消えないようにする。
     for (const [width, color] of [[4.6, '#28323a'], [2.1, '#b9c4cc']]) {
@@ -11167,9 +11244,10 @@
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
     const imgTopAbs = a.y + UNIT_RADIUS - h;
+    const shakeX = actionSkipShakeOffset(u);
 
     ctx.save();
-    ctx.translate(a.x, a.y);
+    ctx.translate(a.x + shakeX, a.y);
     if (isBossUnit) {
       ctx.beginPath();
       ctx.arc(0, UNIT_RADIUS - h / 2, h / 2 + 8, 0, Math.PI * 2);
@@ -11205,6 +11283,7 @@
     }
     ctx.restore();
     drawMoveLockChains(u, a, tilt, 'front');
+    drawActionSkipEffects(u, { x: a.x + shakeX, y: a.y }, imgTopAbs);
 
     if (isBossUnit) {
       ctx.save();
@@ -15681,13 +15760,12 @@
         // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと、そこから手番が
         // 一切進まなくなる。決着に届いているか(陣営の全滅)で判断する。
         const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));
-        if (!waitingForPeerResult) endTurn();
+        if (!waitingForPeerResult) endTurn(() => netSyncTurn(acted));
         if (isOnline() && online.kind === 'firebase' && acted.control === 'remote' && online.remoteAction && online.remoteAction.unitId === acted.id) {
           // state/resultは相手の発射をローカルで最後まで解決してからだけ受け入れる。
           // 決着待ちでもここは必ず通す。通さないと result が対応づけられず弾かれる。
           online.remoteAction.resolved = true;
         }
-        if (!waitingForPeerResult) netSyncTurn(acted); // 行動した側だけが、切り替わったあとの状態を権威として送る
       }
     } else {
       turnSettle = TURN_SETTLE_SEC;

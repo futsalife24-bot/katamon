@@ -620,6 +620,8 @@ const HOOK = `
     specialFlashForTest: () => specialFlash && specialFlash.timer > 0 ? { ...specialFlash } : null,
     clearSpecialFlashForTest: () => { specialFlash = { timer: 0, key: null, text: '', color: '', sub: '' }; },
     moveLockVisualForTest: (id) => typeof moveLockStatus === 'function' ? moveLockStatus(unitById(id)) : null,
+    actionSkipVisualForTest: (id) => typeof actionSkipStatus === 'function' ? actionSkipStatus(unitById(id)) : null,
+    actionSkipStunConfigForTest: () => ({ duration: ACTION_SKIP_STUN_DURATION, shakePx: ACTION_SKIP_SHAKE_PX }),
     // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
     explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound) => (

@@ -1078,13 +1078,37 @@ check('猫だまし命中は移動封印を付けず行動不能を1手付ける
   nyanEffect.moveLockTurns === 0 && nyanEffect.actionSkipTurns === 1
     && nyanSaved.actionSkipTurns === 1,
   JSON.stringify({ effect: nyanEffect, saved: nyanSaved }));
+const nyanVisual = typeof kt.actionSkipVisualForTest === 'function' ? kt.actionSkipVisualForTest('e1') : null;
+check('行動不能は移動封印と異なる頭上の星と電撃で表示する',
+  nyanVisual?.effect === 'stunned' && nyanVisual?.placement === 'head'
+    && nyanVisual?.icon === 'stars' && nyanVisual?.electric === true
+    && indexHtml.includes('drawActionSkipEffects(u, { x: a.x + shakeX, y: a.y }, imgTopAbs);'),
+  JSON.stringify(nyanVisual));
+const nyanStunConfig = typeof kt.actionSkipStunConfigForTest === 'function'
+  ? kt.actionSkipStunConfigForTest() : null;
+check('行動不能の手番は1秒以上震えてからスキップする',
+  nyanStunConfig?.duration >= 1 && nyanStunConfig?.shakePx >= 3
+    && indexHtml.includes("kind: 'actionSkip'")
+    && indexHtml.includes('actionSkipShakeOffset(u)'),
+  JSON.stringify(nyanStunConfig));
 const nyanTurnBefore = kt.state().turnCount;
 kt.endTurnForTest();
+check('行動不能の手番へ一度移り、震え演出中は状態をまだ消費しない',
+  kt.state().turnOrder[kt.state().activeIndex] === 'e1'
+    && kt.state().turnCount === nyanTurnBefore + 1
+    && kt.turnEffectForTest('e1').actionSkipTurns === 1
+    && kt.hasCutIn(),
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+kt.step(1.3);
 check('行動不能になったキャラの次の手番は操作させず自動で飛ばす',
   kt.state().turnOrder[kt.state().activeIndex] === 'p1'
     && kt.state().turnCount === nyanTurnBefore + 2
     && kt.turnEffectForTest('e1').actionSkipTurns === 0,
   JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+check('オンライン状態は震えスキップが完了してから送る',
+  indexHtml.includes('endTurn(() => netSyncTurn(acted))')
+    && !indexHtml.includes('if (!waitingForPeerResult) netSyncTurn(acted);'),
+  '震え途中の手番を送ると、遅延した相手側で古い状態へ巻き戻る');
 
 // ===== Issue #20: 2vs2(CPU4体) =====
 // 「1vs1を壊さないこと」が最優先なので、まず1vs1側の不変を押さえてから2vs2を見る。
