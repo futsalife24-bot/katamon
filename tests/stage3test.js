@@ -377,23 +377,37 @@ function check(name, value) {
   // 古い絵を持ち続け、中身を入れ替えても表に出ない(v115で実際に出なかった)。
   // 画像を差し替えたらこの表のハッシュと CHARACTER_ASSET_VERSION の両方を更新すること。
   const CHARACTER_ASSET_PINS = [
-    { key: 'kyoryu', base: 'assets/kyoryu', webp: 'c13291632f36', png: 'd7e8126f2075' },
-    { key: 'medama', base: 'assets/medama', webp: '29c0f8b99547', png: 'f1d5608f8625' },
-    { key: 'iwa', base: 'assets/iwa', webp: 'e5bc1c5714d2', png: '283307e2478f' },
-    { key: 'tori', base: 'assets/tori', webp: '1396a2448001', png: 'b4f372180210' },
-    { key: 'barugerukan', base: 'assets/barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
-    { key: 'nisenmono', base: 'assets/nisenmono', webp: '19933146097d', png: 'ff4991ae8756', version: 2 },
-    { key: 'burumutan', base: 'assets/burumutan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
-    { key: 'sumoeru', base: 'assets/sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
-    { key: 'doRednote', base: 'assets/do-rednote', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
-    { key: 'mocchario', base: 'assets/mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
-    { key: 'mecha', base: 'assets/mecha', webp: 'ec5ac42f758b', png: '086923d116e6' },
-    { key: 'akuma', base: 'assets/akuma', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
-    { key: 'jinba', base: 'assets/jinba', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
-    { key: 'kishi', base: 'assets/kishi', webp: '52e362107fa5', png: '54142e9e8e56' },
-    { key: 'neko', base: 'assets/neko', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
-    { key: 'shinigami', base: 'assets/shinigami', webp: 'ea291207269c', png: '806d572ce13d' }
+    { key: 'kyoryu', stem: 'dirano', webp: 'c13291632f36', png: 'd7e8126f2075' },
+    { key: 'medama', stem: 'eyebolt', webp: '29c0f8b99547', png: 'f1d5608f8625' },
+    { key: 'iwa', stem: 'gorocca', webp: 'e5bc1c5714d2', png: '283307e2478f' },
+    { key: 'tori', stem: 'fenice', webp: '1396a2448001', png: 'b4f372180210' },
+    { key: 'barugerukan', stem: 'barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
+    { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756', version: 2 },
+    { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
+    { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
+    { key: 'doRednote', stem: 'dread-arrow', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
+    { key: 'mocchario', stem: 'mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
+    { key: 'mecha', stem: 'chrome-gear', webp: 'ec5ac42f758b', png: '086923d116e6' },
+    { key: 'akuma', stem: 'rubidevi', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
+    { key: 'jinba', stem: 'astauros', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
+    { key: 'kishi', stem: 'paladier', webp: '52e362107fa5', png: '54142e9e8e56' },
+    { key: 'neko', stem: 'nyan-tank', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
+    { key: 'shinigami', stem: 'yomigama', webp: 'ea291207269c', png: '806d572ce13d' }
   ];
+  const repoRoot = path.join(__dirname, '..');
+  const legacyCharacterStems = [
+    'kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru',
+    'do-rednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'
+  ];
+  check('character assets use display-name based master/runtime directories',
+    CHARACTER_ASSET_PINS.every(({ stem }) =>
+      fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${stem}.png`))
+      && fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'runtime', `${stem}.webp`)))
+    && CHARACTER_ASSET_PINS.every(({ key, stem }) =>
+      new RegExp(`\\n    ${key}: \\{[\\s\\S]*?key: '${key}', name: '[^']+', asset: '${stem}'`).test(htmlForAudio))
+    && legacyCharacterStems.every((stem) =>
+      !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.png`))
+      && !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.webp`))));
   const versionMapSrc = /const CHARACTER_ASSET_VERSION = \{([^}]*)\}/.exec(htmlForAudio);
   const declaredVersions = {};
   for (const [, k, v] of (versionMapSrc ? versionMapSrc[1] : '').matchAll(/(\w+):\s*(\d+)/g)) declaredVersions[k] = Number(v);
@@ -401,11 +415,13 @@ function check(name, value) {
   for (const pin of CHARACTER_ASSET_PINS) {
     // v130から実際に配るのは .webp。読めない端末が落ちてくる先の .png も一緒に留める。
     // 片方だけ差し替えると、端末によって別の絵が出る。
-    if (fileHash(pin.base + '.webp') !== pin.webp) {
-      charNg.push(`${pin.base}.webp の中身が変わっている(${fileHash(pin.base + '.webp')})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+    const webpPath = `assets/characters/runtime/${pin.stem}.webp`;
+    const pngPath = `assets/characters/master/${pin.stem}.png`;
+    if (fileHash(webpPath) !== pin.webp) {
+      charNg.push(`${webpPath} の中身が変わっている(${fileHash(webpPath)})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
     }
-    if (fileHash(pin.base + '.png') !== pin.png) {
-      charNg.push(`${pin.base}.png の中身が変わっている(${fileHash(pin.base + '.png')})。webp と食い違っていないか確かめること`);
+    if (fileHash(pngPath) !== pin.png) {
+      charNg.push(`${pngPath} の中身が変わっている(${fileHash(pngPath)})。webp と食い違っていないか確かめること`);
     }
     if (declaredVersions[pin.key] !== pin.version) {
       charNg.push(`${pin.key} の版が食い違う(宣言=${declaredVersions[pin.key]} 期待=${pin.version})`);
@@ -414,29 +430,32 @@ function check(name, value) {
   check('character images and their cache-busting versions stay in sync', charNg.length === 0, charNg.join(' / '));
   // v130: webp を先に読み、読めなかった時だけ同じ名前の png へ落とす。
   check('the art loader asks for webp first and falls back to png',
-    /img\.src = `assets\/\$\{baseName\}\.webp\$\{suffix\}`;/.test(htmlForAudio)
-    && /img\.src = `assets\/\$\{baseName\}\.png\$\{suffix\}`;/.test(htmlForAudio)
+    /img\.src = `\$\{webpBase\}\.webp\$\{suffix\}`;/.test(htmlForAudio)
+    && /img\.src = `\$\{pngBase\}\.png\$\{suffix\}`;/.test(htmlForAudio)
     && htmlForAudio.includes('if (!triedPng) {'));
   check('the character image URL actually carries the version',
     htmlForAudio.includes('version: CHARACTER_ASSET_VERSION[key],')
     && /const suffix = opts\.version \? `\?v=\$\{opts\.version\}` : '';/.test(htmlForAudio));
   // 落とし先の png を消すと、古い端末で絵が1枚も出なくなる。
   check('the png fallbacks still exist on disk',
-    CHARACTER_ASSET_PINS.every(pin => require('fs').existsSync(require('path').join(__dirname, '..', pin.base + '.png'))));
+    CHARACTER_ASSET_PINS.every(pin => fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${pin.stem}.png`))));
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
   check('the preload hints point at webp',
-    ['loading-emblem', 'title-logo', 'kyoryu', 'medama', 'iwa', 'tori'].every(n =>
+    ['loading-emblem', 'title-logo'].every(n =>
       htmlForAudio.includes(`<link rel="preload" as="image" href="assets/${n}.webp" type="image/webp"`))
-    && !/rel="preload" as="image" href="assets\/(loading-emblem|title-logo|kyoryu|medama|iwa|tori)\.png/.test(htmlForAudio));
+    && ['dirano', 'eyebolt', 'gorocca', 'fenice'].every(stem =>
+      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/characters/runtime/${stem}.webp" type="image/webp"`))
+    && !/rel="preload" as="image" href="assets\/(?:characters\/master\/)?(?:loading-emblem|title-logo|dirano|eyebolt|gorocca|fenice)\.png/.test(htmlForAudio));
   // ロビーのエンブレムはDOMの<img>。JSを通らないので picture で振り分ける。
   check('the lobby emblem falls back through <picture>',
     /<source srcset="assets\/loading-emblem\.webp" type="image\/webp">/.test(htmlForAudio)
     && /<img id="onlineLobbyEmblem" src="assets\/loading-emblem\.png"/.test(htmlForAudio)
     && htmlForAudio.includes('#onlineLobbyBody picture { display: block; }'));
   // 起動時に読む絵の合計。ここが膨らむと読み込み画面が長くなる(v130で3.83MB→0.74MB)。
-  const startupArtBytes = ['title-logo', 'loading-emblem']
-    .concat(CHARACTER_ASSET_PINS.map(pin => pin.base.replace('assets/', '')))
-    .reduce((sum, n) => sum + require('fs').statSync(require('path').join(__dirname, '..', 'assets', n + '.webp')).size, 0);
+  const startupArtFiles = ['assets/title-logo.webp', 'assets/loading-emblem.webp']
+    .concat(CHARACTER_ASSET_PINS.map(pin => `assets/characters/runtime/${pin.stem}.webp`));
+  const startupArtBytes = startupArtFiles
+    .reduce((sum, file) => sum + fs.statSync(path.join(repoRoot, file)).size, 0);
   check('the images the loading screen waits for stay under 1MB',
     startupArtBytes < 1024 * 1024, `${(startupArtBytes / 1024).toFixed(0)}KB`);
 
@@ -814,7 +833,7 @@ function check(name, value) {
     sumoeruRoomPreview && medamaRoomPreview
     && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
     && sumoeruRoomPreview.alt === 'スモエル'
-    && medamaRoomPreview.character === 'medama' && /medama\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
+    && medamaRoomPreview.character === 'medama' && /eyebolt\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
     && medamaRoomPreview.alt === 'アイボルト'
     && medamaRoomPreview.options === 16);
   check('both rematch votes reset a new round with automatic readiness',

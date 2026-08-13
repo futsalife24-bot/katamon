@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.8.0-steel-terrain';
+  const APP_VERSION = '1.8.1-character-assets';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
@@ -118,10 +118,10 @@
     volcanic: '../../assets/stage-volcanic-bg.jpg'
   });
   const CHARACTER_SOURCES = Object.freeze({
-    kyoryu: ['../../assets/kyoryu.webp', '../../assets/kyoryu.png'],
-    medama: ['../../assets/medama.webp', '../../assets/medama.png'],
-    tori: ['../../assets/tori.webp', '../../assets/tori.png'],
-    iwa: ['../../assets/iwa.webp', '../../assets/iwa.png']
+    kyoryu: ['../../assets/characters/runtime/dirano.webp', '../../assets/characters/master/dirano.png'],
+    medama: ['../../assets/characters/runtime/eyebolt.webp', '../../assets/characters/master/eyebolt.png'],
+    tori: ['../../assets/characters/runtime/fenice.webp', '../../assets/characters/master/fenice.png'],
+    iwa: ['../../assets/characters/runtime/gorocca.webp', '../../assets/characters/master/gorocca.png']
   });
   const SLOT_CHARACTER = Object.freeze({ p1: 'kyoryu', e1: 'medama', p2: 'tori', e2: 'iwa' });
   const SPRITE_SIZE = 78;
