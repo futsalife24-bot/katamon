@@ -612,6 +612,11 @@ const HOOK = `
     cpuPickTarget: (id) => { const t = cpuPickTarget(unitById(id)); return t ? t.id : null; },
     cpuFriendlyFireRadius: () => CPU_FRIENDLY_FIRE_RADIUS,
     emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, ownerId, turns || 1),
+    emitNyanDisableForTest: (x, y, radius, ownerId) => emitEmp(x, y, radius, ownerId, 1, 'turnSkip'),
+    turnEffectForTest: (id) => {
+      const u = unitById(id);
+      return u ? { moveLockTurns: u.moveLockTurns || 0, actionSkipTurns: u.actionSkipTurns || 0 } : null;
+    },
     specialFlashForTest: () => specialFlash && specialFlash.timer > 0 ? { ...specialFlash } : null,
     clearSpecialFlashForTest: () => { specialFlash = { timer: 0, key: null, text: '', color: '', sub: '' }; },
     moveLockVisualForTest: (id) => typeof moveLockStatus === 'function' ? moveLockStatus(unitById(id)) : null,

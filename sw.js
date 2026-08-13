@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v183-sumo-proximity-firework';
+const CACHE_VERSION = 'katamon-pwa-v184-nyan-turn-skip';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

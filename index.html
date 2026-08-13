@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v183-sumo-proximity-firework';
+  const BUILD_ID = 'v184-nyan-turn-skip';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2728,7 +2728,7 @@
     neko: {
       key: 'neko', name: 'にゃんタンク', asset: 'nyan-tank', role: '翻弄型', roleEn: 'TRICK',
       desc: '肉球砲を構えた身軽な猫戦車。逃げ回りながら相手の足を止める。',
-      selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし移動を1手封じる', selectFlavor: '大爆風の猫だましで翻弄する。',
+      selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし次の手番をスキップ', selectFlavor: '大爆風の猫だましで翻弄する。',
       maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
       color: '#ffe14d', special: '猫だまし爆弾', facesLeft: true
     },
@@ -3048,14 +3048,14 @@
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#4fc3f7', label: 'YOU',
     id: 'p1', team: 'player', control: 'local',
-    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+    character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   const cpu = {
     x: STAGE_W * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ff6b6b', label: 'CPU',
     id: 'e1', team: 'cpu', control: 'cpu',
-    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+    character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   // 2vs2の3人目・4人目。1vs1の間は units へ入れないので、既存の進行に一切影響しない。
   const ally2 = {
@@ -3063,14 +3063,14 @@
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#8fd8ff', label: 'ALLY',
     id: 'p2', team: 'player', control: 'cpu',
-    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+    character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   const foe2 = {
     x: STAGE_W * 0.7, y: 0, vy: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ffa07a', label: 'CPU2',
     id: 'e2', team: 'cpu', control: 'cpu',
-    character: null, specialCharge: 0, moveLockTurns: 0, jumpAvailable: true
+    character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   const units = [player, cpu];
   // '1v1' | '2v2'。units の中身を差し替えるだけで、進行ロジックには手を入れない。
@@ -3253,6 +3253,7 @@
     u.color = def.color;
     u.label = def.name;
     u.moveLockTurns = 0;
+    u.actionSkipTurns = 0;
     u.facingLeft = null;
   }
 
@@ -3432,6 +3433,7 @@
       emp: !!opts.emp,
       empRadius: opts.empRadius || 90,
       empTurns: opts.empTurns || 2,
+      actionSkip: !!opts.actionSkip,
       noTerrain: !!opts.noTerrain,
       ignoreObstacles: !!opts.ignoreObstacles,
       lightning: !!opts.lightning,
@@ -3751,13 +3753,14 @@
         damageMul: 1.5
       });
     } else if (activateSpecial && def.key === 'neko') {
-      // 猫の必殺: 大爆風で地形を削りつつ、当たった相手の移動を1手だけ封じる。
+      // 猫の必殺: 大爆風を受けた者の次の手番を、移動だけでなく行動ごと飛ばす。
       fireProjectile(owner, anchor, vx0, vy0, {
         blastMul: def.blastMul * 1.5,
         windMul: def.windMul,
         emp: true,
         empRadius: def.empRadius,
-        empTurns: 1
+        empTurns: 1,
+        actionSkip: true
       });
     } else {
       fireProjectile(owner, anchor, vx0, vy0, {
@@ -4899,6 +4902,7 @@
       id: u.id, team: u.team, control: u.control, character: u.character,
       hp: u.hp, maxHp: u.maxHp, fuel: u.fuel, fuelMax: u.fuelMax,
       x: u.x, y: u.y, specialCharge: u.specialCharge, moveLockTurns: u.moveLockTurns,
+      actionSkipTurns: u.actionSkipTurns || 0,
       jumpAvailable: u.jumpAvailable !== false,
       facingLeft: u.facingLeft == null ? null : !!u.facingLeft
     };
@@ -5150,6 +5154,7 @@
       u.fuelMax = saved.fuelMax;
       u.x = saved.x;
       u.moveLockTurns = Number.isFinite(saved.moveLockTurns) ? Math.max(0, Math.min(2, saved.moveLockTurns)) : 0;
+      u.actionSkipTurns = Number.isFinite(saved.actionSkipTurns) ? Math.max(0, Math.min(1, saved.actionSkipTurns)) : 0;
       // 旧セーブは「未使用=満タン、使用済み=空」として新チャージ制へ移行する。
       u.specialCharge = Number.isFinite(saved.specialCharge)
         ? Math.max(0, Math.min(SPECIAL_CHARGE_MAX, saved.specialCharge))
@@ -5653,6 +5658,7 @@
       && isFiniteIn(unit.fuel, 0, 10000) && isFiniteIn(unit.fuelMax, 0, 10000) && unit.fuel <= unit.fuelMax
       && isFiniteIn(unit.x, UNIT_RADIUS, stageWidth - UNIT_RADIUS) && isFiniteIn(unit.y, -UNIT_RADIUS, stageHeight)
       && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 2)
+      && (unit.actionSkipTurns == null || isFiniteIn(unit.actionSkipTurns, 0, 1))
       && (unit.jumpAvailable == null || typeof unit.jumpAvailable === 'boolean')
       && (unit.facingLeft == null || typeof unit.facingLeft === 'boolean');
   }
@@ -10080,7 +10086,7 @@
     return 0;
   }
 
-  function emitEmp(x, y, radius, owner, turns) {
+  function emitEmp(x, y, radius, owner, turns, effect = 'moveLock') {
     spawnEmpPulse(x, y, radius);
     triggerShake(2.5, 0.16);
     const ownerTeam = teamOfOwner(owner);
@@ -10095,13 +10101,18 @@
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
       const damage = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
       u.hp = Math.max(0, u.hp - damage);
-      u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
+      if (effect === 'turnSkip') u.actionSkipTurns = Math.max(u.actionSkipTurns || 0, 1);
+      else u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
       if (ownerTeam !== null && u.team !== ownerTeam) opponentHit = true;
       spawnDamageText(u.x, u.y - UNIT_RADIUS - 10, damage);
       creditDamage(owner, u, damage);
     }
     // 発射時の必殺カットインとは別の「命中結果」。空振りや味方だけの誤爆では出さない。
-    if (opponentHit) triggerSpecialFlash(`電磁波命中: 移動不可 ${turns}手`);
+    if (opponentHit) {
+      triggerSpecialFlash(effect === 'turnSkip'
+        ? '猫だまし命中: 次の手番をスキップ'
+        : `電磁波命中: 移動不可 ${turns}手`);
+    }
     playExplosionSound(0.8);
     checkMatchEnd();
   }
@@ -10319,15 +10330,37 @@
       showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
       return;
     }
-    // 倒れたユニットの手番は飛ばす。1vs1では倒れた時点で決着なので通らないが、
-    // 2vs2ではここが無いと死体に手番が渡って進行が止まる。
-    for (let i = 0; i < turnOrder.length; i++) {
+    // 倒れたユニットと、猫だましで行動不能になったユニットの手番を飛ばす。
+    // 行動不能の手番も総ターン数と必殺チャージでは1手として数える。
+    const skippedByNyan = [];
+    for (let i = 0; i < turnOrder.length * 2; i++) {
       activeIndex = (activeIndex + 1) % turnOrder.length;
-      if (activeUnit().hp > 0) break;
+      const next = activeUnit();
+      if (next.hp <= 0) continue;
+      if (next.actionSkipTurns > 0) {
+        next.actionSkipTurns--;
+        if (next.moveLockTurns > 0) next.moveLockTurns--;
+        advanceSpecialCharge(next);
+        turnCount++;
+        skippedByNyan.push(next);
+        if (battleMode !== 'tutorial' && turnCount >= maxTurnsTotal()) {
+          showCutIn('タイムアップ!', '判定は…', 1.6, () => { judgeByHp(); });
+          return;
+        }
+        continue;
+      }
+      break;
     }
     startTurn();
     const lines = turnCutInLines(activeUnit());
-    showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
+    if (skippedByNyan.length) {
+      const skipped = skippedByNyan[0];
+      showCutIn(`${CHARACTERS[skipped.character]?.name || skipped.label}は行動不能!`, '手番をスキップ', TURN_CUTIN_DURATION, () => {
+        showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
+      }, '#ffe14d');
+    } else {
+      showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
+    }
   }
 
   // ===== CPU AI(精度成長型)=====
@@ -12315,7 +12348,8 @@
     // 2vs2は4体居るので「CPUのターン」だけでは、味方のCPUなのか敵のCPUなのかも
     // 4体のうちどれなのかも分からなかった(実機で指摘)。HPカードと同じ呼び名を添える。
     const turnLabel = turnCutInLines(actingUnit).short;
-    const lockLabel = actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
+    const lockLabel = actingUnit.actionSkipTurns > 0 ? `　行動不能 ${actingUnit.actionSkipTurns}手`
+      : actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
     // チュートリアルは時間切れが無いので、あるように見える「TURN n/15」は出さない。
     const turnCounter = battleMode === 'tutorial' ? 'れんしゅう'
       : `TURN ${Math.min(turnCount + 1, maxTurnsTotal())}/${maxTurnsTotal()}`;
@@ -15501,7 +15535,7 @@
             } else if (p.deathGateMarker) {
               spawnDeathGate(p, p.x, p.y);
             } else if (p.emp) {
-              emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
+              emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
             } else if (p.firework) {
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
               spawnFireworkBurst(p);
@@ -15527,7 +15561,7 @@
         } else if (p.deathGateMarker) {
           spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
         } else if (p.emp) {
-          emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns);
+          emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         } else if (p.firework) {
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
           spawnFireworkBurst(p);
@@ -15543,7 +15577,7 @@
       if (!p.pierce && isSolidAt(p.x, p.y)) {
         if (p.jump) teleportOwnerToImpact(p, p.x, p.y, true);
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
-        else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns);
+        else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
           explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
           spawnFireworkBurst(p);
