@@ -997,6 +997,56 @@ check('花火の接近信管は90pxを越えた敵には反応しない',
 check('花火の接近信管は発射者と同じ陣営には反応しない',
   kt.fireworkProximityProbeForTest('e1', 'e1', 0, 120) === null);
 
+// ===== v188: ルビデビの必殺は爆発しない直撃電撃 =====
+check('ルビデビの必殺説明は障害物無視や爆発ではなく直撃電撃を示す',
+  kt.character('akuma').specialDesc.includes('直接ダメージ')
+    && !kt.character('akuma').specialDesc.includes('障害物を無視'),
+  kt.character('akuma').specialDesc);
+kt.startBattle('akuma');
+kt.disableCpuForTest();
+settle();
+const rubideviShot = kt.fireSpecialImmediateForTest('akuma', 300, 0);
+const rubideviProfile = kt.projectileProfilesForTest()[rubideviShot];
+check('ルビデビの電撃は風・重力だけを無視し、空中障害物には遮られる',
+  rubideviProfile?.windMul === 0
+    && rubideviProfile?.gravityMul === 0
+    && rubideviProfile?.ignoreObstacles === false
+    && rubideviProfile?.lightning === true,
+  JSON.stringify(rubideviProfile));
+check('ルビデビの電撃は爆風と地形破壊を使わない直撃専用弾である',
+  rubideviProfile?.directHitOnly === true && rubideviProfile?.noTerrain === true,
+  JSON.stringify(rubideviProfile));
+const rubideviTarget = kt.unitById('e1');
+const rubideviHpBefore = rubideviTarget.hp;
+const rubideviCratersBefore = kt.craters();
+const rubideviVisualsBefore = kt.impactVisualCountsForTest();
+kt.resolveProjectileUnitImpactForTest(rubideviShot, 'e1');
+const rubideviVisualsAfter = kt.impactVisualCountsForTest();
+check('ルビデビの直撃は相手だけへダメージを与え、爆発も地形破壊も起こさない',
+  rubideviTarget.hp < rubideviHpBefore
+    && kt.craters() === rubideviCratersBefore
+    && rubideviVisualsAfter.explosions === rubideviVisualsBefore.explosions
+    && rubideviVisualsAfter.lightningRemnants === rubideviVisualsBefore.lightningRemnants + 1,
+  JSON.stringify({
+    hp: [rubideviHpBefore, rubideviTarget.hp],
+    craters: [rubideviCratersBefore, kt.craters()],
+    visuals: [rubideviVisualsBefore, rubideviVisualsAfter]
+  }));
+kt.clearProjectilesForTest();
+const rubideviGroundShot = kt.fireSpecialImmediateForTest('akuma', 0, 300);
+const rubideviGroundCraters = kt.craters();
+const rubideviGroundVisuals = kt.impactVisualCountsForTest();
+kt.resolveProjectileSurfaceImpactForTest(rubideviGroundShot, rubideviTarget.x, rubideviTarget.y + 30);
+const rubideviGroundAfter = kt.impactVisualCountsForTest();
+check('ルビデビの電撃は地面や空中障害物で止まっても爆発・地形破壊しない',
+  kt.craters() === rubideviGroundCraters
+    && rubideviGroundAfter.explosions === rubideviGroundVisuals.explosions
+    && rubideviGroundAfter.lightningRemnants === rubideviGroundVisuals.lightningRemnants + 1,
+  JSON.stringify({
+    craters: [rubideviGroundCraters, kt.craters()],
+    visuals: [rubideviGroundVisuals, rubideviGroundAfter]
+  }));
+
 // ===== タイトルの「おまけ」ボタン =====
 // 曲が終わるたび 1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目… と自動で送り、
 // 手動タップの次曲／停止も残す。BGMの切り替えは syncBgm へ一本化しているので、

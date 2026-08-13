@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v187-action-skip-sequence';
+  const BUILD_ID = 'v188-rubidevi-lightning';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2707,7 +2707,7 @@
     akuma: {
       key: 'akuma', name: 'ルビデビ', asset: 'rubidevi', role: '雷撃型', roleEn: 'BOLT',
       desc: '雷を直線で叩き込む魔導バイク。軽く速いがHPは薄い。',
-      selectStats: [2, 5, 4], specialDesc: '重力・風・障害物を無視して直進する電撃', selectFlavor: '稲妻となって一直線に駆ける。',
+      selectStats: [2, 5, 4], specialDesc: '風・重力を無視して直進し、触れた相手へ直接ダメージ', selectFlavor: '稲妻となって一直線に駆ける。',
       maxHp: 84, blastMul: 1.1, windMul: 0.95, fuelMul: 1.15, velScaleMul: 1.12, specialVelocityMul: 2.0, tBias: 0.9,
       color: '#ff3b5c', special: 'ライトニング', facesLeft: true
     },
@@ -3413,7 +3413,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,emp,firework,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,emp,firework,directHitOnly,normalImpactSound}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
@@ -3437,6 +3437,7 @@
       noTerrain: !!opts.noTerrain,
       ignoreObstacles: !!opts.ignoreObstacles,
       lightning: !!opts.lightning,
+      directHitOnly: !!opts.directHitOnly,
       firework: !!opts.firework,
       jump: opts.jump != null ? !!opts.jump : !!(unitById(owner) && unitById(owner).jumpShot),
       fireworkShard: !!opts.fireworkShard,
@@ -3724,14 +3725,15 @@
         fireProjectile(owner, anchor, v.vx * 1.25, v.vy * 1.25, { blastMul: def.blastMul * 0.85, windMul: def.windMul });
       }
     } else if (activateSpecial && def.key === 'akuma') {
-      // 悪魔の必殺: 重力も風も空中障害物も無視してまっすぐ走る電撃。地面か相手で止まる。
+      // ルビデビの必殺: 風と重力を受けず直進する。相手・地面・空中障害物で止まり、爆発や地形破壊は起こさない。
       fireProjectile(owner, anchor, vx0 * 2, vy0 * 2, {
         blastMul: def.blastMul * 1.2,
         windMul: 0,
         gravityMul: 0,
         damageMul: 1.35,
-        ignoreObstacles: true,
-        lightning: true
+        noTerrain: true,
+        lightning: true,
+        directHitOnly: true
       });
     } else if (activateSpecial && def.key === 'jinba') {
       // 人馬の必殺: 地形を貫通して進む大爆発の突撃槍
@@ -4024,6 +4026,39 @@
 
   function spawnLightningRemnant(p) {
     lightningBeams.push({ x0: p.originX, y0: p.originY, x1: p.x, y1: p.y, life: 0.24, maxLife: 0.24 });
+  }
+
+  // ルビデビの電撃は「爆風」ではなく、線が触れた1体だけへ直接ダメージを与える。
+  // 地面や空中障害物へ当たった時も電撃の終点だけを見せ、クレーターと爆発粒子は作らない。
+  function finishDirectLightningImpact(p, x, y) {
+    p.x = x;
+    p.y = y;
+    spawnLightningRemnant(p);
+    triggerShake(1.5, 0.08);
+    playCrackleSound(0.8);
+  }
+
+  function resolveProjectileUnitImpact(p, target, x = p.x, y = p.y) {
+    if (!p || !target) return;
+    const ownerUnit = unitById(p.owner);
+    const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
+    if (remoteShot) noteRemoteDamageBaseline();
+    if (!unitDefeated(target)) {
+      const directDamage = computeDamage(0, 1, p.damageMul);
+      const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
+      const actualDamage = Math.max(1, Math.round(directDamage * takenMul));
+      target.hp = Math.max(0, target.hp - actualDamage);
+      const a = unitAnchor(target);
+      if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
+      creditDamage(p.owner, target, actualDamage);
+    }
+    finishDirectLightningImpact(p, x, y);
+    checkMatchEnd();
+  }
+
+  function resolveProjectileSurfaceImpact(p, x = p.x, y = p.y) {
+    if (!p) return;
+    finishDirectLightningImpact(p, x, y);
   }
 
   function triggerSpecialFlash(text, def, duration = SPECIAL_FLASH_DURATION) {
@@ -15633,10 +15668,12 @@
             } else if (p.firework) {
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
               spawnFireworkBurst(p);
+            } else if (p.directHitOnly) {
+              resolveProjectileUnitImpact(p, u);
             } else {
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
             }
-            if (p.lightning) spawnLightningRemnant(p);
+            if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
             hit = true;
@@ -15659,10 +15696,12 @@
         } else if (p.firework) {
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
           spawnFireworkBurst(p);
+        } else if (p.directHitOnly) {
+          resolveProjectileSurfaceImpact(p);
         } else {
           explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
         }
-        triggerShake(2.5, 0.1);
+        if (!p.directHitOnly) triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
         projectiles.splice(i, 1);
         continue;
@@ -15675,8 +15714,9 @@
         else if (p.firework) {
           explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
           spawnFireworkBurst(p);
-        } else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
-        if (p.lightning) spawnLightningRemnant(p);
+        } else if (p.directHitOnly) resolveProjectileSurfaceImpact(p);
+        else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+        if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
       } else if (p.x < -30 || p.x > STAGE_W + 30 || p.y > STAGE_H + 60) {
