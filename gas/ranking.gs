@@ -125,6 +125,9 @@ function sanitizeName(raw) {
   var name = String(raw == null ? '' : raw).replace(/[\r\n\t]/g, ' ').trim();
   if (!name) name = 'ななし';
   if (name.length > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH);
+  // Sheetsは先頭の = + - @ を数式として解釈し得る。アポストロフィを付けて
+  // 文字列として保存し、ランキング名から管理シートへ式を持ち込ませない。
+  if (/^[=+\-@]/.test(name)) name = "'" + name;
   return name;
 }
 
