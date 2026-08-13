@@ -1064,6 +1064,28 @@ check('タイトルへ戻ってもおまけ曲は鳴り出さない',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
 
+// ===== v184: にゃんタンクは移動封印ではなく次の手番をスキップさせる =====
+check('にゃんタンクの必殺説明は次の手番を行動不能にする',
+  kt.character('neko').specialDesc.includes('次の手番をスキップ')
+    && indexHtml.includes('actionSkip: true'));
+kt.startBattle('neko');
+kt.disableCpuForTest();
+const nyanTarget = kt.unitById('e1');
+kt.emitNyanDisableForTest(nyanTarget.x, nyanTarget.y, 20, 'p1');
+const nyanEffect = kt.turnEffectForTest('e1');
+const nyanSaved = kt.buildSnapshotForTest().units.find(u => u.id === 'e1');
+check('猫だまし命中は移動封印を付けず行動不能を1手付ける',
+  nyanEffect.moveLockTurns === 0 && nyanEffect.actionSkipTurns === 1
+    && nyanSaved.actionSkipTurns === 1,
+  JSON.stringify({ effect: nyanEffect, saved: nyanSaved }));
+const nyanTurnBefore = kt.state().turnCount;
+kt.endTurnForTest();
+check('行動不能になったキャラの次の手番は操作させず自動で飛ばす',
+  kt.state().turnOrder[kt.state().activeIndex] === 'p1'
+    && kt.state().turnCount === nyanTurnBefore + 2
+    && kt.turnEffectForTest('e1').actionSkipTurns === 0,
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+
 // ===== Issue #20: 2vs2(CPU4体) =====
 // 「1vs1を壊さないこと」が最優先なので、まず1vs1側の不変を押さえてから2vs2を見る。
 kt.setPhase('title');
