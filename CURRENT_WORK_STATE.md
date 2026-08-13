@@ -2,6 +2,15 @@
 
 更新日: 2026-08-13（JST）
 
+## 2026-08-13 PRのCI二重実行を解消（CI設定のみ・作業中）
+
+- 作業ブランチ: `chore/ci-pr-dedup`。origin/master（v182、PR #128マージ済み）から、GitHub Actionsの起動条件だけを変更する。アプリ、GAS、Firebaseルール、テスト内容、依存関係は変更しない。
+- 何を変えたか: `.github/workflows/stage-studio-ci.yml`の`push`対象を`master`だけへ限定した。PRブランチは`pull_request`で1回検証し、masterへマージされた後は`push`で1回検証する。
+- なぜ: 従来は全ブランチの`push`と`pull_request`が同時に成立し、PR #127・#128で通常テストとモバイルE2Eが2系列ずつ走ることを実測した。結果を減らさず、PR中のCI時間・GitHub Actions利用量をほぼ半減するため。品質監査の`CI-01`に対応する。
+- やってはいけないこと: `pull_request`検証を消さない。masterのpush検証を消さない。ジョブ内容、Node版、テストコマンド、E2E対象を同時に変えない。
+- 実測テスト数: CI設定だけのため新規アプリテストはなし。基準版v182はローカル **1,343/1,343成功**、loopback **103/103**・中継数 **38 / 64 / 83 / 61 / 48**、PR #128の二重CI系列はいずれも通常テスト・モバイルE2E成功。本PRではGitHub Actionsがpull_request由来の1系列だけ起動することを実測する。
+- キャッシュ/Firebase: 配信アプリと`database.rules.json`は変更しない。`BUILD_ID`と`CACHE_VERSION`はともに`v181-character-assets`のまま。
+
 ## v182 ランキング名のSheets数式化防止（作業中）
 
 - 作業ブランチ: `fix/v182-ranking-formula`。origin/master（品質監査PR #127マージ済み）から、ランキング名をGoogle Sheetsへ保存する入力境界だけを安全化する。ゲーム表示、スコア計算、順位、同一プレイヤー3件保持、オンライン対戦、Firebaseルールは変更しない。
