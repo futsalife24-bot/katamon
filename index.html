@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v185-action-skip-effects';
+  const BUILD_ID = 'v186-action-skip-duration';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3969,6 +3969,8 @@
   let shakeMag = 0;
   const SPECIAL_AURA_DURATION = 0.78;
   const SPECIAL_FLASH_DURATION = 1.12;
+  const ACTION_SKIP_EFFECT_DURATION_MULTIPLIER = 1.5;
+  const ACTION_SKIP_HIT_FLASH_DURATION = 1.68;
   let specialAura = null;     // 必殺を放つ本人の周囲で、カットイン前だけ沸き立つ
   let specialFlash = { timer: 0, text: '', color: '#ff9d42', sub: '' };
   let pendingShot = null;    // 必殺のオーラ→カットインを見せ終わるまで発射を待たせる
@@ -4024,9 +4026,10 @@
     lightningBeams.push({ x0: p.originX, y0: p.originY, x1: p.x, y1: p.y, life: 0.24, maxLife: 0.24 });
   }
 
-  function triggerSpecialFlash(text, def) {
+  function triggerSpecialFlash(text, def, duration = SPECIAL_FLASH_DURATION) {
     specialFlash = {
-      timer: SPECIAL_FLASH_DURATION,
+      timer: duration,
+      duration,
       key: def?.key || null,
       text,
       color: def?.color || '#ff9d42',
@@ -9586,8 +9589,9 @@
     else ctx.rect(x, y, w, h);
   }
 
-  function spawnEmpPulse(x, y, radius) {
-    empRings.push({ x, y, radius, life: 0.55, maxLife: 0.55 });
+  function spawnEmpPulse(x, y, radius, durationMultiplier = 1) {
+    const ringLife = 0.55 * durationMultiplier;
+    empRings.push({ x, y, radius, life: ringLife, maxLife: ringLife });
     const count = 18;
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
@@ -9597,8 +9601,8 @@
         y: y + Math.sin(ang) * dist,
         vx: Math.cos(ang) * 22,
         vy: Math.sin(ang) * 22,
-        life: 0.45 + Math.random() * 0.3,
-        maxLife: 0.75,
+        life: (0.45 + Math.random() * 0.3) * durationMultiplier,
+        maxLife: 0.75 * durationMultiplier,
         color: Math.random() < 0.55 ? '#66e8ff' : '#b38cff',
         size: 2 + Math.random() * 2
       });
@@ -10087,7 +10091,8 @@
   }
 
   function emitEmp(x, y, radius, owner, turns, effect = 'moveLock') {
-    spawnEmpPulse(x, y, radius);
+    const actionSkipEffect = effect === 'turnSkip';
+    spawnEmpPulse(x, y, radius, actionSkipEffect ? ACTION_SKIP_EFFECT_DURATION_MULTIPLIER : 1);
     triggerShake(2.5, 0.16);
     const ownerTeam = teamOfOwner(owner);
     let opponentHit = false;
@@ -10111,7 +10116,9 @@
     if (opponentHit) {
       triggerSpecialFlash(effect === 'turnSkip'
         ? '猫だまし命中: 次の手番をスキップ'
-        : `電磁波命中: 移動不可 ${turns}手`);
+        : `電磁波命中: 移動不可 ${turns}手`,
+        undefined,
+        actionSkipEffect ? ACTION_SKIP_HIT_FLASH_DURATION : SPECIAL_FLASH_DURATION);
     }
     playExplosionSound(0.8);
     checkMatchEnd();
@@ -11011,7 +11018,7 @@
     return { turns: u.moveLockTurns, effect: 'chain', placement: 'feet', icon: 'padlock' };
   }
 
-  const ACTION_SKIP_STUN_DURATION = 1.25;
+  const ACTION_SKIP_STUN_DURATION = 1.25 * ACTION_SKIP_EFFECT_DURATION_MULTIPLIER;
   const ACTION_SKIP_SHAKE_PX = 4.5;
 
   function actionSkipStatus(u) {
@@ -13209,7 +13216,7 @@
 
   function drawSpecialFlash() {
     if (specialFlash.timer <= 0) return;
-    const duration = SPECIAL_FLASH_DURATION;
+    const duration = specialFlash.duration || SPECIAL_FLASH_DURATION;
     const progress = Math.max(0, Math.min(1, 1 - specialFlash.timer / duration));
     const alpha = Math.sin(Math.min(1, progress * 3.4) * Math.PI / 2) * Math.min(1, specialFlash.timer * 3.1);
     const color = specialFlash.color || '#ff9d42';

@@ -1086,8 +1086,11 @@ check('行動不能は移動封印と異なる頭上の星と電撃で表示す�
   JSON.stringify(nyanVisual));
 const nyanStunConfig = typeof kt.actionSkipStunConfigForTest === 'function'
   ? kt.actionSkipStunConfigForTest() : null;
-check('行動不能の手番は1秒以上震えてからスキップする',
-  nyanStunConfig?.duration >= 1 && nyanStunConfig?.shakePx >= 3
+check('行動不能の付与演出と手番の震えは従来の1.5倍にする',
+  nyanStunConfig?.duration === 1.875
+    && nyanStunConfig?.hitFlashDuration === 1.68
+    && nyanStunConfig?.effectDurationMultiplier === 1.5
+    && nyanStunConfig?.shakePx >= 3
     && indexHtml.includes("kind: 'actionSkip'")
     && indexHtml.includes('actionSkipShakeOffset(u)'),
   JSON.stringify(nyanStunConfig));
@@ -1100,6 +1103,12 @@ check('行動不能の手番へ一度移り、震え演出中は状態をまだ�
     && kt.hasCutIn(),
   JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
 kt.step(1.3);
+check('従来の震え時間を過ぎても1.5倍の演出中はまだスキップしない',
+  kt.state().turnOrder[kt.state().activeIndex] === 'e1'
+    && kt.turnEffectForTest('e1').actionSkipTurns === 1
+    && kt.hasCutIn(),
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+kt.step(0.6);
 check('行動不能になったキャラの次の手番は操作させず自動で飛ばす',
   kt.state().turnOrder[kt.state().activeIndex] === 'p1'
     && kt.state().turnCount === nyanTurnBefore + 2
