@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v189-fenice-ground-flame';
+const CACHE_VERSION = 'katamon-pwa-v190-burumutan-drain';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

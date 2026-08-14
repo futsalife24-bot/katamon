@@ -1068,9 +1068,11 @@ check('フェニーチェの必殺弾は同じ引っぱりなら通常弾と同�
 kt.startBattle('tori');
 kt.disableCpuForTest();
 settle();
-kt.setTerrain('rolling');
-kt.placeOnGround('p1', Math.round(kt.stageW() * 0.2));
-kt.placeOnGround('e1', Math.round(kt.stageW() * 0.55));
+kt.setFlatTerrainForTest();
+const feniceShooter = kt.localUnit();
+const feniceTarget = kt.foeUnit();
+kt.placeOnGround(feniceShooter.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(feniceTarget.id, Math.round(kt.stageW() * 0.55));
 const feniceShot = kt.fireSpecialImmediateForTest('tori', 300, -180);
 const feniceProfile = kt.projectileProfilesForTest()[feniceShot];
 check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け、地走り炎の印だけを持つ',
@@ -1078,7 +1080,6 @@ check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け�
     && feniceProfile?.gravityMul === 1
     && feniceProfile?.groundFlame === true,
   JSON.stringify(feniceProfile));
-const feniceTarget = kt.unitById('e1');
 const feniceHpBefore = feniceTarget.hp;
 const feniceCratersBefore = kt.craters();
 const feniceVisualsBefore = kt.impactVisualCountsForTest();
@@ -1103,6 +1104,64 @@ check('フェニーチェの地走り炎はダメージと小削りだけを起�
     craters: feniceNewCraters,
     visuals: [feniceVisualsBefore, feniceVisualsAfter]
   }));
+
+// ===== v190: ブルームタンの必殺は固定回復ではなく、敵へ実際に与えたダメージを吸収 =====
+check('ブルームタンの必殺説明は固定30回復ではなく与えたダメージ分の回復を示す',
+  kt.character('burumutan').specialDesc.includes('与えたダメージ')
+    && !kt.character('burumutan').specialDesc.includes('30回復'),
+  kt.character('burumutan').specialDesc);
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomOwner = kt.localUnit();
+const bloomMissTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomMissTarget.id, Math.round(kt.stageW() * 0.8));
+const bloomMissShot = kt.fireSpecialWithHpForTest('burumutan', 40, 260, -180);
+const bloomMissProfile = kt.projectileProfilesForTest()[bloomMissShot];
+check('ブルームタンは必殺弾を発射しただけでは回復せず、吸収弾の印を持つ',
+  bloomOwner.hp === 40 && bloomMissProfile?.drainHeal === true,
+  JSON.stringify({ hp: bloomOwner.hp, profile: bloomMissProfile }));
+kt.detonateProjectileForTest(bloomMissShot, kt.stageW() / 2, 80);
+check('ブルームタンの必殺弾が相手へ当たらなければ回復しない',
+  bloomOwner.hp === 40,
+  `hp=${bloomOwner.hp}`);
+
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomDrainOwner = kt.localUnit();
+const bloomDrainTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomDrainOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomDrainTarget.id, Math.round(kt.stageW() * 0.8));
+bloomDrainTarget.hp = 20;
+const bloomDrainShot = kt.fireSpecialWithHpForTest('burumutan', 40, 260, -180);
+kt.detonateProjectileForTest(bloomDrainShot, bloomDrainTarget.x, bloomDrainTarget.y);
+check('ブルームタンは過剰ダメージで水増しせず、敵から実際に奪ったHPだけ回復する',
+  bloomDrainTarget.hp === 0
+    && bloomDrainOwner.hp === 60
+    && kt.damageTexts().includes('+20'),
+  JSON.stringify({ ownerHp: bloomDrainOwner.hp, targetHp: bloomDrainTarget.hp, texts: kt.damageTexts() }));
+
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomCapOwner = kt.localUnit();
+const bloomCapTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomCapOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomCapTarget.id, Math.round(kt.stageW() * 0.8));
+bloomCapTarget.hp = 20;
+const bloomCapShot = kt.fireSpecialWithHpForTest('burumutan', 105, 260, -180);
+const bloomCapProfile = kt.projectileProfilesForTest()[bloomCapShot];
+kt.detonateProjectileForTest(bloomCapShot, bloomCapTarget.x, bloomCapTarget.y);
+check('ブルームタンの吸収回復は最大HPを超えない',
+  bloomCapOwner.hp === bloomCapOwner.maxHp
+    && bloomCapTarget.hp === 0
+    && bloomCapProfile?.drainHeal === true,
+  JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
 
 // ===== タイトルの「おまけ」ボタン =====
 // 曲が終わるたび 1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目… と自動で送り、

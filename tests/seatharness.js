@@ -124,6 +124,11 @@ const HOOK = `
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
     setTerrain: (pattern) => { newTerrain(pattern); },
+    setFlatTerrainForTest: (surface = 420) => {
+      const y = Math.max(0, Math.min(TERRAIN_BOTTOM_Y - 60, Number(surface)));
+      const segments = Array.from({ length: TERRAIN_COLS }, () => [[y, TERRAIN_BOTTOM_Y]]);
+      loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
+    },
     cpuStepIsSafe: (u, toX) => cpuStepIsSafe(u, toX),
     placeOnGround: (id, x) => { const u = unitById(id); if (Number.isFinite(x)) u.x = x; initUnitOnGround(u); return { x: u.x, y: u.y }; },
     stageW: () => STAGE_W,
@@ -195,11 +200,19 @@ const HOOK = `
       lightning: !!p.lightning,
       directHitOnly: !!p.directHitOnly,
       groundFlame: !!p.groundFlame,
+      drainHeal: !!p.drainHeal,
       damageMul: p.damageMul
     })),
     fireSpecialImmediateForTest: (key, vx0, vy0) => {
       const u = localUnit();
       applyCharacter(u, key);
+      launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
+      return projectiles.length - 1;
+    },
+    fireSpecialWithHpForTest: (key, hp, vx0, vy0) => {
+      const u = localUnit();
+      applyCharacter(u, key);
+      u.hp = Math.max(0, Math.min(u.maxHp, Number(hp)));
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
       return projectiles.length - 1;
     },
@@ -237,7 +250,7 @@ const HOOK = `
     detonateProjectileForTest: (index, x, y) => {
       const p = projectiles[index];
       if (!p) return false;
-      explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+      explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
       return true;
     },
     clearProjectilesForTest: () => { projectiles.length = 0; },

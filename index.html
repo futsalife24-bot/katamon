@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v189-fenice-ground-flame';
+  const BUILD_ID = 'v190-burumutan-drain';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2672,7 +2672,7 @@
     burumutan: {
       key: 'burumutan', name: 'ブルームタン', asset: 'bloom-tan', role: '支援型', roleEn: 'SUPPORT',
       desc: '花の力で持久戦を制する支援戦車。耐久と回復でじわじわ勝つ。',
-      selectStats: [4, 2, 3], specialDesc: '自身のHPを30回復して砲撃', selectFlavor: '花の力で傷を癒やし、咲く。',
+      selectStats: [4, 2, 3], specialDesc: '花弾で相手に与えたダメージ分だけ自身のHPを回復', selectFlavor: '咲かせた傷を、命の花へ変える。',
       maxHp: 110, blastMul: 0.9, windMul: 0.85, fuelMul: 1.0, velScaleMul: 0.95, specialVelocityMul: 1.0, tBias: 1.1,
       color: '#f56f9a', special: '再生ブルーム'
     },
@@ -3441,6 +3441,7 @@
       lightning: !!opts.lightning,
       directHitOnly: !!opts.directHitOnly,
       groundFlame: !!opts.groundFlame,
+      drainHeal: !!opts.drainHeal,
       firework: !!opts.firework,
       jump: opts.jump != null ? !!opts.jump : !!(unitById(owner) && unitById(owner).jumpShot),
       fireworkShard: !!opts.fireworkShard,
@@ -3698,14 +3699,12 @@
       // ニセンモノの必殺: 高速貫通レーザー
       fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, { blastMul: def.blastMul * 1.2, windMul: def.windMul, pierce: true });
     } else if (activateSpecial && def.key === 'burumutan') {
-      // ブルームタンの必殺: 自己回復後に花弾を発射
-      const heal = Math.min(30, unit.maxHp - unit.hp);
-      unit.hp += heal;
-      if (heal > 0) spawnHealText(unit.x, unit.y - 32, heal);
+      // ブルームタンの必殺: 花弾が敵から実際に奪ったHPだけ、着弾時に発射者へ還元する。
       fireProjectile(owner, anchor, vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
-        gravityMul: def.gravityMul
+        gravityMul: def.gravityMul,
+        drainHeal: true
       });
     } else if (activateSpecial && def.key === 'sumoeru') {
       // スモエルの必殺: 敵へ近づくと接近信管が作動し、8方向へ散る花火。
@@ -10255,9 +10254,11 @@
     }
   }
 
-  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false) {
+  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false) {
     blastMul = blastMul || 1;
     const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
+    const ownerTeam = teamOfOwner(owner);
+    let drainedDamage = 0;
     if (remoteShot) noteRemoteDamageBaseline();
     carveCrater(x, y, 44 * blastMul);
     spawnExplosion(x, y, blastMul);
@@ -10272,9 +10273,19 @@
       if (dmg > 0) {
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
         const actualDamage = Math.max(1, Math.round(dmg * takenMul));
+        const hpBefore = u.hp;
         u.hp = Math.max(0, u.hp - actualDamage);
+        if (drainHeal && ownerTeam !== null && u.team !== ownerTeam) drainedDamage += hpBefore - u.hp;
         if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
         creditDamage(owner, u, actualDamage);
+      }
+    }
+    if (drainHeal && drainedDamage > 0) {
+      const ownerUnit = unitById(owner);
+      if (ownerUnit) {
+        const heal = Math.min(drainedDamage, Math.max(0, ownerUnit.maxHp - ownerUnit.hp));
+        ownerUnit.hp += heal;
+        if (heal > 0) spawnHealText(ownerUnit.x, ownerUnit.y - 32, heal);
       }
     }
     checkMatchEnd();
@@ -15784,14 +15795,14 @@
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
             } else if (p.firework) {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
               spawnFireworkBurst(p);
             } else if (p.groundFlame) {
               resolveGroundFlameImpact(p, p.x, p.y);
             } else if (p.directHitOnly) {
               resolveProjectileUnitImpact(p, u);
             } else {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
             }
             if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
@@ -15814,14 +15825,14 @@
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         } else if (p.firework) {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
           spawnFireworkBurst(p);
         } else if (p.groundFlame) {
           resolveGroundFlameImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.directHitOnly) {
           resolveProjectileSurfaceImpact(p);
         } else {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
         }
         if (!p.directHitOnly && !p.groundFlame) triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
@@ -15834,11 +15845,11 @@
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
-          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
           spawnFireworkBurst(p);
         } else if (p.groundFlame) resolveGroundFlameImpact(p, p.x, p.y);
         else if (p.directHitOnly) resolveProjectileSurfaceImpact(p);
-        else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
+        else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
         if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);
