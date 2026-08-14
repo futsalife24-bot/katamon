@@ -478,6 +478,22 @@
     }
   });
 
+  function placeLauncher(state) {
+    var placement = state && state.customStageLauncherRect;
+    var gameCanvas = document.getElementById('game');
+    if (!placement || !gameCanvas) return;
+    var bounds = gameCanvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    // 本編Canvasの仮想解像度は540x960。CSS上の実寸へこの基準から写すことで、
+    // 縦長端末でもカスタムステージ入口をSTAGE直下の行へ重ねられる。
+    var scaleX = bounds.width / 540;
+    var scaleY = bounds.height / 960;
+    launcher.style.left = (bounds.left + placement.x * scaleX) + 'px';
+    launcher.style.top = (bounds.top + placement.y * scaleY) + 'px';
+    launcher.style.width = (placement.w * scaleX) + 'px';
+    launcher.style.height = (placement.h * scaleY) + 'px';
+  }
+
   setInterval(function () {
     var gameBridge = bridge();
     var state = gameBridge && gameBridge.getState ? gameBridge.getState() : null;
@@ -485,6 +501,7 @@
     // 重ねると、本編の開始演出より先に見え続けるためfreeSetupだけで表示する。
     launcher.hidden = overlay.classList.contains('open') || !state || state.onlineActive
       || state.gamePhase !== 'freeSetup';
+    if (!launcher.hidden) placeLauncher(state);
   }, 250);
 
   globalThis.CustomStageManager = Object.freeze({
