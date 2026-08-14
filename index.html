@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v191-special-names';
+  const BUILD_ID = 'v192-d-smash-drill';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2714,7 +2714,7 @@
     jinba: {
       key: 'jinba', name: 'アスタウロス', asset: 'astauros', role: '突撃型', roleEn: 'CHARGE',
       desc: '槍と肩砲を備えた四脚戦車。走り回りながら高速弾で圧をかける。',
-      selectStats: [4, 3, 4], specialDesc: '地形を貫き大爆発する突撃槍', selectFlavor: '槍を掲げ、一直線に突き抜ける。',
+      selectStats: [4, 3, 4], specialDesc: '地面へ着弾後、大・中・小の爆発で地中を掘り進む突撃槍', selectFlavor: '槍を掲げ、地中を爆砕しながら突き抜ける。',
       maxHp: 108, blastMul: 0.95, windMul: 0.6, fuelMul: 1.25, velScaleMul: 1.15, specialVelocityMul: 1.3, tBias: 0.9,
       color: '#3fd6b0', special: 'Dスマッシュ'
     },
@@ -3415,7 +3415,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,dSmash,emp,firework,directHitOnly,normalImpactSound}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
@@ -3432,6 +3432,9 @@
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
       normalImpactSound: !!opts.normalImpactSound,
       pierce: !!opts.pierce,
+      dSmash: !!opts.dSmash,
+      dSmashDrilling: false,
+      dSmashBlasts: 0,
       emp: !!opts.emp,
       empRadius: opts.empRadius || 90,
       empTurns: opts.empTurns || 2,
@@ -3631,6 +3634,29 @@
     if (carveCraterInternal(x, y, radius, false)) craterHistory.push({ x, y, r: radius });
   }
 
+  // Dスマッシュは地面へ触れるまでは通常の衝突判定を持ち、着弾した瞬間だけ
+  // 地形貫通へ切り替える。爆発位置は固定刻みの「進んだ距離」で決め、端末性能で
+  // 掘削位置が変わらないようにする。最初の大爆発は従来の威力・大きさを維持する。
+  const D_SMASH_DRILL_BLASTS = [1, 0.68, 0.4];
+  const D_SMASH_DRILL_STRIDE = 52;
+
+  function explodeDSmashDrill(p, x, y) {
+    const scale = D_SMASH_DRILL_BLASTS[p.dSmashBlasts];
+    if (!Number.isFinite(scale)) return;
+    explodeAt(x, y, p.blastMul * scale, p.owner, p.damageMul, false, p.drainHeal);
+    p.dSmashBlasts++;
+  }
+
+  function startDSmashDrill(p, impactX, impactY) {
+    p.x = impactX;
+    p.y = impactY;
+    p.dSmashDrilling = true;
+    p.pierce = true;
+    p.travelDistance = 0;
+    p.dSmashBlasts = 0;
+    explodeDSmashDrill(p, impactX, impactY);
+  }
+
   // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
@@ -3738,11 +3764,11 @@
         directHitOnly: true
       });
     } else if (activateSpecial && def.key === 'jinba') {
-      // 人馬の必殺: 地形を貫通して進む大爆発の突撃槍
+      // アスタウロスの必殺: 地面への着弾後、大→中→小の爆発で掘り進む突撃槍
       fireProjectile(owner, anchor, vx0 * 1.3, vy0 * 1.3, {
         blastMul: def.blastMul * 1.9,
         windMul: def.windMul,
-        pierce: true
+        dSmash: true
       });
     } else if (activateSpecial && def.key === 'kishi') {
       // 騎士の必殺: 自分のHPを代償に超高威力の一撃を放つ。自滅はしない。
@@ -11915,7 +11941,7 @@
         ctx.beginPath();
         ctx.arc(10, 0, 3.2, 0, Math.PI * 2);
         ctx.fill();
-      } else if (p.pierce) {
+      } else if (p.dSmash || p.pierce) {
         // 貫通弾は高密度のエネルギーボルト。芯・外光・速度線を分けて描く。
         ctx.shadowColor = '#5de8ff';
         ctx.shadowBlur = 18;
@@ -15770,6 +15796,23 @@
         }
       }
 
+      if (p.dSmashDrilling) {
+        const stepX = p.x - prevX;
+        const stepY = p.y - prevY;
+        const stepLen = Math.sqrt(stepX * stepX + stepY * stepY);
+        p.travelDistance += stepLen;
+        while (p.dSmashBlasts < D_SMASH_DRILL_BLASTS.length
+               && p.travelDistance >= D_SMASH_DRILL_STRIDE * p.dSmashBlasts) {
+          const threshold = D_SMASH_DRILL_STRIDE * p.dSmashBlasts;
+          const back = stepLen > 0 ? (p.travelDistance - threshold) / stepLen : 0;
+          explodeDSmashDrill(p, p.x - stepX * back, p.y - stepY * back);
+        }
+        if (p.dSmashBlasts >= D_SMASH_DRILL_BLASTS.length) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
       const fireworkDue = p.firework && !p.fireworkShard && fireworkProximityTarget(p);
 
       if (fireworkDue) {
@@ -15782,7 +15825,7 @@
       let hit = false;
       // ユニットへの直撃判定(発射者自身は着弾するまで判定除外。誤射防止)
       // 拡散弾は素通りさせ、ダメージは進行中の爆発だけに任せる(二重取りの防止)。
-      if (!p.fireworkShard && !p.deathGateScythe) {
+      if (!p.fireworkShard && !p.deathGateScythe && !p.dSmashDrilling) {
         for (const u of units) {
           if (u.id === p.owner) continue;
           const a = unitHitCenter(u);
@@ -15837,6 +15880,11 @@
         if (!p.directHitOnly && !p.groundFlame) triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
         projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (p.dSmash && !p.dSmashDrilling && isSolidAt(p.x, p.y)) {
+        startDSmashDrill(p, p.x, p.y);
         continue;
       }
 

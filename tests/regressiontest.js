@@ -1177,6 +1177,45 @@ check('ブルームタンの吸収回復は最大HPを超えない',
     && bloomCapProfile?.drainHeal === true,
   JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
 
+// ===== v192: Dスマッシュは地面への着弾後に大→中→小の爆発で掘り進む =====
+check('Dスマッシュの説明は地面へ着弾後に大中小の爆発で掘り進む性能を示す',
+  kt.character('jinba').specialDesc.includes('着弾')
+    && kt.character('jinba').specialDesc.includes('大・中・小')
+    && kt.character('jinba').specialDesc.includes('掘り進む'),
+  kt.character('jinba').specialDesc);
+kt.startBattle('jinba');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest(420);
+const dSmashOwner = kt.localUnit();
+const dSmashTarget = kt.foeUnit();
+kt.placeOnGround(dSmashOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(dSmashTarget.id, Math.round(kt.stageW() * 0.8));
+const dSmashShot = kt.fireSpecialImmediateForTest('jinba', 60, 220);
+const dSmashInitialProfile = kt.projectileProfilesForTest()[dSmashShot];
+check('Dスマッシュは地面へ当たる前から地形を無視せず、専用の着弾判定を持つ',
+  dSmashInitialProfile?.dSmash === true && dSmashInitialProfile?.pierce === false,
+  JSON.stringify(dSmashInitialProfile));
+const dSmashConfig = kt.dSmashConfigForTest();
+const dSmashCratersBefore = kt.craters();
+for (let i = 0; i < 600 && kt.projectiles().length; i++) kt.step(1 / 60);
+const dSmashCraters = kt.craterHistory().slice(dSmashCratersBefore);
+check('Dスマッシュは地面への着弾後に爆発を3回だけ起こす',
+  dSmashCraters.length === 3 && kt.projectiles().length === 0,
+  JSON.stringify({ config: dSmashConfig, craters: dSmashCraters, projectiles: kt.projectiles().length }));
+check('Dスマッシュの爆発は大→中→小の順に小さくなる',
+  dSmashCraters.length === 3
+    && dSmashCraters[0].r > dSmashCraters[1].r
+    && dSmashCraters[1].r > dSmashCraters[2].r,
+  JSON.stringify(dSmashCraters));
+check('Dスマッシュは着弾時の進行方向へ爆発しながら地中を掘り進む',
+  dSmashCraters.length === 3
+    && dSmashCraters[1].x > dSmashCraters[0].x
+    && dSmashCraters[2].x > dSmashCraters[1].x
+    && dSmashCraters[1].y > dSmashCraters[0].y
+    && dSmashCraters[2].y > dSmashCraters[1].y,
+  JSON.stringify(dSmashCraters));
+
 // ===== タイトルの「おまけ」ボタン =====
 // 曲が終わるたび 1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目… と自動で送り、
 // 手動タップの次曲／停止も残す。BGMの切り替えは syncBgm へ一本化しているので、
