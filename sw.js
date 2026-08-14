@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v190-burumutan-drain';
+const CACHE_VERSION = 'katamon-pwa-v191-special-names';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

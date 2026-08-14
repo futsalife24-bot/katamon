@@ -302,6 +302,20 @@ check('全キャラクターの表示名が確定した名前になっている'
   Object.entries(EXPECTED_CHARACTER_NAMES).every(([key, name]) => kt.character(key).name === name),
   JSON.stringify(Object.fromEntries(Object.keys(EXPECTED_CHARACTER_NAMES).map(key => [key, kt.character(key).name]))));
 
+// v191: 必殺技の性能は変えず、キャラクター性が伝わる固有名へ統一する。
+const EXPECTED_SPECIAL_NAMES = {
+  burumutan: 'ドレインシード',
+  tori: 'フレイムウェーブ',
+  sumoeru: '職人カエル玉',
+  iwa: 'Bインパクト',
+  medama: 'バインドスピット'
+};
+for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
+  check(`${kt.character(key).name}の必殺技名は「${specialName}」`,
+    kt.character(key).special === specialName,
+    kt.character(key).special);
+}
+
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
 // 別の種類として持たせないと、4体の顔ぶれを描き分けられない。
 check('VSカットインの状態を検査できる', typeof kt.matchupCutIn === 'function');
@@ -1054,7 +1068,7 @@ check('ルビデビの電撃は地面や空中障害物で止まっても爆発�
   }));
 
 // ===== v189: フェニーチェの必殺は通常弾と同じ弾道から左右へ地走り炎 =====
-check('フェニーチェの必殺説明は超高速ロケットではなく左右へ広がる炎を示す',
+check('フェニーチェの必殺説明は旧・超高速弾ではなく左右へ広がる炎を示す',
   kt.character('tori').specialDesc.includes('左右')
     && kt.character('tori').specialDesc.includes('炎')
     && !kt.character('tori').specialDesc.includes('超高速'),
@@ -1075,7 +1089,7 @@ kt.placeOnGround(feniceShooter.id, Math.round(kt.stageW() * 0.2));
 kt.placeOnGround(feniceTarget.id, Math.round(kt.stageW() * 0.55));
 const feniceShot = kt.fireSpecialImmediateForTest('tori', 300, -180);
 const feniceProfile = kt.projectileProfilesForTest()[feniceShot];
-check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け、地走り炎の印だけを持つ',
+check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け、フレイムウェーブの印だけを持つ',
   feniceProfile?.windMul === 1
     && feniceProfile?.gravityMul === 1
     && feniceProfile?.groundFlame === true,
@@ -1093,7 +1107,7 @@ check('フェニーチェの炎は着弾点から地面に沿って左右3か所
     && feniceFlamePoints.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
   JSON.stringify(feniceFlamePoints));
 const feniceNewCraters = kt.craterHistory().slice(feniceCratersBefore);
-check('フェニーチェの地走り炎はダメージと小削りだけを起こし、大爆発には戻らない',
+check('フェニーチェのフレイムウェーブはダメージと小削りだけを起こし、大爆発には戻らない',
   feniceTarget.hp === feniceHpBefore - 30
     && feniceNewCraters.length === 7
     && feniceNewCraters.every(crater => crater.r <= 12)
@@ -1448,8 +1462,8 @@ const empEnemy = kt.unitById('e1');
 kt.clearSpecialFlashForTest();
 kt.emitEmpForTest(empEnemy.x, empEnemy.y, 20, 'p1', 2);
 const empHitFlash = kt.specialFlashForTest();
-check('電磁波が敵へ命中した時だけ移動不可カットインを出す',
-  !!empHitFlash && empHitFlash.text.includes('電磁波命中') && empHitFlash.text.includes('移動不可'),
+check('バインドスピットが敵へ命中した時だけ移動不可カットインを出す',
+  !!empHitFlash && empHitFlash.text.includes('バインドスピット命中') && empHitFlash.text.includes('移動不可'),
   JSON.stringify(empHitFlash));
 const empLockVisual = kt.moveLockVisualForTest('e1');
 check('移動封印中は文字や電気ではなく、足元を前後から囲む鎖と南京錠を割り当てる',
