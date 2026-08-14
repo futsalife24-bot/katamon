@@ -1,12 +1,13 @@
 #customStageLauncher {
   position: fixed;
   z-index: 45;
-  left: 50%;
-  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  min-width: 210px;
-  min-height: 48px;
-  padding: 10px 18px;
+  left: -9999px;
+  top: -9999px;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 12px;
   border: 2px solid #c78335;
   border-radius: 4px 4px 10px 10px;
   color: #fff5dc;

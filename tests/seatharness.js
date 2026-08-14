@@ -677,6 +677,10 @@ const HOOK = `
       ? JSON.parse(JSON.stringify(freeTrainingMenuRows()))
       : null),
     freeStartBtn: () => ({ ...freeStartBtn() }),
+    gamePhaseForTest: () => gamePhase,
+    endFreeTrainingForTest: () => endFreeTrainingToTitle(),
+    clearSuspendedForTest: () => clearSuspendedMatch(),
+    suspendedSavePresentForTest: () => !!loadSuspendedMatch(),
     freeConfig: () => ({ ...freeModeConfig }),
     setFreeFormat: (key) => {
       freeModeConfig.formatIndex = Math.max(0, FORMAT_OPTIONS.findIndex(o => o.key === key));

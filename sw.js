@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v194-d-smash-contiguous';
+const CACHE_VERSION = 'katamon-pwa-v195-training-lobby-cta';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

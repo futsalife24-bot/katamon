@@ -548,8 +548,8 @@
       <div id="onlineLobbyStatus">通信を準備します。通信できない時もCPU・演習は遊べます。</div>
     </div>
     <div id="onlineLobbyButtons">
-      <button id="onlineStart" type="button">対戦開始</button>
       <button id="onlineReady" type="button">準備完了</button>
+      <button id="onlineStart" type="button">対戦開始</button>
       <button id="onlineRematch" type="button">このまま再戦</button>
       <button id="onlineReturnLobby" type="button">ロビーへ戻る</button>
       <button id="onlineQuick" type="button">すぐ対戦する</button>
@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v194-d-smash-contiguous';
+  const BUILD_ID = 'v195-training-lobby-cta';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -3979,6 +3979,14 @@
     }
     return { resume: menuResumeBtn, restart: menuRestartBtn, exit: menuSuspendBtn };
   }
+  // 演習は試すための場なので、途中の状態を保存して再開する必要はない。
+  // ただし通常対戦の中断データが先にある場合は消さず、そのままタイトルへ戻す。
+  function endFreeTrainingToTitle() {
+    menuOpen = false;
+    gamePhase = 'title';
+    hasSuspendedSave = !!loadSuspendedMatch();
+    syncBgm();
+  }
   function canOpenMenu() {
     return gamePhase === 'battle' && !awaitingResolve && !cutIn && !matchOver;
   }
@@ -4361,7 +4369,10 @@
     }]));
     const lastCharacterY = firstCharacterY + (characterKeys.length - 1) * 90;
     rows.terrain = { y: lastCharacterY + 78, h: FREE_SETTING_ROW_H };
-    rows.stageSize = { y: rows.terrain.y + 56, h: FREE_SETTING_ROW_H };
+    // カスタムステージは地形を選ぶ流れの中に置く。画面最下部に単独で置くと、
+    // START BATTLEと何が違う入口なのか分かりにくく、選択後に戻る場所も見失いやすい。
+    rows.customStage = { y: rows.terrain.y + 56, h: FREE_SETTING_ROW_H };
+    rows.stageSize = { y: rows.customStage.y + 56, h: FREE_SETTING_ROW_H };
     rows.format = { y: rows.stageSize.y + 56, h: FREE_SETTING_ROW_H };
     return rows;
   }
@@ -9187,19 +9198,23 @@
     }
 
     const valueX = hasCharacterArt ? 306 : 348;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff5dc';
-    ctx.strokeStyle = '#070a0c';
-    ctx.lineWidth = hasCharacterArt ? 4 : 3;
-    ctx.font = `400 ${hasCharacterArt ? 21 : 17}px ${UI_FONT}`;
-    ctx.strokeText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
-    ctx.fillText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
-    ctx.fillStyle = 'rgba(220,232,231,0.72)';
-    ctx.font = '400 10px ' + UI_FONT;
-    ctx.fillText(sub, valueX, hasCharacterArt ? row.y + 24 : row.y + 16);
+    if (kind !== 'customStage') {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff5dc';
+      ctx.strokeStyle = '#070a0c';
+      ctx.lineWidth = hasCharacterArt ? 4 : 3;
+      ctx.font = `400 ${hasCharacterArt ? 21 : 17}px ${UI_FONT}`;
+      ctx.strokeText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
+      ctx.fillText(value, valueX, hasCharacterArt ? row.y + 1 : row.y + 2);
+      ctx.fillStyle = 'rgba(220,232,231,0.72)';
+      ctx.font = '400 10px ' + UI_FONT;
+      ctx.fillText(sub, valueX, hasCharacterArt ? row.y + 24 : row.y + 16);
+    }
 
-    drawFreeArrow(hasCharacterArt ? 48 : 190, hasCharacterArt ? row.y + 7 : row.y, -1);
-    drawFreeArrow(hasCharacterArt ? VW - 48 : 506, hasCharacterArt ? row.y + 7 : row.y, 1);
+    if (kind !== 'customStage') {
+      drawFreeArrow(hasCharacterArt ? 48 : 190, hasCharacterArt ? row.y + 7 : row.y, -1);
+      drawFreeArrow(hasCharacterArt ? VW - 48 : 506, hasCharacterArt ? row.y + 7 : row.y, 1);
+    }
     ctx.restore();
   }
 
@@ -9241,6 +9256,7 @@
     if (rows.ally) drawFreeRow(rows.ally, 'ALLY CPU', CHARACTERS[allyKey].name, CHARACTERS[allyKey].role, 'ally', allyKey);
     if (rows.foe2) drawFreeRow(rows.foe2, 'ENEMY CPU', CHARACTERS[foe2Key].name, CHARACTERS[foe2Key].role, 'foe2', foe2Key);
     drawFreeRow(rows.terrain, 'STAGE', terrain.name, terrain.sub, 'terrain');
+    drawFreeRow(rows.customStage, 'CUSTOM STAGE', 'カスタムステージを選ぶ', '保存済みの地形で演習', 'customStage');
     drawFreeRow(rows.stageSize, 'SIZE', sizeOption.name, sizeOption.sub, 'stageSize');
     drawFreeRow(rows.format, 'FORMAT', formatOption.name, formatOption.sub, 'format');
 
@@ -14397,7 +14413,10 @@
       [buttons.resume, 'ゲームに戻る', '']
     ];
     if (freePracticeMenu) items.push([buttons.restart, 'リスタート', '演習を最初からやり直します']);
-    items.push([buttons.exit, isOnline() ? 'タイトルへ戻る' : '中断してタイトルへ', isOnline() ? 'オンライン対戦を退出します' : '進行状況を保存します']);
+    items.push([buttons.exit,
+      isOnline() ? 'タイトルへ戻る' : (freePracticeMenu ? '演習を終了' : '中断してタイトルへ'),
+      isOnline() ? 'オンライン対戦を退出します' : (freePracticeMenu ? '演習を終了してタイトルへ戻ります' : '進行状況を保存します')
+    ]);
     for (const [b, label, sub] of items) {
       drawIronPlate(b.x, b.y, b.w, b.h, {
         cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
@@ -14817,7 +14836,7 @@
       for (const [kind, row] of Object.entries(freeRows())) {
         if (Math.abs(p0.y - row.y) > row.h / 2) continue;
         const characterRow = ['player', 'cpu', 'ally', 'foe2'].includes(kind);
-        if (kind === 'terrain' && p0.x > 238 && p0.x < 458 && globalThis.CustomStageManager) {
+        if (kind === 'customStage' && globalThis.CustomStageManager) {
           playUiSound();
           globalThis.CustomStageManager.open();
           return;
@@ -14888,6 +14907,10 @@
       if (hitRect(p0, buttons.exit)) {
         if (isOnline()) {
           exitOnlineFromMenu();
+          return;
+        }
+        if (battleMode === 'free') {
+          endFreeTrainingToTitle();
           return;
         }
         const saved = saveSuspendedMatch();
@@ -16179,13 +16202,16 @@
         onlineActive: isOnline() || roomScreenOpen(),
         featureEnabled: CUSTOM_STAGE_FEATURE_ENABLED,
         selectedStageId: selectedCustomStage?.stageId || null,
-        onlineStageSelection: !!(isFirebaseHost() && online.phase === 'lobby')
+        onlineStageSelection: !!(isFirebaseHost() && online.phase === 'lobby'),
+        customStageLauncherRect: gamePhase === 'freeSetup'
+          ? { x: VW / 2, y: freeRows().customStage.y, w: 300, h: FREE_SETTING_ROW_H }
+          : null
       };
     }
   });
 
 })();
 </script>
-<script src="game-custom-stages.js?v=4"></script>
+<script src="game-custom-stages.js?v=6"></script>
 </body>
 </html>

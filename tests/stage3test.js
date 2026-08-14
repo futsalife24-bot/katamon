@@ -1831,6 +1831,9 @@ function check(name, value) {
   check('the ready toggle shows its state in the styling, not only in the label',
     htmlText.includes("onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);")
     && htmlText.includes('#onlineLobbyButtons #onlineReady.is-ready'));
+  check('ready comes before start so the primary launch action stays at the bottom',
+    htmlText.indexOf('<button id="onlineReady" type="button">準備完了</button>')
+      < htmlText.indexOf('<button id="onlineStart" type="button">対戦開始</button>'));
   // 英数字の羅列だけでは何なのか分からない、という指摘。見出しを1つ添える。
   check('the room code says what it is',
     htmlText.includes('<span id="onlineRoomCodeLabel">部屋ID</span>')

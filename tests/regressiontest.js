@@ -656,10 +656,20 @@ check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して�
 const setupRowsBeforeBattle = kt.freeRows();
 const trainingMenuRows = kt.freeTrainingMenuRows();
 check('演習前はキャラ・地形・ステージサイズ・人数だけを選び、練習条件は戦闘メニューにまとめる',
-  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,stageSize,format'
+  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,customStage,stageSize,format'
     && !!trainingMenuRows
     && Object.keys(trainingMenuRows).join(',') === 'special,jump,cpuAi,windDirection,windStrength',
   JSON.stringify({ setupRowsBeforeBattle, trainingMenuRows }));
+check('カスタムステージはSTAGEの直下にあり、ほかの演習条件と重ならない',
+  setupRowsBeforeBattle.customStage.y - setupRowsBeforeBattle.terrain.y === 56
+    && setupRowsBeforeBattle.stageSize.y - setupRowsBeforeBattle.customStage.y === 56,
+  JSON.stringify({ terrain: setupRowsBeforeBattle.terrain, customStage: setupRowsBeforeBattle.customStage, stageSize: setupRowsBeforeBattle.stageSize }));
+kt.clearSuspendedForTest();
+kt.startFreeMatch();
+kt.endFreeTrainingForTest();
+check('演習を終了すると中断セーブを作らずタイトルへ戻る',
+  kt.gamePhaseForTest() === 'title' && !kt.suspendedSavePresentForTest(),
+  JSON.stringify({ phase: kt.gamePhaseForTest(), hasSave: kt.suspendedSavePresentForTest() }));
 // 「最遠」はステージの横幅を端から端まで見渡せる全景であること。
 // v159はHUD下から操作盤までへステージ全高を収める倍率を「最遠」としたため、
 // 標準でも横幅の約51%しか見えず、スライダーを端まで動かしても全景にできなかった。
