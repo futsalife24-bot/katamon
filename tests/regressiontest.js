@@ -1202,10 +1202,10 @@ check('ブルームタンの吸収回復は最大HPを超えない',
     && bloomCapProfile?.drainHeal === true,
   JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
 
-// ===== v192: Dスマッシュは地面への着弾後に大→中→小の爆発で掘り進む =====
-check('Dスマッシュの説明は地面へ着弾後に大中小の爆発で掘り進む性能を示す',
+// ===== v194: Dスマッシュは地面への着弾後に中→小→小の連続爆発で掘り進む =====
+check('Dスマッシュの説明は地面へ着弾後に中小小の爆発で掘り進む性能を示す',
   kt.character('jinba').specialDesc.includes('着弾')
-    && kt.character('jinba').specialDesc.includes('大・中・小')
+    && kt.character('jinba').specialDesc.includes('中・小・小')
     && kt.character('jinba').specialDesc.includes('掘り進む'),
   kt.character('jinba').specialDesc);
 kt.startBattle('jinba');
@@ -1228,11 +1228,20 @@ const dSmashCraters = kt.craterHistory().slice(dSmashCratersBefore);
 check('Dスマッシュは地面への着弾後に爆発を3回だけ起こす',
   dSmashCraters.length === 3 && kt.projectiles().length === 0,
   JSON.stringify({ config: dSmashConfig, craters: dSmashCraters, projectiles: kt.projectiles().length }));
-check('Dスマッシュの爆発は大→中→小の順に小さくなる',
+const dSmashPairsOverlap = dSmashCraters.slice(1).every((crater, index) => {
+  const previous = dSmashCraters[index];
+  return Math.hypot(crater.x - previous.x, crater.y - previous.y) <= crater.r + previous.r;
+});
+const dSmashDrillCenterDistance = dSmashCraters.length === 3
+  ? Math.hypot(dSmashCraters[2].x - dSmashCraters[0].x, dSmashCraters[2].y - dSmashCraters[0].y)
+  : 0;
+check('Dスマッシュの爆発は中→小→小で隙間なく、従来の掘削距離を保つ',
   dSmashCraters.length === 3
     && dSmashCraters[0].r > dSmashCraters[1].r
-    && dSmashCraters[1].r > dSmashCraters[2].r,
-  JSON.stringify(dSmashCraters));
+    && dSmashCraters[1].r === dSmashCraters[2].r
+    && dSmashPairsOverlap
+    && dSmashDrillCenterDistance >= dSmashConfig.stride * 2 - 0.1,
+  JSON.stringify({ config: dSmashConfig, centerDistance: dSmashDrillCenterDistance, craters: dSmashCraters }));
 check('Dスマッシュは着弾時の進行方向へ爆発しながら地中を掘り進む',
   dSmashCraters.length === 3
     && dSmashCraters[1].x > dSmashCraters[0].x
