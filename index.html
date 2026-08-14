@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v196-stage-branching';
+  const BUILD_ID = 'v197-training-stage-affordance';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4388,6 +4388,13 @@
       normal: { x: 340, y: rows.terrain.y, w: 352, h: FREE_SETTING_ROW_H },
       custom: { x: 340, y: rows.customStage.y, w: 352, h: FREE_SETTING_ROW_H }
     };
+  }
+  // 演習準備の見本は、素材ごとの向きではなく陣営ごとに向きを固定する。
+  // 味方は右向き、相手は左向きになるよう、元画像が左向きなら反転する。
+  function freePreviewShouldMirror(kind, imageKey) {
+    const sourceFacesLeft = !!CHARACTERS[imageKey]?.facesLeft;
+    const targetFacesLeft = kind === 'cpu' || kind === 'foe2';
+    return sourceFacesLeft !== targetFacesLeft;
   }
   function freeStartBtn() {
     return { x: VW / 2, y: freeRows().format.y + 76, w: 350, h: 58 };
@@ -9197,7 +9204,7 @@
         const imageW = imageH * (img.naturalWidth / img.naturalHeight);
         ctx.save();
         ctx.translate(126, row.y + 8);
-        if (kind === 'cpu' || kind === 'foe2') ctx.scale(-1, 1);
+        if (freePreviewShouldMirror(kind, imageKey)) ctx.scale(-1, 1);
         ctx.drawImage(img, -imageW / 2, -imageH / 2, imageW, imageH);
         ctx.restore();
       }
@@ -16260,6 +16267,7 @@
         featureEnabled: CUSTOM_STAGE_FEATURE_ENABLED,
         selectedStageId: selectedCustomStage?.stageId || null,
         onlineStageSelection: !!(isFirebaseHost() && online.phase === 'lobby'),
+        soundPanelOpen,
         customStageLauncherRect: gamePhase === 'freeSetup'
           ? { ...freeStageGroup().custom }
           : null
@@ -16269,6 +16277,6 @@
 
 })();
 </script>
-<script src="game-custom-stages.js?v=7"></script>
+<script src="game-custom-stages.js?v=8"></script>
 </body>
 </html>

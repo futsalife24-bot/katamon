@@ -674,6 +674,25 @@ check('STAGEは左の共通欄から通常・カスタムの上下2択へ分か�
     && freeStageGroupBeforeBattle.normal.w === freeStageGroupBeforeBattle.custom.w
     && freeStageGroupBeforeBattle.normal.x > freeStageGroupBeforeBattle.label.x,
   JSON.stringify({ stageGroup: freeStageGroupBeforeBattle, rows: setupRowsBeforeBattle }));
+const customStageLauncherCss = require('fs').readFileSync(require('path').join(__dirname, '..', 'game-custom-stages.css'), 'utf8');
+const customStageLauncherJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'game-custom-stages.js'), 'utf8');
+check('カスタムステージはSTAGEの下段へ収まる色付きの選択ボタンである',
+  /#customStageLauncher\s*\{[^}]*border:\s*1px solid rgba\(102, 190, 184, \.82\)[^}]*background:\s*linear-gradient\(180deg, rgba\(37, 83, 88, \.96\), rgba\(12, 38, 43, \.98\)\)/s.test(customStageLauncherCss),
+  customStageLauncherCss.match(/#customStageLauncher\s*\{[^}]*\}/s)?.[0]);
+const freePreviewDirections = kt.chars().map(key => ({
+  key,
+  playerMirrored: kt.freePreviewShouldMirror('player', key),
+  enemyMirrored: kt.freePreviewShouldMirror('cpu', key),
+    facesLeft: !!kt.character(key).facesLeft
+}));
+check('演習設定のキャラ画像は味方を右向き・相手を左向きへ素材ごとに揃える',
+  freePreviewDirections.every(item => item.playerMirrored === item.facesLeft
+    && item.enemyMirrored !== item.facesLeft),
+  JSON.stringify(freePreviewDirections));
+check('サウンド設定を開いている間はカスタムステージのボタンを前面へ出さない',
+  /soundPanelOpen,/.test(indexHtml)
+    && /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs),
+  JSON.stringify({ stateHasSoundPanel: /soundPanelOpen,/.test(indexHtml), launcherHidesForSoundPanel: /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs) }));
 kt.clearSuspendedForTest();
 kt.startFreeMatch();
 kt.endFreeTrainingForTest();
