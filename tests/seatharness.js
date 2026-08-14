@@ -200,9 +200,19 @@ const HOOK = `
       lightning: !!p.lightning,
       directHitOnly: !!p.directHitOnly,
       groundFlame: !!p.groundFlame,
+      pierce: !!p.pierce,
+      dSmash: !!p.dSmash,
+      dSmashDrilling: !!p.dSmashDrilling,
+      dSmashBlasts: Number(p.dSmashBlasts || 0),
       drainHeal: !!p.drainHeal,
       damageMul: p.damageMul
     })),
+    dSmashConfigForTest: () => typeof D_SMASH_DRILL_BLASTS === 'undefined'
+      ? null
+      : {
+          blasts: D_SMASH_DRILL_BLASTS.slice(),
+          stride: D_SMASH_DRILL_STRIDE
+        },
     fireSpecialImmediateForTest: (key, vx0, vy0) => {
       const u = localUnit();
       applyCharacter(u, key);

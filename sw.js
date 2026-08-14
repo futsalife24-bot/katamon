@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v191-special-names';
+const CACHE_VERSION = 'katamon-pwa-v192-d-smash-drill';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
