@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v195-training-lobby-cta';
+const CACHE_VERSION = 'katamon-pwa-v196-stage-branching';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

@@ -673,6 +673,9 @@ const HOOK = `
     is2v2: () => is2v2(),
     formatOptions: () => FORMAT_OPTIONS.map(o => o.key),
     freeRows: () => JSON.parse(JSON.stringify(freeRows())),
+    freeStageGroup: () => (typeof freeStageGroup === 'function'
+      ? JSON.parse(JSON.stringify(freeStageGroup()))
+      : null),
     freeTrainingMenuRows: () => (typeof freeTrainingMenuRows === 'function'
       ? JSON.parse(JSON.stringify(freeTrainingMenuRows()))
       : null),

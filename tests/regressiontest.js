@@ -654,6 +654,7 @@ check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して�
     && practicePlayerOnlySpecial === true,
   JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
 const setupRowsBeforeBattle = kt.freeRows();
+const freeStageGroupBeforeBattle = kt.freeStageGroup();
 const trainingMenuRows = kt.freeTrainingMenuRows();
 check('演習前はキャラ・地形・ステージサイズ・人数だけを選び、練習条件は戦闘メニューにまとめる',
   Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,customStage,stageSize,format'
@@ -664,6 +665,15 @@ check('カスタムステージはSTAGEの直下にあり、ほかの演習条�
   setupRowsBeforeBattle.customStage.y - setupRowsBeforeBattle.terrain.y === 56
     && setupRowsBeforeBattle.stageSize.y - setupRowsBeforeBattle.customStage.y === 56,
   JSON.stringify({ terrain: setupRowsBeforeBattle.terrain, customStage: setupRowsBeforeBattle.customStage, stageSize: setupRowsBeforeBattle.stageSize }));
+check('STAGEは左の共通欄から通常・カスタムの上下2択へ分かれる',
+  !!freeStageGroupBeforeBattle
+    && freeStageGroupBeforeBattle.label.h === freeStageGroupBeforeBattle.outer.h
+    && freeStageGroupBeforeBattle.normal.y === setupRowsBeforeBattle.terrain.y
+    && freeStageGroupBeforeBattle.custom.y === setupRowsBeforeBattle.customStage.y
+    && freeStageGroupBeforeBattle.normal.x === freeStageGroupBeforeBattle.custom.x
+    && freeStageGroupBeforeBattle.normal.w === freeStageGroupBeforeBattle.custom.w
+    && freeStageGroupBeforeBattle.normal.x > freeStageGroupBeforeBattle.label.x,
+  JSON.stringify({ stageGroup: freeStageGroupBeforeBattle, rows: setupRowsBeforeBattle }));
 kt.clearSuspendedForTest();
 kt.startFreeMatch();
 kt.endFreeTrainingForTest();
