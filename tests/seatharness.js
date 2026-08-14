@@ -194,6 +194,7 @@ const HOOK = `
       ignoreObstacles: !!p.ignoreObstacles,
       lightning: !!p.lightning,
       directHitOnly: !!p.directHitOnly,
+      groundFlame: !!p.groundFlame,
       damageMul: p.damageMul
     })),
     fireSpecialImmediateForTest: (key, vx0, vy0) => {
@@ -225,8 +226,14 @@ const HOOK = `
     },
     impactVisualCountsForTest: () => ({
       explosions: particles.length,
-      lightningRemnants: lightningBeams.length
+      lightningRemnants: lightningBeams.length,
+      groundFlames: typeof groundFlames === 'undefined' ? 0 : groundFlames.length
     }),
+    resolveGroundFlameImpactForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p || typeof resolveGroundFlameImpact !== 'function') return null;
+      return resolveGroundFlameImpact(p, x, y).map(point => ({ ...point }));
+    },
     detonateProjectileForTest: (index, x, y) => {
       const p = projectiles[index];
       if (!p) return false;

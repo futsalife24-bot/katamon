@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v188-rubidevi-lightning';
+const CACHE_VERSION = 'katamon-pwa-v189-fenice-ground-flame';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
