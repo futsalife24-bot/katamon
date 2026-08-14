@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v199-title-update-history';
+const CACHE_VERSION = 'katamon-pwa-v200-scorpion-surface-wave';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
