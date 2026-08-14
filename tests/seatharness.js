@@ -202,6 +202,10 @@ const HOOK = `
       groundFlame: !!p.groundFlame,
       pierce: !!p.pierce,
       dSmash: !!p.dSmash,
+      scorpionRail: !!p.scorpionRail,
+      scorpionRailActive: !!p.scorpionRailActive,
+      vx: p.vx,
+      vy: p.vy,
       dSmashDrilling: !!p.dSmashDrilling,
       dSmashBlasts: Number(p.dSmashBlasts || 0),
       drainHeal: !!p.drainHeal,
@@ -213,6 +217,23 @@ const HOOK = `
           blasts: D_SMASH_DRILL_BLASTS.slice(),
           stride: D_SMASH_DRILL_STRIDE
         },
+    scorpionRailConfigForTest: () => typeof SCORPION_RAIL_SPEED === 'undefined'
+      ? null
+      : {
+          speed: SCORPION_RAIL_SPEED,
+          range: SCORPION_RAIL_RANGE,
+          carveRadius: SCORPION_RAIL_CARVE_RADIUS,
+          damage: SCORPION_RAIL_DAMAGE
+        },
+    startScorpionRailForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p || typeof startScorpionRail !== 'function') return null;
+      startScorpionRail(p, x, y);
+      return { active: !!p.scorpionRailActive, vx: p.vx, vy: p.vy, pierce: !!p.pierce };
+    },
+    vsSpecialTextForTest: key => typeof vsSpecialTextLayout !== 'function'
+      ? null
+      : vsSpecialTextLayout(CHARACTERS[key]?.special || '', 80),
     groundFlameConfigForTest: () => typeof GROUND_FLAME_TICK_DAMAGE === 'undefined'
       ? null
       : {
