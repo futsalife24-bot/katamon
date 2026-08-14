@@ -3313,7 +3313,7 @@ GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 
 - ローカルHTTP（`http://127.0.0.1:4180/`）を実ブラウザで起動・開始演出まで確認。Console error/warn 0件。
 - `database.rules.json`は変更していないためFirebase Console反映は不要。
 
-## v199 タイトル最下部の更新履歴表示（2026-08-14）
+## v199 タイトル最下部の更新履歴表示（PR #148 / 2026-08-14）
 
 ### 何をしたか
 
