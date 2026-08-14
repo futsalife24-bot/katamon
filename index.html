@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v195-training-lobby-cta';
+  const BUILD_ID = 'v196-stage-branching';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4375,6 +4375,19 @@
     rows.stageSize = { y: rows.customStage.y + 56, h: FREE_SETTING_ROW_H };
     rows.format = { y: rows.stageSize.y + 56, h: FREE_SETTING_ROW_H };
     return rows;
+  }
+  // STAGEは単独の行ではなく、左の見出しから「通常」と「カスタム」の2択へ分かれる一組として扱う。
+  // 行のY座標は既存の選択・当たり判定と共有し、見た目だけを別の入口にしない。
+  function freeStageGroup() {
+    const rows = freeRows();
+    const outerH = rows.customStage.y - rows.terrain.y + FREE_SETTING_ROW_H;
+    const outerY = (rows.terrain.y + rows.customStage.y) / 2;
+    return {
+      outer: { x: VW / 2, y: outerY, w: 492, h: outerH },
+      label: { x: 91, y: outerY, w: 134, h: outerH },
+      normal: { x: 340, y: rows.terrain.y, w: 352, h: FREE_SETTING_ROW_H },
+      custom: { x: 340, y: rows.customStage.y, w: 352, h: FREE_SETTING_ROW_H }
+    };
   }
   function freeStartBtn() {
     return { x: VW / 2, y: freeRows().format.y + 76, w: 350, h: 58 };
@@ -9218,6 +9231,51 @@
     ctx.restore();
   }
 
+  function drawFreeStageGroup(rows, terrain) {
+    const group = freeStageGroup();
+    const outer = group.outer;
+    ctx.save();
+    angularPlatePath(outer.x, outer.y, outer.w, outer.h, 10);
+    const fill = ctx.createLinearGradient(0, outer.y - outer.h / 2, 0, outer.y + outer.h / 2);
+    fill.addColorStop(0, 'rgba(55,70,77,0.97)');
+    fill.addColorStop(0.12, 'rgba(26,37,43,0.98)');
+    fill.addColorStop(1, 'rgba(9,17,22,0.98)');
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = '#8c5b2c';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 左は2段を貫くSTAGE、右だけを上下に分ける。こうして選択の親子関係を形でも示す。
+    ctx.strokeStyle = 'rgba(193,137,69,0.52)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(158, outer.y - outer.h / 2 + 5);
+    ctx.lineTo(158, outer.y + outer.h / 2 - 5);
+    ctx.moveTo(164, outer.y);
+    ctx.lineTo(VW - 30, outer.y);
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d39b4b';
+    ctx.font = '400 10px ' + UI_FONT;
+    ctx.fillText('STAGE', 34, outer.y + 4);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff5dc';
+    ctx.strokeStyle = '#070a0c';
+    ctx.lineWidth = 3;
+    ctx.font = '400 17px ' + UI_FONT;
+    ctx.strokeText(terrain.name, group.normal.x, group.normal.y + 2);
+    ctx.fillText(terrain.name, group.normal.x, group.normal.y + 2);
+    ctx.fillStyle = 'rgba(220,232,231,0.72)';
+    ctx.font = '400 10px ' + UI_FONT;
+    ctx.fillText(terrain.sub, group.normal.x, group.normal.y + 16);
+    drawFreeArrow(190, group.normal.y, -1);
+    drawFreeArrow(506, group.normal.y, 1);
+    ctx.restore();
+  }
+
   function drawFreeSetupScreen() {
     ctx.save();
     if (titleTimeBackgroundReady) ctx.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
@@ -9255,8 +9313,7 @@
     drawFreeRow(rows.cpu, 'ENEMY MONSTER', CHARACTERS[cpuKey].name, CHARACTERS[cpuKey].role, 'cpu', cpuKey);
     if (rows.ally) drawFreeRow(rows.ally, 'ALLY CPU', CHARACTERS[allyKey].name, CHARACTERS[allyKey].role, 'ally', allyKey);
     if (rows.foe2) drawFreeRow(rows.foe2, 'ENEMY CPU', CHARACTERS[foe2Key].name, CHARACTERS[foe2Key].role, 'foe2', foe2Key);
-    drawFreeRow(rows.terrain, 'STAGE', terrain.name, terrain.sub, 'terrain');
-    drawFreeRow(rows.customStage, 'CUSTOM STAGE', 'カスタムステージを選ぶ', '保存済みの地形で演習', 'customStage');
+    drawFreeStageGroup(rows, terrain);
     drawFreeRow(rows.stageSize, 'SIZE', sizeOption.name, sizeOption.sub, 'stageSize');
     drawFreeRow(rows.format, 'FORMAT', formatOption.name, formatOption.sub, 'format');
 
@@ -14836,7 +14893,7 @@
       for (const [kind, row] of Object.entries(freeRows())) {
         if (Math.abs(p0.y - row.y) > row.h / 2) continue;
         const characterRow = ['player', 'cpu', 'ally', 'foe2'].includes(kind);
-        if (kind === 'customStage' && globalThis.CustomStageManager) {
+        if (kind === 'customStage' && p0.x >= 164 && globalThis.CustomStageManager) {
           playUiSound();
           globalThis.CustomStageManager.open();
           return;
@@ -16204,7 +16261,7 @@
         selectedStageId: selectedCustomStage?.stageId || null,
         onlineStageSelection: !!(isFirebaseHost() && online.phase === 'lobby'),
         customStageLauncherRect: gamePhase === 'freeSetup'
-          ? { x: VW / 2, y: freeRows().customStage.y, w: 300, h: FREE_SETTING_ROW_H }
+          ? { ...freeStageGroup().custom }
           : null
       };
     }
@@ -16212,6 +16269,6 @@
 
 })();
 </script>
-<script src="game-custom-stages.js?v=6"></script>
+<script src="game-custom-stages.js?v=7"></script>
 </body>
 </html>
