@@ -97,15 +97,21 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     const def = kt.character(key);
     const special = kt.shotPhysicsProfileForTest(key, true, false);
     const jump = kt.shotPhysicsProfileForTest(key, false, true);
-    return special.blastMul === (def.blastMul || 1)
+    const specialStays = key === 'tori' || (special.blastMul === (def.blastMul || 1)
       && special.windMul === (def.windMul || 1)
       && special.gravityMul === (def.gravityMul || 1)
       && special.velScaleMul === (def.velScaleMul || 1)
       && special.guideMul === (def.guideMul || 1)
-      && special.tBias === (def.tBias || 1)
-      && JSON.stringify(jump) === JSON.stringify(special);
+      && special.tBias === (def.tBias || 1));
+    return specialStays
+      && jump.blastMul === (def.blastMul || 1)
+      && jump.windMul === (def.windMul || 1)
+      && jump.gravityMul === (def.gravityMul || 1)
+      && jump.velScaleMul === (def.velScaleMul || 1)
+      && jump.guideMul === (def.guideMul || 1)
+      && jump.tBias === (def.tBias || 1);
   });
-  check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
+  check('フェニーチェ必殺以外の必殺技と、全キャラの跳躍は固有の弾道値を残す', characterProfilesStay);
 }
 
 // v146: 通常弾そのものはv135で共通化したが、岩と騎士だけ被ダメージ軽減が残り、
@@ -1045,6 +1051,57 @@ check('ルビデビの電撃は地面や空中障害物で止まっても爆発�
   JSON.stringify({
     craters: [rubideviGroundCraters, kt.craters()],
     visuals: [rubideviGroundVisuals, rubideviGroundAfter]
+  }));
+
+// ===== v189: フェニーチェの必殺は通常弾と同じ弾道から左右へ地走り炎 =====
+check('フェニーチェの必殺説明は超高速ロケットではなく左右へ広がる炎を示す',
+  kt.character('tori').specialDesc.includes('左右')
+    && kt.character('tori').specialDesc.includes('炎')
+    && !kt.character('tori').specialDesc.includes('超高速'),
+  kt.character('tori').specialDesc);
+const feniceNormalVelocity = kt.launchVelocityForTest('tori', 70, -45, false, false);
+const feniceSpecialVelocity = kt.launchVelocityForTest('tori', 70, -45, true, false);
+check('フェニーチェの必殺弾は同じ引っぱりなら通常弾と同じ初速になる',
+  feniceSpecialVelocity.vx0 === feniceNormalVelocity.vx0
+    && feniceSpecialVelocity.vy0 === feniceNormalVelocity.vy0,
+  JSON.stringify({ normal: feniceNormalVelocity, special: feniceSpecialVelocity }));
+kt.startBattle('tori');
+kt.disableCpuForTest();
+settle();
+kt.setTerrain('rolling');
+kt.placeOnGround('p1', Math.round(kt.stageW() * 0.2));
+kt.placeOnGround('e1', Math.round(kt.stageW() * 0.55));
+const feniceShot = kt.fireSpecialImmediateForTest('tori', 300, -180);
+const feniceProfile = kt.projectileProfilesForTest()[feniceShot];
+check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け、地走り炎の印だけを持つ',
+  feniceProfile?.windMul === 1
+    && feniceProfile?.gravityMul === 1
+    && feniceProfile?.groundFlame === true,
+  JSON.stringify(feniceProfile));
+const feniceTarget = kt.unitById('e1');
+const feniceHpBefore = feniceTarget.hp;
+const feniceCratersBefore = kt.craters();
+const feniceVisualsBefore = kt.impactVisualCountsForTest();
+const feniceFlamePoints = kt.resolveGroundFlameImpactForTest(feniceShot, feniceTarget.x, feniceTarget.y);
+const feniceVisualsAfter = kt.impactVisualCountsForTest();
+check('フェニーチェの炎は着弾点から地面に沿って左右3か所ずつへ広がる',
+  Array.isArray(feniceFlamePoints)
+    && feniceFlamePoints.length === 7
+    && feniceFlamePoints.filter(point => point.direction < 0).length === 3
+    && feniceFlamePoints.filter(point => point.direction > 0).length === 3
+    && feniceFlamePoints.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
+  JSON.stringify(feniceFlamePoints));
+const feniceNewCraters = kt.craterHistory().slice(feniceCratersBefore);
+check('フェニーチェの地走り炎はダメージと小削りだけを起こし、大爆発には戻らない',
+  feniceTarget.hp === feniceHpBefore - 30
+    && feniceNewCraters.length === 7
+    && feniceNewCraters.every(crater => crater.r <= 12)
+    && feniceVisualsAfter.groundFlames === feniceVisualsBefore.groundFlames + 7
+    && feniceVisualsAfter.explosions === feniceVisualsBefore.explosions,
+  JSON.stringify({
+    hp: [feniceHpBefore, feniceTarget.hp],
+    craters: feniceNewCraters,
+    visuals: [feniceVisualsBefore, feniceVisualsAfter]
   }));
 
 // ===== タイトルの「おまけ」ボタン =====
