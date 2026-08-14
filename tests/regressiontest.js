@@ -1266,6 +1266,21 @@ check('スコーピオンレールは地面へ刺さった後に地表を這う�
     && dreadRailConfig?.carveRadius > 0
     && dreadRailConfig?.damage >= 20,
   JSON.stringify({ start: dreadRailStart, config: dreadRailConfig }));
+const dreadStepTerrain = kt.setScorpionRailStepTerrainForTest(620, 420, 320);
+const dreadClimbShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+kt.startScorpionRailForTest(dreadClimbShot, 560, dreadStepTerrain.floorY, 1);
+const dreadClimb = kt.advanceScorpionRailForTest(dreadClimbShot, 230);
+const dreadClimbedVertically = dreadClimb?.points.some(point => point.x >= 610 && point.y < 390);
+check('スコーピオンレールは地形から離れず、壁を登って上面へ回り込む',
+  dreadClimb?.moved >= 225
+    && dreadClimbedVertically
+    && dreadClimb?.x > dreadStepTerrain.wallX
+    && dreadClimb?.y < dreadStepTerrain.topY
+    && dreadClimb?.attached === true,
+  JSON.stringify({ terrain: dreadStepTerrain, climb: dreadClimb }));
+check('スコーピオンレールは太い残光と長い軌跡でショックウェーブを描く',
+  dreadRailConfig?.waveWidth >= 14 && dreadRailConfig?.trailLength >= 80,
+  JSON.stringify(dreadRailConfig));
 const dreadVsSpecial = kt.vsSpecialTextForTest('doRednote');
 check('長い必殺技名も開始カットインで省略せず全文を表示する',
   dreadVsSpecial?.text === 'スコーピオンレール' && dreadVsSpecial?.fontSize >= 7,

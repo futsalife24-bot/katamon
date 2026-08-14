@@ -624,13 +624,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v199-title-update-history';
+  const BUILD_ID = 'v200-scorpion-surface-wave';
   // 版を上げるたびにBUILD_IDと一緒に更新する、タイトル画面用の最新1件。
   // 履歴を長く積まず、プレイヤーが「今回何が変わったか」をすぐ読める量に留める。
   const LATEST_UPDATE_HISTORY = Object.freeze({
-    version: 'v199',
-    date: '2026/08/14',
-    summary: 'タイトルに更新履歴を表示'
+    version: 'v200',
+    date: '2026/08/15',
+    summary: 'スコーピオンレールが地形を走破'
   });
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
@@ -2693,7 +2693,7 @@
     doRednote: {
       key: 'doRednote', name: 'ドレッドアロー', asset: 'dread-arrow', role: '狙撃型', roleEn: 'SNIPER',
       desc: '弩とサソリ尾を備えた狙撃戦車。刺した地面から毒針を走らせて追い詰める。',
-      selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表を這う毒針で追い詰める', selectFlavor: '刺した毒針が、地面を走って逃げ道を断つ。',
+      selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表から坂や壁を登る毒針の衝撃波', selectFlavor: '刺した毒針が、地形を走って逃げ道を断つ。',
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
       color: '#f14b46', special: 'スコーピオンレール', facesLeft: true
     },
@@ -3445,6 +3445,12 @@
       scorpionRail: !!opts.scorpionRail,
       scorpionRailActive: false,
       railCarves: 0,
+      railNormalX: 0,
+      railNormalY: 1,
+      railTangentX: 0,
+      railTangentY: 0,
+      railSurfaceDistance: 0,
+      railTrail: [],
       emp: !!opts.emp,
       empRadius: opts.empRadius || 90,
       empTurns: opts.empTurns || 2,
@@ -3658,6 +3664,9 @@
   const SCORPION_RAIL_CARVE_RADIUS = 9;
   const SCORPION_RAIL_CARVE_STRIDE = 34;
   const SCORPION_RAIL_DAMAGE = 24;
+  const SCORPION_RAIL_WAVE_WIDTH = 18;
+  const SCORPION_RAIL_TRAIL_LENGTH = 96;
+  const SCORPION_RAIL_TRACE_STEP = 1.5;
 
   function scorpionRailDirection(p, impactX) {
     const ownerTeam = teamOfOwner(p.owner);
@@ -3672,20 +3681,166 @@
 
   function startScorpionRail(p, impactX, impactY) {
     if (!p || !p.scorpionRail) return false;
-    p.x = impactX;
-    p.y = impactY;
+    const outwardDirections = [
+      { x: 0, y: -1, order: 0 },
+      { x: -1, y: 0, order: 1 },
+      { x: 1, y: 0, order: 2 },
+      { x: 0, y: 1, order: 3 }
+    ];
+    const incomingLength = Math.hypot(p.vx, p.vy) || 1;
+    let bestExit = null;
+    for (const direction of outwardDirections) {
+      let exitDistance = 0;
+      while (exitDistance <= 36
+             && isSolidAt(impactX + direction.x * exitDistance, impactY + direction.y * exitDistance)) {
+        exitDistance++;
+      }
+      if (exitDistance > 36) continue;
+      const incomingScore = -(direction.x * p.vx + direction.y * p.vy) / incomingLength;
+      if (!bestExit
+          || exitDistance < bestExit.exitDistance
+          || (exitDistance === bestExit.exitDistance && incomingScore > bestExit.incomingScore)
+          || (exitDistance === bestExit.exitDistance && incomingScore === bestExit.incomingScore
+              && direction.order < bestExit.direction.order)) {
+        bestExit = { direction, exitDistance, incomingScore };
+      }
+    }
+    if (!bestExit) return false;
+
+    const outward = bestExit.direction;
+    const surfaceGap = p.radius + 1;
+    p.x = impactX + outward.x * (bestExit.exitDistance + surfaceGap);
+    p.y = impactY + outward.y * (bestExit.exitDistance + surfaceGap);
+    p.railNormalX = -outward.x;
+    p.railNormalY = -outward.y;
+    const tangentA = { x: -p.railNormalY, y: p.railNormalX };
+    const tangentB = { x: -tangentA.x, y: -tangentA.y };
+    const desiredX = scorpionRailDirection(p, impactX);
+    const scoreTangent = tangent => tangent.x * desiredX * 4 - tangent.y;
+    const tangent = scoreTangent(tangentA) >= scoreTangent(tangentB) ? tangentA : tangentB;
+    p.railTangentX = tangent.x;
+    p.railTangentY = tangent.y;
     p.scorpionRailActive = true;
     p.pierce = true;
     p.ignoreObstacles = true;
     p.travelDistance = 0;
+    p.railSurfaceDistance = 0;
     p.railCarves = 0;
-    p.vx = scorpionRailDirection(p, impactX) * SCORPION_RAIL_SPEED;
-    p.vy = 0;
+    p.railTrail = [{ x: p.x, y: p.y, nx: p.railNormalX, ny: p.railNormalY, d: 0 }];
+    p.vx = p.railTangentX * SCORPION_RAIL_SPEED;
+    p.vy = p.railTangentY * SCORPION_RAIL_SPEED;
     p.windMul = 0;
     p.gravityMul = 0;
     spawnExplosion(impactX, impactY, 0.32);
     playCrackleSound(0.5);
     return true;
+  }
+
+  function scorpionRailHasSupportAt(p, x, y, normalX = p.railNormalX, normalY = p.railNormalY) {
+    const supportDistance = p.radius + 4;
+    return isSolidAt(x + normalX * supportDistance, y + normalY * supportDistance);
+  }
+
+  function scorpionRailHasSupport(p) {
+    return scorpionRailHasSupportAt(p, p.x, p.y);
+  }
+
+  function scorpionRailFrontBlocked(p, distance) {
+    const probeDistance = p.radius + 2 + distance;
+    return isSolidAt(
+      p.x + p.railTangentX * probeDistance,
+      p.y + p.railTangentY * probeDistance
+    );
+  }
+
+  function turnScorpionRailIntoWall(p) {
+    const oldTangentX = p.railTangentX;
+    const oldTangentY = p.railTangentY;
+    p.railTangentX = -p.railNormalX;
+    p.railTangentY = -p.railNormalY;
+    p.railNormalX = oldTangentX;
+    p.railNormalY = oldTangentY;
+  }
+
+  function turnScorpionRailAroundEdge(p) {
+    const oldTangentX = p.railTangentX;
+    const oldTangentY = p.railTangentY;
+    const cornerClearance = p.radius + 4;
+    p.x += (oldTangentX + p.railNormalX) * cornerClearance;
+    p.y += (oldTangentY + p.railNormalY) * cornerClearance;
+    p.railTangentX = p.railNormalX;
+    p.railTangentY = p.railNormalY;
+    p.railNormalX = -oldTangentX;
+    p.railNormalY = -oldTangentY;
+  }
+
+  function recordScorpionRailTrail(p) {
+    const trail = p.railTrail || (p.railTrail = []);
+    const last = trail[trail.length - 1];
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 3) {
+      trail.push({
+        x: p.x,
+        y: p.y,
+        nx: p.railNormalX,
+        ny: p.railNormalY,
+        d: p.railSurfaceDistance
+      });
+    }
+    const minimumDistance = p.railSurfaceDistance - SCORPION_RAIL_TRAIL_LENGTH;
+    while (trail.length > 2 && trail[1].d < minimumDistance) trail.shift();
+  }
+
+  function advanceScorpionRailSurface(p, distance) {
+    if (!p?.scorpionRailActive || !Number.isFinite(distance) || distance <= 0) return 0;
+    let moved = 0;
+    let remaining = distance;
+    let safety = 0;
+    while (remaining > 0.0001 && safety++ < 512) {
+      const step = Math.min(SCORPION_RAIL_TRACE_STEP, remaining);
+      let attached = false;
+      for (let turn = 0; turn < 4; turn++) {
+        if (scorpionRailFrontBlocked(p, step)) {
+          turnScorpionRailIntoWall(p);
+          continue;
+        }
+        const nextX = p.x + p.railTangentX * step;
+        const nextY = p.y + p.railTangentY * step;
+        if (!scorpionRailHasSupportAt(p, nextX, nextY)) {
+          turnScorpionRailAroundEdge(p);
+          continue;
+        }
+        p.x = nextX;
+        p.y = nextY;
+        attached = true;
+        break;
+      }
+      if (!attached) break;
+      moved += step;
+      remaining -= step;
+      p.railSurfaceDistance = (p.railSurfaceDistance || 0) + step;
+      p.travelDistance = p.railSurfaceDistance;
+      p.vx = p.railTangentX * SCORPION_RAIL_SPEED;
+      p.vy = p.railTangentY * SCORPION_RAIL_SPEED;
+      recordScorpionRailTrail(p);
+    }
+    return moved;
+  }
+
+  function scorpionRailTrailPointAt(p, distance) {
+    const trail = p.railTrail || [];
+    if (!trail.length) return { x: p.x, y: p.y };
+    for (let i = 1; i < trail.length; i++) {
+      const before = trail[i - 1];
+      const after = trail[i];
+      if (after.d < distance) continue;
+      const span = Math.max(0.0001, after.d - before.d);
+      const ratio = Math.max(0, Math.min(1, (distance - before.d) / span));
+      return {
+        x: before.x + (after.x - before.x) * ratio,
+        y: before.y + (after.y - before.y) * ratio
+      };
+    }
+    return { x: p.x, y: p.y };
   }
 
   function resolveScorpionRailImpact(p, target) {
@@ -12073,6 +12228,72 @@
     ctx.restore();
   }
 
+  function drawScorpionRailShockwave(p) {
+    const trail = p.railTrail || [];
+    if (!p.scorpionRailActive || trail.length < 2) return;
+    const drawTrailPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for (let i = 1; i < trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#8dff57';
+    ctx.shadowBlur = 24;
+    ctx.strokeStyle = 'rgba(71, 255, 89, 0.26)';
+    ctx.lineWidth = SCORPION_RAIL_WAVE_WIDTH;
+    drawTrailPath();
+    ctx.stroke();
+    ctx.shadowBlur = 15;
+    ctx.strokeStyle = 'rgba(126, 255, 89, 0.72)';
+    ctx.lineWidth = SCORPION_RAIL_WAVE_WIDTH * 0.52;
+    drawTrailPath();
+    ctx.stroke();
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#fff4a8';
+    ctx.lineWidth = 2.6;
+    drawTrailPath();
+    ctx.stroke();
+
+    const tx = p.railTangentX || 1;
+    const ty = p.railTangentY || 0;
+    const outwardX = -p.railNormalX;
+    const outwardY = -p.railNormalY;
+    const phase = (p.railSurfaceDistance || 0) * 0.24;
+    const crest = [];
+    for (let back = 38; back >= -7; back -= 5) {
+      const envelope = Math.max(0, 1 - Math.abs(back - 8) / 34);
+      const height = 5 + envelope * 18 + Math.sin(phase + back * 0.48) * 2.4;
+      crest.push({
+        x: p.x - tx * back + outwardX * height,
+        y: p.y - ty * back + outwardY * height
+      });
+    }
+    const drawCrest = () => {
+      ctx.beginPath();
+      ctx.moveTo(crest[0].x, crest[0].y);
+      for (let i = 1; i < crest.length; i++) ctx.lineTo(crest[i].x, crest[i].y);
+    };
+    ctx.shadowColor = '#c4ff54';
+    ctx.shadowBlur = 22;
+    ctx.strokeStyle = 'rgba(75, 255, 115, 0.48)';
+    ctx.lineWidth = 13;
+    drawCrest();
+    ctx.stroke();
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#74f45a';
+    ctx.lineWidth = 7;
+    drawCrest();
+    ctx.stroke();
+    ctx.shadowBlur = 5;
+    ctx.strokeStyle = '#fff5ad';
+    ctx.lineWidth = 2.5;
+    drawCrest();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawProjectile() {
     for (const b of lightningBeams) {
       drawLightningPath(b.x0, b.y0, b.x1, b.y1, Math.max(0, b.life / b.maxLife) * 0.9, 0);
@@ -12086,6 +12307,7 @@
         drawLightningPath(p.originX, p.originY, p.x, p.y, 1, 4.6);
         continue;
       }
+      if (p.scorpionRailActive) drawScorpionRailShockwave(p);
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
@@ -15985,7 +16207,10 @@
       const windAccel = wind.dir * wind.strength * WIND_ACCEL_MAX * p.windMul;
       // gravityMulは0(無重力の電撃)を取り得るので、||でのフォールバックは使えない。
       const projectileGravity = GRAVITY * (p.gravityMul != null ? p.gravityMul : 1);
-      if (globalThis.StageCore?.stepProjectile) {
+      let scorpionRailMoved = 0;
+      if (p.scorpionRailActive) {
+        scorpionRailMoved = advanceScorpionRailSurface(p, SCORPION_RAIL_SPEED * dt);
+      } else if (globalThis.StageCore?.stepProjectile) {
         globalThis.StageCore.stepProjectile(p, dt, windAccel, projectileGravity);
       } else {
         p.vx += windAccel * dt;
@@ -16058,21 +16283,15 @@
       }
 
       if (p.scorpionRailActive) {
-        const stepX = p.x - prevX;
-        const stepY = p.y - prevY;
-        const stepLen = Math.sqrt(stepX * stepX + stepY * stepY);
-        p.travelDistance += stepLen;
-        const surfaceY = walkableGroundYAt(p.x, Math.max(0, p.y - UNIT_RADIUS));
-        if (!Number.isFinite(surfaceY) || surfaceY >= DEAD_LINE_Y) {
+        if (scorpionRailMoved <= 0 || p.x < -40 || p.x > STAGE_W + 40 || p.y < -40 || p.y >= DEAD_LINE_Y) {
           projectiles.splice(i, 1);
           continue;
         }
-        p.y = surfaceY - p.radius;
-        while (p.railCarves * SCORPION_RAIL_CARVE_STRIDE < p.travelDistance) {
-          const distance = Math.min((p.railCarves + 1) * SCORPION_RAIL_CARVE_STRIDE, SCORPION_RAIL_RANGE);
-          const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
-          if (carveCraterInternal(p.x - stepX * back, p.y - stepY * back, SCORPION_RAIL_CARVE_RADIUS, false)) {
-            craterHistory.push({ x: p.x - stepX * back, y: p.y - stepY * back, r: SCORPION_RAIL_CARVE_RADIUS });
+        while ((p.railCarves + 1) * SCORPION_RAIL_CARVE_STRIDE <= p.travelDistance) {
+          const distance = (p.railCarves + 1) * SCORPION_RAIL_CARVE_STRIDE;
+          const carvePoint = scorpionRailTrailPointAt(p, distance);
+          if (carveCraterInternal(carvePoint.x, carvePoint.y, SCORPION_RAIL_CARVE_RADIUS, false)) {
+            craterHistory.push({ x: carvePoint.x, y: carvePoint.y, r: SCORPION_RAIL_CARVE_RADIUS });
             trailDirty = true;
           }
           p.railCarves++;

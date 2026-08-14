@@ -223,13 +223,55 @@ const HOOK = `
           speed: SCORPION_RAIL_SPEED,
           range: SCORPION_RAIL_RANGE,
           carveRadius: SCORPION_RAIL_CARVE_RADIUS,
-          damage: SCORPION_RAIL_DAMAGE
+          damage: SCORPION_RAIL_DAMAGE,
+          waveWidth: typeof SCORPION_RAIL_WAVE_WIDTH === 'undefined' ? 0 : SCORPION_RAIL_WAVE_WIDTH,
+          trailLength: typeof SCORPION_RAIL_TRAIL_LENGTH === 'undefined' ? 0 : SCORPION_RAIL_TRAIL_LENGTH
         },
-    startScorpionRailForTest: (index, x, y) => {
+    startScorpionRailForTest: (index, x, y, direction = null) => {
       const p = projectiles[index];
       if (!p || typeof startScorpionRail !== 'function') return null;
+      const movedEnemies = [];
+      if (direction === 1 || direction === -1) {
+        const ownerTeam = teamOfOwner(p.owner);
+        for (const unit of units) {
+          if (unit.team === ownerTeam) continue;
+          movedEnemies.push({ unit, x: unit.x });
+          unit.x = x + direction * 240;
+        }
+      }
       startScorpionRail(p, x, y);
+      if ((direction === 1 || direction === -1) && p.railTangentX * direction < 0) {
+        p.railTangentX *= -1;
+        p.railTangentY *= -1;
+        p.vx = p.railTangentX * SCORPION_RAIL_SPEED;
+        p.vy = p.railTangentY * SCORPION_RAIL_SPEED;
+      }
+      for (const saved of movedEnemies) saved.unit.x = saved.x;
       return { active: !!p.scorpionRailActive, vx: p.vx, vy: p.vy, pierce: !!p.pierce };
+    },
+    setScorpionRailStepTerrainForTest: (wallX = 620, floorY = 420, topY = 320) => {
+      const segments = Array.from({ length: TERRAIN_COLS }, (_, c) => {
+        const x = (c + 0.5) * COL_W;
+        return [[x >= wallX ? topY : floorY, TERRAIN_BOTTOM_Y]];
+      });
+      loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
+      return { wallX, floorY, topY };
+    },
+    advanceScorpionRailForTest: (index, distance) => {
+      const p = projectiles[index];
+      if (!p || typeof advanceScorpionRailSurface !== 'function') return null;
+      const moved = advanceScorpionRailSurface(p, distance);
+      return {
+        moved,
+        x: p.x,
+        y: p.y,
+        vx: p.vx,
+        vy: p.vy,
+        normalX: p.railNormalX,
+        normalY: p.railNormalY,
+        attached: typeof scorpionRailHasSupport === 'function' ? scorpionRailHasSupport(p) : false,
+        points: (p.railTrail || []).map(point => ({ ...point }))
+      };
     },
     vsSpecialTextForTest: key => typeof vsSpecialTextLayout !== 'function'
       ? null
