@@ -624,7 +624,7 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v197-training-stage-affordance';
+  const BUILD_ID = 'v198-scorpion-rail';
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -2685,10 +2685,10 @@
     },
     doRednote: {
       key: 'doRednote', name: 'ドレッドアロー', asset: 'dread-arrow', role: '狙撃型', roleEn: 'SNIPER',
-      desc: '弩で超高速の矢弾を放つ狙撃戦車。遠距離から正確に仕留める。',
-      selectStats: [3, 4, 3], specialDesc: '高速で地形を貫く一撃', selectFlavor: '一点を貫く、静かな必殺矢。',
-      maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 2.15, tBias: 0.8,
-      color: '#f14b46', special: '貫通狙撃', facesLeft: true
+      desc: '弩とサソリ尾を備えた狙撃戦車。刺した地面から毒針を走らせて追い詰める。',
+      selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表を這う毒針で追い詰める', selectFlavor: '刺した毒針が、地面を走って逃げ道を断つ。',
+      maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
+      color: '#f14b46', special: 'スコーピオンレール', facesLeft: true
     },
     mocchario: {
       key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
@@ -3415,7 +3415,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,dSmash,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,dSmash,scorpionRail,emp,firework,directHitOnly,normalImpactSound}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
@@ -3435,6 +3435,9 @@
       dSmash: !!opts.dSmash,
       dSmashDrilling: false,
       dSmashBlasts: 0,
+      scorpionRail: !!opts.scorpionRail,
+      scorpionRailActive: false,
+      railCarves: 0,
       emp: !!opts.emp,
       empRadius: opts.empRadius || 90,
       empTurns: opts.empTurns || 2,
@@ -3641,6 +3644,59 @@
   const D_SMASH_DRILL_BLASTS = [0.68, 0.4, 0.4];
   const D_SMASH_DRILL_STRIDE = 52;
 
+  // ドレッドアローの毒針は、地面へ刺さってから相手側へ地表を這う。
+  // 弾道は発射時の照準どおりで、レール化後だけ風と重力を受けない。
+  const SCORPION_RAIL_SPEED = 260;
+  const SCORPION_RAIL_RANGE = 260;
+  const SCORPION_RAIL_CARVE_RADIUS = 9;
+  const SCORPION_RAIL_CARVE_STRIDE = 34;
+  const SCORPION_RAIL_DAMAGE = 24;
+
+  function scorpionRailDirection(p, impactX) {
+    const ownerTeam = teamOfOwner(p.owner);
+    let closest = null;
+    for (const unit of units) {
+      if (unitDefeated(unit) || unit.team === ownerTeam) continue;
+      if (!closest || Math.abs(unit.x - impactX) < Math.abs(closest.x - impactX)) closest = unit;
+    }
+    if (closest) return closest.x >= impactX ? 1 : -1;
+    return p.vx >= 0 ? 1 : -1;
+  }
+
+  function startScorpionRail(p, impactX, impactY) {
+    if (!p || !p.scorpionRail) return false;
+    p.x = impactX;
+    p.y = impactY;
+    p.scorpionRailActive = true;
+    p.pierce = true;
+    p.ignoreObstacles = true;
+    p.travelDistance = 0;
+    p.railCarves = 0;
+    p.vx = scorpionRailDirection(p, impactX) * SCORPION_RAIL_SPEED;
+    p.vy = 0;
+    p.windMul = 0;
+    p.gravityMul = 0;
+    spawnExplosion(impactX, impactY, 0.32);
+    playCrackleSound(0.5);
+    return true;
+  }
+
+  function resolveScorpionRailImpact(p, target) {
+    if (!p || !target || unitDefeated(target)) return;
+    const ownerUnit = unitById(p.owner);
+    const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
+    if (remoteShot) noteRemoteDamageBaseline();
+    const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
+    const actualDamage = Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul));
+    target.hp = Math.max(0, target.hp - actualDamage);
+    const anchor = unitAnchor(target);
+    if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
+    creditDamage(p.owner, target, actualDamage);
+    spawnExplosion(p.x, p.y, 0.4);
+    playCrackleSound(0.62);
+    checkMatchEnd();
+  }
+
   function explodeDSmashDrill(p, x, y) {
     const scale = D_SMASH_DRILL_BLASTS[p.dSmashBlasts];
     if (!Number.isFinite(scale)) return;
@@ -3742,8 +3798,12 @@
         firework: true
       });
     } else if (activateSpecial && def.key === 'doRednote') {
-      // 弩レッドノートの必殺: 超高速の貫通狙撃
-      fireProjectile(owner, anchor, vx0 * 2.15, vy0 * 2.15, { blastMul: def.blastMul * 1.25, windMul: def.windMul, pierce: true });
+      // ドレッドアローの必殺: 照準どおりに毒針を刺し、地表を相手側へ這わせる。
+      fireProjectile(owner, anchor, vx0, vy0, {
+        blastMul: def.blastMul,
+        windMul: def.windMul,
+        scorpionRail: true
+      });
     } else if (activateSpecial && def.key === 'mocchario') {
       // モッチャリオの必殺: 高火力・大爆風のレーザー砲
       fireProjectile(owner, anchor, vx0 * 1.1, vy0 * 1.1, { blastMul: def.blastMul * 2.0, windMul: def.windMul });
@@ -12006,7 +12066,27 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
 
-      if (p.deathGateMarker) {
+      if (p.scorpionRail) {
+        // 毒針の芯と尾のような二股の残光で、地表を走るサソリ尾だと読めるようにする。
+        ctx.shadowColor = '#8cf25a';
+        ctx.shadowBlur = p.scorpionRailActive ? 16 : 10;
+        const trail = ctx.createLinearGradient(-30, 0, 13, 0);
+        trail.addColorStop(0, 'rgba(91,224,65,0)');
+        trail.addColorStop(0.56, '#72d953');
+        trail.addColorStop(1, '#fff2a6');
+        ctx.strokeStyle = trail;
+        ctx.lineWidth = p.scorpionRailActive ? 4.5 : 3.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-30, 0); ctx.lineTo(10, 0);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fff3b0';
+        ctx.beginPath();
+        ctx.moveTo(14, 0); ctx.lineTo(4, -5); ctx.lineTo(5, 0); ctx.lineTo(4, 5);
+        ctx.closePath();
+        ctx.fill();
+      } else if (p.deathGateMarker) {
         const pulse = 0.72 + Math.sin(simTimeMs * 0.018) * 0.22;
         ctx.rotate(simTimeMs * 0.004);
         ctx.shadowColor = '#a955ff';
@@ -13029,6 +13109,19 @@
   // 1vs1の窓の空きに出す、相手を測るための3行。
   // 役割・最大HP・必殺技の名前は、どの端末でもキャラだけで決まるので表示がずれない。
   // 名前や戦績のような端末ごとに変わる値はここへ入れないこと。
+  function vsSpecialTextLayout(text, maxWidth) {
+    const value = String(text == null ? '' : text);
+    for (let fontSize = 11; fontSize >= 7; fontSize--) {
+      ctx.save();
+      ctx.font = `900 ${fontSize}px ${UI_FONT_HEAVY}`;
+      const fits = ctx.measureText(value).width <= maxWidth;
+      ctx.restore();
+      if (fits) return { text: value, fontSize };
+    }
+    // VSカードの必殺名は省略しない。現行の最長名なら7pxで収まり、将来さらに長くなっても全文を渡す。
+    return { text: value, fontSize: 7 };
+  }
+
   function drawVsPlateInfo(entry, rect, mirror, anchor) {
     const def = entry && CHARACTERS[entry.character];
     if (!def) return;
@@ -13068,8 +13161,9 @@
     drawOutlinedText(fitText(`HP ${def.maxHp}`, lineFont, w), cx, top + step, {
       font: lineFont, color: UI.parchment, lineWidth: 3
     });
-    drawOutlinedText(fitText(`必殺 ${def.special || '—'}`, lineFont, w), cx, top + step * 2, {
-      font: lineFont, color: UI.brassLight, lineWidth: 3
+    const specialLayout = vsSpecialTextLayout(def.special || '—', w);
+    drawOutlinedText(specialLayout.text, cx, top + step * 2, {
+      font: `900 ${specialLayout.fontSize}px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
   }
 
@@ -15939,6 +16033,32 @@
         }
       }
 
+      if (p.scorpionRailActive) {
+        const stepX = p.x - prevX;
+        const stepY = p.y - prevY;
+        const stepLen = Math.sqrt(stepX * stepX + stepY * stepY);
+        p.travelDistance += stepLen;
+        const surfaceY = walkableGroundYAt(p.x, Math.max(0, p.y - UNIT_RADIUS));
+        if (!Number.isFinite(surfaceY) || surfaceY >= DEAD_LINE_Y) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+        p.y = surfaceY - p.radius;
+        while (p.railCarves * SCORPION_RAIL_CARVE_STRIDE < p.travelDistance) {
+          const distance = Math.min((p.railCarves + 1) * SCORPION_RAIL_CARVE_STRIDE, SCORPION_RAIL_RANGE);
+          const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
+          if (carveCraterInternal(p.x - stepX * back, p.y - stepY * back, SCORPION_RAIL_CARVE_RADIUS, false)) {
+            craterHistory.push({ x: p.x - stepX * back, y: p.y - stepY * back, r: SCORPION_RAIL_CARVE_RADIUS });
+            trailDirty = true;
+          }
+          p.railCarves++;
+        }
+        if (p.travelDistance >= SCORPION_RAIL_RANGE) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
       const fireworkDue = p.firework && !p.fireworkShard && fireworkProximityTarget(p);
 
       if (fireworkDue) {
@@ -15966,6 +16086,8 @@
             } else if (p.firework) {
               explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
               spawnFireworkBurst(p);
+            } else if (p.scorpionRail) {
+              resolveScorpionRailImpact(p, u);
             } else if (p.groundFlame) {
               resolveGroundFlameImpact(p, p.x, p.y);
             } else if (p.directHitOnly) {
@@ -16011,6 +16133,11 @@
 
       if (p.dSmash && !p.dSmashDrilling && isSolidAt(p.x, p.y)) {
         startDSmashDrill(p, p.x, p.y);
+        continue;
+      }
+
+      if (p.scorpionRail && !p.scorpionRailActive && isSolidAt(p.x, p.y)) {
+        startScorpionRail(p, p.x, p.y);
         continue;
       }
 

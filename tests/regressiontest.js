@@ -1241,6 +1241,36 @@ check('ブルームタンの吸収回復は最大HPを超えない',
     && bloomCapProfile?.drainHeal === true,
   JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
 
+// ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
+const dreadNormalVelocity = kt.launchVelocityForTest('doRednote', 180, -96, false, false);
+const dreadSpecialShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+const dreadRailProfile = kt.projectileProfilesForTest()[dreadSpecialShot];
+check('ドレッドアローの必殺は高速貫通ではなく、照準どおりのスコーピオンレールである',
+  kt.character('doRednote').special === 'スコーピオンレール'
+    && kt.character('doRednote').specialDesc.includes('地表')
+    && !kt.character('doRednote').specialDesc.includes('高速')
+    && !kt.character('doRednote').specialDesc.includes('貫通')
+    && dreadRailProfile?.scorpionRail === true
+    && dreadRailProfile?.pierce === false
+    && dreadRailProfile?.vx === dreadNormalVelocity.vx0
+    && dreadRailProfile?.vy === dreadNormalVelocity.vy0,
+  JSON.stringify({ def: kt.character('doRednote'), profile: dreadRailProfile, normal: dreadNormalVelocity }));
+const dreadRailStart = kt.startScorpionRailForTest(dreadSpecialShot, 360, 420);
+const dreadRailConfig = kt.scorpionRailConfigForTest();
+check('スコーピオンレールは地面へ刺さった後に地表を這う状態へ切り替わる',
+  dreadRailStart?.active === true
+    && dreadRailStart?.pierce === true
+    && dreadRailStart?.vy === 0
+    && Math.abs(dreadRailStart?.vx || 0) === dreadRailConfig?.speed
+    && dreadRailConfig?.range >= 180
+    && dreadRailConfig?.carveRadius > 0
+    && dreadRailConfig?.damage >= 20,
+  JSON.stringify({ start: dreadRailStart, config: dreadRailConfig }));
+const dreadVsSpecial = kt.vsSpecialTextForTest('doRednote');
+check('長い必殺技名も開始カットインで省略せず全文を表示する',
+  dreadVsSpecial?.text === 'スコーピオンレール' && dreadVsSpecial?.fontSize >= 7,
+  JSON.stringify(dreadVsSpecial));
+
 // ===== v194: Dスマッシュは地面への着弾後に中→小→小の連続爆発で掘り進む =====
 check('Dスマッシュの説明は地面へ着弾後に中小小の爆発で掘り進む性能を示す',
   kt.character('jinba').specialDesc.includes('着弾')
@@ -1902,7 +1932,7 @@ kt.setLocalSeat('p1');
   check('1vs1では役割・HP・必殺技が実際に描かれる',
     one.defs.every(d => one.drawn.includes(d.role)
       && one.drawn.includes(`HP ${d.maxHp}`)
-      && one.drawn.includes(`必殺 ${d.special}`)),
+      && one.drawn.includes(d.special)),
     one.defs.map(d => d.role + '/' + d.maxHp + '/' + d.special).join(' ') + ' drawn=' + one.drawn.join('/'));
   const two = shown('2v2');
   check('2vs2では窓が狭いので出さない',

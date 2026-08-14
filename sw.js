@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v197-training-stage-affordance';
+const CACHE_VERSION = 'katamon-pwa-v198-scorpion-rail';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
