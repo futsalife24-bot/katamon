@@ -1099,6 +1099,7 @@ const feniceCratersBefore = kt.craters();
 const feniceVisualsBefore = kt.impactVisualCountsForTest();
 const feniceFlamePoints = kt.resolveGroundFlameImpactForTest(feniceShot, feniceTarget.x, feniceTarget.y);
 const feniceVisualsAfter = kt.impactVisualCountsForTest();
+const feniceTickConfig = kt.groundFlameConfigForTest();
 check('フェニーチェの炎は着弾点から地面に沿って左右3か所ずつへ広がる',
   Array.isArray(feniceFlamePoints)
     && feniceFlamePoints.length === 7
@@ -1107,9 +1108,33 @@ check('フェニーチェの炎は着弾点から地面に沿って左右3か所
     && feniceFlamePoints.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
   JSON.stringify(feniceFlamePoints));
 const feniceNewCraters = kt.craterHistory().slice(feniceCratersBefore);
-check('フェニーチェのフレイムウェーブはダメージと小削りだけを起こし、大爆発には戻らない',
-  feniceTarget.hp === feniceHpBefore - 30
-    && feniceNewCraters.length === 7
+check('フレイムウェーブの各炎は6ダメージを0.5秒間隔で3回与える設定',
+  feniceTickConfig?.damage === 6
+    && feniceTickConfig?.ticks === 3
+    && feniceTickConfig?.interval === 0.5,
+  JSON.stringify(feniceTickConfig));
+check('フレイムウェーブは着火時の1回目だけ6ダメージを与える',
+  feniceTarget.hp === feniceHpBefore - 6,
+  JSON.stringify({ hp: [feniceHpBefore, feniceTarget.hp], flames: kt.groundFlamesForTest() }));
+const feniceHpAfterFirstTick = feniceTarget.hp;
+for (let i = 0; i < 29; i++) kt.step(1 / 60);
+check('フレイムウェーブは0.5秒に達する前には追撃しない',
+  feniceHpAfterFirstTick === feniceHpBefore - 6
+    && feniceTarget.hp === feniceHpAfterFirstTick,
+  JSON.stringify({ hp: feniceTarget.hp, flames: kt.groundFlamesForTest() }));
+for (let i = 0; i < 2; i++) kt.step(1 / 60);
+check('フレイムウェーブは約0.5秒後に2回目の6ダメージを与える',
+  feniceTarget.hp === feniceHpBefore - 12,
+  JSON.stringify({ hp: feniceTarget.hp, flames: kt.groundFlamesForTest() }));
+for (let i = 0; i < 31; i++) kt.step(1 / 60);
+const feniceHpAfterThirdTick = feniceTarget.hp;
+for (let i = 0; i < 31; i++) kt.step(1 / 60);
+check('フレイムウェーブは3回目で止まり、4回目のダメージを出さない',
+  feniceHpAfterThirdTick === feniceHpBefore - 18
+    && feniceTarget.hp === feniceHpAfterThirdTick,
+  JSON.stringify({ hp: [feniceHpBefore, feniceHpAfterThirdTick, feniceTarget.hp], flames: kt.groundFlamesForTest() }));
+check('フェニーチェのフレイムウェーブは持続ダメージと小削りだけを起こし、大爆発には戻らない',
+  feniceNewCraters.length === 7
     && feniceNewCraters.every(crater => crater.r <= 12)
     && feniceVisualsAfter.groundFlames === feniceVisualsBefore.groundFlames + 7
     && feniceVisualsAfter.explosions === feniceVisualsBefore.explosions,
