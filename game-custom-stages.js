@@ -17,7 +17,7 @@
   launcher.id = 'customStageLauncher';
   launcher.type = 'button';
   launcher.hidden = true;
-  launcher.textContent = 'カスタムステージ';
+  launcher.textContent = 'カスタムステージを選ぶ';
   launcher.setAttribute('data-testid', 'custom-stage-button');
 
   var overlay = document.createElement('section');
@@ -500,6 +500,7 @@
     // カスタムステージは演習設定の地形欄から使う。起動前やタイトルへ固定ボタンを
     // 重ねると、本編の開始演出より先に見え続けるためfreeSetupだけで表示する。
     launcher.hidden = overlay.classList.contains('open') || !state || state.onlineActive
+      || state.soundPanelOpen
       || state.gamePhase !== 'freeSetup';
     if (!launcher.hidden) placeLauncher(state);
   }, 250);
