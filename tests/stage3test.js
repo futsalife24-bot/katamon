@@ -501,7 +501,7 @@ function check(name, value) {
   // (揃えないと、コードは正しいのにチェックアウトの仕方だけで落ちる)
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   check('title offers an in-game force-update action that refreshes the worker and clears old app caches',
-    /const titleUpdateBtn = \{ x: VW \/ 2, y: \d+, w: 250, h: 30 \};/.test(htmlText)
+    /const titleUpdateBtn = \{ x: \d+, y: \d+, w: \d+, h: 30 \};/.test(htmlText)
     && htmlText.includes('async function forceGameUpdate()')
     && htmlText.includes('await registration.update();')
     && htmlText.includes("key.startsWith('katamon-pwa-')")

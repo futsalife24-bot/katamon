@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v198-scorpion-rail';
+const CACHE_VERSION = 'katamon-pwa-v199-title-update-history';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
