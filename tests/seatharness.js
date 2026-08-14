@@ -710,6 +710,7 @@ const HOOK = `
       setActiveUnitForTest: (id) => { const i = turnOrder.indexOf(id); if (i >= 0) activeIndex = i; return activeUnit().id; }
     }),
     setPhase: (p) => { gamePhase = p; },
+    phase: () => gamePhase,
     setBattleModeForTest: (mode) => { battleMode = mode; },
     // 画面の揺れ。対戦中以外でも必ず止まることを見るため(v110の起動演出で震え続けた)。
     shakeTimer: () => shakeTimer,
@@ -724,8 +725,12 @@ const HOOK = `
     titleUpdateHistoryInfo: () => ({
       build: typeof BUILD_ID === 'undefined' ? '' : BUILD_ID,
       history: typeof LATEST_UPDATE_HISTORY === 'undefined' ? null : { ...LATEST_UPDATE_HISTORY },
+      entries: typeof UPDATE_HISTORY === 'undefined' ? [] : UPDATE_HISTORY.map(entry => ({ ...entry })),
+      open: typeof updateHistoryOpen === 'undefined' ? false : updateHistoryOpen,
       update: { ...titleUpdateBtn },
-      panel: typeof titleUpdateHistoryPanel === 'undefined' ? null : { ...titleUpdateHistoryPanel }
+      panel: typeof titleUpdateHistoryPanel === 'undefined' ? null : { ...titleUpdateHistoryPanel },
+      modal: typeof titleUpdateHistoryModal === 'undefined' ? null : { ...titleUpdateHistoryModal },
+      close: typeof titleUpdateHistoryCloseBtn === 'undefined' ? null : { ...titleUpdateHistoryCloseBtn }
     }),
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,

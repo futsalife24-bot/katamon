@@ -624,14 +624,17 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v200-scorpion-surface-wave';
-  // 版を上げるたびにBUILD_IDと一緒に更新する、タイトル画面用の最新1件。
-  // 履歴を長く積まず、プレイヤーが「今回何が変わったか」をすぐ読める量に留める。
-  const LATEST_UPDATE_HISTORY = Object.freeze({
-    version: 'v200',
-    date: '2026/08/15',
-    summary: 'スコーピオンレールが地形を走破'
-  });
+  const BUILD_ID = 'v201-update-history-modal';
+  // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
+  // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
+  const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v201', date: '2026/08/15', summary: '過去の更新履歴を一覧表示' }),
+    Object.freeze({ version: 'v200', date: '2026/08/15', summary: 'スコーピオンレールが地形を走破' }),
+    Object.freeze({ version: 'v199', date: '2026/08/14', summary: 'タイトルに更新履歴を表示' }),
+    Object.freeze({ version: 'v198', date: '2026/08/14', summary: 'スコーピオンレールを実装' }),
+    Object.freeze({ version: 'v197', date: '2026/08/14', summary: '演習画面の選択表示を改善' })
+  ]);
+  const LATEST_UPDATE_HISTORY = UPDATE_HISTORY[0];
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4493,6 +4496,9 @@
   // 保守用の更新ボタンだけは、見本どおり木枠の外へ置いて従来の鉄板を残す。
   const titleUpdateBtn = { x: 135, y: 914, w: 186, h: 30 };
   const titleUpdateHistoryPanel = { x: 366, y: 914, w: 264, h: 30 };
+  const titleUpdateHistoryModal = { x: VW / 2, y: VH / 2, w: 540, h: 560 };
+  const titleUpdateHistoryCloseBtn = { x: VW / 2, y: VH / 2 + 235, w: 200, h: 46 };
+  let updateHistoryOpen = false;
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
   let safeUpdateReloadStarted = false;
@@ -9373,13 +9379,16 @@
       { cut: 8, lineWidth: 1.2, rivets: false, edge: UI.brassDark, fill: 'rgba(29, 48, 51, 0.92)' }
     );
     drawOutlinedText(`更新履歴 ${LATEST_UPDATE_HISTORY.version}・${LATEST_UPDATE_HISTORY.date}`,
-      titleUpdateHistoryPanel.x, titleUpdateHistoryPanel.y - 2, {
+      titleUpdateHistoryPanel.x - 8, titleUpdateHistoryPanel.y - 2, {
         font: `900 9px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
       });
     drawOutlinedText(LATEST_UPDATE_HISTORY.summary,
-      titleUpdateHistoryPanel.x, titleUpdateHistoryPanel.y + 10, {
+      titleUpdateHistoryPanel.x - 8, titleUpdateHistoryPanel.y + 10, {
         font: `900 9px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 2.5
       });
+    drawOutlinedText('›', titleUpdateHistoryPanel.x + 118, titleUpdateHistoryPanel.y + 6, {
+      font: `900 19px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+    });
 
     ctx.save();
     ctx.textAlign = 'center';
@@ -9389,6 +9398,59 @@
       ctx.fillText(LAST_UPDATED_TEXT, VW / 2, VH - 18);
     }
     ctx.restore();
+  }
+
+  function drawUpdateHistoryModal() {
+    if (!updateHistoryOpen) return;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(2, 7, 11, 0.82)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.restore();
+
+    drawIronPlate(
+      titleUpdateHistoryModal.x,
+      titleUpdateHistoryModal.y,
+      titleUpdateHistoryModal.w,
+      titleUpdateHistoryModal.h,
+      { cut: 22, lineWidth: 3, rivets: true, rivetInset: 18, rivetRadius: 4, glow: UI.gold }
+    );
+    drawOutlinedText('更新履歴', VW / 2, VH / 2 - 240, {
+      font: `900 27px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 6
+    });
+    drawOutlinedText('これまでの主な変更', VW / 2, VH / 2 - 210, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    });
+
+    UPDATE_HISTORY.forEach((entry, index) => {
+      const y = VH / 2 - 160 + index * 64;
+      drawIronPlate(VW / 2, y, 452, 52, {
+        cut: 9,
+        lineWidth: index === 0 ? 2 : 1.2,
+        rivets: false,
+        edge: index === 0 ? UI.gold : UI.brassDark,
+        fill: index === 0 ? 'rgba(49, 64, 57, 0.98)' : 'rgba(18, 33, 38, 0.95)'
+      });
+      drawOutlinedText(`${entry.version}　${entry.date}`, VW / 2 - 205, y - 7, {
+        align: 'left', font: `900 13px ${UI_FONT_HEAVY}`,
+        color: index === 0 ? UI.gold : UI.brassLabel, lineWidth: 3
+      });
+      drawOutlinedText(entry.summary, VW / 2 - 205, y + 14, {
+        align: 'left', font: `900 13px ${UI_FONT_HEAVY}`,
+        color: UI.parchment, lineWidth: 3
+      });
+    });
+
+    drawIronPlate(
+      titleUpdateHistoryCloseBtn.x,
+      titleUpdateHistoryCloseBtn.y,
+      titleUpdateHistoryCloseBtn.w,
+      titleUpdateHistoryCloseBtn.h,
+      { cut: 12, lineWidth: 2, rivets: true, rivetInset: 14, rivetRadius: 3 }
+    );
+    drawOutlinedText('閉じる', titleUpdateHistoryCloseBtn.x, titleUpdateHistoryCloseBtn.y + 6, {
+      font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+    });
   }
 
   function drawFreeArrow(x, y, direction, width = 48, height = 54) {
@@ -14945,6 +15007,7 @@
       drawTitleScreen();
       drawSoundToggle();
       drawSoundPanel();
+      drawUpdateHistoryModal();
       ctx.restore();
       return;
     }
@@ -15131,6 +15194,15 @@
       return;
     }
 
+    // 更新履歴を開いている間は、背面のタイトルボタンやサウンド設定へ入力を通さない。
+    if (updateHistoryOpen) {
+      if (hitRect(p0, titleUpdateHistoryCloseBtn) || !hitRect(p0, titleUpdateHistoryModal)) {
+        updateHistoryOpen = false;
+        playUiSound();
+      }
+      return;
+    }
+
     // サウンド設定は全画面共通で扱う。パネルが開いている間は他の入力を通さない。
     if (soundPanelOpen) {
       if (hitRect(p0, soundCloseBtn)) {
@@ -15201,6 +15273,9 @@
       } else if (hitRect(p0, titleUpdateBtn)) {
         playUiSound();
         forceGameUpdate();
+      } else if (hitRect(p0, titleUpdateHistoryPanel)) {
+        updateHistoryOpen = true;
+        playUiSound();
       }
       return;
     }

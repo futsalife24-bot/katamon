@@ -1360,6 +1360,28 @@ check('更新履歴は最新版ボタンの横に収まり、操作領域と重�
     && updateHistoryInfo.update.x - updateHistoryInfo.update.w / 2 >= 0
     && updateHistoryInfo.panel.x + updateHistoryInfo.panel.w / 2 <= kt.viewW(),
   JSON.stringify(updateHistoryInfo));
+check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
+  updateHistoryInfo.entries.length >= 4
+    && updateHistoryInfo.entries[0]?.version === updateHistoryInfo.history?.version
+    && updateHistoryInfo.entries.every(entry => /^v\d+$/.test(entry.version)
+      && /^\d{4}\/\d{2}\/\d{2}$/.test(entry.date) && entry.summary.length > 0)
+    && updateHistoryInfo.entries.some(entry => entry.version === 'v200')
+    && updateHistoryInfo.entries.some(entry => entry.version === 'v199'),
+  JSON.stringify(updateHistoryInfo.entries));
+kt.setPhase('title');
+down(updateHistoryInfo.panel.x, updateHistoryInfo.panel.y);
+const openedUpdateHistory = kt.titleUpdateHistoryInfo();
+check('タイトルの更新履歴をタップすると過去版一覧が開く',
+  openedUpdateHistory.open === true
+    && !!openedUpdateHistory.modal
+    && !!openedUpdateHistory.close,
+  JSON.stringify(openedUpdateHistory));
+if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
+check('更新履歴は閉じるボタンでタイトルへ戻る',
+  openedUpdateHistory.open === true
+    && kt.titleUpdateHistoryInfo().open === false
+    && kt.phase() === 'title',
+  JSON.stringify(kt.titleUpdateHistoryInfo()));
 const otherTitleBtns = [btns.cpu, btns.online, btns.free, btns.ranking, btns.update];
 check('おまけボタンが他のタイトルボタンと重ならない',
   otherTitleBtns.every(b => !rectsOverlap(btns.bonus, b)),
