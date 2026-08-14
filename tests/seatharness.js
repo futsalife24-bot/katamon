@@ -679,6 +679,12 @@ const HOOK = `
       tutorial: { ...titleTutorialBtn },
       bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
     }),
+    titleUpdateHistoryInfo: () => ({
+      build: typeof BUILD_ID === 'undefined' ? '' : BUILD_ID,
+      history: typeof LATEST_UPDATE_HISTORY === 'undefined' ? null : { ...LATEST_UPDATE_HISTORY },
+      update: { ...titleUpdateBtn },
+      panel: typeof titleUpdateHistoryPanel === 'undefined' ? null : { ...titleUpdateHistoryPanel }
+    }),
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
     bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),

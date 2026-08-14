@@ -624,7 +624,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v198-scorpion-rail';
+  const BUILD_ID = 'v199-title-update-history';
+  // 版を上げるたびにBUILD_IDと一緒に更新する、タイトル画面用の最新1件。
+  // 履歴を長く積まず、プレイヤーが「今回何が変わったか」をすぐ読める量に留める。
+  const LATEST_UPDATE_HISTORY = Object.freeze({
+    version: 'v199',
+    date: '2026/08/14',
+    summary: 'タイトルに更新履歴を表示'
+  });
 
   // ===== 最終更新日(サーバー側のファイル更新日時から自動取得。手動更新不要) =====
   const LAST_UPDATED_TEXT = (() => {
@@ -4329,7 +4336,8 @@
   // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
   const TITLE_WOOD_SELECTION_OUTLINE = false;
   // 保守用の更新ボタンだけは、見本どおり木枠の外へ置いて従来の鉄板を残す。
-  const titleUpdateBtn = { x: VW / 2, y: 914, w: 250, h: 30 };
+  const titleUpdateBtn = { x: 135, y: 914, w: 186, h: 30 };
+  const titleUpdateHistoryPanel = { x: 366, y: 914, w: 264, h: 30 };
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
   let safeUpdateReloadStarted = false;
@@ -9201,6 +9209,22 @@
     drawOutlinedText(updateRequestInFlight ? '更新中...' : '最新版を取得', titleUpdateBtn.x, titleUpdateBtn.y + 4, {
       font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
+
+    drawIronPlate(
+      titleUpdateHistoryPanel.x,
+      titleUpdateHistoryPanel.y,
+      titleUpdateHistoryPanel.w,
+      titleUpdateHistoryPanel.h,
+      { cut: 8, lineWidth: 1.2, rivets: false, edge: UI.brassDark, fill: 'rgba(29, 48, 51, 0.92)' }
+    );
+    drawOutlinedText(`更新履歴 ${LATEST_UPDATE_HISTORY.version}・${LATEST_UPDATE_HISTORY.date}`,
+      titleUpdateHistoryPanel.x, titleUpdateHistoryPanel.y - 2, {
+        font: `900 9px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
+      });
+    drawOutlinedText(LATEST_UPDATE_HISTORY.summary,
+      titleUpdateHistoryPanel.x, titleUpdateHistoryPanel.y + 10, {
+        font: `900 9px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 2.5
+      });
 
     ctx.save();
     ctx.textAlign = 'center';

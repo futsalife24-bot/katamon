@@ -1327,6 +1327,24 @@ const btns = kt.titleBtnRects();
 function rectsOverlap(a, b) {
   return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
 }
+const updateHistoryInfo = kt.titleUpdateHistoryInfo();
+check('タイトル最下部の更新履歴はBUILD_IDと同じv番号を表示する',
+  !!updateHistoryInfo.history
+    && updateHistoryInfo.build.startsWith(updateHistoryInfo.history.version + '-'),
+  JSON.stringify(updateHistoryInfo));
+check('タイトル最下部の更新履歴は日付と変更内容を持つ',
+  !!updateHistoryInfo.history
+    && /^\d{4}\/\d{2}\/\d{2}$/.test(updateHistoryInfo.history.date)
+    && updateHistoryInfo.history.summary.length > 0,
+  JSON.stringify(updateHistoryInfo.history));
+check('更新履歴は最新版ボタンの横に収まり、操作領域と重ならない',
+  !!updateHistoryInfo.panel
+    && !rectsOverlap(updateHistoryInfo.update, updateHistoryInfo.panel)
+    && updateHistoryInfo.panel.x > updateHistoryInfo.update.x
+    && updateHistoryInfo.panel.y === updateHistoryInfo.update.y
+    && updateHistoryInfo.update.x - updateHistoryInfo.update.w / 2 >= 0
+    && updateHistoryInfo.panel.x + updateHistoryInfo.panel.w / 2 <= kt.viewW(),
+  JSON.stringify(updateHistoryInfo));
 const otherTitleBtns = [btns.cpu, btns.online, btns.free, btns.ranking, btns.update];
 check('おまけボタンが他のタイトルボタンと重ならない',
   otherTitleBtns.every(b => !rectsOverlap(btns.bonus, b)),
