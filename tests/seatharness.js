@@ -213,6 +213,22 @@ const HOOK = `
           blasts: D_SMASH_DRILL_BLASTS.slice(),
           stride: D_SMASH_DRILL_STRIDE
         },
+    groundFlameConfigForTest: () => typeof GROUND_FLAME_TICK_DAMAGE === 'undefined'
+      ? null
+      : {
+          damage: GROUND_FLAME_TICK_DAMAGE,
+          ticks: GROUND_FLAME_TICK_COUNT,
+          interval: GROUND_FLAME_TICK_INTERVAL
+        },
+    groundFlamesForTest: () => typeof groundFlames === 'undefined'
+      ? []
+      : groundFlames.map(flame => ({
+          x: flame.x,
+          y: flame.y,
+          delay: flame.delay,
+          ticksDone: Number(flame.ticksDone || 0),
+          tickTimer: Number(flame.tickTimer || 0)
+        })),
     fireSpecialImmediateForTest: (key, vx0, vy0) => {
       const u = localUnit();
       applyCharacter(u, key);
