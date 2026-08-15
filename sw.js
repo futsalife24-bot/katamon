@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v206-scorpion-spike-freeze';
+const CACHE_VERSION = 'katamon-pwa-v207-cpu-turn-autosave';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

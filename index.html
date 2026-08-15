@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v206-scorpion-spike-freeze';
+  const BUILD_ID = 'v207-cpu-turn-autosave';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v207', date: '2026/08/15', summary: 'CPU対戦をターン開始時に自動保存' }),
     Object.freeze({ version: 'v206', date: '2026/08/15', summary: '毒針演出のフリーズを修正' }),
     Object.freeze({ version: 'v205', date: '2026/08/15', summary: 'ショックウェーブ命中に毒針演出を追加' }),
     Object.freeze({ version: 'v204', date: '2026/08/15', summary: 'バルコプターの10連射を実装' }),
@@ -5620,6 +5621,20 @@
     } catch (err) {
       return false; // 保存できなくても対戦は続行可能
     }
+  }
+
+  // 強制終了から戻すため、通常のCPU BATTLEだけは安全なターン開始状態を自動保存する。
+  // 演習・チュートリアル・オンラインは、それぞれの終了/同期ルールを変えないため対象外にする。
+  function saveCpuBattleAtTurnStart() {
+    if (battleMode !== 'normal' || isOnline() || matchOver) return false;
+    return saveSuspendedMatch();
+  }
+
+  // 自動保存は途中復帰のためだけのもの。CPU BATTLEで負けた試合を再開できない従来仕様は守る。
+  function clearCpuBattleSuspendOnLoss() {
+    if (battleMode !== 'normal' || isOnline() || localWon() || isDraw()) return;
+    clearSuspendedMatch();
+    hasSuspendedSave = false;
   }
 
   function loadSuspendedMatchFromKey(key) {
@@ -10971,6 +10986,7 @@
     }
     matchOver = true;
     winner = playerAlive ? 'player' : cpuAlive ? 'cpu' : 'draw';
+    clearCpuBattleSuspendOnLoss();
     const resultReason = isDraw() ? '相討ち' : (reason || '撃破');
     logOnlineEvent({ type: 'matchEnd', declared: true, reason: resultReason, winner });
     beginMatchEnd(resultReason);
@@ -10998,6 +11014,7 @@
     const playerRatio = teamHpRatio('player');
     const cpuRatio = teamHpRatio('cpu');
     winner = playerRatio > cpuRatio ? 'player' : playerRatio < cpuRatio ? 'cpu' : 'draw';
+    clearCpuBattleSuspendOnLoss();
     beginMatchEnd('時間切れ');
     applyStreakResult();
     netSyncResult('時間切れ');
@@ -11040,6 +11057,7 @@
     if (freeTrainingRules().jumpEachTurn) acting.jumpAvailable = true;
     focusCameraOn(acting.x, false, acting.y);
     if (acting.control === 'cpu') beginCpuTurnPlan(acting);
+    saveCpuBattleAtTurnStart();
   }
   // CPUの手番の入り口。startTurn だけでなく、開始カットインが明けた時(v121)と、
   // 試合中に落ちた席をCPUが引き継いだ時(段D)にも呼ぶ。どちらも startTurn を
