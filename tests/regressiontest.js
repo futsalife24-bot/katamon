@@ -1611,6 +1611,24 @@ check('指をモーダル外へ動かしても更新履歴のタッチスクロ�
   touchScrolledUpdateHistory.modal.scroll > touchStartScroll,
   JSON.stringify(touchScrolledUpdateHistory.modal));
 touchUp(touchId, scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top - 120);
+const fourthEntryY = scrolledUpdateHistory.modal.contentViewport.top + 26 + 3 * 64;
+const fourthStartScroll = scrolledUpdateHistory.modal.scroll;
+const fourthTouchId = touchDown(scrolledUpdateHistory.modal.x, fourthEntryY);
+touchMoveWindow(fourthTouchId, scrolledUpdateHistory.modal.x, fourthEntryY - 120);
+const fourthTouchScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴4件目から指を始めてもスクロールできる',
+  fourthTouchScrolled.modal.scroll > fourthStartScroll,
+  JSON.stringify({ fourthEntryY, modal: fourthTouchScrolled.modal }));
+touchUp(fourthTouchId, scrolledUpdateHistory.modal.x, fourthEntryY - 120);
+const lowerEdgeStartScroll = kt.titleUpdateHistoryInfo().modal.scroll;
+const lowerEdgeY = scrolledUpdateHistory.modal.contentViewport.bottom + 4;
+const lowerEdgeTouchId = touchDown(scrolledUpdateHistory.modal.x, lowerEdgeY);
+touchMoveWindow(lowerEdgeTouchId, scrolledUpdateHistory.modal.x, lowerEdgeY - 120);
+const lowerEdgeScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴の下段カード付近から指を始めてもスクロールを掴める',
+  lowerEdgeScrolled.modal.scroll > lowerEdgeStartScroll,
+  JSON.stringify({ lowerEdgeY, modal: lowerEdgeScrolled.modal }));
+touchUp(lowerEdgeTouchId, scrolledUpdateHistory.modal.x, lowerEdgeY - 120);
 if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
 check('更新履歴は閉じるボタンでタイトルへ戻る',
   openedUpdateHistory.open === true
