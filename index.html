@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v209-cpu-battle-randomness';
+  const BUILD_ID = 'v210-balcopter-helicopter-art';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v210', date: '2026/08/15', summary: 'バルコプターを専用ヘリ画像へ差し替え' }),
     Object.freeze({ version: 'v209', date: '2026/08/15', summary: 'CPU連戦の相手・ステージを毎回ランダム化' }),
     Object.freeze({ version: 'v208', date: '2026/08/15', summary: 'バルコプター調整と必殺技説明を更新' }),
     Object.freeze({ version: 'v207', date: '2026/08/15', summary: 'CPU対戦をターン開始時に自動保存' }),
@@ -2835,6 +2836,17 @@
       onFailed: () => { characterImagesFailed++; }
     });
   }
+  // 1.65MBの支援機はタイトルのコア画像読込から外し、必殺技時だけ読む。
+  const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=1';
+  let barucopterImage = null;
+  function getBarucopterImage() {
+    if (barucopterImage) return barucopterImage;
+    barucopterImage = new Image();
+    barucopterImage.decoding = 'async';
+    barucopterImage.src = BARUCOPTER_IMAGE_PATH;
+    return barucopterImage;
+  }
+
   function areCoreImagesReady() {
     const titleSettled = titleLogoReady || titleLogoFailed;
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
@@ -12589,7 +12601,7 @@
   }
 
   function drawBarucopters() {
-    const img = charImages.barugerukan;
+    const img = getBarucopterImage();
     const imgReady = img && img.complete && img.naturalWidth > 0;
     for (const b of barucopters) {
       const pulse = 0.82 + Math.sin(simTimeMs * 0.018) * 0.18;
@@ -12613,18 +12625,10 @@
       ctx.translate(b.x, b.y);
       const faceLeft = b.targetX < b.x;
       // 仮ローターを足して、本体画像流用中でも上空支援機として判別できるようにする。
-      ctx.strokeStyle = '#d9f5ff';
-      ctx.shadowColor = '#59c9ff';
-      ctx.shadowBlur = 8;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-42, -35); ctx.lineTo(42, -35);
-      ctx.moveTo(0, -35); ctx.lineTo(0, -25);
-      ctx.stroke();
       ctx.shadowBlur = 12;
       if (faceLeft) ctx.scale(-1, 1);
       if (imgReady) {
-        const h = 68;
+        const h = 86;
         const w = h * (img.naturalWidth / img.naturalHeight);
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
       } else {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v209-cpu-battle-randomness';
+const CACHE_VERSION = 'katamon-pwa-v210-balcopter-helicopter-art';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
