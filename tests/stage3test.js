@@ -324,6 +324,12 @@ function check(name, value) {
   check('battle-start video removes its opaque black background before canvas drawing',
     /battleStartLogoVideoCanvas[\s\S]{0,500}getImageData\([\s\S]{0,500}putImageData\(/.test(readRepoFile('index.html')),
     'BATTLE START video is drawn without black-background removal');
+  check('battle-start video is 1.5x and stops after one playback',
+    /const BATTLE_START_LOGO_SCALE = 1\.5;/.test(readRepoFile('index.html'))
+      && /const logoW = 300 \* BATTLE_START_LOGO_SCALE;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideo\.loop = false;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideo\.addEventListener\('ended',[\s\S]{0,120}battleStartLogoVideo\.pause\(\)/.test(readRepoFile('index.html')),
+    'BATTLE START video size or one-shot playback is not configured');
   check('VS plate drawing clips the asset to its rounded shell shape',
     /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
     'VS plate image is not clipped before drawing');
