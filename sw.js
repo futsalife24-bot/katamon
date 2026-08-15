@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v204-barucopter';
+const CACHE_VERSION = 'katamon-pwa-v205-scorpion-spike';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

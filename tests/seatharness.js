@@ -263,6 +263,13 @@ const HOOK = `
           waveWidth: typeof SCORPION_RAIL_WAVE_WIDTH === 'undefined' ? 0 : SCORPION_RAIL_WAVE_WIDTH,
           trailLength: typeof SCORPION_RAIL_TRAIL_LENGTH === 'undefined' ? 0 : SCORPION_RAIL_TRAIL_LENGTH
         },
+    scorpionRailSpikeConfigForTest: () => typeof SCORPION_RAIL_SPIKE_COUNT === 'undefined'
+      ? null
+      : {
+          count: SCORPION_RAIL_SPIKE_COUNT,
+          life: SCORPION_RAIL_SPIKE_LIFE,
+          height: SCORPION_RAIL_SPIKE_HEIGHT
+        },
     startScorpionRailForTest: (index, x, y, direction = null) => {
       const p = projectiles[index];
       if (!p || typeof startScorpionRail !== 'function') return null;
@@ -352,7 +359,9 @@ const HOOK = `
       const p = projectiles[index];
       const target = unitById(unitId);
       if (!p || !target) return false;
-      if (p.barucopterBullet && typeof resolveBarucopterBulletUnitImpact === 'function') {
+      if (p.scorpionRail && typeof resolveScorpionRailImpact === 'function') {
+        resolveScorpionRailImpact(p, target);
+      } else if (p.barucopterBullet && typeof resolveBarucopterBulletUnitImpact === 'function') {
         resolveBarucopterBulletUnitImpact(p, target, p.x, p.y);
       } else if (typeof resolveProjectileUnitImpact === 'function') {
         resolveProjectileUnitImpact(p, target, p.x, p.y);
@@ -374,7 +383,8 @@ const HOOK = `
     impactVisualCountsForTest: () => ({
       explosions: particles.length,
       lightningRemnants: lightningBeams.length,
-      groundFlames: typeof groundFlames === 'undefined' ? 0 : groundFlames.length
+      groundFlames: typeof groundFlames === 'undefined' ? 0 : groundFlames.length,
+      scorpionRailSpikes: typeof scorpionRailSpikeBursts === 'undefined' ? 0 : scorpionRailSpikeBursts.length
     }),
     resolveGroundFlameImpactForTest: (index, x, y) => {
       const p = projectiles[index];
