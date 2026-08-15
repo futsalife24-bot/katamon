@@ -1396,6 +1396,32 @@ check('スコーピオンレールは地形から離れず、壁を登って上�
 check('スコーピオンレールは太い残光と長い軌跡でショックウェーブを描く',
   dreadRailConfig?.waveWidth >= 14 && dreadRailConfig?.trailLength >= 80,
   JSON.stringify(dreadRailConfig));
+// v205: 地表を走るショックウェーブが敵へ触れた時だけ、足元から毒針を突き上げる。
+kt.startBattle('doRednote');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest();
+const dreadSpikeOwner = kt.localUnit();
+const dreadSpikeTarget = kt.foeUnit();
+kt.placeOnGround(dreadSpikeOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(dreadSpikeTarget.id, Math.round(kt.stageW() * 0.55));
+kt.setUnitHpForTest(dreadSpikeTarget.id, dreadSpikeTarget.maxHp);
+const dreadSpikeShot = kt.fireSpecialImmediateForTest('doRednote', 240, -120);
+kt.startScorpionRailForTest(dreadSpikeShot, Math.round(kt.stageW() * 0.42), 420);
+const dreadSpikeHpBefore = dreadSpikeTarget.hp;
+const dreadSpikeCratersBefore = kt.craters();
+const dreadSpikeVisualsBefore = kt.impactVisualCountsForTest();
+kt.resolveProjectileUnitImpactForTest(dreadSpikeShot, dreadSpikeTarget.id);
+const dreadSpikeVisualsAfter = kt.impactVisualCountsForTest();
+const dreadSpikeConfig = kt.scorpionRailSpikeConfigForTest();
+check('スコーピオンレールのショックウェーブ命中時は下から3本の毒針演出だけを出す',
+  dreadSpikeConfig?.count === 3
+    && dreadSpikeConfig?.life >= 0.4
+    && dreadSpikeConfig?.height >= 40
+    && dreadSpikeTarget.hp === dreadSpikeHpBefore - dreadRailConfig.damage
+    && kt.craters() === dreadSpikeCratersBefore
+    && dreadSpikeVisualsAfter.scorpionRailSpikes === dreadSpikeVisualsBefore.scorpionRailSpikes + dreadSpikeConfig.count,
+  JSON.stringify({ config: dreadSpikeConfig, hp: [dreadSpikeHpBefore, dreadSpikeTarget.hp], craters: [dreadSpikeCratersBefore, kt.craters()], visuals: [dreadSpikeVisualsBefore, dreadSpikeVisualsAfter] }));
 const dreadVsSpecial = kt.vsSpecialTextForTest('doRednote');
 check('長い必殺技名も開始カットインで省略せず全文を表示する',
   dreadVsSpecial?.text === 'スコーピオンレール' && dreadVsSpecial?.fontSize >= 7,

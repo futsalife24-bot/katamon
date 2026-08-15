@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v204-barucopter';
+  const BUILD_ID = 'v205-scorpion-spike';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v205', date: '2026/08/15', summary: 'ショックウェーブ命中に毒針演出を追加' }),
     Object.freeze({ version: 'v204', date: '2026/08/15', summary: 'バルコプターの10連射を実装' }),
     Object.freeze({ version: 'v203', date: '2026/08/15', summary: 'Bインパクトの破壊範囲を調整' }),
     Object.freeze({ version: 'v202', date: '2026/08/15', summary: '衝撃波が近い相手へ進行' }),
@@ -3945,6 +3946,7 @@
     const anchor = unitAnchor(target);
     if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
     creditDamage(p.owner, target, actualDamage);
+    if (p.scorpionRailActive) spawnScorpionRailSpikeBurst(target);
     spawnExplosion(p.x, p.y, 0.4);
     playCrackleSound(0.62);
     checkMatchEnd();
@@ -4322,6 +4324,7 @@
   // ===== エフェクト =====
   let particles = [];   // 爆発パーティクル
   let empRings = [];
+  let scorpionRailSpikeBursts = []; // ショックウェーブ命中時だけ出す、演出専用の毒針
   let floatTexts = [];  // ダメージ数字ポップ
   let shakeTimer = 0;
   let shakeMag = 0;
@@ -4345,6 +4348,27 @@
   const GROUND_FLAME_STEP_DELAY = 0.1;
   const GROUND_FLAME_LIFE = GROUND_FLAME_TICK_INTERVAL * (GROUND_FLAME_TICK_COUNT - 1) + 0.35;
   const GROUND_FLAME_MAX_HEIGHT_DELTA = 54;
+  const SCORPION_RAIL_SPIKE_COUNT = 3;
+  const SCORPION_RAIL_SPIKE_LIFE = 0.46;
+  const SCORPION_RAIL_SPIKE_HEIGHT = 56;
+
+  // 当たった相手の足元から、少しずつ時間差を付けて毒針を突き上げる。
+  // 当たり判定・地形・乱数を持たないので、対戦の同期やダメージには一切関与しない。
+  function spawnScorpionRailSpikeBurst(target) {
+    if (!target) return;
+    const anchor = unitAnchor(target);
+    const offsets = [-15, 0, 15];
+    for (let i = 0; i < SCORPION_RAIL_SPIKE_COUNT; i++) {
+      scorpionRailSpikeBursts.push({
+        x: anchor.x + offsets[i],
+        y: anchor.y + UNIT_RADIUS * 0.72,
+        delay: i * 0.035,
+        age: 0,
+        height: SCORPION_RAIL_SPIKE_HEIGHT * (i === 1 ? 1 : 0.82),
+        maxAge: SCORPION_RAIL_SPIKE_LIFE
+      });
+    }
+  }
 
   function spawnExplosion(x, y, blastMul) {
     const count = Math.round(14 * Math.min(2, blastMul || 1));
@@ -5766,6 +5790,7 @@
     cpuPhase = 'aim';
     particles = [];
     empRings = [];
+    scorpionRailSpikeBursts = [];
     lightningBeams = [];
     groundFlames = [];
     floatTexts = [];
@@ -14074,6 +14099,41 @@
     }
   }
 
+  function drawScorpionRailImpactSpikes() {
+    for (const spike of scorpionRailSpikeBursts) {
+      const localAge = spike.age - spike.delay;
+      if (localAge <= 0) continue;
+      const progress = clamp(localAge / spike.maxAge, 0, 1);
+      const rise = Math.min(1, progress * 4.4);
+      const fade = Math.max(0, 1 - Math.max(0, (progress - 0.42) / 0.58));
+      const height = spike.height * rise;
+      const halfWidth = 5.5 + rise * 2;
+      ctx.save();
+      ctx.translate(spike.x, spike.y);
+      ctx.globalAlpha = fade;
+      ctx.shadowColor = '#a6ff43';
+      ctx.shadowBlur = 12;
+      const grad = ctx.createLinearGradient(0, 0, 0, -height);
+      grad.addColorStop(0, '#355d17');
+      grad.addColorStop(0.45, '#b8ff52');
+      grad.addColorStop(1, '#f2ffd0');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(-halfWidth, 0);
+      ctx.lineTo(-halfWidth * 0.42, -height * 0.42);
+      ctx.lineTo(0, -height);
+      ctx.lineTo(halfWidth * 0.42, -height * 0.42);
+      ctx.lineTo(halfWidth, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(14, 37, 10, 0.92)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function drawFloatTexts() {
     ctx.save();
     ctx.textAlign = 'center';
@@ -15297,6 +15357,7 @@
     drawProjectile();
     drawParticles();
     for (const u of units) drawUnit(u);
+    drawScorpionRailImpactSpikes();
     drawGroundFlames();
     drawFloatTexts();
     ctx.restore();
@@ -16001,6 +16062,7 @@
     battleIntroPending = true;
     particles = [];
     empRings = [];
+    scorpionRailSpikeBursts = [];
     lightningBeams = [];
     groundFlames = [];
     floatTexts = [];
@@ -16470,6 +16532,11 @@
     for (let i = empRings.length - 1; i >= 0; i--) {
       empRings[i].life -= dt;
       if (empRings[i].life <= 0) empRings.splice(i, 1);
+    }
+    for (let i = scorpionRailSpikeBursts.length - 1; i >= 0; i--) {
+      const spike = scorpionRailSpikeBursts[i];
+      spike.age += dt;
+      if (spike.age > spike.delay + spike.maxAge) scorpionRailSpikeBursts.splice(i, 1);
     }
     // ダメージ数字ポップ更新
     for (let i = floatTexts.length - 1; i >= 0; i--) {
