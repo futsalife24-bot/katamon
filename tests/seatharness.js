@@ -131,6 +131,19 @@ const HOOK = `
     },
     cpuStepIsSafe: (u, toX) => cpuStepIsSafe(u, toX),
     placeOnGround: (id, x) => { const u = unitById(id); if (Number.isFinite(x)) u.x = x; initUnitOnGround(u); return { x: u.x, y: u.y }; },
+    setUnitPositionForTest: (id, x, y) => {
+      const u = unitById(id);
+      if (!u) return null;
+      if (Number.isFinite(x)) u.x = x;
+      if (Number.isFinite(y)) u.y = y;
+      return { x: u.x, y: u.y };
+    },
+    setUnitHpForTest: (id, hp) => {
+      const u = unitById(id);
+      if (!u || !Number.isFinite(hp)) return null;
+      u.hp = Math.max(0, Math.min(u.maxHp, hp));
+      return u.hp;
+    },
     stageW: () => STAGE_W,
     arenaLayoutForTest: () => {
       const shelves = typeof arenaShelves === 'function'

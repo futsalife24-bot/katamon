@@ -1267,6 +1267,13 @@ check('スコーピオンレールは地面へ刺さった後に地表を這う�
     && dreadRailConfig?.damage >= 20,
   JSON.stringify({ start: dreadRailStart, config: dreadRailConfig }));
 const dreadStepTerrain = kt.setScorpionRailStepTerrainForTest(620, 420, 320);
+const dreadTargetedShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+kt.setUnitPositionForTest(kt.foeUnit().id, 580, 410);
+kt.setUnitHpForTest(kt.foeUnit().id, kt.foeUnit().maxHp);
+const dreadTargetedStart = kt.startScorpionRailForTest(dreadTargetedShot, 620, 350);
+check('スコーピオンレールは壁面でも最も近い相手がいる向きへ走り出す',
+  dreadTargetedStart?.active === true && dreadTargetedStart?.vx === 0 && dreadTargetedStart?.vy > 0,
+  JSON.stringify({ target: kt.foeUnit(), start: dreadTargetedStart }));
 const dreadClimbShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
 kt.startScorpionRailForTest(dreadClimbShot, 560, dreadStepTerrain.floorY, 1);
 const dreadClimb = kt.advanceScorpionRailForTest(dreadClimbShot, 230);
