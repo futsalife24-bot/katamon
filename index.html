@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v203-b-impact-balance';
+  const BUILD_ID = 'v204-barucopter';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v204', date: '2026/08/15', summary: 'バルコプターの10連射を実装' }),
     Object.freeze({ version: 'v203', date: '2026/08/15', summary: 'Bインパクトの破壊範囲を調整' }),
     Object.freeze({ version: 'v202', date: '2026/08/15', summary: '衝撃波が近い相手へ進行' }),
     Object.freeze({ version: 'v201', date: '2026/08/15', summary: '過去の更新履歴を一覧表示' }),
@@ -2668,10 +2669,10 @@
     },
     barugerukan: {
       key: 'barugerukan', name: 'バルゲルカン', asset: 'barugerukan', role: '連射型', roleEn: 'RAPID',
-      desc: '水弾をばらまく軽快なヘリ戦車。高い機動力と連射で相手を追い詰める。',
-      selectStats: [2, 3, 5], specialDesc: '5発の水弾を扇状に一斉発射', selectFlavor: '水弾の雨で逃げ道を奪う。',
+      desc: '上空支援を呼ぶ軽快なヘリ戦車。高い機動力と連射で相手を追い詰める。',
+      selectStats: [2, 3, 5], specialDesc: 'マーキング地点へ上空から10発の機銃掃射', selectFlavor: '上空の支援機が、印へ10連射する。',
       maxHp: 82, blastMul: 0.78, windMul: 0.9, fuelMul: 1.2, velScaleMul: 1.05, specialVelocityMul: 1.0, tBias: 0.9,
-      color: '#59c9ff', special: 'スライム掃射'
+      color: '#59c9ff', special: 'バルコプター'
     },
     nisenmono: {
       key: 'nisenmono', name: 'オベリスク', asset: 'obelisk', role: '防御型', roleEn: 'GUARD',
@@ -3429,15 +3430,27 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,dSmash,scorpionRail,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
+  let barucopters = []; // [{owner,x,y,targetX,targetY,shotsFired,shotTimer,departTimer}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
+
+  const BARUCOPTER_HEIGHT = 150;
+  const BARUCOPTER_SHOT_COUNT = 10;
+  const BARUCOPTER_SHOT_INTERVAL = 0.12;
+  const BARUCOPTER_INITIAL_DELAY = 0.18;
+  const BARUCOPTER_DEPART_DELAY = 0.36;
+  const BARUCOPTER_BULLET_SPEED = 720;
+  const BARUCOPTER_BULLET_DAMAGE = 5;
+  // 乱数は通信対戦で端末差になるため使わない。中心角の平均が0になる固定ブレ。
+  const BARUCOPTER_SPREAD_DEGREES = [-1.6, 1.1, -0.7, 0.4, 1.7, -1.3, 0.8, -0.2, 1.4, -1.6];
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
     opts = opts || {};
     const windMul = opts.windMul != null ? opts.windMul : 1;
     const gravityMul = opts.gravityMul != null ? opts.gravityMul : 1;
     projectiles.push({
-      x: anchor.x, y: anchor.y, vx, vy, owner, radius: 5,
+      x: anchor.x, y: anchor.y, vx, vy, owner,
+      radius: opts.radius != null ? opts.radius : 5,
       originX: anchor.x, originY: anchor.y,   // 電撃ビームを発射点から伸ばすのに使う
       blastMul: opts.blastMul || 1,
       terrainBlastMul: opts.terrainBlastMul,
@@ -3449,6 +3462,8 @@
       normalImpactSound: !!opts.normalImpactSound,
       pierce: !!opts.pierce,
       dSmash: !!opts.dSmash,
+      barucopterMarker: !!opts.barucopterMarker,
+      barucopterBullet: !!opts.barucopterBullet,
       dSmashDrilling: false,
       dSmashBlasts: 0,
       scorpionRail: !!opts.scorpionRail,
@@ -3543,6 +3558,64 @@
   function rotateVec(vx, vy, deg) {
     const r = deg * Math.PI / 180;
     return { vx: vx * Math.cos(r) - vy * Math.sin(r), vy: vx * Math.sin(r) + vy * Math.cos(r) };
+  }
+
+  // ===== バルコプター(バルゲルカンの必殺) =====
+  // マーカーが触れた世界座標を固定し、発射者の真上へ支援機を出す。
+  // 専用画像は後日差し替えるため、現時点ではバルゲルカン本体画像を流用する。
+  function startBarucopterBarrage(p, impactX, impactY) {
+    if (!p || !p.barucopterMarker) return false;
+    const owner = unitById(p.owner);
+    if (!owner || unitDefeated(owner)) return false;
+    barucopters.push({
+      owner: owner.id,
+      x: owner.x,
+      y: Math.max(54, owner.y - BARUCOPTER_HEIGHT),
+      targetX: Math.max(0, Math.min(STAGE_W, impactX)),
+      targetY: Math.max(0, Math.min(STAGE_H, impactY)),
+      shotsFired: 0,
+      shotTimer: BARUCOPTER_INITIAL_DELAY,
+      departTimer: BARUCOPTER_DEPART_DELAY
+    });
+    pushFloatText(impactX, impactY - 18, '照準', '#ffd24a', 14);
+    return true;
+  }
+
+  function fireBarucopterBullet(b) {
+    const dx = b.targetX - b.x;
+    const dy = b.targetY - b.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const baseVx = dx / length * BARUCOPTER_BULLET_SPEED;
+    const baseVy = dy / length * BARUCOPTER_BULLET_SPEED;
+    const spread = BARUCOPTER_SPREAD_DEGREES[b.shotsFired % BARUCOPTER_SPREAD_DEGREES.length];
+    const velocity = rotateVec(baseVx, baseVy, spread);
+    fireProjectile(b.owner, { x: b.x, y: b.y }, velocity.vx, velocity.vy, {
+      radius: 3,
+      windMul: 0,
+      gravityMul: 0,
+      damageMul: 1,
+      noTerrain: true,
+      directHitOnly: true,
+      barucopterBullet: true
+    });
+  }
+
+  // 固定刻みの物理内で連射する。端末の描画速度に関係なく10発・同じ角度になる。
+  function stepBarucopters(dt) {
+    for (let i = barucopters.length - 1; i >= 0; i--) {
+      const b = barucopters[i];
+      if (b.shotsFired < BARUCOPTER_SHOT_COUNT) {
+        b.shotTimer -= dt;
+        while (b.shotsFired < BARUCOPTER_SHOT_COUNT && b.shotTimer <= 0) {
+          fireBarucopterBullet(b);
+          b.shotsFired++;
+          b.shotTimer += BARUCOPTER_SHOT_INTERVAL;
+        }
+      } else {
+        b.departTimer -= dt;
+        if (b.departTimer <= 0) barucopters.splice(i, 1);
+      }
+    }
   }
 
   // ===== 花火(スモエルの必殺)=====
@@ -3958,11 +4031,12 @@
       // 恐竜の必殺: 強化砲弾(バランス型らしい高威力・大爆風の一撃)
       fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 1.8, windMul: def.windMul });
     } else if (activateSpecial && def.key === 'barugerukan') {
-      // バルゲルカンの必殺: 5連掃射(水弾を広範囲へばらまく)
-      for (const deg of [-16, -8, 0, 8, 16]) {
-        const v = rotateVec(vx0, vy0, deg);
-        fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul * 0.76, windMul: def.windMul });
-      }
+      // バルゲルカンの必殺: まず通常の弾道で地点を指定し、着弾後に上空支援を呼ぶ。
+      fireProjectile(owner, anchor, vx0, vy0, {
+        windMul: def.windMul,
+        barucopterMarker: true,
+        noTerrain: true
+      });
     } else if (activateSpecial && def.key === 'nisenmono') {
       // ニセンモノの必殺: 高速貫通レーザー
       fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, { blastMul: def.blastMul * 1.2, windMul: def.windMul, pierce: true });
@@ -4454,6 +4528,28 @@
   function resolveProjectileSurfaceImpact(p, x = p.x, y = p.y) {
     if (!p) return;
     finishDirectLightningImpact(p, x, y);
+  }
+
+  // 機銃は小さな直撃だけ。通常弾の爆発・地形削り・電撃残像は使わない。
+  function resolveBarucopterBulletUnitImpact(p, target, x = p.x, y = p.y) {
+    if (!p || !target || unitDefeated(target)) return false;
+    const ownerUnit = unitById(p.owner);
+    const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
+    if (remoteShot) noteRemoteDamageBaseline();
+    const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
+    const actualDamage = Math.max(1, Math.round(BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul));
+    target.hp = Math.max(0, target.hp - actualDamage);
+    const anchor = unitAnchor(target);
+    if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
+    creditDamage(p.owner, target, actualDamage);
+    spawnExplosion(x, y, 0.1);
+    checkMatchEnd();
+    return true;
+  }
+
+  function resolveBarucopterBulletSurfaceImpact(p, x = p.x, y = p.y) {
+    if (!p) return;
+    spawnExplosion(x, y, 0.07);
   }
 
   function triggerSpecialFlash(text, def, duration = SPECIAL_FLASH_DURATION) {
@@ -5633,6 +5729,7 @@
     for (const u of units) faceUnitTowardOpponent(u);
 
     projectiles = [];
+    barucopters = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
@@ -6956,7 +7053,7 @@
 
   // キューを流していい状態か。「弾が飛んでいない・落下していない・カットインも必殺の保留も無い」。
   function netCanApply() {
-    return !cutIn && !pendingShot && !projectiles.length && !groundFlames.length && units.every(u => u.grounded) && !(online && online.kind === 'firebase' && awaitingResolve);
+    return !cutIn && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(u => u.grounded) && !(online && online.kind === 'firebase' && awaitingResolve);
   }
 
   function netDrainQueue(dt) {
@@ -7152,6 +7249,7 @@
           // 決着打も同じ扱い。ここで出さないと、とどめの一撃だけ数字が出ない。
           flushRemoteDamageText();
           projectiles = [];
+          barucopters = [];
           awaitingResolve = false;
           matchOver = true;
           winner = msg.winner;
@@ -7167,6 +7265,7 @@
         }
         flushRemoteDamageText();
         projectiles = [];
+        barucopters = [];
         awaitingResolve = false;
         matchOver = true;
         winner = msg.winner;
@@ -8093,7 +8192,7 @@
   function resumeCpuTurnAfterTakeover(u) {
     const acting = activeUnit();
     if (!acting || acting.id !== u.id) return;
-    if (awaitingResolve || projectiles.length) return;
+    if (awaitingResolve || projectiles.length || barucopters.length) return;
     beginCpuTurnPlan(acting);
   }
 
@@ -8597,7 +8696,7 @@
   }
   function receiveFirebaseSpectatorResult(msg) {
     if (!online || online.kind !== 'firebase') return;
-    matchOver = true; winner = msg.winner; projectiles = []; awaitingResolve = false; online.phase = 'results';
+    matchOver = true; winner = msg.winner; projectiles = []; barucopters = []; awaitingResolve = false; online.phase = 'results';
     beginMatchEnd(msg.reason); scheduleFirebaseResultsLobby();
   }
   async function updateFirebaseSettings() {
@@ -11086,7 +11185,7 @@
   }
 
   function cpuAutoTurn() {
-    if (matchOver || projectiles.length) return;
+    if (matchOver || projectiles.length || barucopters.length) return;
     const self = activeUnit();
     const foe = cpuPickTarget(self);
     if (!foe) return;
@@ -12409,6 +12508,55 @@
     ctx.restore();
   }
 
+  function drawBarucopters() {
+    const img = charImages.barugerukan;
+    const imgReady = img && img.complete && img.naturalWidth > 0;
+    for (const b of barucopters) {
+      const pulse = 0.82 + Math.sin(simTimeMs * 0.018) * 0.18;
+      // マーキング地点。機体と同じワールドレイヤーに置き、着弾後も掃射先を読めるようにする。
+      ctx.save();
+      ctx.translate(b.targetX, b.targetY);
+      ctx.strokeStyle = `rgba(255,210,74,${0.68 + pulse * 0.22})`;
+      ctx.shadowColor = '#ffd24a';
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 11 + pulse * 3, 0, Math.PI * 2);
+      ctx.moveTo(-20, 0); ctx.lineTo(-8, 0);
+      ctx.moveTo(20, 0); ctx.lineTo(8, 0);
+      ctx.moveTo(0, -20); ctx.lineTo(0, -8);
+      ctx.moveTo(0, 20); ctx.lineTo(0, 8);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      const faceLeft = b.targetX < b.x;
+      // 仮ローターを足して、本体画像流用中でも上空支援機として判別できるようにする。
+      ctx.strokeStyle = '#d9f5ff';
+      ctx.shadowColor = '#59c9ff';
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-42, -35); ctx.lineTo(42, -35);
+      ctx.moveTo(0, -35); ctx.lineTo(0, -25);
+      ctx.stroke();
+      ctx.shadowBlur = 12;
+      if (faceLeft) ctx.scale(-1, 1);
+      if (imgReady) {
+        const h = 68;
+        const w = h * (img.naturalWidth / img.naturalHeight);
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = '#59c9ff';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 30, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
   function drawProjectile() {
     for (const b of lightningBeams) {
       drawLightningPath(b.x0, b.y0, b.x1, b.y1, Math.max(0, b.life / b.maxLife) * 0.9, 0);
@@ -12427,7 +12575,33 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
 
-      if (p.scorpionRail) {
+      if (p.barucopterMarker) {
+        ctx.shadowColor = '#ffd24a';
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = '#fff1a8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-18, 0); ctx.lineTo(8, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#ffd24a';
+        ctx.beginPath();
+        ctx.moveTo(13, 0); ctx.lineTo(3, -6); ctx.lineTo(3, 6);
+        ctx.closePath();
+        ctx.fill();
+      } else if (p.barucopterBullet) {
+        const tracer = ctx.createLinearGradient(-24, 0, 7, 0);
+        tracer.addColorStop(0, 'rgba(255,190,60,0)');
+        tracer.addColorStop(0.52, '#ffb72f');
+        tracer.addColorStop(1, '#fff7c7');
+        ctx.shadowColor = '#ffb72f';
+        ctx.shadowBlur = 9;
+        ctx.strokeStyle = tracer;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-24, 0); ctx.lineTo(8, 0);
+        ctx.stroke();
+      } else if (p.scorpionRail) {
         // 毒針の芯と尾のような二股の残光で、地表を走るサソリ尾だと読めるようにする。
         ctx.shadowColor = '#8cf25a';
         ctx.shadowBlur = p.scorpionRailActive ? 16 : 10;
@@ -13085,6 +13259,7 @@
 
   function returnToTitleFromResult() {
     projectiles = [];
+    barucopters = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
@@ -15118,6 +15293,7 @@
     drawTerrain();
     drawArenaObstacles();
     drawTrajectoryPreview();
+    drawBarucopters();
     drawProjectile();
     drawParticles();
     for (const u of units) drawUnit(u);
@@ -15793,6 +15969,7 @@
       placed.push(u);
     }
     projectiles = [];
+    barucopters = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
@@ -16221,6 +16398,14 @@
       cameraY += (targetY - cameraY) * Math.min(1, dt * 5);
       cameraTargetX = null;
       cameraTargetY = null;
+    } else if (barucopters.length) {
+      const barrage = barucopters[0];
+      const target = centerCameraOn((barrage.x + barrage.targetX) / 2);
+      const targetY = centerCameraYOn((barrage.y + barrage.targetY) / 2);
+      cameraX += (target - cameraX) * Math.min(1, dt * 5);
+      cameraY += (targetY - cameraY) * Math.min(1, dt * 5);
+      cameraTargetX = null;
+      cameraTargetY = null;
     } else if (cameraTargetX !== null) {
       cameraX += (cameraTargetX - cameraX) * Math.min(1, dt * 6);
       if (Math.abs(cameraTargetX - cameraX) < 0.5) {
@@ -16323,6 +16508,7 @@
   // 弾と落下。必ず固定刻み(PHYSICS_DT)で呼ぶこと。ここへ描画フレームのdtを
   // 渡すと Issue #9 の不具合がそのまま戻る。
   function stepWorldPhysics(dt) {
+    stepBarucopters(dt);
     stepGroundFlames(dt);
     if (matchOver) return;
     // 弾の物理(花火の本体弾と、地形を細く削る8方向の拡散弾に対応)
@@ -16451,6 +16637,10 @@
           if (hitDx * hitDx + hitDy * hitDy <= hitReach * hitReach) {
             if (p.jump) {
               teleportOwnerToImpact(p, p.x, p.y);
+            } else if (p.barucopterMarker) {
+              startBarucopterBarrage(p, p.x, p.y);
+            } else if (p.barucopterBullet) {
+              resolveBarucopterBulletUnitImpact(p, u, p.x, p.y);
             } else if (p.deathGateMarker) {
               spawnDeathGate(p, p.x, p.y);
             } else if (p.emp) {
@@ -16483,6 +16673,10 @@
       if (obstacleHit) {
         if (p.jump) {
           teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.barucopterMarker) {
+          startBarucopterBarrage(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.barucopterBullet) {
+          resolveBarucopterBulletSurfaceImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.deathGateMarker) {
           spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
         } else if (p.emp) {
@@ -16515,6 +16709,8 @@
 
       if (!p.pierce && isSolidAt(p.x, p.y)) {
         if (p.jump) teleportOwnerToImpact(p, p.x, p.y, true);
+        else if (p.barucopterMarker) startBarucopterBarrage(p, p.x, p.y);
+        else if (p.barucopterBullet) resolveBarucopterBulletSurfaceImpact(p, p.x, p.y);
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
@@ -16569,7 +16765,7 @@
     const cpuActor = activeUnit();
     // 開始カットインが終わるまでは、まだ誰の手番も始まっていない。
     // ここを通すと、カットインが出る前や明けた直後にCPUが撃ってしまう。
-    if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && cpuActor.grounded && !projectiles.length) {
+    if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && cpuActor.grounded && !projectiles.length && !barucopters.length) {
       if (cpuPhase === 'skip') {
         cpuThinkTimer -= dt;
         if (cpuThinkTimer <= 0) endTurn();
@@ -16611,7 +16807,7 @@
     // ターン解決(着弾+落下が収まったら手番交代)
     // pendingShotがある間はまだ弾が出ていないだけなので、ターンを終わらせてはいけない。
     // 着弾した瞬間に手番が変わると爆発や破片を見る間がないので、少し置いてから交代する。
-    if (awaitingResolve && !pendingShot && !projectiles.length && !groundFlames.length && units.every(u => u.grounded)) {
+    if (awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(u => u.grounded)) {
       turnSettle -= dt;
       if (turnSettle <= 0) {
         awaitingResolve = false;

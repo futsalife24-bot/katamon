@@ -206,6 +206,9 @@ const HOOK = `
       computeLaunchVelocity(dx, dy, CHARACTERS[key], !!useSpecial, !!useJump)
     ),
     projectileProfilesForTest: () => projectiles.map(p => ({
+      x: p.x,
+      y: p.y,
+      owner: p.owner,
       blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
       terrainBlastMul: p.terrainBlastMul,
       knockbackSpeed: p.knockbackSpeed,
@@ -217,6 +220,8 @@ const HOOK = `
       groundFlame: !!p.groundFlame,
       pierce: !!p.pierce,
       dSmash: !!p.dSmash,
+      barucopterMarker: !!p.barucopterMarker,
+      barucopterBullet: !!p.barucopterBullet,
       scorpionRail: !!p.scorpionRail,
       scorpionRailActive: !!p.scorpionRailActive,
       vx: p.vx,
@@ -226,6 +231,22 @@ const HOOK = `
       drainHeal: !!p.drainHeal,
       damageMul: p.damageMul
     })),
+    barucoptersForTest: () => typeof barucopters === 'undefined'
+      ? []
+      : barucopters.map(b => ({ ...b })),
+    startBarucopterForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p || typeof startBarucopterBarrage !== 'function') return null;
+      const started = startBarucopterBarrage(p, x, y);
+      if (started) projectiles.splice(index, 1);
+      return started ? { ...barucopters[barucopters.length - 1] } : null;
+    },
+    stepBarucoptersForTest: seconds => {
+      if (typeof stepBarucopters !== 'function') return false;
+      const steps = Math.ceil(Math.max(0, Number(seconds) || 0) / PHYSICS_DT);
+      for (let i = 0; i < steps; i++) stepBarucopters(PHYSICS_DT);
+      return true;
+    },
     dSmashConfigForTest: () => typeof D_SMASH_DRILL_BLASTS === 'undefined'
       ? null
       : {
@@ -331,7 +352,9 @@ const HOOK = `
       const p = projectiles[index];
       const target = unitById(unitId);
       if (!p || !target) return false;
-      if (typeof resolveProjectileUnitImpact === 'function') {
+      if (p.barucopterBullet && typeof resolveBarucopterBulletUnitImpact === 'function') {
+        resolveBarucopterBulletUnitImpact(p, target, p.x, p.y);
+      } else if (typeof resolveProjectileUnitImpact === 'function') {
         resolveProjectileUnitImpact(p, target, p.x, p.y);
       } else {
         explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound);
@@ -370,7 +393,10 @@ const HOOK = `
       updateFalling(dt, u);
       return { x: u.x, y: u.y, vy: u.vy, grounded: u.grounded, knockbackVx: u.knockbackVx || 0 };
     },
-    clearProjectilesForTest: () => { projectiles.length = 0; },
+    clearProjectilesForTest: () => {
+      projectiles.length = 0;
+      if (typeof barucopters !== 'undefined') barucopters.length = 0;
+    },
     deathGateTestX: () => {
       for (let x = Math.round(STAGE_W * 0.2); x <= Math.round(STAGE_W * 0.8); x += 12) {
         const y = groundYAt(x);
