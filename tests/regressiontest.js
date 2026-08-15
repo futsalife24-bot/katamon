@@ -2451,6 +2451,11 @@ kt.setLocalSeat('p1');
   kt.resetDrawnText();
   kt.render();
   const titleText = kt.drawnTextDetails();
+  const titleMenuTextSizes = titleText.filter(entry => ['チュートリアル', '演習', 'はじめての方へ', '条件を組んで開始', 'もう一度おさらい'].includes(entry.text));
+  check('タイトルメニューのチュートリアル・演習文字を読みやすい大きさにする',
+    titleMenuTextSizes.some(entry => /21px/.test(entry.font))
+      && titleMenuTextSizes.filter(entry => /px/.test(entry.font)).some(entry => /11px/.test(entry.font)),
+    JSON.stringify(titleMenuTextSizes));
   const tutorialLabel = titleText.find(entry => entry.text === 'チュートリアル');
   const freeLabel = titleText.find(entry => entry.text === '演習');
   const tutorialSub = titleText.find(entry => entry.text === 'もう一度おさらい');
