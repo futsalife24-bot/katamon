@@ -1353,10 +1353,10 @@ check('バルゲルカンの必殺は「バルコプター」のマーキング�
   JSON.stringify({ def: kt.character('barugerukan'), projectiles: barucopterMarkerProfiles }));
 const barucopterMark = { x: barucopterTarget.x, y: barucopterTarget.y };
 const barucopterStarted = kt.startBarucopterForTest(barucopterMarkerIndex, barucopterMark.x, barucopterMark.y);
-check('マーキング後は自キャラの真上へバルゲルカン仮画像のヘリが現れる',
+check('マーキング後は自キャラの真上450pxへバルコプターが現れる',
   barucopterStarted?.owner === barucopterOwner.id
     && Math.abs(barucopterStarted?.x - barucopterOwner.x) < 0.001
-    && barucopterStarted?.y === Math.max(54, barucopterOwner.y - 300)
+    && barucopterStarted?.y === Math.max(54, barucopterOwner.y - 450)
     && barucopterStarted?.targetX === barucopterMark.x
     && barucopterStarted?.targetY === barucopterMark.y,
   JSON.stringify({ owner: { x: barucopterOwner.x, y: barucopterOwner.y }, barrage: barucopterStarted }));
