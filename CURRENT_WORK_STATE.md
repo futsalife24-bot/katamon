@@ -3313,6 +3313,33 @@ GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 
 - ローカルHTTP（`http://127.0.0.1:4180/`）を実ブラウザで起動・開始演出まで確認。Console error/warn 0件。
 - `database.rules.json`は変更していないためFirebase Console反映は不要。
 
+## v206 毒針演出フリーズ修正（2026-08-15）
+
+### 何をしたか
+
+- スコーピオンレールの毒針演出が伸び始める描画時、存在しない`clamp()`を呼んでいたため、標準の`Math.max`/`Math.min`へ置き換えた。
+- 毒針を生成しただけではなく、実際に伸び始めた時点まで描画する回帰テストを追加した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v206-scorpion-spike-freeze`へ更新し、タイトルの更新履歴先頭へv206を追加した。
+
+### なぜそうしたか
+
+- v205では毒針が出る瞬間に`ReferenceError: clamp is not defined`となり、描画ループが止まって画面がフリーズしていたため。
+
+### やってはいけないこと
+
+- 毒針のダメージ、地形破壊、吹き飛ばし、状態異常、同期処理を変更しないこと。今回の修正は描画時の値の丸めだけに限定する。
+- 生成直後（高さ0）だけを検査して描画経路を通らないテストへ戻さないこと。少なくとも伸び始めた瞬間を描画して例外がないことを検査する。
+- 他キャラの必殺技、`database.rules.json`、中継仕様を変更しない。
+
+### 実測テスト数・確認
+
+- 新規の描画回帰テストは、修正前v205相当で`366 passed, 1 failed`となり、失敗理由が`clamp is not defined`であることを確認してから修正した。
+- 修正後の回帰はp1/e1ともに`367 passed, 0 failed`。
+- `npm.cmd test`はseat 20件×2、regression 367件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ranking 5件、Stage Studio 53件、合計 **1,484/1,484成功**。全スイートで件数出力を確認した。
+- loopbacktestの中継数は **38 / 64 / 83 / 61 / 48** で不変。描画専用の修正であり、物理・通信へは触れていない。
+- ローカルHTTP（`http://127.0.0.1:4206/`）＋実ブラウザでv206を起動し、Console error 0件を確認。`file://`は使っていない。ローカルworktreeにはPlaywright本体が無いためmobile-e2eはGitHub CIで確認する。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
 ## v205 スコーピオンレール命中時の毒針演出（2026-08-15）
 
 ### 何をしたか

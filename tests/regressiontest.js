@@ -1422,6 +1422,17 @@ check('スコーピオンレールのショックウェーブ命中時は下か�
     && kt.craters() === dreadSpikeCratersBefore
     && dreadSpikeVisualsAfter.scorpionRailSpikes === dreadSpikeVisualsBefore.scorpionRailSpikes + dreadSpikeConfig.count,
   JSON.stringify({ config: dreadSpikeConfig, hp: [dreadSpikeHpBefore, dreadSpikeTarget.hp], craters: [dreadSpikeCratersBefore, kt.craters()], visuals: [dreadSpikeVisualsBefore, dreadSpikeVisualsAfter] }));
+// v206: 実画面の描画まで通し、命中直後に例外でゲーム全体を止めない。
+let dreadSpikeDrawn = false;
+let dreadSpikeDrawError = '';
+try {
+  dreadSpikeDrawn = kt.drawScorpionRailImpactSpikesForTest();
+} catch (error) {
+  dreadSpikeDrawError = error?.message || String(error);
+}
+check('スコーピオンレールの毒針演出は描画時にも例外を出さない',
+  dreadSpikeDrawn && !dreadSpikeDrawError,
+  dreadSpikeDrawError || '描画できませんでした');
 const dreadVsSpecial = kt.vsSpecialTextForTest('doRednote');
 check('長い必殺技名も開始カットインで省略せず全文を表示する',
   dreadVsSpecial?.text === 'スコーピオンレール' && dreadVsSpecial?.fontSize >= 7,
