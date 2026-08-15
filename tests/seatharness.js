@@ -380,6 +380,12 @@ const HOOK = `
       }
       return true;
     },
+    resolveBarucopterBulletSurfaceImpactForTest: (index, x, y) => {
+      const p = projectiles[index];
+      if (!p || !p.barucopterBullet || typeof resolveBarucopterBulletSurfaceImpact !== 'function') return false;
+      resolveBarucopterBulletSurfaceImpact(p, x, y);
+      return true;
+    },
     impactVisualCountsForTest: () => ({
       explosions: particles.length,
       lightningRemnants: lightningBeams.length,
