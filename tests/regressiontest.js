@@ -357,6 +357,31 @@ for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
     kt.character(key).special);
 }
 
+// v208: キャラ選択の必殺技説明は雰囲気文ではなく、実際の性能を短く示す。
+const EXPECTED_SPECIAL_FLAVORS = {
+  kyoryu: '高威力・大爆風の砲弾を放つ',
+  medama: '命中相手を2手番、行動不能にする',
+  iwa: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
+  tori: '着弾から左右へ炎が広がり、6×3回ダメージ',
+  barugerukan: 'マーキング弾を放ち、着弾地点へ機銃掃射',
+  nisenmono: '高速の貫通光線で、遠距離を射抜く',
+  burumutan: '与えたダメージ分、自分のHPを回復',
+  sumoeru: '敵の近くで炸裂し、8方向へ中小弾を放つ',
+  doRednote: '着弾後、相手に向かって地雷針が追尾する',
+  mocchario: '大爆風のレーザー砲を発射',
+  mecha: '3発の高速弾を狭い扇状に連射',
+  akuma: '風と重力を無視して直進し、直接ダメージ',
+  jinba: '地面着弾後、中・小・小の連続爆発で掘進',
+  kishi: 'HPを15払って、超高威力の一撃',
+  neko: '大爆風で吹き飛ばし、次の手番をスキップ',
+  shinigami: '着弾地点の真下へ、縦穴を掘る'
+};
+for (const [key, flavor] of Object.entries(EXPECTED_SPECIAL_FLAVORS)) {
+  check(`${kt.character(key).name}の必殺技説明は性能を示す`,
+    kt.character(key).selectFlavor === flavor,
+    kt.character(key).selectFlavor);
+}
+
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
 // 別の種類として持たせないと、4体の顔ぶれを描き分けられない。
 check('VSカットインの状態を検査できる', typeof kt.matchupCutIn === 'function');
@@ -1322,7 +1347,7 @@ const barucopterStarted = kt.startBarucopterForTest(barucopterMarkerIndex, baruc
 check('マーキング後は自キャラの真上へバルゲルカン仮画像のヘリが現れる',
   barucopterStarted?.owner === barucopterOwner.id
     && Math.abs(barucopterStarted?.x - barucopterOwner.x) < 0.001
-    && barucopterStarted?.y < barucopterOwner.y
+    && barucopterStarted?.y === Math.max(54, barucopterOwner.y - 300)
     && barucopterStarted?.targetX === barucopterMark.x
     && barucopterStarted?.targetY === barucopterMark.y,
   JSON.stringify({ owner: { x: barucopterOwner.x, y: barucopterOwner.y }, barrage: barucopterStarted }));
@@ -1361,9 +1386,15 @@ if (barucopterBullets.length > 0) {
     craterDelta: kt.craters() - cratersBefore
   };
 }
-check('バルコプターの機銃1発は5ダメージで地形を破壊しない',
-  barucopterDamageResult?.damage === 5 && barucopterDamageResult?.craterDelta === 0,
-  JSON.stringify(barucopterDamageResult));
+const barucopterSurfaceCratersBefore = kt.craters();
+const barucopterSurfaceHit = kt.resolveBarucopterBulletSurfaceImpactForTest(1, barucopterTarget.x, barucopterTarget.y);
+const barucopterSurfaceCraterDelta = kt.craters() - barucopterSurfaceCratersBefore;
+check('バルコプターの機銃1発は3ダメージで、着弾地点を小さく削る',
+  barucopterDamageResult?.damage === 3
+    && barucopterDamageResult?.craterDelta === 0
+    && barucopterSurfaceHit === true
+    && barucopterSurfaceCraterDelta === 1,
+  JSON.stringify({ unit: barucopterDamageResult, surfaceCraterDelta: barucopterSurfaceCraterDelta }));
 kt.clearProjectilesForTest();
 
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
