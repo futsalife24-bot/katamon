@@ -441,10 +441,10 @@ function check(name, value) {
     CHARACTER_ASSET_PINS.every(pin => fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${pin.stem}.png`))));
   check('the Barucopter uses its dedicated helicopter art instead of the Barugerukan body art',
     fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', 'barugerukan-helicopter.png'))
-      && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=1';")
+      && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=2';")
       && /function getBarucopterImage\(\)[\s\S]*?BARUCOPTER_IMAGE_PATH/.test(htmlForAudio)
-      && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);/.test(htmlForAudio),
-    '専用ヘリ画像を遅延読込し、通常のバルゲルカン画像を流用しないこと');
+      && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 98;/.test(htmlForAudio),
+    '透過を直した専用ヘリ画像を遅延読込し、本体より少し大きく表示すること');
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
   check('the preload hints point at webp',
     ['loading-emblem', 'title-logo'].every(n =>

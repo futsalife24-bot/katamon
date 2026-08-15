@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v210-balcopter-helicopter-art';
+  const BUILD_ID = 'v211-balcopter-helicopter2-art';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v211', date: '2026/08/15', summary: 'バルコプターの透過ヘリ画像を差し替え' }),
     Object.freeze({ version: 'v210', date: '2026/08/15', summary: 'バルコプターを専用ヘリ画像へ差し替え' }),
     Object.freeze({ version: 'v209', date: '2026/08/15', summary: 'CPU連戦の相手・ステージを毎回ランダム化' }),
     Object.freeze({ version: 'v208', date: '2026/08/15', summary: 'バルコプター調整と必殺技説明を更新' }),
@@ -2836,8 +2837,8 @@
       onFailed: () => { characterImagesFailed++; }
     });
   }
-  // 1.65MBの支援機はタイトルのコア画像読込から外し、必殺技時だけ読む。
-  const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=1';
+  // 4.4MBの支援機はタイトルのコア画像読込から外し、必殺技時だけ読む。
+  const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=2';
   let barucopterImage = null;
   function getBarucopterImage() {
     if (barucopterImage) return barucopterImage;
@@ -12628,7 +12629,8 @@
       ctx.shadowBlur = 12;
       if (faceLeft) ctx.scale(-1, 1);
       if (imgReady) {
-        const h = 86;
+        // 通常の本体より少し大きく、上空支援機として読み取れる大きさにする。
+        const h = 98;
         const w = h * (img.naturalWidth / img.naturalHeight);
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
       } else {
