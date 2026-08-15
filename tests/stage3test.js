@@ -314,9 +314,22 @@ function check(name, value) {
       && swText.includes("'./assets/battle-start-logo.png'")
       && readRepoFile('index.html').includes('battleStartLogoImage, 608, 1776, 2880, 1608'),
     'BATTLE START logo asset wiring is incomplete');
+  check('battle-start logo video is preloaded, cached, and drawn above the old logo position',
+    require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.mp4'))
+      && readRepoFile('index.html').includes("assets/battle-start-logo.mp4")
+      && swText.includes("'./assets/battle-start-logo.mp4'")
+      && /const BATTLE_START_LOGO_Y = 180;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideoCanvas,\s*\n?\s*VW \/ 2 - logoW \/ 2,\s*BATTLE_START_LOGO_Y/.test(readRepoFile('index.html')),
+    'BATTLE START logo video wiring or upward position is incomplete');
+  check('battle-start video removes its opaque black background before canvas drawing',
+    /battleStartLogoVideoCanvas[\s\S]{0,500}getImageData\([\s\S]{0,500}putImageData\(/.test(readRepoFile('index.html')),
+    'BATTLE START video is drawn without black-background removal');
   check('VS plate drawing clips the asset to its rounded shell shape',
     /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
     'VS plate image is not clipped before drawing');
+  check('VS plate flash does not paint a transient rectangular color block',
+    !/if \(flash > 0\) \{[\s\S]{0,500}ctx\.fill\(\);[\s\S]{0,80}ctx\.restore\(\);\s*\}\s*ctx\.restore\(\);/.test(readRepoFile('index.html')),
+    'VS plate flash still uses a full-plate fill');
 
   // 音源はURL末尾の ?v=N がキャッシュの鍵になる。同じURLのまま中身を差し替えると、
   // ブラウザは保存済みの古い曲を鳴らし続ける。v98で bonus-bgm-2 をCeltic版へ替えた際に

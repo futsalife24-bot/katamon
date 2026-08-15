@@ -1,5 +1,32 @@
 # カタモン 現在作業状態
 
+## v2.0.7 BATTLE START video and flash cleanup (2026-08-16)
+
+### What changed
+
+- Added the user-provided Google Drive asset `assets/battle-start-logo.mp4` and use it for normal battle-start cut-ins.
+- Removed the MP4's opaque black background per frame before drawing, so the video itself cannot create a rectangular black box.
+- Moved the BATTLE START logo center from virtual Y=250 to Y=180; tutorial keeps the standard text.
+- Removed the transient full-plate flash fill that was painting a rectangular color block around the cannon shells.
+- Kept the PNG as a safe fallback, and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.7-battle-start-video`.
+
+### Why
+
+- Replace the static logo with the requested video version and remove the brief colored rectangle visible during the VS impact flash.
+
+### Do not do
+
+- Do not use the BATTLE START video for the tutorial heading.
+- Do not restore a full `pw`/`ph` canvas fill inside `drawVsPlate`; it recreates the transient rectangular frame.
+- Do not change VS timing, layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- `npm.cmd run test:stage3`: 441/441 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- New regression checks: video asset wiring/upward position, opaque-background removal, and no transient VS plate fill all passed.
+- Browser visual check on a local HTTP server rooted at this worktree passed; the logo was visible above the old position with no black rectangle. `file://` remains prohibited.
+
 ## v2.0.6 Battle Start visual assets (2026-08-16)
 
 ### What changed
