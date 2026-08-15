@@ -123,6 +123,27 @@ const HOOK = `
     }),
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
+    // v209: CPU BATTLE の連戦で、相手とステージ種別を直前から必ず引き直す。
+    // 乱数を0へ固定して、旧実装でも例外で止まらず「同じまま」を検出できるようにする。
+    cpuBattleRematchForTest: () => {
+      if (typeof prepareNextCpuBattleRound !== 'function') return null;
+      const savedRandom = Math.random;
+      try {
+        Math.random = () => 0;
+        online = null;
+        battleMode = 'normal';
+        winStreak = 0;
+        selectedCustomAdapter = null;
+        setMatchFormat('1v1');
+        player.character = 'kyoryu';
+        cpu.character = 'kyoryu';
+        newTerrain('plateauLeft');
+        resetMatch(true);
+        return { cpu: cpu.character, pattern: currentPattern };
+      } finally {
+        Math.random = savedRandom;
+      }
+    },
     setTerrain: (pattern) => { newTerrain(pattern); },
     setFlatTerrainForTest: (surface = 420) => {
       const y = Math.max(0, Math.min(TERRAIN_BOTTOM_Y - 60, Number(surface)));

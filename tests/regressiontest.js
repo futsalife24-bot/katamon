@@ -32,6 +32,15 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
 
+// v209: CPU BATTLEの「つぎのバトルへ」は、同じ相手・ステージに張り付かない。
+// 乱数を固定しても直前の候補を外すため、旧実装なら実際に失敗する。
+{
+  const rematch = kt.cpuBattleRematchForTest();
+  check('CPU BATTLE連戦は相手とステージ種別を直前から引き直す',
+    !!rematch && rematch.cpu !== 'kyoryu' && rematch.pattern !== 'plateauLeft',
+    JSON.stringify(rematch));
+}
+
 // v171: 上端にあった横長の中断再開ボタンを出撃ギアの下へ移し、
 // 空いた場所では「カタモンを選択」を主役として見せる。
 {
