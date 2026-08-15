@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.3-update-history-touch-start';
+const CACHE_VERSION = 'katamon-pwa-v2.0.4-update-history-touch-right';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

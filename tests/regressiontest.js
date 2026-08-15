@@ -1629,6 +1629,16 @@ check('更新履歴の下段カード付近から指を始めてもスクロー�
   lowerEdgeScrolled.modal.scroll > lowerEdgeStartScroll,
   JSON.stringify({ lowerEdgeY, modal: lowerEdgeScrolled.modal }));
 touchUp(lowerEdgeTouchId, scrolledUpdateHistory.modal.x, lowerEdgeY - 120);
+const rightStartScroll = kt.titleUpdateHistoryInfo().modal.scroll;
+const rightStartX = scrolledUpdateHistory.modal.contentViewport.x + scrolledUpdateHistory.modal.contentViewport.w - 20;
+const rightStartY = scrolledUpdateHistory.modal.contentViewport.top + 100;
+const rightTouchId = touchDown(rightStartX, rightStartY);
+touchMoveWindow(rightTouchId, rightStartX, rightStartY - 120);
+const rightScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴の右半分から指を始めてもスクロールを掴める',
+  rightScrolled.modal.scroll > rightStartScroll,
+  JSON.stringify({ rightStartX, rightStartY, modal: rightScrolled.modal }));
+touchUp(rightTouchId, rightStartX, rightStartY - 120);
 if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
 check('更新履歴は閉じるボタンでタイトルへ戻る',
   openedUpdateHistory.open === true
