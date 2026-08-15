@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v214-balcopter-owner-relative-altitude';
+const CACHE_VERSION = 'katamon-pwa-v2.0.1-update-history-scroll';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

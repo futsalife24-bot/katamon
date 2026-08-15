@@ -828,9 +828,17 @@ const HOOK = `
       open: typeof updateHistoryOpen === 'undefined' ? false : updateHistoryOpen,
       update: { ...titleUpdateBtn },
       panel: typeof titleUpdateHistoryPanel === 'undefined' ? null : { ...titleUpdateHistoryPanel },
-      modal: typeof titleUpdateHistoryModal === 'undefined' ? null : { ...titleUpdateHistoryModal },
+      modal: typeof titleUpdateHistoryModal === 'undefined' ? null : {
+        ...titleUpdateHistoryModal,
+        scroll: typeof updateHistoryScrollY === 'undefined' ? 0 : updateHistoryScrollY,
+        maxScroll: typeof updateHistoryMaxScroll === 'undefined' ? 0 : updateHistoryMaxScroll,
+        contentViewport: typeof updateHistoryContentViewport === 'function' ? updateHistoryContentViewport() : null
+      },
       close: typeof titleUpdateHistoryCloseBtn === 'undefined' ? null : { ...titleUpdateHistoryCloseBtn }
     }),
+    scrollUpdateHistoryForTest: (delta) => {
+      if (typeof updateHistoryScrollBy === 'function') updateHistoryScrollBy(delta);
+    },
     bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
     bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),

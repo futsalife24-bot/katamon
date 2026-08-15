@@ -624,10 +624,12 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v214-balcopter-owner-relative-altitude';
+  const BUILD_ID = 'v2.0.1-update-history-scroll';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.1', date: '2026/08/15', summary: '更新履歴を枠内スクロールへ修正' }),
+    Object.freeze({ version: 'v2.0.0', date: '2026/08/15', summary: 'SemVer形式の版管理へ移行' }),
     Object.freeze({ version: 'v214', date: '2026/08/15', summary: 'バルコプターを自キャラ基準の高度へ修正' }),
     Object.freeze({ version: 'v213', date: '2026/08/15', summary: 'バルコプターの出現高度を1.5倍へ上昇' }),
     Object.freeze({ version: 'v212', date: '2026/08/15', summary: 'バルコプターを3倍サイズへ拡大' }),
@@ -4666,6 +4668,11 @@
   const titleUpdateHistoryModal = { x: VW / 2, y: VH / 2, w: 540, h: 560 };
   const titleUpdateHistoryCloseBtn = { x: VW / 2, y: VH / 2 + 235, w: 200, h: 46 };
   let updateHistoryOpen = false;
+  let updateHistoryScrollY = 0;
+  let updateHistoryScrollStartY = 0;
+  let updateHistoryScrollStartOffset = 0;
+  let updateHistoryScrollTravel = 0;
+  let updateHistoryMaxScroll = 0;
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
   let safeUpdateReloadStarted = false;
@@ -9606,8 +9613,35 @@
     ctx.restore();
   }
 
+  function updateHistoryContentViewport() {
+    const top = titleUpdateHistoryModal.y - titleUpdateHistoryModal.h / 2 + 122;
+    const bottom = titleUpdateHistoryModal.y + titleUpdateHistoryModal.h / 2 - 76;
+    return {
+      x: titleUpdateHistoryModal.x - titleUpdateHistoryModal.w / 2 + 24,
+      y: top,
+      w: titleUpdateHistoryModal.w - 48,
+      h: bottom - top,
+      top,
+      bottom
+    };
+  }
+
+  function updateHistoryContentHeight() {
+    return Math.max(0, UPDATE_HISTORY.length * 64 - 12);
+  }
+
+  function updateHistoryScrollBy(delta) {
+    const viewport = updateHistoryContentViewport();
+    updateHistoryMaxScroll = Math.max(0, updateHistoryContentHeight() - viewport.h);
+    updateHistoryScrollY = Math.max(0, Math.min(updateHistoryMaxScroll, updateHistoryScrollY + delta));
+  }
+
   function drawUpdateHistoryModal() {
     if (!updateHistoryOpen) return;
+
+    const viewport = updateHistoryContentViewport();
+    updateHistoryMaxScroll = Math.max(0, updateHistoryContentHeight() - viewport.h);
+    updateHistoryScrollY = Math.max(0, Math.min(updateHistoryMaxScroll, updateHistoryScrollY));
 
     ctx.save();
     ctx.fillStyle = 'rgba(2, 7, 11, 0.82)';
@@ -9628,8 +9662,13 @@
       font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(viewport.x, viewport.y, viewport.w, viewport.h);
+    ctx.clip();
+    ctx.translate(0, -updateHistoryScrollY);
     UPDATE_HISTORY.forEach((entry, index) => {
-      const y = VH / 2 - 160 + index * 64;
+      const y = viewport.top + 26 + index * 64;
       drawIronPlate(VW / 2, y, 452, 52, {
         cut: 9,
         lineWidth: index === 0 ? 2 : 1.2,
@@ -9646,6 +9685,7 @@
         color: UI.parchment, lineWidth: 3
       });
     });
+    ctx.restore();
 
     drawIronPlate(
       titleUpdateHistoryCloseBtn.x,
@@ -15552,7 +15592,18 @@
 
     // 更新履歴を開いている間は、背面のタイトルボタンやサウンド設定へ入力を通さない。
     if (updateHistoryOpen) {
-      if (hitRect(p0, titleUpdateHistoryCloseBtn) || !hitRect(p0, titleUpdateHistoryModal)) {
+      const historyViewport = updateHistoryContentViewport();
+      if (hitRect(p0, titleUpdateHistoryCloseBtn)) {
+        updateHistoryOpen = false;
+        playUiSound();
+      } else if (hitRect(p0, historyViewport)) {
+        updateHistoryScrollStartY = p0.y;
+        updateHistoryScrollStartOffset = updateHistoryScrollY;
+        updateHistoryScrollTravel = 0;
+        inputMode = 'updateHistoryScroll';
+        inputPointerId = e.pointerId;
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* pointer capture is optional */ }
+      } else if (!hitRect(p0, titleUpdateHistoryModal)) {
         updateHistoryOpen = false;
         playUiSound();
       }
@@ -15631,6 +15682,8 @@
         forceGameUpdate();
       } else if (hitRect(p0, titleUpdateHistoryPanel)) {
         updateHistoryOpen = true;
+        updateHistoryScrollY = 0;
+        updateHistoryScrollBy(0);
         playUiSound();
       }
       return;
@@ -15896,6 +15949,12 @@
       setCameraZoomFromSlider(p);
       return;
     }
+    if (inputMode === 'updateHistoryScroll') {
+      updateHistoryScrollTravel = Math.abs(p.y - updateHistoryScrollStartY);
+      updateHistoryScrollY = updateHistoryScrollStartOffset + (updateHistoryScrollStartY - p.y);
+      updateHistoryScrollBy(0);
+      return;
+    }
     if (inputMode === 'selectWheel' && gamePhase === 'select') {
       const dy = p.y - selectWheelLastY;
       const elapsed = Math.max(8, e.timeStamp - selectWheelLastTime) / 1000;
@@ -15918,6 +15977,11 @@
 
   function onPointerUp(e) {
     if (e.pointerType === 'touch') activeTouchPoints.delete(e.pointerId);
+    if (inputMode === 'updateHistoryScroll' && e.pointerId === inputPointerId) {
+      inputMode = null;
+      inputPointerId = null;
+      return;
+    }
     if (inputMode === 'volumeSlider' && e.pointerId === inputPointerId) {
       const key = volumeDragKey;
       inputMode = null;
@@ -16011,6 +16075,11 @@
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('wheel', (e) => {
+    if (updateHistoryOpen) {
+      e.preventDefault();
+      updateHistoryScrollBy(e.deltaY);
+      return;
+    }
     if (gamePhase !== 'select') return;
     e.preventDefault();
     selectWheelDragging = false;
