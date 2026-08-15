@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v202-scorpion-target-direction';
+  const BUILD_ID = 'v203-b-impact-balance';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v203', date: '2026/08/15', summary: 'Bインパクトの破壊範囲を調整' }),
     Object.freeze({ version: 'v202', date: '2026/08/15', summary: '衝撃波が近い相手へ進行' }),
     Object.freeze({ version: 'v201', date: '2026/08/15', summary: '過去の更新履歴を一覧表示' }),
     Object.freeze({ version: 'v200', date: '2026/08/15', summary: 'スコーピオンレールが地形を走破' }),
@@ -1492,8 +1493,7 @@
   // 闘技場(tieredBasin)は元からこの作りで、標準時の外壁の底625・棚の底387/468/549はすべてこの上。
   // 大型時は arenaScaleY() で960高へ同比率に広げるため、同じ余白比率を保ったまま死線より上で完結する。
   // GROUND_MAX_Y との差が床の最小の厚み(636-516=120px)。共通化した通常弾のクレーター半径は
-  // 44pxなので1発では貫通しない。岩の必殺だけは154.4pxで1発で抜ける
-  // (「Bインパクト」という技の役割どおりの挙動として意図的に許容する)。
+  // 44pxなので1発では貫通しない。Bインパクトもv203から66pxへ抑え、1発で床を消し飛ばさない。
   let TERRAIN_BOTTOM_Y = DEAD_LINE_Y;
 
   // ===== ステージの見た目テーマ(空・地形・草・遠景の配色セット。試合ごとにランダムで選ぶ) =====
@@ -3055,14 +3055,14 @@
   //   team    … 陣営。勝敗判定・味方判定はすべてこれで行う
   //   control … 'local'(この端末の操作) / 'cpu'(AI) / 将来 'remote'(相手端末)
   const player = {
-    x: STAGE_W * 0.15, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    x: STAGE_W * 0.15, y: 0, vy: 0, knockbackVx: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#4fc3f7', label: 'YOU',
     id: 'p1', team: 'player', control: 'local',
     character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   const cpu = {
-    x: STAGE_W * 0.85, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    x: STAGE_W * 0.85, y: 0, vy: 0, knockbackVx: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ff6b6b', label: 'CPU',
     id: 'e1', team: 'cpu', control: 'cpu',
@@ -3070,14 +3070,14 @@
   };
   // 2vs2の3人目・4人目。1vs1の間は units へ入れないので、既存の進行に一切影響しない。
   const ally2 = {
-    x: STAGE_W * 0.3, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    x: STAGE_W * 0.3, y: 0, vy: 0, knockbackVx: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#8fd8ff', label: 'ALLY',
     id: 'p2', team: 'player', control: 'cpu',
     character: null, specialCharge: 0, moveLockTurns: 0, actionSkipTurns: 0, jumpAvailable: true
   };
   const foe2 = {
-    x: STAGE_W * 0.7, y: 0, vy: 0, grounded: true, fallStartY: 0,
+    x: STAGE_W * 0.7, y: 0, vy: 0, knockbackVx: 0, grounded: true, fallStartY: 0,
     hp: MAX_HP, maxHp: MAX_HP, fuel: FUEL_MAX, fuelMax: FUEL_MAX,
     color: '#ffa07a', label: 'CPU2',
     id: 'e2', team: 'cpu', control: 'cpu',
@@ -3300,6 +3300,7 @@
   function initUnitOnGround(u) {
     u.y = groundYAt(u.x) - UNIT_RADIUS;
     u.vy = 0;
+    u.knockbackVx = 0;
     u.grounded = true;
     u.fallStartY = u.y;
   }
@@ -3402,6 +3403,8 @@
     guideMul: 1,
     tBias: 1
   });
+  const B_IMPACT_TERRAIN_BLAST_MUL = 1.5;
+  const B_IMPACT_KNOCKBACK_SPEED = 80;
 
   function shotPhysicsProfile(def, useSpecial, useJump) {
     if (!useSpecial && !useJump) return NORMAL_SHOT_PROFILE;
@@ -3426,7 +3429,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,windMul,gravityMul,pierce,dSmash,scorpionRail,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,dSmash,scorpionRail,emp,firework,directHitOnly,normalImpactSound}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
@@ -3437,6 +3440,8 @@
       x: anchor.x, y: anchor.y, vx, vy, owner, radius: 5,
       originX: anchor.x, originY: anchor.y,   // 電撃ビームを発射点から伸ばすのに使う
       blastMul: opts.blastMul || 1,
+      terrainBlastMul: opts.terrainBlastMul,
+      knockbackSpeed: opts.knockbackSpeed || 0,
       windMul,
       gravityMul,
       // 花火の接近信管も固定刻みの物理内で判定し、両端末で一致させる。
@@ -3934,8 +3939,13 @@
         noTerrain: true
       });
     } else if (activateSpecial && def.key === 'iwa') {
-      // ゴーロッカの必殺: Bインパクト(巨大クレーター)
-      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 2.6, windMul: def.windMul });
+      // ゴーロッカの必殺: 爆風の威力は保ち、地形破壊だけ通常弾の1.5倍へ抑えて軽く吹き飛ばす。
+      fireProjectile(owner, anchor, vx0, vy0, {
+        blastMul: def.blastMul * 2.6,
+        terrainBlastMul: B_IMPACT_TERRAIN_BLAST_MUL,
+        knockbackSpeed: B_IMPACT_KNOCKBACK_SPEED,
+        windMul: def.windMul
+      });
     } else if (activateSpecial && def.key === 'tori') {
       // フェニーチェの必殺: 本体弾は通常弾と同じ物理。着弾後だけ地面沿いの炎へ変わる。
       fireProjectile(owner, anchor, vx0, vy0, {
@@ -5615,6 +5625,7 @@
       const nearbyGround = walkableGroundYAt(u.x, savedY + UNIT_RADIUS);
       u.y = (nearbyGround === null ? groundYAt(u.x) : nearbyGround) - UNIT_RADIUS;
       u.vy = 0;
+      u.knockbackVx = 0;
       u.grounded = true;
       u.fallStartY = u.y;
     }
@@ -10718,13 +10729,27 @@
     }
   }
 
-  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false) {
+  function applyExplosionKnockback(u, blastX, speed, owner) {
+    if (!u || u.hp <= 0 || !(speed > 0)) return;
+    const ownerUnit = unitById(owner);
+    const dx = u.x - blastX;
+    const direction = Math.abs(dx) > 0.5
+      ? Math.sign(dx)
+      : (ownerUnit && ownerUnit.x > u.x ? -1 : 1);
+    u.knockbackVx = direction * speed;
+    u.vy = Math.min(Number.isFinite(u.vy) ? u.vy : 0, -speed * 1.1);
+    u.grounded = false;
+    u.fallStartY = u.y;
+  }
+
+  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0) {
     blastMul = blastMul || 1;
+    terrainBlastMul = terrainBlastMul || blastMul;
     const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
     const ownerTeam = teamOfOwner(owner);
     let drainedDamage = 0;
     if (remoteShot) noteRemoteDamageBaseline();
-    carveCrater(x, y, 44 * blastMul);
+    carveCrater(x, y, 44 * terrainBlastMul);
     spawnExplosion(x, y, blastMul);
     triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
     if (normalImpactSound) playNormalImpactSound();
@@ -10742,6 +10767,7 @@
         if (drainHeal && ownerTeam !== null && u.team !== ownerTeam) drainedDamage += hpBefore - u.hp;
         if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
         creditDamage(owner, u, actualDamage);
+        applyExplosionKnockback(u, x, knockbackSpeed, owner);
       }
     }
     if (drainHeal && drainedDamage > 0) {
@@ -10753,6 +10779,10 @@
       }
     }
     checkMatchEnd();
+  }
+
+  function explodeProjectileAt(p, x, y) {
+    explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal, p.terrainBlastMul, p.knockbackSpeed);
   }
 
   function estimateFlightTime(vx0, vy0, gravity = GRAVITY) {
@@ -11101,6 +11131,7 @@
     if (u.hp <= 0 || u.y + UNIT_RADIUS < DEAD_LINE_Y) return false;
     u.hp = 0;
     u.vy = 0;
+    u.knockbackVx = 0;
     u.grounded = true;
     playDeadLineSound();
     triggerShake(5, 0.18);
@@ -11112,6 +11143,7 @@
     // 地面が残っていても、車体下端がデッドラインへ触れた時点で敗北。
     if (eliminateAtDeadLine(u)) return;
     if (u.grounded) {
+      u.knockbackVx = 0;
       const nearbyGround = walkableGroundYAt(u.x, u.y + UNIT_RADIUS);
       const groundY = (nearbyGround === null ? u.y + UNIT_RADIUS : nearbyGround) - UNIT_RADIUS;
       if (groundY > u.y + 2) {
@@ -11123,6 +11155,16 @@
         u.y = groundY; // 地形に追従(登り降りはそのまま歩ける)
       }
     } else {
+      if (Math.abs(u.knockbackVx || 0) > 0.01) {
+        const direction = Math.sign(u.knockbackVx);
+        const nextX = Math.min(STAGE_W - UNIT_RADIUS, Math.max(UNIT_RADIUS, u.x + u.knockbackVx * dt));
+        const frontX = nextX + direction * UNIT_RADIUS * 0.7;
+        const blocked = isSolidAt(nextX, u.y)
+          || isSolidAt(frontX, u.y)
+          || isSolidAt(frontX, u.y - UNIT_RADIUS * 0.55);
+        if (blocked) u.knockbackVx = 0;
+        else u.x = nextX;
+      }
       const previousFeetY = u.y + UNIT_RADIUS;
       u.vy += GRAVITY * dt;
       u.y += u.vy * dt;
@@ -11133,6 +11175,7 @@
         const fallDist = g2 - u.fallStartY;
         u.y = g2;
         u.vy = 0;
+        u.knockbackVx = 0;
         u.grounded = true;
         if (fallDist > 15) {
           triggerShake(3, 0.1);
@@ -15740,6 +15783,7 @@
         const customGround = walkableGroundYAt(u.x, customSpawn.y + UNIT_RADIUS);
         u.y = (customGround === null ? customSpawn.y + UNIT_RADIUS : customGround) - UNIT_RADIUS;
         u.vy = 0;
+        u.knockbackVx = 0;
         u.grounded = true;
         u.fallStartY = u.y;
         u.facingLeft = spriteFlipForFacing(u, customSpawn.direction === 'left');
@@ -16412,7 +16456,7 @@
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
             } else if (p.firework) {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+              explodeProjectileAt(p, p.x, p.y);
               spawnFireworkBurst(p);
             } else if (p.scorpionRail) {
               resolveScorpionRailImpact(p, u);
@@ -16421,7 +16465,7 @@
             } else if (p.directHitOnly) {
               resolveProjectileUnitImpact(p, u);
             } else {
-              explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+              explodeProjectileAt(p, p.x, p.y);
             }
             if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
@@ -16444,14 +16488,14 @@
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         } else if (p.firework) {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+          explodeProjectileAt(p, obstacleHit.x, obstacleHit.y);
           spawnFireworkBurst(p);
         } else if (p.groundFlame) {
           resolveGroundFlameImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.directHitOnly) {
           resolveProjectileSurfaceImpact(p);
         } else {
-          explodeAt(obstacleHit.x, obstacleHit.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+          explodeProjectileAt(p, obstacleHit.x, obstacleHit.y);
         }
         if (!p.directHitOnly && !p.groundFlame) triggerShake(2.5, 0.1);
         teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
@@ -16474,11 +16518,11 @@
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
-          explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+          explodeProjectileAt(p, p.x, p.y);
           spawnFireworkBurst(p);
         } else if (p.groundFlame) resolveGroundFlameImpact(p, p.x, p.y);
         else if (p.directHitOnly) resolveProjectileSurfaceImpact(p);
-        else explodeAt(p.x, p.y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+        else explodeProjectileAt(p, p.x, p.y);
         if (p.lightning && !p.directHitOnly) spawnLightningRemnant(p);
         teleportOwnerToImpact(p, p.x, p.y);
         projectiles.splice(i, 1);

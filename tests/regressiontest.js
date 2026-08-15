@@ -93,6 +93,38 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     firedProfiles.every(p => p.blastMul === 1 && p.windMul === 1 && p.gravityMul === 1),
     JSON.stringify(firedProfiles));
 
+  // v203: Bインパクトは爆風の威力を残しつつ、地形だけ通常弾の1.5倍に抑える。
+  // 命中者は大きく位置を飛ばさず、短い浮き上がりと横移動で「少し吹き飛ぶ」。
+  kt.setCharactersForTest('iwa', 'iwa');
+  const bImpactTarget = kt.unitById('e1');
+  let bImpactGroundX = kt.stageW() * 0.5;
+  for (let x = kt.stageW() * 0.2; x <= kt.stageW() * 0.8; x += 12) {
+    if (kt.groundYAt(x) < kt.deadLineY() - 80) { bImpactGroundX = x; break; }
+  }
+  kt.placeOnGround(bImpactTarget.id, bImpactGroundX);
+  kt.setUnitHpForTest(bImpactTarget.id, bImpactTarget.maxHp);
+  kt.clearProjectilesForTest();
+  const bImpactIndex = kt.fireSpecialImmediateForUnitForTest('p1', 'iwa', 260, -180);
+  const bImpactProfile = kt.projectileProfilesForTest()[bImpactIndex];
+  const bImpactCratersBefore = kt.craters();
+  const bImpactTargetBefore = { x: bImpactTarget.x, y: bImpactTarget.y };
+  // 真っさらなCIでも先に倒れず、「生存中の命中者が少し飛ぶ」を測れる距離へ固定する。
+  kt.detonateProjectileForTest(bImpactIndex, bImpactTarget.x - 100, bImpactTarget.y);
+  const bImpactCrater = kt.craterHistory()[bImpactCratersBefore];
+  check('Bインパクトの地形破壊半径は通常弾44pxの1.5倍',
+    bImpactProfile?.terrainBlastMul === 1.5 && Math.abs((bImpactCrater?.r || 0) - 66) < 0.0001,
+    JSON.stringify({ profile: bImpactProfile, crater: bImpactCrater }));
+  const bImpactAfterHit = kt.unitById(bImpactTarget.id);
+  const bImpactAfterStep = kt.updateFallingForTest(bImpactTarget.id, 0.1);
+  check('Bインパクト命中者は少しだけ上方かつ爆心から外側へ吹き飛ぶ',
+    bImpactAfterHit.grounded === false && bImpactAfterHit.vy < 0
+      && bImpactAfterStep.x > bImpactTargetBefore.x
+      && bImpactAfterStep.x - bImpactTargetBefore.x <= 20,
+    JSON.stringify({ before: bImpactTargetBefore, hit: bImpactAfterHit, step: bImpactAfterStep }));
+  kt.placeOnGround(bImpactTarget.id, bImpactTargetBefore.x);
+  kt.setCharactersForTest('kyoryu', 'kyoryu');
+  kt.clearProjectilesForTest();
+
   const characterProfilesStay = kt.chars().every(key => {
     const def = kt.character(key);
     const special = kt.shotPhysicsProfileForTest(key, true, false);

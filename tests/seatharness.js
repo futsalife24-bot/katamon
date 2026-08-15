@@ -207,6 +207,8 @@ const HOOK = `
     ),
     projectileProfilesForTest: () => projectiles.map(p => ({
       blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
+      terrainBlastMul: p.terrainBlastMul,
+      knockbackSpeed: p.knockbackSpeed,
       normalImpactSound: !!p.normalImpactSound,
       noTerrain: !!p.noTerrain,
       ignoreObstacles: !!p.ignoreObstacles,
@@ -311,6 +313,13 @@ const HOOK = `
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
       return projectiles.length - 1;
     },
+    fireSpecialImmediateForUnitForTest: (id, key, vx0, vy0) => {
+      const u = unitById(id);
+      if (!u) return -1;
+      applyCharacter(u, key);
+      launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
+      return projectiles.length - 1;
+    },
     fireSpecialWithHpForTest: (key, hp, vx0, vy0) => {
       const u = localUnit();
       applyCharacter(u, key);
@@ -352,8 +361,14 @@ const HOOK = `
     detonateProjectileForTest: (index, x, y) => {
       const p = projectiles[index];
       if (!p) return false;
-      explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal);
+      explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal, p.terrainBlastMul, p.knockbackSpeed);
       return true;
+    },
+    updateFallingForTest: (id, dt) => {
+      const u = unitById(id);
+      if (!u) return null;
+      updateFalling(dt, u);
+      return { x: u.x, y: u.y, vy: u.vy, grounded: u.grounded, knockbackVx: u.knockbackVx || 0 };
     },
     clearProjectilesForTest: () => { projectiles.length = 0; },
     deathGateTestX: () => {
