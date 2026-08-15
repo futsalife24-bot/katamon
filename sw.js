@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v212-balcopter-triple-size';
+const CACHE_VERSION = 'katamon-pwa-v213-balcopter-higher-altitude';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
