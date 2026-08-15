@@ -624,11 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.2-update-history-touch-scroll';
+  const BUILD_ID = 'v2.0.3-update-history-touch-start';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    Object.freeze({ version: 'v2.0.2', date: '2026/08/15', summary: '更新履歴の指スクロールを安定化' }),
+    Object.freeze({ version: 'v2.0.3', date: '2026/08/15', summary: '更新履歴の下段からの指スクロールを修正' }),
     Object.freeze({ version: 'v2.0.0', date: '2026/08/15', summary: 'SemVer形式の版管理へ移行' }),
     Object.freeze({ version: 'v214', date: '2026/08/15', summary: 'バルコプターを自キャラ基準の高度へ修正' }),
     Object.freeze({ version: 'v213', date: '2026/08/15', summary: 'バルコプターの出現高度を1.5倍へ上昇' }),
@@ -9626,6 +9626,21 @@
     };
   }
 
+  // 描画クリップの下端と閉じるボタンの間に、端末倍率による数pxのズレが出ても
+  // 下段カードから指を始められるよう、タッチ開始だけは閉じるボタンの直上まで受ける。
+  function updateHistoryTouchViewport() {
+    const viewport = updateHistoryContentViewport();
+    const closeTop = titleUpdateHistoryCloseBtn.y - titleUpdateHistoryCloseBtn.h / 2;
+    return {
+      x: viewport.x,
+      y: (viewport.y + closeTop) / 2,
+      w: viewport.w,
+      h: Math.max(0, closeTop - viewport.y),
+      top: viewport.y,
+      bottom: closeTop
+    };
+  }
+
   function updateHistoryContentHeight() {
     return Math.max(0, UPDATE_HISTORY.length * 64 - 12);
   }
@@ -15593,10 +15608,11 @@
     // 更新履歴を開いている間は、背面のタイトルボタンやサウンド設定へ入力を通さない。
     if (updateHistoryOpen) {
       const historyViewport = updateHistoryContentViewport();
+      const historyTouchViewport = updateHistoryTouchViewport();
       if (hitRect(p0, titleUpdateHistoryCloseBtn)) {
         updateHistoryOpen = false;
         playUiSound();
-      } else if (hitRect(p0, historyViewport)) {
+      } else if (hitRect(p0, historyTouchViewport)) {
         updateHistoryScrollStartY = p0.y;
         updateHistoryScrollStartOffset = updateHistoryScrollY;
         updateHistoryScrollTravel = 0;
