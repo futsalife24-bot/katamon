@@ -1572,7 +1572,7 @@ check('更新履歴は最新版ボタンの横に収まり、操作領域と重�
 check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
   updateHistoryInfo.entries.length >= 4
     && updateHistoryInfo.entries[0]?.version === updateHistoryInfo.history?.version
-    && updateHistoryInfo.entries.every(entry => /^v\d+$/.test(entry.version)
+    && updateHistoryInfo.entries.every(entry => /^v\d+(?:\.\d+){0,2}$/.test(entry.version)
       && /^\d{4}\/\d{2}\/\d{2}$/.test(entry.date) && entry.summary.length > 0)
     && updateHistoryInfo.entries.some(entry => entry.version === 'v200')
     && updateHistoryInfo.entries.some(entry => entry.version === 'v199'),
@@ -1585,6 +1585,21 @@ check('タイトルの更新履歴をタップすると過去版一覧が開く'
     && !!openedUpdateHistory.modal
     && !!openedUpdateHistory.close,
   JSON.stringify(openedUpdateHistory));
+check('更新履歴の内容はモーダル内にクリップされ、閉じるボタンの外へ出ない',
+  !!openedUpdateHistory.modal
+    && openedUpdateHistory.modal.contentViewport
+    && openedUpdateHistory.modal.contentViewport.bottom < openedUpdateHistory.close.y
+    && openedUpdateHistory.modal.contentViewport.top > openedUpdateHistory.modal.y - openedUpdateHistory.modal.h / 2
+    && openedUpdateHistory.modal.contentViewport.bottom <= openedUpdateHistory.modal.y + openedUpdateHistory.modal.h / 2
+    && openedUpdateHistory.modal.maxScroll > 0,
+  JSON.stringify(openedUpdateHistory.modal));
+kt.scrollUpdateHistoryForTest(240);
+const scrolledUpdateHistory = kt.titleUpdateHistoryInfo();
+check('更新履歴は一覧位置を保持してスクロールできる',
+  scrolledUpdateHistory.open === true
+    && scrolledUpdateHistory.modal.scroll > 0
+    && scrolledUpdateHistory.modal.scroll <= scrolledUpdateHistory.modal.maxScroll,
+  JSON.stringify(scrolledUpdateHistory.modal));
 if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
 check('更新履歴は閉じるボタンでタイトルへ戻る',
   openedUpdateHistory.open === true
