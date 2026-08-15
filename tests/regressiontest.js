@@ -644,6 +644,23 @@ check('復元後も手番が一致',
   JSON.stringify(after.state));
 check('復元しても席は動かない', after.seat === SEAT, after.seat);
 
+// v207: CPU BATTLEは、弾や演出の途中ではなく安全なターン開始状態を自動保存する。
+// これによりアプリを終了しても、最大でその手番の最初から再開できる。
+kt.clearSuspendedForTest();
+kt.startTurnForTest();
+const turnStartAutoSave = kt.loadSuspendedForTest();
+check('CPU BATTLEはターン開始時に中断データを自動保存する',
+  !!turnStartAutoSave
+    && turnStartAutoSave.battleMode === 'normal'
+    && turnStartAutoSave.turnCount === kt.state().turnCount
+    && turnStartAutoSave.activeIndex === kt.state().activeIndex,
+  JSON.stringify(turnStartAutoSave && {
+    battleMode: turnStartAutoSave.battleMode,
+    turnCount: turnStartAutoSave.turnCount,
+    activeIndex: turnStartAutoSave.activeIndex
+  }));
+kt.clearSuspendedForTest();
+
 // ---- 3. フリーモード ----
 kt.startFree();
 check('フリーモードに入る', kt.mode() === 'free', kt.mode());

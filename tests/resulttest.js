@@ -140,7 +140,10 @@ check('フリーモードでは中断セーブを作らない', kt.load() === nu
   kt.setHasSave(true);
   kt.requestNewMatch(kt.chars()[1]);
   kt.resolveNewMatchConfirm('start');
-  check('消して出撃を選んで初めて中断データが消える', kt.load() === null);
+  const freshAutoSave = kt.load();
+  check('消して出撃を選ぶと古い中断を消し、新しいCPU戦の自動保存だけが残る',
+    !!freshAutoSave && freshAutoSave.units?.[0]?.character === kt.chars()[1],
+    JSON.stringify(freshAutoSave && freshAutoSave.units?.[0]?.character));
 
   // 中断データが無ければ、確認を挟まずそのまま始まる
   kt.setHasSave(false);
