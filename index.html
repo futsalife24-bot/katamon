@@ -16,6 +16,7 @@
 <link rel="preload" as="image" href="assets/loading-emblem.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
+<link rel="preload" as="image" href="assets/battle-start-logo.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-mode-board.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
@@ -624,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.5-title-menu-readability';
+  const BUILD_ID = 'v2.0.6-battle-start-logo';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.6', date: '2026/08/16', summary: 'BATTLE STARTロゴを更新し砲弾の外周枠を抑制' }),
     Object.freeze({ version: 'v2.0.5', date: '2026/08/16', summary: 'タイトルメニューの文字を読みやすく改善' }),
     Object.freeze({ version: 'v2.0.0', date: '2026/08/15', summary: 'SemVer形式の版管理へ移行' }),
     Object.freeze({ version: 'v214', date: '2026/08/15', summary: 'バルコプターを自キャラ基準の高度へ修正' }),
@@ -2956,6 +2958,13 @@
     vsPlateImages[key] = img;
   }
   function vsPlateReady(img) { return !!(img && img.complete && img.naturalWidth > 0); }
+
+  const battleStartLogoImage = new Image();
+  battleStartLogoImage.decoding = 'async';
+  battleStartLogoImage.src = 'assets/battle-start-logo.png';
+  function battleStartLogoReady() {
+    return battleStartLogoImage.complete && battleStartLogoImage.naturalWidth > 0;
+  }
 
   const SPRITE_SIZE = 78; // 画像の表示高さ(px)。幅は元画像のアスペクト比から算出
   // **高さ基準で描くので、縦長の絵ほど小さく、横長の絵ほど大きく見える。**
@@ -13742,6 +13751,11 @@
     if (vsPlateReady(img)) {
       ctx.save();
       if (mirror) ctx.scale(-1, 1);
+      // 素材の外周に残った矩形ピクセルを拾わず、砲弾の丸い輪郭内だけを描く。
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-pw / 2, -ph / 2, pw, ph, ph * 0.46);
+      else ctx.rect(-pw / 2, -ph / 2, pw, ph);
+      ctx.clip();
       ctx.drawImage(img, -pw / 2, -ph / 2, pw, ph);
       ctx.restore();
     } else {
@@ -13937,9 +13951,16 @@
     ctx.restore();
 
     // チュートリアルは対戦ではないので、見出しも「対戦開始」とは言わない。
-    drawOutlinedText(battleMode === 'tutorial' ? 'TUTORIAL START!' : 'BATTLE START', VW / 2, 250, {
-      font: `400 25px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
-    });
+    if (battleMode === 'tutorial' || !battleStartLogoReady()) {
+      drawOutlinedText(battleMode === 'tutorial' ? 'TUTORIAL START!' : 'BATTLE START', VW / 2, 250, {
+        font: `400 25px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 5
+      });
+    } else {
+      const logoW = 300;
+      const logoH = logoW * (1608 / 2880);
+      ctx.drawImage(battleStartLogoImage, 608, 1776, 2880, 1608,
+        VW / 2 - logoW / 2, 250 - logoH / 2, logoW, logoH);
+    }
 
     // 相手陣営を先に描き、自陣営を上に重ねる(見本と同じ重なり)。
     // 砲弾同士を離しているので、中央のVSが前に来ても4人の顔と名前を隠さない。

@@ -308,6 +308,16 @@ function check(name, value) {
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
 
+  check('battle-start logo is preloaded, cached, and drawn from the Drive PNG',
+    require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.png'))
+      && readRepoFile('index.html').includes('assets/battle-start-logo.png')
+      && swText.includes("'./assets/battle-start-logo.png'")
+      && readRepoFile('index.html').includes('battleStartLogoImage, 608, 1776, 2880, 1608'),
+    'BATTLE START logo asset wiring is incomplete');
+  check('VS plate drawing clips the asset to its rounded shell shape',
+    /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
+    'VS plate image is not clipped before drawing');
+
   // 音源はURL末尾の ?v=N がキャッシュの鍵になる。同じURLのまま中身を差し替えると、
   // ブラウザは保存済みの古い曲を鳴らし続ける。v98で bonus-bgm-2 をCeltic版へ替えた際に
   // ?v=1 のままだったため、2曲目に旧Hard Rock版が鳴る不具合が実機で出た。
