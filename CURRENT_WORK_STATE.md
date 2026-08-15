@@ -21,6 +21,7 @@
 ### Measured tests
 
 - `npm.cmd run test:stage3`: 438/438 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
 - New regression checks: Drive logo asset wiring and rounded VS plate clipping both passed.
 - Browser visual check must be repeated on a server rooted at this worktree before merge; `file://` is prohibited.
 
