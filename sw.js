@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.5-title-menu-readability';
+const CACHE_VERSION = 'katamon-pwa-v2.0.6-battle-start-logo';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -26,6 +26,7 @@ const APP_SHELL = [
   './assets/title-parchment-button.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
+  './assets/battle-start-logo.png',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];

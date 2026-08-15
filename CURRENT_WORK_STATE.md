@@ -1,5 +1,29 @@
 # カタモン 現在作業状態
 
+## v2.0.6 Battle Start visual assets (2026-08-16)
+
+### What changed
+
+- Added the user-provided Google Drive asset `assets/battle-start-logo.png` and use its cropped transparent artwork for the normal battle-start heading.
+- Added a rounded shell clip before drawing the VS plate PNGs, preventing opaque rectangular edge pixels from flashing around the cannon shells.
+- Added preload/service-worker caching and kept `BUILD_ID` and `CACHE_VERSION` aligned at `v2.0.6-battle-start-logo`.
+
+### Why
+
+- Replace the temporary text heading with the supplied BATTLE START logo and remove the visible rectangular color fringe around the shell assets.
+
+### Do not do
+
+- Do not use the BATTLE START logo for the tutorial heading; tutorial keeps its standard text.
+- Do not remove the fallback hand-drawn VS plate, and do not change the shell timing, layout, damage, or game rules.
+- Do not change `database.rules.json`.
+
+### Measured tests
+
+- `npm.cmd run test:stage3`: 438/438 passed.
+- New regression checks: Drive logo asset wiring and rounded VS plate clipping both passed.
+- Browser visual check must be repeated on a server rooted at this worktree before merge; `file://` is prohibited.
+
 ## v2.0.5 タイトルメニューの文字可読性改善（実装・検証完了）
 
 ### 何を変えたか
