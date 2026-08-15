@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.6-battle-start-logo';
+const CACHE_VERSION = 'katamon-pwa-v2.0.7-battle-start-video';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -27,6 +27,7 @@ const APP_SHELL = [
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
   './assets/battle-start-logo.png',
+  './assets/battle-start-logo.mp4',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];
