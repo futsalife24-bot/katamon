@@ -443,8 +443,8 @@ function check(name, value) {
     fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', 'barugerukan-helicopter.png'))
       && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=2';")
       && /function getBarucopterImage\(\)[\s\S]*?BARUCOPTER_IMAGE_PATH/.test(htmlForAudio)
-      && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 98;/.test(htmlForAudio),
-    '透過を直した専用ヘリ画像を遅延読込し、本体より少し大きく表示すること');
+      && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 294;/.test(htmlForAudio),
+    '透過を直した専用ヘリ画像を遅延読込し、従来の3倍で表示すること');
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
   check('the preload hints point at webp',
     ['loading-emblem', 'title-logo'].every(n =>
