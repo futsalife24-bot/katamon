@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v208-balcopter-and-special-descriptions';
+  const BUILD_ID = 'v209-cpu-battle-randomness';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v209', date: '2026/08/15', summary: 'CPU連戦の相手・ステージを毎回ランダム化' }),
     Object.freeze({ version: 'v208', date: '2026/08/15', summary: 'バルコプター調整と必殺技説明を更新' }),
     Object.freeze({ version: 'v207', date: '2026/08/15', summary: 'CPU対戦をターン開始時に自動保存' }),
     Object.freeze({ version: 'v206', date: '2026/08/15', summary: '毒針演出のフリーズを修正' }),
@@ -4970,6 +4971,26 @@
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
+  }
+
+  // CPU BATTLEの連戦用。直前と同じ顔ぶれ・地形種別を続けず、毎試合の新鮮さを保つ。
+  // 完全ランダムの中でも直前の候補だけは外し、同じ見た目が偶然続いて固定に感じるのを防ぐ。
+  // ボス戦の闘技場は例外として固定する。
+  const CPU_BATTLE_TERRAIN_PATTERNS = Object.freeze([
+    'plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin'
+  ]);
+
+  function randomChoiceExcept(options, previous) {
+    const candidates = options.filter(option => option !== previous);
+    const pool = candidates.length ? candidates : options;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function prepareNextCpuBattleRound() {
+    // 演習・チュートリアル・オンライン・ボス戦は、それぞれの設定を優先する。
+    if (battleMode !== 'normal' || isOnline() || isBossMatch) return null;
+    cpu.character = randomChoiceExcept(CHARACTER_LIST, cpu.character);
+    return randomChoiceExcept(CPU_BATTLE_TERRAIN_PATTERNS, currentPattern);
   }
 
   function wrapOptionIndex(value, length) {
@@ -15995,6 +16016,9 @@
     for (const u of units) carriedCharge[u.id] = carrySpecialCharge ? u.specialCharge : 0;
     // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
     isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
+    // 結果画面からの連戦だけ、相手と通常ステージ種別を次戦用に引き直す。
+    // 初戦はキャラ選択直後の抽選を使い、演習・オンラインの選択内容は変えない。
+    const nextCpuBattleTerrain = carrySpecialCharge ? prepareNextCpuBattleRound() : null;
     const lobbySettings = battleMode === 'normal' && online && online.kind === 'firebase' ? online.settings : null;
     const freeWind = activeFixedWind();
     calmBattle = freeWind ? freeWind.key === 'calm' : Math.random() < CALM_BATTLE_CHANCE;
@@ -16016,7 +16040,7 @@
       ? 'rolling'
       : (isBossMatch
         ? 'tieredBasin'
-        : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : undefined));
+        : (freeTerrain && freeTerrain.key !== 'random' ? freeTerrain.key : nextCpuBattleTerrain));
     if ((battleMode === 'free' || onlineCustomStageActive()) && selectedCustomAdapter) {
       loadTerrainFromSave(
         selectedCustomAdapter.segments,
