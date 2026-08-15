@@ -102,19 +102,27 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     if (kt.groundYAt(x) < kt.deadLineY() - 80) { bImpactGroundX = x; break; }
   }
   kt.placeOnGround(bImpactTarget.id, bImpactGroundX);
+  // 地形生成によっては足場がデッドライン間際になるため、吹き飛び検証だけは安全な高さへ固定する。
+  kt.setUnitPositionForTest(bImpactTarget.id, bImpactTarget.x, Math.min(bImpactTarget.y, kt.deadLineY() - 150));
   kt.setUnitHpForTest(bImpactTarget.id, bImpactTarget.maxHp);
   kt.clearProjectilesForTest();
   const bImpactIndex = kt.fireSpecialImmediateForUnitForTest('p1', 'iwa', 260, -180);
   const bImpactProfile = kt.projectileProfilesForTest()[bImpactIndex];
   const bImpactCratersBefore = kt.craters();
   const bImpactTargetBefore = { x: bImpactTarget.x, y: bImpactTarget.y };
-  // 真っさらなCIでも先に倒れず、「生存中の命中者が少し飛ぶ」を測れる距離へ固定する。
-  kt.detonateProjectileForTest(bImpactIndex, bImpactTarget.x - 100, bImpactTarget.y);
+  // 最大HPでも先に倒れず、地形穴にも巻き込まれない距離で「生存中の命中者が少し飛ぶ」を測る。
+  kt.detonateProjectileForTest(bImpactIndex, bImpactTarget.x - 180, bImpactTarget.y);
   const bImpactCrater = kt.craterHistory()[bImpactCratersBefore];
   check('Bインパクトの地形破壊半径は通常弾44pxの1.5倍',
     bImpactProfile?.terrainBlastMul === 1.5 && Math.abs((bImpactCrater?.r || 0) - 66) < 0.0001,
     JSON.stringify({ profile: bImpactProfile, crater: bImpactCrater }));
-  const bImpactAfterHit = kt.unitById(bImpactTarget.id);
+  const bImpactHitUnit = kt.unitById(bImpactTarget.id);
+  const bImpactAfterHit = {
+    grounded: bImpactHitUnit.grounded,
+    vy: bImpactHitUnit.vy,
+    knockbackVx: bImpactHitUnit.knockbackVx,
+    hp: bImpactHitUnit.hp
+  };
   const bImpactAfterStep = kt.updateFallingForTest(bImpactTarget.id, 0.1);
   check('Bインパクト命中者は少しだけ上方かつ爆心から外側へ吹き飛ぶ',
     bImpactAfterHit.grounded === false && bImpactAfterHit.vy < 0
@@ -336,6 +344,7 @@ check('全キャラクターの表示名が確定した名前になっている'
 
 // v191: 必殺技の性能は変えず、キャラクター性が伝わる固有名へ統一する。
 const EXPECTED_SPECIAL_NAMES = {
+  barugerukan: 'バルコプター',
   burumutan: 'ドレインシード',
   tori: 'フレイムウェーブ',
   sumoeru: '職人カエル玉',
@@ -1272,6 +1281,73 @@ check('ブルームタンの吸収回復は最大HPを超えない',
     && bloomCapTarget.hp === 0
     && bloomCapProfile?.drainHeal === true,
   JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
+
+// ===== v204: バルゲルカンはマーカー地点へ仮ヘリから10発の機銃掃射 =====
+kt.startBattle('barugerukan');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest();
+const barucopterOwner = kt.localUnit();
+const barucopterTarget = kt.foeUnit();
+kt.placeOnGround(barucopterOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(barucopterTarget.id, Math.round(kt.stageW() * 0.8));
+kt.clearProjectilesForTest();
+const barucopterMarkerIndex = kt.fireSpecialImmediateForTest('barugerukan', 260, -180);
+const barucopterMarkerProfiles = kt.projectileProfilesForTest();
+check('バルゲルカンの必殺は「バルコプター」のマーキング弾1発で始まる',
+  kt.character('barugerukan').special === 'バルコプター'
+    && kt.character('barugerukan').specialDesc.includes('10発')
+    && barucopterMarkerProfiles.length === 1
+    && barucopterMarkerProfiles[barucopterMarkerIndex]?.barucopterMarker === true,
+  JSON.stringify({ def: kt.character('barugerukan'), projectiles: barucopterMarkerProfiles }));
+const barucopterMark = { x: barucopterTarget.x, y: barucopterTarget.y };
+const barucopterStarted = kt.startBarucopterForTest(barucopterMarkerIndex, barucopterMark.x, barucopterMark.y);
+check('マーキング後は自キャラの真上へバルゲルカン仮画像のヘリが現れる',
+  barucopterStarted?.owner === barucopterOwner.id
+    && Math.abs(barucopterStarted?.x - barucopterOwner.x) < 0.001
+    && barucopterStarted?.y < barucopterOwner.y
+    && barucopterStarted?.targetX === barucopterMark.x
+    && barucopterStarted?.targetY === barucopterMark.y,
+  JSON.stringify({ owner: { x: barucopterOwner.x, y: barucopterOwner.y }, barrage: barucopterStarted }));
+kt.stepBarucoptersForTest(2);
+const barucopterBullets = kt.projectileProfilesForTest();
+const barucopterAngles = barucopterBullets.map(p => Math.atan2(p.vy, p.vx));
+const uniqueBarucopterAngles = new Set(barucopterAngles.map(angle => angle.toFixed(4)));
+const barucopterAimAngle = barucopterStarted
+  ? Math.atan2(barucopterStarted.targetY - barucopterStarted.y, barucopterStarted.targetX - barucopterStarted.x)
+  : 0;
+const averageBarucopterAngle = barucopterAngles.length
+  ? Math.atan2(
+      barucopterAngles.reduce((sum, angle) => sum + Math.sin(angle), 0),
+      barucopterAngles.reduce((sum, angle) => sum + Math.cos(angle), 0)
+    )
+  : Infinity;
+const barucopterAngleDelta = Math.atan2(
+  Math.sin(averageBarucopterAngle - barucopterAimAngle),
+  Math.cos(averageBarucopterAngle - barucopterAimAngle)
+);
+check('バルコプターはマーカーへ無風・無重力の機銃を10発だけ連射する',
+  barucopterBullets.length === 10
+    && barucopterBullets.every(p => p.barucopterBullet && p.windMul === 0 && p.gravityMul === 0),
+  JSON.stringify(barucopterBullets));
+check('10発の機銃はマーカー方向を中心にほんの僅かだけ固定でブレる',
+  uniqueBarucopterAngles.size >= 5
+    && Math.abs(barucopterAngleDelta) < 0.03,
+  JSON.stringify({ aim: barucopterAimAngle, average: averageBarucopterAngle, delta: barucopterAngleDelta, angles: barucopterAngles }));
+let barucopterDamageResult = null;
+if (barucopterBullets.length > 0) {
+  const hpBefore = barucopterTarget.hp;
+  const cratersBefore = kt.craters();
+  kt.resolveProjectileUnitImpactForTest(0, barucopterTarget.id);
+  barucopterDamageResult = {
+    damage: hpBefore - barucopterTarget.hp,
+    craterDelta: kt.craters() - cratersBefore
+  };
+}
+check('バルコプターの機銃1発は5ダメージで地形を破壊しない',
+  barucopterDamageResult?.damage === 5 && barucopterDamageResult?.craterDelta === 0,
+  JSON.stringify(barucopterDamageResult));
+kt.clearProjectilesForTest();
 
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
 const dreadNormalVelocity = kt.launchVelocityForTest('doRednote', 180, -96, false, false);

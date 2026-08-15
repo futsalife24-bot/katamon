@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v203-b-impact-balance';
+const CACHE_VERSION = 'katamon-pwa-v204-barucopter';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
