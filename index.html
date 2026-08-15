@@ -624,11 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.4-update-history-touch-right';
+  const BUILD_ID = 'v2.0.5-title-menu-readability';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    Object.freeze({ version: 'v2.0.4', date: '2026/08/15', summary: '更新履歴の右半分からの指スクロールを修正' }),
+    Object.freeze({ version: 'v2.0.5', date: '2026/08/16', summary: 'タイトルメニューの文字を読みやすく改善' }),
     Object.freeze({ version: 'v2.0.0', date: '2026/08/15', summary: 'SemVer形式の版管理へ移行' }),
     Object.freeze({ version: 'v214', date: '2026/08/15', summary: 'バルコプターを自キャラ基準の高度へ修正' }),
     Object.freeze({ version: 'v213', date: '2026/08/15', summary: 'バルコプターの出現高度を1.5倍へ上昇' }),
@@ -9372,11 +9372,11 @@
     if (kind === 'shield') {
       ctx.strokeStyle = '#123f3d';
       ctx.fillStyle = '#fff3ce';
-      ctx.font = '400 20px ' + UI_FONT_DISPLAY;
+      ctx.font = '400 21px ' + UI_FONT_DISPLAY;
       ctx.lineWidth = 5;
       ctx.strokeText(label, button.x, button.y - 18);
       ctx.fillText(label, button.x, button.y - 18);
-      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.font = '900 10px ' + UI_FONT_HEAVY;
       ctx.lineWidth = 3;
       ctx.strokeText(sub, button.x, button.y + 7);
       ctx.fillStyle = '#fff0bd';
@@ -9385,11 +9385,11 @@
       // ロープではなく看板本体の中央へ置き、木目と同化しない青緑で読ませる。
       ctx.strokeStyle = '#fff0bd';
       ctx.fillStyle = '#123f3d';
-      ctx.font = '400 18px ' + UI_FONT_DISPLAY;
+      ctx.font = '400 20px ' + UI_FONT_DISPLAY;
       ctx.lineWidth = 3;
       ctx.strokeText(label, button.x, button.y - 5);
       ctx.fillText(label, button.x, button.y - 5);
-      ctx.font = '900 9px ' + UI_FONT_HEAVY;
+      ctx.font = '900 10px ' + UI_FONT_HEAVY;
       ctx.lineWidth = 3;
       ctx.strokeText(sub, button.x, button.y + 12);
       ctx.fillStyle = '#235f59';
@@ -9400,11 +9400,11 @@
       const subY = button.y + (compact ? 10 : 17);
       ctx.strokeStyle = '#fff0bd';
       ctx.fillStyle = '#123f3d';
-      ctx.font = `400 ${compact ? 17 : 22}px ${UI_FONT_DISPLAY}`;
+      ctx.font = `400 ${compact ? 21 : 23}px ${UI_FONT_DISPLAY}`;
       ctx.lineWidth = 3;
       ctx.strokeText(label, button.x, labelY);
       ctx.fillText(label, button.x, labelY);
-      ctx.font = `900 ${compact ? 9 : 10}px ${UI_FONT_HEAVY}`;
+      ctx.font = `900 ${compact ? 11 : 11}px ${UI_FONT_HEAVY}`;
       ctx.lineWidth = 3;
       ctx.strokeText(sub, button.x, subY);
       ctx.fillStyle = '#235f59';
