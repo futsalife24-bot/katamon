@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v201-update-history-modal';
+const CACHE_VERSION = 'katamon-pwa-v202-scorpion-target-direction';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
