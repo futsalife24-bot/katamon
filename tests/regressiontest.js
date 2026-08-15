@@ -26,6 +26,9 @@ let pid = 1;
 function down(x, y) { const id = pid++; canvas.__fire('pointerdown', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now(), button: 0 }); return id; }
 function move(id, x, y) { canvas.__fire('pointermove', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
 function up(id, x, y) { win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
+function touchDown(x, y) { const id = pid++; canvas.__fire('pointerdown', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now(), button: 0 }); return id; }
+function touchMoveWindow(id, x, y) { win.__fire('pointermove', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now() }); }
+function touchUp(id, x, y) { win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now() }); }
 
 const selectWheelCards = kt.selectWheelCards();
 check('キャラ選択は手前の最大7枚だけを描画する',
@@ -1600,6 +1603,14 @@ check('更新履歴は一覧位置を保持してスクロールできる',
     && scrolledUpdateHistory.modal.scroll > 0
     && scrolledUpdateHistory.modal.scroll <= scrolledUpdateHistory.modal.maxScroll,
   JSON.stringify(scrolledUpdateHistory.modal));
+const touchStartScroll = scrolledUpdateHistory.modal.scroll;
+const touchId = touchDown(scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top + 100);
+touchMoveWindow(touchId, scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top - 120);
+const touchScrolledUpdateHistory = kt.titleUpdateHistoryInfo();
+check('指をモーダル外へ動かしても更新履歴のタッチスクロールを継続する',
+  touchScrolledUpdateHistory.modal.scroll > touchStartScroll,
+  JSON.stringify(touchScrolledUpdateHistory.modal));
+touchUp(touchId, scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top - 120);
 if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
 check('更新履歴は閉じるボタンでタイトルへ戻る',
   openedUpdateHistory.open === true
