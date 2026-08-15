@@ -386,6 +386,14 @@ const HOOK = `
       groundFlames: typeof groundFlames === 'undefined' ? 0 : groundFlames.length,
       scorpionRailSpikes: typeof scorpionRailSpikeBursts === 'undefined' ? 0 : scorpionRailSpikeBursts.length
     }),
+    drawScorpionRailImpactSpikesForTest: () => {
+      if (typeof drawScorpionRailImpactSpikes !== 'function') return false;
+      for (const spike of scorpionRailSpikeBursts) {
+        spike.age = spike.delay + spike.maxAge * 0.2;
+      }
+      drawScorpionRailImpactSpikes();
+      return true;
+    },
     resolveGroundFlameImpactForTest: (index, x, y) => {
       const p = projectiles[index];
       if (!p || typeof resolveGroundFlameImpact !== 'function') return null;

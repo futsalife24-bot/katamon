@@ -624,10 +624,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v205-scorpion-spike';
+  const BUILD_ID = 'v206-scorpion-spike-freeze';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v206', date: '2026/08/15', summary: '毒針演出のフリーズを修正' }),
     Object.freeze({ version: 'v205', date: '2026/08/15', summary: 'ショックウェーブ命中に毒針演出を追加' }),
     Object.freeze({ version: 'v204', date: '2026/08/15', summary: 'バルコプターの10連射を実装' }),
     Object.freeze({ version: 'v203', date: '2026/08/15', summary: 'Bインパクトの破壊範囲を調整' }),
@@ -14103,7 +14104,7 @@
     for (const spike of scorpionRailSpikeBursts) {
       const localAge = spike.age - spike.delay;
       if (localAge <= 0) continue;
-      const progress = clamp(localAge / spike.maxAge, 0, 1);
+      const progress = Math.max(0, Math.min(1, localAge / spike.maxAge));
       const rise = Math.min(1, progress * 4.4);
       const fade = Math.max(0, 1 - Math.max(0, (progress - 0.42) / 0.58));
       const height = spike.height * rise;
