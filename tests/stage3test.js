@@ -325,8 +325,8 @@ function check(name, value) {
     /ctx\.globalCompositeOperation = 'screen';[\s\S]{0,300}ctx\.drawImage\(battleStartLogoVideoCanvas/.test(readRepoFile('index.html'))
       && !/battleStartLogoVideoCtx\.getImageData\([\s\S]{0,500}battleStartLogoVideoCtx\.putImageData\(/.test(readRepoFile('index.html')),
     'BATTLE START video still performs expensive per-pixel background removal');
-  check('battle-start video is 1.5x and stops after one playback',
-    /const BATTLE_START_LOGO_SCALE = 1\.5;/.test(readRepoFile('index.html'))
+  check('battle-start video is 1.95x and stops after one playback',
+    /const BATTLE_START_LOGO_SCALE = 1\.95;/.test(readRepoFile('index.html'))
       && /const logoW = 300 \* BATTLE_START_LOGO_SCALE;/.test(readRepoFile('index.html'))
       && /battleStartLogoVideo\.loop = false;/.test(readRepoFile('index.html'))
       && /battleStartLogoVideo\.addEventListener\('ended',[\s\S]{0,120}battleStartLogoVideo\.pause\(\)/.test(readRepoFile('index.html')),
@@ -334,6 +334,13 @@ function check(name, value) {
   check('battle-start video playback rate is 1.3x without changing the render path',
     /battleStartLogoVideo\.playbackRate = 1\.3;/.test(readRepoFile('index.html')),
     'BATTLE START video playback rate is not 1.3x');
+  check('battle-start video reapplies 1.3x at playback start',
+    /battleStartLogoVideo\.defaultPlaybackRate = 1\.3;/.test(readRepoFile('index.html'))
+      && /function startBattleStartLogoVideo\(\)[\s\S]{0,180}battleStartLogoVideo\.playbackRate = 1\.3;/.test(readRepoFile('index.html')),
+    'BATTLE START video does not lock 1.3x when playback starts');
+  check('battle-start video scale is increased by another 1.3x',
+    /const BATTLE_START_LOGO_SCALE = 1\.95;/.test(readRepoFile('index.html')),
+    'BATTLE START video scale is not 1.95x');
   check('VS plate drawing clips the asset to its rounded shell shape',
     /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
     'VS plate image is not clipped before drawing');
