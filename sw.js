@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.19-battle-hud-readable-layout';
+const CACHE_VERSION = 'katamon-pwa-v2.0.20-battle-hud-wind-forecast-fix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
