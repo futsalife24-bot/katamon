@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.15-battle-start-logo-scale-speed';
+const CACHE_VERSION = 'katamon-pwa-v2.0.16-battle-hud-bridge';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
