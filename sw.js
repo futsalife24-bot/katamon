@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.17-battle-hud-assets';
+const CACHE_VERSION = 'katamon-pwa-v2.0.18-battle-hud-text-layout';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

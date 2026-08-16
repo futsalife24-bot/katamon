@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.17-battle-hud-assets';
+  const BUILD_ID = 'v2.0.18-battle-hud-text-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.18', date: '2026/08/16', summary: 'BATTLE HUDの文字とゲージを専用素材の情報窓内へ配置' }),
     Object.freeze({ version: 'v2.0.17', date: '2026/08/16', summary: 'BATTLE画面の戦況HUDへ専用デザイン素材を適用' }),
     Object.freeze({ version: 'v2.0.16', date: '2026/08/16', summary: 'BATTLE画面上部を戦況司令ブリッジ風に刷新' }),
     Object.freeze({ version: 'v2.0.15', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画のサイズと再生開始速度を調整' }),
@@ -12356,7 +12357,7 @@
     const forecastText = fixedForecast
       ? '次の風　同じ'
       : (forecast.calmWind ? '次の風　無風' : `次の風　${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
-    drawOutlinedText(forecastText, cx, cardY + 48, {
+    drawOutlinedText(forecastText, cx, cardY + 46, {
       font: `900 10px ${UI_FONT_HEAVY}`,
       color: forecast.calmWind ? '#72e8ff' : UI.parchment,
       lineWidth: 2.5
@@ -12384,11 +12385,14 @@
     const compact = h < 40;
     const tabY = compact ? cardY + 6 : cardY + 9;
     const tabH = compact ? 18 : 22;
-    const labelY = compact ? cardY + 11 : cardY + 14;
-    const hpBarY = compact ? cardY + 14 : cardY + 18;
-    const hpBarH = compact ? 7 : 9;
-    const fuelBarY = compact ? cardY + 23 : cardY + 30;
-    const fuelBarH = compact ? 4 : 5;
+    // 素材左側の円形パーツは装飾。動的情報は右側の横長パネル内へ揃える。
+    const contentX = barX + w * 0.34;
+    const contentRight = barX + w * 0.94;
+    const labelY = compact ? cardY + 12 : cardY + 15;
+    const hpBarY = compact ? cardY + 18 : cardY + 28;
+    const hpBarH = compact ? 5 : 7;
+    const fuelBarY = compact ? cardY + 27 : cardY + 43;
+    const fuelBarH = compact ? 3 : 4;
     // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
     // カードが左右どちらに出るかは席で決まるので、色は「置いた側」ではなく持ち主で引く。
     // 2vs2では味方CPUも自分と同じ青にしたいので、判定はIDではなく陣営で行う
@@ -12414,20 +12418,20 @@
     ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, tabY, 3, tabH);
     ctx.restore();
 
-    drawOutlinedText(u.team === localUnit().team ? '自軍' : '敵軍', barX + 10, cardY + h - 4, {
+    drawOutlinedText(u.team === localUnit().team ? '自軍' : '敵軍', contentX, cardY + h - 4, {
       align: 'left', font: `900 ${compact ? 7 : 8}px ${UI_FONT_HEAVY}`,
       color: accent, lineWidth: 2
     });
 
-    drawOutlinedText(u.label, barX + 10, labelY, {
+    drawOutlinedText(u.label, contentX, labelY, {
       align: 'left', font: `900 ${compact ? 11 : 12}px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
     });
-    drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, barX + w - 10, labelY, {
+    drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, contentRight, labelY, {
       align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
 
-    const innerX = barX + 10;
-    const innerW = w - 18;
+    const innerX = barX + w * 0.36;
+    const innerW = w * 0.55;
     const hpRatio = Math.max(0, u.hp / u.maxHp);
     ctx.save();
     // HPゲージ(黒い溝に嵌った真鍮枠のバー)
