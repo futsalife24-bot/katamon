@@ -308,9 +308,9 @@ function check(name, value) {
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
   check('battle HUD uses the expanded readable layout',
-    /const HUD_BASE_BOTTOM = 212;/.test(readRepoFile('index.html'))
-      && /const TURN_BAR_BASE_Y = 126;/.test(readRepoFile('index.html'))
-      && /const MINIMAP = \{ x: 13, y: 156, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
+    /const HUD_BASE_BOTTOM = 270;/.test(readRepoFile('index.html'))
+      && /const TURN_BAR_BASE_Y = 158;/.test(readRepoFile('index.html'))
+      && /const MINIMAP = \{ x: 13, y: 190, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
     'battle HUD is still using the compact top layout');
   check('battle HUD command bridge keeps team accents and a central console',
     /自軍/.test(readRepoFile('index.html'))
@@ -333,19 +333,25 @@ function check(name, value) {
     'supplied battle HUD frame assets are not wired into the renderer');
 
   check('battle HUD text and gauges use wide HP-first windows',
-    /const contentX = barX \+ w \* 0\.18;/.test(readRepoFile('index.html'))
-      && /const innerX = barX \+ w \* 0\.18;/.test(readRepoFile('index.html'))
-      && /const hpBarH = compact \? 7 : 12;/.test(readRepoFile('index.html'))
+    /const contentX = barX \+ w \* 0\.12;/.test(readRepoFile('index.html'))
+      && /const innerX = barX \+ w \* 0\.12;/.test(readRepoFile('index.html'))
+      && /const hpBarH = compact \? 7 : 10;/.test(readRepoFile('index.html'))
       && /const fuelBarH = compact \? 3 : 4;/.test(readRepoFile('index.html'))
-      && /const contentRight = barX \+ w \* 0\.94;/.test(readRepoFile('index.html'))
-      && /const leftX = cx - cardW \* 0\.31;/.test(readRepoFile('index.html'))
-      && /forecastText\.replace\('次の風　', ''\), rightX/.test(readRepoFile('index.html')),
+      && /const contentRight = barX \+ w \* 0\.90;/.test(readRepoFile('index.html'))
+      && /const leftX = cx - cardW \* 0\.27;/.test(readRepoFile('index.html'))
+      && /drawOutlinedText\(forecastText, rightX/.test(readRepoFile('index.html')),
     'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
   check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
-    /const w = 242;/.test(readRepoFile('index.html'))
+    /const w = HUD_CARD_W;/.test(readRepoFile('index.html'))
       && /function showTacticalStrip\(\) \{[\s\S]{0,100}is2v2\(\) \|\| STAGE_W === 2160/.test(readRepoFile('index.html'))
       && /function drawMinimap\(\) \{\s*if \(!showTacticalStrip\(\)\) return;/.test(readRepoFile('index.html')),
     '2vs2 card reuse or contextual minimap visibility is missing');
+  check('battle HUD preserves asset proportions and leaves the wind forecast visible',
+    ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 103, rows: [50] };',
+      'const PANEL_2V2 = { h: 103, rows: [50, 155] };', 'const TURN_BAR_BASE_Y = 158;',
+      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 92;',
+      'drawOutlinedText(forecastText, rightX'].every(text => readRepoFile('index.html').includes(text)),
+    'HUD assets are being squashed, overlapped, or the forecast label is hidden');
   check('battle HUD turn ribbon has separate left, center, and right data zones',
     /v3\/turn-ribbon\.png/.test(readRepoFile('index.html'))
       && /drawOutlinedText\(turnCounter, VW \/ 2, barY \+ 17/.test(readRepoFile('index.html'))
