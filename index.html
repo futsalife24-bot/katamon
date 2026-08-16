@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.13-update-history-visual-fix';
+  const BUILD_ID = 'v2.0.14-update-history-polish';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.14', date: '2026/08/16', summary: '更新履歴の見出し位置と強調表示・文字サイズを調整' }),
     Object.freeze({ version: 'v2.0.13', date: '2026/08/16', summary: '更新履歴の見出し表示と一覧枠・タイトル表示を修正' }),
     Object.freeze({ version: 'v2.0.12', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画を1.3倍速で再生' }),
     Object.freeze({ version: 'v2.0.11', date: '2026/08/16', summary: '更新履歴の詳細を一覧画面へ集約し表示枠を拡張' }),
@@ -9641,7 +9642,7 @@
     );
     drawOutlinedText(`更新履歴 ${LATEST_UPDATE_HISTORY.version}・${LATEST_UPDATE_HISTORY.date}`,
       titleUpdateHistoryPanel.x - 8, titleUpdateHistoryPanel.y + 4, {
-        font: `900 9px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
       });
     drawOutlinedText('›', titleUpdateHistoryPanel.x + 118, titleUpdateHistoryPanel.y + 6, {
       font: `900 19px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
@@ -9714,10 +9715,10 @@
       titleUpdateHistoryModal.h,
       { cut: 22, lineWidth: 3, rivets: true, rivetInset: 18, rivetRadius: 4, glow: UI.gold }
     );
-    drawOutlinedText('更新履歴', VW / 2, VH / 2 - 240, {
+    drawOutlinedText('更新履歴', VW / 2, VH / 2 - 260, {
       font: `900 27px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 6
     });
-    drawOutlinedText('これまでの主な変更', VW / 2, VH / 2 - 210, {
+    drawOutlinedText('これまでの主な変更', VW / 2, VH / 2 - 230, {
       font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
 
@@ -9730,14 +9731,14 @@
       const y = viewport.top + 26 + index * 64;
       drawIronPlate(VW / 2, y, 452, 52, {
         cut: 9,
-        lineWidth: index === 0 ? 2 : 1.2,
+        lineWidth: 1.2,
         rivets: false,
-        edge: index === 0 ? UI.gold : UI.brassDark,
-        fill: index === 0 ? 'rgba(49, 64, 57, 0.98)' : 'rgba(18, 33, 38, 0.95)'
+        edge: UI.brassDark,
+        fill: 'rgba(18, 33, 38, 0.95)'
       });
       drawOutlinedText(`${entry.version}　${entry.date}`, VW / 2 - 205, y - 7, {
         align: 'left', font: `900 13px ${UI_FONT_HEAVY}`,
-        color: index === 0 ? UI.gold : UI.brassLabel, lineWidth: 3
+        color: UI.brassLabel, lineWidth: 3
       });
       drawOutlinedText(entry.summary, VW / 2 - 205, y + 14, {
         align: 'left', font: `900 13px ${UI_FONT_HEAVY}`,

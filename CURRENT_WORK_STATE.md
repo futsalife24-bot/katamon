@@ -1,5 +1,29 @@
 # カタモン 現在作業状態
 
+## v2.0.14 Update history polish (2026-08-16)
+
+### What changed
+
+- Moved the `更新履歴` heading and `これまでの主な変更` subtitle upward inside the modal.
+- Removed the special yellow styling from the first history card so it no longer looks like a separate tappable item.
+- Increased the title-screen update-history label from 9px to 10px while keeping it inside the panel.
+- Added v2.0.14 and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.14-update-history-polish`.
+
+### Why
+
+- The heading sat too close to the first card, and the yellow first card suggested a different interaction even though the whole list is the scrollable view. The title label also needed a little more readable size without overflowing.
+
+### Do not do
+
+- Do not make individual history cards open a second detail screen; the existing list remains the single history view.
+- Do not restore first-card-only yellow emphasis, move the close button behind the list, or change touch scrolling and right-half start detection.
+- Do not change game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New UI regressions failed on the old implementation: 396/399 passed, then passed after the fix.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
 ## v2.0.13 Update history visual fix (2026-08-16)
 
 ### What changed

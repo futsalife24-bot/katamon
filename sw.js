@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.13-update-history-visual-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.14-update-history-polish';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
