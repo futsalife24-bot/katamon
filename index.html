@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.31-wind-console-calm-layout';
+  const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.32', date: '2026/08/17', summary: '風コンソールの矢印色と文字配置を調整' }),
     Object.freeze({ version: 'v2.0.31', date: '2026/08/16', summary: '風コンソールの無風表示と文字位置を調整' }),
     Object.freeze({ version: 'v2.0.30', date: '2026/08/16', summary: '風コンソールの文字を内側へ収め強さを拡大' }),
     Object.freeze({ version: 'v2.0.29', date: '2026/08/16', summary: '風コンソールの矢印と予報を見やすく改善' }),
@@ -12463,8 +12464,8 @@
     ctx.fillStyle = color;
     ctx.fill();
     ctx.restore();
-    const strengthPlateW = label === '無風' ? width * 0.48 : width * 0.30;
-    const strengthPlateH = height * 1.28;
+    const strengthPlateW = width * 0.43;
+    const strengthPlateH = height * 0.78;
     const strengthPlateX = cx - sign * width * 0.08;
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.82)';
@@ -12497,11 +12498,11 @@
     ctx.stroke();
     ctx.restore();
     drawOutlinedText('NEXT', cx - w * 0.16, cy, {
-      baseline: 'middle', font: `900 ${expanded ? 7 : 5.2}px ${UI_FONT_HEAVY}`,
+      baseline: 'middle', font: `900 ${expanded ? 8.5 : 6.2}px ${UI_FONT_HEAVY}`,
       color: UI.brassLight, lineWidth: 1.5
     });
     drawOutlinedText(nextArrow, cx + w * 0.18, cy - (expanded ? 0.4 : 0.2), {
-      baseline: 'middle', font: `900 ${expanded ? 16 : 12}px ${UI_FONT_HEAVY}`,
+      baseline: 'middle', font: `900 ${expanded ? 17 : 13}px ${UI_FONT_HEAVY}`,
       color: '#fff3cf', lineWidth: expanded ? 2.4 : 1.8
     });
   }
@@ -12530,11 +12531,12 @@
       ctx.restore();
     }
 
-    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.52, {
+    const arrowColor = calmWind ? '#72e8ff' : '#38cfff';
+    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.56, {
       baseline: 'middle', font: `900 ${titleFont}px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2
     });
     drawWindStrengthArrow(cx, roundCenterY, expanded, wind.dir, calmWind ? '無風' : windLevel,
-      arrowWidth, arrowHeight, accent, arrowFont);
+      arrowWidth, arrowHeight, arrowColor, arrowFont);
     drawWindNextBadge(cx, roundCenterY + inner * 0.58, expanded, nextArrow,
       forecast.calmWind ? '#72e8ff' : UI.brassLight);
   }
