@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -28,33 +28,40 @@ function check(name, value) {
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
     && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
-    anchoredHudSource.includes('const arrowHeight = expanded ? 21 : 16;')
+    anchoredHudSource.includes('const arrowHeight = expanded ? 18 : 14;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
-    && anchoredHudSource.includes('roundCenterY - inner * 0.56')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.66')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY, expanded')
-    && anchoredHudSource.includes('roundCenterY + inner * 0.58')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes('roundCenterY + inner * 0.67')
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
-    && anchoredHudSource.includes('const w = expanded ? 54 : 38;')
-    && anchoredHudSource.includes('roundCenterY - inner * 0.56')
-    && anchoredHudSource.includes('roundCenterY + inner * 0.58')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes('const w = expanded ? 48 : 36;')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.66')
+    && anchoredHudSource.includes('roundCenterY + inner * 0.67')
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
     && anchoredHudSource.includes('const strengthPlateH = height * 0.78;')
-    && anchoredHudSource.includes('roundCenterY - inner * 0.56')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.66')
     && anchoredHudSource.includes('expanded ? 8.5 : 6.2')
-    && anchoredHudSource.includes('expanded ? 17 : 13')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes("nextArrow === '無風'")
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
+  check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
+    anchoredHudSource.includes('const arrowWidth = expanded ? 56 : 42;')
+    && anchoredHudSource.includes('const arrowHeight = expanded ? 18 : 14;')
+    && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
+    && anchoredHudSource.includes('roundCenterY - inner * 0.66')
+    && anchoredHudSource.includes('roundCenterY + inner * 0.67')
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -63,7 +70,7 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -79,7 +86,7 @@ function check(name, value) {
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.32-wind-console-contrast-layout';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.33-wind-console-hierarchy';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);

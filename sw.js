@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.32-wind-console-contrast-layout';
+const CACHE_VERSION = 'katamon-pwa-v2.0.33-wind-console-hierarchy';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
