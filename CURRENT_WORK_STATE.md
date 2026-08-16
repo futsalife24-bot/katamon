@@ -1,5 +1,29 @@
 # カタモン 現在作業状態
 
+## v2.0.13 Update history visual fix (2026-08-16)
+
+### What changed
+
+- Expanded the update-history modal to 760px tall and kept the close button in front below the list.
+- Moved the content viewport below the modal heading so `これまでの主な変更` remains visible while the list still clips and scrolls.
+- Vertically centered the title-screen update-history label and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.13-update-history-visual-fix`.
+
+### Why
+
+- The heading subtitle was being clipped by the list viewport, and the narrow title panel label sat above the panel center. More vertical room improves the list’s readability without changing its touch behavior.
+
+### Do not do
+
+- Do not draw summaries back into the narrow title-screen panel.
+- Do not let cards escape the modal clip or put the close button behind the list.
+- Do not change scrolling start areas, game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New UI regressions failed on the old implementation: 394/396 passed, then passed after the fix.
+- `npm.cmd run test:regression`: p1/e1 396/396 passed after the fix.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
 ## v2.0.12 BATTLE START logo playback speed (2026-08-16)
 
 ### What changed
