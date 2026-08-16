@@ -329,6 +329,13 @@ function check(name, value) {
       && readRepoFile('index.html').includes('drawBattleHudAsset'),
     'supplied battle HUD frame assets are not wired into the renderer');
 
+  check('battle HUD text and gauges stay inside the supplied panel windows',
+    /const contentX = barX \+ w \* 0\.34;/.test(readRepoFile('index.html'))
+      && /const innerX = barX \+ w \* 0\.36;/.test(readRepoFile('index.html'))
+      && /const contentRight = barX \+ w \* 0\.94;/.test(readRepoFile('index.html'))
+      && /drawOutlinedText\(forecastText, cx, cardY \+ 46/.test(readRepoFile('index.html')),
+    'dynamic HUD text is still positioned on the decorative artwork instead of the panel windows');
+
   check('battle-start logo is preloaded, cached, and drawn from the Drive PNG',
     require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.png'))
       && readRepoFile('index.html').includes('assets/battle-start-logo.png')
