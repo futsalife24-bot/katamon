@@ -331,9 +331,9 @@ function check(name, value) {
       && /battleStartLogoVideo\.loop = false;/.test(readRepoFile('index.html'))
       && /battleStartLogoVideo\.addEventListener\('ended',[\s\S]{0,120}battleStartLogoVideo\.pause\(\)/.test(readRepoFile('index.html')),
     'BATTLE START video size or one-shot playback is not configured');
-  check('battle-start video playback rate is 1.2x without changing the render path',
-    /battleStartLogoVideo\.playbackRate = 1\.2;/.test(readRepoFile('index.html')),
-    'BATTLE START video playback rate is not 1.2x');
+  check('battle-start video playback rate is 1.3x without changing the render path',
+    /battleStartLogoVideo\.playbackRate = 1\.3;/.test(readRepoFile('index.html')),
+    'BATTLE START video playback rate is not 1.3x');
   check('VS plate drawing clips the asset to its rounded shell shape',
     /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
     'VS plate image is not clipped before drawing');
