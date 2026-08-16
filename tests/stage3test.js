@@ -18,13 +18,17 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.28-wind-console-three-lines';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
     && anchoredHudSource.includes('centerY: 0.32')
     && anchoredHudSource.includes('const labelY = cardY + h * layout.text.centerY;')
     && (anchoredHudSource.match(/baseline: 'middle'/g) || []).length >= 2);
+  check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
+    anchoredHudSource.includes('function drawWindStrengthArrow(')
+    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.28-wind-console-three-lines';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -33,23 +37,23 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.28-wind-console-three-lines';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && anchoredHudSource.includes('drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windLevel, forecast, fixedForecast, forecastText);'));
-  check('丸形コンソール内に風向矢印・強さ・次の風予報を表示する',
-    anchoredHudSource.includes("const arrowText = calmWind ? '—' : (wind.dir < 0 ? '←' : '→');")
-    && anchoredHudSource.includes("drawOutlinedText(calmWind ? '無風' : `風力 ${windLevel}`")
-    && anchoredHudSource.includes("const forecastLabel = fixedForecast ? '次の風: 同じ' : '次の風';")
-    && anchoredHudSource.includes('drawOutlinedText(forecastText, cx, roundCenterY + inner * 0.97'));
+  check('丸形コンソールは現在風・強さ入り矢印・NEXT方向の3行で表示する',
+    anchoredHudSource.includes('function drawWindStrengthArrow(')
+    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
+    && anchoredHudSource.includes("windLevel,\n      arrowWidth, arrowHeight, accent, arrowFont)")
+    && !anchoredHudSource.includes("const forecastLabel = fixedForecast ? '次の風: 同じ' : '次の風';"));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   check('battle HUD reserves the centered round wind console and keeps the stage title layer clear',
     hudSource.includes("roundWind: 'wind-console-round.webp'")
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.28-wind-console-three-lines';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
