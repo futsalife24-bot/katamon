@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.28-wind-console-three-lines';
+const CACHE_VERSION = 'katamon-pwa-v2.0.29-wind-console-legibility';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
