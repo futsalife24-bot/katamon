@@ -1,5 +1,31 @@
 # カタモン 現在作業状態
 
+## v2.0.11 Update history summary layout (2026-08-16)
+
+### What changed
+
+- The title-screen update-history panel now shows only the latest version and date; the latest summary text is no longer drawn in the narrow panel.
+- The full summary remains in each entry and is shown inside the tapped history list.
+- Expanded the history modal from 560px to 680px vertically and moved the close button with it, while keeping clipping, touch scrolling, right-half start detection, and front layering intact.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.11-update-history-summary`.
+
+### Why
+
+- Long update summaries could overflow the narrow title-screen panel. The title screen should stay compact while the detailed list provides enough vertical room to read the content.
+
+### Do not do
+
+- Do not draw `LATEST_UPDATE_HISTORY.summary` in the title-screen panel.
+- Do not put history cards outside the modal clip or move the close button behind the list.
+- Do not change touch scrolling, the right-half touch start area, game rules, communication, or `database.rules.json`.
+
+### Measured tests
+
+- New layout regression failed on the pre-change implementation: 393/394 passed, then passed after the fix.
+- `npm.cmd run test:regression`: p1/e1 394/394 passed.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- Browser visual check must confirm the title panel has no summary text, the expanded list shows summaries and still scrolls/clips correctly, and the close button stays in front on local HTTP; `file://` is prohibited.
+
 ## v2.0.10 BATTLE START video playback speed (2026-08-16)
 
 ### What changed

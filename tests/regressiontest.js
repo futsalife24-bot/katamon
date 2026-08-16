@@ -1564,6 +1564,13 @@ check('タイトル最下部の更新履歴は日付と変更内容を持つ',
     && /^\d{4}\/\d{2}\/\d{2}$/.test(updateHistoryInfo.history.date)
     && updateHistoryInfo.history.summary.length > 0,
   JSON.stringify(updateHistoryInfo.history));
+const titleHistoryPanelDraw = indexHtml.slice(
+  indexHtml.indexOf('drawIronPlate(titleUpdateHistoryPanel'),
+  indexHtml.indexOf('function updateHistoryContentViewport')
+);
+check('タイトル最下部の更新履歴パネルは内容を表示しない',
+  !/LATEST_UPDATE_HISTORY\.summary/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
 check('更新履歴は最新版ボタンの横に収まり、操作領域と重ならない',
   !!updateHistoryInfo.panel
     && !rectsOverlap(updateHistoryInfo.update, updateHistoryInfo.panel)
@@ -1572,6 +1579,9 @@ check('更新履歴は最新版ボタンの横に収まり、操作領域と重�
     && updateHistoryInfo.update.x - updateHistoryInfo.update.w / 2 >= 0
     && updateHistoryInfo.panel.x + updateHistoryInfo.panel.w / 2 <= kt.viewW(),
   JSON.stringify(updateHistoryInfo));
+check('更新履歴一覧の枠は縦に広い',
+  !!updateHistoryInfo.modal && updateHistoryInfo.modal.h >= 640,
+  JSON.stringify(updateHistoryInfo.modal));
 check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
   updateHistoryInfo.entries.length >= 4
     && updateHistoryInfo.entries[0]?.version === updateHistoryInfo.history?.version
