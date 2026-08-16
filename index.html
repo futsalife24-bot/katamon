@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.8-battle-start-video-playback';
+  const BUILD_ID = 'v2.0.9-battle-start-video-performance';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.9', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画の画素処理を廃止し開始時の負荷を軽量化' }),
     Object.freeze({ version: 'v2.0.8', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画を1.5倍へ拡大し1回再生で停止' }),
     Object.freeze({ version: 'v2.0.7', date: '2026/08/16', summary: 'BATTLE STARTロゴを動画版へ更新し表示位置を上方修正' }),
     Object.freeze({ version: 'v2.0.6', date: '2026/08/16', summary: 'BATTLE STARTロゴを更新し砲弾の外周枠を抑制' }),
@@ -2990,14 +2991,6 @@
     }
     battleStartLogoVideoCtx.clearRect(0, 0, battleStartLogoVideoCanvas.width, battleStartLogoVideoCanvas.height);
     battleStartLogoVideoCtx.drawImage(battleStartLogoVideo, 0, 0);
-    const frame = battleStartLogoVideoCtx.getImageData(
-      0, 0, battleStartLogoVideoCanvas.width, battleStartLogoVideoCanvas.height);
-    for (let i = 0; i < frame.data.length; i += 4) {
-      const brightness = Math.max(frame.data[i], frame.data[i + 1], frame.data[i + 2]);
-      if (brightness <= 16) frame.data[i + 3] = 0;
-      else if (brightness < 40) frame.data[i + 3] = Math.round(frame.data[i + 3] * (brightness - 16) / 24);
-    }
-    battleStartLogoVideoCtx.putImageData(frame, 0, 0);
     return true;
   }
   function startBattleStartLogoVideo() {
@@ -13989,8 +13982,11 @@
     } else if (prepareBattleStartLogoVideoFrame()) {
       const logoW = 300 * BATTLE_START_LOGO_SCALE;
       const logoH = logoW * (battleStartLogoVideo.videoHeight / battleStartLogoVideo.videoWidth);
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
       ctx.drawImage(battleStartLogoVideoCanvas,
         VW / 2 - logoW / 2, BATTLE_START_LOGO_Y - logoH / 2, logoW, logoH);
+      ctx.restore();
     } else {
       const logoW = 300;
       const logoH = logoW * (1608 / 2880);
