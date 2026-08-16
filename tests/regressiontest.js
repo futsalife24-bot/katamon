@@ -1828,11 +1828,11 @@ check('演習の既定は1vs1で、参加は2体のまま',
   kt.matchFormat() === '1v1' && kt.units.length === 2 && !kt.is2v2(),
   `${kt.matchFormat()} 人数=${kt.units.length}`);
 const panels1v1 = (() => { kt.resetPanels(); kt.render(); return kt.panels(); })();
-check('1vs1の名前カードは従来どおり2枚・高さ40・上端46',
-  panels1v1.length === 2 && panels1v1.every(p => p.h === 40 && p.cardY === 46),
+check('1vs1の名前カードは2枚・司令盤向け高さ46・上端46',
+  panels1v1.length === 2 && panels1v1.every(p => p.h === 46 && p.cardY === 46),
   JSON.stringify(panels1v1));
-check('1vs1のターン帯・ミニマップ・HUD下端は従来の位置のまま',
-  kt.turnBarTop() === 94 && kt.minimapTop() === 120 && kt.hudBottom() === 116,
+check('1vs1の司令盤はターン帯・ミニマップ・HUD下端を拡張位置へ揃える',
+  kt.turnBarTop() === 108 && kt.minimapTop() === 138 && kt.hudBottom() === 132,
   `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
 const spawn1v1 = kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000);
 
@@ -1914,8 +1914,8 @@ check('名前カードはターン帯に重ならない',
   lowestPanelBottom <= kt.turnBarTop(), `最下端=${lowestPanelBottom} ターン帯上端=${kt.turnBarTop()}`);
 check('名前カードはミニマップに重ならない',
   lowestPanelBottom <= kt.minimapTop(), `最下端=${lowestPanelBottom} ミニマップ上端=${kt.minimapTop()}`);
-check('2vs2はターン帯とミニマップがカード2段ぶん下がる',
-  kt.turnBarTop() === 128 && kt.minimapTop() === 154 && kt.hudBottom() === 150,
+check('2vs2は司令盤のターン帯とミニマップをカード2段ぶん下げる',
+  kt.turnBarTop() === 146 && kt.minimapTop() === 176 && kt.hudBottom() === 170,
   `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
 
 // 4体ぶんのHPが実際に読み取れること(パネルに出る値がユニットのHPと一致する)。

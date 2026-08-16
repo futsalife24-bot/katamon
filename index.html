@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.15-battle-start-logo-scale-speed';
+  const BUILD_ID = 'v2.0.16-battle-hud-bridge';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.16', date: '2026/08/16', summary: 'BATTLE画面上部を戦況司令ブリッジ風に刷新' }),
     Object.freeze({ version: 'v2.0.15', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画のサイズと再生開始速度を調整' }),
     Object.freeze({ version: 'v2.0.14', date: '2026/08/16', summary: '更新履歴の見出し位置と強調表示・文字サイズを調整' }),
     Object.freeze({ version: 'v2.0.13', date: '2026/08/16', summary: '更新履歴の見出し表示と一覧枠・タイトル表示を修正' }),
@@ -12244,7 +12245,7 @@
 
   function drawBattleHudBackdrop() {
     ctx.save();
-    const hudBottom = 116 + hudShift();
+    const hudBottom = HUD_BASE_BOTTOM + hudShift();
     const bg = ctx.createLinearGradient(0, 0, 0, hudBottom);
     bg.addColorStop(0, 'rgba(28,34,39,0.97)');
     bg.addColorStop(0.06, 'rgba(16,21,26,0.96)');
@@ -12262,6 +12263,10 @@
     ctx.fillStyle = rail;
     ctx.fillRect(0, hudBottom - 4, VW, 6);
     ctx.restore();
+
+    drawOutlinedText('司令ブリッジ', VW / 2, 35, {
+      font: `900 8px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
+    });
 
     // ステージ名の真鍮プレート
     const stageName = currentPattern === 'tieredBasin'
@@ -12337,11 +12342,13 @@
   // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
   // 名前カードの寸法。2vs2は4枚を上下2段に積むので、1枚あたりを低くする。
   // 上端はメニュー/音量ボタンを避けて46から、下端はHUD背景の真鍮レール(112)まで。
-  const PANEL_1V1 = { h: 40, rows: [46] };
-  const PANEL_2V2 = { h: 34, rows: [46, 82] };
+  const HUD_BASE_BOTTOM = 132;
+  const TURN_BAR_BASE_Y = 108;
+  const PANEL_1V1 = { h: 46, rows: [46] };
+  const PANEL_2V2 = { h: 36, rows: [46, 84] };
   // 2vs2はカードが2段になるので、その下に続くターン帯・ミニマップ・HUD背景を丸ごと下げる。
   // 世界はHUDの下に全画面で描かれているため、下げても隠れるのは空だけで戦場は狭くならない。
-  const HUD_EXTRA_2V2 = 34;
+  const HUD_EXTRA_2V2 = 38;
   function hudShift() { return is2v2() ? HUD_EXTRA_2V2 : 0; }
   function minimapTop() { return MINIMAP.y + hudShift(); }
 
@@ -12349,7 +12356,7 @@
     const w = 168;
     const barX = align === 'left' ? edgeX : edgeX - w;
     // 低いカードは中身を詰めないと枠から溢れる。1vs1の見た目は一切変えない。
-    const compact = h < 38;
+    const compact = h < 40;
     const tabY = compact ? cardY + 6 : cardY + 9;
     const tabH = compact ? 18 : 22;
     const labelY = compact ? cardY + 11 : cardY + 14;
@@ -12378,6 +12385,11 @@
     ctx.fillStyle = accent;
     ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, tabY, 3, tabH);
     ctx.restore();
+
+    drawOutlinedText(u.team === localUnit().team ? '自軍' : '敵軍', barX + 10, cardY + h - 4, {
+      align: 'left', font: `900 ${compact ? 7 : 8}px ${UI_FONT_HEAVY}`,
+      color: accent, lineWidth: 2
+    });
 
     drawOutlinedText(u.label, barX + 10, labelY, {
       align: 'left', font: `900 ${compact ? 11 : 12}px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
@@ -13495,7 +13507,7 @@
     // 帯の左右はHPパネルの並び(左=自分の席)に合わせるので、陣営ではなく席で見る。
     const isPlayer = isLocalTurn();
     const accent = isPlayer ? UI.ally : UI.enemy;
-    const barY = 94 + hudShift();
+    const barY = TURN_BAR_BASE_Y + hudShift();
     ctx.save();
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(8, barY, VW - 16, 19, 5) : ctx.rect(8, barY, VW - 16, 19);
@@ -13558,7 +13570,7 @@
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
-  const MINIMAP = { x: 13, y: 120, w: VW - 26, h: 56 };
+  const MINIMAP = { x: 13, y: 138, w: VW - 26, h: 60 };
   const MINIMAP_PAD = 4;
   // 地形は爆発・生成・中断復元の時しか変わらない。ここへ地形部分を焼いておけば、
   // 通常の1フレームでは巨大なsolidGridを走査せず、完成画像を1回貼るだけで済む。
