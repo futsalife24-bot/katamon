@@ -1,5 +1,30 @@
 # カタモン 現在作業状態
 
+## v2.0.9 BATTLE START video performance (2026-08-16)
+
+### What changed
+
+- Removed the per-frame `getImageData`/pixel-loop/`putImageData` processing from the BATTLE START video path.
+- Uses Canvas `screen` compositing for the black-background video, preserving the black-background-free appearance without reading and rewriting every pixel each frame.
+- Kept the 1.5x size, one-shot playback, logo position, PNG fallback, VS timing/layout, and game rules unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.9-battle-start-video-performance`.
+
+### Why
+
+- The previous implementation could make BATTLE start feel heavy on mobile because every animation frame copied and modified the full video pixel buffer before drawing it.
+
+### Do not do
+
+- Do not restore per-frame `getImageData`/`putImageData` processing for this video.
+- Do not change the 1.5x size, one-shot playback, logo position, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New performance regression failed on the pre-change implementation: 441/442 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 442/442 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check on a local HTTP server rooted at this worktree must confirm the logo remains visible without a black rectangle and the battle continues normally; `file://` is prohibited.
+
 ## v2.0.8 BATTLE START video playback adjustment (2026-08-16)
 
 ### What changed

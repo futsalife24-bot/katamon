@@ -321,9 +321,10 @@ function check(name, value) {
       && /const BATTLE_START_LOGO_Y = 180;/.test(readRepoFile('index.html'))
       && /battleStartLogoVideoCanvas,\s*\n?\s*VW \/ 2 - logoW \/ 2,\s*BATTLE_START_LOGO_Y/.test(readRepoFile('index.html')),
     'BATTLE START logo video wiring or upward position is incomplete');
-  check('battle-start video removes its opaque black background before canvas drawing',
-    /battleStartLogoVideoCanvas[\s\S]{0,500}getImageData\([\s\S]{0,500}putImageData\(/.test(readRepoFile('index.html')),
-    'BATTLE START video is drawn without black-background removal');
+  check('battle-start video uses compositing instead of per-pixel background removal',
+    /ctx\.globalCompositeOperation = 'screen';[\s\S]{0,300}ctx\.drawImage\(battleStartLogoVideoCanvas/.test(readRepoFile('index.html'))
+      && !/battleStartLogoVideoCtx\.getImageData\([\s\S]{0,500}battleStartLogoVideoCtx\.putImageData\(/.test(readRepoFile('index.html')),
+    'BATTLE START video still performs expensive per-pixel background removal');
   check('battle-start video is 1.5x and stops after one playback',
     /const BATTLE_START_LOGO_SCALE = 1\.5;/.test(readRepoFile('index.html'))
       && /const logoW = 300 \* BATTLE_START_LOGO_SCALE;/.test(readRepoFile('index.html'))
