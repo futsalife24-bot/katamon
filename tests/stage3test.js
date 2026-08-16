@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.25-battle-wind-console-vertical-layout';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.26-battle-wind-gauge-round';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -35,13 +35,18 @@ function check(name, value) {
     && anchoredHudSource.includes("drawOutlinedText('現在', zoneX[0]")
     && anchoredHudSource.includes("drawOutlinedText('風向', zoneX[1]")
     && anchoredHudSource.includes("drawOutlinedText('次の風', zoneX[2]"));
+  check('2vs2 wind direction uses a round gauge containing both arrow and strength',
+    anchoredHudSource.includes('const windGaugeRadius = 19;')
+    && anchoredHudSource.includes('ctx.arc(zoneX[1], windGaugeY, windGaugeRadius, 0, Math.PI * 2);')
+    && anchoredHudSource.includes("const windStrengthText = calmWind ? '無風' : windLevel;")
+    && anchoredHudSource.includes('drawOutlinedText(windStrengthText, zoneX[1], windGaugeY + 11'));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
     hudSource.includes("wind: 'v4-wind-console.png'")
     && hudSource.includes('const cardW = expanded ? 162 : 198;')
     && hudSource.includes('const cardH = expanded ? 152 : 54;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.25-battle-wind-console-vertical-layout';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.26-battle-wind-gauge-round';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);

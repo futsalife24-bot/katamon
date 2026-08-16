@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.25-battle-wind-console-vertical-layout';
+  const BUILD_ID = 'v2.0.26-battle-wind-gauge-round';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.26', date: '2026/08/16', summary: '2vs2の風向きを矢印と強さ入りの丸形計器へ変更' }),
     Object.freeze({ version: 'v2.0.25', date: '2026/08/16', summary: '2vs2の風情報を3列の縦型コンソールへ再配置' }),
     Object.freeze({ version: 'v2.0.24', date: '2026/08/16', summary: 'BATTLE HUDのHPゲージを素材レールの上下中央へ整列' }),
     Object.freeze({ version: 'v2.0.23', date: '2026/08/16', summary: 'BATTLE HUDの名前とHP値を文字窓の上下中央へ整列' }),
@@ -12372,10 +12373,20 @@
     drawOutlinedText('風向', zoneX[1], zoneY + 16, {
       baseline: 'middle', font: `900 7px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 2
     });
+    const windStrengthText = calmWind ? '無風' : windLevel;
+    const windGaugeY = zoneY + 53;
+    const windGaugeRadius = 19;
     ctx.save();
-    const len = calmWind ? 18 : 30;
+    ctx.fillStyle = 'rgba(3, 13, 19, 0.92)';
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(zoneX[1], windGaugeY, windGaugeRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const len = calmWind ? 14 : 24;
     const dir = calmWind ? 1 : wind.dir;
-    const arrowY = zoneY + 43;
+    const arrowY = windGaugeY - 5;
     ctx.strokeStyle = accent;
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
@@ -12394,8 +12405,8 @@
       ctx.fill();
     }
     ctx.restore();
-    drawOutlinedText(directionText, zoneX[1], zoneY + 82, {
-      baseline: 'middle', font: `900 7px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 1.8
+    drawOutlinedText(windStrengthText, zoneX[1], windGaugeY + 11, {
+      baseline: 'middle', font: `900 8px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 2
     });
 
     drawOutlinedText('次の風', zoneX[2], zoneY + 16, {
