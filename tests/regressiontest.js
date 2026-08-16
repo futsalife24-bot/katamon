@@ -1565,11 +1565,15 @@ check('タイトル最下部の更新履歴は日付と変更内容を持つ',
     && updateHistoryInfo.history.summary.length > 0,
   JSON.stringify(updateHistoryInfo.history));
 const titleHistoryPanelDraw = indexHtml.slice(
-  indexHtml.indexOf('drawIronPlate(titleUpdateHistoryPanel'),
+  indexHtml.indexOf('titleUpdateHistoryPanel.x - 8'),
   indexHtml.indexOf('function updateHistoryContentViewport')
 );
 check('タイトル最下部の更新履歴パネルは内容を表示しない',
   !/LATEST_UPDATE_HISTORY\.summary/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
+check('title update history text is vertically centered in its panel',
+  /titleUpdateHistoryPanel\.y \+ 4/.test(titleHistoryPanelDraw)
+    && !/titleUpdateHistoryPanel\.y - 2/.test(titleHistoryPanelDraw),
   titleHistoryPanelDraw);
 check('更新履歴は最新版ボタンの横に収まり、操作領域と重ならない',
   !!updateHistoryInfo.panel
@@ -1581,6 +1585,11 @@ check('更新履歴は最新版ボタンの横に収まり、操作領域と重�
   JSON.stringify(updateHistoryInfo));
 check('更新履歴一覧の枠は縦に広い',
   !!updateHistoryInfo.modal && updateHistoryInfo.modal.h >= 640,
+  JSON.stringify(updateHistoryInfo.modal));
+check('update history modal leaves room for its heading above the viewport',
+  !!updateHistoryInfo.modal
+    && updateHistoryInfo.modal.h >= 740
+    && updateHistoryInfo.modal.contentViewport.top >= updateHistoryInfo.modal.y - 195,
   JSON.stringify(updateHistoryInfo.modal));
 check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
   updateHistoryInfo.entries.length >= 4
