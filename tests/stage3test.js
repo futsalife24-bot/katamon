@@ -308,15 +308,26 @@ function check(name, value) {
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
   check('battle HUD uses the expanded command-bridge layout',
-    /const HUD_BASE_BOTTOM = 132;/.test(readRepoFile('index.html'))
-      && /const TURN_BAR_BASE_Y = 108;/.test(readRepoFile('index.html'))
-      && /const MINIMAP = \{ x: 13, y: 138, w: VW - 26, h: 60 \}/.test(readRepoFile('index.html')),
+    /const HUD_BASE_BOTTOM = 150;/.test(readRepoFile('index.html'))
+      && /const TURN_BAR_BASE_Y = 126;/.test(readRepoFile('index.html'))
+      && /const MINIMAP = \{ x: 13, y: 156, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
     'battle HUD is still using the compact top layout');
   check('battle HUD command bridge keeps team accents and a central console',
     /自軍/.test(readRepoFile('index.html'))
       && /敵軍/.test(readRepoFile('index.html'))
       && /司令ブリッジ/.test(readRepoFile('index.html')),
     'battle HUD command-bridge visual language is missing');
+
+  check('battle HUD uses the four supplied visual frame assets',
+    ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'minimap-frame.png']
+      .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', file)))
+      && readRepoFile('index.html').includes('battleHudImages')
+      && readRepoFile('index.html').includes('player-card-ally.png')
+      && readRepoFile('index.html').includes('player-card-enemy.png')
+      && readRepoFile('index.html').includes('wind-console.png')
+      && readRepoFile('index.html').includes('minimap-frame.png')
+      && readRepoFile('index.html').includes('drawBattleHudAsset'),
+    'supplied battle HUD frame assets are not wired into the renderer');
 
   check('battle-start logo is preloaded, cached, and drawn from the Drive PNG',
     require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.png'))
