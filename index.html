@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.29-wind-console-legibility';
+  const BUILD_ID = 'v2.0.30-wind-console-inner-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.30', date: '2026/08/16', summary: '風コンソールの文字を内側へ収め強さを拡大' }),
     Object.freeze({ version: 'v2.0.29', date: '2026/08/16', summary: '風コンソールの矢印と予報を見やすく改善' }),
     Object.freeze({ version: 'v2.0.28', date: '2026/08/16', summary: '風コンソールを3行の矢印表示へ整理' }),
     Object.freeze({ version: 'v2.0.27', date: '2026/08/16', summary: '風情報を共通の丸形コンソールへ統一' }),
@@ -12498,9 +12499,9 @@
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
     const inner = roundSize * 0.32;
     const titleFont = expanded ? 7 : 5.2;
-    const arrowFont = expanded ? 12 : 8.5;
+    const arrowFont = expanded ? 16 : 11;
     const arrowWidth = expanded ? 64 : 48;
-    const arrowHeight = expanded ? 15 : 11;
+    const arrowHeight = expanded ? 21 : 16;
     const nextArrow = forecast.calmWind ? '—' : (forecast.dir < 0 ? '⇦' : '⇨');
     const nextText = `NEXT ${nextArrow}`;
 
@@ -12516,12 +12517,12 @@
       ctx.restore();
     }
 
-    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.82, {
+    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.68, {
       baseline: 'middle', font: `900 ${titleFont}px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2
     });
-    drawWindStrengthArrow(cx, roundCenterY - inner * 0.08, expanded, wind.dir, calmWind ? '無風' : windLevel,
+    drawWindStrengthArrow(cx, roundCenterY, expanded, wind.dir, calmWind ? '無風' : windLevel,
       arrowWidth, arrowHeight, accent, arrowFont);
-    drawWindNextBadge(cx, roundCenterY + inner * 0.74, expanded, nextArrow,
+    drawWindNextBadge(cx, roundCenterY + inner * 0.66, expanded, nextArrow,
       forecast.calmWind ? '#72e8ff' : UI.brassLight);
   }
 
