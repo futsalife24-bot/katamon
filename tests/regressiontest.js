@@ -1591,6 +1591,20 @@ check('update history modal leaves room for its heading above the viewport',
     && updateHistoryInfo.modal.h >= 740
     && updateHistoryInfo.modal.contentViewport.top >= updateHistoryInfo.modal.y - 195,
   JSON.stringify(updateHistoryInfo.modal));
+const updateHistoryModalDraw = indexHtml.slice(
+  indexHtml.indexOf('function drawUpdateHistoryModal'),
+  indexHtml.indexOf('function drawFreeArrow')
+);
+check('update history heading and subtitle sit higher above the cards',
+  /VW \/ 2, VH \/ 2 - 260/.test(updateHistoryModalDraw)
+    && /VW \/ 2, VH \/ 2 - 230/.test(updateHistoryModalDraw),
+  updateHistoryModalDraw);
+check('the first update-history card is not styled as a tappable highlight',
+  !/index === 0 \? UI\.gold/.test(updateHistoryModalDraw),
+  updateHistoryModalDraw);
+check('title update history label uses the larger fitting font',
+  /font: `900 10px \$\{UI_FONT_HEAVY\}`/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
 check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
   updateHistoryInfo.entries.length >= 4
     && updateHistoryInfo.entries[0]?.version === updateHistoryInfo.history?.version
