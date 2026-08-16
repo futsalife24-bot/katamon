@@ -1,5 +1,28 @@
 # カタモン 現在作業状態
 
+## v2.0.12 BATTLE START logo playback speed (2026-08-16)
+
+### What changed
+
+- Set the non-looping BATTLE START logo video playback rate to 1.3x.
+- Added v2.0.12 to the title-screen update history and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.12-battle-start-video-speed`.
+
+### Why
+
+- The requested 1.3x playback makes the opening transition finish sooner while preserving the existing one-shot video path and visual treatment.
+
+### Do not do
+
+- Do not loop the video, change its render path, replace the PNG fallback, or alter the BATTLE START layout.
+- Do not change update-history behavior, game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New 1.3x regression failed on the old implementation: 442/443 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
 ## v2.0.11 Update history summary layout (2026-08-16)
 
 ### What changed

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.11-update-history-summary';
+const CACHE_VERSION = 'katamon-pwa-v2.0.12-battle-start-video-speed';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',

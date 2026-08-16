@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.11-update-history-summary';
+  const BUILD_ID = 'v2.0.12-battle-start-video-speed';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.12', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画を1.3倍速で再生' }),
     Object.freeze({ version: 'v2.0.11', date: '2026/08/16', summary: '更新履歴の詳細を一覧画面へ集約し表示枠を拡張' }),
     Object.freeze({ version: 'v2.0.10', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画を1.2倍速で再生' }),
     Object.freeze({ version: 'v2.0.9', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画の画素処理を廃止し開始時の負荷を軽量化' }),
@@ -2975,7 +2976,7 @@
   battleStartLogoVideo.preload = 'auto';
   battleStartLogoVideo.muted = true;
   battleStartLogoVideo.playsInline = true;
-  battleStartLogoVideo.playbackRate = 1.2;
+  battleStartLogoVideo.playbackRate = 1.3;
   battleStartLogoVideo.loop = false;
   battleStartLogoVideo.addEventListener('ended', () => battleStartLogoVideo.pause());
   battleStartLogoVideo.src = 'assets/battle-start-logo.mp4';
