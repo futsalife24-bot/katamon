@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.20-battle-hud-wind-forecast-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.21-battle-hud-wind-console-center';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -36,6 +36,7 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v3/player-card-enemy.png',
   './assets/ui/battle-hud/v3/wind-console.png',
   './assets/ui/battle-hud/v3/turn-ribbon.png',
+  './assets/ui/battle-hud/v4-wind-console.png',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];

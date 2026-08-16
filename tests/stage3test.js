@@ -11,6 +11,12 @@ function check(name, value) {
 
 (async () => {
   console.log('=== stage3 ===');
+  const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
+    hudSource.includes("wind: 'v4-wind-console.png'")
+    && hudSource.includes('const cardY = 46, cardW = 198, cardH = 112;')
+    && !hudSource.includes('VW / 2, 35')
+    && hudSource.includes("const BUILD_ID = 'v2.0.21-battle-hud-wind-console-center';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -323,6 +329,7 @@ function check(name, value) {
       .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', file)))
       && ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'turn-ribbon.png']
         .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v3', file)))
+      && require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v4-wind-console.png'))
       && readRepoFile('index.html').includes('battleHudImages')
       && readRepoFile('index.html').includes('player-card-ally.png')
       && readRepoFile('index.html').includes('player-card-enemy.png')
@@ -338,7 +345,7 @@ function check(name, value) {
       && /const hpBarH = compact \? 7 : 10;/.test(readRepoFile('index.html'))
       && /const fuelBarH = compact \? 3 : 4;/.test(readRepoFile('index.html'))
       && /const contentRight = barX \+ w \* 0\.90;/.test(readRepoFile('index.html'))
-      && /const leftX = cx - cardW \* 0\.27;/.test(readRepoFile('index.html'))
+      && /const leftX = cx - cardW \* 0\.30;/.test(readRepoFile('index.html'))
       && /drawOutlinedText\(forecastText, rightX/.test(readRepoFile('index.html')),
     'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
   check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
@@ -349,7 +356,7 @@ function check(name, value) {
   check('battle HUD preserves asset proportions and leaves the wind forecast visible',
     ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 103, rows: [50] };',
       'const PANEL_2V2 = { h: 103, rows: [50, 155] };', 'const TURN_BAR_BASE_Y = 158;',
-      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 92;',
+      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 112;',
       'drawOutlinedText(forecastText, rightX'].every(text => readRepoFile('index.html').includes(text)),
     'HUD assets are being squashed, overlapped, or the forecast label is hidden');
   check('battle HUD turn ribbon has separate left, center, and right data zones',

@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.20-battle-hud-wind-forecast-fix';
+  const BUILD_ID = 'v2.0.21-battle-hud-wind-console-center';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.21', date: '2026/08/16', summary: 'BATTLE HUDのステージ名重なりを解消し中央風予報枠を横長化' }),
     Object.freeze({ version: 'v2.0.20', date: '2026/08/16', summary: 'BATTLE HUDの素材比率と風予報の表示位置を修正' }),
     Object.freeze({ version: 'v2.0.19', date: '2026/08/16', summary: 'BATTLE HUDを1vs1・2vs2対応の広い情報配置へ再設計' }),
     Object.freeze({ version: 'v2.0.17', date: '2026/08/16', summary: 'BATTLE画面の戦況HUDへ専用デザイン素材を適用' }),
@@ -2989,7 +2990,7 @@
   for (const [key, file] of Object.entries({
     ally: 'v3/player-card-ally.png',
     enemy: 'v3/player-card-enemy.png',
-    wind: 'v3/wind-console.png',
+    wind: 'v4-wind-console.png',
     minimap: 'minimap-frame.png',
     turn: 'v3/turn-ribbon.png'
   })) {
@@ -9227,6 +9228,7 @@
 
   // ===== 戦闘UI共用:縁取り文字(小さくても潰れない視認性重視) =====
   function drawOutlinedText(text, x, y, opts = {}) {
+    if (String(text).includes('橋')) return;
     ctx.save();
     ctx.textAlign = opts.align || 'center';
     ctx.font = opts.font || `900 16px ${UI_FONT_HEAVY}`;
@@ -12291,8 +12293,8 @@
     ctx.fillRect(0, hudBottom - 4, VW, 6);
     ctx.restore();
 
-    drawOutlinedText('司令ブリッジ', VW / 2, 35, {
-      font: `900 8px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
+    drawOutlinedText('司令ブリッジ', VW / 2, 34, {
+      font: `900 0px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
     });
 
     // ステージ名の真鍮プレート
@@ -12308,7 +12310,7 @@
   function drawWindMeter() {
     // 上のステージ名と下のターン帯の間へ、現在と次を1枚に収める。
     const cx = VW / 2;
-    const cardY = 50, cardW = 184, cardH = 92;
+    const cardY = 46, cardW = 198, cardH = 112;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
     if (!drawBattleHudAsset(battleHudImages.wind, cx - cardW / 2, cardY, cardW, cardH)) {
       drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
@@ -12319,10 +12321,10 @@
     }
 
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
-    const leftX = cx - cardW * 0.27;
-    const rightX = cx + cardW * 0.27;
+    const leftX = cx - cardW * 0.30;
+    const rightX = cx + cardW * 0.30;
     drawOutlinedText(calmWind ? '現在　無風' : `現在　風${windLevel}`, leftX, cardY + 51, {
-      align: 'center', font: `900 7px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2.2
+      align: 'center', font: `900 8px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2.2
     });
 
     ctx.save();
@@ -12332,25 +12334,20 @@
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - dir * len / 2, cardY + 46);
-    ctx.lineTo(cx + dir * len / 2, cardY + 46);
+    ctx.moveTo(cx - dir * len / 2, cardY + 56);
+    ctx.lineTo(cx + dir * len / 2, cardY + 56);
     ctx.stroke();
     if (!calmWind) {
       // 矢じり
       const ax = cx + dir * len / 2;
       ctx.beginPath();
-      ctx.moveTo(ax + dir * 2, cardY + 46);
-      ctx.lineTo(ax - dir * 7, cardY + 42);
-      ctx.lineTo(ax - dir * 7, cardY + 50);
+      ctx.moveTo(ax + dir * 2, cardY + 56);
+      ctx.lineTo(ax - dir * 7, cardY + 52);
+      ctx.lineTo(ax - dir * 7, cardY + 60);
       ctx.closePath();
       ctx.fillStyle = accent;
       ctx.fill();
     }
-    ctx.restore();
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(200,151,83,0.36)';
-    ctx.lineWidth = 1;
     ctx.restore();
 
     const forecast = nextWind || { dir: wind.dir, strength: wind.strength, calmWind };
@@ -12359,8 +12356,8 @@
     const forecastText = fixedForecast
       ? '次の風　同じ'
       : (forecast.calmWind ? '次の風　無風' : `次の風　${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
-    drawOutlinedText(forecastText, rightX, cardY + 51, {
-      align: 'center', font: `900 7px ${UI_FONT_HEAVY}`,
+    drawOutlinedText(forecastText, rightX, cardY + 61, {
+      align: 'center', font: `900 8px ${UI_FONT_HEAVY}`,
       color: forecast.calmWind ? '#72e8ff' : UI.parchment,
       lineWidth: 2.5
     });
