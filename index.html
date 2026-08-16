@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.22-battle-hud-anchor-layout';
+  const BUILD_ID = 'v2.0.23-battle-hud-text-vertical-center';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.23', date: '2026/08/16', summary: 'BATTLE HUDの名前とHP値を文字窓の上下中央へ整列' }),
     Object.freeze({ version: 'v2.0.22', date: '2026/08/16', summary: 'BATTLE HUD素材の透明余白を除外し情報位置を実測アンカーへ統一' }),
     Object.freeze({ version: 'v2.0.21', date: '2026/08/16', summary: 'BATTLE HUDのステージ名重なりを解消し中央風予報枠を横長化' }),
     Object.freeze({ version: 'v2.0.20', date: '2026/08/16', summary: 'BATTLE HUDの素材比率と風予報の表示位置を修正' }),
@@ -2991,13 +2992,13 @@
   const HUD_ASSET_LAYOUT = Object.freeze({
     ally: Object.freeze({
       crop: Object.freeze({ x: 12, y: 122, w: 1642, h: 620 }),
-      text: Object.freeze({ left: 0.10, right: 0.91, y: 0.31 }),
+      text: Object.freeze({ left: 0.10, right: 0.91, centerY: 0.31 }),
       hp: Object.freeze({ left: 0.17, right: 0.91, y: 0.68, h: 0.12 }),
       fuel: Object.freeze({ left: 0.18, right: 0.90, y: 0.88, h: 0.06 })
     }),
     enemy: Object.freeze({
       crop: Object.freeze({ x: 12, y: 74, w: 1653, h: 707 }),
-      text: Object.freeze({ left: 0.08, right: 0.82, y: 0.32 }),
+      text: Object.freeze({ left: 0.08, right: 0.82, centerY: 0.32 }),
       hp: Object.freeze({ left: 0.10, right: 0.82, y: 0.69, h: 0.11 }),
       fuel: Object.freeze({ left: 0.12, right: 0.77, y: 0.88, h: 0.06 })
     }),
@@ -9250,6 +9251,7 @@
   function drawOutlinedText(text, x, y, opts = {}) {
     ctx.save();
     ctx.textAlign = opts.align || 'center';
+    ctx.textBaseline = opts.baseline || 'alphabetic';
     ctx.font = opts.font || `900 16px ${UI_FONT_HEAVY}`;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = opts.outline || UI.ink;
@@ -12416,7 +12418,7 @@
     const tabH = h * 0.28;
     const contentX = barX + w * layout.text.left;
     const contentRight = barX + w * layout.text.right;
-    const labelY = cardY + h * layout.text.y;
+    const labelY = cardY + h * layout.text.centerY;
     const hpBarY = cardY + h * layout.hp.y;
     const hpBarH = Math.max(6, h * layout.hp.h);
     const fuelBarY = cardY + h * layout.fuel.y;
@@ -12452,10 +12454,10 @@
     });
 
     drawOutlinedText(u.label, contentX, labelY, {
-      align: 'left', font: `900 ${compact ? 11 : 12}px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
+      align: 'left', baseline: 'middle', font: `900 ${compact ? 11 : 12}px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5
     });
     drawOutlinedText(`${Math.max(0, Math.ceil(u.hp))} / ${u.maxHp}`, contentRight, labelY, {
-      align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      align: 'right', baseline: 'middle', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
 
     const innerX = barX + w * layout.hp.left;
