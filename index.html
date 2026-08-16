@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.21-battle-hud-wind-console-center';
+  const BUILD_ID = 'v2.0.22-battle-hud-anchor-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.22', date: '2026/08/16', summary: 'BATTLE HUD素材の透明余白を除外し情報位置を実測アンカーへ統一' }),
     Object.freeze({ version: 'v2.0.21', date: '2026/08/16', summary: 'BATTLE HUDのステージ名重なりを解消し中央風予報枠を横長化' }),
     Object.freeze({ version: 'v2.0.20', date: '2026/08/16', summary: 'BATTLE HUDの素材比率と風予報の表示位置を修正' }),
     Object.freeze({ version: 'v2.0.19', date: '2026/08/16', summary: 'BATTLE HUDを1vs1・2vs2対応の広い情報配置へ再設計' }),
@@ -2987,6 +2988,24 @@
     minimap: new Image(),
     turn: new Image()
   };
+  const HUD_ASSET_LAYOUT = Object.freeze({
+    ally: Object.freeze({
+      crop: Object.freeze({ x: 12, y: 122, w: 1642, h: 620 }),
+      text: Object.freeze({ left: 0.10, right: 0.91, y: 0.31 }),
+      hp: Object.freeze({ left: 0.17, right: 0.91, y: 0.68, h: 0.12 }),
+      fuel: Object.freeze({ left: 0.18, right: 0.90, y: 0.88, h: 0.06 })
+    }),
+    enemy: Object.freeze({
+      crop: Object.freeze({ x: 12, y: 74, w: 1653, h: 707 }),
+      text: Object.freeze({ left: 0.08, right: 0.82, y: 0.32 }),
+      hp: Object.freeze({ left: 0.10, right: 0.82, y: 0.69, h: 0.11 }),
+      fuel: Object.freeze({ left: 0.12, right: 0.77, y: 0.88, h: 0.06 })
+    }),
+    wind: Object.freeze({
+      crop: Object.freeze({ x: 2, y: 201, w: 1668, h: 448 }),
+      leftX: 0.17, centerX: 0.50, rightX: 0.82, contentY: 0.56
+    })
+  });
   for (const [key, file] of Object.entries({
     ally: 'v3/player-card-ally.png',
     enemy: 'v3/player-card-enemy.png',
@@ -2998,9 +3017,10 @@
     battleHudImages[key].fetchPriority = 'high';
     battleHudImages[key].src = `assets/ui/battle-hud/${file}`;
   }
-  function drawBattleHudAsset(image, x, y, w, h) {
+  function drawBattleHudAsset(image, x, y, w, h, crop = null) {
     if (!image || !image.complete || image.naturalWidth <= 0) return false;
-    ctx.drawImage(image, x, y, w, h);
+    if (crop) ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);
+    else ctx.drawImage(image, x, y, w, h);
     return true;
   }
   const battleStartLogoVideo = document.createElement('video');
@@ -9228,7 +9248,6 @@
 
   // ===== 戦闘UI共用:縁取り文字(小さくても潰れない視認性重視) =====
   function drawOutlinedText(text, x, y, opts = {}) {
-    if (String(text).includes('橋')) return;
     ctx.save();
     ctx.textAlign = opts.align || 'center';
     ctx.font = opts.font || `900 16px ${UI_FONT_HEAVY}`;
@@ -12293,10 +12312,6 @@
     ctx.fillRect(0, hudBottom - 4, VW, 6);
     ctx.restore();
 
-    drawOutlinedText('司令ブリッジ', VW / 2, 34, {
-      font: `900 0px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 2.5
-    });
-
     // ステージ名の真鍮プレート
     const stageName = currentPattern === 'tieredBasin'
       ? '闘技場ステージ'
@@ -12310,9 +12325,10 @@
   function drawWindMeter() {
     // 上のステージ名と下のターン帯の間へ、現在と次を1枚に収める。
     const cx = VW / 2;
-    const cardY = 46, cardW = 198, cardH = 112;
+    const cardY = 52, cardW = 198, cardH = 54;
+    const layout = HUD_ASSET_LAYOUT.wind;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
-    if (!drawBattleHudAsset(battleHudImages.wind, cx - cardW / 2, cardY, cardW, cardH)) {
+    if (!drawBattleHudAsset(battleHudImages.wind, cx - cardW / 2, cardY, cardW, cardH, layout.crop)) {
       drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
         cut: 10,
         edge: calmWind ? 'rgba(114,232,255,0.75)' : UI.brass,
@@ -12321,29 +12337,35 @@
     }
 
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
-    const leftX = cx - cardW * 0.30;
-    const rightX = cx + cardW * 0.30;
-    drawOutlinedText(calmWind ? '現在　無風' : `現在　風${windLevel}`, leftX, cardY + 51, {
+    const frameX = cx - cardW / 2;
+    const leftX = frameX + cardW * layout.leftX;
+    const centerX = frameX + cardW * layout.centerX;
+    const rightX = frameX + cardW * layout.rightX;
+    const infoY = cardY + cardH * layout.contentY;
+    drawOutlinedText('現在', leftX, infoY - 6, {
+      align: 'center', font: `900 6px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 1.8
+    });
+    drawOutlinedText(calmWind ? '無風' : `風${windLevel}`, leftX, infoY + 5, {
       align: 'center', font: `900 8px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2.2
     });
 
     ctx.save();
-    const len = calmWind ? 28 : 16 + wind.strength * 42;
+    const len = calmWind ? 20 : 18 + wind.strength * 24;
     const dir = calmWind ? 1 : wind.dir;
     ctx.strokeStyle = accent;
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - dir * len / 2, cardY + 56);
-    ctx.lineTo(cx + dir * len / 2, cardY + 56);
+    ctx.moveTo(centerX - dir * len / 2, infoY);
+    ctx.lineTo(centerX + dir * len / 2, infoY);
     ctx.stroke();
     if (!calmWind) {
       // 矢じり
-      const ax = cx + dir * len / 2;
+      const ax = centerX + dir * len / 2;
       ctx.beginPath();
-      ctx.moveTo(ax + dir * 2, cardY + 56);
-      ctx.lineTo(ax - dir * 7, cardY + 52);
-      ctx.lineTo(ax - dir * 7, cardY + 60);
+      ctx.moveTo(ax + dir * 2, infoY);
+      ctx.lineTo(ax - dir * 7, infoY - 4);
+      ctx.lineTo(ax - dir * 7, infoY + 4);
       ctx.closePath();
       ctx.fillStyle = accent;
       ctx.fill();
@@ -12354,9 +12376,14 @@
     const fixedForecast = !!activeFixedWind() || battleMode === 'tutorial';
     const forecastLevel = forecast.strength < 0.34 ? '弱' : forecast.strength < 0.67 ? '中' : '強';
     const forecastText = fixedForecast
-      ? '次の風　同じ'
-      : (forecast.calmWind ? '次の風　無風' : `次の風　${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
-    drawOutlinedText(forecastText, rightX, cardY + 61, {
+      ? '同じ'
+      : (forecast.calmWind ? '無風' : `${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
+    drawOutlinedText('次の風', rightX, infoY - 6, {
+      align: 'center', font: `900 6px ${UI_FONT_HEAVY}`,
+      color: forecast.calmWind ? '#72e8ff' : UI.parchment,
+      lineWidth: 1.8
+    });
+    drawOutlinedText(forecastText, rightX, infoY + 5, {
       align: 'center', font: `900 8px ${UI_FONT_HEAVY}`,
       color: forecast.calmWind ? '#72e8ff' : UI.parchment,
       lineWidth: 2.5
@@ -12370,29 +12397,30 @@
   const HUD_BASE_BOTTOM = 270;
   const TURN_BAR_BASE_Y = 158;
   const HUD_CARD_W = 184;
-  const PANEL_1V1 = { h: 103, rows: [50] };
-  const PANEL_2V2 = { h: 103, rows: [50, 155] };
+  const PANEL_1V1 = { h: 74, rows: [50] };
+  const PANEL_2V2 = { h: 74, rows: [50, 128] };
   // 2vs2はカードが2段になるので、その下に続くターン帯・ミニマップ・HUD背景を丸ごと下げる。
   // 世界はHUDの下に全画面で描かれているため、下げても隠れるのは空だけで戦場は狭くならない。
-  const HUD_EXTRA_2V2 = 108;
+  const HUD_EXTRA_2V2 = 62;
   function hudShift() { return is2v2() ? HUD_EXTRA_2V2 : 0; }
   function minimapTop() { return MINIMAP.y + hudShift(); }
 
   function drawUnitPanel(u, edgeX, align, cardY, h) {
     const w = HUD_CARD_W;
     const barX = align === 'left' ? edgeX : edgeX - w;
-    // 低いカードは中身を詰めないと枠から溢れる。1vs1の見た目は一切変えない。
-    const compact = h < 96;
-    const tabY = compact ? cardY + 6 : cardY + 9;
-    const tabH = compact ? 18 : 22;
-    // 素材左側の円形パーツは装飾。動的情報は右側の横長パネル内へ揃える。
-    const contentX = barX + w * 0.12;
-    const contentRight = barX + w * 0.90;
-    const labelY = compact ? cardY + 14 : cardY + 31;
-    const hpBarY = compact ? cardY + 24 : cardY + 54;
-    const hpBarH = compact ? 7 : 10;
-    const fuelBarY = compact ? cardY + 35 : cardY + 81;
-    const fuelBarH = compact ? 3 : 4;
+    // 2vs2は同じ実測アンカーを保ちつつ文字だけ一段小さくして2段へ収める。
+    const compact = is2v2();
+    const layoutKey = u.team === localUnit().team ? 'ally' : 'enemy';
+    const layout = HUD_ASSET_LAYOUT[layoutKey];
+    const tabY = cardY + h * 0.18;
+    const tabH = h * 0.28;
+    const contentX = barX + w * layout.text.left;
+    const contentRight = barX + w * layout.text.right;
+    const labelY = cardY + h * layout.text.y;
+    const hpBarY = cardY + h * layout.hp.y;
+    const hpBarH = Math.max(6, h * layout.hp.h);
+    const fuelBarY = cardY + h * layout.fuel.y;
+    const fuelBarH = Math.max(3, h * layout.fuel.h);
     // 自分=青/相手=赤の陣営色は、どちらのカードか一目で分かるので残す。
     // カードが左右どちらに出るかは席で決まるので、色は「置いた側」ではなく持ち主で引く。
     // 2vs2では味方CPUも自分と同じ青にしたいので、判定はIDではなく陣営で行う
@@ -12403,7 +12431,7 @@
 
     // 手番側のカードだけ縁を光らせ、今どちらの番かカードでも分かるようにする
     const frameImage = u.team === localUnit().team ? battleHudImages.ally : battleHudImages.enemy;
-    if (!drawBattleHudAsset(frameImage, barX, cardY, w, h)) {
+    if (!drawBattleHudAsset(frameImage, barX, cardY, w, h, layout.crop)) {
       drawIronPlate(barX + w / 2, cardY + h / 2, w, h, {
         cut: 10,
         edge: isTurn ? accent : UI.brass,
@@ -12418,7 +12446,7 @@
     ctx.fillRect(align === 'left' ? barX + 1 : barX + w - 4, tabY, 3, tabH);
     ctx.restore();
 
-    drawOutlinedText(u.team === localUnit().team ? '自軍' : '敵軍', contentX, cardY + h - 4, {
+    drawOutlinedText(u.team === localUnit().team ? '自軍' : '敵軍', contentX, cardY + h + 9, {
       align: 'left', font: `900 ${compact ? 7 : 8}px ${UI_FONT_HEAVY}`,
       color: accent, lineWidth: 2
     });
@@ -12430,8 +12458,8 @@
       align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
 
-    const innerX = barX + w * 0.12;
-    const innerW = w * 0.78;
+    const innerX = barX + w * layout.hp.left;
+    const innerW = w * (layout.hp.right - layout.hp.left);
     const hpRatio = Math.max(0, u.hp / u.maxHp);
     ctx.save();
     // HPゲージ(黒い溝に嵌った真鍮枠のバー)
@@ -12452,12 +12480,14 @@
 
     // 燃料ゲージ
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(innerX, fuelBarY, innerW, fuelBarH);
+    const fuelX = barX + w * layout.fuel.left;
+    const fuelW = w * (layout.fuel.right - layout.fuel.left);
+    ctx.fillRect(fuelX, fuelBarY, fuelW, fuelBarH);
     const fuelRatio = Math.max(0, u.fuel / u.fuelMax);
     ctx.fillStyle = UI.fuel;
-    ctx.fillRect(innerX, fuelBarY, innerW * fuelRatio, fuelBarH);
+    ctx.fillRect(fuelX, fuelBarY, fuelW * fuelRatio, fuelBarH);
     ctx.strokeStyle = 'rgba(255,226,161,0.3)';
-    ctx.strokeRect(innerX + 0.5, fuelBarY + 0.5, innerW - 1, fuelBarH - 1);
+    ctx.strokeRect(fuelX + 0.5, fuelBarY + 0.5, fuelW - 1, fuelBarH - 1);
     ctx.restore();
   }
 
