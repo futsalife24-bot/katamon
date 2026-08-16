@@ -16,9 +16,9 @@ function check(name, value) {
     anchoredHudSource.includes('const HUD_ASSET_LAYOUT = Object.freeze({')
     && anchoredHudSource.includes('ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);')
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
-    && anchoredHudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
+    && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.24-battle-hud-hp-gauge-center';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.25-battle-wind-console-vertical-layout';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -29,12 +29,19 @@ function check(name, value) {
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
     && anchoredHudSource.includes('const hpBarY = cardY + h * layout.hp.centerY - hpBarH / 2;'));
+  check('2vs2 expands the wind console into three tall current-direction-forecast zones',
+    anchoredHudSource.includes('const expanded = is2v2();')
+    && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
+    && anchoredHudSource.includes("drawOutlinedText('現在', zoneX[0]")
+    && anchoredHudSource.includes("drawOutlinedText('風向', zoneX[1]")
+    && anchoredHudSource.includes("drawOutlinedText('次の風', zoneX[2]"));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
     hudSource.includes("wind: 'v4-wind-console.png'")
-    && hudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
+    && hudSource.includes('const cardW = expanded ? 162 : 198;')
+    && hudSource.includes('const cardH = expanded ? 152 : 54;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.24-battle-hud-hp-gauge-center';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.25-battle-wind-console-vertical-layout';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -374,7 +381,7 @@ function check(name, value) {
   check('battle HUD preserves asset proportions and leaves the wind forecast visible',
     ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 74, rows: [50] };',
       'const PANEL_2V2 = { h: 74, rows: [50, 128] };', 'const TURN_BAR_BASE_Y = 158;',
-      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 54;',
+      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = expanded ? 152 : 54;',
       'drawOutlinedText(forecastText, rightX'].every(text => readRepoFile('index.html').includes(text)),
     'HUD assets are being squashed, overlapped, or the forecast label is hidden');
   check('battle HUD turn ribbon has separate left, center, and right data zones',
