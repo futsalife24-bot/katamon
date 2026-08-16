@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.18-battle-hud-text-layout';
+const CACHE_VERSION = 'katamon-pwa-v2.0.19-battle-hud-readable-layout';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -32,6 +32,10 @@ const APP_SHELL = [
   './assets/ui/battle-hud/player-card-enemy.png',
   './assets/ui/battle-hud/wind-console.png',
   './assets/ui/battle-hud/minimap-frame.png',
+  './assets/ui/battle-hud/v3/player-card-ally.png',
+  './assets/ui/battle-hud/v3/player-card-enemy.png',
+  './assets/ui/battle-hud/v3/wind-console.png',
+  './assets/ui/battle-hud/v3/turn-ribbon.png',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];

@@ -307,8 +307,8 @@ function check(name, value) {
   const cacheId = /const CACHE_VERSION = 'katamon-pwa-([^']+)'/.exec(swText);
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
-  check('battle HUD uses the expanded command-bridge layout',
-    /const HUD_BASE_BOTTOM = 150;/.test(readRepoFile('index.html'))
+  check('battle HUD uses the expanded readable layout',
+    /const HUD_BASE_BOTTOM = 212;/.test(readRepoFile('index.html'))
       && /const TURN_BAR_BASE_Y = 126;/.test(readRepoFile('index.html'))
       && /const MINIMAP = \{ x: 13, y: 156, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
     'battle HUD is still using the compact top layout');
@@ -318,23 +318,39 @@ function check(name, value) {
       && /司令ブリッジ/.test(readRepoFile('index.html')),
     'battle HUD command-bridge visual language is missing');
 
-  check('battle HUD uses the four supplied visual frame assets',
+  check('battle HUD uses the readable v3 visual frame assets',
     ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'minimap-frame.png']
       .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', file)))
+      && ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'turn-ribbon.png']
+        .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v3', file)))
       && readRepoFile('index.html').includes('battleHudImages')
       && readRepoFile('index.html').includes('player-card-ally.png')
       && readRepoFile('index.html').includes('player-card-enemy.png')
       && readRepoFile('index.html').includes('wind-console.png')
+      && readRepoFile('index.html').includes('turn-ribbon.png')
       && readRepoFile('index.html').includes('minimap-frame.png')
       && readRepoFile('index.html').includes('drawBattleHudAsset'),
     'supplied battle HUD frame assets are not wired into the renderer');
 
-  check('battle HUD text and gauges stay inside the supplied panel windows',
-    /const contentX = barX \+ w \* 0\.34;/.test(readRepoFile('index.html'))
-      && /const innerX = barX \+ w \* 0\.36;/.test(readRepoFile('index.html'))
+  check('battle HUD text and gauges use wide HP-first windows',
+    /const contentX = barX \+ w \* 0\.18;/.test(readRepoFile('index.html'))
+      && /const innerX = barX \+ w \* 0\.18;/.test(readRepoFile('index.html'))
+      && /const hpBarH = compact \? 7 : 12;/.test(readRepoFile('index.html'))
+      && /const fuelBarH = compact \? 3 : 4;/.test(readRepoFile('index.html'))
       && /const contentRight = barX \+ w \* 0\.94;/.test(readRepoFile('index.html'))
-      && /drawOutlinedText\(forecastText, cx, cardY \+ 46/.test(readRepoFile('index.html')),
-    'dynamic HUD text is still positioned on the decorative artwork instead of the panel windows');
+      && /const leftX = cx - cardW \* 0\.31;/.test(readRepoFile('index.html'))
+      && /forecastText\.replace\('次の風　', ''\), rightX/.test(readRepoFile('index.html')),
+    'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
+  check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
+    /const w = 242;/.test(readRepoFile('index.html'))
+      && /function showTacticalStrip\(\) \{[\s\S]{0,100}is2v2\(\) \|\| STAGE_W === 2160/.test(readRepoFile('index.html'))
+      && /function drawMinimap\(\) \{\s*if \(!showTacticalStrip\(\)\) return;/.test(readRepoFile('index.html')),
+    '2vs2 card reuse or contextual minimap visibility is missing');
+  check('battle HUD turn ribbon has separate left, center, and right data zones',
+    /v3\/turn-ribbon\.png/.test(readRepoFile('index.html'))
+      && /drawOutlinedText\(turnCounter, VW \/ 2, barY \+ 17/.test(readRepoFile('index.html'))
+      && /battleHudImages\.turn/.test(readRepoFile('index.html')),
+    'turn information remains a cramped single text line');
 
   check('battle-start logo is preloaded, cached, and drawn from the Drive PNG',
     require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.png'))
