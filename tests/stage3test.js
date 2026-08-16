@@ -18,19 +18,23 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.23-battle-hud-text-vertical-center';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.24-battle-hud-hp-gauge-center';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
     && anchoredHudSource.includes('centerY: 0.32')
     && anchoredHudSource.includes('const labelY = cardY + h * layout.text.centerY;')
     && (anchoredHudSource.match(/baseline: 'middle'/g) || []).length >= 2);
+  check('battle HUD HP gauges are centered vertically on their measured rail anchors',
+    anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
+    && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
+    && anchoredHudSource.includes('const hpBarY = cardY + h * layout.hp.centerY - hpBarH / 2;'));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
     hudSource.includes("wind: 'v4-wind-console.png'")
     && hudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.23-battle-hud-text-vertical-center';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.24-battle-hud-hp-gauge-center';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
