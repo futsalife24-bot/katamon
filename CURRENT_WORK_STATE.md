@@ -1,5 +1,28 @@
 # カタモン 現在作業状態
 
+## v2.0.10 BATTLE START video playback speed (2026-08-16)
+
+### What changed
+
+- Set the normal BATTLE START video playback rate to 1.2x.
+- Kept the existing 1.5x visual size, one-shot playback, screen compositing, position, PNG fallback, VS timing/layout, and game rules unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.10-battle-start-video-speed`.
+
+### Why
+
+- Make the opening cut-in feel a little snappier without adding rendering work; playback speed changes the video clock only and does not add frames or pixel processing.
+
+### Do not do
+
+- Do not restore per-frame pixel processing or change the video render path for this small playback adjustment.
+- Do not change the 1.5x visual size, one-shot stop behavior, position, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New playback-rate regression failed on the pre-change implementation: 442/443 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- Browser visual check must confirm the BATTLE START video remains visible without a black rectangle and the battle continues normally on local HTTP; `file://` is prohibited.
+
 ## v2.0.9 BATTLE START video performance (2026-08-16)
 
 ### What changed
