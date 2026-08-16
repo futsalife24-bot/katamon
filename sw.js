@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.26-battle-wind-gauge-round';
+const CACHE_VERSION = 'katamon-pwa-v2.0.27-battle-wind-round-console';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -37,6 +37,7 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v3/wind-console.png',
   './assets/ui/battle-hud/v3/turn-ribbon.png',
   './assets/ui/battle-hud/v4-wind-console.png',
+  './assets/ui/battle-hud/wind-console-round.webp',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];

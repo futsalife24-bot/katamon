@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.26-battle-wind-gauge-round';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -29,24 +29,27 @@ function check(name, value) {
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
     && anchoredHudSource.includes('const hpBarY = cardY + h * layout.hp.centerY - hpBarH / 2;'));
-  check('2vs2 expands the wind console into three tall current-direction-forecast zones',
+  check('1vs1と2vs2の風情報は同じ丸形フレーム内へ統一して表示する',
+    anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
+    && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
+    && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
+  check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
-    && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
-    && anchoredHudSource.includes("drawOutlinedText('現在', zoneX[0]")
-    && anchoredHudSource.includes("drawOutlinedText('風向', zoneX[1]")
-    && anchoredHudSource.includes("drawOutlinedText('次の風', zoneX[2]"));
-  check('2vs2 wind direction uses a round gauge containing both arrow and strength',
-    anchoredHudSource.includes('const windGaugeRadius = 19;')
-    && anchoredHudSource.includes('ctx.arc(zoneX[1], windGaugeY, windGaugeRadius, 0, Math.PI * 2);')
-    && anchoredHudSource.includes("const windStrengthText = calmWind ? '無風' : windLevel;")
-    && anchoredHudSource.includes('drawOutlinedText(windStrengthText, zoneX[1], windGaugeY + 11'));
+    && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
+    && anchoredHudSource.includes('drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windLevel, forecast, fixedForecast, forecastText);'));
+  check('丸形コンソール内に風向矢印・強さ・次の風予報を表示する',
+    anchoredHudSource.includes("const arrowText = calmWind ? '—' : (wind.dir < 0 ? '←' : '→');")
+    && anchoredHudSource.includes("drawOutlinedText(calmWind ? '無風' : `風力 ${windLevel}`")
+    && anchoredHudSource.includes("const forecastLabel = fixedForecast ? '次の風: 同じ' : '次の風';")
+    && anchoredHudSource.includes('drawOutlinedText(forecastText, cx, roundCenterY + inner * 0.97'));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
-    hudSource.includes("wind: 'v4-wind-console.png'")
-    && hudSource.includes('const cardW = expanded ? 162 : 198;')
-    && hudSource.includes('const cardH = expanded ? 152 : 54;')
+  check('battle HUD reserves the centered round wind console and keeps the stage title layer clear',
+    hudSource.includes("roundWind: 'wind-console-round.webp'")
+    && hudSource.includes('const roundSize = expanded ? 142 : 104;')
+    && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.26-battle-wind-gauge-round';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.27-battle-wind-round-console';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -354,18 +357,19 @@ function check(name, value) {
       && !readRepoFile('index.html').includes("drawOutlinedText('司令ブリッジ'"),
     'battle HUD still draws the obsolete bridge label');
 
-  check('battle HUD uses the readable v3 visual frame assets',
-    ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'minimap-frame.png']
+  check('battle HUD uses the supplied player frames and unified round wind asset',
+    ['player-card-ally.png', 'player-card-enemy.png', 'minimap-frame.png']
       .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', file)))
       && ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'turn-ribbon.png']
         .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v3', file)))
       && require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v4-wind-console.png'))
+      && require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'wind-console-round.webp'))
       && readRepoFile('index.html').includes('battleHudImages')
       && readRepoFile('index.html').includes('player-card-ally.png')
       && readRepoFile('index.html').includes('player-card-enemy.png')
-      && readRepoFile('index.html').includes('wind-console.png')
       && readRepoFile('index.html').includes('turn-ribbon.png')
       && readRepoFile('index.html').includes('minimap-frame.png')
+      && readRepoFile('index.html').includes('wind-console-round.webp')
       && readRepoFile('index.html').includes('drawBattleHudAsset'),
     'supplied battle HUD frame assets are not wired into the renderer');
 
