@@ -11,12 +11,20 @@ function check(name, value) {
 
 (async () => {
   console.log('=== stage3 ===');
+  const anchoredHudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check('battle HUD crops transparent asset margins and uses measured content anchors',
+    anchoredHudSource.includes('const HUD_ASSET_LAYOUT = Object.freeze({')
+    && anchoredHudSource.includes('ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);')
+    && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
+    && anchoredHudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
+    && !anchoredHudSource.includes("String(text).includes('橋')")
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.22-battle-hud-anchor-layout';"));
   const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   check('battle HUD reserves a wide three-zone wind console and keeps the stage title layer clear',
     hudSource.includes("wind: 'v4-wind-console.png'")
-    && hudSource.includes('const cardY = 46, cardW = 198, cardH = 112;')
+    && hudSource.includes('const cardY = 52, cardW = 198, cardH = 54;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.21-battle-hud-wind-console-center';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.22-battle-hud-anchor-layout';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -318,11 +326,11 @@ function check(name, value) {
       && /const TURN_BAR_BASE_Y = 158;/.test(readRepoFile('index.html'))
       && /const MINIMAP = \{ x: 13, y: 190, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
     'battle HUD is still using the compact top layout');
-  check('battle HUD command bridge keeps team accents and a central console',
+  check('battle HUD keeps team accents and removes the obsolete bridge label',
     /自軍/.test(readRepoFile('index.html'))
       && /敵軍/.test(readRepoFile('index.html'))
-      && /司令ブリッジ/.test(readRepoFile('index.html')),
-    'battle HUD command-bridge visual language is missing');
+      && !readRepoFile('index.html').includes("drawOutlinedText('司令ブリッジ'"),
+    'battle HUD still draws the obsolete bridge label');
 
   check('battle HUD uses the readable v3 visual frame assets',
     ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'minimap-frame.png']
@@ -340,12 +348,12 @@ function check(name, value) {
     'supplied battle HUD frame assets are not wired into the renderer');
 
   check('battle HUD text and gauges use wide HP-first windows',
-    /const contentX = barX \+ w \* 0\.12;/.test(readRepoFile('index.html'))
-      && /const innerX = barX \+ w \* 0\.12;/.test(readRepoFile('index.html'))
-      && /const hpBarH = compact \? 7 : 10;/.test(readRepoFile('index.html'))
-      && /const fuelBarH = compact \? 3 : 4;/.test(readRepoFile('index.html'))
-      && /const contentRight = barX \+ w \* 0\.90;/.test(readRepoFile('index.html'))
-      && /const leftX = cx - cardW \* 0\.30;/.test(readRepoFile('index.html'))
+    /const contentX = barX \+ w \* layout\.text\.left;/.test(readRepoFile('index.html'))
+      && /const innerX = barX \+ w \* layout\.hp\.left;/.test(readRepoFile('index.html'))
+      && /const fuelX = barX \+ w \* layout\.fuel\.left;/.test(readRepoFile('index.html'))
+      && /const hpBarH = Math\.max\(6, h \* layout\.hp\.h\);/.test(readRepoFile('index.html'))
+      && /const fuelBarH = Math\.max\(3, h \* layout\.fuel\.h\);/.test(readRepoFile('index.html'))
+      && /const centerX = frameX \+ cardW \* layout\.centerX;/.test(readRepoFile('index.html'))
       && /drawOutlinedText\(forecastText, rightX/.test(readRepoFile('index.html')),
     'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
   check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
@@ -354,9 +362,9 @@ function check(name, value) {
       && /function drawMinimap\(\) \{\s*if \(!showTacticalStrip\(\)\) return;/.test(readRepoFile('index.html')),
     '2vs2 card reuse or contextual minimap visibility is missing');
   check('battle HUD preserves asset proportions and leaves the wind forecast visible',
-    ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 103, rows: [50] };',
-      'const PANEL_2V2 = { h: 103, rows: [50, 155] };', 'const TURN_BAR_BASE_Y = 158;',
-      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 112;',
+    ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 74, rows: [50] };',
+      'const PANEL_2V2 = { h: 74, rows: [50, 128] };', 'const TURN_BAR_BASE_Y = 158;',
+      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = 54;',
       'drawOutlinedText(forecastText, rightX'].every(text => readRepoFile('index.html').includes(text)),
     'HUD assets are being squashed, overlapped, or the forecast label is hidden');
   check('battle HUD turn ribbon has separate left, center, and right data zones',
