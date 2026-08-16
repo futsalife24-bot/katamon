@@ -1,5 +1,30 @@
 # カタモン 現在作業状態
 
+## v2.0.8 BATTLE START video playback adjustment (2026-08-16)
+
+### What changed
+
+- Enlarged the normal BATTLE START video from the previous 300px virtual width to 1.5x (450px).
+- Disabled looping and explicitly pauses the video at the end of its single playback.
+- Kept the transparent-background processing, upward position, PNG fallback, and tutorial text behavior unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.8-battle-start-video-playback`.
+
+### Why
+
+- Match the requested logo scale and make the animation stop after one playback instead of repeating.
+
+### Do not do
+
+- Do not loop the BATTLE START video or enlarge the tutorial heading.
+- Do not change the video position, black-background removal, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New playback regression failed on the pre-change implementation, then passed after the fix.
+- `npm.cmd run test:stage3`: 442/442 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check on a local HTTP server rooted at this worktree passed: the logo visibly renders at 1.5x, with no black rectangle; after the cut-in completes the game proceeds normally. `file://` was not used.
+
 ## v2.0.7 BATTLE START video and flash cleanup (2026-08-16)
 
 ### What changed
