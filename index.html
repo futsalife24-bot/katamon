@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.30-wind-console-inner-layout';
+  const BUILD_ID = 'v2.0.31-wind-console-calm-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.31', date: '2026/08/16', summary: '風コンソールの無風表示と文字位置を調整' }),
     Object.freeze({ version: 'v2.0.30', date: '2026/08/16', summary: '風コンソールの文字を内側へ収め強さを拡大' }),
     Object.freeze({ version: 'v2.0.29', date: '2026/08/16', summary: '風コンソールの矢印と予報を見やすく改善' }),
     Object.freeze({ version: 'v2.0.28', date: '2026/08/16', summary: '風コンソールを3行の矢印表示へ整理' }),
@@ -12431,6 +12432,21 @@
   // 丸枠の中央行は、方向を輪郭で示した矢印の中へ強さを直接入れる。
   // 文字列の横並びより小さい計器内でも意味が取りやすく、左右の風にも対応できる。
   function drawWindStrengthArrow(cx, cy, expanded, direction, label, width, height, color, fontSize) {
+    if (label === '無風') {
+      const w = expanded ? 48 : 36;
+      const h = expanded ? 25 : 19;
+      ctx.save();
+      ctx.fillStyle = 'rgba(2, 12, 18, 0.94)';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = expanded ? 2 : 1.5;
+      ctx.beginPath();
+      ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h * 0.32);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      drawOutlinedText(label, cx, cy, { baseline: 'middle', font: `900 ${fontSize}px ${UI_FONT_HEAVY}`, color: '#fff3cf', lineWidth: expanded ? 2.4 : 1.8 });
+      return;
+    }
     const sign = direction < 0 ? -1 : 1;
     ctx.save();
     ctx.translate(cx, cy);
@@ -12444,11 +12460,8 @@
     ctx.lineTo(width * 0.10, height / 2);
     ctx.lineTo(-width / 2, height / 2);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(3, 12, 18, 0.94)';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = expanded ? 3 : 2.2;
+    ctx.fillStyle = color;
     ctx.fill();
-    ctx.stroke();
     ctx.restore();
     const strengthPlateW = label === '無風' ? width * 0.48 : width * 0.30;
     const strengthPlateH = height * 1.28;
@@ -12472,7 +12485,7 @@
   // 予報は補助情報として独立した小バッジにする。NEXTの文字と矢印を同じ白さにせず、
   // 次に読むべき方向だけを即座に拾えるようにする。
   function drawWindNextBadge(cx, cy, expanded, nextArrow, color) {
-    const w = expanded ? 62 : 46;
+    const w = expanded ? 54 : 38;
     const h = expanded ? 15 : 11;
     ctx.save();
     ctx.fillStyle = 'rgba(2, 10, 15, 0.88)';
@@ -12517,12 +12530,12 @@
       ctx.restore();
     }
 
-    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.68, {
+    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.52, {
       baseline: 'middle', font: `900 ${titleFont}px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2
     });
     drawWindStrengthArrow(cx, roundCenterY, expanded, wind.dir, calmWind ? '無風' : windLevel,
       arrowWidth, arrowHeight, accent, arrowFont);
-    drawWindNextBadge(cx, roundCenterY + inner * 0.66, expanded, nextArrow,
+    drawWindNextBadge(cx, roundCenterY + inner * 0.58, expanded, nextArrow,
       forecast.calmWind ? '#72e8ff' : UI.brassLight);
   }
 
