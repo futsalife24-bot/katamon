@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.16-battle-hud-bridge';
+const CACHE_VERSION = 'katamon-pwa-v2.0.17-battle-hud-assets';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -28,6 +28,10 @@ const APP_SHELL = [
   './assets/intro-cannonball.png',
   './assets/battle-start-logo.png',
   './assets/battle-start-logo.mp4',
+  './assets/ui/battle-hud/player-card-ally.png',
+  './assets/ui/battle-hud/player-card-enemy.png',
+  './assets/ui/battle-hud/wind-console.png',
+  './assets/ui/battle-hud/minimap-frame.png',
   './assets/normal-impact-explosion.mp3?v=3',
   './assets/special-cutin-edm-zap.mp3?v=1'
 ];

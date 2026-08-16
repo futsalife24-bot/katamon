@@ -4171,3 +4171,8 @@ GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 
 - loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。タイトルの表示・入力だけを変更し、通信処理には触れていないため。
 - ローカルHTTP（`http://127.0.0.1:4181/`）＋実ブラウザのスマートフォン幅で、タイトル最下部の履歴欄、v201〜v197の一覧、「閉じる」での復帰を確認した。文字切れ・背面への入力漏れはなく、Console error/warn 0件。`file://`は使っていない。
 - `database.rules.json`は変更していないためFirebase Console反映は不要。
+\n+## v2.0.17 BATTLE HUD専用素材適用（2026-08-16）
+\n+- 何を: Google Drive提供の味方カード枠・敵カード枠・風向きコンソール・ミニマップ枠をBATTLE画面へ組み込み、動的情報はCanvasで重ねた。素材未読込時は旧描画へフォールバックする。
+- なぜ: 線描画中心だったHUDへ、メロニキ提供のメカニカルな質感を反映するため。
+- やってはいけないこと: `assets/ui/battle-hud/`を削除・別用途へ流用しない。`database.rules.json`は変更しない。Firebase Console反映は不要。
+- 実測テスト数: 旧実装で新規テスト `447/448 passed` を確認後、実装後 `npm.cmd run test:stage3` `448/448 passed`、`npm.cmd test` 全成功。loopback基準値 38 / 64 / 83 / 61 / 48 は通信処理を変更せず維持。HTTP `127.0.0.1:4203`の実ブラウザで4素材表示を確認、`file://`未使用。

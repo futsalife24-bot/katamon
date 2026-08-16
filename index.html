@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.16-battle-hud-bridge';
+  const BUILD_ID = 'v2.0.17-battle-hud-assets';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.17', date: '2026/08/16', summary: 'BATTLE画面の戦況HUDへ専用デザイン素材を適用' }),
     Object.freeze({ version: 'v2.0.16', date: '2026/08/16', summary: 'BATTLE画面上部を戦況司令ブリッジ風に刷新' }),
     Object.freeze({ version: 'v2.0.15', date: '2026/08/16', summary: 'BATTLE STARTロゴ動画のサイズと再生開始速度を調整' }),
     Object.freeze({ version: 'v2.0.14', date: '2026/08/16', summary: '更新履歴の見出し位置と強調表示・文字サイズを調整' }),
@@ -2974,6 +2975,28 @@
   battleStartLogoImage.src = 'assets/battle-start-logo.png';
   function battleStartLogoReady() {
     return battleStartLogoImage.complete && battleStartLogoImage.naturalWidth > 0;
+  }
+  // メロニキ提供の戦況HUD素材。動的な文字・ゲージはCanvasで重ね、枠だけを画像に任せる。
+  const battleHudImages = {
+    ally: new Image(),
+    enemy: new Image(),
+    wind: new Image(),
+    minimap: new Image()
+  };
+  for (const [key, file] of Object.entries({
+    ally: 'player-card-ally.png',
+    enemy: 'player-card-enemy.png',
+    wind: 'wind-console.png',
+    minimap: 'minimap-frame.png'
+  })) {
+    battleHudImages[key].decoding = 'async';
+    battleHudImages[key].fetchPriority = 'high';
+    battleHudImages[key].src = `assets/ui/battle-hud/${file}`;
+  }
+  function drawBattleHudAsset(image, x, y, w, h) {
+    if (!image || !image.complete || image.naturalWidth <= 0) return false;
+    ctx.drawImage(image, x, y, w, h);
+    return true;
   }
   const battleStartLogoVideo = document.createElement('video');
   const BATTLE_START_LOGO_SCALE = 1.95;
@@ -12282,11 +12305,13 @@
     // 上のステージ名と下のターン帯の間へ、現在と次を1枚に収める。
     const cx = VW / 2, cardY = 38, cardW = 164, cardH = 54;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
-    drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
-      cut: 10,
-      edge: calmWind ? 'rgba(114,232,255,0.75)' : UI.brass,
-      lineWidth: 2
-    });
+    if (!drawBattleHudAsset(battleHudImages.wind, cx - cardW / 2, cardY, cardW, cardH)) {
+      drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
+        cut: 10,
+        edge: calmWind ? 'rgba(114,232,255,0.75)' : UI.brass,
+        lineWidth: 2
+      });
+    }
 
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
     drawOutlinedText(calmWind ? '無風 / CALM' : `現在　風力 ${windLevel}`, cx, cardY + 12, {
@@ -12342,10 +12367,10 @@
   // 「減った分=そのターンでどれだけ移動したか」が常に見える =====
   // 名前カードの寸法。2vs2は4枚を上下2段に積むので、1枚あたりを低くする。
   // 上端はメニュー/音量ボタンを避けて46から、下端はHUD背景の真鍮レール(112)まで。
-  const HUD_BASE_BOTTOM = 132;
-  const TURN_BAR_BASE_Y = 108;
-  const PANEL_1V1 = { h: 46, rows: [46] };
-  const PANEL_2V2 = { h: 36, rows: [46, 84] };
+  const HUD_BASE_BOTTOM = 150;
+  const TURN_BAR_BASE_Y = 126;
+  const PANEL_1V1 = { h: 56, rows: [44] };
+  const PANEL_2V2 = { h: 38, rows: [44, 86] };
   // 2vs2はカードが2段になるので、その下に続くターン帯・ミニマップ・HUD背景を丸ごと下げる。
   // 世界はHUDの下に全画面で描かれているため、下げても隠れるのは空だけで戦場は狭くならない。
   const HUD_EXTRA_2V2 = 38;
@@ -12353,7 +12378,7 @@
   function minimapTop() { return MINIMAP.y + hudShift(); }
 
   function drawUnitPanel(u, edgeX, align, cardY, h) {
-    const w = 168;
+    const w = h < 40 ? 168 : 178;
     const barX = align === 'left' ? edgeX : edgeX - w;
     // 低いカードは中身を詰めないと枠から溢れる。1vs1の見た目は一切変えない。
     const compact = h < 40;
@@ -12373,12 +12398,15 @@
     const isTurn = activeUnit().id === u.id;
 
     // 手番側のカードだけ縁を光らせ、今どちらの番かカードでも分かるようにする
-    drawIronPlate(barX + w / 2, cardY + h / 2, w, h, {
-      cut: 10,
-      edge: isTurn ? accent : UI.brass,
-      lineWidth: isTurn ? 2.6 : 2,
-      glow: isTurn ? accent : null
-    });
+    const frameImage = u.team === localUnit().team ? battleHudImages.ally : battleHudImages.enemy;
+    if (!drawBattleHudAsset(frameImage, barX, cardY, w, h)) {
+      drawIronPlate(barX + w / 2, cardY + h / 2, w, h, {
+        cut: 10,
+        edge: isTurn ? accent : UI.brass,
+        lineWidth: isTurn ? 2.6 : 2,
+        glow: isTurn ? accent : null
+      });
+    }
 
     ctx.save();
     // 陣営色のタブ
@@ -12398,7 +12426,7 @@
       align: 'right', font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
 
-    const innerX = barX + 9;
+    const innerX = barX + 10;
     const innerW = w - 18;
     const hpRatio = Math.max(0, u.hp / u.maxHp);
     ctx.save();
@@ -13570,7 +13598,7 @@
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
-  const MINIMAP = { x: 13, y: 138, w: VW - 26, h: 60 };
+  const MINIMAP = { x: 13, y: 156, w: VW - 26, h: 72 };
   const MINIMAP_PAD = 4;
   // 地形は爆発・生成・中断復元の時しか変わらない。ここへ地形部分を焼いておけば、
   // 通常の1フレームでは巨大なsolidGridを走査せず、完成画像を1回貼るだけで済む。
@@ -13686,13 +13714,15 @@
     const toMapY = y => innerY + Math.max(0, Math.min(1, (y - mapWorldTop) / mapWorldH)) * innerH;
 
     ctx.save();
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(map.x, map.y, map.w, map.h, 6) : ctx.rect(map.x, map.y, map.w, map.h);
-    ctx.fillStyle = 'rgba(3,9,19,0.34)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(199,131,53,0.85)';
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
+    if (!drawBattleHudAsset(battleHudImages.minimap, map.x, map.y, map.w, map.h)) {
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(map.x, map.y, map.w, map.h, 6) : ctx.rect(map.x, map.y, map.w, map.h);
+      ctx.fillStyle = 'rgba(3,9,19,0.34)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(199,131,53,0.85)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
     ctx.save();
     ctx.beginPath();
     ctx.rect(innerX, innerY, innerW, innerH);
