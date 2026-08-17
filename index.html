@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.39-boss-cpu-bonus';
+  const BUILD_ID = 'v2.0.40-firebase-connection-resilience';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.40', date: '2026/08/17', summary: '通信不調時のFirebase再試行と案内を改善' }),
     Object.freeze({ version: 'v2.0.39', date: '2026/08/17', summary: '10連勝ごとのボスCPUをHP30%増・必殺MAXで開始' }),
     Object.freeze({ version: 'v2.0.38', date: '2026/08/17', summary: 'フェニーチェとクロムギア必殺の弾道を通常弾へ統一' }),
     Object.freeze({ version: 'v2.0.37', date: '2026/08/17', summary: '途中参加用の盤面保存を廃止し、対戦通信を軽量化' }),
@@ -6135,7 +6136,7 @@
     if (firebaseAuth) {
       try {
         if (!firebaseAuth.refreshToken) throw new Error('refresh token missing');
-        const response = await fetch(`${FIREBASE_REFRESH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
+        const response = await firebaseFetchWithTimeout(`${FIREBASE_REFRESH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(firebaseAuth.refreshToken)}`
         });
@@ -6154,7 +6155,7 @@
     }
     // 新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ。
     try {
-      const response = await fetch(`${FIREBASE_AUTH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
+      const response = await firebaseFetchWithTimeout(`${FIREBASE_AUTH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true })
       });
       if (!response.ok) throw new Error('anonymous sign-in failed');
@@ -6169,11 +6170,17 @@
       throw new Error(err && err.message === 'token-time-invalid' ? '認証の時刻情報を確認できません。端末の日時と通信を確認してもう一度お試しください。' : 'オンライン対戦に接続できません。通信設定を確認してもう一度お試しください。');
     }
   }
+  const FIREBASE_REQUEST_TIMEOUT_MS = 10000;
+  function firebaseFetchWithTimeout(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FIREBASE_REQUEST_TIMEOUT_MS);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
+  }
   function firebaseRequestUrl(path, auth) {
     return `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
   }
   async function firebaseRequest(path, auth, options = {}) {
-    let response = await fetch(firebaseRequestUrl(path, auth), options);
+    let response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth), options);
     // 401は「鍵の期限切れ」と「ルールに弾かれた」の両方で返り、見分けが付かない。
     // まず期限切れの方を潰す。鍵を取り直して**本当に新しくなった時だけ**1回だけ送り直す。
     // 鍵が変わらなければ期限切れではないので、そのまま従来どおり失敗させる
@@ -6184,7 +6191,7 @@
       const before = auth.idToken;
       const renewed = await ensureFirebaseAuth().catch(() => null);
       if (renewed && renewed.idToken && renewed.idToken !== before) {
-        response = await fetch(firebaseRequestUrl(path, auth), options);
+        response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth), options);
       }
     }
     if (!response.ok) throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
@@ -6249,7 +6256,7 @@
   function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
   async function firebasePutMessageIfAbsent(path, auth, body) {
     const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
-    const response = await fetch(url, {
+    const response = await firebaseFetchWithTimeout(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
     });
     if (response.ok) return;
@@ -6278,13 +6285,13 @@
   async function firebaseClaimEmptySlot(path, auth, body) {
     const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
     const payload = JSON.stringify(body);
-    const response = await fetch(url, {
+    const response = await firebaseFetchWithTimeout(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: payload
     });
     if (response.ok) return true;
     if (response.status === 412) return false; // 既に埋まっている
     if (response.status !== 401) throw new Error(`席の確保に失敗しました（HTTP ${response.status}）`);
-    const plain = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: payload });
+    const plain = await firebaseFetchWithTimeout(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: payload });
     if (plain.ok) return true;
     // 素のPUTでも拒否された。埋まっているのか権限が無いのかはここでは区別できないので、
     // 次の席へ進ませる。全席だめなら呼び出し側が「空き席がありません」を出す。
@@ -8198,6 +8205,7 @@
   // 裏に回ったタブの間引き(Chromeは最長1分程度)で生きている席が空けられないようにする。
   const FIREBASE_SEAT_STALE_RELEASE_MS = 90000;
   const FIREBASE_SEAT_RELEASE_VERIFY_INTERVAL_MS = 5000;
+  const FIREBASE_SEAT_HEARTBEAT_MAX_FAILURES = 3;
   function firebaseSeatHeartbeatAllowsRelease(serverNow, seenAt) {
     return Number.isFinite(serverNow) && Number.isFinite(seenAt)
       && seenAt < serverNow - FIREBASE_SEAT_STALE_RELEASE_MS;
@@ -8215,28 +8223,50 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ '.sv': 'timestamp' })
       });
     } catch (_) {
-      // 書けないのは「席を空けられた」か「一時的な通信不良」のどちらか。
-      // ここでは切らず、名簿を読み直して自席が残っているかで判断する。
-      if (online === beating) checkOwnFirebaseSeatLost();
+      if (online !== beating) return;
+      beating.seatHeartbeatFailures = (beating.seatHeartbeatFailures || 0) + 1;
+      // 生存印の失敗で部屋全文を取り直さない。席名簿だけなら通信量を一定に保てる。
+      checkOwnFirebaseSeatLost();
+      if (beating.seatHeartbeatFailures >= FIREBASE_SEAT_HEARTBEAT_MAX_FAILURES) {
+        beating.heartbeatStopped = true;
+        onlineLobbyStatus('通信を3回確認できませんでした。電波を確認してから入り直してください。');
+      }
+      return;
     }
+    if (online === beating) beating.seatHeartbeatFailures = 0;
   }
   function scheduleFirebaseSeatHeartbeat() {
-    if (!firebaseSeatHeartbeatTarget()) return;
+    if (!firebaseSeatHeartbeatTarget() || online.heartbeatStopped) return;
     if (online.seatHeartbeatTimer) clearTimeout(online.seatHeartbeatTimer);
     online.seatHeartbeatTimer = setTimeout(async () => {
       await sendFirebaseSeatHeartbeat();
       scheduleFirebaseSeatHeartbeat();
-    }, FIREBASE_SEAT_HEARTBEAT_MS);
+    }, FIREBASE_SEAT_HEARTBEAT_MS * Math.pow(2, Math.min(2, online.seatHeartbeatFailures || 0)));
   }
+  function handleFirebaseNetworkOffline() {
+    if (!online || online.kind !== 'firebase') return;
+    onlineLobbyStatus('オフラインです。通信が戻るまで対戦通信を待機しています。');
+  }
+  function handleFirebaseNetworkOnline() {
+    if (!online || online.kind !== 'firebase') return;
+    if (online.heartbeatStopped) {
+      online.heartbeatStopped = false;
+      online.seatHeartbeatFailures = 0;
+      scheduleFirebaseSeatHeartbeat();
+    }
+    onlineLobbyStatus('通信が戻りました。再接続を確認しています…');
+  }
+  window.addEventListener('online', handleFirebaseNetworkOnline);
+  window.addEventListener('offline', handleFirebaseNetworkOffline);
   // 自席が他人のものになっている/消えている＝ホストに空けられた。
   // 名簿は lobbyState でも降ってくるので、そちらからも呼ぶ。
   async function checkOwnFirebaseSeatLost() {
     if (!online || online.kind !== 'firebase' || !online.seat || online.seatLostHandled) return;
     const checking = online;
     try {
-      const room = await firebaseRequest(`rooms/${checking.room}`, checking.auth);
-      if (online !== checking || !room) return;
-      online.slots = room.slots || online.slots;
+      const slots = await firebaseRequest(`rooms/${checking.room}/slots`, checking.auth);
+      if (online !== checking || !slots) return;
+      online.slots = slots;
     } catch (_) {
       // 部屋ごと読めないのは席の問題ではない(期限切れ・通信不良)。ここでは何もしない。
       return;
