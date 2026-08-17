@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.45-reduce-move-sync-traffic';
+  const BUILD_ID = 'v2.0.46-cache-control-panel';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.46', date: '2026/08/17', summary: '静止コントロールパネルを軽量化' },
     { version: 'v2.0.45', date: '2026/08/17', summary: '移動同期の通信量を削減' },
     { version: 'v2.0.44', date: '2026/08/17', summary: 'ポインタ座標計算を軽量化' },
     { version: 'v2.0.43', date: '2026/08/17', summary: 'DEAD LINEの発光を軽量化' },
@@ -15295,44 +15296,63 @@
   }
 
   // ===== 下部コントローラパネル(ここより下は地形を描かず操作専用のデッドゾーンにする) =====
-  function drawControlPanel() {
-    if (gamePhase !== 'battle') return;
-    const top = CONTROL_PANEL_Y;
-    ctx.save();
+  const controlPanelCanvas = document.createElement('canvas');
+  controlPanelCanvas.width = VW;
+  controlPanelCanvas.height = VH - CONTROL_PANEL_Y + 3;
+  const controlPanelCtx = controlPanelCanvas.getContext('2d');
+  let controlPanelArtDirty = true;
 
-    // 黒鉄の地板(上端が明るい、擦れた金属)
-    const plate = ctx.createLinearGradient(0, top, 0, VH);
+  function rebuildControlPanelArt() {
+    if (!controlPanelArtDirty) return;
+    controlPanelArtDirty = false;
+    const g = controlPanelCtx;
+    const h = controlPanelCanvas.height;
+    g.clearRect(0, 0, VW, h);
+    const plate = g.createLinearGradient(0, 0, 0, h);
     plate.addColorStop(0, '#39434b');
     plate.addColorStop(0.05, '#232c33');
     plate.addColorStop(0.45, '#151b21');
     plate.addColorStop(1, '#0b1015');
-    ctx.fillStyle = plate;
-    ctx.fillRect(0, top, VW, VH - top);
+    g.fillStyle = plate;
+    g.fillRect(0, 0, VW, h);
+    g.globalAlpha = 0.045;
+    g.strokeStyle = '#cfe4ff';
+    g.lineWidth = 1;
+    for (let y = 8; y < h; y += 7) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(VW, y + 0.5); g.stroke(); }
+    g.globalAlpha = 1;
+    const rail = g.createLinearGradient(0, 0, 0, 9);
+    rail.addColorStop(0, '#4a3016'); rail.addColorStop(0.38, '#efc880'); rail.addColorStop(0.66, '#a9722f'); rail.addColorStop(1, '#241608');
+    g.fillStyle = rail;
+    g.fillRect(0, 0, VW, 9);
+    for (let x = 30; x < VW; x += 60) {
+      const r = 3.4;
+      const rivet = g.createRadialGradient(x - r * 0.36, 4.5 - r * 0.36, r * 0.18, x, 4.5, r * 1.1);
+      rivet.addColorStop(0, '#fff1a3');
+      rivet.addColorStop(0.42, '#b47728');
+      rivet.addColorStop(1, '#35200e');
+      g.fillStyle = rivet;
+      g.beginPath();
+      g.arc(x, 4.5, r, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#160e08';
+      g.lineWidth = 1;
+      g.stroke();
+    }
+  }
+
+  function drawControlPanel() {
+    if (gamePhase !== 'battle') return;
+    rebuildControlPanelArt();
+    ctx.drawImage(controlPanelCanvas, 0, CONTROL_PANEL_Y);
+    return;
+
+    // 黒鉄の地板(上端が明るい、擦れた金属)
 
     // ヘアライン(横方向の擦れ)で圧延鋼の質感を出す
-    ctx.globalAlpha = 0.045;
-    ctx.strokeStyle = '#cfe4ff';
-    ctx.lineWidth = 1;
-    for (let y = top + 8; y < VH; y += 7) {
-      ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(VW, y + 0.5);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
 
     // 戦場との境界を仕切る真鍮レール
-    const rail = ctx.createLinearGradient(0, top - 3, 0, top + 6);
-    rail.addColorStop(0, '#4a3016');
-    rail.addColorStop(0.38, '#efc880');
-    rail.addColorStop(0.66, '#a9722f');
-    rail.addColorStop(1, '#241608');
-    ctx.fillStyle = rail;
-    ctx.fillRect(0, top - 3, VW, 9);
-    ctx.restore();
 
     // レール上の鋲
-    for (let x = 30; x < VW; x += 60) drawRivet(x, top + 1.5, 3.4);
   }
 
   function drawCameraSlider() {
