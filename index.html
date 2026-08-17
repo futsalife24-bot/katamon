@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.47-cache-hill-layer';
+  const BUILD_ID = 'v2.0.48-batch-terrain-rim';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.48', date: '2026/08/17', summary: '地形の縁線更新をまとめて軽量化' },
     { version: 'v2.0.47', date: '2026/08/17', summary: '遠景の丘を軽量化' },
     { version: 'v2.0.46', date: '2026/08/17', summary: '静止コントロールパネルを軽量化' },
     { version: 'v2.0.45', date: '2026/08/17', summary: '移動同期の通信量を削減' },
@@ -1698,6 +1699,8 @@
   terrainCanvas.width = STAGE_W;
   terrainCanvas.height = VH;
   const terrainCtx = terrainCanvas.getContext('2d');
+  // 固定刻み物理の途中で地形が複数回削れても、縁線の見た目更新は描画フレームごとに1回でよい。
+  let terrainRimRebuildQueued = false;
 
   // 遠景の丘はステージ中に変化しない。2層はカメラの追従率が違うため、別々に焼いて貼る。
   const farHillCanvas = document.createElement('canvas');
@@ -1737,11 +1740,20 @@
   }
 
   function rebuildTerrainRim() {
+    terrainRimRebuildQueued = false;
     markTerrainArtDirty();
     terrainRimCtx.clearRect(0, 0, STAGE_W, VH);
     const arena = currentPattern === 'tieredBasin';
     paintTerrainRimLayer(arena ? '#090c11' : currentTheme.rimShadow, 6);
     paintTerrainRimLayer(arena ? '#b98238' : currentTheme.rim, 3);
+  }
+
+  function queueTerrainRimRebuild() {
+    terrainRimRebuildQueued = true;
+  }
+
+  function flushTerrainRimRebuild() {
+    if (terrainRimRebuildQueued) rebuildTerrainRim();
   }
 
   // 既存の薄床地形を土台にして、橋だと一目で分かる装飾だけを別レイヤーに描く。
@@ -4729,7 +4741,7 @@
     if (!p) return;
     if (carveCraterInternal(x, y, BARUCOPTER_TERRAIN_RADIUS, false)) {
       craterHistory.push({ x, y, r: BARUCOPTER_TERRAIN_RADIUS });
-      rebuildTerrainRim();
+      queueTerrainRimRebuild();
     }
     spawnExplosion(x, y, 0.07);
   }
@@ -5383,14 +5395,26 @@
   // 的の足元に薄い板だけ残して、その下を空洞にする。
   function tutorialHollowUnder(unit) {
     const top = unit.y + UNIT_RADIUS + TUTORIAL_LEDGE_THICKNESS;
+    let terrainChanged = false;
     for (let x = unit.x - TUTORIAL_LEDGE_HALF_W - 8; x <= unit.x + TUTORIAL_LEDGE_HALF_W + 8; x += 22) {
-      for (let y = top + 34; y <= TERRAIN_BOTTOM_Y + 40; y += 40) carveCrater(x, y, 34);
+      for (let y = top + 34; y <= TERRAIN_BOTTOM_Y + 40; y += 40) {
+        if (carveCraterInternal(x, y, 34, false)) {
+          craterHistory.push({ x, y, r: 34 });
+          terrainChanged = true;
+        }
+      }
     }
+    return terrainChanged;
   }
   function tutorialDigColumn(x, radius) {
+    let terrainChanged = false;
     for (let y = 0; y <= TERRAIN_BOTTOM_Y + radius; y += radius * 0.6) {
-      carveCrater(x, y, radius);
+      if (carveCraterInternal(x, y, radius, false)) {
+        craterHistory.push({ x, y, r: radius });
+        terrainChanged = true;
+      }
     }
+    return terrainChanged;
   }
 
   // 各項目。setup で場を整え、cleared() が真になったら次へ進む。
@@ -5446,10 +5470,11 @@
         // 立つことになり、1発では削りきれない(通常弾のクレーターは半径60px弱、柱の高さは
         // 200px以上)。落ちてもすぐ柱の残りに着地するので、何度撃っても終わらなかった。
         // 薄い板だけ残して下を抜けば、1発で崩れてそのまま場外まで落ちる。
-        tutorialDigColumn(foe.x - TUTORIAL_LEDGE_HALF_W - 46, 46);
-        tutorialDigColumn(foe.x + TUTORIAL_LEDGE_HALF_W + 46, 46);
+        let tutorialTerrainChanged = tutorialDigColumn(foe.x - TUTORIAL_LEDGE_HALF_W - 46, 46);
+        tutorialTerrainChanged = tutorialDigColumn(foe.x + TUTORIAL_LEDGE_HALF_W + 46, 46) || tutorialTerrainChanged;
         initUnitOnGround(foe);
-        tutorialHollowUnder(foe);
+        tutorialTerrainChanged = tutorialHollowUnder(foe) || tutorialTerrainChanged;
+        if (tutorialTerrainChanged) rebuildTerrainRim();
         initUnitOnGround(foe);
       },
       cleared() {
@@ -17134,6 +17159,7 @@
       stepWorldPhysics(PHYSICS_DT);
       if (matchOver) break;
     }
+    flushTerrainRimRebuild();
 
     if (matchOver) return;
     updateAfterPhysics(dt);
@@ -17146,7 +17172,6 @@
     stepGroundFlames(dt);
     if (matchOver) return;
     // 弾の物理(花火の本体弾と、地形を細く削る8方向の拡散弾に対応)
-    let trailDirty = false;
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
       const prevX = p.x;
@@ -17186,7 +17211,7 @@
           const back = stepLen > 0 ? (p.travelDistance - stride * (p.shardBlasts + 1)) / stepLen : 0;
           fireworkShardExplode(p, FIREWORK_SHARD_BLASTS[p.shardBlasts], p.x - stepX * back, p.y - stepY * back);
           p.shardBlasts++;
-          trailDirty = true;
+          queueTerrainRimRebuild();
         }
         if (p.travelDistance >= p.maxDistance) {
           projectiles.splice(i, 1);
@@ -17206,7 +17231,7 @@
           const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
           carveDeathGate(p, p.x - stepX * back, p.y - stepY * back, distance);
           p.deathGateCarves++;
-          trailDirty = true;
+          queueTerrainRimRebuild();
         }
         if (p.travelDistance >= p.maxDistance) {
           projectiles.splice(i, 1);
@@ -17241,7 +17266,7 @@
           const carvePoint = scorpionRailTrailPointAt(p, distance);
           if (carveCraterInternal(carvePoint.x, carvePoint.y, SCORPION_RAIL_CARVE_RADIUS, false)) {
             craterHistory.push({ x: carvePoint.x, y: carvePoint.y, r: SCORPION_RAIL_CARVE_RADIUS });
-            trailDirty = true;
+            queueTerrainRimRebuild();
           }
           p.railCarves++;
         }
@@ -17360,8 +17385,6 @@
         projectiles.splice(i, 1); // 画面外(誤爆なしで消滅)
       }
     }
-    if (trailDirty) rebuildTerrainRim();
-
     // 落下物理(常時判定)
     for (const u of units) updateFalling(dt, u);
   }
