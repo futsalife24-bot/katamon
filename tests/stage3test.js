@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -28,25 +28,25 @@ function check(name, value) {
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
     && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
     anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
@@ -54,25 +54,25 @@ function check(name, value) {
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes("nextArrow === '無風'")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
     anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
     anchoredHudSource.includes('function drawWindForecastDivider(')
     && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
     && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('round wind console renders NEXT and its forecast as one centered text line',
     anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
     && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -81,7 +81,7 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -97,7 +97,7 @@ function check(name, value) {
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.47-cache-hill-layer';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.48-batch-terrain-rim';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -2354,6 +2354,17 @@ function check(name, value) {
     && parallaxSource.includes('ctx.drawImage(farHillCanvas, -200, 0);')
     && parallaxSource.includes('ctx.drawImage(nearHillCanvas, -200, 0);')
     && parallaxSource.includes('drawClouds();'));
+  const updateSource = htmlText.match(/function update\(dt\)[\s\S]*?\n  \}/)?.[0] || '';
+  const physicsSource = htmlText.match(/function stepWorldPhysics\(dt\)[\s\S]*?\n  \}/)?.[0] || '';
+  const barucopterImpactSource = htmlText.match(/function resolveBarucopterBulletSurfaceImpact\([\s\S]*?\n  \}/)?.[0] || '';
+  check('terrain rim redraws are queued across physics substeps and flushed once per frame',
+    htmlText.includes('function queueTerrainRimRebuild()')
+    && htmlText.includes('function flushTerrainRimRebuild()')
+    && updateSource.includes('flushTerrainRimRebuild();')
+    && physicsSource.includes('queueTerrainRimRebuild();')
+    && !physicsSource.includes('rebuildTerrainRim();')
+    && barucopterImpactSource.includes('queueTerrainRimRebuild();')
+    && !barucopterImpactSource.includes('rebuildTerrainRim();'));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 
