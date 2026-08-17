@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.42-remove-duplicate-app-shell-entry';
+  const BUILD_ID = 'v2.0.43-optimize-dead-line-glow';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.43', date: '2026/08/17', summary: 'DEAD LINEの発光を軽量化' },
     Object.freeze({ version: 'v2.0.42', date: '2026/08/17', summary: 'Service Workerの重複した初回取得を削減' }),
     Object.freeze({ version: 'v2.0.41', date: '2026/08/17', summary: '未使用の確認ダイアログを削除し入力処理を整理' }),
     Object.freeze({ version: 'v2.0.40', date: '2026/08/17', summary: '通信不調時のFirebase再試行と案内を改善' }),
@@ -11964,15 +11965,22 @@
     const y = worldToScreenY(DEAD_LINE_Y);
     const pulse = 0.68 + Math.sin(performance.now() * 0.006) * 0.18;
     ctx.save();
-    ctx.shadowColor = `rgba(255,45,55,${pulse})`;
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = `rgba(255,72,72,${pulse + 0.12})`;
-    ctx.lineWidth = 3;
     ctx.setLineDash([13, 7]);
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(VW, y);
-    ctx.stroke();
+    // 画面幅の破線にぼかしを掛けると毎フレーム重くなる。太さ違いの線を重ね、
+    // 同じ赤い発光感だけを残す。
+    const glowLayers = [
+      { lineWidth: 11, color: `rgba(255,38,48,${pulse * 0.16})` },
+      { lineWidth: 6, color: `rgba(255,48,58,${pulse * 0.36})` },
+      { lineWidth: 2.5, color: `rgba(255,92,92,${Math.min(1, pulse + 0.12)})` }
+    ];
+    for (const layer of glowLayers) {
+      ctx.strokeStyle = layer.color;
+      ctx.lineWidth = layer.lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(VW, y);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(255,95,95,0.95)';
     ctx.font = '400 10px ' + UI_FONT;

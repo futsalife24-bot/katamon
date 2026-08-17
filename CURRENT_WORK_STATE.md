@@ -4,7 +4,7 @@
 
 ## 現在の公開版
 
-- 最新公開版は **v2.0.42**。Service Workerの重複した初回取得を削減する。
+- 最新公開版は **v2.0.43**。DEAD LINEの発光描画を軽量化する。
 - `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` は、同じ版番号に保つ。
 - 最新の変更履歴は [docs/CHANGELOG.md](docs/CHANGELOG.md) に保存している。
 
@@ -12,6 +12,7 @@
 
 | 版・日付 | 内容 | 確認 |
 | --- | --- | --- |
+| v2.0.43 / 2026-08-17 | DEAD LINEの発光を影ではなく重ね線へ変更 | 旧実装でStage 3失敗後、Stage 3 470/470 |
 | v2.0.42 / 2026-08-17 | APP_SHELLから重複する `./` 入口を削除 | 旧実装でApp Shell検証失敗後、App Shell 3/3 |
 | v2.0.41 / 2026-08-17 | 到達不能なCanvas確認ダイアログと入力分岐を削除 | 旧実装でStage 3失敗後、Stage 3 469/469 |
 | v2.0.40 / 2026-08-17 | Firebase通信を10秒で打ち切り、席ハートビート失敗時の通信量と案内を改善 | 旧実装でStage 3失敗後、Stage 3 468/468 |
@@ -115,6 +116,18 @@
 
 - 他のAPP_SHELL資産、Service Workerの更新契約、画面仕様は変えない。
 - 旧実装でApp Shell新規検証が失敗後、App Shell **3/3**、`npm test` **1,193件**（loopback **38 / 64 / 83 / 61 / 48**）成功。ローカルHTTPのAndroid Chromium E2Eは1件成功・pageerror 0件（Mobile WebKit 1件は既知canvasクラッシュでスキップ）。
+
+## v2.0.43 DEAD LINE発光の軽量化（PR #209予定）
+
+### 何を / なぜ
+
+- 画面幅いっぱいのDEAD LINEに掛けていた影を、太さの異なる3本の赤い破線へ置き換える。
+- 発光した見た目を保ったまま、毎フレームの長い線への高コストなぼかしをなくすため。
+
+### やってはいけないこと / 実測テスト数
+
+- DEAD LINEの位置、点滅、当たり判定、他の描画やゲーム仕様は変えない。
+- 旧実装でStage 3新規検証が失敗後、Stage 3 **470/470**、`npm test` **1,194件**（loopback **38 / 64 / 83 / 61 / 48**）成功。ローカルHTTPのAndroid ChromiumでDEAD LINEの発光を目視し、タイトル・CPU開始・演習・チュートリアルE2Eは1件成功・pageerror 0件（Mobile WebKit 1件は既知canvasクラッシュでスキップ）。
 
 ## 保留・ユーザー判断待ち
 
