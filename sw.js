@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.58-online-lobby-remix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.59-tutorial-turn-gate';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

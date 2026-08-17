@@ -656,10 +656,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.58-online-lobby-remix';
+  const BUILD_ID = 'v2.0.59-tutorial-turn-gate';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.59', date: '2026/08/17', summary: 'チュートリアルは行動解決後に次の項目へ進行' },
     { version: 'v2.0.58', date: '2026/08/17', summary: 'ONLINEロビーのBGMをRemixへ更新' },
     { version: 'v2.0.57', date: '2026/08/17', summary: '公開部屋を一覧から選べるように改善' },
     { version: 'v2.0.56', date: '2026/08/17', summary: '演習と戦闘の風力表示を0〜10で統一' },
@@ -5532,7 +5533,7 @@
     gamePhase = 'battle';
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
-    tutorial = { stepIndex: 0, stepShots: 0, clearTimer: 0, cleared: false, baseHp: 0, baseX: 0, baseCharge: 0 };
+    tutorial = { stepIndex: 0, stepShots: 0, clearTimer: 0, cleared: false, waitForActionResolve: false, baseHp: 0, baseX: 0, baseCharge: 0 };
     resetMatch(false);
     // 手番は自分だけ。相手を turnOrder から外すので、的は一度も動かない。
     turnOrder = ['p1'];
@@ -5549,6 +5550,7 @@
     player.fuel = player.fuelMax;
     tutorial.stepShots = 0;
     tutorial.cleared = false;
+    tutorial.waitForActionResolve = false;
     tutorial.clearTimer = 0;
     // 項目ごとにHPを戻す。倒せてしまうと項目の途中で終わってしまうため。
     tutorialDummy().hp = tutorialDummy().maxHp;
@@ -5587,6 +5589,13 @@
     const step = tutorialStep();
     if (!step) return;
     if (tutorial.cleared) {
+      // 発射で達成になる項目は、必殺の演出・飛翔・着弾後の手番確定まで見せ切る。
+      // 先に次の項目へ進むと、直前の弾が次の課題まで達成してしまい混乱を招く。
+      if (tutorial.waitForActionResolve) {
+        if (pendingShot || projectiles.length || barucopters.length || groundFlames.length || awaitingResolve) return;
+        tutorial.waitForActionResolve = false;
+        tutorial.clearTimer = TUTORIAL_CLEAR_HOLD_SEC;
+      }
       tutorial.clearTimer -= dt;
       if (tutorial.clearTimer <= 0) advanceTutorialStep();
       return;
@@ -5598,7 +5607,10 @@
     if (step.key !== 'terrain' && foe.hp <= 0) foe.hp = 1;
     if (step.cleared()) {
       tutorial.cleared = true;
-      tutorial.clearTimer = TUTORIAL_CLEAR_HOLD_SEC;
+      // 移動はその場で達成表示へ進める。一方、発射済みの弾がある時は
+      // この手番の解決後にだけ「できた!」の待ち時間を始める。
+      tutorial.waitForActionResolve = !!(pendingShot || projectiles.length || barucopters.length || groundFlames.length || awaitingResolve);
+      tutorial.clearTimer = tutorial.waitForActionResolve ? 0 : TUTORIAL_CLEAR_HOLD_SEC;
     }
   }
 
