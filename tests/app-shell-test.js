@@ -11,6 +11,8 @@ const gameScripts = [...indexHtml.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']
   .map((match) => normalize(match[1]));
 const appShellSource = /const APP_SHELL\s*=\s*\[([\s\S]*?)\];/.exec(serviceWorker)?.[1];
 assert.ok(appShellSource, 'sw.js に APP_SHELL が必要です。');
+assert.ok(!appShellSource.includes("'./',") && !appShellSource.includes('"./",'),
+  '同じHTMLを二重取得する ./ はAPP_SHELLへ入れない。');
 const appShell = new Set([...appShellSource.matchAll(/["']([^"']+)["']/g)].map((match) => normalize(match[1])));
 
 function assertAppShellIncludes(sources) {
