@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.52-idle-physics-step';
+  const BUILD_ID = 'v2.0.53-terrain-canvas-height';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.53', date: '2026/08/17', summary: '地形描画のメモリを軽量化' },
     { version: 'v2.0.52', date: '2026/08/17', summary: '待機中も物理の進行量を維持' },
     { version: 'v2.0.51', date: '2026/08/17', summary: '風力を0〜10で見える化' },
     { version: 'v2.0.50', date: '2026/08/17', summary: '戦闘待機中の描画を軽量化' },
@@ -1701,7 +1702,7 @@
   // 実体は不可視のオフスクリーンキャンバス(見た目)。塗り(source-over)で地面、destination-outで爆風の穴をあける
   const terrainCanvas = document.createElement('canvas');
   terrainCanvas.width = STAGE_W;
-  terrainCanvas.height = VH;
+  terrainCanvas.height = TERRAIN_BOTTOM_Y;
   const terrainCtx = terrainCanvas.getContext('2d');
   // 固定刻み物理の途中で地形が複数回削れても、縁線の見た目更新は描画フレームごとに1回でよい。
   let terrainRimRebuildQueued = false;
@@ -1717,17 +1718,17 @@
   // またいで長い線が出るため、実際の地形シルエットを膨張させて全周の輪郭だけを抜き出す。
   const terrainRimCanvas = document.createElement('canvas');
   terrainRimCanvas.width = STAGE_W;
-  terrainRimCanvas.height = VH;
+  terrainRimCanvas.height = TERRAIN_BOTTOM_Y;
   const terrainRimCtx = terrainRimCanvas.getContext('2d');
   const terrainRimLayer = document.createElement('canvas');
   terrainRimLayer.width = STAGE_W;
-  terrainRimLayer.height = VH;
+  terrainRimLayer.height = TERRAIN_BOTTOM_Y;
   const terrainRimLayerCtx = terrainRimLayer.getContext('2d');
 
   function paintTerrainRimLayer(color, radius) {
     markTerrainArtDirty();
     terrainRimLayerCtx.save();
-    terrainRimLayerCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainRimLayerCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainRimLayerCtx.globalCompositeOperation = 'source-over';
     terrainRimLayerCtx.imageSmoothingEnabled = true;
     for (let i = 0; i < 16; i++) {
@@ -1736,7 +1737,7 @@
     }
     terrainRimLayerCtx.globalCompositeOperation = 'source-in';
     terrainRimLayerCtx.fillStyle = color;
-    terrainRimLayerCtx.fillRect(0, 0, STAGE_W, VH);
+    terrainRimLayerCtx.fillRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainRimLayerCtx.globalCompositeOperation = 'destination-out';
     terrainRimLayerCtx.drawImage(terrainCanvas, 0, 0);
     terrainRimLayerCtx.restore();
@@ -1746,7 +1747,7 @@
   function rebuildTerrainRim() {
     terrainRimRebuildQueued = false;
     markTerrainArtDirty();
-    terrainRimCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainRimCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     const arena = currentPattern === 'tieredBasin';
     paintTerrainRimLayer(arena ? '#090c11' : currentTheme.rimShadow, 6);
     paintTerrainRimLayer(arena ? '#b98238' : currentTheme.rim, 3);
@@ -1764,13 +1765,13 @@
   // 地形と同じクレーターで削るため、爆破後に絵だけ宙へ残ることもない。
   const bridgeCanvas = document.createElement('canvas');
   bridgeCanvas.width = STAGE_W;
-  bridgeCanvas.height = VH;
+  bridgeCanvas.height = TERRAIN_BOTTOM_Y;
   const bridgeCtx = bridgeCanvas.getContext('2d');
 
   // 闘技場専用の鉄柵・鋲・補強材。地形とは別レイヤーにして、爆風で地面と一緒に欠けるようにする。
   const arenaDecorationCanvas = document.createElement('canvas');
   arenaDecorationCanvas.width = STAGE_W;
-  arenaDecorationCanvas.height = VH;
+  arenaDecorationCanvas.height = TERRAIN_BOTTOM_Y;
   const arenaDecorationCtx = arenaDecorationCanvas.getContext('2d');
 
   // 上の4枚(地形・縁取り・橋・闘技場の飾り)を1枚に束ねたもの。**毎フレーム4枚貼るのをやめるため。**
@@ -1781,7 +1782,7 @@
   // 4枚のどれかに描く関数には必ず入れること。試作の段階で実際にこれを踏んだ。
   const terrainArtCanvas = document.createElement('canvas');
   terrainArtCanvas.width = STAGE_W;
-  terrainArtCanvas.height = VH;
+  terrainArtCanvas.height = TERRAIN_BOTTOM_Y;
   const terrainArtCtx = terrainArtCanvas.getContext('2d');
   function setStageDimensions(width, height) {
     const large = Number(width) === 2160 && Number(height) === 960;
@@ -1818,7 +1819,7 @@
     cameraY = clampCameraY(cameraY);
     [terrainCanvas, terrainRimCanvas, terrainRimLayer, bridgeCanvas, arenaDecorationCanvas, terrainArtCanvas].forEach((layer) => {
       layer.width = STAGE_W;
-      layer.height = VH;
+      layer.height = TERRAIN_BOTTOM_Y;
     });
     solidGrid = new Uint8Array(TERRAIN_COLS * ROWS);
     surfaceY = new Float64Array(TERRAIN_COLS).fill(FLOOR_Y);
@@ -1840,7 +1841,7 @@
     if (!terrainArtDirty) return;
     terrainArtDirty = false;
     terrainArtBuilds++;
-    terrainArtCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainArtCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainArtCtx.drawImage(terrainCanvas, 0, 0);
     terrainArtCtx.drawImage(terrainRimCanvas, 0, 0);
     terrainArtCtx.drawImage(bridgeCanvas, 0, 0);
@@ -1849,7 +1850,7 @@
 
   function rebuildArenaDecoration() {
     markTerrainArtDirty();
-    arenaDecorationCtx.clearRect(0, 0, STAGE_W, VH);
+    arenaDecorationCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     if (currentPattern !== 'tieredBasin') return;
 
     const wallEdge = STAGE_W * ARENA_WALL_RATIO;
@@ -1905,7 +1906,7 @@
 
   function rebuildBridgeDecoration() {
     markTerrainArtDirty();
-    bridgeCtx.clearRect(0, 0, STAGE_W, VH);
+    bridgeCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     if (!currentBridge) return;
     const { startX, endX, y, style } = currentBridge;
     const length = endX - startX;
@@ -2017,7 +2018,7 @@
       steelShade.addColorStop(0.5, 'rgba(74,80,88,0.18)');
       steelShade.addColorStop(1, 'rgba(9,13,18,0.50)');
       terrainCtx.fillStyle = steelShade;
-      terrainCtx.fillRect(0, 0, STAGE_W, VH);
+      terrainCtx.fillRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
 
       // 石組みの継ぎ目。
       terrainCtx.strokeStyle = 'rgba(8,10,14,0.62)';
@@ -2119,7 +2120,7 @@
 
   function buildTerrainMask(segments, refreshRim = true) {
     markTerrainArtDirty();
-    terrainCtx.clearRect(0, 0, STAGE_W, VH);
+    terrainCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainCtx.globalCompositeOperation = 'source-over';
     const grad = terrainCtx.createLinearGradient(0, GROUND_MIN_Y, 0, TERRAIN_BOTTOM_Y);
     if (currentTerrainMaterial === 'steel') {
@@ -2153,7 +2154,7 @@
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'source-atop';
     terrainCtx.fillStyle = terrainCtx.createPattern(noiseTile, 'repeat');
-    terrainCtx.fillRect(0, 0, STAGE_W, VH);
+    terrainCtx.fillRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainCtx.restore();
     drawTerrainDetails();
     if (currentTerrainMaterial === 'steel') {
