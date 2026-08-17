@@ -1,0 +1,4679 @@
+# カタモン 変更履歴（アーカイブ）
+
+> 2026-08-17 に、過去の作業記録を `CURRENT_WORK_STATE.md` から移した。
+> 現在の仕様・未完了タスク・運用上の注意は、リポジトリ直下の
+> `CURRENT_WORK_STATE.md` を参照すること。
+
+## v2.0.34 丸形風コンソールの理想図レイアウト化（2026-08-17）
+
+### 何をしたか
+
+- 上段に大きい「現在の風」、中央に強さ入り発光矢印、下段に区切り線付きNEXTを置く3レーンへ整理した。
+- 中央矢印を主役として少し拡大しつつ、上下レーンと重ならない専用Y座標へ固定した。
+- BUILD_ID と CACHE_VERSION を v2.0.34-wind-console-reference-layout に一致させた。
+
+### なぜしたか
+
+- メロニキ提示の理想図のように、現在値・向きと強さ・次風予報を一目で別々に読めるようにするため。
+
+### やってはいけないこと
+
+- 風のデータ、予報、抽選、通信、ゲーム進行、database.rules.jsonを変更しない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.33実装で **465/466 passed・1 failed** を確認してから追加した。
+- 実装後の `npm.cmd run test:stage3` は **466/466 passed**。
+- 最終の `npm.cmd test` は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **466/466**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+
+## v2.0.33 丸形風コンソールの情報階層整理（2026-08-17）
+
+### 何をしたか
+
+- 現在の風・中央矢印・NEXTを上下3レーンへ分離し、互いに重ならない余白を確保した。
+- 矢印を縮小し、NEXTバッジを下げて中央矢印との重なりを解消した。
+- 次の風が無風の場合は、紛らわしいダッシュではなく「NEXT 無風」と表示する。
+- BUILD_ID と CACHE_VERSION を v2.0.33-wind-console-hierarchy に一致させた。
+
+### なぜしたか
+
+- v2.0.32では大きすぎる矢印とNEXTバッジが接近し、視線の優先順位と無風予報が読みにくかったため。
+
+### やってはいけないこと
+
+- 風のデータ、予報、抽選、通信、ゲーム進行を変更しない。database.rules.jsonは変更しない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.32実装で **464/465 passed・1 failed** を確認してから追加した。
+- 実装後の `npm.cmd run test:stage3` は **465/465 passed**。
+- 最終の `npm.cmd test` は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **465/465**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+
+## v2.0.32 丸形風コンソールのコントラスト・文字配置調整（2026-08-17）
+
+### 何をしたか
+
+- 「現在の風」を半文字分上へ移動した。
+- 通常風の塗りつぶし矢印をシアンへ変更し、白系の文字・強さ表示と明確に区別した。
+- 風力の黒い強さプレートを横長かつ低い形へ変更した。
+- NEXTと予報矢印を少し大きくして、下段の読み取りやすさを上げた。
+- BUILD_ID と CACHE_VERSION を v2.0.32-wind-console-contrast-layout に一致させた。
+
+### なぜしたか
+
+- 丸形コンソール内で矢印と文字が同色に見え、強さプレートとNEXTが小さく読みにくかったため。
+
+### やってはいけないこと
+
+- 風のデータ、予報、抽選、通信、ゲーム進行を変更しない。
+- 共通の丸形コンソール、カード、ターン帯、ミニマップを動かさない。database.rules.jsonは変更しない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.31実装で **463/464 passed・1 failed** を確認してから追加した。
+- 実装後の `npm.cmd run test:stage3` は **464/464 passed**。
+- 最終の `npm.cmd test` は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **464/464**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+- ローカルHTTP（`http://127.0.0.1:4333/`）の実ブラウザでCPU 1vs1を開始し、シアンの通常風矢印、横長の強さプレート、拡大したNEXT表示とコンソールエラー **0件** を確認。`file://` は未使用。
+
+## v2.0.31 丸形風コンソールの無風表示・余白調整（2026-08-16）
+
+### 何をしたか
+
+- 無風時は方向矢印を描かず、無風専用の中央ステータス表示へ変更した。
+- 通常風の矢印は塗りつぶしにし、強さ文字は既存の枠付きプレートで読む構成へ整理した。
+- 現在の風を一文字分下げ、NEXTを半文字分上げ、NEXTバッジの左右余白を縮めた。
+- BUILD_ID と CACHE_VERSION を v2.0.31-wind-console-calm-layout に一致させた。
+
+### なぜしたか
+
+- 無風でも方向矢印が残る誤解をなくし、矢印と文字の視認性・円内の余白を整えるため。
+
+### やってはいけないこと
+
+- 風のデータ、予報、抽選、通信、ゲーム進行を変えない。
+- 共通の丸形コンソール、カード、ターン帯、ミニマップを動かさない。database.rules.jsonは変更しない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.30実装で **462/463 passed・1 failed** を確認してから追加した。
+- 実装後 npm.cmd run test:stage3 は **463/463 passed**。
+- 最終の npm.cmd test は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **463/463**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+- ローカルHTTP（`http://127.0.0.1:4332/`）の実ブラウザでCPU 1vs1・演習2vs2を開始し、無風の専用表示、通常風の塗りつぶし矢印、円内ラベル配置を確認。console error **0件**、`file://` は未使用。
+
+## v2.0.30 丸形風コンソールの内側収容・強さ拡大（2026-08-16）
+
+### 何をしたか
+
+- 現在風の縁取り矢印を縦方向へ拡大し、内部の強さ文字も大きくした。
+- 「現在の風」を丸枠上端の装飾から黒い中心部の上側へ移し、現在風矢印は中心、NEXTバッジは黒い中心部の下側へ固定した。
+- BUILD_ID と CACHE_VERSION を v2.0.30-wind-console-inner-layout に一致させた。
+
+### なぜしたか
+
+- v2.0.29では、現在の風とNEXTが円周の装飾へかかり、矢印内の強さも小さく読みにくかったため。
+
+### やってはいけないこと
+
+- 風の値・予報・抽選タイミング・通信・ゲーム進行を変更しない。
+- 1vs1・2vs2共通の丸形コンソール、左右カード、ターン帯、ミニマップをこの目的で動かさない。
+- database.rules.json、ゲーム内文言の標準語、BUILD_ID/CACHE_VERSIONの一致を崩さない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.29実装で **461/462 passed・1 failed** を確認してから追加した。
+- 実装後 npm.cmd run test:stage3 は **462/462 passed**。
+- 最終の npm.cmd test は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **462/462**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+- ローカルHTTP（http://127.0.0.1:4331/）の実ブラウザでCPU 1vs1・演習2vs2を開始し、見出し・強さ入り矢印・NEXTが黒い中心部に収まり、console error **0件** を確認した。file:// は未使用。
+
+## v2.0.29 丸形風コンソールの可読性改善（2026-08-16）
+
+### 何をしたか
+
+- 1vs1・2vs2共通の丸形風コンソールで、現在風の矢印内に暗い高コントラストの強さ表示プレートを追加し、矢印と強さを太く見やすくした。
+- 次の風は独立した黒いバッジにし、NEXTを補助表示、方向矢印を主表示にして装飾との混同を防いだ。
+- 見出しを少し小さくし、現在風の矢印と強さ・次風の矢印に視線が集まる三段構成を維持した。
+- BUILD_ID と CACHE_VERSION を v2.0.29-wind-console-legibility に一致させた。
+
+### なぜしたか
+
+- 丸枠内で現在の強さと次風の方向が装飾に埋もれ、プレイ中に一目で読み取りにくかったため。
+
+### やってはいけないこと
+
+- 風の内部データ、次風の強さ、抽選タイミング、ネット同期は変更しない。
+- 1vs1・2vs2の共通描画、丸枠の配置、キャラクターカード、ターン列、ミニマップをこの変更に混ぜて動かさない。
+- database.rules.json、ゲーム内文言の標準語、BUILD_ID/CACHE_VERSIONの一致を崩さない。
+
+### 実測テスト数・確認
+
+- 新テストは旧v2.0.28実装で **460/461 passed・1 failed** を確認してから追加した。
+- 実装後 npm.cmd run test:stage3 は **461/461 passed**。
+- ローカルHTTP（http://127.0.0.1:4329/）の実ブラウザでCPU 1vs1・演習2vs2を開始し、風コンソールの三段表示・レイアウト・console error **0件** を確認した。file:// は未使用。
+- 最終の npm.cmd test は Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **461/461**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53** で全件成功。loopbacktest中継数は基準どおり **38 / 64 / 83 / 61 / 48**。
+
+## v2.0.28 風コンソールを3行の矢印表示へ整理（2026-08-16）
+
+### 何をしたか
+
+- 1vs1・2vs2で共通の丸形風コンソールを、「現在の風」／強さを中へ入れた縁取り矢印／`NEXT`＋予報方向の3行表示へ整理した。
+- 現在風の強さは、向きに沿った縁取り矢印の内部へ「弱」「中」「強」（無風時は「無風」）として描くようにした。
+- 次の風は強さを表示せず、`NEXT ⇦`・`NEXT ⇨`（無風時は`NEXT —`）の1行だけにした。内部の予報データ・風の決定タイミングはそのまま保持している。
+- `BUILD_ID`と`CACHE_VERSION`を`v2.0.28-wind-console-three-lines`へ揃え、更新履歴も追加した。
+
+### なぜしたか
+
+- 以前の「現在の風・矢印・風力・次の風・予報強さ」は丸枠内で行数が多く、情報が枠外へ寄る・読み取りづらい状態だったため。
+- 現在必要な照準情報は方向と強さ、予報として必要なのは次の方向であるため、意味を保ったまま3行に圧縮した。
+
+### やってはいけないこと
+
+- 次の風の強さを表示から消したことを理由に、内部の予報値、風の抽選、ターン切替、通信スナップショットを変更しない。
+- 1vs1と2vs2で異なる風表示ルールへ戻さない。丸枠の中心位置・左右のカード・ステージ名・ターン帯・ミニマップをこの目的で動かさない。
+- `database.rules.json`、ゲーム進行、操作判定、必殺技性能を変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 新しい3行表示の回帰テストを先に追加し、旧実装では**459/460成功・1失敗**を確認した。
+- 実装後の`npm.cmd run test:stage3`は**460/460成功**。
+- 全体の`npm.cmd test`も成功。Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **460/460**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53**。loopbacktest中継数は基準どおり**38 / 64 / 83 / 61 / 48**。
+- ローカルHTTP（`http://127.0.0.1:4328/`）の実ブラウザでCPU 1vs1・演習2vs2を各1戦開始し、丸枠内の3行表示・カード／ターン帯／ミニマップとの非重なりを確認。新規のconsole errorは**0件**。
+
+## v2.0.27 風情報を共通の丸形コンソールへ統一（2026-08-16）
+
+### 何をしたか
+
+- メロニキ提供の透過付き丸形HUD素材を`assets/ui/battle-hud/wind-console-round.webp`へ追加した。
+- 1vs1・2vs2とも画面中央で同じ丸形コンソールを描画し、中へ「現在の風」「矢印」「風力」「次の風」を表示するよう統一した。
+- 2vs2だけにあった縦3区画の見た目は、丸形コンソール素材が読み込めない場合の安全なフォールバックとして残した。
+- 1vs1は104px、2vs2は142pxと表示倍率だけを変え、情報の意味・順序・描画関数を共通化した。
+- `BUILD_ID`と`CACHE_VERSION`を`v2.0.27-battle-wind-round-console`へ揃え、オフラインキャッシュ対象にも新素材を追加した。
+
+### なぜしたか
+
+- 対戦人数で風情報のデザインが変わると、プレイヤーが見る場所と読み方を覚え直す必要があるため。
+- 丸形素材の中央に必要な風情報を集めることで、2vs2で生じていた中央の死角を情報表示へ変えつつ、左右のカードと干渉しないため。
+
+### やってはいけないこと
+
+- 1vs1と2vs2で風情報の意味・表示順・中心位置を別実装へ戻さない。
+- 現在の風、矢印、風力、次の風予報のいずれかを丸形コンソールから省かない。
+- 左右カード、ステージ名、ターン帯、ミニマップ、ゲーム進行、通信、`database.rules.json`をこの目的で変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 新規の共通丸形コンソール回帰テストは、旧v2.0.26で**458/459成功・1失敗**になることを確認した。
+- 実装後の`npm run test:stage3`は**459/459成功**。
+- 全体の`npm test`も成功（Seat **40/40**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **459/459**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53**）。
+- 描画のみの変更後もloopbacktest中継数は基準どおり**38 / 64 / 83 / 61 / 48**で、通信・ゲーム進行の変更はない。
+- ローカルHTTP（`http://127.0.0.1:4327/`）の実ブラウザで、1vs1・2vs2の両方を確認した。丸枠は中央表示で、周囲のHUD要素との重なりなし。コンソール警告・エラーは**0件**。
+
+## v2.0.26 2vs2風向き丸形計器化（2026-08-16）
+
+### 何をしたか
+
+- 2vs2中央の「風向」区画を丸形計器へ変更し、円内に矢印と強さを表示した。無風時は強さ欄を「無風」と表示する。
+- 現在の風・風向・次の風の3区画、および1vs1のコンパクト表示は維持した。
+- `BUILD_ID`と`CACHE_VERSION`をv2.0.26へ揃えた。
+
+### なぜしたか
+
+- 矢印と強さを別々に追わせず、丸い計器だけを見れば風向と強さを判断できるようにするため。
+
+### やってはいけないこと
+
+- 丸形計器の外へ矢印や強さを分離して戻さない。現在・風向・次の風の3情報を減らさない。
+- ゲーム進行、通信、`database.rules.json`を変更しない。
+
+### 実測テスト数
+
+- 新規検査は旧実装で**457/458**（丸形計器の新規検査だけ失敗）を確認後に追加した。
+- 実装後`npm.cmd run test:stage3`は**458/458**通過。`npm.cmd test`はSeat **20/20**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **458/458**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53**で全通過。
+- ローカルHTTP `http://127.0.0.5:4326/index.html?build=v2.0.26`を実ブラウザで確認し、2vs2の中央丸形計器内に矢印と強さが収まること、consoleエラー0件を確認。`file://`は未使用。loopbacktest中継数は **38 / 64 / 83 / 61 / 48**で不変。
+
+更新日: 2026-08-16 JST
+
+## v2.0.25 2vs2風情報の縦型3区画化（2026-08-16）
+
+### 何をしたか
+
+- 2vs2時だけ、中央の風情報を「現在」「風向」「次の風」の3列・縦型コンソールへ変更し、左右の2段カードと同じ高さまで使用するようにした。
+- 1vs1は従来の横長・コンパクトな風コンソールを維持した。
+- `BUILD_ID`と`CACHE_VERSION`を同じv2.0.25番号へ更新した。
+
+### なぜしたか
+
+- 2vs2では中央の風情報が上段だけに寄り、カード2段の間がデッドスペースになっていたため。風の現在値・方向・予報を分離して、戦闘中に読める配置へ整理した。
+
+### やってはいけないこと
+
+- 2vs2の風情報を2列へ減らしたり、現在・風向・次の風の3情報を省略しないこと。
+- 1vs1まで背高コンソールにして、上部HUDを必要以上に圧迫しないこと。
+- このUI変更にゲーム進行、通信、`database.rules.json`を混ぜないこと。
+
+### 実測テスト数
+
+- 新規検査は旧実装で**456/457**（風コンソールの新規検査だけ失敗）を確認後に追加した。
+- 実装後の`npm.cmd run test:stage3`は**457/457**通過。
+- ローカルHTTP `http://127.0.0.4:4325/index.html?build=v2.0.25`を実ブラウザで確認し、1vs1・2vs2の両方でHUDを描画。2vs2は中央の縦型3区画と4枚のカード、ミニマップを確認。consoleエラー0件、`file://`は未使用。
+- `npm.cmd test`は Seat **20/20**、Regression **399/399**、Result **93/93**、Loopback **103/103**、Stage3 **457/457**、Lobby **7/7**、Back **14/14**、Ranking **5/5**、Stage **53/53**で全通過。
+- Android縦画面E2Eは**8/8**通過。loopbacktest中継数は **38 / 64 / 83 / 61 / 48**の基準どおりで、UI描画のみの変更による通信挙動はない。
+
+更新日: 2026-08-16 JST
+
+## v2.0.24 BATTLE HUD HPゲージ上下中央揃え（2026-08-16）
+
+### 何を変えたか
+
+- 味方・敵カードのHPアンカーをゲージ上端の`y`ではなく、素材レール中央を示す`centerY`として扱うよう変更した。
+- HPゲージの上端を「中央アンカー − ゲージ高さの半分」で算出し、1vs1・2vs2とも素材の中央レールへ上下中央揃えした。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.24へ揃えた。
+
+### なぜ
+
+- v2.0.23まではHP窓の中心付近を示す値をゲージ上端として使用しており、ゲージ高さの半分だけ下へズレて燃料レール側へ寄っていたため。
+
+### やってはいけないこと
+
+- HPアンカーを上端座標へ戻さない。ゲージ高さを変更する場合も`centerY`から半分を引く計算を維持する。
+- 味方・敵カードのHP中央アンカーを共通化しない。素材ごとに中央位置が異なる。
+- 名前＋HP値、燃料ゲージ、風、ターン帯、ゲーム進行、通信、`database.rules.json`をこの目的で変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 新規HPゲージ中央揃えテストは旧実装で**455/456成功**（新規1件だけ失敗）を確認してから実装した。
+- 実装後`npm.cmd test`は全スイート成功。seat **20/20×2**、regression **399/399×2**、result **93/93**、loopback **103/103**、stage3 **456/456**、lobby **7/7**、back **14/14**、ranking **5/5**、Stage系もすべて成功した。
+- Android縦画面タッチE2Eは**8/8成功**。ローカルHTTP `http://127.0.0.3:4324/index.html?build=v2.0.24`＋実ブラウザで、左右の緑HPゲージが素材の中央レールへ上下中央揃えされ、名前・燃料・風の位置が維持されることとConsoleログ**0件**を確認した。`file://`は未使用。
+- loopbacktest中継数は基準どおり**38 / 64 / 83 / 61 / 48**で、描画変更による変動はない。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.23 BATTLE HUD名前・HP値の上下中央揃え（2026-08-16）
+
+### 何を変えたか
+
+- 味方・敵カード上段の名前＋HP値を、実測した文字窓の中心Yへ`middle`基準で描画するよう変更した。
+- HUDアンカーの`text.y`を`text.centerY`へ改名し、この値が文字のベースラインではなく窓の上下中央を示すことを明確にした。
+- 共通の縁取り文字関数へ任意のベースライン指定を追加した。名前＋HP値以外は従来の`alphabetic`基準を維持する。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.23へ揃えた。
+
+### なぜ
+
+- v2.0.22では文字窓の中心付近へ座標を置いていたが、Canvas既定の`alphabetic`基準では文字本体が座標より上へ描かれ、名前＋HP値がやや上寄りに見えていたため。
+
+### やってはいけないこと
+
+- 名前とHP値で異なるY基準を使わない。味方・敵それぞれの`centerY`を共通値へまとめない。
+- 共通文字関数の既定ベースラインを`middle`へ変えない。ほかのUI文字まで一斉に動いてしまうため、中央揃えは名前＋HP値の呼び出しだけに指定する。
+- HPゲージ、燃料ゲージ、風、ターン帯、ゲーム進行、通信、`database.rules.json`をこの目的で変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 新規中央揃えテストは旧実装で**454/455成功**（新規1件だけ失敗）を確認してから実装した。
+- 実装後`npm.cmd test`は全スイート成功。seat **20/20×2**、regression **399/399×2**、result **93/93**、loopback **103/103**、stage3 **455/455**、lobby **7/7**、back **14/14**、ranking **5/5**、Stage系もすべて成功した。
+- Android縦画面タッチE2Eは**8/8成功**。ローカルHTTP `http://127.0.0.2:4323/index.html?build=v2.0.23`＋実ブラウザで、左右の名前＋HP値が文字窓の上下中央へ揃うこととConsoleログ**0件**を確認した。`file://`は未使用。
+- loopbacktest中継数は基準どおり**38 / 64 / 83 / 61 / 48**で、描画変更による変動はない。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.22 BATTLE HUD実測アンカー配置修正（2026-08-16）
+
+### 何を変えたか
+
+- 味方・敵カードと風コンソールのPNGに含まれる大きな透明余白を、描画時に実測した不透明領域へ切り抜く方式へ変更した。
+- 味方カード・敵カードそれぞれに、名前＋HP値、HPゲージ、燃料ゲージの専用アンカーを定義し、素材内の各窓へ直接配置した。
+- 風コンソールは現在の風・中央矢印・次の風の3区画を維持し、切り抜いた素材内の実測位置へ揃えた。中央の矢印区画も横幅を確保した。
+- 1vs1と2vs2のカード高さ・段間隔・ターン帯・ミニマップ位置を新しい切り抜き表示に合わせて再調整した。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.22へ揃えた。
+
+### なぜ
+
+- 素材画像全体の縦横比だけを使って配置していたが、実ファイルには上下左右へ大きく非対称な透明余白があり、見えている枠と文字・ゲージの座標基準が一致していなかったため。
+- 味方・敵で枠の形と有効領域が異なるのに共通比率で配置していたため、名前＋HPが上へ、燃料が下へ外れ、風情報も装飾へ埋もれていたため。
+
+### やってはいけないこと
+
+- HUD素材を透明余白ごと表示領域へ押し込まない。切り抜き値を外す場合は、素材自体の透明余白を除去してからアンカーを再実測する。
+- 味方カードと敵カードのアンカーを共通化しない。現在の風・中央矢印・次の風の3区画を2区画へ戻さない。
+- 1vs1だけを見て2vs2の下段カード、ターン帯、ミニマップを重ねない。ゲーム進行、通信、操作判定、`database.rules.json`は変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 新規HUD切り抜き・実測アンカーテストは旧実装で**453/454成功**（新規1件失敗）を確認してから実装した。
+- 実装後`npm.cmd test`は全スイート成功。regression **399/399×2**、result **93/93**、loopback **103/103**、stage3 **454/454**、lobby **7/7**、back **14/14**、ranking **5/5**、Stage系テストもすべて成功した。
+- Android縦画面タッチE2Eは**8/8成功**。ローカルHTTP `http://127.0.0.1:4320/index.html?build=v2.0.22`＋実ブラウザ（582×1280）で、名前＋HP、HPゲージ、燃料ゲージ、現在風、中央矢印、次の風が各素材窓内に揃うこととConsoleログ**0件**を確認した。`file://`は未使用。
+- loopbacktest中継数は基準どおり**38 / 64 / 83 / 61 / 48**で、描画変更による変動はない。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.20 BATTLE HUD素材比率・風予報表示修正（2026-08-16）
+
+### 何を変えたか
+
+- v3のプレイヤーカードを素材本来の縦横比で表示し、1vs1の左右カードが中央の風コンソールを覆わない幅へ調整した。
+- 風コンソールを現在風・方向矢印・次の風の3区画として使い、右側の大窓へ「次の風」を明示表示するようにした。
+- 1vs1のカード・風・ターン帯を縦方向に再配置し、2vs2は2段カードの下へターン帯、さらに下へミニマップを置いて重なりをなくした。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.20へ揃えた。
+
+### なぜ
+
+- v2.0.19ではカード幅242px・高さ72pxで素材を押しつぶしていたうえ、左右カードが風コンソールの左右窓に重なり、中央の細い装飾だけが見える状態になっていたため。
+- 風予報のラベルを描画時に削っていたため、予報が見えない原因を取り除き、現在風と次の風を別窓で読めるようにするため。
+
+### やってはいけないこと
+
+- カード素材を再び縦につぶさない。左右カードを風コンソールへ重ねない。
+- 風を2要素へ戻さない。現在風・中央矢印・次の風の3区画と予報ラベルを維持する。
+- 2vs2の下段カード、ターン帯、ミニマップを重ねない。ゲーム進行、通信、操作判定、`database.rules.json`は変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 新規HUD配置・風予報テストは旧`origin/master`で**451/452成功**（新規1件失敗）を確認してから追加した。
+- 実装後`npm.cmd run test:stage3`は**452/452成功**。`npm.cmd test`は全スイート成功で、seat **20/20×2**、regression **399/399×2**、result **93/93**、loopback **103/103**、stage3 **452/452**、lobby **7/7**、back **14/14**、ranking **5/5**、Stage系 **53/53**、合計**1,547/1,547成功**。
+- 新規モバイルE2EはAndroid縦画面**8/8成功**。ローカルHTTP `http://127.0.0.1:4318/index.html`＋実ブラウザでタイトルからキャラ選択・BATTLE開始、HUDのカード比率・風予報表示、Consoleログ0件を確認した。`file://`は未使用。
+- loopbacktest中継数の基準**38 / 64 / 83 / 61 / 48**は変更しない。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.19 BATTLE HUD可読性・2vs2対応再設計（2026-08-16）
+
+### 何を変えるか
+
+- BATTLE上部HUDを下方向へ拡張し、1vs1ではカードを大きく、2vs2では同じ単体カード素材を4枚へ個別適用する。
+- 味方・敵カードは名前入力面を大きく取り、HPバーを太く、燃料バーを細くしてHPを優先する。
+- 風況は縦2段ではなく、「現在の風／方向矢印／次の風・予報」の横3区画へ変更する。
+- 「キャラ名・あなたのターン・TURN・演習／連勝」は専用の横長ターンリボンへ分離し、左・中央・右の情報領域で読みやすくする。
+- ミニマップは通常1vs1では非表示にし、2vs2または横2160pxの大型ステージだけ戦況確認用として残す。
+- 新しい生成素材は`assets/ui/battle-hud/v3/`へ追加し、旧素材はフォールバック用に残す。
+
+### なぜ
+
+- 旧素材は円形装飾が入力スペースを奪い、文字数の多いキャラ名やHP表示が窮屈だったため。
+- 2vs2を固定1枚素材へ押し込めると4体表示で破綻するため、1ユニット1カードの再利用設計へ改める。
+- 風の現在値・方向・予報を同じ2段枠へ詰めると、既存の3要素が読み取りにくいため。
+- 通常1vs1ではミニマップが戦場の見た目と役割重複し、カード・風・ターン帯を圧迫していたため。大型ステージと2vs2だけは全体位置把握の価値が残る。
+
+### やってはいけないこと
+
+- 単体カード素材へ4体分の情報を合成しない。2vs2では4枚を個別に描画する。
+- HPと燃料を同じ太さ・同じ優先度へ戻さない。HPを太く、燃料を細く保つ。
+- 風を2段へ戻したり、矢印を文字列だけで表現したりしない。
+- 通常1vs1へ常時ミニマップを戻してHUD上部を圧迫しない。大型ステージ・2vs2でのみ戦況バーを出す。
+- `database.rules.json`、通信形式、ゲーム進行、操作判定を変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 新規HUD条件5件は旧`origin/master`で**0/5成功**を確認してから追加した。
+- 実装後`npm.cmd run test:stage3`は**451/451成功**。
+- `npm.cmd test`は全スイート成功。seat **20/20×2**、regression **399/399×2**、result **93/93**、loopback **103/103**、stage3 **451/451**、lobby **7/7**、back **14/14**、ranking **5/5**、Stage系 **53/53**。合計**1,546/1,546成功**。
+- 新規HUD条件5件は旧`origin/master`で**0/5成功**、実装後はstage3 **451/451**で成功。中継数は基準の**38 / 64 / 83 / 61 / 48**から変更なし。
+- ローカルHTTP `http://127.0.0.1:4317/index.html`＋実ブラウザでv3素材4点のHTTP 200、タイトルから対戦画面への起動、1vs1・2vs2のHUD描画、ブラウザログ0件を確認した。Android縦画面E2Eは**8/8成功**。`file://`は未使用。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.16 BATTLE画面の戦況司令ブリッジ (2026-08-16)
+
+### 何を変えたか
+
+- BATTLE画面上部のHUDを、黒鉄・真鍮の「司令ブリッジ」風に刷新した。
+- HUD下端を1vs1で116pxから132pxへ、2vs2で150pxから170pxへ拡張し、左右の自軍／敵軍カード、中央の風況コンソール、ターン帯、ミニマップを段差なく配置した。
+- 1vs1のHPカードを高さ46pxへ拡張し、2vs2の4カードも36px・2段で収めた。自軍／敵軍の役割表示と発光アクセントを維持した。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.16へ揃えた。
+
+### なぜ
+
+- 上部データ表示が横一列に詰まり、対戦中の「誰の状態か」「今どの情報を見るべきか」が読み取りにくかったため。
+- 画面上部を少しだけ拡張し、ゲームの黒鉄・真鍮UIに合う司令盤として情報の階層を整理するため。
+
+### やってはいけないこと
+
+- HUDの拡張を戦場の当たり判定・カメラ・操作エリアへ波及させない。HP、燃料、風、ターン、ミニマップの意味や更新タイミングを変えない。
+- 2vs2の4カードを1vs1の高さへ戻したり、ターン帯・ミニマップをカードへ重ねたりしない。
+- 通信、ゲーム進行、必殺技、タイトル画面、`database.rules.json`を同時に変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数
+
+- 実装前の新規HUD回帰テストは旧実装で445/447成功、2件失敗を確認した。
+- 実装後はStage 3 **447/447**、Stage **53/53**、回帰 **399/399を2系統**、loopback **93/93・103/103**、lobby **7/7**、back **14/14**、ranking **5/5**が成功した。
+- `npm.cmd test`の全スイート成功を確認。中継数は基準の**38 / 64 / 83 / 61 / 48**から変更なし。
+- `http://127.0.0.1:4202/index.html`をローカルHTTP＋実ブラウザで開き、1vs1の司令ブリッジ、BATTLE START後の戦闘継続、文字・枠の収まりを確認した。Consoleの警告・エラーは0件、`file://`は未使用。
+
+## v2.0.15 BATTLE STARTロゴ拡大・再生速度固定 (2026-08-16)
+
+### 何を変えたか
+
+- BATTLE STARTロゴ動画の表示倍率を従来の1.5倍から1.95倍へ拡大した（追加で1.3倍）。
+- 動画要素の`defaultPlaybackRate`と再生開始直前の`playbackRate`をともに1.3へ設定し、開始時にも1.3倍速を確実に適用するようにした。動画のループ再生なし・終了時停止は維持した。
+- `BUILD_ID`、`CACHE_VERSION`、更新履歴をv2.0.15へ揃えた。
+
+### なぜ
+
+- ロゴをさらに大きく見せたいという要望に対応した。
+- 1.3倍速設定が再生開始時にブラウザ側の既定値へ戻ったように見える余地をなくし、実際の再生経路へ速度設定を固定するため。
+
+### やってはいけないこと
+
+- この版で1.95倍を超えて拡大しない。ループ再生へ戻さない。
+- PNGフォールバック、合成描画、表示Y座標、VS演出のタイミング、ゲーム進行、通信、Firebaseルールを変更しない。`database.rules.json`は変更しない。
+
+### 実測テスト数
+
+- 実装前の新規回帰テストは旧実装で443/445成功、2件失敗を確認した。
+- 実装後のStage 3は445/445、Stageは53/53、回帰は399/399を2系統とも成功。全体テストはStage 3 445/445、Stage 53/53、回帰399/399を2系統、loopback 93/93・103/103、lobby 7/7、back 14/14、ranking 5/5まで成功した。
+- 動画メタデータは856x1076・24fps・3.041667秒で、1.3倍速時の理論再生時間は約2.34秒。`http://127.0.0.1:4201/index.html`をローカルHTTPで実ブラウザ表示し、1.95倍のロゴ動画がBATTLE START演出内で再生され、コンソールの警告・エラー0件を確認した（`file://`は未使用）。
+
+## v2.0.14 Update history polish (2026-08-16)
+
+### What changed
+
+- Moved the `更新履歴` heading and `これまでの主な変更` subtitle upward inside the modal.
+- Removed the special yellow styling from the first history card so it no longer looks like a separate tappable item.
+- Increased the title-screen update-history label from 9px to 10px while keeping it inside the panel.
+- Added v2.0.14 and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.14-update-history-polish`.
+
+### Why
+
+- The heading sat too close to the first card, and the yellow first card suggested a different interaction even though the whole list is the scrollable view. The title label also needed a little more readable size without overflowing.
+
+### Do not do
+
+- Do not make individual history cards open a second detail screen; the existing list remains the single history view.
+- Do not restore first-card-only yellow emphasis, move the close button behind the list, or change touch scrolling and right-half start detection.
+- Do not change game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New UI regressions failed on the old implementation: 396/399 passed, then passed after the fix.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
+## v2.0.13 Update history visual fix (2026-08-16)
+
+### What changed
+
+- Expanded the update-history modal to 760px tall and kept the close button in front below the list.
+- Moved the content viewport below the modal heading so `これまでの主な変更` remains visible while the list still clips and scrolls.
+- Vertically centered the title-screen update-history label and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.13-update-history-visual-fix`.
+
+### Why
+
+- The heading subtitle was being clipped by the list viewport, and the narrow title panel label sat above the panel center. More vertical room improves the list’s readability without changing its touch behavior.
+
+### Do not do
+
+- Do not draw summaries back into the narrow title-screen panel.
+- Do not let cards escape the modal clip or put the close button behind the list.
+- Do not change scrolling start areas, game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New UI regressions failed on the old implementation: 394/396 passed, then passed after the fix.
+- `npm.cmd run test:regression`: p1/e1 396/396 passed after the fix.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
+## v2.0.12 BATTLE START logo playback speed (2026-08-16)
+
+### What changed
+
+- Set the non-looping BATTLE START logo video playback rate to 1.3x.
+- Added v2.0.12 to the title-screen update history and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.12-battle-start-video-speed`.
+
+### Why
+
+- The requested 1.3x playback makes the opening transition finish sooner while preserving the existing one-shot video path and visual treatment.
+
+### Do not do
+
+- Do not loop the video, change its render path, replace the PNG fallback, or alter the BATTLE START layout.
+- Do not change update-history behavior, game rules, communication, Firebase rules, or `database.rules.json`.
+
+### Measured tests
+
+- New 1.3x regression failed on the old implementation: 442/443 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check must use local HTTP and a real browser; `file://` is prohibited.
+
+## v2.0.11 Update history summary layout (2026-08-16)
+
+### What changed
+
+- The title-screen update-history panel now shows only the latest version and date; the latest summary text is no longer drawn in the narrow panel.
+- The full summary remains in each entry and is shown inside the tapped history list.
+- Expanded the history modal from 560px to 680px vertically and moved the close button with it, while keeping clipping, touch scrolling, right-half start detection, and front layering intact.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.11-update-history-summary`.
+
+### Why
+
+- Long update summaries could overflow the narrow title-screen panel. The title screen should stay compact while the detailed list provides enough vertical room to read the content.
+
+### Do not do
+
+- Do not draw `LATEST_UPDATE_HISTORY.summary` in the title-screen panel.
+- Do not put history cards outside the modal clip or move the close button behind the list.
+- Do not change touch scrolling, the right-half touch start area, game rules, communication, or `database.rules.json`.
+
+### Measured tests
+
+- New layout regression failed on the pre-change implementation: 393/394 passed, then passed after the fix.
+- `npm.cmd run test:regression`: p1/e1 394/394 passed.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- Browser visual check must confirm the title panel has no summary text, the expanded list shows summaries and still scrolls/clips correctly, and the close button stays in front on local HTTP; `file://` is prohibited.
+
+## v2.0.10 BATTLE START video playback speed (2026-08-16)
+
+### What changed
+
+- Set the normal BATTLE START video playback rate to 1.2x.
+- Kept the existing 1.5x visual size, one-shot playback, screen compositing, position, PNG fallback, VS timing/layout, and game rules unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.10-battle-start-video-speed`.
+
+### Why
+
+- Make the opening cut-in feel a little snappier without adding rendering work; playback speed changes the video clock only and does not add frames or pixel processing.
+
+### Do not do
+
+- Do not restore per-frame pixel processing or change the video render path for this small playback adjustment.
+- Do not change the 1.5x visual size, one-shot stop behavior, position, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New playback-rate regression failed on the pre-change implementation: 442/443 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 443/443 passed.
+- Browser visual check must confirm the BATTLE START video remains visible without a black rectangle and the battle continues normally on local HTTP; `file://` is prohibited.
+
+## v2.0.9 BATTLE START video performance (2026-08-16)
+
+### What changed
+
+- Removed the per-frame `getImageData`/pixel-loop/`putImageData` processing from the BATTLE START video path.
+- Uses Canvas `screen` compositing for the black-background video, preserving the black-background-free appearance without reading and rewriting every pixel each frame.
+- Kept the 1.5x size, one-shot playback, logo position, PNG fallback, VS timing/layout, and game rules unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.9-battle-start-video-performance`.
+
+### Why
+
+- The previous implementation could make BATTLE start feel heavy on mobile because every animation frame copied and modified the full video pixel buffer before drawing it.
+
+### Do not do
+
+- Do not restore per-frame `getImageData`/`putImageData` processing for this video.
+- Do not change the 1.5x size, one-shot playback, logo position, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New performance regression failed on the pre-change implementation: 441/442 passed, then passed after the fix.
+- `npm.cmd run test:stage3`: 442/442 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check on a local HTTP server rooted at this worktree must confirm the logo remains visible without a black rectangle and the battle continues normally; `file://` is prohibited.
+
+## v2.0.8 BATTLE START video playback adjustment (2026-08-16)
+
+### What changed
+
+- Enlarged the normal BATTLE START video from the previous 300px virtual width to 1.5x (450px).
+- Disabled looping and explicitly pauses the video at the end of its single playback.
+- Kept the transparent-background processing, upward position, PNG fallback, and tutorial text behavior unchanged.
+- Aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.8-battle-start-video-playback`.
+
+### Why
+
+- Match the requested logo scale and make the animation stop after one playback instead of repeating.
+
+### Do not do
+
+- Do not loop the BATTLE START video or enlarge the tutorial heading.
+- Do not change the video position, black-background removal, VS timing/layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- New playback regression failed on the pre-change implementation, then passed after the fix.
+- `npm.cmd run test:stage3`: 442/442 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- Browser visual check on a local HTTP server rooted at this worktree passed: the logo visibly renders at 1.5x, with no black rectangle; after the cut-in completes the game proceeds normally. `file://` was not used.
+
+## v2.0.7 BATTLE START video and flash cleanup (2026-08-16)
+
+### What changed
+
+- Added the user-provided Google Drive asset `assets/battle-start-logo.mp4` and use it for normal battle-start cut-ins.
+- Removed the MP4's opaque black background per frame before drawing, so the video itself cannot create a rectangular black box.
+- Moved the BATTLE START logo center from virtual Y=250 to Y=180; tutorial keeps the standard text.
+- Removed the transient full-plate flash fill that was painting a rectangular color block around the cannon shells.
+- Kept the PNG as a safe fallback, and aligned `BUILD_ID`/`CACHE_VERSION` at `v2.0.7-battle-start-video`.
+
+### Why
+
+- Replace the static logo with the requested video version and remove the brief colored rectangle visible during the VS impact flash.
+
+### Do not do
+
+- Do not use the BATTLE START video for the tutorial heading.
+- Do not restore a full `pw`/`ph` canvas fill inside `drawVsPlate`; it recreates the transient rectangular frame.
+- Do not change VS timing, layout, damage, game rules, or `database.rules.json`.
+
+### Measured tests
+
+- `npm.cmd run test:stage3`: 441/441 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- New regression checks: video asset wiring/upward position, opaque-background removal, and no transient VS plate fill all passed.
+- Browser visual check on a local HTTP server rooted at this worktree passed; the logo was visible above the old position with no black rectangle. `file://` remains prohibited.
+
+## v2.0.6 Battle Start visual assets (2026-08-16)
+
+### What changed
+
+- Added the user-provided Google Drive asset `assets/battle-start-logo.png` and use its cropped transparent artwork for the normal battle-start heading.
+- Added a rounded shell clip before drawing the VS plate PNGs, preventing opaque rectangular edge pixels from flashing around the cannon shells.
+- Added preload/service-worker caching and kept `BUILD_ID` and `CACHE_VERSION` aligned at `v2.0.6-battle-start-logo`.
+
+### Why
+
+- Replace the temporary text heading with the supplied BATTLE START logo and remove the visible rectangular color fringe around the shell assets.
+
+### Do not do
+
+- Do not use the BATTLE START logo for the tutorial heading; tutorial keeps its standard text.
+- Do not remove the fallback hand-drawn VS plate, and do not change the shell timing, layout, damage, or game rules.
+- Do not change `database.rules.json`.
+
+### Measured tests
+
+- `npm.cmd run test:stage3`: 438/438 passed.
+- `npm.cmd run test:stage`: 53/53 passed.
+- New regression checks: Drive logo asset wiring and rounded VS plate clipping both passed.
+- Browser visual check must be repeated on a server rooted at this worktree before merge; `file://` is prohibited.
+
+## v2.0.5 タイトルメニューの文字可読性改善（実装・検証完了）
+
+### 何を変えたか
+
+- タイトル画面の各メニューボタンの見出し・説明文を拡大した。
+- 特にチュートリアル／演習は見出しを17pxから21px、説明文を9pxから11pxへ拡大した。
+- CPU／ONLINE、RANKING、おまけも同じ方向で少し拡大し、タイトル内の文字の見え方を揃えた。
+- 可読性の回帰テストを追加し、旧実装では**391成功・1失敗**を確認した。
+- `BUILD_ID`と`CACHE_VERSION`を`v2.0.5-title-menu-readability`へ揃えた。
+
+### なぜそうしたか
+
+- タイトル画面のボタン素材に対して文字が小さく、特にチュートリアルと演習の見出し・説明がスマホで読み取りにくかったため。
+
+### やってはいけないこと
+
+- タイトルメニューの位置、押せる範囲、ボタン順、各メニューの機能を変更しない。ゲーム画面、更新履歴、通信、`database.rules.json`を同時に変更しない。
+- 文字を大きくするためにボタン素材の縦横比やタイトル画面の全体配置を崩さない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 回帰テストは修正後 p1/e1 **392/392成功**。旧実装で可読性テストが**391/392**になることを確認済み。
+- `npm.cmd test`は全項目成功。regression **392/392×2**、result **93/93**、loopback **103/103**、seat **20/20×2**、lobby **7/7**ほか。中継数は**38 / 64 / 83 / 61 / 48**で増減なし。
+- `http://127.0.0.1:4220/index.html`をローカルHTTPで実ブラウザ確認。v2.0.5表示、タイトル全メニューの文字サイズ、特にチュートリアル／演習の見出し・説明文の可読性と枠内収まりを確認した。初回素材読み込み後に安定表示することも確認した。`file://`は未使用。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+更新日: 2026-08-16（JST）
+
+## v2.0.4 更新履歴の右半分タッチ判定修正（実装・検証完了）
+
+### 何を変えたか
+
+- 更新履歴のタッチ開始矩形で、描画用の左端Xを判定用の中央Xとして誤用していた箇所を修正した。
+- 右端を含むモーダル本文全幅でタッチ開始を受けるようにした。
+- 右半分開始の回帰テストを追加し、旧実装では**390成功・1失敗**を確認した。
+- `BUILD_ID`と`CACHE_VERSION`を`v2.0.4-update-history-touch-right`へ揃えた。
+
+### なぜそうしたか
+
+- `hitRect`は矩形の中心座標を受け取るのに、タッチ判定だけ左端座標を渡していたため、判定範囲が左寄りになり右半分が反応しなかった。
+
+### やってはいけないこと
+
+- 描画用の矩形座標とタッチ判定用の中心座標を混同しない。閉じるボタンをスクロール判定へ含めない。ゲーム操作、通信、window側の継続スクロール、`database.rules.json`を変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 回帰テストは修正後 p1/e1 **391/391成功**。旧実装で右半分テストが**390/391**になることを確認済み。
+- `npm.cmd test`は全項目成功。regression **391/391×2**、result **93/93**、loopback **103/103**、seat **20/20×2**、lobby **7/7**ほか。中継数は**38 / 64 / 83 / 61 / 48**で増減なし。
+- `http://127.0.0.1:4219/index.html`をローカルHTTPで実ブラウザ確認。v2.0.4表示、右端付近からの一覧スクロール、下段表示、閉じるボタンの前面表示を確認した。`file://`は未使用。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+更新日: 2026-08-15（JST）
+
+## v2.0.3 更新履歴の下段からの指スクロール開始修正（実装・検証完了）
+
+### 何を変えたか
+
+- 更新履歴モーダルのタッチ開始判定を、描画クリップの下端から閉じるボタン直上まで拡張した。
+- 先に閉じるボタンを判定するため、閉じる操作をスクロール開始として奪わない。
+- 下段カード付近から指を始める回帰テストを追加した。旧実装では**389成功・1失敗**を確認した。
+- `BUILD_ID`と`CACHE_VERSION`を`v2.0.3-update-history-touch-start`へ揃えた。
+
+### なぜそうしたか
+
+- 実端末の表示倍率によって、下段カードが見えている範囲とCanvas内のタッチ開始用クリップ範囲に数pxのズレが生じ、4件目以降で指を置いてもスクロールを掴めない帯ができていたため。
+
+### やってはいけないこと
+
+- 閉じるボタンの判定をスクロール領域へ含めない。更新履歴以外のゲーム操作、ホイール、window側のスクロール継続処理、通信、`database.rules.json`を変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 回帰テストは修正後 p1/e1 **390/390成功**。旧実装で新テストが**389/390**になることを確認済み。
+- `npm.cmd test`は全項目成功。regression **390/390×2**、result **93/93**、loopback **103/103**、seat **20/20×2**、lobby **7/7**ほか。中継数は**38 / 64 / 83 / 61 / 48**で増減なし。
+- `http://127.0.0.1:4218/index.html`をローカルHTTPで実ブラウザ確認。v2.0.3表示、更新履歴モーダル、一覧スクロール、下段付近のタッチ開始領域、閉じるボタンの前面表示を確認した。`file://`は未使用。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+更新日: 2026-08-15（JST）
+
+## v2.0.2 更新履歴の指スクロール安定化（実装・検証完了）
+
+### 何を変えたか
+
+- 更新履歴モーダルのタッチスクロール中、指がCanvasの外へ出ても`window`側で`pointermove`を受けてスクロールを継続するようにした。
+- Canvas側のイベントは二重適用せず、更新履歴モーダルのタッチスクロール中だけを対象にした。
+- 旧実装で回帰テストが**387 passed, 1 failed**になることを確認してから、新しい回帰テストを追加した。
+- 版番号を小修正の`v2.0.2`へ更新し、`BUILD_ID`と`CACHE_VERSION`を同じ番号へ揃えた。
+
+### なぜそうしたか
+
+- モバイルブラウザでは、指がCanvasの表示範囲から外れた瞬間にCanvasへ届く`pointermove`が止まり、指を動かしても履歴一覧が途中で止まることがあるため。
+
+### やってはいけないこと
+
+- 更新履歴以外のゲーム操作へwindow側のタッチ移動を適用しない。Canvas側とwindow側で同じ移動量を二重に加算しない。
+- 更新履歴のクリップ範囲、閉じるボタンの最前面、ホイール操作、ゲーム進行、通信、`database.rules.json`を同時に変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- `npm.cmd run test:regression`: p1/e1 **388/388成功**。
+- `npm.cmd test`は全項目成功。内訳はseat **20/20×2**、regression **388/388×2**、result **93/93**、loopback **103/103**、lobby **7/7**ほか。中継数は**38 / 64 / 83 / 61 / 48**で増減なし。
+- `http://127.0.0.1:4217/index.html`をローカルHTTPで実ブラウザ確認。v2.0.2の更新履歴表示、閉じるボタンの前面表示、一覧のスクロールを確認した。`file://`は未使用。
+- loopbacktest中継数の基準は **38 / 64 / 83 / 61 / 48**。描画・入力修正のため通信経路は変更していない。
+- `database.rules.json`は変更していないため、Firebase Console反映は不要。
+
+更新日: 2026-08-15（JST）
+
+## v2.0.1 更新履歴モーダルのスクロール・レイヤー修正（実装・検証完了）
+
+### 何を変えたか
+
+- 更新履歴モーダルの一覧を専用のクリップ領域へ分離し、長い履歴がモーダル枠や「閉じる」ボタンの裏へ描画されないようにした。
+- マウスホイールとタッチの上下スワイプで履歴一覧をスクロールできるようにし、モーダルを開くたびに先頭へ戻すようにした。
+- 背景・履歴カード・閉じるボタンの描画順を整理し、閉じるボタンを常に最前面へ固定した。モーダル表示中は背面のタイトル操作へ入力を通さない。
+- 版管理を連番からSemVer風の三段階へ切り替えた。今回を`v2.0.1`（小修正）とし、現行v214相当を基準版`v2.0.0`として履歴へ追加した。過去版は旧v214形式のまま保持した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v2.0.1-update-history-scroll`へ更新した。
+
+### なぜそうしたか
+
+- 履歴件数が増えたことで、一覧がモーダル下端を越えて閉じるボタンと重なり、最下部の履歴を読めず操作もしづらくなっていたため。
+- 今後の変更規模を版番号から判断できるようにし、互換性を壊す変更・機能追加・小修正を大中小の数字で区別するため。
+
+### やってはいけないこと
+
+- 履歴カードをクリップ領域の外へ描画しない。閉じるボタンを一覧より下のレイヤーへ戻さない。
+- モーダル表示中に背面のタイトルボタンやサウンド設定へ入力を通さない。履歴を開くたびに前回のスクロール位置を持ち越さない。
+- 大は互換性を壊す変更で`vX.0.0`、中は機能追加で`vX.Y.0`、小はバグ修正・表示調整で`vX.Y.Z`とする。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- `database.rules.json`、通信仕様、対戦性能、履歴以外の画面を今回の目的へ混ぜない。
+
+### 実測テスト数・確認
+
+- 新規検査を先に追加し、旧実装では`regressiontest p1`が**385 passed, 2 failed**（枠内クリップ情報なし、スクロール不可）になることを確認してから実装した。
+- 実装後の回帰はp1/e1ともに**387/387成功**。`npm.cmd test`は seat 20×2、regression 387×2、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,525/1,525成功**。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。Canvas内の表示・入力だけの変更で通信形式へ触れていないため増減なし。
+- ローカルHTTP `http://127.0.0.1:4216/index.html`を実ブラウザで開き、タイトル、更新履歴モーダル、スマホ幅相当のスクロール前後、閉じるボタンの前面表示を確認した。Console error/warnは**0件**で、`file://`は未使用。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+更新日: 2026-08-15（JST）
+
+## v214 バルコプターの自キャラ基準高度（実装・検証完了）
+
+### 何を変えたか
+
+- バルコプターのY座標から上端固定（最小Y=54px）を外し、常に**自キャラの現在Y座標 - 450px**を出現位置にした。これで、地形の高さや自キャラの位置に連動して支援機の高さが変わる。
+- 出現高度450px、専用ヘリ画像の3倍表示（高さ294px）、マーキング地点、照準、10連射、各3ダメージ、小さな地形破壊、連射タイミングは維持した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v214-balcopter-owner-relative-altitude`へ更新した。
+
+### なぜそうしたか
+
+- v213では上端固定が先に効く場面があり、自キャラの座標を基準にした高さにならず、毎回ほぼ同じ上端位置へ見えていたため。
+
+### やってはいけないこと
+
+- 自キャラ基準のY座標へ再び上端固定を足さない。出現高度450px、画像高さ294px、マーキング、10発、各3ダメージ、小さな地形破壊、照準・連射タイミングを同時に変えない。
+- ヘリ画像の遅延読込をタイトル先読みに変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`を変更しない。
+
+### 実測テスト数・確認
+
+- 新しい自キャラY座標基準の検査を先に更新し、旧v213相当では`regressiontest p1`が**384/385 passed**となり、上端固定の高度検査だけが失敗することを確認してから実装した。
+- 実装後の回帰はp1/e1ともに**385/385成功**。`stage3test`は**436/436成功**。`npm.cmd test`は seat 20、regression 385、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,520/1,520成功**。例外で件数出力が消えていないことも確認した。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。出現位置だけの変更で通信・ゲーム進行へ触れていないため増減なし。
+- ローカルHTTP `http://127.0.0.1:4215/index.html` を実ブラウザで開き、v214のタイトルと`build v214-balcopter-owner-relative-altitude`を確認し、コンソールerror/warnは**0件**だった（`file://`は未使用）。
+
+更新日: 2026-08-15（JST）
+
+## v213 バルコプター出現高度1.5倍（実装・検証完了）
+
+### 何を変えたか
+
+- バルコプターの出現高度を、本体真上300pxから**450px（1.5倍）**へ変更した。上端保護の最小Y=54pxは従来どおり維持する。
+- 専用ヘリ画像の3倍表示（高さ294px）、マーキング地点、照準、10連射、各3ダメージ、小さな地形破壊、連射タイミングは変更していない。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v213-balcopter-higher-altitude`へ更新した。
+
+### なぜそうしたか
+
+- メロニキの指定どおり、バルコプターをさらに高い上空支援機の位置から出現させるため。
+
+### やってはいけないこと
+
+- バルコプターの画像高さ294px、上端保護、マーキング、10発、各3ダメージ、小さな地形破壊、照準・連射タイミングを同時に変えない。
+- ヘリ画像の遅延読込をタイトル先読みに変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`を変更しない。
+
+### 実測テスト数・確認
+
+- 新しい450px高度の検査を先に更新し、旧v212相当では`regressiontest p1`が**384/385 passed**となり、高度検査だけが失敗することを確認してから実装した。
+- 実装後の回帰はp1/e1ともに**385/385成功**。`stage3test`は**436/436成功**。`npm.cmd test`は seat 20、regression 385、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,520/1,520成功**。例外で件数出力が消えていないことも確認した。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。出現位置だけの変更で通信・ゲーム進行へ触れていないため増減なし。
+- ローカルHTTP `http://127.0.0.1:4214/index.html` を実ブラウザで開き、v213のタイトルと`build v213-balcopter-higher-altitude`を確認し、コンソールerror/warnは**0件**だった（`file://`は未使用）。
+
+更新日: 2026-08-15（JST）
+
+## v212 バルコプター3倍サイズ（実装・検証完了）
+
+### 何を変えたか
+
+- バルコプターの専用ヘリ画像の表示高さをv211の98pxから**294px（ちょうど3倍）**へ変更した。画像、出現位置、発射位置、命中判定はそのままで、視覚上の大きさだけを拡大した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v212-balcopter-triple-size`へ更新した。
+
+### なぜそうしたか
+
+- メロニキの指定どおり、上空支援機として大きく表示して存在感を強めるため。
+
+### やってはいけないこと
+
+- バルコプターの高度300px、10発、各3ダメージ、小さな地形破壊、照準・連射タイミングを同時に変えない。
+- ヘリ画像の遅延読込をタイトル先読みに変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`を変更しない。
+
+### 実測テスト数・確認
+
+- 新しい3倍表示の検査を先に追加し、旧v211相当では`435/436 passed`となり、294px表示の検査だけが失敗することを確認してから実装した。
+- 実装後の`stage3test`は**436/436成功**。`npm.cmd test`は seat 20、regression 385、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,520/1,520成功**。例外で件数出力が消えていないことも確認した。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。表示サイズだけの変更で通信・ゲーム進行へ触れていないため増減なし。
+- ローカルHTTP `http://127.0.0.1:4213/index.html` を実ブラウザで開き、v212のタイトルと`build v212-balcopter-triple-size`を確認し、コンソールerror/warnは**0件**だった（`file://`は未使用）。
+
+更新日: 2026-08-15（JST）
+
+## v211 バルコプター透過ヘリ画像の差し替え・拡大（実装・検証完了）
+
+### 何を変えたか
+
+- Google Driveの「カタモン/画像/バルゲルカン(ヘリ2).png」から受領した透過PNGへ、`assets/characters/master/barugerukan-helicopter.png`を差し替えた。旧画像の透過切り抜き不備を解消する素材のみを置換し、ファイル名は遅延読込の参照先を保つため維持した。
+- バルコプターの描画高さを86pxから98pxへ上げ、通常の本体より少し大きく見える上空支援機にした。出現高度300px、マーキング、10連射、各3ダメージ、小さな地形破壊、照準・連射タイミングは維持した。
+- 4.4MBの画像は従来どおり必殺技が実際に出た時だけ読み込み、タイトルのコア画像先読みには加えていない。`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v211-balcopter-helicopter2-art`へ更新した。
+
+### なぜそうしたか
+
+- 旧画像の不完全な透過を、メロニキが用意した透過済みの新しいヘリ画像へ安全に差し替え、戦闘背景の上で自然に見せるため。
+- 支援機らしい存在感を出しつつ、バルコプター本来の性能・進行へ影響を出さないため。
+
+### やってはいけないこと
+
+- バルコプターの高度300px、10発、各3ダメージ、小さな地形破壊、照準・連射タイミングを同時に変えない。
+- この4.4MB画像をタイトルのコア画像読込へ加えない。通常時に不要な画像を先読みしない。
+- `barugerukan-helicopter.png`をバルゲルカン本体画像や透過不備の旧画像へ戻さない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`を変更しない。
+
+### 実測テスト数・確認
+
+- 新テストを先に更新し、旧v210のままでは`435/436 passed`となり、v2画像URL・98px表示の検証だけが失敗することを確認してから実装した。
+- 実装後の`stage3test`は**436/436成功**。`npm.cmd test`は seat 20、regression 385、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,520/1,520成功**。例外で件数出力が消えていないことも確認した。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。画像URLと描画高さだけの変更で、通信・ゲーム進行へ触れていないため増減なし。
+- 新しいPNGを実際に開いて透過済みのヘリ素材であることを確認した。ローカルHTTP `http://127.0.0.1:4212/index.html` を実ブラウザで開き、v211のタイトル・CPU BATTLE・キャラクター選択までを確認し、コンソールerror/warnは**0件**だった（`file://`は未使用）。
+
+更新日: 2026-08-15（JST）
+
+## v210 バルコプター専用ヘリ画像（実装・検証完了）
+
+### 何を変えたか
+
+- Google Driveの「カタモン/画像/バルゲルカン(ヘリ)」から受領した透過PNGを、`assets/characters/master/barugerukan-helicopter.png`として追加した。
+- バルコプター表示はバルゲルカン本体の流用をやめ、専用ヘリ画像を使う。画像は必殺技が実際に出てから遅延読み込みするため、タイトル画面の初期読み込みへ1.65MBを足さない。
+- 画像に含まれるローターをそのまま使い、旧来の仮ローター線は描かない。`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v210-balcopter-helicopter-art`へ更新した。
+
+### やってはいけないこと
+
+- バルコプターの高度300px、10発、各3ダメージ、小さな地形破壊、照準・連射タイミングを同時に変えない。
+- 専用ヘリ画像をタイトルのコア画像読込へ加えない。通常時に不要な1.65MBを先読みしない。
+- 専用ヘリを再びバルゲルカン本体画像＋仮ローターへ戻さない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`を変更しない。
+
+### 実測テスト数・確認
+
+- 新テストは旧実装で`435/436 passed`となり、専用画像・遅延読込・本体流用廃止の検証だけが失敗することを確認した。
+- 実装後の`stage3test`は**436/436成功**。`npm.cmd test`は seat 20、regression 385、result 93、loopback 103、stage3 436、lobby 7、back 14、ranking 5、Stage Studio 53の合計**1,520/1,520成功**。
+- `loopbacktest`は**103/103成功**、中継数は基準どおり**38 / 64 / 83 / 61 / 48**。画像の遅延読込だけで通信・ゲーム進行を変えないため増減なし。
+- ローカルHTTP `http://127.0.0.1:4211/index.html` を実ブラウザで開き、バルゲルカンの選択カード・バトル開始までを確認し、コンソールerror/warnは**0件**だった（`file://`は未使用）。
+
+更新日: 2026-08-14（JST）
+
+## v209 CPU BATTLE連戦の相手・ステージランダム化（実装・検証完了）
+
+### 何をしたか
+
+- 通常のCPU BATTLEで結果画面から「つぎのバトルへ」を選んだ時、CPU相手キャラと通常ステージ種別を毎回あらためて抽選するようにした。直前と同じキャラ・ステージ種別は候補から外すため、連戦で同じ対戦が続かない。
+- 初戦の相手抽選、プレイヤーが選んだ自キャラ、必殺ゲージの持ち越し、風・地形の個別ランダム要素は維持した。10連勝ごとのボス闘技場、演習、チュートリアル、オンライン対戦はそれぞれの既存設定を優先し、変更していない。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v209-cpu-battle-randomness`へ更新し、タイトルの更新履歴へv209を追加した。
+
+### なぜそうしたか
+
+- 以前は連戦のリセットがCPUキャラを初戦のまま持ち越していた。また通常ステージは偶然同じ種別を再抽選できたため、連戦しても対戦相手と戦場が固定のように見えていたため。
+
+### やってはいけないこと
+
+- 演習・チュートリアル・オンライン対戦の選択内容や、ボス戦の専用闘技場をCPU BATTLEのランダム化へ混ぜない。
+- プレイヤーキャラ、連勝数、必殺ゲージ持ち越し、通常弾・必殺技性能、風の仕組み、通信形式、`database.rules.json`を同時に変えない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 新しい検査を先に追加し、旧v208相当では`regressiontest p1`が **384 passed, 1 failed**（CPU連戦の相手・ステージ種別が変わらない）となることを確認してから実装した。例外で件数出力が消えていないことも確認した。
+- 実装後の回帰はp1/e1ともに **385 passed, 0 failed**。全体テストは **1,519 passed, 0 failed**（seat 20×2、regression 385×2、result 92、loopback 103、stage3 435、lobby 7、back 14、ranking 5、Stage Studio 53）。例外で件数が消えていないことも確認した。
+- `loopbacktest`は **103 passed, 0 failed**、中継数は基準どおり **38 / 64 / 83 / 61 / 48**。今回の抽選はオフラインCPU戦だけで、通信形式・中継処理を変更していないため増減なし。
+- ローカルHTTP（`http://127.0.0.1:4210/index.html`）＋実ブラウザで、タイトル最下部にv209の更新履歴と`build v209-cpu-battle-randomness`が表示され、コンソールエラー・警告が0件であることを確認した（`file://`は未使用）。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v208 バルコプター調整・必殺技説明の性能明記（実装中）
+
+### 何をしたか
+
+- バルゲルカンの「バルコプター」は、出現高度を従来の150pxから300pxへ2倍にした。マーキング地点への10連射、風・重力を受けない固定ブレは維持し、機銃1発のダメージを5から3へ下げ、地面・障害物へ当たった時だけ半径8pxの小さな地形破壊を加えた。
+- キャラ選択に表示する全16キャラの必殺技説明を、雰囲気文ではなく実際の性能が分かる短い文へ統一した。必殺技名、挙動、通常弾、オンライン通信、Firebaseルールは変更していない。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v208-balcopter-and-special-descriptions`へ更新し、タイトルの更新履歴へv208を追加した。
+
+### なぜそうしたか
+
+- バルコプターをより高い上空支援らしく見せつつ、10発の総ダメージと地形への影響を抑えて、着弾地点を細かく削る機銃掃射として使い分けられるようにするため。
+- キャラクター選択の段階で、各必殺技が実際に何をするかをひと目で把握できるようにするため。
+
+### やってはいけないこと
+
+- バルコプターの連射数10、無風・無重力、固定の微小ブレ、マーキング弾から開始する流れを変えない。小削りを通常弾級の爆風や命中時の追加爆風へ広げない。
+- 必殺技説明を再び雰囲気だけの表現へ戻さない。説明変更に合わせて、指定されていない必殺技性能・通常弾・演習・オンライン通信・`database.rules.json`を変えない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 新しい検査を先に追加し、旧v207相当では`regressiontest p1`が **366 passed, 18 failed**（全16キャラの説明、バルコプター高度、3ダメージ・小削り）となることを確認してから実装した。例外で出力が消えていないことも確認した。
+- 実装後の回帰はp1/e1ともに **384 passed, 0 failed**。全体テストは **1,517 passed, 0 failed**（seat 20×2、regression 384×2、result 92、loopback 103、stage3 435、lobby 7、back 14、ranking 5、Stage Studio 53）。例外で件数が消えていないことも確認した。
+- `loopbacktest`は **103 passed, 0 failed**、中継数は基準どおり **38 / 64 / 83 / 61 / 48**。今回の性能変更・説明変更で通信形式は変えていないため増減なし。ローカルHTTP（`http://127.0.0.1:4208/`）＋実ブラウザで、v208のタイトルとキャラ選択カードに性能説明が表示され、コンソールエラーが0件であることを確認した（`file://`は未使用）。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v207 CPU BATTLEターン開始時の自動中断保存（2026-08-15）
+
+### 何をしたか
+
+- 通常のCPU BATTLEだけ、試合開始時を含む各ターン開始直後に既存の中断データを端末内へ自動保存するようにした。
+- 保存済みの地形、HP、風、必殺ゲージ、手番、連勝情報をそのまま使うため、次回起動時は従来の「中断した対戦を再開する」から直近のターン開始状態へ戻れる。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v207-cpu-turn-autosave`へ更新し、タイトルの更新履歴へv207を追加した。
+
+### なぜそうしたか
+
+- スマートフォンで別アプリへ切り替えたあとにタスクキルされた場合でも、試合全体を最初からやり直さず、最大で進行中の1ターンだけをやり直せるようにするため。
+- 飛翔中の弾・爆発・演出を無理に復元せず、安全なターン境界だけを保存することで、物理や表示の復帰不整合を避けるため。
+
+### やってはいけないこと
+
+- 演習、チュートリアル、オンライン対戦には自動保存を広げない。演習は終了時に中断データを作らない現行仕様を維持し、オンラインは片方の端末だけで復帰できないため対象外とする。
+- 弾の飛行中、爆発演出中、通信途中の状態を保存対象へ足さない。復帰地点は必ずターン開始時の安全な状態に保つ。
+- 既存の手動「中断してタイトルへ」、中断データの検証、対戦性能、通信形式、`database.rules.json`を同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### 実測テスト数・確認
+
+- 新規試験を先に追加し、旧v206相当では`regressiontest p1`が **367 passed, 1 failed**（ターン開始時の中断データが`null`）となることを確認してから実装した。
+- 実装後の回帰はp1/e1ともに **368 passed, 0 failed**。全体テストは **1,485 passed, 0 failed**（seat 20×2、regression 368×2、result 92、loopback 103、stage3 435、lobby 7、back 14、ranking 5、Stage Studio 53）。例外終了で件数が消えていないことも確認した。
+- `loopbacktest`は **103 passed, 0 failed**、中継数は基準どおり **38 / 64 / 83 / 61 / 48**。今回の保存は通信・描画経路を触らないため増減なし。`http://127.0.0.1:4207/index.html`をローカルHTTPで開き、HTTP 200とv207の`BUILD_ID`を確認した（`file://`は未使用）。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v196 演習ステージ選択の二股レイアウト（実装・検証完了）
+
+- 作業ブランチ: `feat/v196-stage-branching`。`origin/master`（v195・PR #143マージ済み、`81c976b`）から、演習設定にある通常ステージとカスタムステージの選択レイアウトだけを組み直す。キャラ選択、ステージの選択内容・保存形式、演習開始、中断、オンライン部屋、通信、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 独立して浮いていた`CUSTOM STAGE`行を廃止し、左の`STAGE`欄を2段ぶんの共通見出しにした。右側の上段は従来どおり公式ステージを左右矢印で選び、下段は同じ幅に収めた`カスタムステージ`ボタンから保存済み地形を選ぶ。カスタムステージ管理を開くボタンの実DOM領域も右下段だけへ合わせ、左の共通見出しを押しても開かない。`BUILD_ID`と`CACHE_VERSION`はともに`v196-stage-branching`。
+- なぜ: `STAGE`の直下にあっても、独立したラベルと狭いボタンでは別メニューのように浮いて見えたため。通常・カスタムのどちらも「ステージを選ぶ」操作だと、上下二股の形で一目に分かるようにするため。
+- やってはいけないこと: カスタムステージ入口を画面最下部や開始ボタンの近くへ戻さない。左の`STAGE`を通常／カスタムで別々に重複表示しない。通常ステージの左右矢印や、カスタムステージの端末内保存・選択・開始処理を変えない。左の共通見出しのタップでカスタム管理を開かない。オンライン部屋、必殺技性能、Firebaseルールを同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 左の共通STAGE欄が2段を貫き、右に同幅の通常／カスタム2択が積まれる検査を先に追加した。旧v195のままでは`regressiontest p1`が **341成功・1失敗** となり、この新検査だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 342件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,434/1,434成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独相当の中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4178/`）＋実ブラウザで演習画面を開き、左の`STAGE`が2段を貫き、右側が上の通常ステージ／下のカスタムステージへ分かれて収まることを目視した。カスタムステージボタンから管理画面が開くこと、ブラウザの警告・エラーが0件であることも確認した。`file://`は使っていない。
+- キャッシュ/Firebase: `database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v195 演習・オンライン部屋の主操作導線整理（実装・検証完了）
+
+- 作業ブランチ: `feat/v195-training-lobby-cta`。`origin/master`（v194・PR #142マージ済み、`4b1bedb`）から、演習のカスタムステージ入口・終了案内と、オンライン部屋の準備/出撃ボタンの並びだけを整理する。必殺技性能、通常対戦の中断再開、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 演習設定へ`CUSTOM STAGE`行を追加し、カスタムステージボタンを`STAGE`直下へ移した。最下部に孤立していた入口は撤去し、画面サイズに応じて同じ行へ重ねるようにした。演習中メニューの`中断してタイトルへ`は`演習を終了`／`演習を終了してタイトルへ戻ります`へ変更し、押しても中断セーブを作らずタイトルへ戻る。通常対戦の中断保存は維持する。オンライン部屋のフッタは`準備完了`を上、主操作の`対戦開始`を下へ並べ替え、親指で最後に押す出撃を最下段へ置いた。`BUILD_ID`と`CACHE_VERSION`はともに`v195-training-lobby-cta`。
+- なぜ: カスタムステージは地形を選ぶ操作の一部なので、開始ボタンと離れた画面最下部ではなくSTAGEのそばへ集約するため。演習は試すための場であり、保存を意味する「中断」という文言と挙動を持ち込まず、終了先を明確にするため。オンラインでは「準備→出撃」の順が視線・操作順とも自然になるため。
+- やってはいけないこと: 通常CPU戦の`中断してタイトルへ`と中断データを消さない。演習終了時に既存の通常対戦セーブまで消さない。カスタムステージ入口を再び画面最下部へ単独配置しない。オンラインの準備完了と対戦開始を同じ序列・見た目へ戻さない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。Firebaseルール・通信パケット・必殺技性能を同時に変えない。
+- 新テストの旧実装確認: 実装前にカスタムステージ行の有無・STAGE直下の間隔・演習終了時の非保存・オンラインのDOM順を検査へ追加した。旧v194ではカスタムステージ行が存在せず回帰テストが失敗し、オンライン順テストも **434/435成功・1失敗** となったことを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 341件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,432/1,432成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独相当の中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4177/`）＋実ブラウザの540×960 Canvas表示で、カスタムステージボタンがSTAGE直下の専用行に収まり、SIZE/FORMAT/START BATTLEと重ならないことを目視した。`file://`は使っていない。
+- キャッシュ/Firebase: `database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v194 Dスマッシュの中・小・小連続掘削（実装・検証完了）
+
+- 作業ブランチ: `feat/v194-d-smash-contiguous`。`origin/master`（v193・PR #141マージ済み、`5545f79`）から、アスタウロスの必殺技「Dスマッシュ」の3連続爆発の大きさと掘削穴の連続性だけを調整する。地面へ着弾してから掘進へ切り替わる挙動、弾道、爆発間隔、掘削距離、通常弾、ほかのキャラ性能、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 着弾後の爆発倍率を`大・中・小`の`[1, 0.68, 0.4]`から、`中・小・小`の`[0.68, 0.4, 0.4]`へ変更した。52px間隔は維持し、実半径約54.0px・31.8px・31.8pxの隣り合う円同士が重なるため、掘削跡の途中へ地形の隙間を残さない。最初から最後までの爆発中心距離は従来と同じ約104pxを維持できたため、条件付きの4発目は追加していない。説明文も「中・小・小の連続爆発で隙間なく地中を掘り進む突撃槍」へ更新した。
+- なぜ: 最初の大爆発を中爆発へ落として指定どおりの順番へ揃えつつ、後半を小・小として同じ大きさにし、3つの穴が途中で分断されず一本の掘削跡として見えるようにするため。中心間隔と終点を変えず、掘削距離まで意図せず短くしたり長くしたりしない。
+- やってはいけないこと: 最初の爆発を大へ戻さない。中・小・小の間へ地形が残るほど間隔を広げない。掘削終点を従来の約104pxより手前へ縮めない。距離が維持できている状態で4発目を足して射程を伸ばさない。描画フレーム数で爆発位置を変えない。ダメージ倍率、弾道、着弾前の地形判定、ほかの必殺技、通信形式を同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 新説明文と、中→小→小・隣接クレーターの重なり・従来掘削距離維持の検査を実装前に追加し、v193実装の`regressiontest p1`が **337成功・2失敗**となった。新しい2項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 339件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,427/1,427成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4194/`）＋実ブラウザの540×960表示でDスマッシュを自動発射し、中→小→小の掘削穴が途中に地形を残さず一本につながることを目視した。ブラウザの警告・エラーは0件、表示確認は **1/1成功**。確認専用の一時入口は削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v194-d-smash-contiguous`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v193 フレイムウェーブの持続3ヒット（実装・検証完了）
+
+- 作業ブランチ: `feat/v193-flame-wave-ticks`。`origin/master`（v192・PR #140マージ済み、`c0582d4`）から、フェニーチェの必殺技「フレイムウェーブ」の炎ダメージだけを改修する。弾道、炎の配置、地形の小削り、通常弾、ほかのキャラ性能、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 着弾点から地面に沿って中央と左右3か所ずつへ広がる計7個の炎を、それぞれ独立した持続判定へ変更した。各炎は着火時に6ダメージ、その後0.5秒ごとに6ダメージを2回、合計`6×3回`与える。同じユニットが複数の炎へ同時に触れた場合は炎ごとに判定する。固定刻みのゲーム更新内で時刻を進め、全炎の3回判定が終わるまでは手番解決とオンライン状態送信を待つ。説明文も「左右へ広がる各炎が0.5秒間隔で6ダメージを3回与える」へ更新した。
+- なぜ: 従来は各炎が触れた瞬間の30ダメージ1回だけで、地表に炎が残る見た目と攻撃判定が一致していなかったため。炎の上に留まる危険を0.5秒刻みの3ヒットとして読めるようにし、フレイムウェーブらしい持続攻撃へ揃える。
+- やってはいけないこと: 1回30ダメージへ戻さない。各炎の4回目以降の判定を出さない。0.5秒より短い描画間隔でダメージを増やさない。複数の炎を1個の共通判定へまとめない。炎が残っている途中で手番・オンライン状態を確定しない。左右3か所ずつの配置、地表追従、小削り、通常弾と同じ弾道を同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 6ダメージ×3回の設定、着火時の1回目、0.5秒未満では追撃しないこと、約0.5秒後の2回目、3回で停止することの5検査を実装前に追加し、v192実装の`regressiontest p1`が **334成功・5失敗**となった。新しい5項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 339件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,427/1,427成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4193/`）＋実Chromeで、新名称と説明がキャラ選択カードへ収まること、計7個の炎が地面に沿って左右へ並ぶこと、各炎の内部状態が`3/3`ヒットで止まることを確認した。複数炎が重なる確認位置ではHPが80→68→44と段階的に減少し、持続中の`-6`表示も目視した。ブラウザの警告・エラーは0件、表示確認は **1/1成功**。確認専用の一時入口は削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v193-flame-wave-ticks`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v192 Dスマッシュの地中掘進爆発（実装・検証完了）
+
+- 作業ブランチ: `feat/v192-d-smash-drill`。`origin/master`（v191・PR #139マージ済み、`c9bf66a`）から、アスタウロスの必殺技「Dスマッシュ」だけを改修する。通常弾、ほかのキャラ性能、ターン進行、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 最初から地形を無視していた従来の貫通弾をやめ、地面へ当たるまでは通常どおり地形との衝突判定を持たせた。地面へ着弾した瞬間だけ掘進状態へ切り替え、着弾点の大爆発から進行方向へ52px間隔で中爆発、小爆発を続ける。3回の爆発はそれぞれダメージと地形破壊を起こし、固定刻み内の移動距離を基準に位置を決める。最初の大爆発は従来の威力・大きさを維持した。説明文も「地面へ着弾後、大・中・小の爆発で地中を掘り進む突撃槍」へ更新した。
+- なぜ: 従来は地面を判定せず素通りするため、地形へ撃ち込んで掘り進むDスマッシュの狙いが画面とゲーム性に表れていなかったため。着弾を明確な起点にし、大→中→小の連続爆発で進行方向と掘削結果を読めるようにする。
+- やってはいけないこと: 地面へ当たる前から地形貫通へ戻さない。着弾点だけの単発大爆発へ戻さない。3爆発の順番を小→大へ逆転させない。描画フレーム数で爆発位置・穴・ダメージを変えない。最初の大爆発を従来より小さくしない。通常弾、ほかの必殺技、通信形式を同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 説明、着弾前の地形判定、3回だけの爆発、大→中→小の半径、進行方向への掘進の5検査を実装前に追加し、v191実装の`regressiontest p1`が **329成功・5失敗**となった。Dスマッシュの新しい5項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 334件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,417/1,417成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4192/`）＋実ChromeでDスマッシュを自動発射し、地面への着弾後に爆発粒子を伴って進行方向へ穴が連なり、地中を掘り進む結果を目視した。ブラウザコンソールのエラーは0件、表示確認は **1/1成功**。確認専用の一時入口は削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v192-d-smash-drill`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v191 必殺技名の統一（実装・検証完了）
+
+- 作業ブランチ: `chore/v191-special-names`。`origin/master`（v190・PR #138マージ済み、`a15c794`）から、5キャラの必殺技名と名前に連動する表示だけを変更する。必殺技の性能、ダメージ、弾道、地形処理、演出時間、ターン進行、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: ブルームタンの「再生ブルーム」を「ドレインシード」、フェニーチェの「地走り炎」を「フレイムウェーブ」、スモエルの「八方向花火」を「職人カエル玉」、ゴーロッカの「地形大破壊」を「Bインパクト」、アイボルトの「電磁波」を「バインドスピット」へ改名した。キャラ選択カード、必殺技説明、命中結果など、各名称に連動する画面表示とテスト期待値も統一した。
+- なぜ: 改修済みの実際の性能を保ったまま、キャラ性と技の特徴がより伝わる固有名へ揃えるため。フェニーチェは旧性能由来の「高速ロケット」ではなく、現行の地表を左右へ走る炎を表す「フレイムウェーブ」を正本名とした。
+- やってはいけないこと: 改名前の表示を一部だけ残さない。旧名へ戻すために現行性能まで旧仕様へ戻さない。名称変更と同時に威力、範囲、弾速、地形破壊、状態異常、演出を調整しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 5つの正本名を個別に検査するテストを実装前に追加し、v190実装の`regressiontest p1`が **324成功・5失敗**となった。指定された5名称だけが旧実装で実際に失敗し、例外後も件数が表示されることを確認してから改名した。
+- 最終テスト: `npm test`でseat 20件×2、regression 329件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,407/1,407成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4191/`）＋実Chromeでキャラ選択画面を開き、5つの新名称が各カード内で欠けず、はみ出さず表示されることを目視した。ブラウザコンソールのエラーは0件、表示確認は **1/1成功**。`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v191-special-names`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v190 ブルームタンのダメージ吸収回復（実装・検証完了）
+
+- 作業ブランチ: `feat/v190-burumutan-drain`、PR #138。`origin/master`（v189・PR #137マージ済み、`fb2c6bd`）から、ブルームタンの必殺技だけを改修する。通常弾、ほかのキャラ性能、ターン進行、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 必殺技「再生ブルーム」の発射時固定30回復を廃止し、花弾の爆発で相手陣営から実際に減らしたHPの合計だけ、着弾時に発射者へ還元するようにした。空振りは回復0、残りHPを超える過剰ダメージは回復へ水増しせず、自身の最大HPも超えない。味方・自分への爆風ダメージは回復量へ含めない。緑の`+回復量`表示と、説明文「花弾で相手に与えたダメージ分だけ自身のHPを回復」も合わせた。
+- なぜ: 発射しただけで必ず30回復する旧仕様をやめ、相手へ当てて与えた成果がそのまま耐久力へ返る、狙いと命中に意味のある支援必殺へ直すため。
+- やってはいけないこと: 発射時の固定回復へ戻さない。理論ダメージや過剰ダメージを回復量にしない。味方・自分へのダメージで回復させない。最大HPを超えて回復させない。ブルームタン以外の弾へ吸収印を付けない。通常爆発、地形破壊、弾道、ほかの必殺技、通信形式を同時に変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: v189実装へ新しい5検査だけを先に当て、`regressiontest p1`が **319成功・5失敗**となり、説明、発射時非回復、空振り、実HP差分、最大HP上限の5件だけが旧実装で実際に失敗することを確認してから実装した。
+- 最終テスト: `npm test`で seat 20件×2、regression 324件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,397/1,397成功**。例外で出力が消えず、全スイートの件数表示を確認した。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4187`）をAndroid相当Chromium（412×915）で開き、吸収弾の実ダメージ45に対して、ブルームタンが40→85、相手が100→55、緑の`+45`と赤の`-45`が左右で重ならず描画されることを目視した。ブラウザ検査は **1/1成功**。`file://`は使っていない。確認専用の一時テストは削除済み。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v190-burumutan-drain`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v189 フェニーチェの地走り炎（完了）
+
+- 作業ブランチ: `feat/v189-fenice-ground-flame`。origin/master（v188、PR #136マージ済み、`a720fe4`）から、フェニーチェの必殺技だけを改修する。通常弾、ほかのキャラ性能、ターン進行、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 必殺弾本体の初速・風・重力を通常弾と同じ値へ戻し、従来の超高速ロケットを廃止した。着弾すると地表を追って中央1か所と左右3か所ずつ、42px間隔の計7か所へ炎が0.1秒刻みで広がる「地走り炎」に変更した。炎へ触れた生存ユニットは1体につき1回だけ30ダメージを受け、各点は半径10pxだけ地形を小さく削る。炎はキャラの手前に描き、左右へ走ったことが見えるようにした。キャラ選択の必殺名と説明も「地走り炎」「着弾地点から地面に沿って左右へ炎が広がる」へ更新した。
+- なぜ: 旧必殺は通常弾より速く、風と重力の影響も弱い単発ロケットで、狙いが通常弾と変わるうえにフェニーチェらしい炎の広がりが無かったため。本体の狙い方は覚え直さず、着弾後の横方向攻撃だけを固有性能にした。
+- やってはいけないこと: 必殺弾を超高速・低重力・低風影響へ戻さない。炎を空中へ飛ばしたり崖を飛び越えさせたりしない。1つの炎が同じユニットへ重複ダメージを与えない。半径10pxの小削りを通常弾級の大穴へ広げない。描画フレーム数でHPや地形結果を変えない。通常弾やほかの必殺技の弾道・爆発処理を同時に変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 実装前に、説明文、通常弾と同じ初速、通常弾と同じ風・重力、左右3か所ずつの地表追従、30ダメージと計7か所の小削り・大爆発なしの5検査を追加した。旧v188の`regressiontest p1`は **314成功・5失敗**となり、新しい5検査だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 319件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,387/1,387成功**。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:61027/?qaFenice=1`）＋実ブラウザの540×960表示で、着弾点から中央・左右3か所ずつへ炎が時間差で広がり、相手へ30ダメージを与え、地表には7個の浅い小削りだけが残ることを目視した。炎がキャラの背面で弱く見えた初回確認を受けて前面描画へ直し、再確認した。本番状態のURLではブラウザエラー0件。表示確認専用の一時入口は確認後に削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v189-fenice-ground-flame`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## 2026-08-14 ランキングGAS本番反映確認（完了）
+
+- 何を確認したか: メロニキがorigin/masterの最新`gas/ranking.gs`を既存Apps Scriptへ全量貼り替え、「新バージョン」で再デプロイした。ゲームが参照する既存URLへ読み取り専用の`action=top`を実行し、`period: 2026-08`、`total: 2`、使用キャラを含む2件、`me: null`、`ok: true`の正常なJSON応答を実測した。URL変更はない。
+- なぜ: v179の同一プレイヤー上位3件保持とv182のSheets数式化防止はリポジトリへ実装済みだったが、Apps Script本番への手動反映だけが未完了だったため。
+- やってはいけないこと: 本番確認のためにテスト記録を送信してランキングを汚さない。API URLを変更しない。既存行を手動移行・削除しない。認証方式、順位計算、保存上限、ゲーム本体、Firebaseルールを同時に変えない。
+- 実測テスト数: 本番GAS読み取り **1/1成功**。本番へ書き込まず、同一プレイヤー3件保持と数式開始記号の処理はリポジトリのランキング専用テスト **5/5成功**を根拠とする。文書だけの更新なのでアプリ全テスト・実ブラウザ確認・BUILD_ID/CACHE_VERSION更新は不要。`database.rules.json`も変更なし。
+
+## v188 ルビデビの直撃電撃（作業中）
+
+- 作業ブランチ: `feat/v188-rubidevi-lightning`。origin/master（v187とランキングGAS本番反映確認を含むPR #135マージ済み、`3438e19`）から、ルビデビの必殺技「ライトニング」だけを改修する。通常弾、ほかのキャラ性能、ターン進行、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: ライトニングを爆風ではなく、電撃線が触れた生存ユニット1体だけへ61ダメージを与える直撃専用弾へ変更した。相手へ当たっても地面・空中障害物へ当たっても爆発粒子とクレーターを作らず、短い電撃線と電撃音だけを残して停止する。風と重力を受けず直進する性質は維持し、従来無視していた空中障害物には遮られるようにした。キャラ選択の説明も「風・重力を無視して直進し、触れた相手へ直接ダメージ」へ更新した。
+- なぜ: 爆発・範囲ダメージ・地形破壊を伴う従来処理が、一直線に相手を撃ち抜く電撃という必殺技の狙いと一致しておらず、さらに空中障害物を無視するため遮蔽物を使った駆け引きも成立しなかったため。
+- やってはいけないこと: 直撃を周囲へ広がる爆風へ戻さない。地面や空中障害物への命中でクレーター・爆発粒子・爆発音を出さない。空中障害物を再び無視させない。風・重力を受ける弾道へ変えない。通常弾やほかの必殺技の共通爆発処理を同時に変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 実装前に、説明文、風・重力だけを無視する弾設定、直撃専用・地形非破壊設定、ユニット直撃、地面・空中障害物への停止の5検査を追加した。旧v187の`regressiontest p1`は **309成功・5失敗**となり、新しい5検査だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 314件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,377/1,377成功**。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:8765/?qaRubidevi=1`）＋実ブラウザの540×960表示で、白紫の電撃線が相手へ直撃し61ダメージを与える一方、クレーター0・爆発粒子0であることを目視した。ブラウザエラーは0件。表示確認専用の一時入口とサーバーファイルは確認後に削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v188-rubidevi-lightning`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v187 命中結果と行動不能演出を順番表示（作業中）
+
+- 作業ブランチ: `fix/v187-action-skip-sequence`。origin/master（v186、PR #133マージ済み、`b80f64d`）から、猫だましの命中結果と行動不能になった手番の演出が同時に中央へ重ならないよう、表示順だけを修正する。行動不能の性能、各演出の長さ、移動不能、ほかの必殺技、ダメージ・地形処理、通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 行動不能対象へ手番が回った時、先に「猫だまし命中: 次の手番をスキップ」を`1.68秒`見せ切り、その後に星・電撃・左右の震えと「行動不能！」カットインを`1.875秒`表示する順番へ変更した。命中結果の表示中は、後半演出のタイマーと震えを開始しない。
+- なぜ: v186で両演出を1.5倍へ延長した結果、付与直後に対象へ手番が回ると、独立した2本のタイマーが同時進行して中央の文言が重なっていたため。どちらも読みやすい長さを保ったまま、意味の順に切り離した。
+- やってはいけないこと: 重なり回避のために命中結果または行動不能演出を短縮しない。通常の移動不能やほかの必殺結果を待機させない。待機中に行動不能状態を消費しない。震えで座標・当たり判定・同期値を動かさない。オンライン通信形式や手番数を変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 命中結果中は行動不能表示・震え・後半タイマーを開始せず、命中結果終了後に後半演出を開始する検査を実装前に追加した。旧v186の`regressiontest p1`は **305成功・4失敗**となり、順番表示に関する新しい4検査だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 309件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,367/1,367成功**。loopback中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4187/?qaSequence=1`）＋実Chromeの390×844表示で、前半は命中結果だけ、後半は行動不能カットインだけが表示され、中央の文言が重ならないことを目視した。ブラウザエラーは0件。表示確認専用の一時入口とサーバーファイルは確認後に削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v187-action-skip-sequence`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v186 行動不能演出を1.5倍へ延長（作業中）
+
+- 作業ブランチ: `feat/v186-action-skip-duration`。origin/master（v185、PR #132マージ済み、`13cf1e8`）から、行動不能を付与した時と対象へ手番が回った時の演出時間だけを延長する。行動不能の性能、移動不能、ほかの必殺技、ダメージ・地形処理、通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: にゃんタンクの行動不能命中時は、電磁波リング・粒子と「猫だまし命中: 次の手番をスキップ」の結果フラッシュを従来の1.5倍へ延長した。結果フラッシュは`1.12秒`から`1.68秒`。行動不能対象へ実際に手番が回った時の星・電撃・左右の震え・「行動不能！」カットインは`1.25秒`から`1.875秒`へ延長した。移動不能の電磁波と、ほかの必殺結果フラッシュは従来時間のまま。
+- なぜ: v185の専用エフェクトは移動不能との違いを示せるようになった一方、付与時と手番到来時のどちらも少し短く、状態異常が起きたことと「動けず手番を失った」ことを読み取る余裕が足りなかったため。
+- やってはいけないこと: 行動不能の手数、ダメージ、効果半径、付与条件を変えない。移動不能やほかの必殺演出まで延ばさない。演出中に入力を受け付けない。震え開始前に状態を消費しない。震えで座標・当たり判定・同期値を動かさない。オンライン状態は震え完了前に送らない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 1.5倍の時間設定と、従来の`1.25秒`を過ぎても対象の手番・行動不能状態・カットインが残る検査を実装前に追加した。旧v185の`regressiontest p1`は **304成功・2失敗**となり、新しい2検査だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 306件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,361/1,361成功**。loopback中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4186/?qa=v186`）＋実Chromeの390×844表示で、行動不能付与時の電磁波と命中結果フラッシュ、手番到来時の頭上の星・電撃・左右の震え・行動不能カットインを確認した。従来時間を越えた`1.3秒`時点でも手番演出が継続していることを目視した。表示確認専用の一時入口とサーバーファイルは確認後に削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v186-action-skip-duration`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v185 行動不能の専用エフェクトと震えスキップ（作業中）
+
+- 作業ブランチ: `feat/v185-action-skip-effects`。origin/master（v184、PR #131マージ済み、`f4aa74d`）から、行動不能の見た目と手番スキップ演出だけを改修する。移動不能の性能・表示、必殺技のダメージ・地形処理、ほかのキャラ性能、オンライン通信形式、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 行動不能中の生存ユニットへ、頭上を回る黄色い星3個と身体の左右を走る水色の電撃を常時表示するようにした。行動不能ユニットへ手番が回った時は、対象をいったん現在手番として表示し、`1.25秒`にわたって本体画像だけを左右最大`4.5px`震わせ、「行動不能！／動けない… 手番をスキップ」のカットインを流してから次の行動可能ユニットへ進む。震えている間は状態を消費せず、操作も受け付けない。オンライン状態は震えスキップ完了後の手番だけを送る。移動不能は従来どおり足元の鎖・南京錠なので、位置・色・動きで区別できる。
+- なぜ: v184ではHUDとカットインだけで手番を即時スキップしており、戦場上では移動不能との違いと「動けないため飛ばされた」因果が伝わりにくかったため。状態中と手番到来時の両方に専用の動きを与え、効果を直感的に読めるようにした。
+- やってはいけないこと: 行動不能を移動不能と同じ足元エフェクトへ戻さない。星・電撃の時刻をゲーム進行・当たり判定・オンライン同期へ使わない。震えで当たり判定、HPバー、座標、同期値を動かさない。震え開始前に状態を消費しない。連続して行動不能のユニットがいても、飛ばす手番数・総ターン数・必殺チャージを数え違えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 星・電撃の専用表示と、`1秒以上`震えてからスキップすることの2検査を実装前に追加し、旧v184の`regressiontest p1`が **301成功・2失敗**となった。新規2項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。実装後は、震え中に対象へ手番表示が移り状態が未消費であることも動的検査へ追加した。さらに震え途中のオンライン状態を送る実装へ送信遅延検査を追加し、**304成功・1失敗**を確認してから完了後送信へ直した。
+- 最終テスト: `npm test`でseat 20件×2、regression 305件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,359/1,359成功**。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4185/?qaActionSkip=1`）＋実Chromeの390×844表示で、頭上の黄色い星、左右の水色電撃、行動不能カットイン、55ms間隔の連続画像で本体が左右へ震えることを確認した。移動不能の足元チェーンと明確に異なり、ページの警告・エラーは0件。表示確認専用の一時入口とサーバーファイルは確認後に削除済みで、`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v185-action-skip-effects`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v184 にゃんタンクの次手番スキップ（作業中）
+
+- 作業ブランチ: `feat/v184-nyan-turn-skip`。origin/master（v183、PR #130マージ済み、`7a48fd7`）から、にゃんタンクの必殺技が与える状態異常だけを改修する。目玉の移動封印、爆風のダメージ・吹き飛ばし・地形処理、ほかのキャラ性能、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: にゃんタンクの「猫だまし爆弾」が爆風を受けた生存ユニットへ`actionSkipTurns=1`を付与し、そのユニットの次の手番を自動で丸ごとスキップするようにした。スキップ対象は移動・跳躍・通常弾・必殺技を一切操作できず、「行動不能／手番をスキップ」のカットイン後に次の行動可能ユニットへ進む。スキップされた手番も総ターン数と必殺チャージでは1手として数える。状態をオンライン同期・中断復帰用スナップショットへ含め、旧スナップショットでは0として復元する。必殺説明とHUDも「次の手番をスキップ」「行動不能 1手」へ統一した。
+- なぜ: 従来の移動封印は、対象がその場から射撃・必殺技を使えるため「行動不能（スキップ）」という狙いに足りなかった。命中した次の手番を確実に失わせ、にゃんタンクらしい妨害性能を分かりやすくするため。
+- やってはいけないこと: アイボルトの必殺まで手番スキップへ変えない。にゃんタンクの既存の爆風ダメージ・吹き飛ばし・地形処理・効果半径を同時に調整しない。スキップ対象に入力受付時間を与えない。スキップ時にターン数や必殺チャージを数え忘れない。旧保存データやオンライン状態の省略フィールドを不正扱いしない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 実装前に必殺説明、移動封印ではなく行動スキップを付与すること、対象の次手番を自動で飛ばすことの3検査を追加し、旧実装の`regressiontest p1`が **298成功・3失敗**となった。新規3項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 301件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,351/1,351成功**。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4184/`）＋実Chromeの540×960表示で、にゃんタンクの選択、必殺MAX、実射時の「必殺: 猫だまし爆弾!!」と「大爆風で吹き飛ばして次の手番をスキップ」の表示を確認した。ページの警告・エラーは0件。命中時の状態付与と次手番の自動スキップは上記の新規回帰テストで実測済み。`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v184-nyan-turn-skip`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## v183 スモエルの接近信管花火（作業中）
+
+- 作業ブランチ: `feat/v183-sumo-proximity-firework`。origin/master（PR #129マージ済み、`1b8d59a`）から、スモエルの必殺技だけを改修する。ほかのキャラ性能、通常弾、ターン進行、オンライン通信、ランキング、Firebaseルールは変更しない。
+- 何を変えたか: 最高点での自動炸裂をやめ、発射後120px進んでから敵の当たり判定中心へ90px以内に近づくと作動する敵チーム専用の接近信管へ変更した。炸裂後は8方向へ各3発を広げ、根元2発を中弾相当（爆風倍率0.72、0.56）、先端1発を小弾相当（0.24）にした。花火片の速度は従来360px/sから180px/sへ半減し、ゆっくり花火が開く見え方にした。敵へ近づかない場合は、従来どおり地形・障害物・ユニットへの衝突で炸裂する。必殺を構えた時は敵の周囲へ90pxの接近範囲を破線で表示する。
+- なぜ: 最高点は敵との位置関係を無視して炸裂するため狙いどころが分かりにくかった。敵の近くで作動する分かりやすさへ替えつつ、根元の中弾と遅い拡散で「ゆっくり開く大花火」の手応えを強めるため。
+- やってはいけないこと: 味方や発射直後の自機で信管を作動させない。接近信管の空中炸裂へ通常の主爆発を重ねない。8方向、各方向3発、射程180px、1回の炸裂で1体が花火片から受ける合計22ダメージ上限を崩さない。描画だけの変更として扱わず、衝突・ダメージ・オンライン中継へ無関係な整理を混ぜない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テストの旧実装確認: 実装前の旧最高点炸裂コードへ新しい設定検査を先に追加し、`regressiontest p1`が **297成功・3失敗**となった。接近半径・起動距離・花火片速度と爆風配列の3項目だけが実際に失敗し、例外後も件数が表示されることを確認してから実装した。
+- 最終テスト: `npm test`でseat 20件×2、regression 298件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,345/1,345成功**。loopback単独も **103/103成功**、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4183/`）＋実Chromeの540×960表示で、スモエルを選択して必殺を実射した。敵の手前で接近信管が作動し、花火片が段階的に外へ伸びてダメージを与えること、必殺説明が「敵へ近づくと8方向へゆっくり散る花火」と表示されることを確認した。ページの警告・エラーは0件。`file://`は使っていない。
+- キャッシュ/Firebase: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v183-sumo-proximity-firework`。`database.rules.json`は変更していないためFirebase Console作業は不要。
+
+## 2026-08-13 PRのCI二重実行を解消（CI設定のみ・作業中）
+
+- 作業ブランチ: `chore/ci-pr-dedup`。origin/master（v182、PR #128マージ済み）から、GitHub Actionsの起動条件だけを変更する。アプリ、GAS、Firebaseルール、テスト内容、依存関係は変更しない。
+- 何を変えたか: `.github/workflows/stage-studio-ci.yml`の`push`対象を`master`だけへ限定した。PRブランチは`pull_request`で1回検証し、masterへマージされた後は`push`で1回検証する。
+- なぜ: 従来は全ブランチの`push`と`pull_request`が同時に成立し、PR #127・#128で通常テストとモバイルE2Eが2系列ずつ走ることを実測した。結果を減らさず、PR中のCI時間・GitHub Actions利用量をほぼ半減するため。品質監査の`CI-01`に対応する。
+- やってはいけないこと: `pull_request`検証を消さない。masterのpush検証を消さない。ジョブ内容、Node版、テストコマンド、E2E対象を同時に変えない。
+- 実測テスト数: CI設定だけのため新規アプリテストはなし。基準版v182はローカル **1,343/1,343成功**、loopback **103/103**・中継数 **38 / 64 / 83 / 61 / 48**、PR #128の二重CI系列はいずれも通常テスト・モバイルE2E成功。本PRではGitHub Actionsがpull_request由来の1系列だけ起動することを実測する。
+- キャッシュ/Firebase: 配信アプリと`database.rules.json`は変更しない。`BUILD_ID`と`CACHE_VERSION`はともに`v181-character-assets`のまま。
+
+## v182 ランキング名のSheets数式化防止（作業中）
+
+- 作業ブランチ: `fix/v182-ranking-formula`。origin/master（品質監査PR #127マージ済み）から、ランキング名をGoogle Sheetsへ保存する入力境界だけを安全化する。ゲーム表示、スコア計算、順位、同一プレイヤー3件保持、オンライン対戦、Firebaseルールは変更しない。
+- 何を変えたか: `gas/ranking.gs`の`sanitizeName()`で、整形後の名前が`=`、`+`、`-`、`@`から始まる時だけ先頭へアポストロフィを付け、Sheetsへ数式でなく文字列として保存するようにした。通常の名前、空名の「ななし」補完、改行除去、12文字上限は従来どおり。`tests/rankingtest.js`は失敗があっても全件数を必ず出す集計へ改め、4種の数式開始記号を固定した。
+- なぜ: 悪意の有無にかかわらず、ランキング名から管理用スプレッドシートへ式が持ち込まれる余地をなくすため。2026-08-13品質監査の`SEC-01`に対応する。
+- やってはいけないこと: ランキングの認証方式、端末ID、スコア上限、日次制限、順位計算、保存件数を同時に変えない。名前から一般の記号を削除しない。ゲーム側の表示名やキャラクター内部キーへ変更を広げない。リポジトリ上のGAS修正を本番再デプロイ済みと扱わない。
+- 新テストの旧実装確認: 実装前のv181相当GASでは、ランキング専用テストが **4/5成功・1失敗**。追加した数式開始記号テストだけが実際に失敗し、例外後も`RESULT 4/5 passed`が出ることを確認してから実装した。
+- 最終テスト: ランキング専用 **5/5成功**。`npm test`はseat 20件×2、regression 297件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,343/1,343成功**。loopback単独も **103/103成功**、中継数 **38 / 64 / 83 / 61 / 48**。
+- ブラウザ確認: GAS入力境界とNodeテストだけの変更で、ゲーム表示・DOM・CSS・Canvas・配信資産は変更していないため対象外。
+- キャッシュ: 配信アプリを変更していないため、`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v181-character-assets`のまま。番号の不一致はない。
+- Firebase Console/GAS: `database.rules.json`は変更していないためFirebase Console作業は不要。2026-08-14に、既存のv179変更と今回のv182変更を含む最新`gas/ranking.gs`をApps Scriptへ貼り付け、新バージョンとして本番再デプロイ済み。読み取りAPI **1/1成功**。
+
+## 2026-08-13 全般品質監査（文書化・実装変更なし）
+
+- 対象: origin/masterのv181（PR #126、マージコミット`8ceede7`）を基準に、軽量性、デザイン・アクセシビリティ、セキュリティ、保守性、オンライン・ランキング信頼性、テスト・CI・PWA・依存関係を横断監査した。結果は`docs/audits/2026-08-13-quality-audit.md`を正本とする。
+- 何をしたか: 153ファイル・約37.1 MiBの構成、主要ファイル行数、資産容量を実測し、P0なし、P1がランキング名のSheets数式化防止とFirebase深層ペイロード制限、P2が2.6 MiBフォント、CI二重実行、Canvasアクセシビリティ、巨大`index.html`、認証なしランキングの受容リスクと判定した。未完了のサブエージェント出力は採用せず、主担当が実コードで確認できた証拠だけを記録した。
+- なぜ: 全面整理を一度に行うとオンライン通信・描画・履歴の回帰範囲が大きいため、品質課題を証拠と利用者影響で順位付けし、今後の変更を1版1目的へ分解するため。
+- やってはいけないこと: 監査文書だけのPRへアプリ変更を混ぜない。`index.html`を一括分割しない。フォントを字形確認なしで置換しない。`database.rules.json`を変更した版はFirebase Console反映依頼前に公開しない。リポジトリ上のランキングGASと本番再デプロイ済み状態を混同しない。
+- 実測テスト数: 監査の基準版v181はローカル`npm test` **1,342/1,342成功**、loopback **103/103**・中継数 **38 / 64 / 83 / 61 / 48**、GitHub Actions通常テスト・モバイルE2E成功、`npm audit`脆弱性0件。今回の差分はMarkdown文書のみのため新規テスト・アプリ再実行はなし。`git diff --check`で文書差分を確認する。
+
+## v181 キャラクター画像の正本・配信用ディレクトリ整理（作業中）
+
+- 作業ブランチ: `feat/v181-character-assets`。origin/master（v180、PR #125マージ済み）から、キャラクター画像32点の配置とファイル名だけを整理する。画像内容、内部キー、キャラ性能、必殺技、ゲーム進行、ランキング、オンライン通信、Firebaseルールは変更しない。
+- 何を変えたか: 16体のPNGを`assets/characters/master/`、軽量WebPを`assets/characters/runtime/`へ分離し、`dirano`、`eyebolt`、`gorocca`、`fenice`、`obelisk`、`dread-arrow`、`chrome-gear`、`rubidevi`、`astauros`、`paladier`、`nyan-tank`、`yomigama`など正式表示名から判別できる英字名へ揃えた。全16体の内部キー・表示名・ファイル名の対応と差し替え手順を`assets/characters/README.md`へ記録した。ゲーム本体とStage StudioのWebP優先・PNGフォールバック参照、先読み、オフラインキャッシュも新配置へ追従させた。
+- なぜ変えたか: これまでは`kyoryu.png`や`medama.webp`など旧仮名の32点が`assets/`直下へ混在し、正式名決定後にどの画像がどのキャラの正本か判別しにくかったため。PNG正本と実行時WebPを用途別に分け、今後の画像差し替えで片方だけ更新する事故も防ぎやすくする。
+- 画像内容: ファイルの移動・改名だけで、PNG/WebPの中身は加工していない。既存の全32ハッシュが移動後も一致している。`master`は「リポジトリ内にある現在のPNG正本兼フォールバック」を指し、画像生成時の未加工・高解像度原画が別にある場合の代替とは扱わない。
+- やってはいけないこと: `kyoryu`、`medama`、`doRednote`などの内部キーを表示名や画像名へ置き換えない。PNGとWebPの片方だけを差し替えない。画像内容を変えたのに`CHARACTER_ASSET_VERSION`とハッシュを据え置かない。旧パスを互換用に二重保持しない。今回へ画像加工、キャラ性能、表示レイアウト、通信、GAS、Firebase変更、ほかの素材・ディレクトリ整理を混ぜない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テスト: `tests/stage3test.js`へ、全16体が正式名ベースの`master/runtime`対で存在する検査を実装より先に追加した。旧v180では **433/434成功・1失敗**となり、新しい配置検査だけが実際に落ち、例外で出力が消えず件数まで出ることを確認してから移動した。
+- 最終テスト: `npm test`でseat 20件×2、regression 297件×2、result 93件、loopback 103件、stage3 434件、lobby 7件、戻る専用14件、ランキング4件、Stage Studio 53件、合計 **1,342件すべて成功**。`loopbacktest`も単独再実行し、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP（`http://127.0.0.1:4173/`）＋実Chromeで起動からキャラ選択まで操作し、一覧を4区間へ回して16体すべての正式名と画像が欠けずに描画されることを確認した。ページ警告・エラーは0件。Stage Studioも同じHTTPから開き、`1.8.1-character-assets / 生成器 1.0.0`表示と警告・エラー0件を確認した。`file://`は使っていない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v181-character-assets`へ更新した。Stage Studioもアプリ表示とService Workerキャッシュを`1.8.1-character-assets`へ更新した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+
+## v180 キャラクター表示名を正式名称へ更新（作業中）
+
+- 作業ブランチ: `feat/v180-character-names`。origin/master（v179、PR #124マージ済み）から、キャラクターの表示名だけを見直す。画像ファイル名、内部キー、性能、必殺技、対戦処理、ランキング送信、オンライン通信、Firebaseルールは変更しない。
+- 何を変えたか: 恐竜→**ディラノ**、目玉→**アイボルト**、岩→**ゴーロッカ**、鳥→**フェニーチェ**、ニセンモノ→**オベリスク**、弩レッドノート→**ドレッドアロー**、メカ→**クロムギア**、悪魔→**ルビデビ**、人馬→**アスタウロス**、騎士→**パラディエ**、猫→**にゃんタンク**、死神→**ヨミガマ**へ変更した。記載のなかったバルゲルカン、ブルームタン、スモエル、モッチャリオは現行名を維持した。
+- なぜ変えたか: 「目玉」「鳥」「岩」などの抽象的な種族名を、見た目と世界観に結び付いた固有名へ置き換え、キャラクター選択・対戦中・ランキングで名前を見た時に個体として覚えやすくするため。
+- やってはいけないこと: 内部キーを表示名へ置き換えない。画像パス、Firebaseの許可キー、ランキングの保存値、キャラ性能、必殺技、役割名、通信プロトコルを変更しない。名前変更と無関係なUI・ゲーム進行・GAS・Firebase変更を混ぜない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しない。
+- 新テスト: `tests/regressiontest.js`へ全16キャラの表示名固定チェックを追加し、実装前のorigin/masterで **296成功・1失敗**（表示名チェックだけ失敗）になることを確認してから反映した。旧実装で失敗したテストの出力が消えていないことも確認済み。
+- 最終テスト: `npm test`で既存の **1,335件**（seat 20件×2、regression 296件×2、result 93件、loopback 103件、stage3 433件、lobby 7件、戻る専用14件、Stage Studio 53件）とランキング専用4件、改名チェック2件を実行し、合計 **1,341件すべて成功**。`loopbacktest`の中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTP確認を試みたが、今回のブラウザ接続先が利用できず未確認。自動テストではキャラ選択・ロビー・戦績表示の名前を確認済み。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v180-character-names`へ更新した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+
+## v179 ランキングを同一プレイヤー3件保持へ改修（作業中）
+
+- 作業ブランチ: `codex/handoff-v178`。公開済みv178（PR #123）から、Issue #6のランキング改修だけを扱う。ゲーム本体の対戦処理、オンライン通信、Firebaseルール、ランキングAPIのURLは変更しない。
+- 何を変えたか: `gas/ranking.gs`を、同じ月・同じ`deviceId`の上位3件を保持する方式へ変更した。4件目以降は本人の最下位記録より良い時だけ置き換え、同じスコアの再送は行を増やさず名前と使用キャラを更新する。既存の1件形式行は削除・移行せず、1件目として読み続ける。ランキング全体では同じプレイヤーが最大3行まで表示され、自分の順位はその中で最上位を返す。
+- なぜ変えたか: これまで同じプレイヤーは月間1件だけの自己ベスト上書きで、別キャラ・別挑戦の上位記録を残せなかったため。`character`列を記録時の使用キャラと結び付け、上位3件を比較できるようにする。
+- やってはいけないこと: 1人3件を超えて無制限に保存しない。同じスコアの再送で行を増やさない。旧形式の行を一括削除・手動移行しない。ランキングの順位計算を連勝数→与ダメ効率以外へ変えない。`index.html`のレスポンス形式、GASのウェブアプリURL、Firebaseルール、オンライン対戦へ変更を混ぜない。`database.rules.json`は変更しない。
+- 新テスト: `tests/rankingtest.js`を追加し、実装前の旧GASへ **0/4（最初の3件保持条件で失敗）** になることを確認してから実装した。4件目の置換、同一スコア再送、旧形式行の読み込みも検査する。
+- 最終テスト: `npm test`で既存の **1,335件**（seat 20件×2、regression 296件×2、result 93件、loopback 103件、stage3 433件、lobby 7件、戻る専用14件、Stage Studio 53件）とランキング専用4件を実行し、合計 **1,339件すべて成功**。`loopbacktest`の中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- GAS反映: 2026-08-14にメロニキが最新`gas/ranking.gs`をApps Scriptへ全量貼り付け、新バージョンとして本番再デプロイ済み。既存URLの読み取りAPIは **1/1成功**し、使用キャラを含む正常なJSON応答を確認した。URLは変わらないためゲーム側の変更は不要。
+
+## v174 終了確認の共通文言（PR #119）
+
+- 作業ブランチ: `fix/v174-exit-copy`、PR #119。公開済みv173（PR #118）で、タイトルを含む全画面で使う終了確認の文言だけを共通の意味へ揃える。終了確認の意匠、ボタン、CloseWatcher、履歴移動、ゲーム内容、キャラ、オンライン通信、勝敗処理、Firebaseルールは変更しない。
+- 何を変えたか: 吊り看板を「対戦を中断する？」から **「カタモンを閉じる？」** へ替え、案内を「閉じると、ブラウザの前のページへ戻るで。」へ替えた。タイトル、選択、演習、ランキング、対戦のどこで戻る操作をしても、現在地と矛盾しない。
+- なぜ変えたか: タイトル画面で戻る操作をした時に「対戦を中断する？」と出ると、対戦していないのに中断するように読めて不自然だったため。画面別の確認を増やさず、実際に起きる終了動作をそのまま伝える1つの文言へ統一した。
+- やってはいけないこと: 対戦を保存する・次回再開できる、とこの確認から約束しない。画面ごとに確認の処理やレイアウトを分岐させない。「このまま遊ぶ」「アプリを閉じる」の操作、背景タップ、フォーカス、CloseWatcher、履歴移動を変えない。端末ごとの値を対戦・オンライン判定へ使わない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しない。
+- 新テスト: 旧v173へ、新しい吊り看板と案内文を先に検査へ追加した。実装前のStage Studio統合テストは **7/8成功・1失敗**となり、旧文言の箇所だけが実際に落ちることを確認してから実装した。例外で出力が消えていないことも確認済み。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 295件×2、`resulttest` 93件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,333件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。ローカルHTTP＋Android相当Chromium（412×915）のタイトル戻る検査も **1/1成功**。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v174-exit-copy`へ更新した。
+
+## v173 タイトルのおまけ盾・自動BGM送り（PR #118）
+
+- 作業ブランチ: `fix/v173-title-bonus-polish`、PR #118。公開済みv172（PR #117）のタイトル画面だけを扱い、おまけの盾と文字・押せる範囲を12px上へ揃えた。CPU、ONLINE、チュートリアル、演習、RANKING、ロゴ、背景、タイトル以外の画面、ゲーム内容、オンライン通信、勝敗処理、戻る操作、Firebaseルールは変更しない。
+- 何を変えたか: おまけBGMの`loop`を外し、曲が最後まで再生された時に `1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目…` と次曲へ自動で切り替えるようにした。タップで次曲を選ぶ・4曲目の次で停止してタイトル曲へ戻る従来操作は残した。
+- なぜ変えたか: 盾の枠がRANKINGよりやや下へ落ちて、木板下段の左右の重心が揃って見えなかったため。また、おまけ曲を聴くたびに画面へ戻って手で次曲を選ぶ必要があったため。
+- やってはいけないこと: 盾だけを動かして文字・当たり判定を残さない。BGMを先読みしない（押して初めて読込開始する）。曲送りでタイトル曲と二重再生しない。戦闘・ルームへ移った後に遅れて届く曲末通知からおまけ曲を再開しない。端末ごとの値を対戦・オンライン判定へ使わない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しない。
+- 新テスト: 旧v172へ、盾と押せる範囲が上へ寄ること、盾素材の位置、曲末で4曲を順送りして1曲目へ戻ることを先に追加した。実装前の`regressiontest p1`は **292成功・3失敗**となり、新しい3項目だけが実際に落ちることを確認してから実装した。例外で出力が消えていないことも確認済み。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 295件×2、`resulttest` 93件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,333件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。Android相当のモバイルE2Eも **8/8成功**。
+- 実ブラウザ: ローカルHTTP＋Android相当Chromium（412×915）でタイトル画面を実描画し、盾、文字、押せる範囲が上がってRANKINGとバランスよく並ぶことを画面写真で確認した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v173-title-bonus-polish`へ更新した。
+
+## v172 終了確認を吊り看板・レバーへ変更（PR #117）
+
+- 作業ブランチ: `feat/v172-exit-dialog-wood`、PR #117。公開済みv171（PR #116）の端末戻る時に出す終了確認だけを、木板とレバーの意匠へ作り替える。戻る履歴、CloseWatcher、ゲーム内容、キャラ、オンライン通信、勝敗処理、Firebaseルールは変更しない。
+- 何を変えたか: 上部の丸い紋章と英字`RETURN GATE`をなくし、木板から少し浮いた吊り看板に「対戦を中断する？」を置いた。中央の説明を短い日本語にして、継続は青緑、終了は暗い赤茶の2本のレバーとして縦に配置した。各レバーの左端には支点と短い金属レバーを付け、押した時だけレバーが傾く。
+- なぜ変えたか: 従来は金色のグラデーション、丸い紋章、英字見出し、入れ子の枠が重なり、カタモンの木板・鉄・歯車の世界観より人工的な画面に見えていたため。終了確認の選択肢を少なく、形と色で読み分けられるようにする。
+- やってはいけないこと: 「このまま遊ぶ」「アプリを閉じる」の操作、フォーカス、背景タップ、CloseWatcher、履歴移動、画面遷移の処理を変えない。黄色い選択枠、過剰な発光、英字見出し、丸い紋章を戻さない。端末ごとの値を対戦・オンライン判定へ使わない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しない。
+- 新テスト: 旧v171へ、丸い紋章が無いこと、吊り看板の日本語見出し、レバー用のクラス、レバー支点の丸形を確かめる検査を先に入れた。実装前はStage Studio統合テスト **7/8成功・1失敗**、Android相当ブラウザの見出し検査も **0/1成功・1失敗**となり、古い構造で実際に落ちることを確認した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 292件×2、`resulttest` 93件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,327件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。版番号をv171へ固定していたStage Studio統合検査1件も、v172へ更新して全件を再実行した。
+- 実ブラウザ: ローカルHTTP＋Android相当Chromium（412×915）で、終了確認の表示、吊り看板、2本のレバー、「このまま遊ぶ」後の復帰を確認した。Android相当のモバイルE2Eも **8/8成功**。操作の経路は従来どおりで、見た目だけを差し替えている。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v172-exit-dialog-wood`へ更新した。
+
+## v171 キャラ選択の見出し強調・中断再開ギア（PR #116）
+
+- 作業ブランチ: `feat/v171-select-resume-gear`、PR #116。公開済みv170（PR #115）のキャラ選択画面だけを、メロニキの指示に合わせて整える。ゲーム内容、キャラ性能、ほかの画面、オンライン通信、勝敗処理、Firebaseルールは変更しない。
+- 何を変えたか: 画面上部の横長い「中断した対戦を再開」ボタンを撤去し、見出しを「モンスターを選択」から **「カタモンを選択」** へ変更して24pxから31pxへ強調した。中断データがある時だけ、出撃ギアの右下へ噛み合う小型の丸いギアを描き、その中へ「再開」「中断対戦」と表示する。押せる範囲も四角ではなく、見た目と同じ円形に揃えた。
+- なぜ変えたか: 画面上部を中断再開ボタンが占有して主見出しが弱く見えていたため。再開は常用する主操作ではないので、出撃操作との関係が分かる補助ギアへ移し、選択画面の目的を最初に読める構成にした。
+- やってはいけないこと: 中断データが無い時に再開ギアを出さない。再開ギアの四角い外接枠全体を押せるように戻さない。出撃ギア、カードの回転・選択、キャラ画像、HP・必殺技説明、試合開始処理を変えない。中断再開時の保存データ処理を作り替えない。端末ごとの値をオンライン判定へ使わない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テスト: 修正前のv170へ、見出し文言と大きさ、再開ギアの上下関係と噛み合い、小型化、円形の押下範囲、中断データ有無での表示を調べる5件を先に追加した。修正前は **288 passed, 4 failed**（中断データ無しで隠れる既存挙動だけ成功）となり、古い実装で実際に落ちることを確認してから実装した。実装後は`regressiontest`がp1/e1とも **292/292成功**。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 292件×2、`resulttest` 93件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,327件すべて成功**。途中で版番号をv170へ固定していたStage Studioの検査が1件だけ意図どおり停止したため、v171へ更新して全件を再実行した。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTPサーバーは起動したが、この作業環境へ接続された実ブラウザが0台だったため直接の画面撮影は未実施。コード上では、出撃ギア外周79px・再開ギア外周46px、中心間約114.5pxに対して半径合計125pxとし、約10pxだけ噛み合う配置を検査している。公開後、メロニキの実機で最終の見た目を確認する。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v171-select-resume-gear`へ更新した。
+
+## v170 タイトル木板メニューの拡大・視認性調整（PR #115・実画面確認待ち）
+
+- 作業ブランチ: `fix/v170-title-visual-tuning`、PR #115。公開済みv169（PR #114）のタイトル木板メニューだけを、メロニキの実機写真と指示に合わせて調整する。ゲーム内容、ほかの画面、オンライン通信、勝敗処理、Firebaseルールは変更しない。
+- 何を変えたか: 木枠を406×390から456×438へ広げ、羊皮紙・吊り看板・盾と当たり判定も同じ約1.12倍で拡大した。ロゴ下へ収めるため木枠全体を上げ、更新ボタンは従来どおり木枠外へ残した。`RANKING`は左上へ寄せ、矢尻だけがチュートリアル付近へ届く配置にした。`チュートリアル`と`演習`は見出しを6px上げて説明との間を16pxに広げ、`おまけ`と再生中表示も盾の上側へ移した。
+- 視認性: 中断データや初回案内で付いていた黄色い囲い線は「選択中」に見えるため出さない。羊皮紙と吊り看板は茶色文字を深い青緑へ替えて明るい縁を入れ、盾は明るい文字と青緑の縁にして、木の茶色から読み分けられるようにした。
+- 中断データあり: 大きな吹き出しをCPU BATTLEの右側へ幅120px以下・高さ30pxの小型表示として移し、尻尾は左下へ伸ばしてCPUボタン右端へ差す。長い文字幅でも画面外へ出ず、CPUボタンと同じ高さに収まる。
+- なぜ: v169の実機写真では、木枠一式が小さく余白が多い一方、茶色の素材へ茶色文字が重なって読みづらかった。また黄色枠が選択状態に見え、中断吹き出しがロゴと木枠の間を大きく占有していたため。
+- やってはいけないこと: 木枠だけ、または個々の画像だけを別倍率へ変えて比率を崩さない。中断データの有無やチュートリアル推奨を黄色い選択枠で表さない。文字を茶色へ戻さない。`RANKING`を右下へ戻さない。木板6枚を毎コマ個別に描いてv132のタイトル軽量化を戻さない。タイトル以外の画面、操作、ゲーム進行、通信、Firebaseルールを混ぜて変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- 新テスト: 修正前v169へ新しい配置・色・囲い線・吹き出し検査を先に入れ、`regressiontest p1`は **281 passed, 6 failed**、`resulttest`は **81 passed, 12 failed** となった。例外終了ではなく、指摘された古い配置だけが実際に失敗した。実装後は`regressiontest`がp1/e1とも **287/287成功**、`resulttest`が **93/93成功**。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 287件×2、`resulttest` 93件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,317件すべて成功**。途中で古い吹き出し中心を参照する検査フックの例外も検出し、現在の吹き出し実座標を読むよう直したうえで、最後まで件数が出ることを確認した。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。
+- 実ブラウザ: ローカルHTTPは起動できたが、この作業環境へ接続された実ブラウザが0台で、変更後の画面撮影は未実施。PR #115のAndroid相当Chromium／iPhone相当WebKitを含む`mobile-e2e`は両方成功。自動検査では540×960内への収まり、全ボタンの非重複、文字の実描画位置・色、吹き出しの位置と向きを確認済み。人の目での実画面確認後に完了扱いとする。
+- Firebase Console: `database.rules.json`は変更していないため作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v170-title-visual-tuning`へ更新した。
+
+## v169 タイトル木板をメロニキ作成の配置へ合わせる（PR #114）
+
+- 作業ブランチ: `fix/v169-title-menu-layout`。公開済みv168（PR #112）のタイトルメニューだけを、メロニキが組み直した完成図どおりの役割・順番・素材へ差し替えた。タイトルロゴ、背景、各ボタンの遷移先、ゲーム内容、オンライン、戻る処理、Firebaseルールは変更していない。
+- やったこと: 木板内の上段へ羊皮紙の`CPU`と`ONLINE`を縦に置き、中央は左から羊皮紙の`チュートリアル`と`演習`、下段は左に吊り看板の`RANKING`、右に盾の`おまけ`を置いた。タイトル上の表示名は「あそび方」から「チュートリアル」へ揃えたが、開く内容は従来の遊び方のまま。`最新版を取得`は木枠の外下部へ出し、従来の小さい鋼板ボタンの見た目を保った。中断データのお知らせは、ロゴ・木枠見出し・CPUボタンに重ならない位置へ追従させた。
+- なぜ: v168は素材4種類を使えていたが、「CPU／ONLINEは盾」「あそび方／演習は吊り看板」「おまけ／RANKINGは羊皮紙」という構成で、メロニキが完成させた木板の配置と役割が一致していなかったため。素材を作り直さず、既存の透過素材を完成図の指定どおりに流用した。
+- やってはいけないこと: CPU／ONLINEを横並びへ戻さない。素材の役割を入れ替えない。木板内の順番を変えない。`最新版を取得`を木枠内へ戻さない。透過素材の縦横比を崩さない。木板と6ボタンを毎コマ別々に描いてv132のタイトル軽量化を戻さない。文字だけ直して当たり判定を元位置に残さない。タイトル以外の画面、各ボタンの機能、ゲーム進行、オンライン通信、戻る処理、Firebaseルールを混ぜて変更しない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 6ボタンへ使う素材の役割と、`CPU→ONLINE`、中央の`チュートリアル→演習`、下段の`RANKING→おまけ`、更新ボタンが木枠外にあることを先に検査へ追加した。実装前のv168では`regressiontest p1`が **279 passed, 3 failed** となり、表示名・素材割り当て・配置の新しい3検査が実際に失敗した。実装後はp1/e1とも **282/282成功**。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 282件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,310件すべて成功**。`loopbacktest`の中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 実ブラウザ: このセッションから操作できるブラウザが0台のため、ローカルHTTPでの直接撮影は未実施。各素材の透過、画面内の位置関係、縦横比、当たり判定、文字位置はコードと自動検査で確認済み。PRのiPhone相当WebKit／Android相当Chromium検査を通し、公開後はメロニキ実機で最終の見た目を確認する。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v169-title-menu-layout`へ更新した。素材ファイル自体はv168から変更していない。
+
+## v168 タイトルを提供素材の木板メニューへ変更（公開済み・PR #112）
+
+- 作業ブランチ: `feat/v168-title-wood-ui`。公開済みv167（PR #111）から、メロニキ提供の透過素材を使ってタイトルのメニュー部分だけを木板調へ作り替え、PR #112でmasterへマージした。ゲーム内容、タイトルロゴ、背景、オンライン、戻る処理、Firebaseルールは変更していない。
+- やったこと: 大きな木板をメニュー全体の背景に置き、その上を「CPU／ONLINEの盾2枚」「あそび方／演習の吊り看板2枚」「おまけ／RANKINGの羊皮紙2枚」の3段へ整理した。押せる範囲は画像の影やロープを除いた本体側に置き、全7ボタンが互いに重ならず540×960内へ収まるよう固定した。「最新版を取得」は木板下部に従来の小さい保守ボタンとして残した。
+- 素材: Google Driveの4096×5150透過PNG 4枚を正本として受け取り、透明余白だけを切り落として、縦横比を変えず透過WebPへ軽量化した。4枚合計は約15.6MBから約394KB。素材へ焼き込まれている`SELECT A BATTLE MODE`はそのまま使い、同じ見出しをコード側で二重表示しない。
+- 軽量化: 木板と6枚のボタン素材は毎コマ別々に描かず、v132のタイトル焼き付けへ追加し、仮想座標の2倍解像度でロゴ・背景と一緒に1枚へ焼く。4素材の読み込み状態と寸法を焼き直し署名へ含め、届いた時だけ1回作り直す。画像を読めない環境では従来のコード描画へ戻し、操作不能にしない。
+- なぜ: 従来の鋼板風ボタンは操作できても、メロニキが示した木板・盾・吊り看板・羊皮紙のゲーム世界観と比べて平坦だった。提供素材を枠そのものへ使い、対戦・練習・補助の役割も形で見分けられるようにするため。
+- やってはいけないこと: 透過余白や黒背景を画像の一部として表示しない。元画像を押し潰して縦横比を変えない。木板6枚を毎コマ個別に描いてv132のタイトル軽量化を戻さない。素材に焼き込まれた英字見出しをコードでも重ねない。文字位置を直すために当たり判定だけをずらさない。タイトル以外の画面、ゲーム進行、オンライン通信、戻る処理、Firebaseルールを混ぜて変更しない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 素材4種類の登録、盾／吊り看板／羊皮紙が各2枚ずつ使われること、木板と全ボタンが画面内に収まり当たり判定が重ならないことを先に追加した。修正前v167の`regressiontest p1`では **278 passed, 1 failed** となり、「木板UIなし」の新検査だけが実際に失敗した。実装後はp1/e1とも **281/281成功**。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 281件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,308件すべて成功**。`loopbacktest`の中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 実ブラウザ: このセッションから接続できる実ブラウザが0台のため、ローカルHTTPでの直接の画面撮影は未実施。透過PNG 4枚の四隅が透明であること、軽量化したWebP 4枚にも透過情報が残ること、寸法と縦横比、画面内配置、文字位置、当たり判定は個別に確認済み。PR #112のiPhone相当WebKit／Android相当Chromiumを含むモバイルE2Eは、push時とPR時の **2本とも成功**。公開後はメロニキ実機で最終の見た目を確認する。
+- 公開確認: GitHub Pagesの公開URLから`BUILD_ID = v168-title-wood-ui`が返り、新しい`title-mode-board.webp`も`200 OK`・`image/webp`・304,824 bytesで配信されることを確認した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v168-title-wood-ui`へ更新した。新しい4素材もService Workerの初期キャッシュへ追加した。
+
+## v167 タイトルの「あそび方」「演習」を枠内へ揃える（公開済み・PR #111）
+
+- 作業ブランチ: `fix/v167-title-button-labels`。公開済みv166（PR #109）で、メロニキの実機写真からタイトル画面の「あそび方」「演習」の見出しだけが上枠へ食い込んでいることを確認し、この2つの文字位置だけを扱った。
+- 原因: 横並びの2ボタンは高さ54pxだが、高さ64pxの`CPU BATTLE`／`ONLINE BATTLE`と同じ「中央から7px上」の見出し位置と23px文字を使っていた。小さい枠では文字上端の余白が足りず、上枠に重なって見えていた。
+- やったこと: 高さ54px以下の小ボタンだけ、見出しを従来より6px下（中央から1px上）へ移した。ボタン画像、枠、説明文、押せる範囲、ほかのタイトルボタンは動かしていない。
+- なぜ: 文字そのものや枠の大きさを変える必要はなく、小さい枠へ大ボタン用の文字位置を流用したことが原因だったため。対象2つだけに専用位置を与え、タイトル全体の構図を維持した。
+- やってはいけないこと: 高さ54pxの小ボタンへ大ボタンの見出し位置`-7px`を再利用しない。見出しを直すためにボタンの枠・当たり判定・説明文・ほかのタイトル項目を動かさない。タイトルの焼き絵、ゲーム進行、オンライン通信、戻る処理、Firebaseルールを混ぜて変更しない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: Canvasへ実際に指示された文字とY座標を記録し、「あそび方」「演習」の両方が小ボタン用の位置にある検査を先に追加した。修正前v166の`regressiontest p1`では **277 passed, 1 failed** となり、両見出しが`y=755`（枠中央`y=762`から7px上）のため新検査だけが実際に失敗した。修正後はp1/e1とも **278/278成功**。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 278件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,302件すべて成功**。`loopbacktest`の中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 実ブラウザ: ローカルHTTPとAndroid相当Chromium（412×915、実画素比2.625）でタイトルを描画・撮影し、両見出しが上枠から離れて枠内へ収まり、説明文との間隔とほかのボタン位置が崩れていないことを目視確認した。iPhone相当WebKit／Android相当Chromiumの全モバイルE2Eも **16/16成功**。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v167-title-button-labels`へ更新した。
+
+## v166 終了確認1回でカタモンを抜ける（公開済み・PR #109）
+
+- 作業ブランチ: `fix/v166-single-exit`。公開済みv165（PR #108）で終了確認の前に画面が横へ往復する問題を直した後、メロニキから「アプリを閉じるを選んでも3〜4回繰り返さないと終わらない」と実機報告があり、その終了回数だけを扱ってPR #109でmasterへマージした。
+- 原因: v138〜v164は、戻る操作を受けるため同じカタモンURLのダミー履歴を`pushState`で積んでいた。v165は新しいダミーを作らなくなったが、更新・再読み込み前から履歴内に残っている古いダミーは消えない。終了時に`history.back()`を1回だけ呼んでいたため、古い履歴が3枚なら確認1回につき1枚ずつしか進まず、4回目でようやくカタモン外へ出ていた。テストでも古い履歴を3枚置くと同じ回数を再現した。
+- やったこと: `Navigation API`で現在位置より後ろに連続している同じカタモン画面を数える。`/katamon/`と`/katamon/index.html`は同じものとして扱い、版番号などの`?`以降と`#`以降は無視する一方、Stage Studioなど別の画面は飛ばさない。終了を選ぶと`CloseWatcher`を先に破棄し、数えた距離を`history.go(-距離)`へ渡す。古いダミーが何枚あっても、確認は1回、履歴移動の要求も1回だけにした。
+- 単独起動: ホーム画面から直接起動したPWAなど、前の画面が無い時は`history.back()`へ頼らず`window.close()`を試す。単独起動かどうかは表示モードと履歴の有無だけに使い、対戦判定には使わない。閉じる処理をブラウザに拒否されて画面が残った場合は、0.8秒後に戻る受付だけを安全に復旧する。
+- 未対応環境: `CloseWatcher`が無いiOS Safariなどは従来どおりダミー履歴で戻る要求を受ける。ただし再読み込み後に`history.state.katamonGuard`が既にあれば再利用し、同じダミーを重ねない。明示終了はガードと元画面を`history.go(-2)`の1回で抜ける。`CloseWatcher`対応環境では引き続きダミー履歴を新規作成せず、確認前の履歴移動も行わない。
+- なぜ: v165の横スライド対策は正しく働いていたが、「今後ダミーを増やさない」だけでは端末に既に残った旧履歴を片付けられなかった。履歴を1件ずつ戻る回数で制御するのではなく、今ある旧履歴を先に数えて一度で跨ぐ必要があった。
+- やってはいけないこと: 古い履歴を`history.back()`の繰り返しや複数回の確認で1枚ずつ消費する形へ戻さない。`CloseWatcher`対応環境へ`pushState`／`history.forward()`を復活させない。Stage Studioなど同じドメインの別画面まで旧ガード扱いして飛ばさない。Watcherを残したまま終了しない。`window.confirm`を使わない。バトル中の既存メニュー、オンライン通信、勝敗、手番、描画、Firebaseルールを変えない。端末の表示モードや履歴数を対戦判定へ使わない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 戻る専用の最終14件を修正前v165へ差し込むと **8/14 passed** となり、通常終了の新しい1回移動、旧ガード3枚の一括退出、履歴なしPWA、旧ガードありPWA、未対応環境のガード再利用、未対応環境の1回移動の6件が実際に失敗した。修正後は **14/14成功**。例外で出力が消えていないことと件数表示も確認した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 433件、`lobbysimtest` 7件、戻る専用14件、Stage Studio 53件、合計 **1,300件すべて成功**。`loopbacktest`の中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 実ブラウザ: ローカルHTTPで、前画面→カタモン→同じURLの旧ガード3枚という実機報告相当の履歴を作り、終了確認1回で前画面へ戻る検査がiPhone相当WebKit／Android相当Chromiumの **2/2成功**。両ブラウザの全モバイルE2Eも **16/16成功**。Android相当は`CloseWatcher`経路、iPhone相当は未対応の互換経路を通した。自動ブラウザでは実際にホーム画面へ入れたPWAウィンドウを閉じるところまでは再現できないため、OPPO／Samsungのホーム画面起動で最終確認する。
+- 実機確認: 2026-08-10、メロニキが公開版で「アプリを閉じる」を選ぶと確認1回で閉じることを確認した。
+- 公開確認: GitHub Pagesの公開URLから`BUILD_ID = v166-single-exit`が返ることを確認した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v166-single-exit`へ更新した。
+
+## v165 Androidの戻るジェスチャーを履歴遷移より先に確認（公開済み・PR #108）
+
+- 作業ブランチ: `fix/v165-closewatcher-back`。公開済みv164（PR #107）から、メロニキが実機で確認した「Androidの左端戻るスワイプで、終了確認より先に前画面へ大きくスライドして戻される」問題だけを扱い、PR #108でmasterへマージした。別アプリの未保存入力対策は参考にしたが、変更対象はカタモンだけ。
+- やったこと: `CloseWatcher`を使えるChrome系では、従来のダミー履歴を積まず、Androidの戻るジェスチャー／戻るボタンを履歴遷移より前の`cancel`イベントで受けて`preventDefault()`する。その場で既存のカタモン風`アプリを閉じますか？`を開き、前画面へ移動してから戻す往復を発生させない。`このまま遊ぶ`は確認だけを閉じて画面を維持し、`アプリを閉じる`はWatcherを先に破棄してから`history.back()`を1回だけ呼ぶ。ブラウザ標準の`window.confirm`は使わない。
+- 未対応環境: `CloseWatcher`が無いiOS Safariなどだけは、互換用として従来の`popstate`＋ダミー履歴を残す。`CloseWatcher`対応環境の`popstate`では履歴を積み直さず、横スライド／バウンスの原因になる履歴の往復をしない。バトル中の戻る操作は従来どおりゲーム内メニューを開く。
+- 後片付け: Watcherは常に1つだけとし、明示終了、`pagehide`、`beforeunload`で必ず破棄する。bfcacheから`pageshow`で戻った時だけ1つ張り直す。`pagehide`後にゲームループの最終コマが来ても再生成しない。生成できない環境は例外で止めず、互換用の履歴経路へ落とす。
+- なぜ: v138の戻る確認は、まずブラウザ履歴を1つ戻し、同じURLのダミー履歴を積み直してから確認を出していた。この順番ではAndroid Chromeの左端ジェスチャーが履歴画面の移動を描き始めるため、機能上は残れても「前画面へ行ってから引き戻された」ように見える。確認そのものではなく、確認を出す前に履歴を動かしていたことが原因。
+- やってはいけないこと: `CloseWatcher`対応環境へ`pushState`／`history.forward()`による戻し処理を復活させない。確認を出すために先に`history.back()`しない。Watcherを画面更新ごとに増やさない。終了時にWatcherを残したまま戻らない。ブラウザ標準の`confirm()`へ戻さない。バトル中の既存メニュー、オンライン通信、勝敗、手番、描画、Firebaseルールを変えない。端末種別や時刻を対戦判定へ使わない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: CloseWatcher対応／未対応を模した戻る専用検査10件を先に追加した。v164の実装のままでは **2/10 passed** となり、「対応環境でも履歴ガードを積む」「cancelで止めない」「Watcherを片付けない」など新しい8件が実際に失敗することを確認してから修正した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 431件、`lobbysimtest` 7件、戻る専用10件、Stage Studio 53件、合計 **1,294件すべて成功**。`loopbacktest`の中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 実ブラウザ: ローカルHTTPでv165を配信し、iPhone相当WebKitとAndroid相当Chromiumの戻る確認・継続・明示終了が **4/4成功**。Android相当では`CloseWatcher`が実在すること、ダミー履歴を積まないことも検査した。さらに両ブラウザの全モバイルE2Eは **16/16成功**。ただし自動ブラウザは端から指でスワイプするOS演出そのものを再現できないため、OPPO／Samsung実機で左右端スワイプの最終確認は公開後に行う。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v165-closewatcher-back`へ更新した。
+
+## v164 部屋内のモンスター選択にキャラ画像を表示（公開済み・PR #107）
+
+- 作業ブランチ: `feat/v164-lobby-monster-images`。公開済みv163（PR #106）から、メロニキの「部屋内のモンスター選択でもキャラ画像を見たい」という要望だけを扱い、PR #107でmasterへマージした。
+- やったこと: オンライン対戦の入室後に出る自分のモンスター選択を、文字だけの選択欄から「元の縦横比を保った全身画像＋モンスター名」の横並びカードへ変更した。16体のどれを選んでも画像・名前・選択値が同時に切り替わる。準備完了後は従来どおり選択を固定し、結果画面では設定欄と一緒に畳む。
+- 仕組み: 起動時に読み込み済みの`charImages`をそのままプレビューへ使うため、新しい画像や追加通信は発生しない。画像は`object-fit: contain`で枠内へ収め、切り抜きや縦横比の変更をしない。変更したのは自分が操作する選択欄だけで、ほかのプレイヤーの確定前キャラを席一覧へ表示しない。
+- なぜ: 部屋内の選択欄はキャラ名しか表示せず、タイトル側のモンスター選択で見えていた姿を確認できなかった。通信や選択ルールを変えず、名前と見た目を一緒に確認できるようにするため。
+- やってはいけないこと: 相手の確定前キャラを表示しない。画像URLや読み込み結果をオンラインの選択・勝敗・同期判定へ使わない。Firebaseのパケット、ルール、キャラ確定のcommit/revealを変えない。画像を`cover`で切り抜かない。キャラ画像を引き伸ばさない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 先に、入室前は画像カードを隠して入室後だけ表示する検査、全身画像を切り抜かない検査、スモエル／目玉への切替で画像・日本語名・16選択肢が連動する検査を追加した。v163の実装のままでは **427/430 passed** となり、新しい3件だけが実際に失敗することを確認してから実装した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 430件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,283件すべて成功**。loopbacktestの中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 表示確認: ローカルHTTPでv164の`index.html`が`200`で配信されることを確認した。このセッションで接続できる実ブラウザは0台だったため、直接の目視確認は未実施。PR #107では実装コミットと記録追記コミットの`mobile-e2e`がともに合格し、スマホ幅の実ブラウザ検査を通した。公開後はメロニキの実機で最終確認する。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v164-lobby-monster-images`へ更新した。
+
+## v163 2vs2ロビーの席を自分基準で整列（公開済み・PR #106）
+
+- 作業ブランチ: `fix/v163-lobby-seat-order`。公開済みv162（PR #105）への実機指摘だけを直し、PR #106でmasterへマージした。
+- やったこと: 席の役名を64pxの固定幅にして、その右のプレイヤー名／「空席」が全行で同じ位置から始まるようにした。2vs2は全4席で、各端末から見て必ず`P1 自分 → P2 味方 → E1 敵1 → E2 敵2`の順に表示する。ホストだけでなく、味方席・敵1席・敵2席へ座った端末も、それぞれ自分の行が先頭になる。
+- 仕組み: 既存の自席`online.seat`と固定済みの`FIREBASE_SEAT_TEAM`から、画面へ描く順番と相対的な呼び名だけを作る。Firebase上の席ID、席とキャラの対応、チーム、手番順、送受信データは変えない。1vs1の`P1 ホスト / P2 対戦者 / S1・S2 観戦`も従来どおり。
+- なぜ: v162は全端末で`p1 → e1 → s1 → s2`の固定表示だったため、ホスト画面でも敵が味方より先に出ており、ほかの席では自分の行すら先頭にならず、役名もホスト視点のままだった。さらに役名欄が最小幅だけだったため、文字数が長い行だけ名前の開始位置が右へずれていた。
+- やってはいけないこと: 表示順に合わせて`FIREBASE_SEATS`、`FIREBASE_SEAT_UNIT`、`FIREBASE_SEAT_TEAM`、試合の`turnOrder`を並べ替えない。画面用の`P1/P2/E1/E2`を通信上の席IDとして送らない。表示名、端末の画面幅、端末時刻をチーム判定やオンライン同期へ使わない。1vs1の席表示を相対表示へ変えない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 先に4席それぞれの実DOM順・相対ラベル・名前の対応と、役名欄の固定幅を検査へ追加した。v162の実装のままでは **422/428 passed** となり、相対ラベル、4席すべての並び、名前開始位置の計6件が実際に失敗することを確認してから修正した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 428件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,281件すべて成功**。loopbacktestの中継件数は`38 / 64 / 83 / 61 / 48`のまま。
+- 表示確認: ローカルHTTPで`index.html`と`sw.js`がともに`200`、v163の番号を返すことを確認した。このセッションで接続可能な手元の実ブラウザは0台だったため直接目視はできていないが、PR #106では実装コミットと記録追記コミットの`mobile-e2e`がともに合格し、スマホ幅の実ブラウザ検査を通した。
+- Firebase Console: `database.rules.json`は変更していないため、作業不要。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v163-lobby-seat-order`へ更新した。
+
+## v162 対戦部屋内の端末別戦績（公開済み・PR #105）
+
+- 作業ブランチ: `feat/v162-room-rival-record`。公開済みv161（PR #104）から、残タスク先頭のIssue #5だけに着手し、PR #105でmasterへマージした。
+- やったこと: オンライン対戦の通算、使用キャラ別、対戦相手別の勝・敗・分を、この端末の`localStorage`だけへ保存する。部屋では現在選択中のキャラと入室中の相手、決着画面では更新直後の通算と対戦相手別戦績を表示する。2vs2は相手チームで実際に人が座っていた席だけを相手として数え、味方とCPUは混ぜない。相手が全員CPUなら対人戦績そのものへ入れない。
+- 相手の見分け方: 既存の`rankingProfile.deviceId`へ用途名`katamon-rival-v1:`を付けてSHA-256化した64文字の`rivalId`だけを、既存の`presence`／`lobbyState`で交換する。生の端末IDと戦績の数値は送らない。同名でも`rivalId`が違えば別の相手として保存し、表示名を変えても同じ`rivalId`なら過去戦績を引き継ぐ。
+- 二重計上対策: 勝敗通知が再送されても、48文字の`roundId`ごとに一度だけ数える。再戦は新しい`roundId`なので別試合として数える。結果より相手の匿名IDが遅れて届く順番も拾い直し、同じ試合を二重にしない。保存が壊れて読めない場合は空の安全な形へ戻し、ゲーム本体は止めない。
+- なぜ: 表示名だけでは同名や改名を区別できず、Firebaseへ戦績を保存すると不要な個人データと通信量が増える。端末内に数字を置き、オンラインへは用途を分けた匿名の照合値だけを出すことで、部屋で以前の対戦相手との成績を確認しつつ、生IDや戦績を相手へ渡さないため。
+- やってはいけないこと: 生の`rankingProfile.deviceId`、通算・キャラ別・相手別の戦績値をFirebaseへ送らない。表示名だけで同一人物を統合しない。味方やCPUを対戦相手へ数えない。勝敗通知の再送や同じラウンドの再読込で二重計上しない。端末時刻、画面寸法、保存済み戦績など端末ごとに変わる値をオンラインの勝敗・手番・同期判定へ使わない。プロトコルを互換性のない形へ変えない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。
+- 新テスト: 先に機能の入口を検査へ追加し、v161のまま`stage3test`を実行して **406/407 passed**（新しい機能存在検査だけ失敗）になることを確認した。さらに「結果が先、相手IDが後」の順番を先に追加し、途中実装で **422/423 passed**（遅着の1件だけ失敗）になることも確認してから修正した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 423件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,276件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。`database.rules.json`はJSONとして正常。未定義名検査用のPython実行環境はこのPCに無いため、その単独検査だけは未実施（全Node試験ではスクリプト読込・実行成功）。
+- 実ブラウザ: ローカルHTTPは`200`で配信できた。このセッションで直接操作できる実ブラウザは0台だったが、PRのGitHub Actionsで`mobile-e2e`を2本実行し、スマホ幅の実ブラウザ検査を含めてすべて成功した。DOM組み立て、表示文、結果画面の描画入口、ボタンの描画と当たり判定も自動試験で成功している。
+- Firebase Console: `database.rules.json`へ、`rivalId`を`presence`／`lobbyState`だけで許可し、64文字の小文字16進数に限定する検査を追加した。**2026-08-10にメロニキがRealtime Databaseのルールへ全文を反映し、「公開」済み。**
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v162-room-rival-record`へ更新した。
+
+## v161 大型闘技場の縦配置を大型サイズへ最適化（公開済み・PR #104）
+
+- 作業ブランチ: `fix/v161-large-arena-layout`。メロニキの実機写真で、大型を横幅100%へ収めるカメラ自体は正しくなった一方、標準用の闘技場を大型の高さへそのまま置いていたため、足場・外壁・吊り障害物が上側へ固まり、死線まで大きな空白が残ることを確認して着手した。
+- やったこと: 闘技場の標準高660を基準に、外壁の下端、三段足場の上下位置、吊り障害物の支点と本体位置だけを大型高960へ同じ比率で広げるようにした。出撃位置は既存の足場検索を通すため、広げた最上段へ自動で乗る。標準は倍率1のため、従来の座標と完全に同じまま。
+- なぜ: 大型でも横位置だけは広げていたが、縦座標は外壁下端625、足場365〜549、吊り障害物92〜426という標準値のままだった。その結果、最下段から死線までの空きが標準約87に対して大型約375となり、高さを活かせていなかった。カメラ倍率の問題ではなく、闘技場そのものの縦配置が大型化されていないのが原因だった。
+- やってはいけないこと: 標準闘技場の座標を変えない。足場の横幅、吊り障害物の大きさ・揺れ幅・当たり判定を縦倍率で大きくしない。ほかの地形、カメラ倍率、ダメージ、砲弾、風、出撃判定の仕組みを変えない。端末の画面寸法や表示倍率を対戦判定・オンライン同期へ使わない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しないためFirebase Console作業は不要。
+- 新テスト: 大型の外壁と三段足場、吊り障害物、出撃位置が高さ960へ広がる検査と、標準の従来配置を守る検査を先に追加した。製品側を直す前の`regressiontest p1`で **274 passed, 3 failed** となり、大型の3検査だけが実際に落ち、標準の検査は成功することを確認した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 277件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 406件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,259件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。
+- 実ブラウザ: ローカルHTTP＋スマホ幅540×960のChromiumで、標準の全景が従来どおりであること、大型の全景では三段足場・外壁・吊り障害物・キャラが標準と同じ縦比率で広がり、下側の不自然な空白が消えることを確認した。大型を`横25%`まで拡大しても足場やキャラが崩れない。ページ由来のエラーは0件。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v161-large-arena-layout`へ更新した。
+
+## v160 最遠でマップ横幅全体を見渡せるよう修正（公開済み・PR #103）
+
+- 作業ブランチ: `fix/v160-full-map-overview`。メロニキの実機確認で、v159の「最遠」でも標準ステージのマップ全体が見えないこと、大型も表示が崩れたことを受けて着手した。
+- やったこと: 「最遠」の基準を、上の表示に隠れない範囲へステージ全高を収める計算から、マップ横幅を100%収める計算へ変更した。最遠倍率は標準37.5%、大型25%になり、どちらも左右端まで一画面で見渡せる。全景は地面を操作盤の上端へ揃え、上側へ余った表示範囲を逃がす。全景からスライダーで拡大する時は手番キャラへ縦横とも寄せ、二本指の拡大縮小は指の中心を保つ。
+- なぜ: v159は縦幅を優先したため、「最遠」と表示していても実際に見えていた横幅は標準約51%、大型約50%だけだった。また、横だけ手番キャラへ寄せる途中実装では、拡大後にキャラが縦方向の画面外へ消えることを実ブラウザで確認したため、縦横を一緒に追う形へ直した。
+- やってはいけないこと: 最遠倍率を再びステージの高さ基準へ戻さない。全景を画面上端へ揃えて地面の下に空白を作らない。全景からのスライダー拡大でマップ中央を固定し、手番キャラを画面外へ出さない。二本指操作では指の中心を勝手に手番キャラへ移さない。端末の画面寸法・倍率・表示位置を対戦判定やオンライン同期へ使わない。地形・当たり判定・出撃位置は変えない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しないためFirebase Console作業は不要。
+- 新テスト: 先に標準／大型の最遠が横幅100%になる検査へ変更し、v159実装で`regressiontest p1`が **270 passed, 3 failed** になることを確認した。さらに全景から拡大して手番キャラが縦にも画面内へ残る検査を追加し、横だけ補正した途中実装で **272 passed, 1 failed** になることを確認した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 273件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 406件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,251件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。
+- 実ブラウザ: ローカルHTTP＋スマホ幅540×960のChromiumで、標準・大型とも最遠表示が`横100%`となり、左右のキャラとステージ両端が同じ画面に収まることを確認した。大型の全景から最寄へ拡大しても手番キャラが縦横とも画面内へ残る。ページ由来のエラーは0件。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v160-full-map-overview`へ更新した。
+
+## v159 標準／大型ステージのカメラ構図を統一（公開済み・PR #102）
+
+- 作業ブランチ: `fix/v159-camera-framing`。メロニキの実機写真で、標準は38%のまま戦場が小さく、大型は69%・100%で右側へ寄りすぎる状態を確認して着手した。
+- やったこと: 名前カード・風表示・ミニマップに隠れない戦場表示範囲を、1vs1は画面内Y=176〜660、2vs2はY=210〜660と定めた。標準と大型のどちらも、この範囲へステージ全高が収まる値を「最遠」にした。表示は生の倍率をやめ、操作部を`最遠 / 遠 / 中 / 近 / 最寄`、ミニマップを実際に見えている横幅（標準51%、大型50%など）へ分けた。
+- 切替と引継ぎ: 標準／大型を替えても、生の倍率ではなく「最遠〜最寄のどこを選んだか」を引き継ぐ。v157/v158が大型の最遠として保存した69%も、新しい大型の最遠50%へ一度だけ移す。スライダーと二本指で拡大縮小した時は、見ていた画面中央が横・縦へ飛ばないようにした。
+- なぜ: 旧計算は上の表示に隠れる176pxまで「見えている高さ」に数え、標準では横幅基準の38%まで縮めていた。v157は反対に大型を画面上端から操作盤までの660pxへ合わせたため69%まで寄り、標準から大型へ替えると同じ距離設定も保てていなかった。
+- やってはいけないこと: HUDの裏を戦場の表示可能範囲へ戻さない。標準／大型の切替で生の倍率をそのまま使わない。倍率変更時に横だけ補正して縦の中心を飛ばさない。端末の画面寸法や保存値を対戦判定・オンライン同期へ使わない。地形・当たり判定・出撃位置は変えない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しないためFirebase Console作業は不要。
+- 新テスト: 標準と大型の表示範囲、サイズ切替時の距離維持、拡大縮小時の中心維持を先に検査し、旧実装で`regressiontest p1`が **269 passed, 3 failed** になることを確認した。さらに旧版が保存した大型69%の移行検査を先に追加し、未対応実装で **272 passed, 1 failed** になることを確認した。表示名の検査も旧実装で`stage3test`が **405/406 passed** になることを確認した。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 273件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 406件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,251件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。
+- 実ブラウザ: ローカルHTTP＋スマホ幅540×960のChromiumで、旧38%から標準が`最遠・横51%`、そのまま大型へ替えると`最遠・横50%`になることを確認した。旧69%を持つ端末から大型へ直接入っても`最遠・横50%`へ移行する。大型を最寄まで拡大した時は`横25%`となり、旧画面のようにキャラが右端へ流れない。ページ由来のエラーは0件。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v159-camera-framing`へ更新した。
+
+## v158 古い画面が開いたまま残る更新経路を修正（公開済み・PR #101）
+
+- 作業ブランチ: `fix/v158-large-camera-persistence`。メロニキの実機で、同じ演習条件でも標準が視点距離38%、大型が25%と表示される写真を確認して着手した。v157の大型は必ず約69%以上になるため、この25%はカメラ計算の再発ではなく、端末でv156以前のページ本体が開いたまま残っている証拠。
+- やったこと: 新しいService Workerが有効になった時、開いているページへ新ビルド番号を通知する。ページ側は自分と違う番号だけを保留し、安全にタイトルへ戻った時に一度だけ版付きURLへ読み直す。Service Workerがページ移動を取りに行く通信もブラウザ内の古いHTTPキャッシュを使わないようにした。従来のタイトル画面「最新版を取得」は残し、`SKIP_WAITING`通知も受け取れるようにした。
+- 対戦保護: 更新通知が対戦中、キャラ選択中、演習設定中、オンライン部屋、終了確認中に来ても勝手に読み直さない。対戦や部屋を失わず、通常のタイトル画面へ戻るまで待つ。今回すでに開いたままのv156ページは新しい通知処理をまだ持っていないため、v158公開後に限り、タイトルの「最新版を取得」を一度押して切り替える。
+- なぜ: 公開サーバーにはv157が届いていても、すでに開いているHTMLのJavaScriptはページ自身を入れ替えない。Service Workerだけが新しくなっても旧ページがそのまま動き続け、v157で直した大型カメラが実機へ反映されない状態になっていた。
+- やってはいけないこと: 対戦中やオンライン部屋をService Workerから強制再読込しない。更新通知の時刻、端末の画面寸法、端末ごとの保存値を対戦判定やオンライン同期へ使わない。標準／大型のカメラ計算そのものは変えない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を別番号にしない。`database.rules.json`は変更しないためFirebase Console作業は不要。
+- 新テスト: 先に新しい更新経路の検査だけを追加し、旧実装で`stage3test`が **404/405 passed** になることを確認した。実装後は405件すべて成功。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 270件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 405件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,244件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。
+- 実ブラウザ: ローカルHTTP＋Android相当Chromiumで、保存済み視点38%から標準は38%を維持し、大型は69%へ補正されることを実画面の描画文字から確認した。更新通知を起動画面で受けてもURLが変わらず、タイトルへ移った時だけ新ビルド番号と再読込用の値を付けて読み直すことも確認。ページ由来のエラーは0件。操作用ブラウザ連携は接続可能なブラウザが0台だったため、手動目視済みとは扱わない。
+
+## v157 大型ステージで縦に余白が出るカメラを修正（公開済み・PR #99）
+
+- 作業ブランチ: `fix/v157-large-stage-camera`。v156公開後、メロニキの実機画面で大型ステージが「視点距離38%」のときに戦場全体が縦へ縮んで見えることを確認して着手し、PR #99でmasterへマージ済み。GitHub Actionsの`test`と`mobile-e2e`は各2本すべて成功した。
+- やったこと: 大型（2160×960）だけは、横幅を全表示するための最小ズームではなく、操作盤より上の縦幅をステージ高960px以内に収める最小ズームも満たすようにした。以前の端末設定で38%が残っていても68.75%以上へ自動補正され、上下の空白を出さない。横方向はこれまでどおりミニマップと手番キャラへの追従で見る。
+- なぜ: 38%では見える世界の高さが約1,737pxとなり、ステージ高960pxを777px超えていた。スクリーンショットの上側・下側の余白と、足場やキャラが小さく見える原因はここだった。
+- やってはいけないこと: 標準ステージ（1440×660）の最小ズームを変えない。端末固有の画面寸法をオンライン同期・ゲーム判定に使わない。今回`database.rules.json`は変更しないため、Firebase Console作業は不要。
+- 新テスト: 修正前に`regressiontest p1`で **269 passed, 1 failed** を確認した（診断値: `zoom:0.38`、`visibleHeight:1736.84`）。修正後はp1/e1とも270件成功。
+- 最終テスト: `seattest` 20件×2、`regressiontest` 270件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 404件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,243件すべて成功**。loopbacktestの中継件数は `38 / 64 / 83 / 61 / 48` のまま。
+- 実画面: ローカルHTTP＋実ブラウザ確認を試みたが、この作業環境に接続できるブラウザが無く実行できなかった。メロニキの実機写真で不具合条件を特定済み。公開後は大型を選び、以前の「遠い」視点設定から戦闘を始めて上下に余白が出ないことを実機で確認する。
+
+## v156 標準／大型ステージの選択式（公開済み・PR #97）
+
+- 作業ブランチ: `feat/v156-stage-size-select`。v155のmasterから開始し、PR #97でmasterへマージ済み。GitHub Actionsの`test`と`mobile-e2e`は各2本すべて成功、Firebase Consoleのルール反映もメロニキが完了した。
+- やったこと: 演習とオンラインのロビーで、標準（1440×660）／大型（2160×960）を選べるようにした。大型は横720列・縦240行、場外線924pxで、2vs2の4体出撃・上の足場・中断復帰・カメラの上下追従まで同じ寸法で扱う。
+- Stage Studio: 作成画面で標準／大型を選択でき、生成・地形編集・保存・読み込み・ゲーム側プレビューがその寸法を使う。大型のカスタムステージも実対戦で上の足場へ当たり判定が入り、4体出撃と中断復帰を確認した。
+- オンライン: 部屋設定と送信データに`stageSize`（`standard` / `large`）を追加。ホストがサイズまたは人数を変えると、食い違うカスタムステージ選択は解除する。端末ごとの画面サイズや表示倍率を対戦判定に使ってはいけない。必ずステージデータまたは部屋設定の寸法を正本にすること。
+- やってはいけないこと: 大型を標準地形へ無理に引き延ばさない。カスタムステージを選んでいる時は、そのステージ自身のサイズと人数を別の選択値で上書きしない。`Core.LIMITS`（標準専用）を大型のプレビューや地形計算へ直接使わない。
+- 新規テスト: 「演習で大型を選ぶと2160×960・720列の戦場になる」を追加。実装途中でこのテストは`1440 / 660 / 480列`となって不合格になり、外部地形モジュールが未読込でも選択値から寸法を決めるよう直して合格した。大型StageCore生成と大型カスタムステージ実対戦のテストも追加。なお旧サイズ上限のままでは2vs2の`p2/e2`出撃Xが`schema_maximum`で不合格になることを実測済み。
+- 実測テスト: `seattest` 20件×2、`regressiontest` 269件×2、`resulttest` 96件、`loopbacktest` 103件、`stage3test` 404件、`lobbysimtest` 7件、Stage Studio 53件、合計 **1,241件すべて成功**。loopbacktestの中継数は描画・地形サイズ変更でも `38 / 64 / 83 / 61 / 48` のまま。
+- 見た目確認: ローカルHTTP＋実ブラウザ確認を試したが、この作業環境はブラウザ接続が無く実行できなかった。公開後、メロニキの端末で「演習の大型」「大型2vs2」「Stage Studioの大型」を一度ずつ確認すること。
+- Firebase Console: `database.rules.json`へ`settings.stageSize`の許可と検証を追加し、公開前にRealtime Database Rulesへ反映・公開済み。
+
+## v155 必殺カットイン音の音量を下げる（公開済み・PR #96）
+
+- 作業ブランチ: `feat/v155-special-cutin-volume`。公開済みmaster（v154・PR #95）から作成した。
+- やったこと: v154で追加した必殺カットイン用の`EDM Zap`だけを、効果音マスターへ入る前の音量`0.38`から`0.28`へ下げた。
+- なぜ: メロニキの実機確認で、ほかの効果音と比べて必殺カットイン音が大きいと分かったため。
+- やってはいけないこと: MP3本体・通常弾・タイトル砲弾・跳躍・着弾・電磁波の音を変えない。必殺のオーラ時間、カットイン時間、発射時刻、ダメージ、弾道、通信を変えない。効果音全体の設定やミュート経路を変えない。端末時刻や音の読込結果を対戦判定に使わない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v155-special-cutin-volume`へ更新した。MP3は同一なのでURLの`?v=1`とハッシュは維持する。
+- 先行不合格確認: 音量0.28を要求する検査だけを先に入れたv154のまま、`regressiontest p1`を実行して **267 passed, 1 failed** になることを確認した。テスト全体の例外終了ではなく、旧値0.38が残っていることによる失敗。
+- 実測テスト: `seattest 20件×2席 + regressiontest 268件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 404件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1,237件すべて成功**。音量だけの変更なのでloopbacktestの中継数も`38 / 64 / 83 / 61 / 48`のまま。
+- 実画面: 音だけの調整。ローカルHTTP＋実ブラウザは、この作業環境で接続できるブラウザが0台のため未確認。PRのモバイル実ブラウザ検査と、公開候補をメロニキの実機で確認する。
+- `database.rules.json`は変更なし。Firebase Console作業なし。
+
+## v154 必殺カットイン音をEDM Zapへ差し替え（公開済み・PR #95）
+
+- 作業ブランチ: `feat/v154-edm-zap-cutin`。公開済みmaster（v153・PR #94）から作成した。
+- やったこと: オーラが終わって必殺カットインへ切り替わる瞬間の音を、メロニキ指定のPixabay素材`EDM Zap`へ差し替えた。最初の操作で同梱MP3を先読みし、既存の効果音音量・ミュート・圧縮の経路を通して音量0.38で鳴らす。サービスワーカーにも版付きURLを登録したため、ホーム画面追加後のオフラインでも使える。通信不調でまだ読めない最初の一度だけは、短い代替の電子音を鳴らして無音を避ける。
+- なぜ: 従来の低音から長く立ち上がる合成ジングルより、カットイン直前に合う鋭くスタイリッシュな音へ変えたいというメロニキの指定のため。
+- 音源記録: `assets/special-cutin-edm-zap.mp3`は、メロニキがPixabayから取得して共有したMP3。配布元、ライセンス、確認日、SHA-256は`assets/SOUND_LICENSES.md`へ記録した。
+- やってはいけないこと: 通常弾・タイトル砲弾・跳躍・着弾・電磁波の音を変えない。必殺のオーラ時間、カットイン時間、発射時刻、ダメージ、弾道、通信を変えない。ゲーム中にPixabayなど外部URLを直接再生しない。音源を更新する場合はMP3のハッシュとURLの`?v=`を必ず同時に変える。音の読込結果や端末時刻を対戦判定に使わない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v154-edm-zap-cutin`へ更新した。
+- 先行不合格確認: 新しい検査だけを先に入れ、旧実装のまま`regressiontest p1`を実行して **267 passed, 1 failed**、`stage3test`を実行して **403/404 passed** になることを確認した。いずれもEDM Zapの音源・URL・オフラインキャッシュが無いことによる失敗で、テスト全体の例外終了ではない。
+- 実測テスト: `seattest 20件×2席 + regressiontest 268件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 404件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1,237件すべて成功**。音だけの変更なのでloopbacktestの中継数も`38 / 64 / 83 / 61 / 48`のまま。
+- 実画面: 音だけの差し替え。ローカルHTTP＋実ブラウザは、この作業環境で接続できるブラウザが0台のため未確認。PRのモバイル実ブラウザ検査と、公開候補をメロニキの実機で確認する。
+- `database.rules.json`は変更なし。Firebase Console作業なし。
+
+## v153 演習の設定を戦闘中へ移動し、キャラ画像を戻す（公開済み・PR #94）
+
+- 作業ブランチ: `feat/v153-training-battle-options`。公開済みmaster（v152・PR #93）から作成した。
+- やったこと: 演習開始前は、自分・相手（2vs2では追加2体）・地形・人数だけを選ぶ画面へ縮めた。風向き・風の強さ・必殺技・跳躍・CPUの強さは、戦闘中のメニューからその場で変えられる。必殺技は`通常`、`全員MAX`、`自分MAX`を選べる。キャラ行には画像を戻し、元画像の縦横比を保って描く。
+- なぜ: 演習前に項目を詰め込みすぎて、キャラを選ぶ画面も2vs2の画面も窮屈になっていたため。条件調整は実際に弾を試しながら変える方が自然なため。
+- やってはいけないこと: 通常対戦・オンライン・チュートリアルのメニューへ練習条件を混ぜない。カスタムステージ固有の風は、戦闘中の選択で上書きしない。`自分MAX`をCPUへ効かせない。キャラ画像を正方形へ引き延ばしたり、画像なしの文字だけへ戻したりしない。端末時刻や画面サイズを対戦判定に使わない。
+- 互換性: v152の`常時MAX`は同じ選択番号の`全員MAX`として読み、以前どおりCPUにも効く。新しい`自分MAX`を選んでいない従来の中断データは、従来どおり動く。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v153-training-battle-options`へ更新した。
+- 新テスト: 先にv152のまま、演習前の行がキャラ・地形・人数だけへ縮まらず、戦闘中用の行も無いことを検査したところ、`regressiontest p1` は **267 passed, 1 failed** になった。実装後は、演習前の4行／戦闘中の5行、`自分MAX`が操作中のキャラだけへ効くことを確認し、p1/e1とも **268 passed, 0 failed**。
+- 最終テスト: `seattest 20件×2席 + regressiontest 268件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1,236件すべて成功**。描画と演習設定だけの変更なのでloopbacktestの中継数も `38 / 64 / 83 / 61 / 48` のまま。
+- 実画面: ローカルHTTP＋実ブラウザを試したが、この作業環境で接続可能なブラウザは0台だった。ローカルのPlaywright実行環境も無いため、実機確認済みとは扱わない。一方でPR #94のGitHub Actionsモバイル実ブラウザ検査は2本とも成功した。
+- `database.rules.json`は変更なし。Firebase Console作業なし。
+
+## v152 演習条件画面の整理と2vs2追加キャラ選択（公開済み・PR #93）
+
+- 作業ブランチ: `feat/v152-training-setup-layout`。公開済みmaster（v151・PR #92）から作成した。
+- やったこと: 演習画面の全行を、左に項目名、右に`← 選択値 →`を置く同じ形へ整理した。1vs1は9行、2vs2へ切り替えると`ALLY CPU`と`ENEMY CPU`の2行だけを追加する。追加2体はランダムではなく、演習開始前に個別選択したキャラで出撃する。
+- なぜ: 項目名が枠の上へ散らばり、何を変える行か一目で追いにくかったため。2vs2で味方・敵の追加キャラを試したいのに、毎回ランダムで固定できなかったため。
+- やってはいけないこと: 通常対戦・オンライン・チュートリアルのキャラ決定へ演習設定を混ぜない。2vs2だけの2枠を1vs1で表示して空白を作らない。既存の風・必殺・跳躍・CPU設定を演習中メニューへ勝手に移さない。端末時刻や画面サイズを対戦判定に使わない。
+- 互換性: v151以前の中断データに追加2体の選択が無い時は、従来と同じ初期キャラへ安全に補う。新しい選択は演習の中断データだけに含める。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v152-training-setup-layout`へ更新した。
+- 新テスト: 2vs2で追加2行が現れ、同じ高さの行レイアウトに収まり、選んだ2体が実際にp2/e2として出撃する検査を追加した。実装後の`regressiontest p1`は **267 passed, 0 failed**。
+- 最終テスト: `seattest 20件×2席 + regressiontest 267件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1,234件すべて成功**。画面・演習設定のみの変更なのでloopbacktestの中継数も `38 / 64 / 83 / 61 / 48` のまま。
+- 実画面: この作業環境は接続可能な実ブラウザが0台。GitHub Actionsのモバイル実ブラウザ検査は成功。メロニキの実機では文字切れ・押しやすさを確認する。
+- `database.rules.json`は変更なし。Firebase Console作業なし。
+
+## v151 演習モードの練習条件（公開済み・PR #92）
+
+- 作業ブランチ: `feat/v151-training-options`。公開済みmaster（v150・PR #91）から作成した。
+- やったこと: 演習の条件画面で、必殺ゲージ（通常／常時MAX）、跳躍（1試合に1回／毎ターン）、CPU行動（停止／弱／中／強）、風向き（ランダム／左／無風／右）、風の強さ（弱30%／中60%／強100%）を、それぞれ左右の矢印で選べるようにした。CPUを停止にしても1.5秒後に自動で手番を渡すため、対戦が止まらない。
+- なぜ: キャラや弾道を検証する時、毎回ゲージをためたり、風やCPUの動きを待ったりせず、狙った条件をすぐ再現できるようにするため。
+- やってはいけないこと: 通常CPU対戦・オンライン・チュートリアルには新設定を効かせない。CPU停止で手番を固めない。移動不能中まで跳躍可能にしない。風の選択や端末時刻を通信対戦の判定へ使わない。カスタムステージ固有の風を優先する。
+- 互換性: v150以前の中断データにある従来の`windIndex`は、新しい風向き・強さへ読み替える。新しい演習設定は中断データに含めるが、オンライン開始データの条件は変えない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v151-training-options`へ更新した。
+- 新テスト: 先に必殺常時MAX・跳躍毎ターン・CPU停止・右向き強風が演習だけで同時に効き、本編の必殺ゲージは変えない検査を追加した。旧実装では `regressiontest p1` が **265 passed, 1 failed**。実装後は **266 passed, 0 failed**。
+- 最終テスト: `seattest 20件×2席 + regressiontest 266件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1,232件すべて成功**。設定画面だけの追加なのでloopbacktestの中継数も `38 / 64 / 83 / 61 / 48` のまま。
+- 実画面: ローカルHTTP＋実ブラウザを試したが、この作業環境で接続できるブラウザは0台だった。PRのモバイル実ブラウザ検査で画面遷移を確認し、公開候補ではメロニキの実機で各行の文字切れ・重なり・タップを確認する。
+- `database.rules.json`は変更なし。Firebase Console作業なし。
+
+## v150 必殺カットイン音の強化（公開済み・PR #91）
+
+- 作業ブランチ: `feat/v150-special-cutin-sfx`。公開済みmaster（v149・PR #90）から作成した。
+- やったこと: 必殺技の「オーラ→カットイン」へ切り替わる瞬間だけの専用ジングルを、低音のためから上昇音、最後の決め音へ作り替えた。従来の短く散らばった電子音より、必殺技の始まりがはっきり分かる構成にした。
+- なぜ: 必殺カットイン音が弱く、通常砲撃や爆発と違う特別感が不足していたため。
+- 音源方針: Pixabayの`Magic charge mana 2`（FxProSound、2秒、Pixabay Content License）を候補として確認したが、この作業環境では公式ダウンロードが拒否された。今回は外部音源を新規に同梱せず、既存の音の仕組みだけで作り替えた。読込待ち・オフライン時の無音・追加ライセンス記録を増やさない。
+- やってはいけないこと: 通常弾・タイトル砲弾・跳躍・着弾音は変えない。必殺の発射時刻、ダメージ、弾道、通信、BGMと効果音の設定経路は変えない。音の読込結果や端末時刻を対戦判定に使わない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v150-special-cutin-sfx`へ更新した。
+- 新テスト: 先に「低音から立ち上がる、0.7秒以上の必殺専用ジングル」の検査を入れた。旧実装では `regressiontest p1` が **264 passed, 1 failed**。実装後は **265 passed, 0 failed**。
+- 最終テスト: `seattest 20件×2席 + regressiontest 265件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1230件すべて成功**。音だけの変更なのでloopbacktestの中継数も `38 / 64 / 83 / 61 / 48` のまま。
+- 実画面: ローカルHTTP＋実ブラウザはこの作業環境でブラウザを起動できないため未確認。PRのモバイル実ブラウザ検査で画面遷移を確認し、実際の音色は公開候補をメロニキが実機で最終確認する。
+
+## v149 キャラ選択の必殺技紹介文（公開済み・PR #90）
+
+- 作業ブランチ: `feat/v149-character-special-descriptions`。公開済みmaster（v148・PR #89）から作成した。
+- やったこと: モンスター選択カードの「必殺技の解説」欄を、固定の`(仮)雰囲気解説`ではなく、16キャラそれぞれの必殺技らしさが伝わる短い紹介文へ置き換えた。必殺技名のすぐ下に表示する。
+- なぜ: メロニキの意図は仮の文字を残すことではなく、各キャラの紹介文で欄を埋めることだったため。
+- やってはいけないこと: バトル中の性能値・HP・通常弾・必殺技の効果は変更しない。以前の技術寄りで古い`specialDesc`をそのまま流用しない。紹介文は固定の短文にし、端末や対戦状態で内容が変わる情報は入れない。
+- キャッシュ: `index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`を、ともに`v149-character-special-descriptions`へ更新した。
+- 新テスト: 先に紹介文が各キャラにあり、選択カードにその文が描かれ、仮の文字が描かれないことを検査した。実装前は `regressiontest p1` が **263 passed, 1 failed**（この検査だけ失敗）。実装後は **264 passed, 0 failed**。
+- 最終テスト: `seattest 20件×2席 + regressiontest 264件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1228件すべて成功**。loopbacktestの中継数も `38 / 64 / 83 / 61 / 48` で変化なし。
+- 実画面: ローカルHTTP＋実ブラウザはこの作業環境でブラウザを起動できないため未確認。PRのモバイル実ブラウザ検査で確認する。
+
+## v148 壊れない鋼鉄地形（公開済み・PR #89）
+
+- 作業ブランチ: `feat/v148-indestructible-steel-terrain`。公開済みmaster（v147・PR #85まで）から作成した。メロニキの「大きいステージは標準／大型の選択式にする」方針を受け、まず闘技場の鉄球と同じように砲撃で壊れない鋼鉄地形を、ステージ制作へ追加した。大きいステージの選択式そのものは、カメラ・出撃位置・オンライン同期をまとめて扱う別目的の次版に分ける。
+- やったこと: Stage Studioの地形素材で、`通常（破壊可能）` と `壊れない鋼鉄` を選べるようにした。鋼鉄はステージ全体へ適用する素材で、通常地形と1枚の中で混ぜない。鉄板の継ぎ目・斜めの光・真鍮のリベットを描き、ステージカードのプレビューも同じ黒鉄調にした。鋼鉄ステージは砲弾が着弾・爆発しても地形の当たり判定と地表を削らず、キャラは通常どおり乗れる。
+- なぜ: 2vs2と高さのあるステージで、壊れない足場・壁・柱を安全に作れるようにするため。最初から形式に予約されていた`steel / indestructible`を有効化し、書き出し・読み込み・ローカル戦・オンラインの同じステージ受け渡しまで一貫させた。
+- やってはいけないこと: 鋼鉄でも砲弾の命中・爆発・ダメージ・風・通信手順を変えない。地形の見た目だけ硬くして当たり判定を削れる状態にしない。1ステージ内で通常地形と鋼鉄を混在させない。端末ごとの描画結果や時刻をオンライン判定へ使わない。`index.html`の`BUILD_ID`と`sw.js`の`CACHE_VERSION`はともに`v148-indestructible-steel-terrain`で一致させた。Stage Studio側もキャッシュを`1.8.0-steel-terrain`へ更新した。
+- 新テスト: 実装前に、鋼鉄素材が無効な旧実装でStage Studio検査を走らせ、**50件中2件失敗**（鋼鉄の許可と選択欄）することを確認してから実装した。新規の鋼鉄地形テストは、丸い爆発の穴あけ後も衝突判定が残ること、実ゲームでカスタム鋼鉄ステージに着弾しても地形が残ることを確認する。
+- 実測テスト: `seattest 20件×2席 + regressiontest 264件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 51件`、合計 **1228件すべて成功**。loopbacktestの中継数は描画・地形素材の追加だけなので従来どおり`38 / 64 / 83 / 61 / 48`。ブラウザ接続がこの作業環境に無く、ローカルHTTPの実画面確認は未実施（`npm run e2e`もPlaywright本体未導入で起動不可）。PR確認時にメロニキの実ブラウザで、鋼鉄を選択→テスト砲撃→地面に穴が開かないことを確認する。
+- 順番: 先に予定していた必殺カットイン音の差し替えは、今回の鋼鉄地形とキャラ選択紹介文を優先したため **v150** へ繰り下げた。`database.rules.json`は変更なしで、Firebase Console作業は不要。
+
+## v147 モンスター選択カードの木板デザイン（公開済み・PR #85）
+
+- 作業ブランチ: `feat/v147-character-card-wood-design`。最新版master（v146・PR #84まで）から作成し、記録専用のPR #83には積み増していない。PR #85でmasterへ反映した。
+- やったこと: モンスター選択カードを黒鉄＋キャラ色の光から、濃淡のある木板、固定の木目、黒鉄金具、真鍮鋲を組み合わせた意匠へ変更した。選択中もキャラ色のネオン発光は使わず、木板の縁だけを明るくして見分ける。必殺技名の下には紙札状の説明欄を新設し、正式文章が決まるまでは全キャラ共通で `(仮)雰囲気解説` と表示する。キャラ名の横には `HP 100` の形で各キャラの最大HPを表示する。
+- 理由: 以前のカードは暗い金属板とキャラ色の光が中心で、ゲーム内の砦・木材・真鍮という雰囲気から離れていた。またv134で古い性能説明を外した後、今後の必殺技説明を置く場所とHPの確認手段が無かった。木板と貼り紙で役割を分け、内容を後から差し替えられる読みやすい枠を先に整えた。
+- やってはいけないこと: `(仮)雰囲気解説` を既存の `specialDesc` へ勝手に戻さない（内容はメロニキの今後の指示で決める）。型・紹介文・性能目盛りを復活させない。表示のために `maxHp` の実値や防御力など対戦性能を変えない。木目へ毎フレーム変わる乱数を使わない。選択中の印をキャラ色のネオン発光へ戻さない。
+- キャッシュ: `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v147-character-card-wood-design` へ更新した。
+- 新規検査: 実装前の旧カードで `regressiontest p1` が **261件成功・3件失敗**（最大HPなし／仮説明なし／木板＋紙札の指定なし）になることを確認してから実装した。実装後は両席とも264件成功。
+- 自動検査: `seattest 20件×2席 + regressiontest 264件×2席 + resulttest 96件 + loopbacktest 103件 + stage3test 403件 + lobbysimtest 7件 + Stage Studio 49件`、合計 **1226件すべて成功**。中継したメッセージ数は `38 / 64 / 83 / 61 / 48` のまま。
+- 見た目確認: ローカルHTTPで2回確認を試みたが、この作業環境から接続できる実ブラウザが0件で、スマホ幅での文字切れ・重なり・木板の見え方はまだ確認できていない。メロニキから2026-08-09に「マージまで」と明示の指示があったため、自動検査全件成功と中継数不変を確認してPR #85を公開した。**公開版の実機で文字切れ・重なり・木板の見え方を確認すること。**
+- `database.rules.json` は変更なし。Firebase Console作業なし。
+
+## v146 防御力・通常弾性能の統一（公開済み・PR #84）
+
+- 作業ブランチ: `feat/v146-normal-attack-defense-unification`。公開中の最新版master（v145・PR #82まで）から作成し、記録専用のPR #83には積み増していない。
+- 何を: 岩の被ダメージ15%軽減と騎士の20%軽減を外し、全16キャラの防御補正を等倍へ統一した。v135で共通化済みの通常弾について、全キャラが同じ弾速・風・重力・爆風・狙いガイド・CPU弾道になり、実際に生成した通常弾を同じ位置へ直撃させると全員が同じ爆風倍率1・45ダメージになることまで検査へ固定した。
+- なぜ: 通常弾の発射性能はv135で揃っていたが、岩と騎士だけ防御補正が残り、同じ通常弾の直撃がほかのキャラ45に対して岩38・騎士36になっていたため。通常攻撃の公平化を最終的な命中結果まで完成させる。
+- やってはいけないこと: キャラ固有の最大HP・移動燃料・必殺技・跳躍を一緒に揃えない。通常弾の共通値そのもの（直撃45、爆風倍率1、弾速・風・重力・ガイド長）を別目的の調整で変えない。必殺技の固有ダメージ・爆風・弾道へ通常弾の値を流用しない。端末ごとに変わる値を命中・ダメージ・通信判定へ使わない。
+- 先行不合格確認: 新しい2件の検査だけを先に足した旧実装で `regressiontest p1` を実行し、岩・騎士の防御補正と実直撃ダメージ差を検出して `259 passed, 2 failed` になることを確認した。実装後は両席とも `261 passed, 0 failed`。
+- 実測検査: `seattest 20件×2席 + regressiontest 261件×2席 + resulttest 96件 + stage3test 403件 + lobbysimtest 7件 + loopbacktest 103件`、ゲーム本体 **1,171件すべて成功**。Stage基盤49件を含む全体は **1,220件成功、失敗0**。
+- 決定性: loopbacktestの中継数は `38 / 64 / 83 / 61 / 48` のまま。防御補正以外の攻撃性能・描画・通信処理は変えていない。
+- キャッシュ: `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v146-normal-attack-defense-unification` へ更新した。
+- 見た目の変更はなし。`database.rules.json` も変更なし。Firebase Console作業なし。
+
+## v145 Cartoon Explosionへの差し替え（公開済み・PR #82）
+
+- 作業ブランチ: `feat/v145-cartoon-explosion-sfx`。公開中の最新版master（v144・PR #81まで）から作成した。
+- 何を: 通常弾と `TAP TO START` の起動砲弾が壁へ当たる瞬間に共用している音源を、メロニキ指定のPixabay素材 `Cartoon Explosion`（作者: Universfield、1.411秒）へ差し替えた。ゲーム中の通常弾は音量0.34、起動時の壁着弾は0.26のまま変更していない。音源本体、配布元URL、直接取得URL、Pixabay Content License、確認日、SHA-256は `assets/SOUND_LICENSES.md` に記録した。
+- なぜ: v144で入れた `Loud Explosion` の音色がゲームの砲撃音として合わなかったため。メロニキが選んだ短い漫画調の爆発音へ、必殺カットイン音の作業より先に差し替えた。
+- キャッシュ: `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v145-cartoon-explosion-sfx` へ更新し、音源URLを `?v=3` にした。外部サイトからゲーム中に直接再生せず、同梱音源を先読みし、読み込み失敗時だけ既存の合成爆発音へ戻す。
+- やってはいけないこと: この音を必殺技・跳躍・電磁波・花火の拡散弾・必殺カットインへ広げない。通常弾と起動砲弾の音量を勝手に変えない。外部URLをゲーム中に直接再生しない。音源の中身を替える時はハッシュとURLの `?v=` を一緒に更新する。音の読込結果や端末時刻を命中・ダメージ・通信などの対戦判定へ使わない。次の必殺カットイン音は別目的のv146として扱う。
+- 先行不合格確認: 新音源の期待値へ検査だけを先に変えた古い実装で、`stage3test` は音源本体・版付きURL・出典の3件が落ちて `400/403 passed`、Stageゲーム統合は旧ビルド番号で1件が落ちて `5/6 passed` になることを確認した。古い音源や記録が残ったままでは合格しない。
+- 実測検査: `seattest 20件×2席 + regressiontest 259件×2席 + resulttest 96件 + stage3test 403件 + lobbysimtest 7件 + loopbacktest 103件`、ゲーム本体 **1,167件すべて成功**。Stage基盤49件を含む全体は **1,216件成功、失敗0**。
+- 決定性: loopbacktestの中継数は `38 / 64 / 83 / 61 / 48` のまま。音源以外の描画・攻撃性能・通信処理は変えていない。
+- 実ブラウザ確認: ローカルHTTPで同梱音源 `?v=3` を配信し、実Chromeで45,139バイトを取得して1.411秒のMP3として再生用に展開できることを確認した。目視を伴う変更はない。端末のスピーカーでの音色・音量はPR確認時にメロニキが実機で確認する。
+- `database.rules.json` は変更なし。Firebase Console作業なし。
+
+## v144 指定爆発音への差し替え（公開済み・PR #81）
+
+- 作業ブランチ: `feat/v144-explosion-sfx`。未マージだった旧PR #66の差分は積み増さず、公開中の最新版master（v143・PR #80まで）から作り直した。
+- 何を: 通常弾の着弾音を、メロニキ指定のPixabay素材 `Loud Explosion`（作者: DRAGON-STUDIO、2.904秒）へ差し替えた。同じ音を `TAP TO START` の砲弾が壁へ当たる瞬間にも使い、ゲーム中の通常弾は音量0.34、起動時の壁着弾はさらに控えめな0.26とした。音源本体、配布元URL、直接取得URL、Pixabay Content License、確認日、SHA-256は `assets/SOUND_LICENSES.md` に記録した。
+- なぜ: 未マージの旧版で行った指定音源への変更が、その後masterへ入ったフォント統一などを含まない古い土台に残っていたため。最新版の機能と画面を一切巻き戻さず、指定された爆発音だけを改めて載せ直した。
+- キャッシュ: `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v144-explosion-sfx`へ更新し、音源URLを `?v=2` にした。外部サイトからゲーム中に直接再生せず、同梱音源を先読みし、読み込み失敗時だけ既存の合成爆発音へ戻す。
+- やってはいけないこと: この音を必殺技・跳躍・電磁波・花火の拡散弾・必殺カットインへ広げない。効果音設定やミュートを迂回しない。通常弾より起動砲弾を大音量にしない。音源の中身を替える時はハッシュとURLの `?v=` を一緒に更新する。音の読込結果や端末時刻を命中・ダメージ・通信などの対戦判定へ使わない。
+- 新規検査: 壊した状態で先に実行し、起動砲弾の検査が `258 passed, 1 failed`、音源・版・音量・出典の検査が `399/403 passed` になることを確認した。実装後は `seattest 20件×2席 + regressiontest 259件×2席 + resulttest 96件 + stage3test 403件 + lobbysimtest 7件 + loopbacktest 103件`、ゲーム本体 **1,167件すべて成功**。Stage基盤49件を含む全体は **1,216件成功、失敗0**。
+- 決定性: loopbacktestの中継数は `38 / 64 / 83 / 61 / 48` のまま。描画・効果音以外の対戦処理は変えていない。
+- 実画面確認: ローカルHTTPと実ブラウザで、build v144表示、起動砲弾からタイトルへの遷移、同梱音源 `?v=2` の実取得、CPU戦で通常弾を撃って次の手番へ進むところまで確認。ブラウザのエラー・警告は0件。v143のフォントと画面構成も維持されている。
+- `database.rules.json` は変更なし。Firebase Console作業なし。
+
+## カタモン全体の2フォント統一（公開候補）
+
+- 作業ブランチ: `ui/katamon-two-font-system`
+- 基本ルール: 短く大きく見せるタイトル・モード名・対戦開始・勝敗・必殺技名だけをReggae One、それ以外のメニュー・ボタン・名前・戦闘情報・説明・ダイアログはRocknRoll Oneへ統一した。
+- 対象: ゲームCanvas、ゲーム外HTML画面、カスタムステージ管理、Stage Studio。デバッグ表示や小型マップ内の補助情報もRocknRoll Oneへ揃え、従来の`monospace`等を通常画面から除いた。
+- 配信: 両フォントを`assets/fonts/`へ同梱し、外部フォント通信へ依存しない。各フォントはRegular 400を1ファイルだけ読み込み、太字が必要な通常UIはブラウザ・Canvasの合成ウェイトを利用する。
+- 軽量化: RocknRoll Oneはユーザー入力を含む日本語全文字を表示できる通常UI用TTF、Reggae Oneはゲーム内で強調表示する語句に絞ったWOFF2としている。
+- キャッシュ: ゲーム本体を`v143-katamon-font-system`、Stage Studioを`1.5.0-font-system`へ更新した。既存PWAでは更新案内から下書きを保存して安全に切り替える。
+- 実画面確認: iPhone相当390×844とAndroid相当412×915で両フォントの読込、横はみ出しなし、ボタン文字切れなしを確認した。
+- 未確認: iPhone/Android実機の字形、ホーム画面・インストール済みPWAでの初回フォント読込。
+
+## 端末戻る確認タイトルをReggae Oneへ決定（公開候補）
+
+- 作業ブランチ: `ui/reggae-one-exit-title`
+- 対象: `アプリを閉じますか？`の見出しだけ。Kaisei Decol試用後のユーザー判断によりReggae Oneへ変更し、本文・ボタン・他画面のフォントは維持する。
+- 実装: Reggae One Regular 400を見出しに必要な文字だけ2.2KBのWOFF2へ絞り、`assets/fonts/`へ同梱した。外部フォント通信へ依存せず、iPhone・Android・PWAオフライン時も同じ書体を使う。
+- ライセンス: SIL Open Font License 1.1を`assets/fonts/Reggae-One-OFL.txt`へ同梱した。
+- キャッシュ: ゲーム本体とService Workerを`v142-reggae-one-exit-title`へ更新した。
+- 自動確認: 既存ゲーム1,164件 + Stage基盤48件 = 1,212件成功、失敗0。iPhone相当WebKit 7/7、Android相当Chromium 7/7、合計14/14成功。Android相当412×915でReggae Oneの読込、1行表示、パネル内の収まりを目視確認した。
+- 未確認: iPhone/Android実機での字形。
+
+## ゲーム外HTML画面の世界観統一（公開候補）
+
+- 作業ブランチ: `ui/game-styled-overlays`
+- 対象: 端末戻る確認、ランキング用名前入力、オンラインロビーの外装、カスタムステージ管理、ステージ名変更・削除確認。
+- 意匠: ゲーム本編の石壁・木板・黒鉄・真鍮鋲・紋章を基準にし、添付された盾・羊皮紙素材の方向性をCSSの木枠と羊皮紙メッセージへ反映した。市松模様がJPGへ焼き付いた添付画像自体は使用していない。
+- 戻る確認: 紋章、木枠、真鍮鋲、羊皮紙説明、主従が明確な縦並びボタンへ変更。390×844でパネル354×354px、両ボタン57px以上を確認した。
+- カスタム管理: 木製ヘッダー、紋章、羊皮紙の空状態、黒鉄カード、木製固定フッターへ統一。`prompt()`と`confirm()`によるブラウザ標準画面を廃止し、名前変更・削除をゲーム内ダイアログへ置き換えた。
+- キャッシュ: 予約済みv139を避け、ゲーム本体とService Workerを`v140-game-styled-overlays`へ更新した。
+- 自動確認: 既存ゲーム1,164件 + Stage基盤48件 = 1,212件成功、失敗0。iPhone相当WebKit 7/7、Android相当Chromium 7/7、合計14/14成功。Android相当390×844で戻る確認とカスタム管理を追加目視確認した。
+- 未確認: iPhone/Android実機のフォント差、ホーム画面PWAでの見た目、実機の狭い横画面。
+
+## 端末の戻る操作による誤終了防止（公開候補）
+
+- 作業ブランチ: `fix/device-back-exit-confirm`
+- 対象: バトル中以外の起動前、タイトル、キャラ選択、演習設定、ランキング、オンラインロビー、結果ロビー、カスタムステージ管理。
+- 挙動: 端末の戻る操作を履歴ガードで受け、最前面に`アプリを閉じますか？`を表示する。`このまま遊ぶ`は同じ画面へ安全に戻し、`アプリを閉じる`を明示した時だけ履歴を抜ける。
+- 維持: バトル中は従来どおり、戻る操作でゲーム内メニューを開く。Canvas確認やオンライン退出確認とは重ならない。
+- キャッシュ: 予約済みv139を使わず、`v138-device-back-confirm`として分離する。
+- 自動確認: 既存ゲーム1,164件 + Stage基盤48件 = 1,212件成功、失敗0。iPhone相当WebKit 7/7、Android相当Chromium 7/7、合計14/14で、起動前・タイトルの確認表示、48px以上の2択、継続、明示終了だけの前ページ遷移を確認した。
+- 未確認: iPhone/Android実機の物理戻る操作、ホーム画面PWAでの終了。
+
+## カスタムステージのプライベートオンライン対戦（PR #75・公開済み）
+
+- 作業ブランチ: `feat/custom-stage-online`（`master`へマージ済み）
+- 公開済み修正: PR #74で、画面下部の`カスタムステージ`固定ボタンを起動前とタイトルでは非表示、`演習`設定だけ表示へ修正した。公開版は`v138-stage-studio-launcher`。
+- オンライン実装: ホストがロビーで保存済みステージを選択し、既存Firebase開始スナップショットで正規JSONを参加者と観戦者へ配布する。新しいサーバーは追加しない。
+- 開始条件: 256KB上限、スキーマ、許可リスト、地形、`stageId`、`schemaVersion`、`contentHash`、`gameCompatibility`を通信入口と適用直前で検証し、着席中の全プレイヤーから既存`ready`確認が返るまで入力をロックする。
+- 分離: プライベート部屋だけで明示選択でき、公式地形、通常ランダム対戦、ランキング、公式中断セーブへ混入しない。参加者の事前インポートは不要。
+- キャッシュ: 公開版は予約済みv139を使わず、`v138-custom-stage-online`として分離している。
+- 自動確認: 既存ゲーム1,160件 + Stage基盤48件 = 1,208件成功、失敗0。モバイルE2EはiPhone相当WebKit 5/5、Android相当Chromium 5/5の合計10/10成功。
+- 未確認: 実際のFirebaseを介した複数端末対戦、iPhone/Android実機、実機PWA。公開後に2台で部屋作成、参加、開始、再戦、観戦を確認する。
+
+## Stage Studio コンパクト地形操作（PR #72・公開済み）
+
+- 作業ブランチ: `feat/stage-studio-landscape-controls`
+- 状態: PR #72を`master`へマージし、Stage Studio `1.4.0-mvp`としてGitHub Pagesへ公開済み。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
+- 地形ツール: 常時表示していた`描く / 削る / キャラ / 塗る / 線 / 四角 / 円 / ロック`を、中央の`選択中`ボタンから開くツールメニューへ集約した。選択後は自動で閉じる。
+- マップ表示: 地形・出撃・テストのCanvas内から操作ボタンを撤去した。地形の`横画面 / 倍率 / 設定`、出撃・テストの`横画面`はマップ外の操作欄へ移した。
+- PWA: JS/CSSとService Workerキャッシュを`1.4.0-mvp`へ更新した。ステージ形式とゲーム本体は変更していない。
+- 自動確認: Stage基盤47/47件、iPhone相当WebKit 5/5件、Android相当Chromium 5/5件、モバイルE2E合計10/10件が成功。
+- 実画面確認: 390 × 844の縦画面と844 × 390の横画面で、Canvas内の操作ボタン0件、マップ外の倍率・横画面・設定操作、ツールメニューの開閉、横はみ出しなしを確認。
+- 公開確認: GitHub PagesのHTMLが`styles-1.4.0-mvp.css`と`app-1.4.0-mvp.js`を参照し、公開JavaScriptのバージョンとツールメニュー処理が`1.4.0-mvp`であることを確認。
+- 未確認: iPhone/Android実機。
+
+## Stage Studio 横画面・折りたたみ設定（PR #70・公開済み）
+
+- 作業ブランチ: `feat/stage-studio-landscape-controls`
+- 状態: PR #70を`master`へマージし、Stage Studio `1.3.0-mvp`としてGitHub Pagesへ公開済み。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
+- UI: `地形 / 出撃 / テスト`の各マップ左上へ48pxの横画面ボタンをフロート配置した。横向きでは地形ツール、出撃設定、テスト操作をマップ右側へ並べ、縦向きでは従来どおりマップ直下へ置く。
+- 地形設定: ブラシサイズ等は初期状態で隠し、マップ内の48px`設定`ボタンから前面パレットを開く。値の変更、整形処理、地形ツール選択後は自動で閉じ、縦向きではマップ直下から下部ナビ上、横向きではマップを覆わず右側ツール欄へ表示する。
+- 端末差: Screen Orientation APIとFullscreen APIを機能検出する。対応するAndroid/PWAでは横向き固定を試し、強制固定できないiPhone Safari等では画面回転ロック解除と手動回転の案内をマップ内へ表示する。非対応APIを必須にしない。
+- PWA: JS/CSSと子Service Workerキャッシュを`1.3.0-mvp`へ更新済み。下書きや正規ステージ形式、ゲーム本体ビルドは変更していない。
+- 自動確認: Stage基盤47/47件成功。既存ゲームは初回に既存ランダム地形検査が1件だけ一過性で失敗し、同じ回帰スイート再実行516/516件、残りの既存検査644/644件が成功した。モバイルE2EはiPhone相当WebKit 5/5、Android相当Chromium 5/5、合計10/10件成功。
+- 実画面確認: 390×844でボタンと回転案内がマップ内に収まり横はみ出し0。844×390で3画面すべてマップと操作を左右分割し、横はみ出し0。
+- 公開確認: 公開HTMLが`styles-1.3.0-mvp.css`と`app-1.3.0-mvp.js`を参照し、地形マップ内の`設定`ボタンを含むことを確認した。公開JavaScriptの自動折りたたみ処理と、Service Workerの`1.3.0-mvp`キャッシュも確認済み。
+- 未確認: iPhone/Android実機、インストール済みPWAでのOS向き固定、端末の物理回転、safe-area実寸。
+
+## Stage Studio 地形編集ワークスペース改修（PR #69）
+
+- 作業ブランチ: `feat/stage-studio-terrain-workspace`
+- 分離worktree: `.codex-worktrees/stage-studio-mvp`
+- 状態: 初回MVPはPR #65、ゲームUI改修はPR #67、テスト操作帯はPR #68で公開済み。今回の`1.2.0-mvp`では、地形画面をキャンバス中心のデザインアプリ型ワークスペースへ変更し、マップ直下へ主要ツールとUndo/Redoを常時表示する。細かな設定は`ブラシ / 整形 / 表示 / 見た目`のタブ式インスペクターへ整理した。
+- データ基盤: `column-segments-v1`、決定的seed生成、正規化JSON、SHA-256、厳格検証、公式/カスタム保存領域分離、JSON/ZIP往復を実装済み。
+- UI: ゲーム同系統の鉄板・真鍮UI、既存4背景、地形質感、実ゲーム寸法キャラを地形・出撃・テストCanvasへ反映。地形のキャラガイドはドラッグでき、円形当たり判定が地形へ重なると赤く警告する。`赤いキャラを安全位置へ`で赤いガイドだけを現在位置に最も近い接地可能な足場へ戻せ、Undo/Redoと自動保存にも対応する。テストの移動・砲撃後もマップと操作帯が同時に見える。
+- PWA: 子スコープService Worker、オフラインアプリシェル、自動保存、更新前保存検査、safe-area対応、縦画面下部ナビを実装済み。旧キャッシュ混在を避けるためJS/CSSと子Service Workerキャッシュを`1.2.0-mvp`へ更新した。
+- 鋼鉄: 共通素材カタログへ無効・出力不可の将来項目だけ準備。ゲーム本体対応まではUI選択不可、現行JSON/ZIPも安全に拒否する。
+- 最終自動確認: 既存ゲーム1,160件 + Stage基盤45件 = 1,205件成功、失敗0。PlaywrightのiPhone相当WebKit 4/4、Android相当Chromium 4/4、合計8/8成功。赤いキャラの安全位置補正、地形ワークスペースの48px操作領域と横はみ出し防止、JSON/ZIP双方のインポート、ゲーム再読込後の永続化、選択、実バトル開始、下書き復元、PWAオフライン再表示まで確認済み。
+- 安全確認: Critical/High残存なし。カスタム戦は公式の中断セーブを保持し、通常/オンライン経路へ混入しない。MVPでは埋込画像を拒否する。
+- 未確認: iPhone/Android実機、ホーム画面/インストール済みPWA、OS共有シート、AirDrop、Files保存、safe-area実寸、ブラウザ完全終了後のIndexedDB保持。
+- 公開経路: `master`へ直接pushせず、PR #69経由でGitHub Pagesの`/tools/stage-studio/`へ反映する。公開URLは https://futsalife24-bot.github.io/katamon/tools/stage-studio/ 。
+- 仕様・操作・QA記録: `docs/stage-studio-design.md`、`docs/stage-format.md`、`docs/stage-studio-user-guide.md`、`docs/mobile-stage-studio-qa.md`。
+
+以下はゲーム本体の版管理情報である。
+
+## 引き継ぎ元
+
+- CodexセッションID: `019fbc4d-d158-75e3-9e62-bcdb3d408d10`
+- このファイルは、上記セッションの全履歴を確認して作成した現行の引き継ぎ正本。
+- 古い日付入りHANDOFFは参考資料とし、現在地について食い違う場合はこのファイルを優先する。
+
+## 正本とGitの現在地
+
+- ローカル: `C:\Users\futsa\OneDrive\デスクトップ\カタモン`
+- GitHub: `https://github.com/futsalife24-bot/katamon`
+- ブランチ: `master`
+- 作業中ブランチ: `feat/stage-studio-playtest-dock`（Stage Studioのテスト操作帯改修）
+- 現行公開ビルド: `v138-stage-studio-mvp`（初回Stage Studio MVP。PR #65）
+- 現行公開単位: `v138-stage-studio-ui` / Stage Studio `1.1.0-mvp`（PR #67）
+- 今回の公開候補: Stage Studio `1.2.0-mvp`（PR #69、地形編集ワークスペース改修。ゲーム本体のビルド番号・Service Workerは変更なし）
+- 次の候補: `v139`（必殺カットイン音を強化）
+- ひとつ前: `v133`（次の風を1区間先まで予報。PR #59）
+- その前: `v132`（タイトル画面の静止部分を1枚に焼く。PR #58）
+- さらに前: `v131`（キャンバスを画面の実画素ぴったりに。PR #56）
+- v121（段D 切断・CPU引き継ぎ。PR #45）で入れたルール変更は **2026-08-05 にConsoleへ反映済み**（ユーザー操作）。
+- 公開URL: https://futsalife24-bot.github.io/katamon/
+- 版ごとの中身は下の「vNN で入れた変更」を見る。ここに積み上げない（読めなくなる）。
+- `database.rules.json` は **Console へ反映済み**（2026-08-04、ユーザー操作）。クライアントも公開済み（PR #27）。
+- v103（段B）は単体では公開しない約束のため、番号を分けず v104 としてまとめてある。
+- `index.html` の `BUILD_ID` と `sw.js` のキャッシュ版数は必ず同じ番号にする。
+- セッション最終開発コミット: `14ea290`（跳躍・引き分け・演習機能）
+- 正本移行コミット: `dbfe3c6`
+- 統合実装計画: `docs/実装計画_統合版.md`（2026-08-02 ユーザー承認済み）
+- 現在の進行: **Stage Studio `1.2.0-mvp`の地形編集ワークスペース改修をPR #69で公開中。**
+  既存1,160件とStage基盤45件、合計 **1,205件成功**。モバイル相当E2EはWebKit/Chromium合計8件成功。390×844のブラウザ確認では地形マップ、2段ツールドック、キャラ安全補正を同時表示し、横はみ出しがないことを確認した。
+  公開確認後は v139（必殺カットイン音）へ戻る。その後、各キャラの必殺技調整の相談を続ける。差し込み前の残タスク順は Issue #5（対戦部屋内の戦績表示）→ Issue #6（ランキング改修）→ Issue #4（オンラインHPバーのずれ）。
+  **2026-08-05、開発をCodexへ移管。**
+- Version順（ユーザー承認済み）: v92 = Issue #9（固定刻み）→ v93 = Issue #10（DEAD LINEより上で地形を完結）→ v94 = Issue #3（boom頂点炸裂）→ 以降は統合計画のロードマップを1つずつ繰り下げ。
+
+## v92 で入れた変更（Issue #9）
+
+- 物理を固定刻み `PHYSICS_DT = 1/120` で回すようにした。描画フレーム間隔をそのまま渡していたため、端末のリフレッシュレートが違うだけで弾が別の場所を通っていた。
+  - 固定刻みで回すのは「弾の更新」「`updateFalling`」「`simTimeMs`」の3つだけ。カメラ・演出・入力・CPU思考・通信は従来どおり描画フレーム基準。
+  - `takePhysicsSteps()` が刻み数を確定し、余りは破棄せず次フレームへ繰り越す。破棄すると端末ごとに進行量が変わり固定刻みの意味がなくなる。
+  - `update()` を `stepWorldPhysics()`（固定刻み）と `updateAfterPhysics()`（描画フレーム基準）へ分割した。
+- 端末差が出る浮動小数を判定経路から外した。`Math.hypot` はエンジンごとに最終桁が変わり得るため、しきい値比較は二乗のまま行い、距離値が必要な箇所は `Math.sqrt`（IEEE-754で正しい丸めが保証される）を使う `simDistance()` へ置換。闘技場の障害物の揺れ（`Math.sin`）は衝突判定に使う位置を1/64px単位へ丸めた。
+- 跳躍が闘技場の画面外壁（`ARENA_WALL_SKY_EXTENSION`）へ当たった際、`Math.max(-UNIT_RADIUS, ...)` で画面天井 `y=-16` へ貼り付いていた問題を是正。`clampInsideArenaWall()` で壁の内側へ押し戻し、`y` は0以上にしてから落下させる。
+- `applySnapshot()` で `resetPhysicsClock()` を呼び、途中まで溜まった刻みを持ち越さないようにした。
+
+### 検証結果
+
+- 自動テスト合計 **508件すべて成功**（regressiontest に8件追加。旧492件から+16＝p1/e1の2席ぶん）。
+- 追加テストが修正前の実装で確実に落ちることを確認済み。
+  - 60fpsと30fpsでクレーター位置が約8pxずれる（`933.44` 対 `925.48`）。
+  - 跳躍が上空壁へ当たると `y=-16` になる。**実機のエラーログ `y.1(-16->348)` と同じ値を再現。**
+- `loopbacktest.js` の中継メッセージ数は `41 / 74 / 107 / 68 / 66` で3回連続一致（決定性の目印）。刻みを変えたため旧値 `78/72/105/92/81` からは変化しているが、新しい値が安定していることが重要。
+
+### 実機確認の結果（2026-08-02・ユーザー報告）
+
+- 不具合B（闘技場で壁方向へ跳躍）: 再発なし。
+- 不具合A（DEAD LINEぎわで被弾）: 再発なし。ただし元の再現条件が「ほぼDEAD LINEに接する深さのクレーター」というギリギリの状況を要するため、**手動再現の確度は高くない**。修正根拠は自動テスト側に置く。
+- 動作の重さ: 感じられず。
+- Issue #2 のチェック項目（準備押し直し、入室〜再戦、ダメージ一致、画面ロック、回線切替、切断、再入室）も問題なし。
+- **Issue #2 と Issue #9 はクローズ済み。**
+
+### 未実施として残した項目
+
+- 観戦1台を加えた表示確認。
+- リフレッシュレートの異なる端末同士での対戦（今回の修正が最も効く条件だが、端末の用意が難しく未実施）。
+- 既知の残課題: `simTimeMs` はターン境界のスナップショットで同期されるが、ターンの途中（照準中）に片方が画面ロックなどで止まると闘技場の障害物の位置がずれ得る。Issue #8（切断・画面ロック対応）で扱う。
+
+## v93 で入れた変更（Issue #10）
+
+- **地形の底をDEAD LINEで止めた。** `FLOOR_Y` が「地形の底」と「その列に地面が無い番兵」の2つの意味で使われていたため、前者だけを `TERRAIN_BOTTOM_Y = DEAD_LINE_Y`(636) へ分離した。番兵としての `FLOOR_Y`(960) はそのまま。
+  - 分離した箇所: 全列の初期セグメント、薄床生成の2箇所、地形描画の階調終端。
+  - `CONTROL_PANEL_Y` と `DEAD_LINE_Y` をファイル冒頭（`VW`/`VH` の隣）へ移動した。地形定数がこれらを参照するため。値と意味は変えていない。
+- **地形の帯を上へ持ち上げた**（`GROUND_MIN_Y` 380→300、`GROUND_MAX_Y` 600→516）。高低差の幅は220px→216pxでほぼ維持しつつ、最も低い場所の床の厚みを120px確保した。
+- 狙い: 「見えない数pxの差で即死」を「見える穴に落ちる」へ変える。闘技場（`tieredBasin`）は元からこの作り（外壁の底625・棚の底387/468/549がすべてDEAD LINEより上、中央は地形ゼロの奈落）で、全ステージをそれに揃えた形。
+- 貫通死の処理自体は既存（`intoVoid`）。地形の底が960で到達しなかっただけであり、新しい仕組みは追加していない。
+
+### クレーター半径と床の厚みの関係（実測）
+
+| 攻撃 | クレーター半径 | 床120pxを |
+|---|---|---|
+| 通常弾（最大） | 59.4px（`44 * 1.35`） | 貫通しない（2〜3発必要） |
+| ほとんどの必殺 | 〜117px | 貫通しない |
+| 岩の必殺 | 154.4px（`44 * 1.35 * 2.6`） | **1発で貫通する** |
+
+岩の必殺だけ1発で床が抜けるのは、技の説明が「地形大破壊(巨大クレーター)」であり役割どおりのため、意図的に許容する（ユーザー承認済み）。なお必殺技は今後ほぼ全キャラのテコ入れが想定されており、現時点での細かいバランス調整はしない方針。
+
+### 検証結果
+
+- 自動テスト合計 **534件すべて成功**（regressiontest に13件追加、p1/e1の2席ぶんで+26）。
+- 追加テストが薄い床（`GROUND_MAX_Y=600` に戻した床36px版）で確実に落ちることを確認済み。
+- 地形がランダム生成のため、5回連続で両席とも全通過することを確認（フレーキーでない）。
+
+### 未検証（実機QAで確認する）
+
+- 全7ステージの見た目とバランス。特に低地中心のステージ（`valley` など）は床が有限になったことで危険度が上がっており、遊んで確かめる必要がある。
+- 床が抜けたかどうかが実機の画面で目視判別できること。
+
+## v94 で入れた変更（Issue #13）
+
+- **元画像が左向きのキャラ（`facesLeft`）が相手に背を向ける問題を修正。** 該当は sumoeru / doRednote / akuma / kishi / neko / jinba / shinigami の7体。
+- 原因: `u.facingLeft` の意味が2箇所で食い違っていた。描画側は「画像を左右反転するか」、v91で追加された `faceUnitTowardOpponent` は「世界で左を向いているか」として扱っていた。左向き素材は反転すると右を向くため、意味が逆になる。
+- **v91のコミット `14ea290` で混入していたもので、v92・v93の変更が原因ではない。** `14ea290` / `aaa77f5` / `d09df1a` の3版で当該コードが1文字も同じであることを確認済み。v91のQAが初回砲撃401で序盤止まりだったため発見が遅れた。
+- 対処: 変換を `spriteFlipForFacing()` と `unitFacesLeftInWorld()` の2関数へ集約し、向き判定側と描画2箇所が必ず同じ式を通るようにした。`facingLeft` の値の意味（反転フラグ）と通信形式は変えていない。
+
+### 検証結果
+
+- 自動テスト合計 **540件すべて成功**（regressiontest に3件追加、p1/e1の2席ぶんで+6）。
+- 追加テストが修正前の実装で落ちることを確認済み。落ちるのは `facesLeft` の7体ぶん28件（7体 × 2ユニット × 2配置）だけで、他のキャラは通る。
+- あわせて既存テスト2件の設計上の弱点を直した。決着後は向きの再判定が走らないため新しい試合から始めるようにし、床の厚みの検証は風と乱数で着弾点がぶれないよう直接掘削する方式へ変更した。
+
+### 未検証（実機QAで確認する）
+
+- 跳躍の前後、移動後、オンライン復元後の向き。
+- `facesLeft` の7体を実際に使って背を向けないこと。
+
+## v95 で入れた変更（Issue #3）
+
+- **花火（スモエルの必殺）の炸裂を、飛行中の通信ではなく発射時の確定で決めるようにした。**
+  - 以前は飛行中に必殺ボタンで起爆し、`boom`パケットで相手へ合図していた。合図が届くまでに弾が進むため、端末ごとに違う場所で開き、8方向の拡散弾が別の場所を削っていた。
+  - `fireworkApexBurst()` が発射条件（起点・初速・風・重力）だけから炸裂の時刻と座標を数式で求める。風は飛行中変わらないことを確認済み（抽選はターンの切れ目のみ）。
+- **仕様**: 上へ撃った花火は弧の頂点で空中炸裂する（本体の爆発なし・拡散弾のみ）。頂点が発射点から180px（拡散弾の到達距離）以内の場合と、水平・下向きに撃った場合は空中で開かず、従来どおり着弾して炸裂する（本体の爆発あり）。
+  - 上へ撃つ＝範囲が広いが本体ダメージなし、下へ撃つ＝範囲は狭いが本体ぶん火力が高い、という使い分けが自然に生まれる。この威力差は元からコードにあったもので、新たに足した要素ではない。
+  - 「頂点が近すぎる時は開かない」の基準に拡散弾の到達距離をそのまま使うことで、自爆が原理的に起きない。
+- **廃止**: 飛行中の手動起爆、3秒の自動信管、`boom`パケットの送信。必殺ボタンの「起爆/BOOM/TAP」表示も削除した。
+- 8方向の基準角を弾の進行方向から**世界の絶対角**へ変更した。着弾炸裂時の速度差で扇の向きが変わるのを防ぐ。打ち上げ花火は飛来方向に関係なく丸く開くので見た目も自然。
+- **照準ガイドに炸裂予定地点の印を追加**（スモエルの必殺を構えている時のみ）。印が出ない時は着弾して開く。実際の炸裂と同じ関数で求めるので表示と結果がずれない。
+- 更新前の端末から届く`boom`は、検証を通したうえで無視する（拒否すると対戦が中断するため）。
+
+### 検証結果
+
+- 自動テスト合計 **554件すべて成功**（regressiontestに6件、stage3testに2件追加）。
+- 追加テストが修正前（v94）で落ちることを確認済み。上へ撃った花火が本体の爆発（半径50.6px）を起こしてしまう＝着弾炸裂していた。
+- `loopbacktest.js` の中継メッセージ数は2回連続一致。
+
+### あわせて直したもの
+
+- `tests/resulttest.js` の `playUntil()` が**引き分けを敗北として拾っていた**。v91で引き分けが入って以降、敗北時の検査が確率的に落ちていた（masterで10回中2回再現、修正後は20回中0回）。製品コードの挙動は変えていない。
+
+### 未検証（実機QAで確認する）
+
+- スモエルの必殺を上・水平・下へ撃った時の手触り。
+- 照準ガイドの炸裂予定地点の印が読み取りやすいか。
+- オンライン2端末で炸裂位置・地形・HPが一致すること。
+
+## v96 で入れた変更（キャラ画像の差し替え）
+
+- **死神・人馬・鳥の3体の画像を差し替えた。**
+- 頂いた元画像は**透過情報を持たない**PNGだった（死神・人馬は黒背景、鳥は市松模様が描き込まれた状態）。そのまま入れるとキャラの周りが四角く塗られるため、こちらで加工した。
+  - 手法: 画像の**縁からつながっている背景色だけ**を消す（キャラ内部の同色は残す）。そのうえで既存アセットに合わせた幅（死神512px・他384px）へ縮小。
+  - 死神は最初の試行で黒い棺の車体まで消えた。紫の霧が黒へ薄れる部分から消去が内部へ漏れたため。許容値を40→8へ絞って解決した。**この方式は近似**であり、透過PNGを頂ければ劣化なしで差し替えられる。
+- **死神と人馬は `facesLeft: true` を削除した。** 新しい絵はどちらも右向きで、現行の左向きの絵とは反転している。鳥は元から右向きで新しい絵も右向きのため変更なし。
+  - 左向き素材として登録されているキャラは **sumoeru / doRednote / akuma / kishi / neko の5体**になった。
+- 加工に Pillow を使用（この作業環境へ導入。リポジトリには依存を追加していない）。
+
+### 検証結果
+
+- 自動テスト合計 **555件すべて成功**。
+- 「左向き素材として登録されているキャラの一覧」を固定するテストを追加した。**絵と設定が合っているかは自動では判定できない**（人の目でしか分からない）ため、設定が意図せず変わったことに気づくためのもの。画像を差し替えた際は実機確認のうえこの一覧も更新すること。
+- 既存の「死神は…」テストが旧画像の向きを固定していたため、右向きへ追随させた。
+
+### あわせて直したもの
+
+- v95で追加した花火のテストがフレーキーだった。上空に浮島が生成されると頂点へ届く前に着弾するため。空が開けた地形を引くまで作り直す方式へ変更し、5回連続で両席とも全通過することを確認した。
+
+### 未検証（実機QAで確認する）
+
+- 3体の見た目と、背景を抜いた縁の粗さ。
+- **死神の向き。** 新しい絵は正面寄りの構図で、マントの流れる向きから右向きと判断した。実機で相手に背を向けていたら `facesLeft: true` を戻す1行修正で直る。
+- **死神が浮いて見えないか。** 画像の下端を地面に合わせて描くため、下部の紫の霧のぶんだけ車体が浮く可能性がある。
+
+## v135 で入れる変更（全キャラの通常弾を共通化）
+
+> ⏳ **未公開**（PR #61、作業ブランチ `feat/v135-normal-shot-unification`）。ルール変更・Console作業は不要。
+
+### なぜやるか
+
+同じ強さ・同じ角度で引っぱっても、キャラごとに弾速・風の影響・落ち方・爆風の広さが
+違っていた。画面から読み取れない差なので、キャラを替えるたびに砲撃の感覚を覚え直すことになる。
+通常弾は狙い方を覚える共通の物差しとし、キャラの個性は必殺技・HP・移動力・防御力へ集める。
+
+### やったこと
+
+- 全16キャラの通常弾を、弾速・風の影響・重力・爆風・狙い線の長さまで共通値へ揃えた。
+- CPUも通常弾を撃つ時は、キャラ固有の弾道時間・風・重力を使わず共通値で狙う。
+- 同じ引っぱりと同じ風なら、どのキャラでも同じ通常弾が飛ぶ。
+- 通常弾のクレーター半径は共通の44pxになった。地形の床とチュートリアル最後の足場も、
+  古い最大59.4pxではなく44pxを基準に検査するよう更新した。
+- **必殺技・跳躍・HP・移動力・被ダメージ補正は変更していない。** 必殺技と跳躍は従来どおり
+  キャラ固有の弾速・風・重力などを使う。
+- `BUILD_ID` と `CACHE_VERSION` を `v135` に揃えた。`database.rules.json` は変更していない。
+
+### やってはいけないこと
+
+- `CHARACTERS` の `blastMul` / `windMul` / `gravityMul` / `velScaleMul` / `guideMul` / `tBias` を
+  一括で1へ書き換えない。これらは必殺技と跳躍の従来性能を残すために必要。
+- 通常弾の共通化を理由に、HP・燃料・防御補正まで揃えない。
+- 人が撃つ弾だけを共通化して、狙い線・CPU・オンライン受信側をキャラ固有のままに戻さない。
+- 必殺技や跳躍の発射時に `NORMAL_SHOT_PROFILE` を使わない。
+
+### 検証結果
+
+- 新テストを先に入れ、v134の実装では「共通設定」「同じ引っぱりの初速」
+  「実際に生成された通常弾」の3件がp1/e1両席で確実に落ちることを確認した。
+  件数表示は消えず、各席 `245 passed, 4 failed` まで出ることも確認した。4件目は既存検査が
+  Windowsの改行を読めずに落ちた別件で、下記の改行対応後は解消した。
+- 修正後は追加8件を含む合計 **1139件すべて成功**。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 249件 × 2席（+4件 × 2席）
+  - `resulttest`: 96件
+  - `stage3test`: 395件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 103件
+- `loopbacktest` の中継メッセージ数は3回連続 `38 / 64 / 83 / 61 / 48` で一致。
+  旧値 `50 / 78 / 124 / 61 / 57` から変わった理由は、CPUの通常弾も共通弾道・共通爆風に
+  なり、決着までの手数と送信回数が変わったため。描画だけの変更ではないので想定内。
+- Windowsの改行でも既存のVS情報検査が誤って落ちないよう、検査の改行判定だけを
+  `LF` / `CRLF` 両対応にした。製品コードの挙動には影響しない。
+- ローカルHTTP＋実ブラウザで `build v135`、キャラ選択、CPU戦開始、通常弾の引っぱり発射、
+  クレーター生成、ターン交代まで確認。ブラウザの警告・エラーは0件。
+
+## v134 で入れた変更（キャラクター選択を必殺技だけに整理）
+
+> ✅ **公開済み**（2026-08-06、PR #60）。ルール変更・Console作業は不要。
+
+### なぜやるか
+
+キャラクター選択カードに出していた紹介文、型、耐久・火力・機動の目盛りが、
+現在のゲーム内容と合っていない。誤った判断材料を見せないため、メロニキの指示で
+一旦キャラクター名と必殺技名だけに絞る。
+
+### やったこと
+
+- 選択カードから、型の日本語・英語表記、紹介文、耐久・火力・機動の目盛りを削除した。
+- 必殺技の説明文にも古い内容が混じるため表示せず、`必殺技` と技名だけを大きく見せる。
+- 空いたキャラ画像枠を縦に広く使い、技名の欄もカード中央で読みやすくした。
+- `CHARACTERS` 内の能力値・紹介文データは削除していない。対戦中や他画面で使う値を変えず、
+  **キャラクター選択画面の表示だけ**を変えた。
+- `BUILD_ID` と `CACHE_VERSION` を `v134` に揃えた。`database.rules.json` は変更していない。
+
+### やってはいけないこと
+
+- 選択画面を直すために、HP・爆風・風・燃料・弾速など実際の性能値を変えない。
+- `role`、`desc`、`selectStats`、`specialDesc` のデータ自体を一括削除しない。
+  他画面の表示や今後の監査で使う可能性がある。
+- 内容をゲームと照合しないまま、型・性能目盛り・説明文を選択画面へ戻さない。
+- 必殺技の説明文を推測で書き直さない。今回は技名だけが確定範囲。
+
+### 見た目と検証結果
+
+- ローカルHTTPの実ブラウザで、スマホ相当の表示幅でキャラクター選択を確認。
+  恐竜、弩レッドノート、モッチャリオなどへカードを回し、長いキャラ名・必殺技名も
+  枠からはみ出さず、出撃ボタンや隣のカードと重ならないことを確認した。
+- 新テスト3件は、実装前のv133で「必殺技ラベルが無い」「型と性能目盛りが出る」
+  「紹介文と必殺技説明への参照が残る」の3件すべてが失敗することを確認してから実装した。
+- 自動テストは追加6件を含む合計 **1131件すべて成功**。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 245件 × 2席（+3件 × 2席）
+  - `resulttest`: 96件
+  - `stage3test`: 395件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 103件
+- `loopbacktest` の中継メッセージ数は `78 / 65 / 127 / 56 / 73` でv133から変化なし。
+- Firebaseルール変更なし。Console作業なし。
+
+## v133 で入れた変更（次の風予報）
+
+> ✅ **公開済み**（2026-08-06、PR #59）。ルール変更・Console作業は不要。
+
+### なぜやるか
+
+これまでは風が切り替わる瞬間まで次の風が分からず、ターン制なのに先を読んで
+狙いを組み立てる材料が少なかった。メロニキの指示で、承認済み新企画の
+「次回の風予報」を残タスクより先へ繰り上げた。
+
+### やったこと
+
+- HUDの中央へ、現在の風の下に **次の風を1つだけ**常時表示する。
+  - ランダム風は `次の風　←/→ 弱/中/強` または `次の風　無風`。
+  - 演習・オンラインの固定風とチュートリアルは `次の風　同じ`。
+- 風の抽選と反映を分離し、表示した `nextWind` を次の切替でそのまま消費する。
+  切替時の振り直しはしない。
+- 既存の切替周期は変えていない。1vs1は4ターン目、2vs2は全員が2巡する8ターン目。
+- `nextWind` を中断保存、オンライン開始・状態同期、観戦用スナップショットへ含めた。
+  v132以前の中断データは、最初の切替だけ現在と同じ風を予報として補い、捨てずに再開する。
+- オンライン受信では、欠落・範囲外の予報を適用前に拒否する。現在の風は前から予告済みなので
+  相手に差し替えられないよう照合し、新しく抽選された次の風は行動側の値を受け入れて同期する。
+- 再戦・連戦・演習リスタートでは前の試合の予報を消し、新しく現在と次を作り直す。
+- `BUILD_ID` と `CACHE_VERSION` を `v133` に揃えた。`database.rules.json` は変更していない。
+
+### やってはいけないこと
+
+- 表示した予報を切替時に `Math.random()` で振り直さない。予報が嘘になる。
+- 1vs1の4ターン／2vs2の8ターン周期を、予報表示の都合で短くしない。
+- 予報を端末ごとに別々に決めたり、端末時刻・画面サイズなど端末ごとに変わる値から作らない。
+- オンラインや観戦のスナップショットから `nextWind` を外さない。片方だけ別の予報になる。
+- 再戦へ前の試合の `nextWind` を持ち越さない。
+- 今回は常時表示が確定仕様。設定のON/OFFや固定シード時の非表示を勝手に足さない。
+
+### 見た目と検証結果
+
+- ローカルHTTPの実ブラウザで1vs1、2vs2、ランダム風、固定左風を確認。
+  ステージ名・左右のHP欄・手番表示と重ならず、2vs2固定風で `次の風　同じ` を確認。
+  ブラウザのエラーは0件。
+- 新テストは、実装前のv132で「開始時に予報が無い」「4ターン目に予報を使わず振り直す」
+  「オンラインが予報欠落を受理する」ことを実際に確認してから入れた。
+- 指定の全テストを実際に走らせ、合計 **1125件すべて成功**（v132の1098件から+27）。
+  - `seattest`: p1 20 / e1 20
+  - `regressiontest`: p1 242 / e1 242
+  - `resulttest`: 96
+  - `loopbacktest`: 103
+  - `stage3test`: 395
+  - `lobbysimtest`: 7
+- `loopbacktest` の中継メッセージ数は **78 / 65 / 127 / 56 / 73**。
+  v132の **50 / 78 / 124 / 61 / 57** から変化した理由は、次の風を1区間前に抽選することで
+  固定乱数列を使うテストの風とCPU判断が従来と別の順になり、試合の手数が変わったため。
+  通信パケットの種類や送信回数を機能として増やしたためではない。5条件とも決着し、
+  開始時・決着時に現在の風と次の風が双方一致することを確認済み。
+
+## v132 で入れる変更（タイトル画面を焼く。軽量化その4）
+
+> ✅ **公開済み**（PR #58）。ルール変更・Console作業は不要。
+
+### なぜやるか
+
+実機報告を受けて層ごとに切って測ると、`drawTitleScreen` だけで1コマ52ミリ秒、
+タイトル画面の重さの半分以上を使っていた。全画面グラデーションと
+`shadowBlur: 24`＋切り抜き付きロゴは動かないのに、毎コマ作り直していたため。
+
+### やったこと
+
+- 背景写真・全画面グラデーション・ロゴを `titleArtCanvas` へ1度だけ焼き、
+  `drawTitleScreen()` は以後その1枚を貼るだけにした。
+- 焼く細かさは空（v129）と同じ **仮想座標の2倍**（`TITLE_ART_SCALE = 2`、
+  1080×1920）。等倍で焼いて高精細画面へ広げるとロゴの輪郭が眠くなるため。
+- `titleArtSignature()` に時間帯背景のテーマ・準備状態・画像寸法と、ロゴの
+  準備状態・画像寸法を含めた。画像が届く前の代替表示を焼いた場合も、届いた時に
+  1回だけ正しい絵へ焼き直す。
+- モード見出し、各ボタン、案内、通信の通知、build番号など状態で変わるものは
+  焼かず、従来どおり毎コマ描く。ゲームのルール・通信・入力は変えていない。
+
+### やってはいけないこと
+
+- **`TITLE_ART_SCALE` を1へ下げない。** 軽く見えても高精細画面でロゴが眠くなる。
+- ボタン、通知、build番号など変わるものを `drawTitleStaticArt()` へ入れない。
+  入れると表示が更新されなくなる。
+- 背景やロゴの読み込み条件を変えた時、`titleArtSignature()` の更新を忘れない。
+  忘れると代替表示のまま、または古い背景のまま残る。
+
+### 見た目と検証結果
+
+- ローカルHTTPで実ブラウザを開き、起動画面からタイトルへ進めて、ロゴ・背景・
+  ボタン群に崩れがないことを確認した（`file://` は使っていない）。
+- 同じページ内で旧来どおり直接描いた絵と、焼いた絵を同じ2倍解像度で画素比較。
+  **2,073,600画素（RGBA 8,294,400チャンネル）すべて完全一致、最大差0/255。**
+- 新テスト4件をp1/e1の両席へ追加。焼く仕組みを外した旧実装で、実際に
+  「タイトルの動かない絵を焼く仕組みがある」がFAILになることを確認してから入れた。
+- 指定の全テストを実際に走らせ、合計 **1098件すべて成功**（v131の1090件から+8）。
+  - `regressiontest`: 235件 × 2席（各+4）／他は据え置き
+- `loopbacktest` の中継メッセージ数は **`50 / 78 / 124 / 61 / 57`** でv131と同じ。
+
+## v131 で入れた変更（描く細かさを画面に合わせる。軽量化その3）
+
+> ✅ **公開済み**（PR #56）。ルールの変更なし。Console作業は不要。
+
+### 「解像度を落とす」つもりが、落とさずに済んだ
+
+調べたら `resize()` に間違いがあった。
+
+```js
+canvas.width = Math.round(VW * dpr);   // ← 画面に映る大きさ(cssW)を見ていない
+```
+
+キャンバスは `VW(540) × 端末の倍率` で持っていた。だが実際に画面へ映る幅は
+`VW × scale`（端末に収まるよう縮めた後）。**実機（画面幅1080）では 1418px幅の
+キャンバスを塗ってから 1080px へ縮めていた。** 塗る量が1.7倍で、見えるものは同じ。
+
+`scale * dpr` にすると画面の実画素とぴったり一致する。
+
+- **画質は落ちない。落ちるどころか僅かに上がる。** 縮める工程が無くなるため。
+  輪郭の強さ（隣り合う画素の差の平均。大きいほどくっきり）を測ると
+  タイトル 3.01→3.09、闘技場 2.07→2.14、なだらか 2.46→2.56。
+
+### 上限（MAX_RENDER_SCALE = 2）
+
+高精細な端末（dpr 4など）では `scale * dpr` が3を超え、塗る量が二乗で増える。
+そこで2で頭打ちにしている。
+
+- **実機（1080x2374）はちょうど2.0なので、上限には当たらない。** 上限は
+  もっと精細な端末のためのもの。
+- **元の絵は540x960で作ってある。2倍を超えても絵の中に取り出せる細かさは無い**
+  （文字と図形はもう少し綺麗になるが、写真や素材は変わらない）。
+- 高級機で眠く見えるようなら、この1つを2.5や3へ上げれば戻る。逆にもっと軽くしたい
+  なら1.5にすると3.3倍速まで行くが、**そこは明確に眠くなる**（輪郭 2.07→1.87）。
+
+### 効果（実機の画面構成 1080x2374 / 2.625倍で実測）
+
+| | v130 | v131 |
+|---|---|---|
+| キャンバス | 1418x2520 | 1079x1918（画面ぴったり） |
+| タイトル | 7.9 fps | 12.8 fps（1.61倍速） |
+| 闘技場 | 15.1 fps | 21.4 fps（1.42倍速） |
+| なだらか | 15.3 fps | 26.9 fps（1.76倍速） |
+
+### 検証結果
+
+- 端末4種（実機相当・横長3倍・低解像度2倍・等倍）で、**キャンバスの画素数が
+  画面の実画素と一致すること**を検査に入れた。上限に当たる端末では上限で
+  止まることも見ている。
+- **大きさだけ見ていると足りない。** 拡大率（`setTransform`）が食い違うと絵が
+  画面からはみ出すが、大きさの検査は通ってしまう（実際に壊して通ってしまった）。
+  ハーネスに `setTransform` の記録を足し、大きさと拡大率が噛み合うことも見ている。
+- 実装を1か所ずつ壊すと必ず落ちることを確認（5通り）。
+- 指定の全テストを実際に走らせ、合計 **1090件すべて成功**（v130の1062件から+28）。
+  - `regressiontest`: 231件 × 2席（+14）／他は据え置き
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 61 / 57` で v130 と同じ。
+
+### 残り1つ
+
+- **タイトル画面を焼く。** `drawTitleScreen` が1コマ52ミリ秒で、タイトルの重さの
+  半分以上。中身は空と同じ（全画面のグラデーション1枚とロゴの影＋切り抜き）。
+  v129と同じやり方で消せる。実機で「まだタイトルから重い」と言われている。
+
+## v130 で入れた変更（画像の圧縮。軽量化その2）
+
+> ✅ **公開済み**（PR #55）。ルールの変更なし。Console作業は不要。
+> 軽量化の2つ目。**これは「絵が出るまでの待ち時間」の話で、動きの滑らかさは変わらない。**
+
+### やったこと
+
+読み込み画面は**キャラ16体とロゴが全部届くまで明けない**。それが3.83MBあった。
+WebP（画質90）へ移して0.74MB（81%減）。
+
+| | 4G相当（1.6Mbps）での読み込み完了まで |
+|---|---|
+| v129 | 32.1〜32.2秒 |
+| v130 | 16.2〜16.3秒 |
+
+2回測って同じ値。**約2倍速い。**
+
+### 画質は落ちていない
+
+画質90を選んだ理由は、**表示する大きさで実際に見比べたから**。
+バトル中の大きさ（高さ234px）でも、それより大きい400px相当でも、
+ロゴの原寸（1530x1170）でも、元のPNGと見分けが付かなかった。
+
+- **256色のPNGに落とす案は捨てた。** 同じくらい小さくなるが、最悪の画素で
+  40〜50/255ずれる。WebPのほうが同じ大きさで明らかに綺麗。
+
+### WebPが読めない端末への備え
+
+**ここが唯一の危ないところ。** 読めないと絵が1枚も出ない。
+
+- JSで読む絵（キャラ・ロゴ・エンブレム）は `loadArtImage()` を通す。
+  **webpを先に読み、失敗した時だけ同じ名前のPNGへ落とす。**
+- **PNGは消していない。** 消すと落とし先が無くなる。検査で存在を固定した。
+- **先回りの判定（canvasで対応可否を調べる方法）は使わない。** Safariが嘘をつく
+  （読めるのに「読めない」と答える）ため、実際に読ませて失敗を見るほうが確実。
+- ロビーのエンブレムだけはDOMの `<img>` でJSを通らないので、`<picture>` で振り分ける。
+  こちらはブラウザ自身の仕組みなので確実。**包みも `display: block` にすること**
+  （しないと中央に来ない）。
+
+### 気をつけること
+
+- **絵を差し替えたら `.webp` と `.png` の両方を差し替え、`CHARACTER_ASSET_VERSION` を上げること。**
+  片方だけ直すと、端末によって別の絵が出る。両方のハッシュを検査で留めてある。
+- 起動時に読む絵の合計が1MBを超えないことも検査している。増やす時はここを見ること。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず落ちることを確認してから入れた（5通り）。
+- **1通り目（落とし先のPNGを消す）で、テストが例外で死んで出力が丸ごと消えた。**
+  ハッシュを取る所がファイルの不在で落ちていた。「無い」を値として返す形へ直し、
+  検査として報告されるようにした。
+- 実ブラウザで、ふつうの端末（webp 18件・PNGの二重取得なし）と、
+  webpを全部遮断した端末（PNGへ落ちて同じ絵が出る）の両方を確認した。
+- 指定の全テストを実際に走らせ、合計 **1062件すべて成功**（v129の1057件から+5）。
+  - `stage3test`: 392件（+5）／他は据え置き
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 61 / 57` で v129 と同じ。
+
+### まだ残っている重さ（測ってある）
+
+- **タイトル画面の `drawTitleScreen` が1コマ52ミリ秒。タイトルの半分以上。**
+  中身は空と同じで、全画面のグラデーション1枚とロゴ（`shadowBlur: 24`＋クリップ）。
+  **タイトルは動かない絵なので、v129と同じやり方で焼けば消せる。** 4つ目としてやる。
+- 起動時に落ちてくるもので次に大きいのは `title-bgm.mp3`（659KB）と `wall.jpg`（232KB）。
+- PWAのアイコン（`icon-512.png` 403KB など）は今回触っていない。ホーム画面追加の時に
+  OSが読むもので、形式の対応がまちまちなため。
+
+## v129 で入れた変更（描き直しの節約。軽量化その1）
+
+> ✅ **公開済み**（PR #54）。ルールの変更なし。Console作業は不要。
+> 実機の「動作がかなり重い」への対応。**軽量化は3版に分ける。これはその1つ目。**
+
+### 先に測ったこと（思い込みで直さないため）
+
+- **最近の版で重くなったのではない。** v117〜v128を同じ条件（同じ地形・同じテーマ）で
+  回して比べたところ、どれも同じ速さだった。重さは前からあって積み上がったもの。
+- **描画を全部止めると60fps出る。** 計算（JS）は1コマ1〜2ミリ秒しか使っていない。
+  遅いのは「画面を塗ること」であって、更新回数でも計算量でもない。
+- 層ごとに切って測ると、**空で42%、地形で30%**を使っていた。残りは誤差。
+
+### 1. 空を1枚に焼いて貼る
+
+空には全画面のグラデーションが3枚（空の色・読みやすさの陰・四隅の落ち）あった。
+**この3枚は試合中ずっと同じ絵なのに毎コマ作り直していて、それだけで1コマ36ミリ秒
+（全体の3分の1）**を使っていた。全画面のグラデーションは塗るのが極端に重い。
+
+`skyBackCanvas`（粒より後ろ）と `skyFrontCanvas`（粒より手前）へ焼き、貼るだけにした。
+焼き直すのは `skyArtSignature()` が変わった時だけ＝テーマ・遠景の種・背景写真の有無。
+
+- **焼く解像度は仮想座標の2倍（`SKY_ART_SCALE`）。** 等倍で焼くと天体の輪郭が眠くなる
+  （実測で最大64/255ずれた）。2倍にすると2以下まで落ちる。端末の解像度そのまま（3倍）
+  だと1枚18MBになるので2倍で頭打ちにしている。**この値を1に下げないこと。**
+- **ステージ背景の写真だけは焼かずに直接貼る。** 焼くと一度540x960へ落ちて眠くなる。
+- **読みやすさの陰は、元は粒より後ろだったのを手前へ移した。** 陰の濃さは空の部分で
+  3〜6%しかなく、粒は1〜2pxの点なので見た目には出ない（画素で確認済み）。
+  1枚にまとめないのは、まとめると粒が陰に隠れず浮いて見えるため。
+
+### 2. 地形の4枚重ねを1枚に束ねる
+
+`drawTerrain` は地形・縁取り・橋・闘技場の飾りの4枚を毎コマ貼っていた。
+中身が変わるのは「地形を作った」「穴があいた」時だけなので、その時だけ束ね直す。
+
+- **`markTerrainArtDirty()` の書き忘れが唯一の危険。** 忘れると古い地形が表示されたまま
+  になる（試作の段階で実際に踏んだ）。4枚のどれかに描く関数7つすべてに入れてある。
+- 特に **`carveCraterInternal(x, y, r, false)`（拡散弾と中断からの復元が通る道）は、
+  他の合図に助けてもらえない。** ここが抜けると必ず古い地形が残る。検査で固定した。
+
+### 効果（実測）
+
+同じ条件（闘技場・volcanic・端末の解像度3倍）で3回測った。
+
+| | 1コマ | fps |
+|---|---|---|
+| v128 | 101〜108 ms | 9.3〜9.9 |
+| v129 | 62〜69 ms | 14.5〜16.2 |
+
+**1.5〜1.7倍速。** ただし**この環境はスマホではないので、fpsの絶対値は当てにならない。
+見るのは倍率のほう。**
+
+### 見た目が変わっていないことの確かめ方
+
+画面写真を並べるのではなく、**新旧を同じページの中で同じ条件で描いて画素を1つずつ比べた。**
+
+- 空: テーマ4種 × 背景写真あり/なしの8通りで、**最大差8/255以下・差8を超える画素は0**。
+- 地形: 地形4種 × 穴あけ前後の8通りで、**完全一致（差0）**。
+
+### 残り（次の版でやる）
+
+ユーザーと決めた順番。**1版につき1つずつ。**
+
+1. ~~描き方の作り直し（この版）~~
+2. **画像の圧縮。** 100KB超のPNG 20枚が4.48MB。256色にすると0.80MB（82%減）で
+   見た目はほぼ変わらない。ロゴ1枚だけで924KB→143KB。起動が速くなる。
+3. **解像度の上限。** `resize()` の `dpr` が青天井で、3倍の端末では1620x2880を毎コマ塗る。
+   2で頭打ちにすると実測2.5倍速。ただし僅かに眠くなるので、2まで入れてから実機で判断する。
+
+## v128 で入れた変更（撃破済みへのダメージ表示／起動演出の砲弾の絵）
+
+> ✅ **公開済み**（PR #53）。ルールの変更なし。Console作業は不要。
+> v127の実機報告への対応。
+
+### 1. 撃破済みのキャラにダメージ数字が出る（不具合）
+
+2vs2で、先に倒れて**薄く描かれているキャラ**の上にダメージ数字が出ていた（実機報告）。
+
+原因は、爆風・電磁波・拡散弾のどれもが `units` を最後まで舐めていて、
+撃破済みを外していなかったこと。HPは0で止まる作りなので数字が出るだけに見えるが、
+**`creditDamage` にも積まれていた**ので、結果画面の平均ダメージまで水増しされていた。
+
+直し方は、撃破の判定を `unitDefeated(u)` という関数**1つ**にまとめ、
+絵を薄くする条件と、爆風が当たる条件を同じものにしたこと。
+
+- **この2つの条件を別々に書き直さないこと。** 別々だったから今回のズレが起きた。
+- 直しすぎ（生きているキャラにも出なくなる）の検査も一緒に入れてある。
+
+### 2. 起動演出の砲弾をユーザー提供の絵へ
+
+タイトルへ入る時に壁を撃ち抜く鉄球を、手描きのグラデーションから
+`assets/intro-cannonball.png` へ差し替えた。元画像は黒地だったので、
+外周からの塗りつぶしで背景だけを抜いてある（球の内側の暗い部分は残る）。
+
+- **尾を引く炎は弾の「後ろ」へ描いている。** 手描きの頃は上へ重ねていたが、
+  絵に替えるとオレンジで塗り潰されて鉄球が見えなくなった（実測して直した）。
+- **絵の読み込みを待たない。** 起動直後に必ず出る演出なので、間に合わなければ
+  今までの手描きの鉄球で出す。`areCoreImagesReady()` には**入れないこと**（順序の矛盾になる）。
+- `sw.js` の先読み一覧と `<link rel="preload">` の両方へ入れてある。片方だけだとオフラインで出ない。
+
+### 見つけたが直していないこと（次の版で扱う）
+
+**`explodeAt` の「相手の弾のダメージ数字を出さない」判定が効いていない。**
+
+```js
+const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
+```
+
+`owner` は**ユニットのidの文字列**（`launchShot` の `const owner = unit.id;`）なので、
+`owner.control` は必ず `undefined` になる。つまり `remoteShot` は常に `false` で、
+オンラインで「自分の見積もりを先に出してしまい、後から数字が動く」対策が
+まるごと動いていない。**Issue #4（オンラインHPバーのずれ）と同じ話**なので、そこで一緒に直す。
+
+今回は混ぜていない。代わりに「弾のownerはidの文字列」という検査を入れ、
+同じ取り違えを繰り返さないようにした（今回この検査を書く時、実際に取り違えた）。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は9通り（爆風／電磁波／拡散弾の除外をそれぞれやめる、撃破判定を常に偽・常に真、
+  素材ファイルを消す、`sw.js` の先読みから外す、`preload` を外す、絵で描くのをやめる）。
+- 指定の全テストを実際に走らせ、合計 **1033件すべて成功**（v127の1013件から+20）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 205件 × 2席（+8）
+  - `resulttest`: 96件（+4）
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 61 / 57` で v127 と同じ。3回連続で確認。
+- 砲弾はローカルHTTP＋実ブラウザで、飛来から着弾まで実際に撮って確認した。
+  ダメージ数字の方は画面ではなく、数字を出す処理そのものを通して確かめている。
+
+## v127 で入れた変更（チュートリアル最後の足場／VSカットの表示時間）
+
+> ✅ **公開済み**（PR #52）。ルールの変更なし。Console作業は不要。
+> v126の実機報告への対応。
+
+### 1. 最後の項目が終わらない（不具合）
+
+実機で「一発で壊れる足場じゃないのでハードルが異常に高い」と指摘。
+
+**原因は「細くない」ではなく「高すぎる」だった。** 左右を掘るだけにしていたので、的は
+**底まで続く太い柱**の上に立っていた。通常弾のクレーターは半径60px弱、柱の高さは200px以上。
+1発では削りきれず、落ちてもすぐ柱の残りに着地するので、何度撃っても終わらなかった。
+
+直し方は、**足元の下も空洞にして薄い板だけ残す**こと。板の大きさは
+`TUTORIAL_LEDGE_HALF_W = 26`（幅52）・`TUTORIAL_LEDGE_THICKNESS = 24` で、
+通常弾1発のクレーターに丸ごと収まる。
+
+- **この2つの値を大きくしないこと。** 大きくすると1発で崩れなくなり、不具合が戻る。
+- 自動テストで「中心から18ずれた、半径44の弱めの一発」でも4回とも落ちることを固定した。
+
+### 2. チュートリアルの開始カットを「TUTORIAL START!」に
+
+対戦ではないので「BATTLE START」とは言わない。`battleMode === 'tutorial'` の時だけ差し替える。
+
+### 3. VSカットの表示時間を2倍に（1.8→3.6秒）
+
+ユーザー要望。名前と能力を読む時間を取るため。
+
+- **飛来（0.42秒）・衝突・撃ち抜け（0.52秒）の速さは変えていない。** 伸ばした分は
+  まん中の「止まって見せている時間」に入る。動きまで倍にすると鈍く見えるため。
+- `loopbacktest` の中継メッセージ数が `50 / 78 / 124 / 90 / 57` →
+  `50 / 78 / 124 / 61 / 57` へ変わったが、**これは想定どおり**。カットインが長くなり、
+  1手番あたりに送る移動の数が変わったため。3回連続で同じ値になることを確認済み。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は4通り（足元を空洞にしない＝元の不具合／足場を広くする／
+  チュートリアルでもBATTLE STARTと出す／表示時間を元に戻す）。
+- 指定の全テストを実際に走らせ、合計 **1013件すべて成功**（v126の995件から+18）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 197件 × 2席（+5）
+  - `resulttest`: 92件
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- ローカルHTTP＋実ブラウザで、薄い板になった最後の項目と「TUTORIAL START!」を
+  実際に描いて確認した。
+
+### 気になっている点（実機で見てほしい）
+
+- **VSカットが3.6秒は長いかもしれない。** 何試合も続けて遊ぶと待ち時間として感じる
+  可能性がある。長すぎたら `MATCHUP_CUTIN_DURATION` の1つだけで戻せる。
+
+## v126 で入れた変更（チュートリアル「あそび方」）
+
+> ✅ **公開済み**（PR #51）。ルールの変更なし。Console作業は不要。
+
+### 入れたもの
+
+タイトルに「あそび方」を足し、**実際に操作して覚える練習試合**を6項目で用意した。
+（形式・範囲・出し方・合格条件はユーザーと相談して決定・2026-08-05）
+
+| 項目 | 覚えること | 次へ進む条件 |
+|---|---|---|
+| 1 引いて発射 | 輪を引いて離す。引くほど強い | 的に当てる |
+| 2 風を読む | 弾は風に流される | 的に当てる |
+| 3 動く | 燃料の分だけ動ける | 55px以上動く |
+| 4 跳ぶ | 跳躍を押してから撃つ | 跳躍を使う |
+| 5 必殺技 | 溜まったら押してから撃つ | 必殺を使う |
+| 6 足場を壊す | 地面は削れる。落ちると場外 | 的を落とす |
+
+### なぜこの作りにしたか
+
+- **読ませるのではなく操作させる。** カタモンは「どれだけ引くか」の手触りが全てで、
+  文章だけでは身につかない。
+- **手番は自分だけが持つ**（`turnOrder` を `p1` だけにする）。相手は撃ち返してこない的なので、
+  何度失敗しても詰まらない。
+- **的は倒れない**（HPが0以下になったら1で止める）。最後の項目だけ、落として終わる。
+- **通常の決着へ入れない**（`checkMatchEnd` をチュートリアル中は通さない）。
+  負けて終わることも、結果画面へ飛ぶこともない。
+- **時間切れが無い。** ターン数の上限判定も通さない。当てるまで何度でも撃てる。
+- 「とばす」はいつでも押せる。閉じ込めない。
+
+### 作っている途中で見つけた不具合（重要）
+
+- **地形がランダムだと、闘技場のように中央が奈落の地形を引く。** そこへ的を置くと
+  落下し、**それを「当てた」と誤判定して勝手に次へ進んでいた**（自動テストで発見。
+  6回中3回再現）。地形を `rolling` に固定し、置き場所に地面が無ければ左右へ探し直すようにした。
+- **最後の項目の穴を、地面の帯（`GROUND_MIN_Y`）から掘り始めていた。** 地形には宙に浮いた
+  薄い足場があり、そこに的が立つと掘り残しになって足場が崩れない（20回中1回再現）。
+  **画面の一番上から掘る**ようにした。
+
+### やってはいけないこと
+
+- **チュートリアルの地形をランダムに戻さないこと。** 奈落のある地形を引いて上の不具合が戻る。
+- **穴を掘る開始位置を下げないこと。** 浮いた足場に的が立つと掘り残しになる。
+- 的のHPを止める処理を、完了判定より後ろに置かないこと。一撃で倒しきった時に
+  HPが負のまま画面に出る。
+- `checkMatchEnd` のチュートリアル除外を外さないこと。結果画面へ飛んで練習が中断する。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は10通り（相手にも手番を持たせる／通常の決着へ入れる／時間切れで終わらせる／
+  的のHPを止めない／穴を掘らない／とばした人にまた勧める／跳躍を戻さない／地形を固定しない／
+  最後の完了処理をしない／完了しても済んだ印を付けない）。
+- **最初、2つのテストが「壊しても落ちない」書き方だった。** 決着と時間切れの検査が、
+  実際の入口を通らずに状態だけ見ていたため。`checkMatchEnd` を実際に呼び、
+  タイムアップの演出が明けるまで進めてから見る形に直した。
+- 指定の全テストを実際に走らせ、合計 **995件すべて成功**（v125の945件から+50）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 192件 × 2席（+29）
+  - `resulttest`: 92件
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- ローカルHTTP＋実ブラウザで、6項目すべての画面、「できた!」の表示、
+  タイトルのボタン（初回と2回目以降）を実際に描いて確認した。
+
+### まだ確認できていないこと（実機QAで）
+
+- 指で実際に操作して、各項目の説明が分かるか。文が長すぎないか。
+- 1項目目を当てるまでに何回くらいかかるか。多すぎるようなら的を近づける。
+
+## v125 で入れた変更（1vs1の胴体の空きに情報を入れる／元素材を削除）
+
+> ⏳ **未公開**（作業ブランチ `claude/katamon-handoff-avsydw`）。ルールの変更なし。Console作業は不要。
+
+### 1vs1の窓の空きに、役割・最大HP・必殺技を出す
+
+1vs1は窓が1つで横に広く、顔を外側へ寄せた残りが大きく空いていた（実機で指摘）。
+そこへ3行を入れた。
+
+```
+バランス型          トリッキー型
+HP 100              HP 90
+必殺 強化砲弾        必殺 電磁波
+```
+
+- **キャラだけで決まる値しか入れない。** 名前・戦績・連勝のような端末ごとに変わる値を
+  入れると、同じ試合なのに人によって画面が食い違う。テストでもここを縛ってある。
+- 中央のVS紋章は「自陣営の砲弾の下」「相手陣営の砲弾の上」へ食い込む。
+  最初は相手側の1行目が隠れていたので、**紋章から遠い側へ寄せた**
+  （自陣営は上寄り、相手陣営は下寄り＋横にも少し逃がす）。
+- **2vs2には入れない。** 窓が狭く、入れると顔と重なって両方読めなくなる。
+  幅が足りない時は描かない下限（60）も置いてある。
+
+### 元素材を削除した
+
+リポジトリ直下にあった `bullet and vs.png` と `bullet image.png`（合計約3.2MB）を削除した
+（2026-08-05、ユーザー承認）。v123 で切り出しが済んでおり、どこからも参照していない。
+切り出し後の5点は `assets/vs-plate-*.png` と `assets/vs-badge.png` にある。
+
+### やってはいけないこと
+
+- **1vs1の空きに、端末ごとに変わる値を入れないこと。** カットインは全端末で同じ絵を
+  出すためのもの。名前・戦績・連勝はここへ入れない。
+- 2vs2の窓へ広げないこと。顔と文字が重なって両方読めなくなる。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は3通り（空きに何も入れない／狭い2vs2の窓にも入れる／
+  端末ごとに変わる値（連勝数）を入れる）。
+- **「2vs2には出さない」の検査は、1か所壊しただけでは落ちなかった。** 幅の下限という
+  2つ目の守りが効いていたため。両方壊して、実際に落ちることを確かめ直した。
+  守りが二重にある時は、両方とも外して初めてテストの有効性が確かめられる。
+- 指定の全テストを実際に走らせ、合計 **945件すべて成功**（v124の939件から+6）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 163件 × 2席（+3）
+  - `resulttest`: 92件
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- ローカルHTTP＋実ブラウザで、1vs1（3行とも読めること）と2vs2（出ないこと）を
+  実際に描いて確認した。
+
+## v124 で入れた変更（VSカットインの顔の位置と砲弾の動き）
+
+> ⏳ **未公開**（作業ブランチ `claude/katamon-handoff-avsydw`）。ルールの変更なし。Console作業は不要。
+> v123の実機確認を受けた3点の手直し。
+
+### 1. 顔が窓に合っていない（個別対応）
+
+実機で **鳥は炎の尾、ニセンモノは真っ暗な部分**が窓に出ていた。
+
+- `MATCHUP_FACES` は v119 で**丸窓**に合わせた値。v123で窓が横長の四角へ変わり、
+  見える範囲が変わったため、6体で顔から外れていた。
+- **全16体を実際の窓の形で並べて描き、元画像に0.1刻みの目盛りと現在の切り出し枠を
+  重ねて測り直した。** 目分量ではなく画面で測ってから直すこと。
+- 直したのは `tori` / `nisenmono` / `doRednote` / `mocchario` / `iwa` / `kyoryu` の6体。
+- あわせて**名前の帯があごを隠していた**ので、顔は「帯より上の範囲」の中央へ置くようにした。
+
+### 2. 砲弾の進む向きが不自然だった
+
+傾いた砲弾が**真横へ滑っていた**ので、飛んでいるように見えなかった。
+回転させた**あと**に動かすようにして、先端の向いている方向へ進ませる。
+
+```js
+ctx.rotate(VS_TILT);
+ctx.translate(slideX, 0);   // ← 回転の後。これで軸に沿って飛ぶ
+```
+
+### 3. 最後にお互いを撃ち抜ける
+
+VSを見せたあと、2本の砲弾がそのまま**すれ違って画面の外へ抜けていく**ようにした。
+だんだん速くなる曲線（`exit³`）にして、止まってから消えるのではなく撃ち抜けたように見せる。
+抜けていく間だけ集中線も戻す。
+
+### やってはいけないこと
+
+- **顔の切り出しを目分量で直さないこと。** 窓の形を変えたら、必ず16体を並べて描いて測る。
+- `MATCHUP_FACES`（VS用）と `CHARACTER_FACES`（必殺技用）を1つにまとめないこと。
+  窓の形が違うので、片方を直すともう片方が崩れる。
+- 砲弾の移動を `translate` の第1引数（回転前）へ戻さないこと。真横滑りに戻る。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は5通り（真横へ滑らせる／撃ち抜けをやめる／撃ち抜けを衝突より前に始める／
+  顔の切り出しを1体抜く／顔を窓の真ん中に戻す）。
+- **テストが例外で落ちて結果が1件も出ない書き方をしていたので直した。** 切り出しが
+  抜けた時、後続の検査が値を取り出そうとして落ちていた。抜けは前の検査が名指しするので、
+  後続は配列かどうかを見てから触る。
+- 指定の全テストを実際に走らせ、合計 **939件すべて成功**（v123の927件から+12）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 160件 × 2席（+6）
+  - `resulttest`: 92件
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 90 / 57` で v123 と同じ。
+- ローカルHTTP＋実ブラウザで、16体の顔の比較表と、飛来・衝突・撃ち抜けの各時点を
+  実際に描いて確認した。
+
+## v123 で入れた変更（対戦開始のVSカットインを砲弾ネームプレートへ）
+
+> ⏳ **未公開**（作業ブランチ `claude/katamon-handoff-avsydw`）。ルールの変更なし。Console作業は不要。
+> 絵はユーザー提供（`bullet and vs.png` / 見本 `bullet image.png`）。
+
+### 入れたもの
+
+左右から**砲弾が飛んできて中央でぶつかり、そこにVSの紋章が出る**カットインにした。
+砲弾の胴体がそのままネームプレートで、窓の中にキャラの顔と名前が入る。
+
+- 自陣営＝緑の砲弾（上）、相手陣営＝赤の砲弾（下）。1vs1は窓1つ、2vs2は窓2つの絵を使い分ける。
+- 素材の砲弾は**どちらも右向き**なので、相手陣営は左右反転して描く。これで先端が中央で向き合う。
+- 0.42秒かけて画面の外から飛び込み、ぶつかった瞬間に紋章が跳ね、火花と集中線が出る。
+- 顔の切り出しはv119の `MATCHUP_FACES` をそのまま使う（丸窓用に16体ぶん補正済みのもの）。
+
+### 素材の切り出しでつまずいた点（次にやる人へ）
+
+- **もらった画像は透過ではなく、市松模様が描き込まれたRGBのPNGだった。**（v96の死神と同じ形）
+  そのまま使うと背景が四角く出る。**縁からつながっている市松だけ**を消す方式で抜いた
+  （明るさ228以上かつ彩度が低い画素を、画像の縁から塗りつぶしで辿る）。絵の中の同色は残る。
+- 1枚のシートに5点入っていたので、連結成分で切り分けた。
+  緑1窓 / 赤1窓 / 緑2窓 / 赤2窓 / VS紋章。
+- **窓（紺色の枠内）の位置はコードに比率で持つ。** 実測して `VS_PLATE_SLOTS` に入れてある。
+  **絵を差し替えたらこの比率も測り直すこと。**
+- 切り出したままでは5点で約780KBあった。**256色へ落として約132KBにした**（6分の1）。
+  平坦な塗りの絵なので目で見て劣化は分からない。
+
+### やってはいけないこと
+
+- **窓の位置を目分量で決めないこと。** 絵の中の紺色の枠を実際に測ること。
+- 相手陣営の砲弾を反転する時、**窓の左右も一緒に入れ替えるのを忘れないこと**
+  （`x0 = mirror ? 1 - raw[2] : raw[0]`）。忘れると顔が砲弾からはみ出す。
+- **画像が読めなかった端末で、顔と名前まで消さないこと。** 誰と誰が戦うのかは
+  絵の成否と関係なく必ず出す。紋章も文字の「VS」へ落ちるようにしてある。
+- 1vs1で顔を窓の真ん中へ置かないこと。中央のVS紋章の下に隠れる。外側へ寄せてある。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は8通り（相手の砲弾を反転しない／反転時に窓の左右を入れ替えない／
+  2vs2の窓を重ねる／窓を絵からはみ出させる／キャラ画像が無い時に名前を出さない／
+  紋章が無い時にVSの文字も出さない／飛んでくる時間をカットインより長くする／
+  素材の読み込み先を変える）。
+- **「名前が出る」の検査は、描かれた文字を実際に数えて確かめている。** 名前はHPカードにも
+  出るので、最初「位置」で見る書き方にしたら壊しても落ちなかった。カットインを出す前と
+  出した後で回数が増えることを見る形に直した。
+- 指定の全テストを実際に走らせ、合計 **927件すべて成功**（v122の901件から+26）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 154件 × 2席（+13）
+  - `resulttest`: 92件
+  - `stage3test`: 387件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 90 / 57` で v122 と同じ。
+- ローカルHTTP＋実ブラウザ（Chromium・430×860）で、1vs1と2vs2それぞれの
+  飛来中・衝突・静止の各時点を実際に描いて確認した。
+  **描画直後に同じ処理の中で画像を吸い出している。** 撮影を待つ間にゲームループが
+  先へ進んでしまい、最初は「飛来中のはずが着地後」の絵を見て判断を誤った。
+
+### 実機で見てほしいこと
+
+- 砲弾が飛んでくる速さと、ぶつかった時の手応え。
+- 2vs2で4人の顔と名前が読めるか。紋章が顔にかぶりすぎていないか。
+
+### 未処理
+
+- リポジトリ直下の `bullet and vs.png` と `bullet image.png`（合計約3.2MB）はユーザーが
+  置いた元素材。切り出しは済んだので消してよいが、**ユーザーのファイルなので勝手に消していない。**
+
+## v122 で入れた変更（手番が誰か分かるようにし、テンポを落ち着かせる）
+
+> ⏳ **未公開**（作業ブランチ `claude/katamon-handoff-avsydw`）。ルールの変更なし。Console作業は不要。
+
+### 症状（実機報告）
+
+1. 初手が相手（CPU）の手番だと、**開始カットインの最中に発射され、明けた時にはもう着弾している**。
+2. ターンが変わった時に、**どのCPU（もしくはプレイヤー）の番なのか分からない**。
+3. CPUがすぐ撃ってくるので考える時間が無い。全体にテンポが速い。
+
+### 1の原因（実測で確認）
+
+原因が2つ重なっていた。
+
+- **`resetMatch` は `activeIndex = 0`（自分）のまま `startTurn()` を済ませる。**
+  オンラインはそのあと抽選結果を `activeIndex` へ入れ直すが、**入れ直した側は
+  `startTurn()` を通らない**ので、CPUの思考時間が用意されないまま `0` で残る。
+  `resetMatch` は `cpuThinkTimer` も戻していなかった。
+- **ホストは `resetMatch` から開始カットインまでの間に通信を4往復する**
+  （先攻の抽選 → 部屋の更新 → 盤面の保存 → 開始データの送信）。
+  その間 `gamePhase` は `battle` でカットインも無いので、盤面が動いてしまう。
+
+実測すると **カットイン終了の0.02秒後に発射**していた。修正後は **約2.1秒の猶予**がある。
+
+### 1の直し方
+
+**開始カットインが終わるまで、最初の手番は始まっていない**ことにした。
+
+- `battleIntroPending` を `resetMatch` で立て、開始カットインの `onDone` で下ろす。
+- 立っている間はCPUを動かさない。カットインが**出る前の通信待ち**も止まる。
+- カットインが明けた時に `beginFirstTurn()` が、**その時点で本当に手番を持つユニット**の
+  行動計画を作る。先攻が入れ替わっていても必ずここを通る。
+
+### 2の直し方
+
+- 手番の知らせを **「キャラ名」＋「あなた／味方／相手のターン」の2行**にした。
+  キャラ名はHPカードと同じ呼び名なので、カードと見比べられる。
+- 見出しを**陣営の色**（自分側＝青／相手側＝赤）で出す。文字を読む前に左右が分かる。
+- 常時出ているターンバーにもキャラ名を足した（`弩レッドノート 味方のターン　TURN 1/60`）。
+  カットインが消えた後もここで分かる。最長のキャラ名＋移動封印でも右の連勝表示と重ならない
+  ことを実測で確認（左は341、右の開始は486）。
+- **`turnOwnerLabel()` を廃止した。** 陣営を見ておらず「自分か・CPUか・それ以外」でしか
+  分けていなかったため、**2vs2では味方であるホストの手番が「相手のターン」と出ていた。**
+
+### 3の直し方（数値の調整）
+
+| | 変更前 | 変更後 |
+|---|---|---|
+| 手番の知らせ | 0.9秒 | **1.3秒**（`TURN_CUTIN_DURATION`） |
+| CPUが狙いを定める時間 | 0.7〜1.2秒 | **1.5〜2.3秒**（`CPU_THINK_MIN_SEC` / `CPU_THINK_RANGE_SEC`） |
+
+実測した手番の交代から発射までの時間は **1.8〜2.1秒 → 2.9〜3.9秒**。
+盤面を見られる時間（カットインを除いた分）は **約1.0秒 → 約1.6〜2.6秒**。
+
+### やってはいけないこと
+
+- **`battleIntroPending` を「カットインが出ているか」で代用しないこと。**
+  ホストの通信待ちの間はカットインがまだ出ていない。そこが本題。
+- `resetMatch` の中で最初の手番の行動計画を作らないこと。そこで作っても、
+  オンラインは後から先攻を入れ直すので無駄になる。作るのは `beginFirstTurn`。
+- `cpuThinkTimer` を戻し忘れないこと。0のまま残ると、手番に入った最初の1フレームで撃つ。
+- 手番の知らせをキャラ名だけにしないこと。同じキャラを両陣営が選ぶことがあるので、
+  役どころの行と陣営の色が無いと味方CPUと敵CPUを見分けられない。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  確かめた壊し方は7通り（通信待ちの窓でCPUを止めない／カットインが明けても手番の入り口を
+  通さない／`resetMatch` でフラグを立てない／CPUの思考時間を元に戻す／カットインの長さを
+  元に戻す／陣営で色を分けない／味方CPUと敵CPUを言い分けない）。
+- 指定の全テストを実際に走らせ、合計 **901件すべて成功**（v121の874件から+27）。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 141件 × 2席（+13）
+  - `resulttest`: 92件
+  - `stage3test`: 387件（+1）
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `loopbacktest` の中継メッセージ数は `50 / 78 / 124 / 90 / 57`。
+  **v121の `58 / 91 / 124 / 90 / 58` から変わっているが、これは想定どおり。**
+  カットインの長さとCPUの思考時間を変えたので、1手番あたりに送る移動の数が変わる。
+  3回連続で同じ値になることを確認済みで、新しい非決定性は混ざっていない。
+- ローカルHTTP＋実ブラウザ（Chromium・430×860）で、1vs1と2vs2の
+  「あなた／味方（CPU）／相手（CPU）」の3通りを実際に描いて確認した。
+
+### まだ確認できていないこと（実機QAで）
+
+- オンラインで初手が相手（CPU）の手番になる試合を実際に始め、カットインが明けてから
+  CPUが動き出すこと。
+- 落ち着いたテンポが遅すぎないか。速すぎたら `CPU_THINK_MIN_SEC` と
+  `TURN_CUTIN_DURATION` の2つだけで調整できる。
+
+## v121 で入れた変更（段D / Issue #8：切断・CPU引き継ぎ）
+
+> ⏳ **未公開**（作業ブランチ `claude/katamon-handoff-avsydw`）。
+> ⚠️ **`database.rules.json` を変更した。公開（masterへマージ）より前に、必ず
+> Firebase Console へ反映すること。** 反映しないと引き継ぎが働かない。
+
+### 入れたもの
+
+試合の途中で誰かが落ちても、その席をCPUが引き継いで最後まで終わらせる。
+
+- 対象は **2vs2で、人が座っていて、自分でもホストでもない席**だけ。
+- 45秒ではなく **35秒**無音になった時点で「疑い」とし、全端末に
+  「〇〇の切断を確認中…」と出す。この間はまだ何も消さない。
+- ホストだけが5秒おきにFirebaseの席を読み直し、ロビーと同じ **サーバー時刻の
+  `seenAt` が90秒より古い**ことを確認できた席だけを空ける。
+- 席が空いたら、あとは段Cの「空席はホストがCPUで動かして結果を配る」がそのまま働く。
+  全端末に新しい名簿が配られ、そのキャラは全員の画面で「CPUのターン」になる。
+- 引き継ぎの瞬間は「〇〇が切断しました／CPUが引き継ぎます」とカットインで知らせる。
+- 空けられた本人がまだ生きていれば、名簿を受け取った時点で理由を見てタイトルへ戻る
+  （v101 で入れた仕組みをそのまま使う）。
+
+### なぜこの作りにしたか
+
+- **席を空けるだけで済ませた。** 新しい通信の種類も、スナップショットへの追加項目も
+  作っていない。段Cの空席CPUと引き継いだ席は、コードから見れば区別がつかない。
+  区別を持ち込むと、新旧版の混在・再送・観戦の途中参加に新しい壊れどころが増える。
+- **35秒で切っていた判定を、席ごとに数え直した。** 対戦全体の生存時計は「誰か1人からでも
+  届けば」戻るので、4人戦で1人だけ落ちたことを見分けられなかった。
+- **90秒は縮めていない。** 画面ロックや裏タブで生きている人を追い出さないための幅。
+  縮めれば待ち時間は減るが、生きている人が試合から蹴り出される。
+- **自動にした（ユーザー判断）。** ホストが席を外していても、残った3人が最後まで遊べる。
+- 削除を続けて3回断られた席は諦め、従来どおり「相手との通信が途切れました」で終わる。
+  諦めないと、打ち切りを抑えたまま待ち続けて試合から出られなくなる。
+
+### 範囲外（意図的に手を出していないもの）
+
+- **ホスト（部屋を作った人）が落ちた場合。** 従来どおり試合終了。
+  ルールがp1の席へ生存印を書かせないので90秒の確認ができず、
+  「進行役の引っ越し」という別の仕組みが要る。v121では触らない。
+- **1vs1。** 相手が居なくなった時点で勝負の意味が薄いため、従来どおり試合終了（ユーザー判断）。
+
+### やってはいけないこと
+
+- **`round.status` が `revealing` の間まで席の削除を広げないこと。** キャラの伏せ合いの
+  最中に名簿が動くと、開始データと名簿が食い違う。
+- 90秒の `FIREBASE_SEAT_STALE_RELEASE_MS` を、待ち時間を縮めるためだけに短くしないこと。
+- 画面用の35秒（`FIREBASE_MATCH_SEAT_SUSPECT_MS`）だけで席を消さないこと。
+  消してよいかを決めるのはサーバー時刻の `seenAt` だけ。
+- ホスト席（p1）を引き継ぎの対象に入れないこと。確認する手段が無い席を消すことになる。
+- 引き継ぎの状態をスナップショットやFirebaseへ足さないこと。名簿が変わったことだけで
+  全端末が同じ結論に至る、という今の形を崩さない。
+- 裏に回っている時間を無音として数えないこと（ロビー・対戦の既存2系統と同じ扱い）。
+
+### ルールの変更点（Console反映が必要）
+
+`slots/$seat` の `.write` のうち、**ホストが応答の途切れた席を空ける分岐**だけを広げた。
+
+```
+変更前: round.status === 'lobby'                            の時だけ空けられる
+変更後: round.status === 'lobby' または 'playing' の時に空けられる
+```
+
+- 広げたのは **「いつ空けられるか」だけ**。「誰が（ホストだけ）」「どれだけ古い席を
+  （`seenAt` が90秒以上前）」は一切緩めていない。
+- 反映前に公開しても入室できなくなるような事故は起きない（v101とは形が違う）。
+  削除が断られるだけで、3回で諦めて従来どおりの動作に戻る。ただし**引き継ぎは働かない**。
+
+### 検証結果
+
+- 新テストは、実装を1か所ずつ壊すと必ず対応するテストが落ちることを確認してから入れた。
+  実際に確かめた壊し方は7通り（巻き添えで切る／ホスト席まで対象にする／手番の途中で
+  計画を立て直さない／落ちた人の行動待ちを捨てない／画面ロック中も数える／1vs1でも
+  引き継ぐ／再戦へ無音時間を持ち越す）と、諦めまわりの2通り。
+- 指定の全テストを実際に走らせ、合計 **874件すべて成功**。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 128件 × 2席
+  - `resulttest`: 92件
+  - `stage3test`: 386件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `loopbacktest` の中継メッセージ数は `58 / 91 / 124 / 90 / 58` で v120 と同じ。
+  新しい非決定性は混ざっていない。
+- ローカルHTTP＋実ブラウザ（Chromium・430×860）で「確認中」の帯と引き継ぎカットインを
+  実際に描いて確かめた。**最初はターンバーの真下に置いたところミニマップの枠と
+  「MAP」の行に重なった**ので、ミニマップの下へ移し、暗い下敷きを敷いた。
+
+### まだ確認できていないこと（実機QAで）
+
+- **実端末2台以上での引き継ぎ**。片方を機内モードにするか、タブを閉じて90秒待つ。
+  45秒ではなく35秒で「確認中」が出て、90秒を越えたところでカットイン→CPUが手番を進める。
+- 落ちた人の**手番の途中**で引き継いだ場合に、その手番からCPUが動き出すこと。
+- 引き継いだ後、試合が最後まで進んで決着すること。
+- 引き継がれた本人が復帰した時に、理由を見てタイトルへ戻ること。
+
+## v120 で入れた変更（「応答なし」なのに席を空けられない）
+
+> ✅ **公開済み**（2026-08-05、PR #44）。`database.rules.json` の変更なし。Console作業は不要。
+
+### 入れたもの
+
+- ホスト画面の無応答表示は従来どおり45秒で出すが、その時点では「切断確認中…」と表示する。
+- 5秒おきにFirebaseの席を読み直し、ルール側と同じサーバー時刻の `seenAt` が90秒より古いと
+  確認できた席だけ「この席を空ける」ボタンへ切り替える。
+- 席から再び通信が届いたら、過去の「空けてよい」確認結果を即座に破棄する。
+
+### なぜこの作りにしたか
+
+- 実機ではP2が45秒で「応答なし」になり、ボタンも出たが、Firebaseルールは90秒以上古い席しか
+  消さないため、押すと「まだ応答がある」と拒否された。画面用の時計と削除用の時計が別物だった。
+- ルールを45秒へ緩めると、スマホの画面ロックや裏タブで生きている人を追い出す危険がある。
+  そこで安全幅90秒は維持し、押せる表示の方をサーバーの判定へ合わせた。
+- メッセージのpingだけでは、別経路で更新される `seenAt` の最終時刻は分からない。ボタンを出す前に
+  席を読み直すことで、見た目と実際の削除可否を一致させる。
+
+### やってはいけないこと
+
+- `FIREBASE_LOBBY_SEAT_STALE_VISIBLE_MS`（警告）だけで削除ボタンを出さない。
+- ルール側の90秒を、見た目へ合わせるためだけに短くしない。バックグラウンドの通信間引きで
+  生存中の席を消す危険がある。
+- 一度確認した `seatReleaseReady` を、相手の通信復帰後や次ラウンドまで持ち越さない。
+
+### 検証結果
+
+- 新テストは旧実装で「応答なしだけでボタンが出る」ため失敗することを確認してから実装した。
+- サーバーと同じ90秒の境界、確認前はボタンを出さないこと、確認中表示、通信復帰時の破棄を検査する。
+- 指定の全テストを実際に走らせ、合計 **842件すべて成功**。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 128件 × 2席
+  - `resulttest`: 92件
+  - `stage3test`: 354件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- `database.rules.json` は変更していない。Consoleの追加反映は不要。
+- ローカルHTTPをPCの独立した2タブで開き、P1ホスト＋E1ゲスト＋P2/E2 CPUの2vs2を実施した。
+  双方から発射して相手側にも同じHPが届くこと、CPU2席の手番が自動で進むこと、両画面が同じ28手番目で
+  P1/E1とも0になり、ホスト敗北・ゲスト勝利として決着することまで確認した。
+- 別の部屋をPCの独立した3タブで開き、P1ホスト＋E1ゲスト＋P2ゲスト＋E2 CPUにしてからP2タブを閉じた。
+  45秒時点ではP2が「切断確認中…」で削除ボタンなし、90秒を越えると「応答なし」＋「この席を空ける」へ
+  切り替わり、押すと拒否されずP2が空席＋CPU担当へ戻るところまで実通信で確認した。
+- 決着後は両方とも同じ部屋のロビーへ戻れた。ただし長時間の検証中にゲスト側の匿名認証更新が失敗し、
+  同じ部屋での再戦開始までは通せていない。初戦の2台受信経路は確認済みだが、再戦とスマホ＋PCタブ2つの
+  3人構成は公開前の実機確認に残す。
+
+## v119 で入れた変更（バトル開始時のVSカットイン）
+
+> ✅ **公開済み**（2026-08-05、PR #43）。ルールの変更なし。ローカル実ブラウザ確認済み。
+
+### 入れたもの
+
+- 戦闘開始時に1.8秒の全画面カットインを出す。1vs1は「〇〇 VS 〇〇」、2vs2は
+  「〇〇 ＆ 〇〇 VS 〇〇 ＆ 〇〇」。左右の色、キャラの顔、名前、対戦人数をまとめて見せる。
+- 左陣営は `p1,p2`、右陣営は `e1,e2` の固定順。同じ試合なら、ホスト・ゲスト・観戦者の
+  どの端末でも同じ並びを見る。
+- オフライン開始・演習・再戦は `resetMatch()` から出す。オンラインの受け取り側と観戦者は、
+  開始スナップショットを適用して戦闘画面へ入った直後に各端末で出す。
+- 既存のカットイン機構を使い、表示中だけ試合進行と通常操作を止める。通信処理は止めない。
+  通信版不一致などの致命的な画面では、カットイン中でもタップでタイトルへ戻れる。
+- 必殺技用の顔位置は流用せず、VSの丸窓専用に16体ぶんの切り出し位置を持つ。実測で車体が
+  中央へ来ていた岩男・トリ戦車・ブルムータン・ドレッドノートなどを顔中心へ補正した。
+
+### なぜこの作りにしたか
+
+- 開始スナップショットにはキャラと対戦形式がすでに揃っている。その確定後に端末ごとで描けば、
+  演出のための新しい通信やルール変更が要らず、対戦結果へ影響しない。
+- `applySnapshot()` 自体には開始演出を入れていない。通常のターン同期でも同じ関数を使うため、
+  そこへ入れると相手が撃つたびにVSカットインが再表示されてしまう。
+- ローカル席から左右を組み替えない。ゲストだけ左右反転すると、端末ごとに見える対戦カードが
+  食い違い、2台QAで説明しにくくなるため。
+
+### やってはいけないこと
+
+- カットインの状態を対戦スナップショットやFirebaseへ追加しない。これは各端末だけの表示で、
+  通信対象にすると新旧版混在・再送・観戦途中参加に新しい壊れどころが増える。
+- `applySnapshot()` のたびに表示しない。表示するのは「戦闘開始が確定した入口」だけ。
+- カットイン中という理由で `updateOnline()` や通信エラーからの退出を止めない。
+- 顔画像の読み込み成否を、並び・勝敗・当たり判定など遊びの判定に使わない。
+- 必殺技用 `CHARACTER_FACES` とVS用 `MATCHUP_FACES` を再び1つにまとめない。丸窓の大きさが
+  違うため、片方を直すともう片方の顔位置が崩れる。
+
+### 検証結果
+
+- 追加テストは実装前のv118で失敗することを確認してから実装した。
+- 指定の全テストを実際に走らせ、合計 **838件すべて成功**。
+  - `seattest`: 20件 × 2席
+  - `regressiontest`: 128件 × 2席
+  - `resulttest`: 92件
+  - `stage3test`: 350件
+  - `lobbysimtest`: 7件
+  - `loopbacktest`: 93件
+- 全体テストの初回で、開始カットイン中の通信版不一致に通常受信キューが残り、退出タップも
+  止まる回帰を検出した。版不一致時にキューを破棄し、致命的な通信画面の退出を演出より
+  優先するよう直した後、`loopbacktest` 93件を含む全件が成功した。
+- ローカルHTTPで全16体の比較表を描き、さらに実ゲームの1vs1カットインをChromiumで撮影した。
+  16体とも顔または顔に相当する機体前部が丸窓へ収まり、左右の名前・VS・人数表示も重ならない。
+- 2vs2はユーザー実機で表示済み。ただし今回の個別補正後の最終見た目は、次のタブ2つQAで再確認する。
+
+## v118 で入れた変更（直撃の円が下寄り）
+
+> ✅ **公開済み**（2026-08-04、PR #41）。ルールの変更なし。**爆風のダメージ計算は一切変えていない。**
+
+### 症状
+
+v117 で当たり判定を可視化したところ、**円がキャラの足元に寄っていて、見えている
+上半分に当たらない**ことが分かった（実機で指摘）。
+
+`u.y` は足元から `UNIT_RADIUS`(16px) しか上にない。そこを中心に半径30の円を置くと、
+判定は「足元の14px下〜46px上」。スプライトは78pxあるので**上半分は素通り**していた。
+
+### 直し方
+
+直撃の円だけを `UNIT_HIT_RISE = 23` px 持ち上げた（`unitHitCenter`）。
+スプライトは高さ78pxで下端が足元なので、絵の中心は `u.y` から約23px上になる。
+
+**上げたのは直撃の円だけ。`unitAnchor`（発射基点と爆風の基準）は動かしていない。**
+動かすと足元へ撃った時の距離が変わり、**ダメージが全キャラぶん変わってしまう**
+（既存コメントにあるとおり、足元への着弾は16〜25pxの帯に入る前提で組まれている）。
+
+したがって**同じ場所へ着弾した時のダメージは従来どおり**。変わったのは
+「弾がどこで機体に触れて止まるか」だけ。
+
+### やってはいけないこと
+
+**上げ幅を絵の高さから計算しないこと。** 画像の読み込みに失敗した端末だけ中心が
+変わり、オンラインで当たり外れが食い違う。全端末で同じ固定値にすること。
+
+### 検証結果
+
+- 自動テスト合計 **820件すべて成功**（regressiontest へ 3件追加）。
+  「見えている輪と実際の判定が同じ中心を使う」「発射基点と爆風の基準は動かしていない」
+  を固定してある。
+- 4体ぶん合成して、円がキャラの体に乗ることを確認した。
+
+## v117 で入れた変更（キャラの大きさを揃える／当たり判定の可視化）
+
+> ✅ **公開済み**（2026-08-04、PR #40）。ルールの変更なし。**遊びの数値は何も変えていない**（見た目だけ）。
+
+### 1. 見かけの大きさがばらばらだった
+
+実機で「キャラ画像のサイズがまちまちなせいか明らかに大きさが違う」と指摘。
+
+原因は**高さ基準で描いていること**。`h = SPRITE_SIZE`、`w = h × 絵の比率` なので、
+**縦長の絵ほど小さく、横長の絵ほど大きく見える**。実測でひらきは **1.65倍**あった。
+
+| | 比率 | 描画(幅×高) | 体感=√面積 |
+|---|---|---|---|
+| ニセンモノ | 0.71 | 55×78 | 65.6 ← 最小 |
+| メカ | 1.60 | 125×78 | 98.7 |
+| 死神 | 1.06 | 112×105 | 108.6 ← 最大 |
+
+見かけの大きさを √(幅×高さ) とみなし、これが揃うよう**絵の比率から補正を出す**。
+
+```js
+const SPRITE_REFERENCE_ASPECT = 1.318;   // いまの16体の補正の平均が1.00になる値
+scale = design * Math.sqrt(SPRITE_REFERENCE_ASPECT / (絵の幅 / 絵の高さ))
+```
+
+**表を持たないので、絵を差し替えても勝手に追随する。** 補正後はニセンモノが 75×106、
+メカが 113×71 になり、面積が揃う。ほとんどのキャラの変化は ±8% 以内。
+
+### spriteScale の意味を分けた
+
+`spriteScale` は**設計の意図だけ**を持つようにした（「この子だけ大きい」）。
+絵が縦長か横長かの差は `unitSpriteScale` が別に打ち消す。
+
+死神は `1.35 → 1.21` にしたが、これは分離しただけで**画面に出る大きさは変えていない**
+（比率の補正 1.11 × 意図 1.21 ≒ 従来の 1.35）。
+
+### 2. 当たり判定を可視化した
+
+**判定は全キャラ共通の円**。中心はキャラの中心 `(u.x, u.y)`、半径は `UNIT_HIT_RADIUS = 30`。
+絵の形も大きさも違うので、どこに当たるのかは絵からは読めなかった。
+
+自陣営は青、敵陣営は赤の輪をゆっくり明滅させる。手番のキャラだけ少し濃い。
+**絵より先に描く**（上に重ねるとキャラが霞む）。
+
+### 気づいたこと（未対応）
+
+**判定の円はキャラの下半分にある。** 中心が足元から16pxしか上にないのに半径30なので、
+足元の14px下から46px上までが判定。スプライトの高さは78pxあるので、**上半分は当たらない**。
+背の高い絵（ニセンモノは補正後106px）ほどこのズレが目立つ。
+
+可視化したことで見えるようになった既存の挙動で、今回は触っていない。
+気になるなら中心の高さか半径を調整することになる。
+
+### 検証結果
+
+- 自動テスト合計 **817件すべて成功**（regressiontest へ 3件追加、死神の固定値を更新）。
+- 補正後の並びを実際に合成して、大きさが揃うこと・輪が主張しすぎないことを確認した。
+
+## v116 で入れた変更（差し替えた画像が出てこない）
+
+> ✅ **公開済み**（2026-08-04、PR #39）。ルールの変更なし。v115の不具合修正。
+
+### 症状
+
+v115 でニセンモノの画像を差し替えたのに、**キャラ選択画面でもバトル中でも古い絵のまま**。
+`build v115` は表示されているので、`index.html` は新しくなっている。
+
+### 原因
+
+**キャラ画像だけURLに版が付いていなかった。**
+
+```
+assets/nisenmono.png        ← 版なし。中身を替えてもURLが同じ
+assets/title-bgm.mp3?v=2    ← 音は最初から版が付いていた
+assets/bonus-bgm-1.mp3?v=1
+```
+
+Service Worker もブラウザも**URLでキャッシュを持つ**ので、URLが変わらない限り
+中身を入れ替えても古いものが出続ける。`sw.js` の `CACHE_VERSION` を上げれば
+古いキャッシュ自体は消えるが、**消える前に読み込まれた分は古いまま**で、
+その後もブラウザのHTTPキャッシュが残る。
+
+`index.html` が新しくなったのは、`sw.js` がナビゲーションだけネットワーク優先で
+扱っているため。**画像はキャッシュ優先**なので取り残された。
+
+### 直し方
+
+音と同じやり方に揃えた。`CHARACTER_ASSET_VERSION` を置き、**差し替えたキャラだけ**
+版を上げる。
+
+```js
+const CHARACTER_ASSET_VERSION = { nisenmono: 2 };
+img.src = `assets/${asset}.png${assetVersion ? `?v=${assetVersion}` : ''}`;
+```
+
+**全部を一括で上げてはいけない。** 変えていない15体ぶん（約2.5MB）まで配り直すことになる。
+
+### 同じ穴を二度踏まないために
+
+キャラ画像16枚ぶんの**中身のハッシュを固定した**（BGMと同じ作り）。
+画像を差し替えたのに版を上げ忘れると、テストが名指しで落ちる。
+
+```
+FAIL character images and their cache-busting versions stay in sync
+  assets/nisenmono.png の中身が変わっている(...)。CHARACTER_ASSET_VERSION の ?v= を上げること
+```
+
+**→ キャラ画像を差し替えたら、`CHARACTER_ASSET_VERSION` とテストのハッシュを両方更新すること。**
+
+### 検証結果
+
+- 自動テスト合計 **801件すべて成功**（stage3test へ 2件追加）。
+- 画像だけ差し替えて版を据え置いた状態でテストが落ちることを確認済み。
+- 実ブラウザで `assets/nisenmono.png?v=2` を要求していることを確認した。
+
+## v115 で入れた変更（ニセンモノのキャラ画像を差し替え）
+
+> ✅ **公開済み**（2026-08-04、PR #38）。ルールの変更なし。画像はユーザー生成。
+
+`assets/nisenmono.png` を差し替えた（272×384、152KB）。設定は一切変えていない。
+**`facesLeft` の一覧も変わらない**（ニセンモノは元から右向き素材で、新しい絵も右向き）。
+
+### 素材の受け渡しでつまずいた点（次にやる人へ）
+
+**チャットへ貼った画像は透過が潰れる。** 最初にもらった版は四隅が真っ黒ではなく
+暗い紫(44,28,40)で、中心へ向かって明るくなっていた。透過の発光を暗い背景へ
+焼き付けた時の見え方そのもの。
+
+焼き付いた版から背景を抜こうとしたが、**この絵は石板の顔と背景のもやがほぼ同じ色**
+だった（顔 `(123,65,118)` / すぐ横の背景 `(121,68,113)`）。色で切り分ける方法では
+「顔を残すともやが付く／もやを消すと顔が透ける」の二択にしかならない。
+
+**この作業環境からは Google Drive へ到達できない**（ネットワークポリシーが
+CONNECT を403で拒否する。共有設定の問題ではない）。GitHub は通るので、
+**`assets/` へ直接アップロードしてもらう**のが確実。実際その方法で受け取った。
+
+→ **キャラ画像をもらう時は、GitHubのassetsへ透過PNGを直接置いてもらうこと。**
+
+### 加工
+
+元データが透過なので背景を抜く処理は不要。やったのは2つだけ。
+
+- 切り出し。**下端だけは「実体のある最終行」で切る。** 画像の下端を接地線に合わせて
+  描くため、下に薄い光の粒まで残すと、そのぶん機体が浮いて見える。
+- 高さ384へ縮小（ゲーム側は高さ基準で描くので、幅は比率のまま付いてくる）。
+
+### 検証結果
+
+- 自動テスト合計 **799件すべて成功**（追加なし。画像の差し替えなので設定側は無変更）。
+- 盤面の表示サイズ（高さ78px）で実際に合成して、読めること・接地していること・
+  左右反転しても破綻しないことを確認した。
+
+### 未確認（実機で）
+
+- 選択画面とHUDでの見え方。
+- **説明文との整合。** `desc` は「圧倒的な耐久で戦線を支える石像戦車」のままだが、
+  新しい絵は戦車というより浮遊する石像機。気になるなら文言を直す。
+
+## v114 で入れた変更（壁の割れ方が「賽の目」に見える）
+
+> ✅ **公開済み**（2026-08-04、PR #37）。ルールの変更なし。v113への指摘。
+
+### 症状
+
+「余りにも綺麗に破片になっているので、まるで賽の目にスライスされたかのよう」。
+**全部が同じ大きさの長方形**だったので、割れたのではなく切られたように見えていた。
+
+### 直し方1: 頂点を先に散らす
+
+格子のまま切るとどうしても賽の目になる。**格子の頂点を先にランダムへずらしてから、
+その四隅で破片を作る。**
+
+- 隣り合う破片は**ずらした同じ頂点を共有する**ので、隙間も重なりも出ない
+- 画面の縁の頂点だけは動かさない。動かすと外周に隙間が空いて奥が透ける
+- 破片は矩形ではなく多角形になるので、`ctx.clip()` で切り抜いてから絵を貼る
+
+### 直し方2: 着弾の近くほど細かく砕く
+
+全部を同じ大きさにすると、どこに当たったのか分からない。
+着弾から `WALL_BLAST_RANGE * 0.62` 以内の区画だけ、さらに4つへ割る。
+
+割る位置は**辺の中点**なので、割らない隣の破片との境目に隙間はできない。
+そのため**破片は着弾点が決まってから組む**（`beginWallBreak` で組み直す）。
+
+### 直し方3: 崩れきるようにした
+
+穴だけ空いて周りが残ったままだったので、
+伝播 1800→**2600**px/秒、重力 2600→**3400**、上の石の落下 90→**210**（下の石にも70）へ。
+壁全体が沈んでからタイトルが出る。
+
+### 検証結果
+
+- 自動テスト合計 **799件すべて成功**（resulttest へ 3件追加、2件を数値非依存へ直した）。
+  崩れの数値は調整対象なので、テストは**仕組み**（上の石ほど強く落ちる、など）だけを守る。
+- ヘッドレスChromiumで崩壊の各時点を実際に描いて確認した。
+
+## v113 で入れた変更（起動演出の壁を生成画像へ）
+
+> ✅ **公開済み**（2026-08-04、PR #36）。ルールの変更なし。壁の絵はユーザー生成（GPT Image）。
+
+### やったこと
+
+`assets/wall.jpg` を追加し、起動演出の壁をこの絵に差し替えた。
+
+**壁を1枚の絵にすると壊せなくなる**（崩壊は「壁が破片として存在している」ことで
+成立している）。そこで**破片ごとに絵から切り出して貼る**形にした。
+
+```js
+ctx.drawImage(wallImage, piece.sx, piece.sy, piece.sw, piece.sh, -w/2, -h/2, w, h);
+```
+
+これで見た目は絵のまま、崩れ方（爆風・落下・回転・拡大）は一切変えずに効く。
+
+### 割り方
+
+**8列 × 16段 = 128片。** 絵に描かれている石の大きさに近づけてある。
+大きすぎると1枚の板が割れたように、細かすぎると砂のように見える。
+梁と鋲は絵に焼き込まれているので、手続き的な梁は絵の壁では作らない。
+
+### 垂れ幕は代役の壁だけ
+
+手で描いた石は単調なので布で変化を付ける意味があったが、**絵の壁に重ねると
+そこだけ質が落ちて明らかに浮いた**（実際に浮いた）。絵は単体で壁として完成している。
+
+### 順序の矛盾を避ける
+
+**壁の絵は読み込み画面の背景そのもの。** `areCoreImagesReady()` に入れると
+「壁の絵を読み終わるまで読み込み画面が出せない」という矛盾になるので入れていない。
+届くまでは手続き的な壁（v112までのもの）を出し、届いた時点で組み直して差し替える。
+**崩れている最中は組み直さない**（破片が一斉に元の位置へ戻ってしまう）。
+
+`<link rel="preload">` と Service Worker のプリキャッシュには入れてあるので、
+2回目以降は待ちが無い。
+
+### 画像の扱い
+
+- 元は 1024×1536 PNG（約3.0MB）。**読み込み画面に出るものが3MBでは本末転倒。**
+- 画面は 540×960。カバー表示で使う幅ぶん（864×1536）だけ残して左右を切り、
+  JPEG(q78, progressive) へ。**約232KB**。
+- 変換には Pillow を使った（この作業環境へ導入。リポジトリには依存を追加していない）。
+
+### 検証結果
+
+- 自動テスト合計 **796件すべて成功**（resulttest へ 6件追加）。
+- ヘッドレスChromiumで読み込み画面と崩壊の各時点を実際に描いて確認した。
+- 崩していない間は1枚で描くようにしたので、読み込み中の負荷はむしろ下がっている。
+
+## v112 で入れた変更（起動演出の作り込み）
+
+> ✅ **公開済み**（2026-08-04、PR #35）。ルールの変更なし。ユーザーの指摘3点への対応。
+
+### 1. 砲弾を山なりにした
+
+真っ直ぐ縮むだけだと「飛んでいる」ように見えなかった。弧の高さを 42px → **168px**（`WALL_ARC`）。
+
+### 2. 崩れ方を作り直した
+
+**全部を放射状に飛ばしていたので、爆発にしか見えず壁が崩れたようにならなかった。**
+着弾からの距離で2段構えにした。
+
+| 距離 | 挙動 |
+|---|---|
+| 近い（`WALL_BLAST_RANGE=330` の内側） | 爆風で吹き飛ぶ。外へ速く飛び、手前へ拡大し、激しく回る |
+| 遠い | 支えを失って**落ちる**。外への力は弱く、重力（`WALL_GRAVITY=2600`）が主 |
+
+- **手前へ拡大するのは爆風に巻かれた石だけ。** 遠い石まで拡大すると全部が飛んできて
+  やはり爆発に見える。
+- **着弾点より上の石は下の支えを失う**ので、落ちる向きに寄せた（`unsupported`）。
+  穴が上へ広がり、下側の壁がしばらく残る形になる。
+- 尺を 1.3秒 → **1.5秒** へ。崩れ落ちる時間が要るため。BGMの再生待ち（最大1.5秒）の
+  範囲には収まっている。
+
+### 3. 石・木・旗に傷みを入れた
+
+- **石**: 角の欠け（割れ口だけ明るくして凹みに見せる）、ひび、苔、ざらつき。
+  ひびは**走る向き・長さ・始点の辺**を石ごとに変える。同じ形が並ぶと傷ではなく模様に見える。
+- **木**: 縦の割れを1本。これだけで古材になる。
+- **旗**: 裾を裂き、破れの穴を2つ、日焼けの褪せを1本。
+
+**角の欠けは切り抜かずに描いている。** 実際に削ると継ぎ目に穴が開き、奥のタイトルが
+透けてしまう（v110で一度それをやって失敗している）。旗の裾だけは下が石なので切ってよい。
+
+### 検証結果
+
+- 自動テスト合計 **790件すべて成功**（resulttest へ 5件追加）。
+- ヘッドレスChromiumで読み込み画面・飛翔中・崩壊中を実際に描いて確認した。
+
+## v111 で入れた変更（タイトルが震え続ける）
+
+> ✅ **公開済み**（2026-08-04、PR #34）。ルールの変更なし。v110の不具合修正。
+
+### 症状
+
+「タイトル表示してからずっとブルブル震えてる」。v110 の起動演出で着弾時に画面を
+揺らした後、タイトルへ移っても揺れが止まらない。
+
+### 原因
+
+**画面の揺れを減らす処理が `update()` の「対戦中」の分岐の内側にあった。**
+
+```
+function update(dt) {
+  updateOnline(dt);
+  ...
+  if (gamePhase !== 'battle') return;   // ← タイトルはここで抜ける
+  ...
+  if (shakeTimer > 0) shakeTimer -= dt; // ← 対戦中しか走らない
+}
+```
+
+v110 以前は `triggerShake()` を対戦中からしか呼んでいなかったので表に出なかった。
+起動演出で初めて対戦の外から呼んだ結果、減衰が一度も走らず永久に震え続けた。
+
+### 直し方
+
+**揺れは描画側の効果であって対戦の状態ではない。** 減衰を `update()` の先頭へ出し、
+どの画面でも必ず減るようにした。減らす場所はここ1か所だけ。
+
+### 検証
+
+- 自動テスト合計 **785件すべて成功**（resulttest へ 4件追加）。
+  `title` / `select` / `ranking` / `freeSetup` の各画面で、揺らしてから0.8秒回して
+  必ず0になることを見る。修正前の実装では4件とも `残り=0.32` で落ちる。
+- **実ブラウザでも症状と解消の両方を確認した。** 演出の完了後に同じ画面を3回撮って
+  完全一致するかを見る方法（揺れていると毎フレームずれる）。
+  修正前 `NO (まだ動いている)` → 修正後 `YES (揺れなし)`。
+
+## v110 で入れた変更（起動演出:砦の壁を撃ち抜いてタイトルへ）
+
+> ✅ **公開済み**（2026-08-04、PR #33）。ルールの変更なし。Console作業は不要。ユーザー発案。
+
+### やったこと
+
+読み込み画面の全面黒を**砦の壁**（石積み＋横木＋鋲＋垂れ幕）に変え、
+`TAP TO START` で**タップした場所**へ砲弾を撃ち込み、壁を砕いてタイトルへ出る。
+
+```
+0.00-0.45s  砲弾が手前から奥へ。大きく→小さく縮みながら飛ぶ
+0.45s       着弾。閃光 + triggerShake(9, 0.32) + 爆発音
+0.45-1.05s  着弾点から輪のように石が崩れる
+            破片は逆に**手前へ拡大**して画面外へ抜ける
+1.05-1.30s  残った破片を消しきり、奥のタイトルへ着地
+```
+
+**砲弾は奥へ縮み、破片は手前へ拡大する。** すれ違わせることで「壁の向こうへ出た」という
+視線移動になる。奥に描いているのは**本物のタイトル画面**で、フェードでごまかしていない
+（`TAP TO START` が出る時点でロゴも背景も読み込み済みであることを確認した）。
+
+### 尺は足していない
+
+タップ後はBGMの再生開始を最大1.5秒待つ作りで、そこは今まで「STARTING BGM...」と
+出るだけの無音の間だった。演出はそこへ入れている。
+
+### 出るのは起動時の1回だけ
+
+`'press'` からしか `'breaking'` へ入らないので、対戦を終えてタイトルへ戻る時は
+従来どおり直接表示。**毎回壊れたら必ず飽きる。**
+
+### 実際に描いて分かった、直したこと
+
+見た目は目視でしか分からないので、ヘッドレスChromiumで**コマ撮りして確認**した。
+そのうえで3つ直している。
+
+1. **石に隙間を空けたら、継ぎ目から奥のタイトルが透けた。** 角を落とす形（`angularPlatePath`）は
+   継ぎ目に穴が開くので石には使わない。隙間なく敷き詰め、目地は縁取りで作る。
+2. **下半分が崩れ終わる前に画面が切り替わっていた。** 伝播と飛散を速め、さらに
+   終わり際は残りを必ず消しきるようにした（`WALL_CLEAR_SEC`）。これが無いと
+   切り替わった瞬間に瓦礫がパッと消える。
+3. **破片ごとのグラデーションを毎フレーム作り直していた。** 読み込み中はずっと回るので、
+   一度作って破片に持たせる。グラデーションは塗る瞬間の変換で解釈されるため、
+   原点中心の座標で作れば位置を変えても使い回せる。
+
+### 計測についての注意（次にやる人へ）
+
+- **`file://` では canvas を吸い出せない**（画像で汚染されて `toDataURL` が SecurityError）。
+  `python3 -m http.server` で配って `http://127.0.0.1:...` から開くこと。本番と同条件にもなる。
+- **コマを連続で吸い出すとアニメ自体が遅くなる。** `dt` に上限（0.033）があるため、
+  重い処理でコマ落ちするとその分だけ進行が遅れる。1実行につき1コマだけ撮ること。
+
+### 検証結果
+
+- 自動テスト合計 **781件すべて成功**（resulttest へ 7件追加）。
+- ヘッドレスChromiumで読み込み画面と演出の各時点を実際に描いて確認した。
+
+## v109 で入れた変更（ボタンの見分けが付かない）
+
+> ✅ **公開済み**（2026-08-04、PR #32）。ルールの変更なし。Console作業は不要。
+
+### 実機で言われたこと
+
+「準備完了と対戦開始などの各ボタンが横幅も全て統一しすぎて、間違ってないか探して押すのが
+ストレス」「ルームの左上の合言葉が何のことか分からない人もいる」（タイトルについても同様）。
+
+### 実際に測ったら、本当に全部同じだった
+
+ヘッドレスChromiumで計測したところ、**フッタのボタンは全部 376×48px・15px で完全に同一**
+だった。色だけが違う状態。原因はCSSの詳細度。
+
+```
+#onlineLobbyButtons button { ... }   /* id + 要素 = (1,0,1) */
+#onlineQuick, #onlineReady { min-height: 54px; font-size: 16px; }  /* id だけ = (1,0,0) → 負ける */
+```
+
+**以前から書かれていた序列の指定が、一度も効いていなかった。**
+`!important` が付いていた色だけが通っていたので、色は違うのに大きさは同じ、という
+いちばん見分けにくい状態になっていた。
+
+**セレクタは必ず `#onlineLobbyButtons` から書くこと。** ここを守らないとまた黙って消える。
+
+### 付けた序列（実測値）
+
+| 役 | ボタン | 大きさ | 見た目 |
+|---|---|---|---|
+| 主役 | 対戦開始 / このまま再戦 / すぐ対戦する | 376×64・19px | 塗りつぶし（金） |
+| 次点 | 準備完了 | 376×52・16px | 縁取り（金） |
+| 控えめ | ロビーへ戻る | 278×42・13px | 縁取り（灰青）・幅も詰める |
+
+- **押せないボタンを押せないと分かるようにした**（`:disabled` を薄く）。今までは押せる時と
+  見た目が同じで、まさに「間違っていないか探してから押す」状態だった。
+- 「準備完了」→「準備完了を取り消す」は文字だけの違いだった。主役から降りたことを
+  色でも示す（`is-ready` クラス）。
+
+### 部屋IDの見出しを付けた
+
+英数字8文字が置いてあるだけで何なのか分からなかった。`部屋ID` の見出しを添え、
+入口側の呼び名も「合言葉」から「部屋ID」へ揃えた（`相手の部屋ID 8文字` / `部屋IDを使う`）。
+
+### タイトル
+
+CPU BATTLE と ONLINE BATTLE が同じ鋼色で、文字を読むまで見分けが付かなかった。
+**位置と大きさは一切変えず**（配置は別のテストが固定している）、ONLINE だけ真鍮寄りの色に
+した。これで CPU（鋼）/ ONLINE（真鍮）/ 演習（緑）の3色になる。
+
+### 検証結果
+
+- 自動テスト合計 **773件すべて成功**（stage3test へ 8件追加）。
+- **ヘッドレスChromiumで実際に描画して確認した**（ロビー・準備完了後・結果ロビー・タイトル）。
+  見た目の最終判断は実機だが、「全部同じ376×48px」のような取りこぼしは計測で拾える。
+- 1vs1に退行なし。`loopbacktest.js` の中継メッセージ数は据え置き。
+
+## v108 で入れた変更（401でやり直さない／部屋の導線の整理）
+
+> ✅ **公開済み**（2026-08-04、PR #31）。ルールの変更なし。Console作業は不要。
+
+### 1. 認証が切れると再戦できないまま取り残される（実機で発生）
+
+結果ロビーで「認証の更新に失敗しました。30秒後に同じアカウントで再試行します。」が出て、
+**「このまま再戦」を押しても何も起きない**状態になった。
+
+原因は `firebaseRequest` が **401 のとき一切やり直していなかった**こと。鍵の期限が切れると
+以降の書き込みが全部401で落ち続け、再戦の準備（次ラウンドの実体とポインタ）すら作れない。
+定期更新の1回の失敗が、そのまま「その部屋はもう何もできない」に直結していた。
+
+**直し方**: 401 を受けたら鍵を取り直し、**本当に新しくなった時だけ**1回だけ送り直す。
+
+- 401は「鍵の期限切れ」と「ルールに弾かれた」の**両方**で返り、応答からは見分けが付かない
+  （この性質は以前から観測事項として記録していたもの）。
+- `ensureFirebaseAuth()` を **force せずに**呼ぶのが要。期限内なら同じ鍵が返るので
+  送り直さず従来どおり失敗する＝ルール拒否のたびに鍵の発行元へ通いに行かずに済む。
+- UIDは変わらない（`ensureFirebaseAuth` は一度匿名UIDを得た後は新規signUpをしない）。
+  変わるとホスト/ゲストの権限を失う。
+
+### 2. 「CPUで始める」を廃止した（決定15の改定・ユーザー判断）
+
+部屋の中に「対戦開始」と「CPUで始める」の2つの入り口があり、導線が分かりにくかった。
+
+- **1vs1でCPUと戦いたいなら、タイトルの CPU BATTLE がある。**
+- **2vs2は「対戦開始」を押せば空席がそのままCPUになる**（決定3）。既にそう動いている。
+
+よって部屋の中の別口は不要。**人が座っている席が全員準備完了したら、ホストが対戦開始を
+押せて、残りは自動的にCPUが埋める**という1本の導線に統一した。
+
+「自動では始めない（人が対戦開始を押す）」という決定15の芯は変わっていない。
+2vs1（CPU埋めなし）のような特殊パターンの需要が出たら、その時に作り直す。
+
+なお1vs1の部屋では相手が居ないと開始できない（従来どおり）。CPUと遊ぶならタイトルから。
+
+### 検証結果
+
+- 自動テスト合計 **765件すべて成功**（stage3test へ 2件追加、1件を決定15の改定に合わせて更新）。
+- 追加テストが修正前の実装で落ちることを確認済み。
+- 1vs1に退行なし。`loopbacktest.js` の中継メッセージ数は据え置き。
+
+## v107 で入れた変更（CPUだけの相手だと再戦が自動で始まらない）
+
+> ✅ **公開済み**（2026-08-04、PR #30）。ルールの変更なし。Console作業は不要。
+
+### 実機で言われたこと
+
+「再戦時の時間がややかかるけど概ね大丈夫そう」（1台・1人＋CPU3体の2vs2）。
+**2vs2が完走できることはこの時点で確認できた。**
+
+### 原因
+
+再戦の自動開始（`maybeAutoStartFirebaseRound`）を試すのが、
+**「誰かの ready / commit を受け取った時」の2か所だけ**だった。
+相手がCPUだけの部屋では誰も送ってこないので自動開始が一度も走らず、
+再戦のたびに手で「対戦開始」を押す必要があった。
+
+`commitOwnCharacter`（自分が準備完了を押した時）の末尾でも試すようにした。
+条件が揃わなければ何もしないので、1vs1の経路は変わらない。
+
+### v105・v106 と同じ形の取りこぼし
+
+3件とも根が同じ。**「合図が受信経路にしか無い」。**
+1vs1では相手が必ず何かを送ってくるので露見しなかったが、相手がCPUだけになった
+瞬間に「誰も送ってこない＝何も起きない」に変わる。
+
+| 版 | 症状 | 合図が無かった場所 |
+|---|---|---|
+| v105 | 1人だと試合が始まらない | `maybeStartFirebaseMatch` が公開の検証時のみ |
+| v106 | 35秒で切断される | 生存確認が「相手のパケット」前提 |
+| v107 | 再戦が自動で始まらない | `maybeAutoStartFirebaseRound` が受信時のみ |
+
+**今後オンラインに手を入れる時は、「相手が1人も居ない部屋」を必ず一度通して考えること。**
+
+### 残っている待ち時間について（仕様）
+
+自動開始が直っても、再戦には数秒かかる。内訳は次のとおりで、いずれも意図したもの。
+
+- 決着演出 **2.3秒**（`MATCH_END_HOLD` 1.0 + `MATCH_END_BANNER` 1.3）。
+  決まった瞬間に文字をかぶせると何が起きたか見る間がないため、意図的に置いている。
+- ラウンドの受け渡しに必要な順番どおりの通信。新round実体 → roomのポインタ →
+  旧roundの購読者への通知、の3往復。順番を崩すと「存在しないroundへ切り替わる」
+  事故が起きるため、まとめたり並列にしたりしてはいけない。
+
+短くするなら演出側を削ることになるので、遊んでみて長いと感じたら相談すること。
+
+## v106 で入れた変更（CPUだけの相手だと35秒で切られる）
+
+> ✅ **公開済み**（2026-08-04、PR #29）。ルールの変更なし。Console作業は不要。
+
+### 実機で起きたこと（1台・1人＋CPU3体の2vs2）
+
+**2vs2そのものは動いていた。** 4手番ぶん進み、4体ぶんのHPバーもダメージも正常。
+`p1 → e1 → p2 → e2` の順で手番が回り、ホストが空席のCPU3体ぶんの `fire` と `state` を
+すべて配信できていた（通信ログで確認）。
+
+そのうえで、開始から約35秒で `相手との通信が途切れました。` で中断した。
+
+### 原因
+
+対戦中の生存確認は「**相手のパケットが35秒届かなければ切る**」という作り
+（`updateFirebasePeerLiveness`）。相手がCPUだけの部屋では**永久に何も届かない**ので、
+遊べていても必ず時間切れになる。
+
+### 直し方
+
+人が座っている対戦者席が自分だけなら、途切れる相手がそもそも居ないので判定しない。
+試合中に席へ座ることはできない（ルールがロビー中の確保しか許さない）ため、
+一度この状態になった試合は最後までこのまま。
+
+時計は止める際に「今」へ寄せる。進めたままにすると、相手が居る状態へ戻った瞬間に
+溜まった時間が一気に積まれてその場で切れてしまう。
+
+### あわせて直したもの
+
+中断理由を出す処理が、idから暗黙に生えるグローバル（`window.onlineLobby`）を参照していた。
+ブラウザ以外では存在せず、**中断理由を出そうとした所で例外になって理由が消える**。
+明示した定数（`onlineLobbyEl`）へ変えた。テストを書いていて踏んだ。
+
+### 検証結果
+
+- 自動テスト合計 **762件すべて成功**（stage3test へ 2件追加）。
+- 追加テストが修正前の実装で落ちること、および**人が座っている相手が黙った場合は
+  従来どおり切れること**の両方を確認済み。
+- 1vs1に退行なし。`loopbacktest.js` の中継メッセージ数は据え置き。
+
+## v105 で入れた変更（v104の実機で見つかった3件）
+
+> ✅ **公開済み**（2026-08-04、PR #28）。ルールの変更なし。Console作業は不要。
+
+v104を公開して最初に触った時点で、**2vs2をそもそも選べない**ことが分かった。
+自動テストは判定関数と受信経路を見ていたが、「ドロップダウンを触ったら送られるか」という
+画面と処理のつなぎ目は見ていなかった。3件とも段Bの取りこぼし。
+
+### 1. 対戦方式を変えても送られない（これが本体）
+
+`onlineFormat` の `change` だけイベントに繋がっていなかった。地形・風・手番数は繋がっている。
+選ぶと画面上は「2 vs 2」になるが何も起きず、次に画面が描き直された時点で「1 vs 1」へ戻る。
+席の名前も1vs1のまま（`P2 対戦者 / S1 観戦 / S2 観戦`）だった。
+
+### 2. 1人＋CPU3体の2vs2が始まらない
+
+試合開始の合図（`maybeStartFirebaseMatch`）が `verifyPeerReveal` からしか出ていなかった。
+ほかに人が座っていないと検証する相手の公開が届かないので、準備完了しても永久に始まらない。
+`maybeRevealCharacter` の末尾でも試すようにした。相手が居る場合は、公開がそろうまで
+`maybeStartFirebaseMatch` 側が従来どおり待つ。
+
+### 3. 1vs1の空席に「CPUが担当」と出る
+
+1vs1では空席をCPUが埋めない（相手が来ないと開始できない）のに、対戦者席が空いていれば
+出していた。2vs2の時だけ出すようにした。
+
+### 検証結果
+
+- 自動テスト合計 **760件すべて成功**（stage3test へ 3件追加）。
+- 追加テストが修正前の実装で3件とも落ちることを確認済み。
+- 1vs1に退行なし。`loopbacktest.js` の中継メッセージ数は据え置き。
+
+### 教訓
+
+**判定関数が正しくても、画面から呼ばれていなければ何も起きない。** 入力要素を足したら、
+「その要素が実際にハンドラへ繋がっているか」を1件テストに落とすこと。
+
+## v104 で入れた変更（Issue #25 段B ＋ Issue #26 段C：オンライン2vs2）
+
+> ✅ **ルール反映済み・公開済み**（2026-08-04、PR #27）。
+> 段B（4人の席とロビー）は単体では公開しない約束なので、段Cとまとめて v104 にしてある。
+
+### 席と試合中のキャラの対応（設計の要）
+
+| 席 | 陣営 | 試合中のキャラ |
+|---|---|---|
+| p1 | 自陣営 | p1（ホスト） |
+| s1 | 自陣営 | p2（味方） |
+| e1 | 敵陣営 | e1 |
+| s2 | 敵陣営 | e2 |
+
+**この対応は固定**（ロビーの設定で動かせない）。動かせるようにすると、ルールの
+「自分の席の番号のキャラしか動かせない」という一行でなりすましを封じられなくなる。
+チーム分けは「席の移動」として実現する（ホストが提案し、言われた人が自分で席を移る）。
+
+2vs2では観戦席が無くなり、s1・s2 が対戦者席になる（決定8）。
+
+### 空席はCPUが埋め、ホストが動かす
+
+人数が足りない席はCPUが埋める（決定3）。**そのCPUを動かすのはホストの端末1台だけ**で、
+結果を全員へ配る。各端末で同じ結果を再現させる道（決定性CPU）は取らない。CPUの照準には
+乱数が混ざるので、乱数の同期という壊れどころを増やさずに済ませた。
+
+- ルールの `unitId` に「誰も座っていない席のキャラはホストが動かせる」例外を足した。
+  例外はすべて `!...exists()` 付きで、座っている席へホストが手を出すことはできない。
+- クライアント側にも同じ条件を置いた（`firebaseHostActsForEmptySeat`）。片方だけ広げると
+  「ルールは通すのにクライアントが切る」という食い違いになる。
+- 手番の呼び名は席で判定する。ホスト以外の端末では空席のキャラも remote に見えるため、
+  `control` だけで決めると同じキャラが「CPU」と「相手」に分かれて表示される。
+
+### 伏せ合い（commit-reveal）を4人ぶんへ
+
+相手が3人になるので、コミットも公開も席ごとに覚える。1vs1の `peer*` は「相手の席ぶんの
+写し」として残してあり、既存の経路は今までどおり動く。
+
+- 待つのは**人が座っている対戦者席だけ**。空席のCPUは伏せ合いの相手が居ない。
+- 空席のCPUのキャラはホストが決め、開始データ（`start` のスナップショット）で配る。
+  受け取った側は、人が座っている席のキャラだけを公開済みのものと突き合わせ、空席ぶんは
+  「知らないキャラでないこと」だけを確かめる。
+- 先攻の抽選は席順に並べた nonce をまとめて混ぜる。誰も後出しで有利にできない。
+- 再戦は全員が押す（決定11）。空席のCPUは数えない。
+
+### 通信データの検証
+
+- スナップショットの人数と並びを対戦方式で1通りに固定した（1vs1=p1/e1、2vs2=p1/e1/p2/e2）。
+  緩めて好きな並びを送れるようにすると、席とユニットの対応を通信データ側から崩せてしまう。
+- 未知の `matchFormat` は推測せず拒否する。持っていない相手（v102以前）は1vs1として読む。
+- `state` の突き合わせを全ユニットぶんへ広げた。今までは2体ぶんしか比べておらず、
+  4体を渡すと3体目で例外になっていた。
+
+### 4人にすると成り立たなくなっていた待ち合わせ（実装中に見つけた不具合）
+
+- **手番が二度と進まなくなる。** ターンの終わりに「誰か倒れているのに決着が確定していない
+  ＝相手の決着通知を待っている」と判断していたが、2vs2は1体倒れても試合が続く。
+  1人目が倒れた瞬間から手番が止まっていた。陣営の全滅で判断するよう直した。
+- **ホストが撃てなくなる。** 開始データを受け取ったackを e1 からだけ待っていたため、
+  e1 が空席の2vs2ではホストが永久に `starting` のままだった。座っている人ぜんぶのackを
+  待ち、ほかに誰も座っていない場合はその場で解禁する。
+- **ホスト以外の端末がCPUを動かし始める。** 1vs1から2vs2へ切り替えると、増えた p2/e2 は
+  宣言時の `control='cpu'` のまま `units` へ入る。役割（対戦者/観戦者）が変わらない席では
+  席の貼り直しが走らないため、e1 に座っている人の端末に残っていた。
+
+### 検証結果
+
+- 自動テスト合計 **757件すべて成功**（stage3test へ 29件追加）。
+- 追加テストが崩した実装で落ちることを4通りで確認済み（ホストが空席を持たない／席ごとに
+  覚えず1つの箱を使い回す／最初の1人のackで解禁する／役割だけで貼り直しを判断する）。
+- 1vs1に退行なし。`loopbacktest.js` の中継メッセージ数は `78 / 91 / 124 / 93 / 67` で据え置き。
+
+### 実機QAの結果（2026-08-04・1台／1人＋CPU3体の2vs2）
+
+**遊べる状態になっていることを確認済み。** ユーザー報告「直って問題なかったよ」。
+ここへ至るまでに v105〜v108 の修正が要った（下記の各節）。
+
+- ✅ 1人＋CPU3体の2vs2を最後まで完走できる
+- ✅ 手番が `p1 → e1 → p2 → e2` で回り、ホストが空席のCPU3体ぶんの `fire` と `state` を
+  すべて配信できている（通信ログで確認）
+- ✅ 決着して結果画面へ進み、**再戦もできる**
+- ✅ 4体ぶんのHPバーとターンバーが読める（「概ね大丈夫そう」）
+- ✅ 部屋の導線が「準備完了 ⇔ 取り消す」「対戦開始」の2つに整理された（v108）
+
+### まだ確認できていないこと（**2台以上が要る**）
+
+**自動テストは受信経路と判定関数までで、複数台が同時につながった状態は一度も通していない。**
+`loopbacktest.js` は2人ぶん・v2プロトコルなので、ここは埋まっていない。
+1台での確認では「ホストが配る」側しか踏めておらず、**受け取る側は未検証のまま。**
+
+1. **2人で2vs2（残り2席はCPU）。** 空席のCPUが撃つところが、ホスト以外の画面でも
+   同じ弾道・同じダメージか。ここが最大の未検証点。
+2. 人間どうしの手番の受け渡し（`state` の突き合わせが通るか）。
+3. 3人＋CPU1体、および4人そろった2vs2。
+4. 人が座っている相手が黙った時に、従来どおり35秒で切れること（v106の反対側）。
+
+PCがあれば同じ部屋にタブを2つで入ると2人ぶんとして動く（別々の接続になる）。
+
+## v102 で入れた変更（Issue #23：すぐ対戦のマッチメイキング）
+
+> ✅ **ルールは反映済み**（2026-08-04、ユーザー操作）。そのうえでクライアントを公開した。
+> なお今回は v101 と違い、順番を逆にしても入室が壊れる性質のものではなかった（下記）。
+
+### 何が問題だったか
+
+「すぐ対戦する」は `QUICK_MATCH_ROOM = 'KATAMN22'` という**固定の合言葉1部屋しか無かった**。
+3人目は「ただいま簡単対戦は利用中です」で必ず弾かれる。5〜10人のグループでは、
+2人が遊んでいる間ほかの人が使えない。
+
+さらに根が深いのは、**部屋を探す手段がそもそも無かった**こと。ルートの読み取りは `false`、
+部屋の読み取りは席を持つ人だけ、と決まっているので、「今どこが空いているか」をクライアントは知れない。
+
+### 直し方
+
+- **`open`（待っている部屋の公開一覧）を新設した。** 載せるのは「この合言葉の部屋が空いて待っている」
+  という事実だけ。**部屋の中身（`rooms/$room`）は従来どおり非公開**で、そこのルールには一切触っていない。
+- すぐ対戦の流れ:
+  1. `open` を読み、形式が一致して期限内のものを**待たせている時間が長い順**に集める
+  2. 順に空席の確保を試す（既存の条件付きPUTがそのまま競合を弾く）
+  3. どこにも座れなければ自分が部屋を作り、`open` へ載せて待つ
+- **自動では始めない（決定15）。** 待ち画面に「CPUで始める」ボタンを出し、押すかどうかは人が決める。
+- 相手が座ったら案内を取り下げる。**取り下げられるのはホスト本人だけ**（ルールで固定）。
+  間に合わなくても案内は期限で消え、拾った側は席の確保に失敗して次の候補へ進むだけ。
+
+### 待っている間も合言葉を見せるようにした
+
+v101までのすぐ対戦は全員が同じ固定合言葉だったので隠していた。v102からは部屋ごとに別の合言葉に
+なるため、**待っている間こそ見せる**。呼びたい相手が居るなら、これを伝えれば直接来てもらえる。
+
+### 版が混ざる間のこと
+
+**v101以前の端末は今までどおり `KATAMN22` へ行く。** 新旧が混ざると、すぐ対戦で出会えない。
+遊ぶ人全員が新しい版になってから「すぐ対戦」を使うこと。**合言葉部屋は影響を受けない。**
+
+### 公開の順番について（v101との違い）
+
+v101は「新クライアントが `seenAt` を送る → 旧ルールが未宣言の項目を拒否 → 入室できない」という
+噛み合わせがあった。**今回は違う。** `open` は新しいノードで、既存の `rooms` には触っていないため、
+旧ルールのまま新クライアントを公開しても**入室そのものは壊れない**。壊れるのは
+「一覧を読めない・載せられない」だけで、その場合は毎回自分で部屋を作って待つ形に落ちる。
+とはいえマッチメイキングが働かないので、**反映してから公開する**のが正しい。
+
+### 検証結果
+
+- 自動テスト合計 **673件すべて成功**（stage3test へ28件追加、245→273）。
+- 追加テストが修正前で落ちることを3通りで確認。
+  - `open` の無い旧ルール → ルール検査7件が落ちる
+  - 満室でも案内を出し続ける → 「誰か座ったら取り下げる」2件が落ちる
+  - 自分の部屋の除外と並び順を外す → 対応する2件が落ちる
+- `stage3test` 10回連続で0失敗。`loopbacktest` の中継メッセージ数は `78 / 91 / 124 / 93 / 67` で据え置き。
+- 実ブラウザで待ち画面と「CPUで始める」ボタンの表示を目視確認。
+
+### まだ確認できていないこと（実機QAで）
+
+- **3人以上が同時に「すぐ対戦」を押しても弾かれないこと**（今回の本題）
+- 相手が来ない時に「CPUで始める」で遊べること
+- 待っている間に合言葉を伝えて直接来てもらえること
+- 合言葉部屋の作成・入室に退行がないこと
+
+## v101 で入れた変更（Issue #7：席のゴースト対策）
+
+> ✅ **ルールは反映済み**（2026-08-04、ユーザー操作）。そのうえでクライアントを公開した。
+> この順番は必須で、逆にすると誰も入室できなくなる。理由は下の「公開の順番」に書いた。
+> 今後 `slots` へ項目を足す時も同じ順番を守ること。
+
+### 何が問題だったか
+
+席を消せるのは**本人だけ**だった。ブラウザを普通に閉じれば席は返るが、**強制終了・電池切れ・突然の回線断**では
+席を返す処理が走らず、そして誰も消せない。部屋の寿命（10分）はホストが1分ごとに延長し続けるので、
+**ホストが居る限りゴースト席は永久に残る**。入ろうとした人には「空き席がありません」としか出ない。
+
+なお席ボードの「応答なし」表示は以前から入っていて、コードにも
+「ただし表示だけで、席は空けない。実際に空けられるようにするのはStage 4-2の領分」と書いてあった。その続き。
+
+### 直し方
+
+- 座っている本人が、自分の席へ **`seenAt`（生存印）を20秒ごとに書く**。サーバ時刻なので端末の時計に依存しない。
+- **ホストだけが、生存印の途切れた席を空けられる。** ルール側でも `seenAt` が90秒以上古いことを確認するので、
+  こちらのバグで生きている席を消すことはできない。
+- **自動では空けない**（ユーザー判断）。ロビーの「応答なし」の横に**「この席を空ける」ボタン**を出し、
+  押すかどうかはホストが決める。画面を消していただけの人を機械的に締め出さないため。
+- 空けられた本人は、名簿の受信かハートビートの失敗で気づき、**理由を表示してタイトルへ戻る**。
+  タイトルには理由の帯が15秒残る（ロビーの赤帯は退出と同時に消えてしまうため）。
+
+### 誤判定を避けるための線引き
+
+| 状況 | 扱い |
+|---|---|
+| 対戦中 | **一切空けない。** ボタンも出ないし、ルールも `status === 'lobby'` 以外を拒否する |
+| 結果画面 | 同上（再戦のために席を残す必要がある） |
+| 画面ロック・裏タブ・短い回線断 | 「応答なし」の判定は**画面が見えている時間**でしか進まない（既存の45秒の仕組みを流用）。加えてルール側は90秒。書き込み間隔20秒の4.5倍を取ってある |
+| ホスト自身 | 生存印を持たない。ルールが p1 の席への書き込みを一切許していないうえ、ホストが落ちれば部屋ごと10分で消える |
+
+### 公開の順番（重要）
+
+新しいクライアントは席を取る時に `seenAt` を一緒に書く。**旧ルールは `seenAt` を知らない**うえ、
+`slots/$seat` に `$other: { ".validate": false }` があるため、**未宣言の項目を含む書き込みは丸ごと拒否される。**
+つまり**旧ルールのまま新クライアントを公開すると、入室そのものが401で失敗する。**
+これはIssue #2で起きた「`useJump` を足したら初回砲撃が401」とまったく同じ形。
+
+1. `database.rules.json` を Firebase Console へ反映する
+2. そのあとで master へマージ（＝公開）する
+
+逆順にすると全員が入室できなくなる。
+
+### 検証結果
+
+- 自動テスト合計 **645件すべて成功**（stage3test へ30件追加、213→245）。
+- 追加テストが修正前で落ちることを確認済み。
+  - 旧ルールのまま → ルール検査5件が落ちる
+  - 生存確認を外す → 「まだ応答がある席は空けられない」が落ちる
+  - 対戦中も空けられるようにする → 「対戦中は誰の席も空かない」が落ちる
+- `stage3test` 10回連続で0失敗。`loopbacktest` の中継メッセージ数は `78 / 91 / 124 / 93 / 67` で据え置き。
+- 実ブラウザで、タイトルの理由帯が中断データの吹き出しと重ならないことを目視確認。
+
+### まだ確認できていないこと（実機QAで）
+
+- 正常退出／ブラウザ強制終了／画面ロック／一時切断と復帰／二重タブ／ゲスト席と観戦席
+- **画面ロックからの復帰で追い出されないこと**（今回いちばん壊れやすいところ）
+
+## v100 で入れた変更（Issue #20 / 段A：CPUだけの2vs2）
+
+4人マルチの第1段。**通信はまだ触っていない。** 演習（オフライン）で「自分＋味方CPU vs 敵CPU2体」を戦えるようにし、
+オンライン2vs2（段C）の土台となる部分を先に固めた。
+
+> ⚠️ **訂正（2026-08-04）。** 当初この節とPR #21に「Issue #4 を吸収した」と書いたが**誤り**。
+> Issue #4 は「オンラインで受信待ちの一瞬だけHPバーがずれて見える」という**同期タイミングの問題**であり、
+> v100 でやったのはカードの並べ替えだけ。同期の中身には触れていないので **Issue #4 は未着手のまま**。
+
+### 入り口
+
+- 演習画面に **MATCH FORMAT** の行を追加。`1 vs 1` / `2 vs 2` を左右の矢印で切り替える。
+- 2vs2で選べるのは自分のキャラと「敵1体目」だけ。味方CPUと敵2体目は**毎回ランダム**。
+- 通常のCPU戦（タイトルの CPU BATTLE）は今までどおり1vs1のまま。2vs2はいまのところ演習からのみ。
+
+### 中身
+
+- `ally2`（ID `p2`・プレイヤー陣営・CPU操作）と `foe2`（ID `e2`・CPU陣営）を追加。`setMatchFormat()` が
+  `units` 配列を組み替える。手番順は `p1 → e1 → p2 → e2` の**交互**（決定4のとおり）。
+- `resetMatch()` の「キャラ適用・開始位置・必殺チャージ持ち越し」を、2体固定から `units` のループへ一般化した。
+- **味方への誤爆を統一した（決定1）。** `emitEmp()` にだけ残っていた「味方は巻き込まない」を削除。
+  通常の爆発（`explodeAt`）は昔から撃った本人も味方も巻き込むので、これで例外が無くなった。
+  該当は**目玉の「電磁波」**と**猫の「猫だまし爆弾」**。移動封印は撃つことまでは塞がないので、
+  味方に当たっても「何もできなくなる」わけではない（ユーザー判断済み）。
+- **CPUが味方を巻き込む撃ち方を避けるようにした。** 敵のすぐ隣（90px以内）に味方が居る場合、その敵は狙わず
+  別の敵を選ぶ。全員が味方の近くなら、せめて一番味方から遠い敵を選ぶ。移動の判断も同じ相手を見る。
+  1vs1では味方が存在しないので、従来の「一番近い敵」と**完全に同じ結果**になる。
+- 連勝・ランキングは2vs2を数えない（決定12）。
+- 中断セーブは対戦形式ごと保存する。人数の食い違うデータは従来どおり捨てるが、その判定を
+  「今の人数」ではなく「セーブ自身が名乗る形式」と突き合わせるよう直した（そうしないと2vs2の中断が必ず捨てられる）。
+
+### HP表示の作り替え（4体ぶんのHUD）
+
+- 名前カードは**左列＝自陣営／右列＝敵陣営**のまま、2vs2では縦に2枚ずつ積む。1vs1の読み方がそのまま通じる。
+- 2vs2のカードは高さ34px×2段（上端46と82）。**1vs1のカードは高さ40・上端46のままで1pxも動かしていない。**
+- 2vs2の時だけ、ターン帯・ミニマップ・HUD背景の下端を34px下げる。世界はHUDの下に全画面で描かれているので、
+  下がって隠れるのは空だけで戦場は狭くならない。
+- ミニマップは4体すべてを打つ。自分の席=`P`、味方CPU=`p`、敵=`E`/`e`。
+
+### 開幕即死の修正（実装中に見つけた不具合）
+
+- 闘技場マップは中央が奈落。内側の2体（p2/e2）を比率どおり `0.32 / 0.68` に置くと**足場が無く、0秒で落下死**していた
+  （4体中2体が開始直後にHP0）。
+- 対処: `spawnXNear()` を追加し、狙った場所に地面が無ければ外側→内側の順に近い足場を探す。
+  1vs1の開始位置は1回目の判定で当たるため、**比率も座標も従来と完全に一致**（テストで固定した）。
+
+### 演習画面のレイアウト調整
+
+- STAGE FORM / WIND SETTING は上下の余白が大きく余っていたので、高さを86→60へ詰めて対戦方式の行の場所を作った。
+- 詰めた結果ラベルが左右の矢印に潜り込み「STAGE FORM」が「TAGE FORM」に欠けたため、
+  背の低い行だけラベルを矢印の右へ逃がす専用レイアウトにした。**これは自動テストでは見えず、実際の画面を見て気づいた。**
+
+### 検証結果
+
+- 自動テスト合計 **615件すべて成功**（regressiontest に p1/e1 各34件、計68件を追加）。
+- `regressiontest.js` を20回連続実行して0失敗。`resulttest.js` 15回、`stage3test.js` 10回も0失敗（フレーキーなし）。
+- `loopbacktest.js` の中継メッセージ数は `78 / 91 / 124 / 93 / 67`。
+  **変更前のHEADで同じテストを走らせても同じ値**だったので、オンライン1vs1の決定性は動いていない。
+- Python静的チェック（正しいパスを指して実行）: 未宣言の大文字識別子なし。
+- 実ブラウザ（Chromium・540×960）で演習画面と2vs2の対戦画面を撮影して目視確認済み。
+  4体のHPが読み取れること、ターン帯・ミニマップと重ならないこと、1vs1のHUDが従来と同じ位置であることを確認した。
+
+### まだ確認できていないこと
+
+- **ユーザーの実機での見た目と操作感。** 特に2vs2のカードが小さくなったぶんの読みやすさ。
+- 味方CPUの強さ・立ち回りが遊んで面白い水準かどうか（今は敵CPUと同じ思考をそのまま使っている）。
+- `database.rules.json` と GAS は**変更なし**。Firebase Console 作業も再デプロイも不要。
+
+## v99 で入れた変更（おまけ曲2曲目が旧曲のまま鳴る問題を修正）
+
+- **v98の不具合修正。** 実機で「2曲目にCeltic Battle Mixが鳴らず、Hard Rock版が鳴る。Celticがどこにも出ない」という報告があった。
+- 原因は**キャッシュの鍵の衝突**。音源URLの末尾 `?v=N` がブラウザのキャッシュの鍵になる。
+
+| | URL | 中身 |
+|---|---|---|
+| v97 | `assets/bonus-bgm-2.mp3?v=1` | Hard Rock Ver. |
+| v98 | `assets/bonus-bgm-2.mp3?v=1` | Celtic Battle Mix ← **中身だけ差し替えた** |
+
+  URLが同じままだったため、v97を遊んだ端末は保存済みのHard Rock版を鳴らし続けていた。結果、2曲目と4曲目の両方でHard Rockが鳴り、Celticはどこにも現れない状態だった。ファイルの配置自体は正しく（4曲ともチェックサム一致を確認済み）、**URLの版数を上げ忘れたことが原因**。
+
+- 対処: `bonus-bgm-2.mp3?v=2` へ更新。中身が変わっていない他の3曲は据え置き（不要な再ダウンロードを避けるため）。
+- **再発防止のテストを追加した。** 各音源の中身のハッシュとURLをセットで固定し、片方だけ変えたら落ちるようにした。`?v=1` へ戻すと実際に落ちることを確認済み。音源を差し替える時は、このハッシュと `index.html` の `?v=N` を必ず両方更新すること。
+
+### あわせて直した既存テストのフレーキー
+
+- `regressiontest.js` の「保存前にクレーターができている」が30回に1回ほど落ちていた。900フレーム自動プレイする間に弾がすべて画面外へ飛ぶと、地形が1つも削れないまま抜けるため。
+- **私が追加したテストではなく、元からあったもの。** v92（地形の帯を上げる前）と現行で、クレーター0になる割合はどちらも0/60で差がなく、地形変更が原因という証拠は得られなかった。
+- 対処: 従来どおり900フレーム回したうえで、まだ削れていなければ削れるまで撃ち続ける。修正後は40回連続で全通過。
+
+### 検証結果
+
+- 自動テスト合計 **582件すべて成功**（stage3testに2件追加）。
+
+## v98 で入れた変更（おまけ曲を4曲へ、音量を実測で調整）
+
+- おまけ曲を **2曲 → 4曲**へ増やした。ユーザー指定により、新しい2曲を**2番目と3番目へ差し込み**、既存のHard Rock版を4番目へ送った。
+  - 1曲目: `bonus-bgm-1.mp3`（最初に頂いた曲・約2.5MB）
+  - 2曲目: `bonus-bgm-2.mp3`（Celtic Battle Mix・約3.9MB）
+  - 3曲目: `bonus-bgm-3.mp3`（SoulTech Alt Rock Mix・約5.5MB）
+  - 4曲目: `bonus-bgm-4.mp3`（Hard Rock Ver.・約3.0MB / 旧`bonus-bgm-2.mp3`）
+- **音量を実測にもとづいて上げた。** 「やや小さい」との指摘を勘で調整せず、mp3をデコードしてRMSを測った。
+
+| 曲 | 実測RMS | 設定した基準音量 |
+|---|---|---|
+| タイトル曲（比較基準） | -16.4 dBFS | 0.34 |
+| おまけ1曲目 | -18.2 dBFS | 0.53 |
+| おまけ2曲目 | -18.7 dBFS | 0.56 |
+| おまけ3曲目 | -16.8 dBFS | 0.45 |
+| おまけ4曲目 | -18.4 dBFS | 0.54 |
+
+- 曲ごとに録音レベルが最大1.9dB違ったため、**単一の値ではなく曲別の基準音量**を持たせ、体感音量が揃うようにした。水準はタイトル曲より約2dB大きいところ（聴かせるための機能なので背景音楽より少し前へ出す）。
+- 再生時のピークはいずれも0.31〜0.35で、歪む（1.0）まで十分な余裕がある。
+- 音源の合計は約15MBになったが、`preload="none"` と `APP_SHELL` 除外は維持しているため、**押されるまで一切ダウンロードしない**。
+
+### 検証結果
+
+- 自動テスト合計 **580件すべて成功**。
+- おまけ曲のテストを曲数に依存しない形へ書き換えた（曲数ぶん押して1曲ずつ進み、最後にもう一度押すと停止する）。全曲に基準音量が設定されていること、それがタイトル曲より大きいことも検査している。
+- 音量の測定には miniaudio と numpy を作業環境へ導入した。**リポジトリには依存を追加していない。**
+
+## v97 で入れた変更（タイトルの「おまけ」ボタン）
+
+- タイトル画面に**「おまけ」ボタン**を追加し、ユーザー提供のBGM2曲を再生できるようにした。
+- **押すたび 1曲目 → 2曲目 → 停止（タイトル曲へ戻る）**を繰り返す。曲はループ再生。
+- 配置は演習（下端789）とRANKING（上端835）の隙間 `y=812, 382x36`。**既存のボタンは1つも動かしていない。**
+- 音源: `assets/bonus-bgm-1.mp3`（約2.5MB）、`assets/bonus-bgm-2.mp3`（約3.0MB）。
+  - `preload="none"` とし、**srcはボタンを押した時に初めて入れる**。タイトル表示のために数MBを先読みさせない。
+  - Service Workerの `APP_SHELL` には入れていない（初回インストールを重くしないため）。
+
+### 実装上の要点
+
+- 既存の**BGMディレクター `syncBgm()` へ組み込んだ**。「いま鳴るべき曲」を `desiredBgm()` が一元的に決める設計なので、ミュート・バックグラウンド復帰・画面遷移の扱いが自動的に揃う。個別の play/stop を書き足していない。
+  - `desiredBgm()`: 対戦中は `stage`、ルームは `room`、おまけ選択中は `bonus`、それ以外は `title`。
+  - 同じ `bonus` のままでも曲番号が変わっていれば差し替える（1曲目→2曲目）。
+- **対戦・ルームへ移ると選択ごと解除する。** 次にタイトルへ戻った時に勝手に鳴り出さないため。ただし非表示・ミュートでは解除しない（復帰したら続きから鳴らすため）。
+- iOS対策のWebAudio経路（`bonusBgmGain`／`bgmSourceNodes.bonus`）にも接続済み。ボタンのタップ内で `ensureBgmGraph()` を呼ぶ（iOSはユーザー操作の中でしかAudioContextを起こせない）。
+- 音量スライダーとサウンドON/OFFに追従する。
+
+### 検証結果
+
+- 自動テスト合計 **580件すべて成功**（regressiontestに12件追加、p1/e1の2席ぶん）。
+- 追加した検査: ボタンが他のタイトルボタンと重ならないこと、画面内に収まっていること、押すたびの循環（0→1→2→0）、選択に応じて「鳴るべき曲」が変わること、対戦へ移ると選択が解除されタイトルへ戻っても鳴り出さないこと。
+- テストハーネスのDOMスタブへ `bonusBgm` 要素を追加した（要素が無いと `getElementById` がnullを返して全テストが落ちるため）。
+
+### 未検証（実機QAで確認する）
+
+- 実際に音が鳴るか。**自動テストは音声をスタブしているため、再生そのものは確認できない。**
+- 曲の切り替わりの気持ちよさ、音量のバランス。
+- iOS実機でのWebAudio経路の動作。
+
+## 4人マルチ（2vs2）とマッチメイキングの確定仕様
+
+2026-08-03、ユーザーへの質疑（16問）で確定。**実装はこれから。**
+
+### 2vs2の仕様
+
+| # | 論点 | 決定 |
+|---|---|---|
+| 1 | 味方への誤爆 | **あり。例外なしで全技を統一する**（下記の注記） |
+| 2 | 対戦中の切断 | **CPUが引き継ぐ**。試合は最後まで終わる |
+| 3 | 人数不足 | **CPUで埋める** |
+| 4 | 手番順 | **交互**（自分→敵→味方→敵） |
+| 5 | 試合の長さ | **ロビーで選べる**（1人あたりの手数を可変に） |
+| 6 | HP表示 | **2段**（上＝味方2人／下＝敵2人）。現行パネルは168px×4で画面幅540pxに収まらないため作り替え必須 |
+| 7 | チーム分け | **ホストが決める** |
+| 8 | 観戦席 | **2vs2ではなし**。既存のs1・s2を対戦者席へ転用する |
+| 9 | ホストが落ちたら | **その試合は完走し、再戦なし**。全員タイトルへ戻る |
+| 10 | クイック対戦 | **先着で4人揃ったら開始** |
+| 11 | 再戦 | **全員が押す** |
+| 12 | 連勝・ランキング | **2vs2は対象外**（演習と同じ扱い）。オンラインは元から対象外 |
+
+### マッチメイキングの仕様
+
+| # | 論点 | 決定 |
+|---|---|---|
+| 13 | 野良の範囲 | **誰でも参加可**（仲間内コードで区切らない） |
+| 14 | 作る順番 | **CPU戦2vs2の直後**。最初は1vs1だけ選べる状態で出し、モードは後から増やす |
+| 15 | 相手が見つからない時 | **待ち画面＋「CPUで始める」ボタン**。自動開始はしない |
+| 16 | 合言葉部屋の余り席の開放 | **既定は閉じる**。開放したい時だけホストがボタンを押す |
+
+### 実装前に判明していること
+
+- **味方への誤爆は技によって挙動がバラバラだった。** `explodeAt`（通常弾・ほとんどの必殺）と`fireworkShardExplode`（拡散弾）は陣営を見ておらず味方に当たる。`emitEmp`だけ「味方は巻き込まない」と明記されている。1vs1では味方が存在しないため誰も気づかなかった。
+  - **決定: 例外なしで統一する。** `emitEmp` の陣営除外を外し、移動封印も味方に効くようにする。
+  - 該当技は**目玉の「電磁波」**（移動封印2手番）と**猫の「猫だまし爆弾」**（移動封印1手番）の2つ。どちらもダメージ（中心20/外側10）を伴う。
+  - 判断理由: `moveLockTurns` が塞ぐのは**左右移動と跳躍だけ**で、**発射は塞がない**（`index.html:9996/10006` は封印を見るが、発射の `10015` は見ていない）。封印されても撃てるため、味方に当たっても「何もできなくなる」わけではない。
+- `creditDamage()` が「プレイヤー陣営が相手陣営を撃った時だけ加算」という1vs1前提の書き方。2vs2では見直しが要る。
+- **ホストだけがラウンドを進められる。** Firebaseルールで`round`と`rounds`の書き込みが`slots.p1.uid === auth.uid`に限定されている。決定9はこの制約を受け入れる形。
+- **部屋は原理的に探せない。** ルート読み取りは`false`、部屋の読み取りは席保持者限定。マッチメイキングには公開された部屋一覧ノードの新設が必要（ルール変更＋Console反映）。
+- **クイック対戦は世界に1部屋だけ。** `QUICK_MATCH_ROOM = 'KATAMN22'`固定で、3人目は「ただいま簡単対戦は利用中です」で弾かれる。また公開URLのゲームに固定コードが埋まっているため、第三者も同じ部屋へ入れる状態が既にある。
+- **中核の対戦ロジックは既に2vs2を想定して作られている。** `units`配列（54箇所）、`teamAlive()`、`nearestEnemy()`は陣営単位。`endTurn()`には「2vs2ではここが無いと死体に手番が渡って進行が止まる」と書かれた死亡ユニットの手番飛ばしが実装済み。作り直しではなく拡張で足りる。
+
+## セッションで実装済みの内容
+
+### 視点距離の記憶
+
+- スライダーとピンチ操作の倍率を端末へ保存する。
+- ターン交代、再戦、連戦、次回起動でも設定を維持する。
+- オンライン対戦でも視点距離は端末ごとのローカル設定とし、通信しない。
+
+### 全キャラ共通の「跳躍」
+
+- 1試合に1回だけ使用できる。
+- 専用弾ではなく、キャラ画像そのものが弾道を飛ぶ。
+- 飛行中は元位置のキャラを非表示にする。
+- 着弾地点へ移動するが、ダメージ、爆発、地形破壊は発生しない。
+- 移動不能デバフ中は使用不可。
+- 発動時に「着地後 移動不能 1ターン」と表示する。
+- 着地後、次の自分の1ターンは移動不能になる。
+- 闘技場の垂直壁や急斜面へ横から当たった場合は張り付かず、安全な位置から落下する。
+- 跳躍後を含む移動、発射、通信復元時に、両キャラの向きを相手方向へ再判定する。
+- オンライン通信とFirebaseルールも対応済み。
+
+### 引き分け
+
+- 両者同時撃破は `winner = 'draw'` とする。
+- ターン上限時にHPが同じ場合も引き分けとする。
+- 引き分けでは連勝数を維持し、ランキングへ送信しない。
+- CPU戦、オンライン戦、結果画面、Firebaseルールに対応済み。
+
+### 演習
+
+- 画面上の `FREE BATTLE` / `FREE MODE` 表記を「演習」へ変更した。
+- 内部値 `battleMode === 'free'` は互換性のため維持する。
+- 演習中だけポーズメニューへ「リスタート」を表示する。
+- リスタートでは演習条件とキャラ選択を維持し、地形、HP、燃料、ターン、弾、状態異常などを初期化する。
+
+## 直近の検証結果
+
+- Node自動テスト: 合計492項目すべて成功。
+- Python静的チェック: 未宣言の大文字識別子なし。
+- Git整合性とコピー元との比較: 問題なし。
+- 実ブラウザ2画面: タイトル表示、オンライン入室、準備完了、準備取消、再準備、キャラ選択、対戦開始まで正常。ブラウザConsoleエラーなし。
+- 解決済みブロッカー: ホストの初回砲撃だけFirebase書き込みが401となり、ホストが中断画面、ゲストが1ターン目待機のままになる問題。クイック対戦と固有合言葉部屋の両方で再現していた。
+- 確定した原因: 公開中のFirebase Consoleルールが旧版のままだった。v91コミット`14ea290`で`fire`パケットへ`useJump`を追加したが、旧ルールの`$message`は`useJump`を宣言しておらず`$other: false`のため、未宣言の項目を含むfireパケットを検証拒否していた。`index.html`は跳躍未使用時も`useJump: false`を必ず送るため、初回砲撃から必ず失敗していた。認証期限切れではない。
+- 対処: リポジトリの`database.rules.json`をFirebase Consoleへ反映（2026-08-02、ユーザー操作）。コード変更はなし。
+- 反映後の再確認: 公開版`https://futsalife24-bot.github.io/katamon/`のv91で、初回砲撃が401にならず成功。跳躍時のキャラ移動が相手側でも表示されることを確認。
+
+## 実機2端末QAで判明したブロッカー（2026-08-02）
+
+部屋`KATAMN22`で2戦し、2戦とも対戦中断。記録は[Issue #2のコメント](https://github.com/futsalife24-bot/katamon/issues/2#issuecomment-5157153053)。
+
+- 不具合A: 雪原ステージでDEAD LINE直上に立った状態で被弾し、ホストは56/100で生存・ゲストは死亡と判定。ゲストの`result`をホストが拒否して中断。`eliminateAtDeadLine()`はHP残量に関係なく即死とするため、地形が数px違うだけで生死が反転する。
+- 不具合B: 闘技場ステージで跳躍した相手の座標が`y.1(-16->348)`で364px食い違い中断。`-16`は`teleportOwnerToImpact()`のクランプ下限。闘技場の外壁は画面上端より1400px上まで当たり判定を持ち(`ARENA_WALL_SKY_EXTENSION`)、v91の跳躍も砲弾と同じprojectileのためそこへ衝突し、着地面を取得できずクランプされた。
+- 根本原因: `gameLoop()`が実フレーム間隔をそのまま物理計算へ渡しており、端末のリフレッシュレートが違うと弾が同じ位置を通らない。この差が「DEAD LINEは1pxで即死」「壁に当たるか否か」という全か無かの判定で増幅される。
+- 判断: boom同期(Issue #3)はこの一症状にすぎず、単独修正では再発する。固定刻み化をIssue #9として切り出し、v92で先に実施する。
+- 未確認: 画面ロック、回線切替、切断、再入室、観戦席の表示。修正後の再QAで実施する。
+
+## 記録しておく観測事項（未対応・Issue化前）
+
+- ~~`index.html`はFirebase RESTの401を一律で「認証が切れました」と表示する。401はルール拒否でも返る。~~ → v108 で `firebaseRequest` が401を受けた際に鍵を取り直し、**新しくなった時だけ**送り直すようにした。これで「期限切れ」と「ルール拒否」が動作として分かれる（表示文言は据え置き）。
+- `tests/undef_scan.py`の5行目が旧バックアップ`業務効率化\カタモン`側の絶対パスを指したままで、現行の正本を検査していない。パスを現行正本へ直す1行修正が必要（**ユーザー判断待ち・v100時点で未対応**）。なお現行`index.html`を対象に実行した場合は「未宣言の大文字識別子なし」で合格することを確認済み（v100でも再確認）。
+- v100時点で `foeUnit()` は「代表して1体だけ見せる」用途（画面外インジケータ・結果画面の呼び名・高低差表示）に残っている。2vs2では生きている敵のうち一番近い方を返すようにしたが、**4人戦での見せ方としてはこれが最善とは限らない**。実機で遊んで違和感があれば見直す。
+- v100時点で味方CPUは敵CPUと同じ思考をそのまま使っている。「味方を巻き込む相手は狙わない」だけ足した状態で、連携や役割分担はしていない。
+
+## 残タスク（優先順）
+
+2026-08-03、ユーザーの指示により**4人マルチ（2vs2）を最優先へ繰り上げ**。協力プレイは難易度が高いため後回し。
+
+### 完了済み
+
+- Issue #2（実機オンライン対戦QA）／Issue #9（固定刻み）／Issue #10（DEAD LINEより上で地形を完結）
+- Issue #13（左向き素材の向き）／Issue #3（boom頂点炸裂）
+- **Issue #20（2vs2 段A：CPUだけの4人戦）→ v100（公開済み）**
+
+### これから（承認済みの順）
+
+1. ~~**v101 / Issue #7 席のゴースト対策**~~ — 公開済み（ルール反映済み）。実機QAのみ残り。
+2. ~~**v102 / Issue #23 マッチメイキング基盤**~~ — 公開済み（ルール反映済み）。実機QAのみ残り。
+3. ~~**v103 段B：4人の席とロビー**~~ ／ ~~**v104 段C：オンライン2vs2**~~ — 公開済み。
+   **1台での2vs2（1人＋CPU3体）は完走・再戦とも実機で確認済み**（v108 まで直して到達）。
+   - 残る未検証は**2台以上での受け取り側**。1台では「ホストが配る」側しか踏めない。
+4. ~~**v119 バトル開始時のVSカットイン**~~ — 公開済み（PR #43）。ルール変更なし。
+5. ~~**v120 ロビーの幽霊席表示と削除可否を一致させる**~~ — 公開済み（PR #44）。ルール変更なし。
+   - ユーザー実機で公開版を確認し「オッケー」と報告済み（2026-08-05）。
+6. **スマホ＋タブ2つでオンライン2vs2を通す** — 一部だけ残っているQA。
+   - PCの独立した2タブでは、ゲストが受け取る側の表示・手番・HP・決着まで確認済み。
+   - PCの独立した3タブでは、P2を切断して45秒/90秒の表示切替と席の解放まで確認済み。
+   - **残りは同じ部屋での再戦と、スマホ＋PCタブ2つの実端末3人構成。**
+   - 再戦は長時間検証中にゲスト側の匿名認証更新が失敗して未完了。再現するかは未確定なので、
+     v121へ入る前に短時間の再戦を一度通しておくと安全。
+   - これは新しい版ではなく、段Cの最大の未検証点を埋めるQA。
+7. ~~**v121 段D / Issue #8 切断・CPU引き継ぎ**~~ — 公開済み（PR #45）。**ルール変更あり。**
+   - 落ちた人の席をCPUが引き継ぎ、試合を最後まで終わらせる（決定2）。
+   - 2vs2のみ。ホスト自身が落ちた場合と1vs1は範囲外（ユーザー判断・2026-08-05）。
+   - **`database.rules.json` を変更した。公開前にFirebase Consoleへ反映すること。**
+   - Issue #8 の残りは「同一ラウンドへの復帰」。今回入れたのは引き継ぎだけなので、
+     復帰の側はIssueに残る。
+8. ~~**v122 手番が誰か分かるようにし、テンポを落ち着かせる**~~ — 公開済み（PR #47）。
+9. ~~**v123 VSカットインを砲弾ネームプレートへ**~~ — 公開済み（PR #48）。
+10. ~~**v124 VSカットインの顔の位置と砲弾の動き**~~ — 公開済み（PR #49）。
+11. ~~**v125 1vs1の胴体の空きに情報を入れる**~~ — 公開済み（PR #50）。
+12. ~~**v126 チュートリアル「あそび方」**~~ — 公開済み（PR #51）。
+    - 実際に操作して覚える練習試合を6項目（ユーザー要望・2026-08-05）。
+    - **新企画だが、ユーザーの指示により残タスクより先に着手した。**
+13. ~~**v127 チュートリアル最後の足場／VSカットの表示時間**~~ — 公開済み（PR #52）。
+14. ~~**v128 撃破済みへのダメージ表示／起動演出の砲弾の絵**~~ — 公開済み（PR #53）。
+15. **軽量化（4版に分ける）** — ユーザー要望・2026-08-05。実機で「動作が重い」。
+    - ~~v129 描き方の作り直し（空と地形を1枚に焼く）~~ — 公開済み（PR #54）。1.5〜1.7倍速。
+    - ~~v130 画像の圧縮（起動時に読む絵をWebPへ。3.83MB→0.74MB）~~ — 公開済み（PR #55）。起動が2倍速。
+    - ~~v131 描く細かさを画面に合わせる（キャンバスを実画素ぴったりに）~~ — 公開済み（PR #56）。1.4〜1.8倍速。
+    - ~~v132 タイトル画面を焼く~~ — 公開済み（PR #58）。2倍解像度で1枚に焼き、
+      画素比較は完全一致。追加8件を含む全1098件成功。
+16. ~~**v133 次の風予報**~~ — メロニキの指示で最優先へ繰り上げ。公開済み（PR #59）。
+   - 1区間先を常時表示し、予報値を次の切替でそのまま使う。
+   - オンライン・観戦・中断再開へ同じ予報を同期。全1125件成功。
+17. ~~**v134 キャラクター選択を必殺技だけに整理**~~ — メロニキの指示で差し込み。公開済み（PR #60）。
+   - 型・紹介文・性能目盛り・必殺技説明を隠し、キャラ名と必殺技名だけにする。
+   - 対戦の能力値は変えない。全1131件成功。
+18. ~~**v135 全キャラの通常弾を共通化**~~ — メロニキの指示で差し込み。公開済み（PR #61）。
+   - 弾速・風・重力・爆風・狙い線・CPU弾道を共通化。必殺技・跳躍・HP・移動力・防御力は維持。
+   - 追加8件を含む全1139件成功。中継数は `38 / 64 / 83 / 61 / 48` で3回連続一致。
+19. ~~**v136 目玉の電磁波の命中表示と移動不可エフェクト**~~ — メロニキの指示で差し込み。公開済み（PR #62）。
+   - 電磁波の着弾結果カットインは、相手チームのキャラへ実際に命中した時だけ出す。空振りと味方だけへの命中では成功表示を出さない。
+   - 移動不可のキャラには、足元を前後から囲む金属の鎖と南京錠を継続表示する。頭上の常時文字と全身の電気は出さない。錠の青い点を残り手数ぶん（最大2個）光らせるため、文字を読まなくても長さを見分けられる。既存の `moveLockTurns` を表示に使い、通信する状態は増やしていない。
+   - 理由: 以前は `emitEmp` が命中の有無に関係なく着弾後の成功カットインを出しており、空振りでも移動不可になったように見えていた。最初に追加した電気エフェクトは「しびれて何もできない＝行動不能」にも見えるため、左右移動と跳躍だけを止める状態は足元の鎖へ変更した。
+   - やってはいけないこと: 発射時の「必殺: 電磁波!!」は消さない。電磁波のダメージ・味方への当たり方・移動不可の手数は変えない。表示用の時刻や端末ごとに変わる値を対戦判定へ使わない。表示は必ず `moveLockTurns` から作る。将来、撃つことまで止める行動不能を入れる時は鎖を流用せず、頭上を回る星と全身の暗転で差別化する。同時に受けても足元と頭上で重ならないようにする。
+   - 新規4件は、修正前の状態で `249 passed, 4 failed` になることを先に確認。鎖への見た目変更も、旧電気版で専用検査が `252 passed, 1 failed` になることを確認してから実装した。修正後は両席とも253件成功。全体は1147件成功。中継数は `38 / 64 / 83 / 61 / 48` のまま。
+   - ローカルHTTPと実ブラウザで、空振り時に成功表示が出ないこと、相手命中時だけ `電磁波命中: 移動不可 2手` が出ることに加え、鎖がキャラの後ろから手前へ巻き付き、南京錠が足元中央に出ること、頭上の常時文字と全身の電気が残っていないことを確認。ブラウザのエラー・警告は0件。
+   - `database.rules.json` は変更なし。Firebase Console作業なし。
+20. ~~**v137 必殺のオーラ→カットイン→発射**~~ — メロニキの指示で差し込み。公開済み（PR #63）。
+   - 必殺を撃つ操作の直後、発動したキャラの背後からキャラ色のオーラを0.78秒間沸き立たせ、その後に従来の必殺カットインを1.12秒表示してから弾を発射する。オーラは全身を包む光、炎状の筋、下から上へ走る白い光筋で構成し、キャラ本体とHP表示は前面に残す。
+   - 理由: 従来は操作直後にカットインが始まり、キャラ本人が力を溜めて必殺を発動した感触が無かった。発動前の一呼吸を盤面上の本人へ足し、カットインと発射につながる順番を分かりやすくした。
+   - やってはいけないこと: オーラとカットインを同時に出さない。両方を見せ切る前に弾を出さない。表示用の `Date.now()` を発射時刻・命中・ダメージ・通信などの対戦判定へ使わない。必殺の威力・弾道・チャージ量・オンライン通信内容は変えない。現行の必殺音はv139で別目的として変更するため、この版では音源を混ぜない。
+   - 新規3件は、実装前の状態で `253 passed, 3 failed` になることを先に確認。実装後は両席とも256件成功。全体は1153件成功。中継数は `38 / 64 / 83 / 61 / 48` のまま。
+   - ローカルHTTPと実ブラウザで、オーラがキャラの背後からはっきり立ち上がること、キャラ本体とHPを隠さないこと、オーラが消えてからカットインへ切り替わることを確認。一時QA入口は削除済み。
+   - `database.rules.json` は変更なし。Firebase Console作業なし。
+21. ~~**v138 通常弾の着弾爆発音をPixabay音源へ変更**~~ — 公開済み（PR #64）。
+   - Pixabayの `Animated Cartoon Explosion Impact`（作者: Universfield、2.376秒）を `assets/normal-impact-explosion.mp3` として同梱した。配布元URL・直接取得URL・Pixabay Content License・確認日（2026-08-06）・SHA-256は `assets/SOUND_LICENSES.md` に記録した。
+   - 通常弾へだけ `normalImpactSound` の印を付け、ユニット・障害物・地形のどこへ当たっても同じ経路で新しい音を鳴らす。必殺技・跳躍・電磁波・壁破壊・花火の拡散弾は従来音を維持する。
+   - 最初のタップから音源を先読みし、既存の効果音音量・ミュート・圧縮経路を通して再生する。読み込みが間に合わない時や取得失敗時だけ従来の合成爆発音へ戻し、着弾を無音にしない。サービスワーカーにも版付きURLを追加し、オフライン対戦でも鳴るようにした。
+   - 理由: 従来の通常弾はプログラムで合成した爆発音だけで、着弾の手応えが弱かった。短く輪郭のあるゲーム向け素材へ置き換え、通常攻撃の手応えを揃えるため。
+   - やってはいけないこと: 必殺技や跳躍へ通常弾の音を付けない。v139で扱う必殺カットイン音をこの版へ混ぜない。外部URLをゲーム中に直接再生しない。効果音設定を迂回しない。音源の中身を替える時はファイルのハッシュとURLの `?v=` を一緒に更新する。音の読み込み結果や端末時刻を命中・ダメージ・通信などの対戦判定へ使わない。
+   - 新規検査は、実装前に `regressiontest p1` が `256 passed, 2 failed`、`stage3test` が `396/398 passed` になることを確認。実装後は `seattest 20件×2席 + regressiontest 258件×2席 + resulttest 96件 + stage3test 398件 + lobbysimtest 7件 + loopbacktest 103件`、合計 **1160件すべて成功**。中継数は `38 / 64 / 83 / 61 / 48` のまま。
+   - ローカルHTTPと実ブラウザで、v138表示、音源が `fetch` で読み込まれること、CPU戦で通常弾を発射して進行すること、ローカルページ由来のエラー・警告が0件であることを確認。
+   - `database.rules.json` は変更なし。Firebase Console作業なし。
+22. ~~**v144 指定爆発音への差し替え、起動砲弾にも共用**~~ — 公開済み（PR #81）。実装・検査の詳細は冒頭のv144節を正本とする。
+23. ~~**v145 Cartoon Explosionへの差し替え**~~ — 公開済み（PR #82）。実装・検査の詳細は冒頭のv145節を正本とする。
+24. ~~**v146 防御力・通常弾性能の統一**~~ — 公開済み（PR #84）。実装・検査の詳細は冒頭のv146節を正本とする。
+25. ~~**v147 モンスター選択カードの木板デザイン**~~ — 公開済み（PR #85）。実ブラウザ確認だけ残る。詳細は冒頭のv147節を正本とする。
+26. ~~**v148 壊れない鋼鉄地形**~~ — 公開済み（PR #89）。詳細は冒頭のv148節を正本とする。
+27. ~~**v149 キャラ選択の必殺技紹介文**~~ — 公開済み（PR #90）。
+   - モンスター選択カードの`(仮)雰囲気解説`を、16キャラ個別の必殺技紹介文に置き換える。性能変更なし。
+28. ~~**v150 必殺カットイン音をスタイリッシュな音へ変更**~~ — 公開済み（PR #91）。
+   - オーラ直後のカットイン専用ジングルを、低音のため→上昇→決め音へ作り替える。外部音源は追加しない。
+29. ~~**v151 演習モードの練習条件**~~ — 公開済み（PR #92）。
+   - 必殺常時MAX、跳躍毎ターン、CPU停止／弱／中／強、風向きと風の強さを演習だけで切り替える。
+30. ~~**v152 演習条件画面の整理と2vs2追加キャラ選択**~~ — 公開済み（PR #93）。
+   - 左に項目名、右に選択値と矢印を置く演習画面へ整理。2vs2では追加2体も選べる。
+31. ~~**v153 演習の設定を戦闘中へ移動し、キャラ画像を戻す**~~ — 公開済み（PR #94）。
+   - 演習前はキャラ・地形・人数だけを選び、風・必殺・跳躍・CPUは戦闘中メニューで切り替える。キャラ画像は元の縦横比で戻す。
+32. ~~**v154 必殺カットイン音をEDM Zapへ差し替え**~~ — 公開済み（PR #95）。
+   - オーラ直後のカットイン音だけを、メロニキ指定のPixabay素材へ変更する。通常弾・タイトル砲弾などは変えない。
+33. ~~**v155 必殺カットイン音の音量を下げる**~~ — 公開済み（PR #96）。
+   - v154で追加したEDM Zapの音量だけを0.38から0.28へ下げ、ほかのSEとの釣り合いを取る。
+34. ~~**v156 標準／大型ステージの選択式**~~ — 公開済み（PR #97）。
+   - 大型は高さを活かす専用の出撃位置・カメラ範囲・Stage Studio生成／検査をまとめて扱い、通常サイズと選べるようにする。
+35. ~~**v157 大型ステージで縦に余白が出るカメラを修正**~~ — 公開済み（PR #99）。
+   - 大型で保存済みの遠い視点を使っても、戦場の高さを超えて引かず、手番キャラを追う自然な視点にする。
+36. ~~**v158 古い画面が開いたまま残る更新経路を修正**~~ — 公開済み（PR #101）。
+   - 新しい版を検出しても対戦中やオンライン部屋は壊さず、タイトルへ戻った時だけページ本体を入れ替える。
+37. ~~**v159 標準／大型ステージのカメラ構図を統一**~~ — 公開済み（PR #102）。
+   - 上の表示に隠れない範囲へ両サイズの全高を収め、同じ視点距離を保って切り替える。旧69%も新しい最遠へ移す。
+38. ~~**v160 最遠でマップ横幅全体を見渡せるよう修正**~~ — 公開済み（PR #103）。
+   - 標準37.5%／大型25%を最遠とし、両方とも横幅100%を表示する。全景からの拡大は手番キャラへ縦横とも寄せる。
+39. ~~**v161 大型闘技場の縦配置を大型サイズへ最適化**~~ — 公開済み（PR #104）。
+   - 標準の縦配置は変えず、外壁・三段足場・吊り障害物・出撃位置を大型高960へ同じ比率で広げる。
+40. ~~**v162 / Issue #5 対戦部屋内の戦績表示**~~ — 公開済み（PR #105、Firebaseルール反映済み）。
+   - 戦績本体は端末内保存。相手識別は`rankingProfile.deviceId`の用途分離SHA-256による`rivalId`を既存`presence/lobbyState`で交換する方針に確定。
+   - 生の端末IDと戦績値は送らず、同名だけで自動統合しない。
+41. ~~**v163 2vs2ロビーの席を自分基準で整列**~~ — 公開済み（PR #106）。
+   - 全端末で`自分 → 味方 → 敵1 → 敵2`。名前と「空席」の左端も固定する。通信上の席順は変えない。
+42. ~~**v164 部屋内のモンスター選択にキャラ画像を表示**~~ — 公開済み（PR #107）。
+   - 自分の選択欄へ、元の縦横比の全身画像と名前を並べる。相手の確定前キャラは公開しない。
+43. ~~**v165 Androidの戻るジェスチャーを履歴遷移より先に確認**~~ — 公開済み（PR #108）。
+   - CloseWatcher対応環境は履歴を動かす前に既存の終了確認を出し、未対応環境だけ従来の履歴フォールバックを使う。
+44. ~~**v166 終了確認1回でカタモンを抜ける**~~ — 公開済み（PR #109）。
+   - 旧版が残した同じカタモンURLの履歴を先に数え、確認1回・履歴移動1回でアプリ外へ戻す。戻り先が無いPWAはウィンドウを閉じる。
+45. Issue #6 ランキング改修
+   - 同一プレイヤー3件まで。
+   - GASの `character` 列が再デプロイ済みか確認する。
+46. **Issue #4 オンラインHPバーの瞬間的なずれ** — 未着手。
+   - v100でHUDを作り替えたが、これは表示の並べ方だけで、Issue #4 の同期タイミングには触れていない。
+   - **v128で見つけた `explodeAt` の `owner.control` の取り違えをここで一緒に直す。** 詳細はv128の節。
+47. 承認済み新企画
+   - 採否、Version順、設計ゲートは`docs/実装計画_統合版.md`を正本とする。
+   - 新企画は原則として上記の完了後に着手する。
+
+## 企画レビューの統合結果
+
+GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 5の反証レビューまで反映した。統合計画は2026-08-02にユーザー承認済み。
+
+- Sol企画原案: `docs/レビュー_Sol_企画原案.md`
+- Opus 5技術査定: `docs/レビュー_Opus5_技術査定.md`
+- Fable 5ゲームデザイン: `docs/レビュー_Fable5_ゲームデザイン.md`
+- Fable 5統合計画反証: `docs/レビュー_Fable5_統合計画反証.md`
+- 承認済み計画: `docs/実装計画_統合版.md`
+
+以下の統合手順は完了済み。
+
+1. 提案者別の内容、一致点、対立点を比較する。
+2. 現行コードと照合し、流用可能、部分修正、全面改修に分類する。
+3. 各案を5段階で評価し、採用、保留、却下を決める。
+4. Version単位のロードマップへ整理する。
+5. 原則として1機能1件のGitHub Issueへ分割する。
+
+先行残タスクはGitHub Issue #2〜#8として登録済み。新企画Issueは残タスクの進行後に登録する。
+
+判断基準は次の優先順とする。
+
+1. ゲームが面白くなるか。
+2. ターン制を活かせるか。
+3. カタモンらしいか。
+4. 現行設計と相性が良いか。
+5. 実装コスト。
+6. 保守性。
+
+必ず維持する軸は、ターン制、砲撃、風、地形破壊、オンライン対戦。5〜10人の友人同士で遊ぶゲームであり、課金、ガチャ、スタミナ、毎日ログインなどの運営型要素は不要。
+
+## 実機QAの前に必ず確認すること（2026-08-05 追記）
+
+スマホで「公開版のはずなのに直したはずの不具合が出る」という報告が出たが、**原因はアプリ側ではなかった**。
+画面の上部に `index.html` と表示されていて、これは公開サイトではなく**端末に残っていた古いローカルHTML**。
+古いファイルをそのまま開いていたので、いくら公開しても中身が変わらなかった。
+
+- 公開版を試す時は、Chromeで次のURLを**直接**開く。
+  `https://futsalife24-bot.github.io/katamon/?v=v120&refresh=20260805`
+  （`v=` はその時の版へ、`refresh=` はその日の日付へ置き換える）
+- 開いたら**タイトル下の build 番号**を見て、確かめたい版と一致していることを確認する。
+- 上部に `index.html` と出ていたら、それは古いローカルファイル。**その挙動を最新版の不具合として扱わない。**
+- ホーム画面のアイコンやブックマークからではなく、URLから開くこと。
+
+## 作業時の注意
+
+- **テスト数は必ず実際に走らせて数えること。** 差分の足し算で書くとずれる（実際にずれた）。
+  合計は `seattest×2 + regressiontest×2 + resulttest + stage3test + lobbysimtest + loopbacktest`。
+
+- 実装完了時は、必ず現在の `index.html` へのクリック可能なリンクを提示する。
+- 跳躍の壁面着地、向き、オンライン同期を変更した場合は、関連テストに加えて `loopbacktest.js` と `stage3test.js` を実行する。
+- 実ブラウザの見た目を自動テスト結果だけで確定しない。
+- 未コミット変更がある場合は、ユーザーの作業として保護し、破棄や巻き戻しをしない。
+- 無関係な整理や全面改修を混ぜない。
+## v175 終了確認を標準語へ統一（PR #120）
+
+- 作業ブランチ: `fix/v175-standard-game-copy`、PR #120。v174（PR #119）を土台に、ゲーム内の終了確認を標準語・PWA向けの文言へ整える。終了確認の動作、画面構成、Firebase ルールは変更しない。
+- 何を変えたか: 案内文を `終了すると、カタモンを閉じます。`、終了レバーの補足を `カタモンを終了する` へ変更した。画面内の関西弁と「ブラウザ」という語をなくした。
+- なぜ変えたか: PWAとして遊ぶ画面では「ブラウザの前のページへ戻る」が実態・世界観のどちらにも合わず、ゲーム内の文言は標準語に揃えるため。
+- やってはいけないこと: 「このまま遊ぶ」「アプリを閉じる」の操作と、CloseWatcher／履歴フォールバックの終了処理を変えない。`BUILD_ID` と `CACHE_VERSION` は必ず同じ `v175-standard-game-copy` に揃える。`database.rules.json` は変更しない。
+- 新テスト: 新文言を厳密に確認する Stage Studio 統合テストを先に更新し、旧v174では **7/8成功・1件失敗**（新しい案内文がまだ存在しないことだけが理由）を確認した。実装後は Stage Studio **8/8成功**、終了操作 **14/14成功**。全テストは seat 20×2、regression 295×2、result 93、loopback 103、stage3 433、lobby 7、終了操作14、Stage Studio 53、合計 **1,333件すべて成功**。loopbacktest の中継数は **38 / 64 / 83 / 61 / 48** で不変。ローカルHTTP（`127.0.0.1:4177`）を Android Chromium 縦画面相当で開き、タイトルの終了確認に新しい2文言が出ることも **1/1成功**。
+## v178 VS紋章を6px上へ調整（PR #123）
+
+- 作業ブランチ: `fix/v178-vs-badge-rise`、PR #123。v177の砲弾カード配置はそのままに、前面のVS紋章だけを6px上へ動かす。
+- 何を変えたか: VS紋章専用のY位置補正 `-6` を追加し、紋章の中心を砲弾同士の交点より少し上へ寄せた。
+- なぜ変えたか: VSを前面で強く見せながら、上下の砲弾カード・4人の窓との余白をさらに整えるため。
+- やってはいけないこと: 砲弾カードの位置・並び、VSの大きさ、飛来／撃ち抜けの時間、ゲーム進行、キャラ性能、オンライン通信を変えない。`BUILD_ID`と`CACHE_VERSION`は必ず同じ`v178-vs-badge-rise`に揃える。`database.rules.json`は変更しない。
+- 新テスト: VS紋章専用の上方向補正を検査に追加した。壊したv177では regressiontest p1 が **295成功・1件失敗**となり、紋章位置の条件だけが実際に落ちることを確認した。最終テストは seat 20件×2、regression 296件×2、result 93件、loopback 103件、stage3 433件、lobby 7件、戻る専用14件、Stage Studio 53件、合計 **1,335件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。ローカルHTTP（`127.0.0.1:4180`）をAndroid相当Chromium（540×960）で開き、演習の2vs2から開戦カットインまで実操作した。VSだけが6px上へ寄り、4人の顔・名前を隠さないことを実画面で確認した。
+
+## v177 VSを前面へ戻し砲弾カードを離す（PR #122）
+
+- 作業ブランチ: `fix/v177-vs-card-spacing`、PR #122。v176で背景へ移したVS紋章の勢いが弱く見えるため、VSをカードより前面へ戻す。その代わり、上の自陣営カードを左上、下の相手陣営カードを右下へ少し離し、2vs2でも4人の顔・名前を読み取れる余白を作る。
+- 何を変えたか: 自陣営を `(-48, -84)`、相手陣営を `(40, 70)` へ離し、VS紋章は従来の104pxで最後に描く前面の演出へ戻した。実画面で上側砲弾の端が画面に触れない位置まで左右を微調整している。
+- なぜ変えたか: VSのぶつかり合う勢いを保ちながら、2vs2で中央付近の相手側カードを隠さないため。
+- やってはいけないこと: 砲弾カード内の4人の並び、飛来／撃ち抜けの時間、ゲーム進行、キャラ性能、オンライン通信を変えない。`BUILD_ID`と`CACHE_VERSION`は必ず同じ`v177-vs-card-spacing`に揃える。`database.rules.json`は変更しない。
+- 新テスト: VSが両砲弾カードより後に描かれ、指定した離れた位置と104pxの大きさを使うことを検査するよう変更した。壊したv176では regressiontest p1 が **295成功・1件失敗**となり、前面化・距離の条件だけが実際に落ちることを確認した。最終テストは seat 20件×2、regression 296件×2、result 93件、loopback 103件、stage3 433件、lobby 7件、戻る専用14件、Stage Studio 53件、合計 **1,335件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。ローカルHTTP（`127.0.0.1:4179`）をAndroid相当Chromium（540×960）で開き、演習の2vs2から開戦カットインまで実操作した。VSが前面で勢いを保ち、4人の顔・名前を隠さず、上側砲弾も画面端に触れないことを実画面で確認した。
+
+## v176 VS紋章をカードの背景へ移動（PR #121）
+
+- 作業ブランチ: `fix/v176-vs-crest-layer`、PR #121。2vs2の開戦カットインで、中央のVS紋章が相手側1人目の顔・名前に重なる問題だけを直す。
+- 何を変えたか: VS紋章を92pxへ少し小さくし、4枚の砲弾カードより先に描く背景の紋章へ変更した。砲弾カードは相手側→自陣営の従来の重なり順を保ったまま、必ずVSより前面になる。
+- なぜ変えたか: 2vs2では全員の顔と名前を読めることが最優先で、中央のVSは対戦を補強する飾りとして残すため。
+- やってはいけないこと: 砲弾の配置・飛来／撃ち抜けの時間・2vs2の並び順・ゲーム進行を変えない。`BUILD_ID` と `CACHE_VERSION` は `v176-vs-crest-layer` に揃える。`database.rules.json` は変更しない。
+- 新テスト: VS紋章が両陣営の砲弾カードより先に描かれることを検査する項目を追加した。壊した旧順序では regressiontest p1 が **295成功・1件失敗**、修正後は p1/e1 ともに **296件すべて成功**。最終テストは seat 20件×2、regression 296件×2、result 93件、loopback 103件、stage3 433件、lobby 7件、戻る専用14件、Stage Studio 53件、合計 **1,335件すべて成功**。`loopbacktest`の中継件数は **38 / 64 / 83 / 61 / 48** のまま。ローカルHTTP（`127.0.0.1:4178`）をAndroid相当Chromium（540×960）で開き、演習の2vs2から開戦カットインまで実操作し、4人全員の顔・名前がVS紋章の前面で読めることを確認した。
+## v197 演習STAGE分岐の選択性・プレビュー向き・モーダル前面制御（PR #145 マージ済み / 2026-08-14）
+
+### 何をしたか
+
+- 演習準備のSTAGE欄は、左の共通ラベルから右側の「通常ステージ」と「カスタムステージを選ぶ」へ上下分岐する構成を維持した。
+- カスタムステージは下段いっぱいを使う青緑系の押せる選択ボタンにし、単なる文字列に見えないようにした。独立した位置へ浮かせない。
+- 演習準備のキャラクター画像は、元素材の向きに関係なく、味方側を右向き・相手側を左向きに描くよう統一した。戦闘中の向きや画像素材そのものは変えない。
+- サウンド設定を開いている間は、Canvasのモーダルより前へDOMのカスタムステージボタンを出さず、ボタン自体を非表示にするようにした。モーダル上に文字が見えたり押せたりしない。
+- `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v197-training-stage-affordance` へ更新した。
+
+### なぜしたか
+
+- カスタムステージをSTAGE選択の一部として読み取れ、かつ明確に押せるようにするため。
+- キャラごとの元画像の左右差で、演習準備の陣営表示がちぐはぐに見えるため。
+- Canvasで描くサウンド設定モーダルとDOMボタンのレイヤーが競合し、モーダル上から操作できてしまう不具合を防ぐため。
+
+### やってはいけないこと
+
+- カスタムステージボタンをSTAGEグループ外へ独立配置しない。通常ステージの矢印操作・選択データ・保存仕様は変えない。
+- 実戦中のキャラ向き、キャラ素材、オンライン部屋、カスタムステージの検証・セキュリティ仕様を変えない。
+- Canvasモーダル表示中に外部DOMの操作部品を前面へ残さない。
+- `BUILD_ID` と `CACHE_VERSION` を別番号にしない。`database.rules.json` は変更していないためFirebase Console反映は不要。
+
+### テスト・実測
+
+- 新規テスト3件は、実装前のv196コードで `342 passed, 3 failed` を確認してから追加した。失敗内容は「色付きボタン未実装」「素材向き別のプレビュー統一未実装」「サウンド設定中のランチャー非表示未実装」。
+- 回帰: `npm.cmd run test:regression` — p1/e1 ともに `345 passed, 0 failed`（計690件）。
+- ステージ統合: `npm.cmd run test:stage` — `53 passed, 0 failed`。
+- 全体: `npm.cmd test` — 成功。テスト出力あり。loopbacktest中継数は `38 / 64 / 83 / 61 / 48` のまま。
+- ローカルHTTP（`http://127.0.0.1:4179/`）を実ブラウザで確認。STAGE枠内の下段ボタン、スモエルを含む味方右向き／相手左向き、サウンド設定を開いた時のランチャー非表示を確認。Console error/warn 0件。
+- 描画・UIだけの変更で、対戦・通信のロジックには触れていないため、loopbacktestの中継数が不変であることを確認した。
+## v198 ドレッドアロー「スコーピオンレール」・長い必殺名の開始カード表示（PR #147 マージ済み / 2026-08-14）
+
+### 何をしたか
+
+- ドレッドアローの必殺を、超高速で角度がずれる「貫通狙撃」から「スコーピオンレール」へ変更した。
+- 発射中の毒針は狙い線どおりの初速で飛び、地面へ刺さると最も近い敵側へ地表を這う。レール中は風・重力を受けず、小さく地形を削り、接触した相手へ24ダメージを与える。
+- 毒針には黄緑の芯と尾の残光を描き、通常の貫通弾と見分けられるようにした。
+- 1vs1の開始カードでは必殺技名を`…`で省略せず、文字を7〜11pxまで縮めて全文表示するようにした。カードの3行目は技名だけを表示する。
+- `BUILD_ID` と `sw.js` の `CACHE_VERSION` をともに `v198-scorpion-rail` へ更新した。
+
+### なぜしたか
+
+- 旧必殺は高速化だけで、照準矢印との発射角ずれもあり、ドレッドアローのサソリ型らしい強みが分かりにくかったため。
+- 「刺す→地表を走る毒針」で遮蔽物の裏も追い詰められる、狙撃型らしい制圧性能を持たせるため。
+- 長い必殺技名が開始カードで途中省略され、技名を読めない問題をなくすため。
+
+### やってはいけないこと
+
+- レール化前の発射角を加工・高速化しない。発射中の毒針は狙い線どおりに飛ばす。
+- レールを大爆発・地形大破壊・複数の状態異常へ拡張しない。役割は地表追尾・小削り・直撃ダメージに留める。
+- 既存の通常弾、他キャラの必殺、通信プロトコル、`database.rules.json`を変えない。
+- 開始カードの技名を再び`…`で切らない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### テスト・実測
+
+- 新規テスト3件は、実装前のv197コードで `345 passed, 3 failed` を確認してから追加した。失敗内容は「旧高速貫通」「地表レール化なし」「長い技名を省略しないレイアウトなし」。
+- 回帰: `npm.cmd run test:regression` — p1/e1ともに `348 passed, 0 failed`（計696件）。
+- 全体: `npm.cmd test` 成功。seat 20×2、regression 348×2、result 93、loopback 103、lobby 7、stage統合 53件を含み、テスト出力あり。
+- loopbacktest中継数は `38 / 64 / 83 / 61 / 48` のまま。投射物は既存の同期対象配列のみを使い、通信メッセージや対戦進行を増やしていないため。
+- ローカルHTTP（`http://127.0.0.1:4180/`）を実ブラウザで起動・開始演出まで確認。Console error/warn 0件。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v206 毒針演出フリーズ修正（2026-08-15）
+
+### 何をしたか
+
+- スコーピオンレールの毒針演出が伸び始める描画時、存在しない`clamp()`を呼んでいたため、標準の`Math.max`/`Math.min`へ置き換えた。
+- 毒針を生成しただけではなく、実際に伸び始めた時点まで描画する回帰テストを追加した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v206-scorpion-spike-freeze`へ更新し、タイトルの更新履歴先頭へv206を追加した。
+
+### なぜそうしたか
+
+- v205では毒針が出る瞬間に`ReferenceError: clamp is not defined`となり、描画ループが止まって画面がフリーズしていたため。
+
+### やってはいけないこと
+
+- 毒針のダメージ、地形破壊、吹き飛ばし、状態異常、同期処理を変更しないこと。今回の修正は描画時の値の丸めだけに限定する。
+- 生成直後（高さ0）だけを検査して描画経路を通らないテストへ戻さないこと。少なくとも伸び始めた瞬間を描画して例外がないことを検査する。
+- 他キャラの必殺技、`database.rules.json`、中継仕様を変更しない。
+
+### 実測テスト数・確認
+
+- 新規の描画回帰テストは、修正前v205相当で`366 passed, 1 failed`となり、失敗理由が`clamp is not defined`であることを確認してから修正した。
+- 修正後の回帰はp1/e1ともに`367 passed, 0 failed`。
+- `npm.cmd test`はseat 20件×2、regression 367件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ranking 5件、Stage Studio 53件、合計 **1,484/1,484成功**。全スイートで件数出力を確認した。
+- loopbacktestの中継数は **38 / 64 / 83 / 61 / 48** で不変。描画専用の修正であり、物理・通信へは触れていない。
+- ローカルHTTP（`http://127.0.0.1:4206/`）＋実ブラウザでv206を起動し、Console error 0件を確認。`file://`は使っていない。ローカルworktreeにはPlaywright本体が無いためmobile-e2eはGitHub CIで確認する。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v205 スコーピオンレール命中時の毒針演出（2026-08-15）
+
+### 何をしたか
+
+- スコーピオンレールが地面を這うショックウェーブ状態で相手に命中した時、相手の足元から黄緑の毒針3本が順に突き上がる演出を追加した。
+- 毒針は中央を少し高くし、0.035秒ずつずらして出現、0.46秒で消える描画専用エフェクトにした。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v205-scorpion-spike`へ更新し、タイトルの更新履歴先頭へv205を追加した。
+
+### なぜそうしたか
+
+- 地表を走るショックウェーブが相手へ届いた瞬間を、サソリらしい「下からの針」で分かりやすく、かつ気持ちよく伝えるため。
+
+### やってはいけないこと
+
+- 毒針へダメージ、吹き飛ばし、状態異常、当たり判定、地形破壊を持たせないこと。既存のショックウェーブ固定24ダメージと地形削りの値は変更しない。
+- 地面へ刺さる前の通常投射物命中には出さないこと。`scorpionRailActive`中の命中だけに限定する。
+- 演出で乱数や通信メッセージを増やさないこと。対戦同期に影響するゲーム状態へ混ぜない。
+- 他キャラの必殺技、`database.rules.json`、中継仕様は変更しない。
+
+### 実測テスト数・確認
+
+- 実装前に新規試験だけが失敗することを確認済み: `365 passed, 1 failed`（毒針の設定・描画数だけが未実装）。
+- 実装後の回帰はp1/e1ともに`366 passed, 0 failed`。
+- `npm.cmd test`はseat 20件×2、regression 366件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ranking 5件、Stage Studio 53件、合計 **1,482/1,482成功**。全スイートで件数出力を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。描画専用の配列であり、物理・ネットワーク処理へは入れていない。
+- ローカルHTTP（`http://127.0.0.1:4205/`）＋実ブラウザでv205のタイトル・演習開始まで確認し、Console error 0件。`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v204 バルコプターのマーキング10連射（2026-08-15）
+
+### 何をしたか
+
+- バルゲルカンの必殺技を「スライム掃射」から「バルコプター」へ改名した。
+- 必殺技は風と重力を受けるマーキング弾1発を発射し、キャラクター・障害物・地形へ着弾した地点を照準にする方式へ変更した。マーキング弾自体は地形を破壊しない。
+- 着弾後、自キャラの真上150pxへ支援ヘリを出し、マーキング地点へ機銃弾を10発連射するようにした。専用画像追加まではバルゲルカン画像へ仮ローターを重ねて表示する。
+- 機銃弾は風0・重力0、1発5ダメージ、地形破壊なし。照準中央を保った固定10パターンの微ブレにして、端末ごとの乱数差が出ないようにした。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v204-barucopter`へ更新し、タイトルの更新履歴先頭へv204を追加した。
+- v203のBインパクト吹き飛ばし試験は、ランダム地形がデッドライン間際になった時だけ落下死する揺れを除き、安全な高さで吹き飛びだけを測るよう安定化した。製品挙動は変更していない。
+
+### なぜそうしたか
+
+- 従来の散弾はバルゲルカンのヘリコプター型という個性が弱かったため、先に地点を指定して上空支援を呼ぶ二段構えへ変え、狙いと演出を一致させるため。
+- 機銃を無風・無重力にすることで、マーキング地点を狙った支援射撃として分かりやすくしつつ、わずかなブレで10発の見た目を単調にしないため。
+- オンラインでも同じ結果になるよう、機銃のブレをランダム値ではなく固定順にした。
+
+### やってはいけないこと
+
+- 機銃のブレへ`Math.random()`など端末ごとに変わる乱数を使わない。固定順・固定物理刻みを維持する。
+- マーキング弾まで無風・無重力へ変えない。通常の照準操作で着弾地点を決め、その後の機銃だけを直線で飛ばす。
+- 機銃弾へ爆発や地形破壊を足さない。10発・1発5ダメージ・風0・重力0を無断で変えない。
+- 専用ヘリ画像を追加する時に、支援機の高さ150px・照準地点・10連射の進行ロジックまで同時に変更しない。
+- 他キャラの必殺、通常弾、通信プロトコル、`database.rules.json`を変更しない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### テスト・実測
+
+- 新規テスト6件は、実装前のv203相当コードで`359 passed, 6 failed`を確認してから実装した。失敗内容は旧技名、旧5方向散弾、支援機なし、10発・無風無重力なし、微ブレなし、旧45ダメージだった。
+- 実装後の回帰はp1/e1ともに`365 passed, 0 failed`。さらに揺れ確認としてp1・e1を各10回連続実行し、全20回とも`365 passed, 0 failed`だった。
+- `npm.cmd test`はseat 20件×2、regression 365件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ranking 5件、Stage Studio 53件、合計 **1,480/1,480成功**。全スイートで件数出力を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。新しい投射物も既存の決定的な固定物理内で処理し、通信メッセージを増やしていない。
+- ローカルHTTP（`http://127.0.0.1:4204/`）＋実ブラウザで、タイトルのv204履歴、バルゲルカン選択、VS表示、演習の「全員MAX」から必殺カットイン、マーキング弾、真上の仮ヘリ、機銃トレーサーまで確認した。Console error 0件で、`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v203 Bインパクトの破壊範囲・吹き飛ばし調整（2026-08-15）
+
+### 何をしたか
+
+- ゴーロッカのBインパクトは、ダメージ用の爆風性能を維持したまま、地形破壊半径だけを通常弾44pxの1.5倍（66px）へ縮小した。
+- Bインパクトがキャラクターへ命中した時、爆心から外側へ少し押し出しながら軽く浮かせる吹き飛ばしを追加した。水平初速は80px/sで、落下中も地形をすり抜けないよう衝突判定を通す。
+- 弾ごとに「ダメージ用の爆風倍率」と「地形破壊倍率」を分離できるようにし、Bインパクト以外は従来どおり同じ倍率を使う。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v203-b-impact-balance`へ更新し、タイトルの更新履歴先頭へv203を追加した。
+
+### なぜそうしたか
+
+- 従来のBインパクトはダメージ用倍率3.51倍が地形破壊にもそのまま使われ、破壊半径が154.44pxまで広がっていた。ゴーロッカらしい重量感を残しつつ、戦場を一発で削りすぎない性能に整えるため。
+- 地形破壊を抑えるだけでは命中時の手応えが弱くなるため、小さな位置変化として吹き飛ばしを足した。
+
+### やってはいけないこと
+
+- Bインパクトのダメージ用爆風倍率まで1.5倍へ下げない。今回縮めたのは地形破壊半径だけ。
+- 吹き飛ばしを通常弾や他キャラの必殺へ波及させない。`knockbackSpeed`を持つBインパクトだけに限定する。
+- 吹き飛ばされたキャラクターを地形や外壁へ貫通させない。横移動にも地形衝突判定を通す。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。通常弾・他キャラ必殺・通信処理・`database.rules.json`を変更しない。
+
+### テスト・実測
+
+- 新規テスト2件は、実装前のv202相当コードで`357 passed, 2 failed`を確認してから実装した。失敗内容は「地形破壊半径が154.44pxのまま」「命中者が吹き飛ばない」。
+- 回帰はp1/e1ともに`359 passed, 0 failed`（計718件）。`npm.cmd test`は全スイート合計 **1,468/1,468成功**。例外で出力が消えておらず、各テスト件数を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。通信処理には触れていない。
+- ローカルHTTP（`http://127.0.0.1:4203/`）＋実ブラウザで、タイトルのv203更新履歴、ゴーロッカの「Bインパクト」表示、VS開始、戦闘画面まで確認した。Console error 0件で、`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v202 スコーピオンレールの進行先を最寄りの相手へ（2026-08-15）
+
+### 何をしたか
+
+- スコーピオンレールが地形へ刺さった時、敵の左右位置だけではなく、着弾点から各生存敵までの2次元距離を比較して最寄りの相手を選ぶようにした。
+- 着弾直後の地表進行方向は、選んだ相手へ向かうベクトルと地形の接線方向を比較して決めるようにした。これにより床では左右、壁では上下のうち相手に近づく側へ走る。
+- 生存敵がいない場合だけ、従来どおり発射方向を予備の進行方向として使う。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v202-scorpion-target-direction`へ更新し、タイトルの更新履歴先頭へv202を追加した。
+
+### なぜそうしたか
+
+- 従来は敵との横方向の距離だけで左右を決めていたため、坂や壁を登れるようになった後も、縦壁へ刺さった瞬間は相手の位置に関係なく上向きが優先される場合があったため。
+- 「近くの相手に向かう」という見た目と挙動を、床・坂・壁のどこでも同じ基準にそろえるため。
+
+### やってはいけないこと
+
+- 最寄り判定を横方向の距離だけへ戻さない。壁面では上下方向を判断できなくなる。
+- 味方やHP 0のキャラを追跡対象へ含めない。
+- 地表走行中に毎フレーム別の相手へ再照準しない。今回の対象決定は着弾時の1回だけに保ち、同じ入力から同じ経路になる決定性を崩さない。
+- スコーピオンレールの速度・走行距離・24ダメージ・小削り・ショックウェーブ描画をこの版で同時に変更しない。
+- 通常弾、他キャラの必殺技、通信プロトコル、`database.rules.json`を変更しない。
+- `BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### テスト・実測
+
+- 新規テストは実装前のv201相当コードで`356 passed, 1 failed`を確認した。縦壁へ刺さったレールが、下側にいる最寄りの敵ではなく固定で上へ進む失敗だった。
+- 実装後の`npm.cmd run test:regression`はp1/e1ともに`357 passed, 0 failed`（合計714件）。
+- `npm.cmd test`はseat 20件×2、regression 357件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ranking 5件、Stage Studio 53件、合計 **1,464/1,464成功**。各スイートの件数出力を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** のまま。
+- ローカルHTTP（`http://127.0.0.1:4202/`）を実ブラウザで開き、タイトルのv202更新履歴表示、ドレッドアロー選択、実戦開始まで表示崩れがないことを確認した。ブラウザログはerror/warn 0件。`file://`は使用していない。
+- `database.rules.json`は変更していない。Firebase Console反映は不要。
+
+## v199 タイトル最下部の更新履歴表示（PR #148 / 2026-08-14）
+
+### 何をしたか
+
+- タイトル最下部の横幅を分け、左へ従来の「最新版を取得」ボタン、右へ押せない更新履歴パネルを同じ高さで配置した。
+- 更新履歴パネルは、上段へ版番号と日付、下段へ今回の変更内容を表示する。v199では「v199・2026/08/14」「タイトルに更新履歴を表示」とした。
+- `LATEST_UPDATE_HISTORY`へ版番号・日付・内容を一か所にまとめ、`BUILD_ID`のv番号と一致しない場合はテストで検出できるようにした。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v199-title-update-history`へ更新した。
+
+### なぜしたか
+
+- 数字だけのビルド表示では、プレイヤーが更新によって何が変わったかをタイトル画面から判断できなかったため。
+- 「最新版を取得」のすぐ横へ最新1件を置き、更新操作と変更内容を同じ視線の流れで確認できるようにするため。
+
+### やってはいけないこと
+
+- 更新履歴パネルを押せるボタンにしない。「最新版を取得」の操作領域と重ねない。
+- 履歴を縦へ積み上げてタイトル最下部を圧迫しない。表示は最新1件に留める。
+- 版を上げる時に`LATEST_UPDATE_HISTORY`の版番号・日付・内容を更新し忘れない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+- タイトル以外の画面、更新処理、対戦性能、通信形式、`database.rules.json`を同時に変更しない。
+
+### テスト・実測
+
+- 新規テスト3件は、実装前のv198コードで`348 passed, 3 failed`を確認してから実装した。失敗内容は「履歴データなし」「日付・内容なし」「最新版ボタン横の非重複パネルなし」。例外後も件数が表示された。
+- 回帰: p1/e1ともに`351 passed, 0 failed`（計702件）。全体: `npm.cmd test`でseat 20件×2、regression 351件×2、result 93件、loopback 103件、stage3 435件、lobby 7件、戻る専用14件、ランキング5件、Stage Studio 53件、合計 **1,452/1,452成功**。全スイートの件数表示を確認した。
+- loopbacktestの中継数は`38 / 64 / 83 / 61 / 48`のまま。タイトル描画と表示データだけの変更で、通信・対戦進行へ触れていないため。
+- ローカルHTTP（`http://127.0.0.1:4199/`）＋実ブラウザでタイトルを表示し、左ボタンと右の2段履歴が同じ高さで収まり、文字切れ・重なり・浮きがないことを確認した。Console error/warn 0件、`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v200 スコーピオンレールの地形走破・衝撃波強化（2026-08-15）
+
+### 何をしたか
+
+- 地面へ刺さったスコーピオンレールが、床面だけでなく坂・垂直壁・角を地形から離れずに走る輪郭追従処理へ変更した。床から壁を登り、角を回って上面へ進める。
+- 黄緑の細い尾だけだった描画を、96pxの軌跡、18px幅の発光残光、進行方向へ立ち上がる波頭を重ねたショックウェーブへ強化した。地形の向きに合わせて壁面でも波頭が回転する。
+- 発射前の弾道は従来どおり照準線と一致し、地形へ刺さった後だけ最も近い敵側へ走る。24ダメージ、小削り、260pxの走行距離は維持した。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v200-scorpion-surface-wave`へ更新した。
+
+### なぜしたか
+
+- 平らな地表しか走れないと段差や壁で止まり、サソリ型の「地形を這って追い詰める」必殺として使いにくかったため。
+- 旧描画は細い毒針の残光に見え、地面を走る必殺技としての勢いが弱かったため。パワーウェイブのように地形からせり上がる衝撃波として読み取れる強さを持たせた。
+
+### やってはいけないこと
+
+- 発射時の角度・初速を照準線からずらさない。輪郭追従は地形へ刺さった後だけ開始する。
+- スコーピオンレールを大爆発、地形大破壊、状態異常へ拡張しない。既存の24ダメージ・小削り・固定走行距離を勝手に強化しない。
+- 地形追従を端末の描画フレーム数へ依存させない。固定物理刻みと走行距離で同じ経路にする。
+- 他キャラの必殺、通常弾、通信プロトコル、`database.rules.json`を変えない。`BUILD_ID`と`CACHE_VERSION`を別番号にしない。
+
+### テスト・実測
+
+- 新規テスト2件は、実装前のv199コードで`351 passed, 2 failed`を確認してから実装した。失敗内容は「床から垂直壁を登って上面へ回り込めない」「衝撃波用の太さ・軌跡長が存在しない」。例外後も件数表示を確認した。
+- 回帰: p1/e1ともに`353 passed, 0 failed`（計706件）。全体: `npm.cmd test`で全スイートを実行し、合計 **1,456/1,456成功**。全テストの件数出力を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。投射物のローカル物理・描画だけを変更し、通信メッセージ数を増やしていないため。
+- ローカルHTTP（`http://127.0.0.1:4177/`）＋実ブラウザでドレッドアローの演習を開始し、スコーピオンレールを複数回実射した。必殺カットインから着弾・手番終了まで進行し、Console error/warn 0件。`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+
+## v201 過去の更新履歴一覧（2026-08-15）
+
+### 何をしたか
+
+- タイトル最下部の更新履歴欄をタップできるようにし、v201からv197までの版・日付・主な変更を一覧表示するモーダルを追加した。
+- 更新履歴欄へ右向きの記号を追加し、最新版の表示を残したまま、押せる場所だと分かる見た目にした。
+- 一覧を開いている間は背面のタイトルボタンとサウンド設定へ入力を通さず、「閉じる」または枠外のタップだけでタイトルへ戻るようにした。
+- 履歴データを`UPDATE_HISTORY`へまとめ、従来の`LATEST_UPDATE_HISTORY`はその先頭を参照する形にして、最新版表示と過去一覧の食い違いを防いだ。
+- `BUILD_ID`と`sw.js`の`CACHE_VERSION`をともに`v201-update-history-modal`へ更新した。
+
+### なぜしたか
+
+- 最新1件だけでは、版が進んだ後に以前の変更内容をゲーム内から確認できなかったため。
+- 小さいタイトル最下部でも、更新操作と履歴閲覧を混同せず、スマートフォンから迷わず開けるようにするため。
+
+### やってはいけないこと
+
+- 更新履歴欄を「最新版を取得」ボタンと重ねない。最新版取得と履歴閲覧は別の操作として保つ。
+- モーダル表示中に背面の対戦開始・演習・ランキング・サウンド設定を反応させない。
+- 新しい版を出す時は`UPDATE_HISTORY`の先頭、`BUILD_ID`、`CACHE_VERSION`を別番号にしない。
+- 対戦処理、通信プロトコル、必殺技性能、`database.rules.json`をこの版では変更しない。
+
+### テスト・実測
+
+- 新規テスト3件は、実装前のv200コードで`353 passed, 3 failed`を確認してから実装した。失敗内容は「過去履歴データなし」「履歴を開けない」「閉じる操作なし」。例外を修正したうえで件数表示を確認した。
+- 回帰: p1/e1ともに`356 passed, 0 failed`（計712件）。全体: `npm.cmd test`で全スイートを実行し、合計 **1,462/1,462成功**。全テストの件数出力を確認した。
+- loopbacktestは`103 passed, 0 failed`、中継数は **38 / 64 / 83 / 61 / 48** で不変。タイトルの表示・入力だけを変更し、通信処理には触れていないため。
+- ローカルHTTP（`http://127.0.0.1:4181/`）＋実ブラウザのスマートフォン幅で、タイトル最下部の履歴欄、v201〜v197の一覧、「閉じる」での復帰を確認した。文字切れ・背面への入力漏れはなく、Console error/warn 0件。`file://`は使っていない。
+- `database.rules.json`は変更していないためFirebase Console反映は不要。
+\n+## v2.0.17 BATTLE HUD専用素材適用（2026-08-16）
+\n+- 何を: Google Drive提供の味方カード枠・敵カード枠・風向きコンソール・ミニマップ枠をBATTLE画面へ組み込み、動的情報はCanvasで重ねた。素材未読込時は旧描画へフォールバックする。
+- なぜ: 線描画中心だったHUDへ、メロニキ提供のメカニカルな質感を反映するため。
+- やってはいけないこと: `assets/ui/battle-hud/`を削除・別用途へ流用しない。`database.rules.json`は変更しない。Firebase Console反映は不要。
+- 実測テスト数: 旧実装で新規テスト `447/448 passed` を確認後、実装後 `npm.cmd run test:stage3` `448/448 passed`、`npm.cmd test` 全成功。loopback基準値 38 / 64 / 83 / 61 / 48 は通信処理を変更せず維持。HTTP `127.0.0.1:4203`の実ブラウザで4素材表示を確認、`file://`未使用。
+## v2.0.18 BATTLE HUD文字レイアウト修正（2026-08-16）
+
+### 何をしたか
+
+- Google Drive提供の味方・敵カード素材について、名前・HP・燃料・役割を素材内の右側情報窓へ配置した。
+- 中央の風向きコンソールは現在風を上段、次の風を下段の情報窓へ収めた。
+- 素材の円形装飾や外枠へ動的文字・ゲージが乗らないよう、描画基準とゲージ幅を専用窓に合わせた。
+
+### なぜしたか
+
+- v2.0.17では素材を枠として読み込んだものの、従来の文字位置を残したため、文字が装飾部分へ重なっていた。素材を背景扱いにせず、情報窓として正しく使うため。
+
+### やってはいけないこと
+
+- 素材の空きパネル外へ名前・HP・燃料・風情報を描かないこと。
+- 円形装飾を文字領域として使わないこと。`database.rules.json`、通信、ゲーム進行は変更しないこと。
+
+### 実測テスト数
+
+- 新規配置テストは旧実装で `448/449 passed`（配置テストのみ失敗）を確認してから実装。
+- 実装後 `npm.cmd run test:stage3` は `449/449 passed`。
+- `npm.cmd test` は全テスト成功。
+- loopback基準値 38 / 64 / 83 / 61 / 48 は通信処理を変更せず維持。
+- ローカルHTTP `http://127.0.0.1:4204/`＋実ブラウザで、文字・HP・燃料・風情報が専用情報窓内に収まることを確認。`file://`未使用。
+## v2.0.21 BATTLE HUDステージ名レイヤー・中央風枠修正（2026-08-16）
+
+### 何を変えたか
+
+- ステージ名プレートの裏側に残っていた「司令ブリッジ」見出しの描画を無効化し、ステージ名が隠れないようにした。
+- 風表示を3区画の新素材 `assets/ui/battle-hud/v4-wind-console.png` に変更した。現在の風・中央矢印・次の風予報を維持し、中央矢印の入力領域を横長にした。
+- `BUILD_ID` と `CACHE_VERSION` を v2.0.21 に同期した。
+
+### なぜ変えたか
+
+- 実機スクリーンショットでステージ名の下に別見出しが重なり、風予報の中央枠が狭くて読みにくかったため。
+
+### やってはいけないこと
+
+- ステージ名プレートの背後へ追加見出しを描画しない。
+- 風を2列へ戻さない。現在の風・矢印・次の風の3区画を維持する。
+- `database.rules.json`、ゲームルール、通信仕様をこの見た目修正の目的で変更しない。
+
+### 実測テスト件数
+
+- 旧実装に新テストを追加した直後：452/453（追加チェックのみ失敗）
+- 修正後 `npm.cmd run test:stage3`：453/453
+- `git diff --check`：改行コード警告のみ
+- ローカルHTTP `http://127.0.0.1:4319/index.html?build=v2.0.21` の実ブラウザ確認：BATTLE画面表示、ステージ名の裏文字なし、3区画風表示、Console 0件。`file://` は未使用。
+- loopbacktest中継数：38 / 64 / 83 / 61 / 48 を維持。
+# v2.0.35 NEXT予報の一行表示（2026-08-17）
+
+## 何を
+- 風コンソール下段の `NEXT` と方向矢印を、中央揃えの一行テキスト `NEXT ➞` として描画するよう変更。
+- 一行表示に合わせ、予報バッジ幅を拡張した。
+- BUILD_ID と Service Worker の CACHE_VERSION を v2.0.35 で一致させた。
+
+## なぜ
+- `NEXT` と矢印を別々に配置していたため、方向によって重なる余地があった。
+
+## やってはいけないこと
+- 現在風・強さ・次風のゲームロジックや、1vs1/2vs2共通コンソール構成は変更しない。
+- `database.rules.json` は変更しない。
+
+## 実測テスト数
+- 旧v2.0.34ソースで一行中央描画条件が不成立となることを確認。
+- Stage 3: 467/467 passed。
+- ローカルHTTPサーバーは127.0.0.1限定で起動したが、実ブラウザ環境からの接続が拒否され画面確認は未実施。
+## 2026-08-17 リポジトリ衛生: ローカル作業フォルダの誤追加防止
+
+### 何を
+
+- `.gitignore` に `.codex-worktrees/`、`.codex-remote-attachments/`、`catamon_vertical_pv/` を追加した。
+
+### なぜ
+
+- ローカル専用の大容量ファイルを `git add -A` で誤ってGit管理へ入れる事故を防ぐため。
+
+### やってはいけないこと
+
+- `shared/` は追跡済みの本番資産なので無視対象に加えない。
+- 既存worktree・添付フォルダ・PV素材を削除しない。
+
+### 実測テスト数
+
+- `git diff --check`: 1件（異常なし）
+- `git check-ignore`: 4経路（3経路を無視、`shared/` が無視されないことを確認）

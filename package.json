@@ -13,9 +13,10 @@
     "test:lobby": "node tests/lobbysimtest.js",
     "test:back": "node tests/devicebacktest.js",
     "test:ranking": "node tests/rankingtest.js",
+    "test:docs": "node tests/current-work-state-size.test.js",
     "test:existing": "npm run test:seat && npm run test:regression && npm run test:result && npm run test:loopback && npm run test:stage3 && npm run test:lobby && npm run test:back && npm run test:ranking",
     "test:stage": "node --test tests/stage-*.test.js",
-    "test": "npm run test:existing && npm run test:stage",
+    "test": "npm run test:docs && npm run test:existing && npm run test:stage",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "e2e:install": "playwright install chromium webkit"
