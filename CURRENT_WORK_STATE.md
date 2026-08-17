@@ -4654,3 +4654,22 @@ GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 
 - 旧v2.0.34ソースで一行中央描画条件が不成立となることを確認。
 - Stage 3: 467/467 passed。
 - ローカルHTTPサーバーは127.0.0.1限定で起動したが、実ブラウザ環境からの接続が拒否され画面確認は未実施。
+## 2026-08-17 リポジトリ衛生: ローカル作業フォルダの誤追加防止
+
+### 何を
+
+- `.gitignore` に `.codex-worktrees/`、`.codex-remote-attachments/`、`catamon_vertical_pv/` を追加した。
+
+### なぜ
+
+- ローカル専用の大容量ファイルを `git add -A` で誤ってGit管理へ入れる事故を防ぐため。
+
+### やってはいけないこと
+
+- `shared/` は追跡済みの本番資産なので無視対象に加えない。
+- 既存worktree・添付フォルダ・PV素材を削除しない。
+
+### 実測テスト数
+
+- `git diff --check`: 1件（異常なし）
+- `git check-ignore`: 4経路（3経路を無視、`shared/` が無視されないことを確認）
