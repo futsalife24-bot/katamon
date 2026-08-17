@@ -1,3 +1,6 @@
 node_modules/
 playwright-report/
 test-results/
+.codex-worktrees/
+.codex-remote-attachments/
+catamon_vertical_pv/
