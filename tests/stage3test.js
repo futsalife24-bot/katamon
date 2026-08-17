@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -28,25 +28,25 @@ function check(name, value) {
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
     && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
     anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
@@ -54,25 +54,25 @@ function check(name, value) {
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes("nextArrow === '無風'")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
     anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
     anchoredHudSource.includes('function drawWindForecastDivider(')
     && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
     && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('round wind console renders NEXT and its forecast as one centered text line',
     anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
     && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -81,7 +81,7 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -97,7 +97,7 @@ function check(name, value) {
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.35-wind-next-inline';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.36-cache-version-contract';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -487,11 +487,8 @@ function check(name, value) {
     !/if \(flash > 0\) \{[\s\S]{0,500}ctx\.fill\(\);[\s\S]{0,80}ctx\.restore\(\);\s*\}\s*ctx\.restore\(\);/.test(readRepoFile('index.html')),
     'VS plate flash still uses a full-plate fill');
 
-  // 音源はURL末尾の ?v=N がキャッシュの鍵になる。同じURLのまま中身を差し替えると、
-  // ブラウザは保存済みの古い曲を鳴らし続ける。v98で bonus-bgm-2 をCeltic版へ替えた際に
-  // ?v=1 のままだったため、2曲目に旧Hard Rock版が鳴る不具合が実機で出た。
-  // 中身のハッシュとURLを一緒に固定し、片方だけ変えたらここで気づけるようにする。
-  // 音源を差し替える時は、このハッシュと index.html の ?v=N を必ず両方更新すること。
+  // 音源を差し替える版では、BUILD_ID/CACHE_VERSIONを上げて新しいAPP_SHELLを
+  // 再取得する。個別のクエリ文字列に頼らず、ハッシュと実際の参照先を固定する。
   const crypto = require('crypto');
   // ファイルが無い時に例外で死ぬと、テスト全体の出力ごと消える(実際に消えた)。
   // 「無い」を値として返し、検査の側で不合格として報告させる。
@@ -511,9 +508,9 @@ function check(name, value) {
   try { thirdPartyAudio = readRepoFile('assets/SOUND_LICENSES.md'); } catch (_) { /* 下の検査で不合格にする */ }
   check('the pinned Pixabay normal impact sound is present',
     fileHash('assets/normal-impact-explosion.mp3') === 'ffae7663a709');
-  check('the normal impact sound is versioned in code and cached for offline play',
-    htmlForAudio.includes("assets/normal-impact-explosion.mp3?v=3")
-      && swText.includes("'./assets/normal-impact-explosion.mp3?v=3'")
+  check('the normal impact sound is cached for offline play under the build cache',
+    htmlForAudio.includes("assets/normal-impact-explosion.mp3")
+      && swText.includes("'./assets/normal-impact-explosion.mp3'")
       && htmlForAudio.includes('normalImpactSound: !activateSpecial && !activateJump'));
   const normalImpactGain = Number((/const NORMAL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
   const titleWallImpactGain = Number((/const TITLE_WALL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
@@ -528,40 +525,38 @@ function check(name, value) {
       && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-cartoon-explosion-567193/')
       && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
       && thirdPartyAudio.includes('2026-08-09'));
-  check('the EDM Zap special cut-in sound is pinned, versioned, cached and licensed',
+  check('the EDM Zap special cut-in sound is pinned, cached and licensed',
     fileHash('assets/special-cutin-edm-zap.mp3') === 'dc50a111cbea'
-      && htmlForAudio.includes("assets/special-cutin-edm-zap.mp3?v=1")
-      && swText.includes("'./assets/special-cutin-edm-zap.mp3?v=1'")
+      && htmlForAudio.includes("assets/special-cutin-edm-zap.mp3")
+      && swText.includes("'./assets/special-cutin-edm-zap.mp3'")
       && thirdPartyAudio.includes('EDM Zap')
       && thirdPartyAudio.includes('https://pixabay.com/sound-effects/edm-zap-246568/')
       && thirdPartyAudio.includes('2026-08-10'));
   const BONUS_TRACK_PINS = [
-    { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
-    { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },
-    { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3?v=1' },
-    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3?v=1' }
+    { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3' },
+    { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3' },
+    { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3' },
+    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' }
   ];
   const pinNg = [];
   for (const pin of BONUS_TRACK_PINS) {
     const actual = fileHash(pin.file);
-    if (actual !== pin.hash) pinNg.push(`${pin.file} の中身が変わっている(${actual})のに ?v= が据え置き`);
+    if (actual !== pin.hash) pinNg.push(`${pin.file} の中身が変わっている(${actual})。BUILD_ID/CACHE_VERSIONを上げること`);
     if (!htmlForAudio.includes(`'${pin.url}'`)) pinNg.push(`${pin.url} が index.html に無い`);
   }
-  check('bonus BGM files and their cache-busting URLs stay in sync',
+  check('bonus BGM files and their build-cached URLs stay in sync',
     pinNg.length === 0, pinNg.join(' / '));
-  const bonusUrls = (htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3\?v=\d+/g) || []);
+  const bonusUrls = (htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3/g) || []);
   check('every bonus BGM URL is unique', new Set(bonusUrls).size === bonusUrls.length, bonusUrls.join(', '));
 
-  // キャラ画像も同じ理由で版が要る。URLが同じままだと Service Worker もブラウザも
-  // 古い絵を持ち続け、中身を入れ替えても表に出ない(v115で実際に出なかった)。
-  // 画像を差し替えたらこの表のハッシュと CHARACTER_ASSET_VERSION の両方を更新すること。
+  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げる。個別のURL版数は使わない。
   const CHARACTER_ASSET_PINS = [
     { key: 'kyoryu', stem: 'dirano', webp: 'c13291632f36', png: 'd7e8126f2075' },
     { key: 'medama', stem: 'eyebolt', webp: '29c0f8b99547', png: 'f1d5608f8625' },
     { key: 'iwa', stem: 'gorocca', webp: 'e5bc1c5714d2', png: '283307e2478f' },
     { key: 'tori', stem: 'fenice', webp: '1396a2448001', png: 'b4f372180210' },
     { key: 'barugerukan', stem: 'barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
-    { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756', version: 2 },
+    { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756' },
     { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
     { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
     { key: 'doRednote', stem: 'dread-arrow', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
@@ -587,9 +582,6 @@ function check(name, value) {
     && legacyCharacterStems.every((stem) =>
       !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.png`))
       && !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.webp`))));
-  const versionMapSrc = /const CHARACTER_ASSET_VERSION = \{([^}]*)\}/.exec(htmlForAudio);
-  const declaredVersions = {};
-  for (const [, k, v] of (versionMapSrc ? versionMapSrc[1] : '').matchAll(/(\w+):\s*(\d+)/g)) declaredVersions[k] = Number(v);
   const charNg = [];
   for (const pin of CHARACTER_ASSET_PINS) {
     // v130から実際に配るのは .webp。読めない端末が落ちてくる先の .png も一緒に留める。
@@ -597,30 +589,26 @@ function check(name, value) {
     const webpPath = `assets/characters/runtime/${pin.stem}.webp`;
     const pngPath = `assets/characters/master/${pin.stem}.png`;
     if (fileHash(webpPath) !== pin.webp) {
-      charNg.push(`${webpPath} の中身が変わっている(${fileHash(webpPath)})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+      charNg.push(`${webpPath} の中身が変わっている(${fileHash(webpPath)})。BUILD_ID/CACHE_VERSIONを上げること`);
     }
     if (fileHash(pngPath) !== pin.png) {
       charNg.push(`${pngPath} の中身が変わっている(${fileHash(pngPath)})。webp と食い違っていないか確かめること`);
     }
-    if (declaredVersions[pin.key] !== pin.version) {
-      charNg.push(`${pin.key} の版が食い違う(宣言=${declaredVersions[pin.key]} 期待=${pin.version})`);
-    }
   }
-  check('character images and their cache-busting versions stay in sync', charNg.length === 0, charNg.join(' / '));
+  check('character images stay in sync with the build cache', charNg.length === 0, charNg.join(' / '));
   // v130: webp を先に読み、読めなかった時だけ同じ名前の png へ落とす。
   check('the art loader asks for webp first and falls back to png',
-    /img\.src = `\$\{webpBase\}\.webp\$\{suffix\}`;/.test(htmlForAudio)
-    && /img\.src = `\$\{pngBase\}\.png\$\{suffix\}`;/.test(htmlForAudio)
+    /img\.src = `\$\{webpBase\}\.webp`;/.test(htmlForAudio)
+    && /img\.src = `\$\{pngBase\}\.png`;/.test(htmlForAudio)
     && htmlForAudio.includes('if (!triedPng) {'));
-  check('the character image URL actually carries the version',
-    htmlForAudio.includes('version: CHARACTER_ASSET_VERSION[key],')
-    && /const suffix = opts\.version \? `\?v=\$\{opts\.version\}` : '';/.test(htmlForAudio));
+  check('character images rely on the build cache instead of per-asset query versions',
+    !htmlForAudio.includes('CHARACTER_ASSET_VERSION') && !htmlForAudio.includes('?v='));
   // 落とし先の png を消すと、古い端末で絵が1枚も出なくなる。
   check('the png fallbacks still exist on disk',
     CHARACTER_ASSET_PINS.every(pin => fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${pin.stem}.png`))));
   check('the Barucopter uses its dedicated helicopter art instead of the Barugerukan body art',
     fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', 'barugerukan-helicopter.png'))
-      && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=2';")
+      && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png';")
       && /function getBarucopterImage\(\)[\s\S]*?BARUCOPTER_IMAGE_PATH/.test(htmlForAudio)
       && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 294;/.test(htmlForAudio),
     '透過を直した専用ヘリ画像を遅延読込し、従来の3倍で表示すること');

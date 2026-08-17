@@ -296,7 +296,7 @@ check('キャラ選択は手前の最大7枚だけを描画する',
       && specialCutInSound.duckMs <= 600
       && specialCutInSound.sampleGain === 0.28
       && specialCutInSoundAsset
-      && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3?v=1'
+      && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3'
       && /function playSpecialSound\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
     JSON.stringify({ specialCutInSound, specialCutInSoundAsset }));
   kt.clearProjectilesForTest();
