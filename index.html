@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.43-optimize-dead-line-glow';
+  const BUILD_ID = 'v2.0.44-cache-canvas-bounds';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.44', date: '2026/08/17', summary: 'ポインタ座標計算を軽量化' },
     { version: 'v2.0.43', date: '2026/08/17', summary: 'DEAD LINEの発光を軽量化' },
     Object.freeze({ version: 'v2.0.42', date: '2026/08/17', summary: 'Service Workerの重複した初回取得を削減' }),
     Object.freeze({ version: 'v2.0.41', date: '2026/08/17', summary: '未使用の確認ダイアログを削除し入力処理を整理' }),
@@ -812,6 +813,8 @@
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  // Canvasの表示位置と大きさはresize時だけ変わる。ポインタ移動ごとのレイアウト計測を避ける。
+  let cachedCanvasBounds = null;
   const debugPanel = document.getElementById('debugPanel');
 
   // ===== 効果音(WebAudio合成・音源ファイル不要) =====
@@ -1526,6 +1529,7 @@
     canvas.height = Math.round(VH * renderScale);
 
     ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    cachedCanvasBounds = canvas.getBoundingClientRect();
     render();
   }
 
@@ -15889,7 +15893,7 @@
 
   // ===== 入力(引っ張り照準) =====
   function canvasPointFromEvent(e) {
-    const rect = canvas.getBoundingClientRect();
+    const rect = cachedCanvasBounds;
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
     const scaleX = VW / rect.width;
