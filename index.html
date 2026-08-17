@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.50-idle-frame-rate';
+  const BUILD_ID = 'v2.0.51-wind-strength-scale';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.51', date: '2026/08/17', summary: '風力を0〜10で見える化' },
     { version: 'v2.0.50', date: '2026/08/17', summary: '戦闘待機中の描画を軽量化' },
     { version: 'v2.0.49', date: '2026/08/17', summary: 'バルコプター画像を軽量化' },
     { version: 'v2.0.48', date: '2026/08/17', summary: '地形の縁線更新をまとめて軽量化' },
@@ -12612,7 +12613,7 @@
     });
   }
 
-  function drawUnifiedRoundWindConsole(cx, cardY, expanded, windLevel, forecast, fixedForecast, forecastText) {
+  function drawUnifiedRoundWindConsole(cx, cardY, expanded, windLevel, windTitle, forecast, fixedForecast, forecastText) {
     const roundSize = expanded ? 142 : 104;
     const roundCenterY = cardY + roundSize / 2;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
@@ -12636,7 +12637,7 @@
     }
 
     const arrowColor = calmWind ? '#72e8ff' : '#38cfff';
-    drawOutlinedText('現在の風', cx, roundCenterY - inner * 0.70, {
+    drawOutlinedText(windTitle, cx, roundCenterY - inner * 0.70, {
       baseline: 'middle', font: `900 ${titleFont}px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2
     });
     drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded, wind.dir, calmWind ? '無風' : windLevel,
@@ -12656,6 +12657,8 @@
     const layout = HUD_ASSET_LAYOUT.wind;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
     const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
+    const windStrengthScale = Math.round(wind.strength * 10);
+    const windTitle = calmWind ? '無風' : `現在の風 ${windStrengthScale}/10`;
     const forecast = nextWind || { dir: wind.dir, strength: wind.strength, calmWind };
     const fixedForecast = !!activeFixedWind() || battleMode === 'tutorial';
     const forecastLevel = forecast.strength < 0.34 ? '弱' : forecast.strength < 0.67 ? '中' : '強';
@@ -12664,7 +12667,7 @@
       : (forecast.calmWind ? '無風' : `${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
     const roundCardY = expanded ? 42 : 47;
     if (battleHudImages.roundWind.complete && battleHudImages.roundWind.naturalWidth > 0) {
-      drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windLevel, forecast, fixedForecast, forecastText);
+      drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windLevel, windTitle, forecast, fixedForecast, forecastText);
       return;
     }
     if (expanded) {
