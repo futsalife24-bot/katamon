@@ -262,6 +262,23 @@
     display: block; color: #ffd56a; font: 900 10px/1.2 var(--katamon-font-ui); letter-spacing: .08em; text-align: left;
   }
   #onlineCharacter { display: block; margin-top: 4px; padding: 8px 7px; font-size: 16px; }
+  #onlineEntryPanel { display: none; margin: 4px 0; }
+  #onlineLobby:not(.in-room) #onlineEntryPanel { display: block; }
+  #onlineEntryActions, #onlineRoomFilters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+  #onlineRoomFilters { grid-template-columns: repeat(3, 1fr); margin-bottom: 7px; }
+  #onlineEntryPanel button, #onlineEntryPanel select, #onlineEntryPanel input { width: 100%; box-sizing: border-box; min-height: 40px; margin-top: 7px; padding: 8px; color: #ffe2a1; font: 400 14px var(--katamon-font-ui); border: 1px solid rgba(199,131,53,.7); border-radius: 4px; background: rgba(6,12,18,.92); }
+  #onlineEntryActions button { margin-top: 0; border: 2px solid #ffd24a; background: linear-gradient(180deg,#37464d,#091116); }
+  #onlineRoomFilters button { margin-top: 0; min-height: 32px; font-size: 12px; }
+  #onlineRoomFilters button.active { color: #13171c; background: #ffd24a; }
+  #onlineCreateOptions, #onlineBrowseOptions { display: none; }
+  #onlineLobby.create-mode #onlineCreateOptions, #onlineLobby.browse-mode #onlineBrowseOptions { display: block; }
+  #onlineLobby.browse-mode:not(.in-room) #onlineRoomInput, #onlineLobby.browse-mode:not(.in-room) #onlineRoomHint, #onlineLobby.browse-mode:not(.in-room) #onlineJoin { display: block; }
+  #onlineLobby:not(.in-room) #onlineQuick, #onlineLobby:not(.in-room) #onlineCodeToggle { display: none; }
+  #onlineRoomList { display: flex; flex-direction: column; gap: 6px; max-height: 196px; overflow-y: auto; text-align: left; }
+  .onlineRoomRow { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px; border: 1px solid rgba(199,131,53,.52); border-radius: 4px; background: rgba(0,0,0,.25); }
+  .onlineRoomRow strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ffe2a1; font-size: 13px; }
+  .onlineRoomRow small { color: #aebbc5; font-size: 11px; }
+  .onlineRoomRow button { grid-row: span 2; align-self: center; margin: 0 !important; min-height: 34px !important; color: #13171c !important; background: #ffd24a !important; }
   #onlineLobby.in-room #onlineRoomPanel { display: block; }
   #onlineLobby.in-room #onlineCreate, #onlineLobby.in-room #onlineJoin { display: none; }
   #onlineRoomPanel { display: none; margin-top: 2px; padding: 9px; border: 1px solid rgba(255,210,74,.45); background: rgba(0,0,0,.22); text-align: left; }
@@ -525,6 +542,20 @@
       <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
       <button id="onlineCreate" type="button">部屋を作る</button>
       <button id="onlineJoin" type="button">部屋に入る</button>
+      <div id="onlineEntryPanel">
+        <div id="onlineEntryActions"><button id="onlineCreateMode" type="button">部屋を作る</button><button id="onlineBrowseMode" type="button">部屋を探す</button></div>
+        <div id="onlineCreateOptions">
+          <input id="onlineRoomNameInput" type="text" maxlength="24" autocomplete="off" placeholder="部屋名（例：フェニーチェ縛り）">
+          <select id="onlineCreateFormat" aria-label="対戦形式"><option value="1v1" selected>1 vs 1</option><option value="2v2">2 vs 2</option></select>
+          <select id="onlineVisibility" aria-label="公開設定"><option value="public" selected>公開する（一覧に載せる）</option><option value="keyed">鍵付き（部屋IDで招待）</option></select>
+          <button id="onlineCreatePublic" type="button">この条件で部屋を作る</button>
+        </div>
+        <div id="onlineBrowseOptions">
+          <div id="onlineRoomFilters"><button type="button" data-format="all">すべて</button><button type="button" data-format="1v1">1 vs 1</button><button type="button" data-format="2v2">2 vs 2</button></div>
+          <button id="onlineRefreshRooms" type="button">部屋一覧を更新</button>
+          <div id="onlineRoomList" aria-live="polite"></div>
+        </div>
+      </div>
       <div id="onlineRoomPanel">
         <div id="onlineSlots"></div>
         <div id="onlineBattleRecord" aria-label="この端末の対人戦績"></div>
@@ -625,10 +656,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.56-wind-power-scale';
+  const BUILD_ID = 'v2.0.57-public-room-browser';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.57', date: '2026/08/17', summary: '公開部屋を一覧から選べるように改善' },
     { version: 'v2.0.56', date: '2026/08/17', summary: '演習と戦闘の風力表示を0〜10で統一' },
     { version: 'v2.0.55', date: '2026/08/17', summary: '試合の一時状態リセットを統一' },
     { version: 'v2.0.54', date: '2026/08/17', summary: '地形の基底データを開始時だけ同期' },
@@ -6250,11 +6282,14 @@
     const timeout = setTimeout(() => controller.abort(), FIREBASE_REQUEST_TIMEOUT_MS);
     return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
   }
-  function firebaseRequestUrl(path, auth) {
-    return `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+  function firebaseRequestUrl(path, auth, query = null) {
+    const params = new URLSearchParams({ auth: auth.idToken });
+    if (query) Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== null) params.set(key, String(value)); });
+    return `${FIREBASE.databaseURL}/${path}.json?${params.toString()}`;
   }
   async function firebaseRequest(path, auth, options = {}) {
-    let response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth), options);
+    const { query, ...fetchOptions } = options;
+    let response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth, query), fetchOptions);
     // 401は「鍵の期限切れ」と「ルールに弾かれた」の両方で返り、見分けが付かない。
     // まず期限切れの方を潰す。鍵を取り直して**本当に新しくなった時だけ**1回だけ送り直す。
     // 鍵が変わらなければ期限切れではないので、そのまま従来どおり失敗させる
@@ -6265,7 +6300,7 @@
       const before = auth.idToken;
       const renewed = await ensureFirebaseAuth().catch(() => null);
       if (renewed && renewed.idToken && renewed.idToken !== before) {
-        response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth), options);
+        response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth, query), fetchOptions);
       }
     }
     if (!response.ok) throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
@@ -7694,6 +7729,15 @@
   const onlineCopyBtn = document.getElementById('onlineCopy');
   const onlineSlotsEl = document.getElementById('onlineSlots');
   const onlineBattleRecordEl = document.getElementById('onlineBattleRecord');
+  const onlineCreateModeButton = document.getElementById('onlineCreateMode');
+  const onlineBrowseModeButton = document.getElementById('onlineBrowseMode');
+  const onlineCreatePublicButton = document.getElementById('onlineCreatePublic');
+  const onlineRoomNameInput = document.getElementById('onlineRoomNameInput');
+  const onlineCreateFormatEl = document.getElementById('onlineCreateFormat');
+  const onlineVisibilityEl = document.getElementById('onlineVisibility');
+  const onlineRefreshRoomsButton = document.getElementById('onlineRefreshRooms');
+  const onlineRoomListEl = document.getElementById('onlineRoomList');
+  let onlineBrowseFormat = 'all';
   const onlineTerrainEl = document.getElementById('onlineTerrain');
   const onlineWindEl = document.getElementById('onlineWind');
   const onlineTurnsEl = document.getElementById('onlineTurns');
@@ -7740,7 +7784,7 @@
     onlineLobbyEl.classList.add('open');
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
-    onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry');
+    onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry', 'create-mode', 'browse-mode');
     cancelLeaveFirebaseLobbyConfirm();
     const codeToggle = document.getElementById('onlineCodeToggle');
     if (codeToggle) codeToggle.textContent = '部屋IDを使う';
@@ -8136,7 +8180,7 @@
   }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && firebasePlayerSeats().includes(online.seat)); }
-  async function createFirebaseRoom(requestedCode = null) {
+  async function createFirebaseRoom(requestedCode = null, settings = null) {
     const auth = await ensureFirebaseAuth();
     const now = firebaseServerNow(auth);
     for (let i = 0; i < (requestedCode ? 1 : 6); i++) {
@@ -8144,7 +8188,7 @@
       const roundId = firebaseRoundId();
       const room = {
         protocol: FIREBASE_PROTO_VERSION, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS,
-        settings: defaultLobbySettings(), slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
+        settings: normalizeLobbySettings(settings || defaultLobbySettings()), slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
         round: { id: roundId, status: 'lobby', players: { p1: auth.uid, e1: null } },
         // RTDBはnull/空objectだけのノードを保持しない。round自体を必ず残す具体値を入れる。
         rounds: { [roundId]: { createdAt: now, messages: {} } }
@@ -8189,9 +8233,12 @@
   // (他人が書いたデータなので、形が違っても例外にせず無視するだけにする)。
   function usableOpenEntry(code, entry, format, now) {
     if (!isRoomCode(code) || !entry || typeof entry !== 'object') return false;
-    if (normalizeOpenFormat(entry.format) !== format) return false;
+    if (format !== 'all' && normalizeOpenFormat(entry.format) !== format) return false;
     if (!Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) return false;
-    return typeof entry.hostUid === 'string' && entry.hostUid.length > 0;
+    return typeof entry.hostUid === 'string' && entry.hostUid.length > 0
+      && typeof entry.hostName === 'string' && entry.hostName.length > 0
+      && typeof entry.roomName === 'string' && entry.roomName.length > 0
+      && Number.isInteger(entry.playerCount) && entry.playerCount >= 1 && entry.playerCount <= 4;
   }
   // 一覧から入る先を選ぶ。通信を挟まないので、そのまま検証できる形にしてある。
   // 「待たせている時間が長い順」に返す。長く待っている人から拾うのが公平。
@@ -8202,23 +8249,57 @@
       const entry = listing[code];
       if (!usableOpenEntry(code, entry, format, now)) continue;
       if (entry.hostUid === selfUid) continue; // 自分が待たせている部屋には入らない
-      rows.push({ code, createdAt: Number(entry.createdAt) || 0 });
+      rows.push({ code, createdAt: Number(entry.createdAt) || 0, format: normalizeOpenFormat(entry.format), hostName: entry.hostName, roomName: entry.roomName, playerCount: entry.playerCount });
     }
     rows.sort((a, b) => (a.createdAt - b.createdAt) || (a.code < b.code ? -1 : 1));
     return rows.slice(0, OPEN_INDEX_MAX_CANDIDATES);
   }
   async function readOpenRooms(auth, format, now) {
     let listing = null;
-    try { listing = await firebaseRequest('open', auth); }
+    try { listing = await firebaseRequest('open', auth, { query: { orderBy: '"createdAt"', limitToFirst: OPEN_INDEX_MAX_CANDIDATES * 2 } }); }
     catch (_) { return []; } // 一覧が読めなくても、自分で部屋を作れば対戦はできる
     return pickOpenCandidates(listing, auth.uid, format, now);
   }
-  async function publishOpenRoom(code, auth, format) {
+  function publicRoomName(value) {
+    const clean = String(value || '').trim().replace(/[\r\n\t]/g, ' ').replace(/\s{2,}/g, ' ');
+    return clean.slice(0, 24) || 'だれでも歓迎';
+  }
+  function onlineRoomAge(createdAt) {
+    const sec = Math.max(0, Math.floor((Date.now() - Number(createdAt || Date.now())) / 1000));
+    return sec < 60 ? `${sec}秒` : `${Math.floor(sec / 60)}分`;
+  }
+  function renderOpenRoomList(rows) {
+    if (!onlineRoomListEl) return;
+    onlineRoomListEl.textContent = '';
+    if (!rows.length) { const empty = document.createElement('small'); empty.textContent = '条件に合う公開部屋はありません。部屋を作るか、少し後に更新してください。'; onlineRoomListEl.appendChild(empty); return; }
+    rows.forEach(row => {
+      const item = document.createElement('div'); item.className = 'onlineRoomRow';
+      const title = document.createElement('strong'); title.textContent = row.roomName;
+      const detail = document.createElement('small'); detail.textContent = `${row.hostName} ／ ${row.format} ／ ${row.playerCount}人 ／ 待機 ${onlineRoomAge(row.createdAt)}`;
+      const join = document.createElement('button'); join.type = 'button'; join.textContent = '入る'; join.addEventListener('click', () => joinFirebaseRoomFromBrowser(row.code));
+      item.append(title, detail, join); onlineRoomListEl.appendChild(item);
+    });
+  }
+  async function refreshOpenRoomList() {
+    if (onlineLobbyBusy || online) return;
+    setOnlineLobbyBusy(true); onlineLobbyStatus('公開部屋を読み込んでいます…');
+    try { const auth = await ensureFirebaseAuth(); const rows = await readOpenRooms(auth, onlineBrowseFormat, firebaseServerNow(auth)); renderOpenRoomList(rows); onlineLobbyStatus(`${rows.length}件の公開部屋を表示しています。`); }
+    catch (_) { onlineLobbyStatus('部屋一覧を読み込めませんでした。通信を確認して更新してください。'); }
+    finally { setOnlineLobbyBusy(false); }
+  }
+  async function joinFirebaseRoomFromBrowser(code) {
+    if (onlineLobbyBusy || online) return;
+    setOnlineLobbyBusy(true); onlineLobbyStatus('部屋に参加しています…');
+    try { const { auth, room, seat } = await claimFirebaseRoom(code, ['e1']); if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code; beginFirebaseOnline('guest', code, auth, selectedOnlineCharacter(), room, seat); }
+    catch (err) { onlineLobbyStatus(err.message || 'この部屋には入れませんでした。一覧を更新してください。'); }
+    finally { setOnlineLobbyBusy(false); }
+  }
+  async function publishOpenRoom(code, auth, format, roomName = 'だれでも歓迎', playerCount = 1) {
     const now = firebaseServerNow(auth);
     await firebaseRequest(`open/${code}`, auth, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        format: normalizeOpenFormat(format), hostUid: auth.uid,
+        format: normalizeOpenFormat(format), hostUid: auth.uid, hostName: localPlayerName(), roomName: publicRoomName(roomName), playerCount,
         createdAt: { '.sv': 'timestamp' }, expiresAt: now + OPEN_INDEX_TTL_MS
       })
     });
@@ -8264,7 +8345,7 @@
     } catch (_) { /* 次の更新に任せる */ }
     // 待ち続けている間は案内も載せ直す。載せっぱなしにすると期限で落ちて拾われなくなる。
     if (online === leasing && leasing.quickWaiting && leasing.quickListed) {
-      try { await publishOpenRoom(leasing.room, leasing.auth, leasing.quickFormat); }
+      try { await publishOpenRoom(leasing.room, leasing.auth, leasing.quickFormat, leasing.quickRoomName, 1); }
       catch (_) { /* 次の更新に任せる */ }
     }
   }
@@ -8359,15 +8440,19 @@
   // 席が空いた時は載せ直す。ホストが待ち続けている限り、また拾ってもらえる。
   function syncQuickMatchListing() {
     if (!online || online.kind !== 'firebase' || !online.quickFormat || online.role !== 'host') return;
-    const someoneElse = FIREBASE_SEATS.some(seat => seat !== 'p1'
-      && online.slots && online.slots[seat] && online.slots[seat].uid);
-    const shouldWait = !someoneElse && online.phase === 'lobby';
-    if (shouldWait === online.quickWaiting) return;
+    const playerSeats = online.quickFormat === '2v2' ? FIREBASE_SEATS : FIREBASE_PLAYER_SEATS;
+    const playerCount = playerSeats.filter(seat => online.slots && online.slots[seat] && online.slots[seat].uid).length;
+    const shouldWait = playerCount < playerSeats.length && online.phase === 'lobby';
+    if (shouldWait === online.quickWaiting) {
+      if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount).catch(() => {});
+      return;
+    }
     online.quickWaiting = shouldWait;
     if (!shouldWait && online.quickListed) {
       online.quickListed = false;
       unpublishOpenRoom(online.room, online.auth);
     }
+    if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount).catch(() => {});
     if (onlineLobbyEl) onlineLobbyEl.classList.toggle('quickplay', shouldWait);
     if (!shouldWait) onlineLobbyStatus('対戦相手が来ました。キャラを選んで「準備完了」を押してください。');
     renderFirebaseLobby();
@@ -8578,6 +8663,7 @@
       quickWaiting: !!(quick && quick.quickWaiting),
       quickListed: !!(quick && quick.quickListed),
       quickFormat: quick && quick.quickFormat ? quick.quickFormat : null,
+      quickRoomName: quick && quick.quickRoomName ? quick.quickRoomName : 'だれでも歓迎',
       log: []
     };
     transport.onMessage(netReceive);
@@ -15095,6 +15181,37 @@
   const onlineCancelButton = document.getElementById('onlineCancel');
   const onlineLeaveConfirmYesButton = document.getElementById('onlineLeaveConfirmYes');
   const onlineLeaveConfirmNoButton = document.getElementById('onlineLeaveConfirmNo');
+  if (onlineCreateModeButton) onlineCreateModeButton.addEventListener('click', () => {
+    if (onlineLobbyBusy || online || !onlineLobbyEl) return;
+    onlineLobbyEl.classList.remove('browse-mode'); onlineLobbyEl.classList.add('create-mode');
+    onlineLobbyStatus('部屋名・形式・公開設定を選んでください。');
+  });
+  if (onlineBrowseModeButton) onlineBrowseModeButton.addEventListener('click', () => {
+    if (onlineLobbyBusy || online || !onlineLobbyEl) return;
+    onlineLobbyEl.classList.remove('create-mode'); onlineLobbyEl.classList.add('browse-mode'); refreshOpenRoomList();
+  });
+  if (onlineRefreshRoomsButton) onlineRefreshRoomsButton.addEventListener('click', refreshOpenRoomList);
+  (document.querySelectorAll ? document.querySelectorAll('#onlineRoomFilters button') : []).forEach(button => button.addEventListener('click', () => {
+    onlineBrowseFormat = button.dataset.format || 'all';
+    (document.querySelectorAll ? document.querySelectorAll('#onlineRoomFilters button') : []).forEach(node => node.classList.toggle('active', node === button));
+    refreshOpenRoomList();
+  }));
+  if (onlineCreatePublicButton) onlineCreatePublicButton.addEventListener('click', async () => {
+    if (onlineLobbyBusy || online) return;
+    const format = onlineCreateFormatEl && onlineCreateFormatEl.value === '2v2' ? '2v2' : '1v1';
+    const roomName = publicRoomName(onlineRoomNameInput && onlineRoomNameInput.value);
+    const isPublic = !onlineVisibilityEl || onlineVisibilityEl.value === 'public';
+    setOnlineLobbyBusy(true); onlineLobbyStatus('部屋を作っています…');
+    try {
+      const settings = { ...defaultLobbySettings(), format };
+      const { code, auth, room, seat } = await createFirebaseRoom(null, settings);
+      if (isPublic) await publishOpenRoom(code, auth, format, roomName, 1);
+      if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
+      if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
+      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat, isPublic ? { quickFormat: format, quickRoomName: roomName, quickWaiting: true, quickListed: true } : null);
+    } catch (err) { onlineLobbyStatus(err.message || '部屋を作れませんでした。'); }
+    finally { setOnlineLobbyBusy(false); }
+  });
   if (onlineCodeToggleButton) onlineCodeToggleButton.addEventListener('click', () => {
     if (onlineLobbyBusy || online || !onlineLobbyEl) return;
     onlineLobbyEl.classList.toggle('code-entry');
