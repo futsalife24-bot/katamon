@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.53-terrain-canvas-height';
+const CACHE_VERSION = 'katamon-pwa-v2.0.54-snapshot-terrain-delta';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

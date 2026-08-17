@@ -330,7 +330,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /\(battleMode === 'free' \|\| onlineCustomStageActive\(\)\) && selectedCustomAdapter/);
   assert.match(html, /battleMode === 'normal' && online && online\.kind === 'firebase'/);
   assert.match(html, /const ONLINE_CUSTOM_STAGE_MAX_BYTES = 256 \* 1024/);
-  assert.match(html, /const includeCustomStage = !!\(selectedCustomStage && \(battleMode === 'free' \|\| onlineCustomStageActive\(\)\)\)/);
+  assert.match(html, /const includeTerrain = options\.includeTerrain !== false;/);
+  assert.match(html, /const includeCustomStage = includeTerrain && !!\(selectedCustomStage && \(battleMode === 'free' \|\| onlineCustomStageActive\(\)\)\)/);
   assert.match(html, /customStageIdentity: includeCustomStage \? customStageIdentity\(selectedCustomStage\) : null/);
   assert.match(html, /StageCore\.compareStageIdentity\(identity, data\.customStageIdentity\)/);
   assert.match(html, /firebaseOccupiedPlayerSeats\(\)\.every\(seat => seat === online\.seat \|\| online\.startAcks\[seat\]\)/);
@@ -409,10 +410,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v2\.0\.53-terrain-canvas-height/);
+  assert.match(html, /v2\.0\.54-snapshot-terrain-delta/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v2\.0\.53-terrain-canvas-height/);
+  assert.match(serviceWorker, /katamon-pwa-v2\.0\.54-snapshot-terrain-delta/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });
