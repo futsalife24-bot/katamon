@@ -1457,3 +1457,16 @@ GPT-5.6 Sol、Claude Opus 5、Claude Fable 5のレビューを統合し、Fable 
 - 実ブラウザの見た目を自動テスト結果だけで確定しない。
 - 未コミット変更がある場合は、ユーザーの作業として保護し、破棄や巻き戻しをしない。
 - 無関係な整理や全面改修を混ぜない。
+
+## 縦型プロモーションPV制作環境
+
+- 2026-08-02、`catamon_vertical_pv/`へ再利用可能なFFmpeg中心の縦型PV制作環境を追加した。
+- 完成プレビュー: `catamon_vertical_pv/output/preview/catamon_vertical_pv_preview.mp4`
+- 完成最終版: `catamon_vertical_pv/output/final/catamon_vertical_pv_final.mp4`
+- サムネイル: `catamon_vertical_pv/output/final/catamon_vertical_pv_thumbnail.png`
+- 設定正本: `catamon_vertical_pv/config/pv_config.yaml`
+- 実プレイ録画と正式効果音が未提供のため、現版は正規素材による演出再構成と自動生成の仮効果音を使用する。詳細は`catamon_vertical_pv/reports/missing_materials.md`を参照。
+- 2026-08-03、正式楽曲`撃ち抜けカタモン.mp3`を追加し、曲全体を解析して49.8〜105.8秒をPVへ採用した。
+- 推定約79BPMの強拍と音量上昇点へ、全15シーン、発射、着弾、フラッシュ、ロゴ強調を再配置した。
+- 再編集後の最終QAは56.000秒、1080×1920、30fps、H.264/AAC、yuv420p、黒画面なし、長い無音なし、最大ピーク-2.4dBで合格。
+- 楽曲解析は`catamon_vertical_pv/scripts/analyze_music.js`、同期内容は`catamon_vertical_pv/reports/music_sync_report.md`を参照。

@@ -1,0 +1,56 @@
+{
+  "source": "input/music/撃ち抜けカタモン.mp3",
+  "analyzed_from_seconds": 49.8,
+  "analyzed_duration_seconds": 56,
+  "method": "FFmpeg ebur128 momentary loudness peaks; scene cuts are manually aligned to the configured climax grid",
+  "strongest_moments": [
+    {
+      "time": 0.399979,
+      "momentary_lufs": -12.7
+    },
+    {
+      "time": 5.399979,
+      "momentary_lufs": -12.6
+    },
+    {
+      "time": 13.499979,
+      "momentary_lufs": -11.9
+    },
+    {
+      "time": 28.099979,
+      "momentary_lufs": -12.7
+    },
+    {
+      "time": 32.999979,
+      "momentary_lufs": -12.5
+    },
+    {
+      "time": 35.099979,
+      "momentary_lufs": -12.6
+    },
+    {
+      "time": 39.299979,
+      "momentary_lufs": -11.8
+    },
+    {
+      "time": 41.199979,
+      "momentary_lufs": -12
+    },
+    {
+      "time": 44.599979,
+      "momentary_lufs": -12.4
+    },
+    {
+      "time": 48.299979,
+      "momentary_lufs": -12.3
+    },
+    {
+      "time": 53.299979,
+      "momentary_lufs": -12.4
+    },
+    {
+      "time": 54.499979,
+      "momentary_lufs": -12.6
+    }
+  ]
+}

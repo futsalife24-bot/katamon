@@ -1,0 +1,13 @@
+{
+  "name": "catamon-vertical-pv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reusable FFmpeg-based vertical PV pipeline for Catamon",
+  "scripts": {
+    "scan": "node scripts/scan_assets.js",
+    "analyze:music": "node scripts/analyze_music.js",
+    "preview": "node scripts/build_preview.js",
+    "final": "node scripts/build_final.js",
+    "qa": "node scripts/qa_video.js"
+  }
+}

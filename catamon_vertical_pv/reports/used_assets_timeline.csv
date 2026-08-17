@@ -1,0 +1,16 @@
+scene_id,start_seconds,end_seconds,duration_seconds,transition,background,overlays,texts
+hook,0,2.74,2.74,flash_cut,input/backgrounds/stage-volcanic-bg.jpg,input/characters/akuma.png | input/characters/mecha.png,モンスター×戦車 | 狙って、撃ち抜け。
+world_title,2.74,9.96,7.22,cut,input/backgrounds/title-day.jpg,input/logo/title-logo.png,個性豊かなカタモンたち | それぞれの武器で戦場へ
+aim,9.96,15.200000000000001,5.24,cut,input/backgrounds/stage-grass-bg.jpg,input/characters/burumutan.png | input/characters/do-rednote.png,角度を読め | 狙いを定めて──発射！
+terrain,15.2,20.16,4.96,cut,input/backgrounds/stage-desert-bg.jpg,input/characters/jinba.png | input/characters/iwa.png,地形を使え | 高低差も、障害物も武器になる
+impact,20.16,25.2,5.04,flash_cut,input/backgrounds/stage-snow-bg.jpg,input/characters/mecha.png | input/characters/nisenmono.png,一発で戦況を変えろ | 着弾の瞬間を見逃すな
+char_akuma,25.2,28.24,3.04,cut,input/backgrounds/stage-volcanic-bg.jpg,input/characters/akuma.png,灼熱の一撃
+char_mecha,28.24,31.279999999999998,3.04,cut,input/backgrounds/stage-boss-arena-bg.jpg,input/characters/mecha.png,重装火力
+char_sumoeru,31.28,34.32,3.04,cut,input/backgrounds/title-evening.jpg,input/characters/sumoeru.png,祭砲、開幕
+char_kishi,34.32,36.6,2.28,cut,input/backgrounds/stage-grass-bg.jpg,input/characters/kishi.png,正面突破
+char_kyoryu,36.6,39.34,2.74,cut,input/backgrounds/stage-desert-bg.jpg,input/characters/kyoryu.png,巨砲が唸る
+char_shinigami,39.34,41.18000000000001,1.84,flash_cut,input/backgrounds/title-night.jpg,input/characters/shinigami.png,必殺の鎌
+climax_one,41.18,44.22,3.04,flash_cut,input/backgrounds/stage-boss-arena-bg.jpg,input/characters/barugerukan.png | input/characters/medama.png,必殺技、炸裂！
+climax_two,44.22,47.28,3.06,flash_cut,input/backgrounds/stage-volcanic-bg.jpg,input/characters/neko.png | input/characters/tori.png,最後まで逆転を狙え
+ensemble,47.28,51.84,4.56,cut,input/backgrounds/title-evening.jpg,input/characters/akuma.png | input/characters/mecha.png | input/characters/sumoeru.png | input/characters/shinigami.png,最後の一発まで | 勝負は分からない
+closing,51.84,56,4.16,cut,input/backgrounds/title-night.jpg,input/logo/title-logo.png,撃ち抜け、カタモン | 開発中 | 続報をお楽しみに

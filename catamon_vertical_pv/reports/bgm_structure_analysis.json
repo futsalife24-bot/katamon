@@ -1,0 +1,161 @@
+{
+  "source": "input/music/撃ち抜けカタモン.mp3",
+  "duration_seconds": 111.92,
+  "codec": "mp3",
+  "sample_rate": "48000",
+  "channels": 2,
+  "analysis": {
+    "frame_seconds": 0.02,
+    "estimated_bpm": 78.95,
+    "estimated_beat_interval_seconds": 0.76,
+    "loudness_floor_db": -21.059,
+    "loudness_reference_db": -13.883,
+    "strongest_moments": [
+      {
+        "time": 0.06,
+        "strength": 2.141
+      },
+      {
+        "time": 1.12,
+        "strength": 1.999
+      },
+      {
+        "time": 2.94,
+        "strength": 2.245
+      },
+      {
+        "time": 6.76,
+        "strength": 2.395
+      },
+      {
+        "time": 8.66,
+        "strength": 1.998
+      },
+      {
+        "time": 14.68,
+        "strength": 2.259
+      },
+      {
+        "time": 17.04,
+        "strength": 2.352
+      },
+      {
+        "time": 18.38,
+        "strength": 2.145
+      },
+      {
+        "time": 20.1,
+        "strength": 2.352
+      },
+      {
+        "time": 30.22,
+        "strength": 2.102
+      },
+      {
+        "time": 32.7,
+        "strength": 1.973
+      },
+      {
+        "time": 33.84,
+        "strength": 2.001
+      },
+      {
+        "time": 35.36,
+        "strength": 2.362
+      },
+      {
+        "time": 36.36,
+        "strength": 2.021
+      },
+      {
+        "time": 41.5,
+        "strength": 2.185
+      },
+      {
+        "time": 47.56,
+        "strength": 2.143
+      },
+      {
+        "time": 49.84,
+        "strength": 2.198
+      },
+      {
+        "time": 53.44,
+        "strength": 2.017
+      },
+      {
+        "time": 60.52,
+        "strength": 2.141
+      },
+      {
+        "time": 82.6,
+        "strength": 2.335
+      },
+      {
+        "time": 89.14,
+        "strength": 1.979
+      },
+      {
+        "time": 90.98,
+        "strength": 2.096
+      },
+      {
+        "time": 97.08,
+        "strength": 2.005
+      },
+      {
+        "time": 103.36,
+        "strength": 2.002
+      }
+    ],
+    "major_energy_lifts": [
+      {
+        "time": 6.75,
+        "lift": 0.281
+      },
+      {
+        "time": 42.25,
+        "lift": 0.289
+      },
+      {
+        "time": 50.25,
+        "lift": 0.295
+      },
+      {
+        "time": 65,
+        "lift": 0.296
+      },
+      {
+        "time": 83,
+        "lift": 0.245
+      },
+      {
+        "time": 91.5,
+        "lift": 0.27
+      },
+      {
+        "time": 97.25,
+        "lift": 0.261
+      },
+      {
+        "time": 107.5,
+        "lift": 0.208
+      }
+    ]
+  },
+  "recommended_pv_window": {
+    "start_seconds": 49.8,
+    "end_seconds": 105.8,
+    "score": 4.06,
+    "beat_aligned_scene_boundaries": [
+      0.04,
+      2.74,
+      9.96,
+      25.2,
+      41.82,
+      51.84,
+      55.56
+    ]
+  },
+  "note": "BPMと強拍はPCM包絡線からの推定。最終タイムラインは映像の可読性を優先し、近傍の強拍へ手動整列する。"
+}
