@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.36-cache-version-contract';
+  const BUILD_ID = 'v2.0.37-remove-latest-snapshot';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.37', date: '2026/08/17', summary: '途中参加用の盤面保存を廃止し、対戦通信を軽量化' }),
     Object.freeze({ version: 'v2.0.36', date: '2026/08/17', summary: '更新時のキャッシュを版番号で確実に入れ替えるよう改善' }),
     Object.freeze({ version: 'v2.0.35', date: '2026/08/17', summary: '風コンソールのNEXT予報を1行表示へ統一' }),
     Object.freeze({ version: 'v2.0.34', date: '2026/08/17', summary: '風コンソールを3レーンの視認性重視配置へ改善' }),
@@ -6346,7 +6347,6 @@
       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
       reconnect: () => { if (closed) return false; try { if (source) source.close(); } catch (_) { /* noop */ } return connect(); },
       setRoundId: nextRoundId => { if (!FIREBASE_ROUND_RE.test(nextRoundId || '')) return false; roundId = nextRoundId; return true; },
-      saveSnapshot: snap => firebaseRequest(`rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/latestSnapshot`, auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snap) }),
       close: () => { closed = true; try { if (source) source.close(); } catch (_) { /* noop */ } }
     };
   }
@@ -7514,7 +7514,6 @@
     if (!online || (online.kind === 'firebase' && online.matchStarted)) return;
     if (online.kind === 'firebase') online.matchStarted = true;
     const snap = buildSnapshot();
-    if (online.kind === 'firebase' && online.transport.saveSnapshot) online.transport.saveSnapshot(snap).catch(() => {});
     netSend({ t: 'start', snap });
   }
 
@@ -7549,7 +7548,6 @@
         return;
       }
       const snap = buildSnapshot();
-      if (online.transport.saveSnapshot) online.transport.saveSnapshot(snap).catch(() => {});
       netSend({ t: 'state', snap, actionId: action.actionId, unitId: action.unitId });
       online.localAction = null;
       return;
@@ -8056,7 +8054,7 @@
         settings: defaultLobbySettings(), slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
         round: { id: roundId, status: 'lobby', players: { p1: auth.uid, e1: null } },
         // RTDBはnull/空objectだけのノードを保持しない。round自体を必ず残す具体値を入れる。
-        rounds: { [roundId]: { createdAt: now, latestSnapshot: null, messages: {} } }
+        rounds: { [roundId]: { createdAt: now, messages: {} } }
       };
       try {
         await firebaseRequest(`rooms/${code}`, auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(room) });
@@ -8486,9 +8484,6 @@
     scheduleFirebaseSeatHeartbeat();
     renderFirebaseLobby();
     if (seat !== 'p1') sendFirebaseIdentityPacket({ t: 'presence' }).catch(() => false);
-    if (online.participantRole === 'spectator' && room && room.round && room.round.latestSnapshot) {
-      applyFirebaseSpectatorSnapshot({ snap: normalizeFirebaseSnapshot(room.round.latestSnapshot) });
-    }
   }
   // 準備完了は取り消せる。ホストが設定を変えた後にキャラを選び直したくなるため。
   // 取り消しても commit は送り直せる(公開前なので情報は漏れない)。
@@ -8664,7 +8659,6 @@
       online.phase = 'starting';
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'playing' }) });
       const snap = buildSnapshot();
-      if (online.transport.saveSnapshot) await online.transport.saveSnapshot(snap);
       const startSent = await netSend({ t: 'start', snap });
       if (startSent !== true) throw new Error('Match start could not be sent.');
       online.matchStarted = true;
@@ -8966,7 +8960,7 @@
     try {
       // 先に新round実体とroomのポインタを確定する。失敗時は誰も不存在roundへ切り替えない。
       // RTDBが空roundを消さないよう、次roundにも必ず具体値のcreatedAtを保存する。
-      await firebaseRequest(`rooms/${online.room}/rounds/${nextId}`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ createdAt: firebaseServerNow(online.auth), latestSnapshot: null, messages: {} }) });
+      await firebaseRequest(`rooms/${online.room}/rounds/${nextId}`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ createdAt: firebaseServerNow(online.auth), messages: {} }) });
       // 次ラウンドの名簿も、実際に座っている席ぶんを載せる。2vs2で s1/s2 を落とすと、
       // その席の人は次のラウンドで一切書き込めなくなる。
       const nextPlayers = { p1: online.clientId, e1: (online.slots.e1 && online.slots.e1.uid) || null };

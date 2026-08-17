@@ -73,10 +73,6 @@
             ".validate": "newData.hasChildren(['createdAt'])",
             "createdAt": { ".validate": "newData.isNumber()" },
 
-            "latestSnapshot": {
-              ".write": "auth != null && root.child('rooms').child($room).child('expiresAt').val() > now && root.child('rooms').child($room).child('round').child('id').val() === $roundId && (root.child('rooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid || root.child('rooms').child($room).child('slots').child('e1').child('uid').val() === auth.uid)"
-            },
-
             "messages": {
               "$message": {
                 ".write": "auth != null && !data.exists() && newData.exists() && root.child('rooms').child($room).child('expiresAt').val() > now && (root.child('rooms').child($room).child('round').child('id').val() === $roundId || (newData.child('t').val() === 'lobbyState' && newData.child('seat').val() === 'p1')) && newData.child('from').val() === auth.uid && root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid && (newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('seat').val() === 's1' || newData.child('seat').val() === 's2') && (newData.child('t').val() !== 'settings' && newData.child('t').val() !== 'lobbyState' && newData.child('t').val() !== 'start' || newData.child('seat').val() === 'p1')",
