@@ -361,7 +361,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.doesNotMatch(studioApp, /const hadController =/);
   assert.match(studioApp, /if \(!saved \|\| state\.dirty \|\| !durable\)/);
   assert.match(studioApp, /shareFailed = true[\s\S]{0,180}blobDownload\(file, file\.name\)/);
-  assert.match(serviceWorker, /caches\.match\(request, \{ ignoreSearch: true \}\)/);
+  assert.doesNotMatch(serviceWorker, /ignoreSearch\s*:\s*true/);
+  assert.match(serviceWorker, /cache\.addAll\(APP_SHELL\.map\(asset => new Request\(asset, \{ cache: 'reload' \}\)\)\)/);
 
   assert.match(manager, /listCustom\(\)/);
   assert.match(manager, /putCustom\(migrated\)/);
@@ -408,10 +409,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v2\.0\.35-wind-next-inline/);
+  assert.match(html, /v2\.0\.36-cache-version-contract/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v2\.0\.35-wind-next-inline/);
+  assert.match(serviceWorker, /katamon-pwa-v2\.0\.36-cache-version-contract/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });

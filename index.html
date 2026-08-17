@@ -28,9 +28,9 @@
 <link rel="preload" as="image" href="assets/characters/runtime/eyebolt.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
-<link rel="preload" as="audio" href="assets/title-bgm.mp3?v=2" type="audio/mpeg">
-<link rel="stylesheet" href="assets/fonts/katamon-fonts.css?v=1">
-<link rel="stylesheet" href="game-custom-stages.css?v=5">
+<link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
+<link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
+<link rel="stylesheet" href="game-custom-stages.css">
 <style>
   html, body {
     margin: 0;
@@ -570,17 +570,17 @@
   </div>
 </div>
 <audio id="titleBgm" preload="auto">
-  <source src="assets/title-bgm.mp3?v=2" type="audio/mpeg">
+  <source src="assets/title-bgm.mp3" type="audio/mpeg">
 </audio>
 <audio id="stageBgm" preload="none"></audio>
-<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3?v=1"></audio>
+<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>
 <!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
 <audio id="bonusBgm" preload="none"></audio>
 
-<script src="shared/stage-core.js?v=1"></script>
-<script src="shared/stage-storage.js?v=1"></script>
-<script src="shared/stage-repository.js?v=1"></script>
-<script src="shared/stage-zip.js?v=1"></script>
+<script src="shared/stage-core.js"></script>
+<script src="shared/stage-storage.js"></script>
+<script src="shared/stage-repository.js"></script>
+<script src="shared/stage-zip.js"></script>
 <script>
 (() => {
   'use strict';
@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.35-wind-next-inline';
+  const BUILD_ID = 'v2.0.36-cache-version-contract';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.36', date: '2026/08/17', summary: '更新時のキャッシュを版番号で確実に入れ替えるよう改善' }),
     Object.freeze({ version: 'v2.0.35', date: '2026/08/17', summary: '風コンソールのNEXT予報を1行表示へ統一' }),
     Object.freeze({ version: 'v2.0.34', date: '2026/08/17', summary: '風コンソールを3レーンの視認性重視配置へ改善' }),
     Object.freeze({ version: 'v2.0.33', date: '2026/08/17', summary: '風コンソールの情報配置を分離して改善' }),
@@ -1039,11 +1040,11 @@
   }
   const stageBgm = document.getElementById('stageBgm');
   const STAGE_BGM_SOURCES = {
-    grass: 'assets/stage-grass.mp3?v=1',
-    desert: 'assets/stage-desert.mp3?v=1',
-    snow: 'assets/stage-snow.mp3?v=1',
-    volcanic: 'assets/stage-volcanic.mp3?v=1',
-    arena: 'assets/stage-boss-arena.mp3?v=1'
+    grass: 'assets/stage-grass.mp3',
+    desert: 'assets/stage-desert.mp3',
+    snow: 'assets/stage-snow.mp3',
+    volcanic: 'assets/stage-volcanic.mp3',
+    arena: 'assets/stage-boss-arena.mp3'
   };
   stageBgm.volume = STAGE_BGM_BASE_VOLUME;
   stageBgm.loop = true;
@@ -1062,14 +1063,12 @@
   // 再生時のピークはいずれも0.35前後で、歪む(1.0)までは十分な余裕がある。
   const BONUS_BGM_TRACKS = [
     null,
-    // URL末尾の ?v=N はキャッシュの鍵。同じURLのまま中身を差し替えると、ブラウザは
-    // 保存済みの古い曲を鳴らし続ける。実際にv98で bonus-bgm-2 をCeltic版へ差し替えた際、
-    // ?v=1 のままだったため2曲目に旧Hard Rock版が鳴っていた。
-    // ファイルの中身を入れ替えたら必ずここの番号も上げること。
-    { src: 'assets/bonus-bgm-1.mp3?v=1', volume: 0.53 },
-    { src: 'assets/bonus-bgm-2.mp3?v=2', volume: 0.56 },
-    { src: 'assets/bonus-bgm-3.mp3?v=1', volume: 0.45 },
-    { src: 'assets/bonus-bgm-4.mp3?v=1', volume: 0.54 }
+    // アセットを差し替える版ではBUILD_ID/CACHE_VERSIONを必ず上げる。個別の
+    // クエリ文字列には依存せず、新しいキャッシュを丸ごと作り直して更新する。
+    { src: 'assets/bonus-bgm-1.mp3', volume: 0.53 },
+    { src: 'assets/bonus-bgm-2.mp3', volume: 0.56 },
+    { src: 'assets/bonus-bgm-3.mp3', volume: 0.45 },
+    { src: 'assets/bonus-bgm-4.mp3', volume: 0.54 }
   ];
   let bonusBgmTrack = 0;        // 0=止まっている / 1〜4=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
@@ -1261,10 +1260,10 @@
   }
   let audioCtx = null;
   let sfxCompressor = null;
-  const NORMAL_IMPACT_SOUND_URL = 'assets/normal-impact-explosion.mp3?v=3';
+  const NORMAL_IMPACT_SOUND_URL = 'assets/normal-impact-explosion.mp3';
   const NORMAL_IMPACT_SOUND_GAIN = 0.34;
   const TITLE_WALL_IMPACT_SOUND_GAIN = 0.26;
-  const SPECIAL_CUTIN_SOUND_URL = 'assets/special-cutin-edm-zap.mp3?v=1';
+  const SPECIAL_CUTIN_SOUND_URL = 'assets/special-cutin-edm-zap.mp3';
   const SPECIAL_CUTIN_SOUND_GAIN = 0.28;
   let normalImpactBuffer = null;
   let normalImpactLoadPromise = null;
@@ -1578,11 +1577,11 @@
   };
   const THEME_KEYS = Object.keys(THEMES);
   const STAGE_BACKGROUND_SOURCES = {
-    grass: 'assets/stage-grass-bg.jpg?v=1',
-    desert: 'assets/stage-desert-bg.jpg?v=1',
-    snow: 'assets/stage-snow-bg.jpg?v=1',
-    volcanic: 'assets/stage-volcanic-bg.jpg?v=1',
-    bossArena: 'assets/stage-boss-arena-bg.jpg?v=1'
+    grass: 'assets/stage-grass-bg.jpg',
+    desert: 'assets/stage-desert-bg.jpg',
+    snow: 'assets/stage-snow-bg.jpg',
+    volcanic: 'assets/stage-volcanic-bg.jpg',
+    bossArena: 'assets/stage-boss-arena-bg.jpg'
   };
   const stageBackgroundImages = {};
   for (const key of Object.keys(STAGE_BACKGROUND_SOURCES)) {
@@ -2833,7 +2832,6 @@
     const img = new Image();
     img.decoding = 'async';
     if (opts.highPriority) img.fetchPriority = 'high';
-    const suffix = opts.version ? `?v=${opts.version}` : '';
     const webpBase = opts.webpBase || `assets/${baseName}`;
     const pngBase = opts.pngBase || `assets/${baseName}`;
     let triedPng = false;
@@ -2841,24 +2839,19 @@
     img.onerror = () => {
       if (!triedPng) {
         triedPng = true;
-        img.src = `${pngBase}.png${suffix}`;
+        img.src = `${pngBase}.png`;
         return;
       }
       if (opts.onFailed) opts.onFailed();
     };
-    img.src = `${webpBase}.webp${suffix}`;
+    img.src = `${webpBase}.webp`;
     return img;
   }
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
-  // キャラ画像のキャッシュ版数。差し替えたキャラだけ載せる(未記載は版なし=初版)。
-  // **画像を差し替えたら、ここの版を必ず上げること。** URLが同じままだと
-  // Service Workerもブラウザも古い絵を持ち続け、中身を入れ替えても表に出ない
-  // (v115でニセンモノを差し替えた時に実際に出なかった)。
-  // 差し替えたキャラだけ上げる。全部を一括で上げると、変えていないぶんまで配り直す。
-  // v130でWebPへ移した時は拡張子ごと変わったので、版を上げる必要はなかった。
-  const CHARACTER_ASSET_VERSION = { nisenmono: 2 };
+  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げる。これにより
+  // Service Workerの新キャッシュが全アセットを安全に更新する。
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   for (const key of CHARACTER_LIST) {
@@ -2867,13 +2860,12 @@
       highPriority: true,
       webpBase: `assets/characters/runtime/${assetStem}`,
       pngBase: `assets/characters/master/${assetStem}`,
-      version: CHARACTER_ASSET_VERSION[key],
       onReady: () => { characterImagesReady++; },
       onFailed: () => { characterImagesFailed++; }
     });
   }
   // 4.4MBの支援機はタイトルのコア画像読込から外し、必殺技時だけ読む。
-  const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png?v=2';
+  const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.png';
   let barucopterImage = null;
   function getBarucopterImage() {
     if (barucopterImage) return barucopterImage;
@@ -17591,6 +17583,6 @@
 
 })();
 </script>
-<script src="game-custom-stages.js?v=8"></script>
+<script src="game-custom-stages.js"></script>
 </body>
 </html>

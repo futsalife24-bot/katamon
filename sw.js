@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.35-wind-next-inline';
+const CACHE_VERSION = 'katamon-pwa-v2.0.36-cache-version-contract';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
@@ -38,14 +38,14 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v3/turn-ribbon.png',
   './assets/ui/battle-hud/v4-wind-console.png',
   './assets/ui/battle-hud/wind-console-round.webp',
-  './assets/normal-impact-explosion.mp3?v=3',
-  './assets/special-cutin-edm-zap.mp3?v=1'
+  './assets/normal-impact-explosion.mp3',
+  './assets/special-cutin-edm-zap.mp3'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => cache.addAll(APP_SHELL.map(asset => new Request(asset, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -102,9 +102,9 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then(cached => {
+    caches.match(request).then(cached => {
       if (cached) return cached;
-      return fetch(request).then(response => {
+      return fetch(new Request(request, { cache: 'reload' })).then(response => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));
