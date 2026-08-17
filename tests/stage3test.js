@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -28,25 +28,25 @@ function check(name, value) {
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
     && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
     anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
@@ -54,25 +54,25 @@ function check(name, value) {
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes("nextArrow === '無風'")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
     anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
     anchoredHudSource.includes('function drawWindForecastDivider(')
     && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
     && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('round wind console renders NEXT and its forecast as one centered text line',
     anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
     && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -81,7 +81,7 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -97,7 +97,7 @@ function check(name, value) {
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.53-terrain-canvas-height';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -163,6 +163,18 @@ function check(name, value) {
   check('fair first player is deterministic', firstA === firstB && (firstA === 'p1' || firstA === 'e1'));
   app.startBattle('kyoryu');
   const safeSnap = app.snapshot();
+  function terrainDeltaFrom(snap) {
+    const delta = JSON.parse(JSON.stringify(snap));
+    for (const key of ['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'customStage', 'customStageIdentity']) delete delta[key];
+    return delta;
+  }
+  const terrainDeltaState = terrainDeltaFrom(safeSnap);
+  check('Firebase v3 turn state sends craters but omits the immutable terrain base after start',
+    !Object.prototype.hasOwnProperty.call(terrainDeltaState, 'segments')
+    && !Object.prototype.hasOwnProperty.call(terrainDeltaState, 'bridge')
+    && Array.isArray(terrainDeltaState.craters)
+    && h.validateFirebaseMessage(firebasePacket('state', { actionId, unitId: 'p1', snap: terrainDeltaState }))
+    && h.stateSnapshotMismatchReason(terrainDeltaState, safeSnap) === '');
   check('Firebase state accepts a complete safe snapshot', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: safeSnap }));
   const missingWindForecast = JSON.parse(JSON.stringify(safeSnap));
   delete missingWindForecast.nextWind;
@@ -637,7 +649,7 @@ function check(name, value) {
     h.validateFirebaseMessage(validV3Fire)
     && !h.validateFirebaseMessage({ ...validV3Fire, roundId: 'bad' })
     && !h.validateFirebaseMessage({ ...validV3Fire, seat: 's1', actionId: 'bad' }));
-  const validV3State = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'state', sentAt: Date.now(), actionId, unitId: 'e1', snap: safeSnap };
+  const validV3State = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'state', sentAt: Date.now(), actionId, unitId: 'e1', snap: terrainDeltaState };
   const validV3Result = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'result', sentAt: Date.now(), actionId, unitId: 'e1', winner: 'player', reason: '撃破', units: safeSnap.units.map(u => ({ id: u.id, hp: u.hp })) };
   check('Firebase v3 state/result require the action unit to match the sender seat',
     h.validateFirebaseMessage(validV3State) && h.validateFirebaseMessage(validV3Result)
@@ -1746,24 +1758,24 @@ function check(name, value) {
     && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'boom' })));
   const roster2v2 = snap2v2.units.map(u => ({ id: u.id, hp: u.hp }));
   check('a result carries all four units in 2vs2 and keeps the fixed order',
-    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
     && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2 }))
     && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: [roster2v2[0], roster2v2[2], roster2v2[1], roster2v2[3]] }))
     && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2.slice(0, 3) })));
   // 席とユニットの対応は、通信データの検証と席の門の両方で同じ表を使う。
   h.setOnlineForLogTest(lobbyWith('2v2'));
   check('s1 may only ever act as p2, in both the payload check and the seat gate',
-    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
-    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
-    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
-    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: terrainDeltaFrom(snap2v2) })));
   // ホストは空席のキャラだけを動かせる。人が座っている席へは手を出せない。
   // ルール側の例外(!slots.$seat.exists())とまったく同じ条件をクライアントでも見る。
   {
     const hostLobby = lobbyWith('2v2');
     hostLobby.slots = seated('p1', 'e1');
     h.setOnlineForLogTest(hostLobby);
-    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: snap2v2 });
+    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: terrainDeltaFrom(snap2v2) });
     check('the host may act for the empty seats and for nobody else’s',
       h.validateFirebaseMessage(hostActs('p2')) && h.firebasePacketSeatAllowed(hostActs('p2'))
       && h.validateFirebaseMessage(hostActs('e2')) && h.firebasePacketSeatAllowed(hostActs('e2'))
@@ -2375,6 +2387,13 @@ function check(name, value) {
   check('terrain-only offscreen canvases stop at the terrain bottom instead of reserving the control-panel area',
     (terrainCanvasSource.match(/\.height = TERRAIN_BOTTOM_Y;/g) || []).length === 7
     && !terrainCanvasSource.includes('.height = VH;'));
+  const snapshotSource = htmlText.match(/function buildSnapshot\(options = \{\}\)[\s\S]*?\n  \}/)?.[0] || '';
+  const netSyncTurnSource = htmlText.match(/function netSyncTurn\(actedUnit\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('turn-boundary state omits immutable terrain while match start keeps the complete base terrain',
+    snapshotSource.includes('const includeTerrain = options.includeTerrain !== false;')
+    && snapshotSource.includes('if (includeTerrain) {')
+    && netSyncTurnSource.includes('buildSnapshot({ includeTerrain: false })')
+    && htmlText.includes('applySnapshot(msg.snap, { preserveTerrain: true });'));
   check('30fps idle battle frames preserve a full 1/30-second fixed-step budget',
     gameLoopSource.includes('const dt = Math.min(0.034, (ts - lastTime) / 1000);'));
   check('the battle wind console keeps its strength label and shows a 0-to-10 scale',

@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.53-terrain-canvas-height';
+  const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.54', date: '2026/08/17', summary: '地形の基底データを開始時だけ同期' },
     { version: 'v2.0.53', date: '2026/08/17', summary: '地形描画のメモリを軽量化' },
     { version: 'v2.0.52', date: '2026/08/17', summary: '待機中も物理の進行量を維持' },
     { version: 'v2.0.51', date: '2026/08/17', summary: '風力を0〜10で見える化' },
@@ -5703,9 +5704,10 @@
 
   // 試合の状態を丸ごと1つのオブジェクトにする。中断セーブはこれをlocalStorageへ
   // 書くだけの薄い層で、オンライン対戦のターン境界の同期にもそのまま使える。
-  function buildSnapshot() {
-    const includeCustomStage = !!(selectedCustomStage && (battleMode === 'free' || onlineCustomStageActive()));
-    return {
+  function buildSnapshot(options = {}) {
+    const includeTerrain = options.includeTerrain !== false;
+    const includeCustomStage = includeTerrain && !!(selectedCustomStage && (battleMode === 'free' || onlineCustomStageActive()));
+    const snapshot = {
       v: SNAPSHOT_VERSION,
       battleMode,
       freeModeConfig: { ...freeModeConfig },
@@ -5715,13 +5717,7 @@
       customStageIdentity: includeCustomStage ? customStageIdentity(selectedCustomStage) : null,
       stageW: STAGE_W,
       stageH: STAGE_H,
-      segments: currentSegments,
       craters: craterHistory,
-      pattern: currentPattern,
-      startOnIsland,
-      bridge: currentBridge,
-      themeKey: currentThemeKey,
-      parallaxSeed,
       simTimeMs, // 再開時に闘技場の障害物の揺れが飛ばないよう位相も持ち越す
       matchFormat,
       units: units.map(serializeUnit),
@@ -5732,6 +5728,17 @@
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, y: cameraY, zoom: cameraZoom }
     };
+    // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
+    // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
+    if (includeTerrain) {
+      snapshot.segments = currentSegments;
+      snapshot.pattern = currentPattern;
+      snapshot.startOnIsland = startOnIsland;
+      snapshot.bridge = currentBridge;
+      snapshot.themeKey = currentThemeKey;
+      snapshot.parallaxSeed = parallaxSeed;
+    }
+    return snapshot;
   }
 
   // v3までは player/cpu の2固定だった。現行の units 形式へ寄せてから読む。
@@ -5894,7 +5901,24 @@
 
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
-  function applySnapshot(data) {
+  function applySnapshot(data, options = {}) {
+    // turn境界stateは地形基底を含まない。開始で検証済みのローカル基底を補ってから、
+    // 従来どおり権威側のcratersとユニット状態を適用する。
+    if (options.preserveTerrain) {
+      const localTerrain = buildSnapshot();
+      data = {
+        ...localTerrain,
+        ...data,
+        segments: localTerrain.segments,
+        pattern: localTerrain.pattern,
+        startOnIsland: localTerrain.startOnIsland,
+        bridge: localTerrain.bridge,
+        themeKey: localTerrain.themeKey,
+        parallaxSeed: localTerrain.parallaxSeed,
+        customStage: localTerrain.customStage,
+        customStageIdentity: localTerrain.customStageIdentity
+      };
+    }
     const customSnapshot = inspectCustomStageSnapshot(data);
     if (!customSnapshot.valid) throw new Error(customSnapshot.message);
     battleMode = data.battleMode === 'free' ? 'free' : 'normal';
@@ -6500,19 +6524,25 @@
       return 'snap.customStage.invalid';
     }
   }
-  function snapshotValidationReason(snap) {
+  function snapshotValidationReason(snap, options = {}) {
+    const includeTerrain = options.includeTerrain !== false;
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
     if (snap.v !== SNAPSHOT_VERSION) return 'snap.v';
     if (snap.battleMode !== 'normal') return 'snap.battleMode';
     const limits = snapshotLimits(snap);
-    if (!hasSafeTerrainSegments(snap.segments, limits)) return 'snap.segments';
+    if (includeTerrain && !hasSafeTerrainSegments(snap.segments, limits)) return 'snap.segments';
     // 着弾中心は弾の当たり判定で画面端を少し越えうる。最大クレーター半径のぶんだけ
     // 余白を許可しつつ、極端な座標は従来どおり通信境界で弾く。
     if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, limits.stageWidth + 600) && isFiniteIn(cr.y, -600, limits.stageHeight + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
-    if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
-    const customStageReason = customStageSnapshotValidationReason(snap);
-    if (customStageReason) return customStageReason;
-    if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge, limits) || !isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
+    if (includeTerrain) {
+      if (!SNAPSHOT_PATTERNS.has(snap.pattern) || typeof snap.startOnIsland !== 'boolean' || !THEMES[snap.themeKey]) return 'snap.terrainMeta';
+      const customStageReason = customStageSnapshotValidationReason(snap);
+      if (customStageReason) return customStageReason;
+      if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge, limits)) return 'snap.world';
+    } else if (['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'customStage', 'customStageIdentity'].some(key => Object.prototype.hasOwnProperty.call(snap, key))) {
+      return 'snap.terrainDelta';
+    }
+    if (!isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
     // 人数と並びは対戦方式で決まる。ここを緩めて「好きな並びを送れる」ようにすると
     // 席とユニットの対応(なりすまし防止の要)が通信データ側から崩せてしまうので、
     // 形式ごとに1通りだけを認める。形式を持たない相手(v102以前)は1vs1として読む。
@@ -6635,7 +6665,7 @@
     if (msg.t === 'reveal') return CHARACTER_LIST.includes(msg.character) && /^[0-9a-f]{48}$/.test(msg.nonce || '') ? { ok: true } : { ok: false, reason: 'reveal.characterOrNonce' };
     if (msg.t === 'start') { const reason = snapshotValidationReason(msg.snap); return reason ? { ok: false, reason: `start.${reason}` } : { ok: true }; }
     if (msg.t === 'state') {
-      const reason = snapshotValidationReason(msg.snap);
+      const reason = snapshotValidationReason(msg.snap, { includeTerrain: legacyV2 });
       const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
@@ -6984,9 +7014,9 @@
     if (snap.units.length !== baseline.units.length || !Array.isArray(snap.turnOrder) || !Array.isArray(baseline.turnOrder) || snap.turnOrder.length !== baseline.turnOrder.length) return 'shape';
     if (snap.turnOrder.some((id, i) => id !== baseline.turnOrder[i])) return 'turnOrder';
     if (snap.units.some((u, i) => u.maxHp !== baseline.units[i].maxHp)) return 'maxHp';
-    if (snap.pattern !== baseline.pattern) return 'pattern';
-    if (snap.themeKey !== baseline.themeKey) return 'themeKey';
-    if (snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
+    if (Object.prototype.hasOwnProperty.call(snap, 'pattern') && snap.pattern !== baseline.pattern) return 'pattern';
+    if (Object.prototype.hasOwnProperty.call(snap, 'themeKey') && snap.themeKey !== baseline.themeKey) return 'themeKey';
+    if (Object.prototype.hasOwnProperty.call(snap, 'parallaxSeed') && snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
     // 現在の風は前のターンから全員に予告済みなので一致を要求できる。
     // 新しい次の風は行動側がこのターン境界で抽選するため、ここでは比較せず受け入れて同期する。
     if (!snap.wind || !baseline.wind || snap.wind.dir !== baseline.wind.dir
@@ -6996,8 +7026,9 @@
     // 生成した側は {startX,endX,y,style,seed} の順、受け取った側は {endX,seed,...} の順になり、
     // 素の JSON.stringify では値が同じでも文字列が一致せず、橋ステージで必ず切れていた。
     // キーの並びに依存しない比較を使う。
-    if (stableFirebaseJson(snap.segments) !== stableFirebaseJson(baseline.segments)) return 'terrain.segments';
-    if (stableFirebaseJson(snap.bridge) !== stableFirebaseJson(baseline.bridge)) return 'terrain.bridge';
+    if (Object.prototype.hasOwnProperty.call(snap, 'segments') && stableFirebaseJson(snap.segments) !== stableFirebaseJson(baseline.segments)) return 'terrain.segments';
+    if ((Object.prototype.hasOwnProperty.call(snap, 'bridge') || Object.prototype.hasOwnProperty.call(snap, 'segments'))
+        && stableFirebaseJson(snap.bridge) !== stableFirebaseJson(baseline.bridge)) return 'terrain.bridge';
     if (Math.abs(snap.craters.length - baseline.craters.length) > 24) return 'craters';
     for (let i = 0; i < snap.units.length; i++) {
       const saved = snap.units[i], local = baseline.units[i];
@@ -7475,7 +7506,7 @@
           online.remoteAction = null;
         }
         logOnlineEvent({ type: 'state', ok: true, units: msg.snap.units.map(u => ({ id: u.id, hp: u.hp })) });
-        applySnapshot(msg.snap);
+        applySnapshot(msg.snap, { preserveTerrain: true });
         setOnlineSeat(online.seat);
         flushRemoteDamageText();
         break;
@@ -7605,7 +7636,7 @@
         rejectFirebaseMessage('ローカル行動IDを確認できません');
         return;
       }
-      const snap = buildSnapshot();
+      const snap = buildSnapshot({ includeTerrain: false });
       netSend({ t: 'state', snap, actionId: action.actionId, unitId: action.unitId });
       online.localAction = null;
       return;
@@ -8957,7 +8988,7 @@
   function applyFirebaseSpectatorSnapshot(msg) {
     if (!online || online.kind !== 'firebase' || !msg.snap) return;
     try {
-      applySnapshot(msg.snap);
+      applySnapshot(msg.snap, { preserveTerrain: msg.t === 'state' });
     } catch (error) {
       online.protocolError = error?.message || '観戦用ステージを確認できませんでした。';
       onlineLobbyStatus(online.protocolError);
