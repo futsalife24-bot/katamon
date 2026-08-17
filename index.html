@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.51-wind-strength-scale';
+  const BUILD_ID = 'v2.0.52-idle-physics-step';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.52', date: '2026/08/17', summary: '待機中も物理の進行量を維持' },
     { version: 'v2.0.51', date: '2026/08/17', summary: '風力を0〜10で見える化' },
     { version: 'v2.0.50', date: '2026/08/17', summary: '戦闘待機中の描画を軽量化' },
     { version: 'v2.0.49', date: '2026/08/17', summary: 'バルコプター画像を軽量化' },
@@ -17011,7 +17012,7 @@
   // ここに載せてよいのは「両端末で完全に一致しなければならない計算」だけ。
   // カメラ・演出・入力・CPU思考は従来どおり描画フレーム基準のままにする。
   const PHYSICS_DT = globalThis.StageCore?.PHYSICS?.fixedDt || 1 / 120; // 秒。全端末共通の刻み
-  const MAX_PHYSICS_SUBSTEPS = 8;  // 1フレームで進める上限(gameLoop側のdt上限0.033で実質4)
+  const MAX_PHYSICS_SUBSTEPS = 8;  // 1フレームで進める上限(gameLoop側のdt上限0.034で実質4)
   let physicsAccumulator = 0;
   // 進める刻み数だけを先に確定する。余りは破棄せず次フレームへ繰り越す
   // (破棄すると端末ごとに進行量が変わり、固定刻みにした意味がなくなる)。
@@ -17511,7 +17512,9 @@
       requestAnimationFrame(gameLoop);
       return;
     }
-    const dt = Math.min(0.033, (ts - lastTime) / 1000);
+    // 30fps待機フレームの1/30秒(約0.0333秒)を丸め落とさない。
+    // 4固定刻み(4/120秒)まで進め、余りは従来どおりaccumulatorへ残す。
+    const dt = Math.min(0.034, (ts - lastTime) / 1000);
     lastTime = ts;
     applyPendingGameUpdateIfSafe();
     syncBackTrap();

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.51-wind-strength-scale';
+const CACHE_VERSION = 'katamon-pwa-v2.0.52-idle-physics-step';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
