@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.40-firebase-connection-resilience';
+const CACHE_VERSION = 'katamon-pwa-v2.0.41-remove-dead-confirm-dialog';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
