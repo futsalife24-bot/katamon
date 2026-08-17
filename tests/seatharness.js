@@ -11,11 +11,31 @@ if (!globalThis.crypto) globalThis.crypto = require('crypto').webcrypto;
 const SEAT = process.argv[2] === 'e1' ? 'e1' : 'p1';
 const HTML = path.join(__dirname, '..', 'index.html');
 
-// ---- スクリプト抽出 ----
+// ---- ブラウザと同じ順のスクリプト抽出 ----
 const html = fs.readFileSync(HTML, 'utf8');
-const m = /<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/.exec(html);
-if (!m) throw new Error('script tag not found');
-let code = m[1];
+const scriptTags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+const inlineIndex = scriptTags.findIndex(([, attributes]) => !/\bsrc\s*=/.test(attributes));
+if (inlineIndex < 0) throw new Error('inline game script tag not found');
+const sourceFromAttributes = (attributes) => {
+  const match = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(attributes);
+  return match ? match[1] : null;
+};
+const preludeSources = scriptTags
+  .slice(0, inlineIndex)
+  .map(([attributes]) => sourceFromAttributes(attributes))
+  .filter(Boolean);
+const externalPrelude = preludeSources.map((source) => {
+  const relativePath = source.replace(/[?#].*$/, '');
+  const absolutePath = path.join(__dirname, '..', relativePath);
+  // 本体ファイルをリネームせず、外部script欠落時にハーネスが確実に落ちることを
+  // 検証するためのテスト専用スイッチ。通常の実行では未設定にする。
+  if (process.env.KATAMON_TEST_FORCE_MISSING_SCRIPT === relativePath) {
+    throw new Error(`external script not found: ${relativePath}`);
+  }
+  if (!fs.existsSync(absolutePath)) throw new Error(`external script not found: ${relativePath}`);
+  return fs.readFileSync(absolutePath, 'utf8');
+}).join('\n;\n');
+let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 
 // ---- 検証フックを IIFE の内側に差し込む ----
 // (本体には残さない。ここで組み立てるだけ。)
