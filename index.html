@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.40-firebase-connection-resilience';
+  const BUILD_ID = 'v2.0.41-remove-dead-confirm-dialog';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.41', date: '2026/08/17', summary: '未使用の確認ダイアログを削除し入力処理を整理' }),
     Object.freeze({ version: 'v2.0.40', date: '2026/08/17', summary: '通信不調時のFirebase再試行と案内を改善' }),
     Object.freeze({ version: 'v2.0.39', date: '2026/08/17', summary: '10連勝ごとのボスCPUをHP30%増・必殺MAXで開始' }),
     Object.freeze({ version: 'v2.0.38', date: '2026/08/17', summary: 'フェニーチェとクロムギア必殺の弾道を通常弾へ統一' }),
@@ -5978,7 +5979,6 @@
     specialAura = null;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
-    confirmDialog = null;
     cutIn = null;
     menuOpen = false;
     if (isOnline()) {
@@ -15395,7 +15395,7 @@
   function applyPendingGameUpdateIfSafe() {
     if (!pendingGameUpdateBuild || safeUpdateReloadStarted) return;
     if (gamePhase !== 'title') return;
-    if (roomScreenOpen() || confirmDialog) return;
+    if (roomScreenOpen()) return;
     safeUpdateReloadStarted = true;
     const latestUrl = new URL(location.href);
     latestUrl.searchParams.set('v', pendingGameUpdateBuild);
@@ -15540,57 +15540,6 @@
       ctx.stroke();
     }
     ctx.restore();
-  }
-
-  // ===== はい/いいえの確認ダイアログ =====
-  // 戻る操作の誤爆で選択画面から抜けてしまうのを防ぐために使う。
-  let confirmDialog = null; // { text, sub, onYes }
-  const confirmYesBtn = { x: VW / 2 - 78, y: VH / 2 + 30, w: 136, h: 50 };
-  const confirmNoBtn = { x: VW / 2 + 78, y: VH / 2 + 30, w: 136, h: 50 };
-  const confirmPanel = { x: VW / 2, y: VH / 2 - 4, w: 360, h: 200 };
-
-  function openConfirmDialog(text, sub, onYes) {
-    confirmDialog = { text, sub, onYes };
-    playUiSound();
-  }
-
-  function drawConfirmDialog() {
-    if (!confirmDialog) return;
-    ctx.save();
-    ctx.fillStyle = 'rgba(2,4,7,0.82)';
-    ctx.fillRect(0, 0, VW, VH);
-    // 背後のキャラカードが明るく透けて読みにくいので、下地を一枚敷く。
-    ctx.translate(confirmPanel.x - confirmPanel.w / 2, confirmPanel.y - confirmPanel.h / 2);
-    const face = ctx.createLinearGradient(0, 0, 0, confirmPanel.h);
-    face.addColorStop(0, UI.plateTop);
-    face.addColorStop(0.55, UI.plateMid);
-    face.addColorStop(1, UI.plateBottom);
-    ctx.fillStyle = face;
-    ctx.fillRect(0, 0, confirmPanel.w, confirmPanel.h);
-    ctx.strokeStyle = UI.brass;
-    ctx.lineWidth = 2.6;
-    ctx.strokeRect(1.3, 1.3, confirmPanel.w - 2.6, confirmPanel.h - 2.6);
-    ctx.strokeStyle = 'rgba(255,226,161,0.22)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(6, 6, confirmPanel.w - 12, confirmPanel.h - 12);
-    ctx.restore();
-
-    drawOutlinedText(confirmDialog.text, VW / 2, VH / 2 - 48, {
-      font: `900 22px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5
-    });
-    if (confirmDialog.sub) {
-      drawOutlinedText(confirmDialog.sub, VW / 2, VH / 2 - 20, {
-        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
-      });
-    }
-    for (const [b, label] of [[confirmYesBtn, 'はい'], [confirmNoBtn, 'いいえ']]) {
-      drawIronPlate(b.x, b.y, b.w, b.h, {
-        cut: 12, lineWidth: 2.4, rivets: true, rivetInset: 14, rivetRadius: 3.4
-      });
-      drawOutlinedText(label, b.x, b.y + 6, {
-        font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
-      });
-    }
   }
 
   function freeTrainingMenuOption(kind) {
@@ -15855,7 +15804,6 @@
       drawCharacterSelect();
       drawSoundToggle();
       drawSoundPanel();
-      drawConfirmDialog();
       ctx.restore();
       return;
     }
@@ -15863,7 +15811,6 @@
       drawFreeSetupScreen();
       drawSoundToggle();
       drawSoundPanel();
-      drawConfirmDialog();
       ctx.restore();
       return;
     }
@@ -15995,23 +15942,6 @@
     if (tutorialActive() && gamePhase === 'battle' && hitRect(p0, tutorialSkipBtn)) {
       playUiSound();
       skipTutorial();
-      return;
-    }
-
-    // 確認ダイアログが最優先。開いている間は他の入力を一切通さない。
-    if (confirmDialog) {
-      if (hitRect(p0, confirmYesBtn)) {
-        const onYes = confirmDialog.onYes;
-        confirmDialog = null;
-        playUiSound();
-        if (onYes) onYes();
-        return;
-      }
-      // いいえ、およびダイアログ外のタップはどちらも取り消し扱い(安全側)
-      if (hitRect(p0, confirmNoBtn) || !hitRect(p0, confirmPanel)) {
-        confirmDialog = null;
-        playUiSound();
-      }
       return;
     }
 
@@ -16652,7 +16582,6 @@
     specialAura = null;
     specialFlash = { timer: 0, text: '' };
     pendingShot = null;
-    confirmDialog = null;
     cutIn = null;
     focusCameraOn(localUnit().x, true, localUnit().y);
     menuOpen = false;
@@ -16756,11 +16685,6 @@
     // ロビーや結果表示は内部状態がbattleのままでも、ユーザー視点ではバトル外画面。
     if (gamePhase !== 'battle' || roomScreenOpen()) {
       openDeviceBackConfirm();
-      return;
-    }
-    if (confirmDialog) {
-      confirmDialog = null;
-      playUiSound();
       return;
     }
     if (soundPanelOpen) {
