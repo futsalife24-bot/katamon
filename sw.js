@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.57-public-room-browser';
+const CACHE_VERSION = 'katamon-pwa-v2.0.58-online-lobby-remix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
