@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.38-special-normal-trajectory';
+  const BUILD_ID = 'v2.0.39-boss-cpu-bonus';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.39', date: '2026/08/17', summary: '10連勝ごとのボスCPUをHP30%増・必殺MAXで開始' }),
     Object.freeze({ version: 'v2.0.38', date: '2026/08/17', summary: 'フェニーチェとクロムギア必殺の弾道を通常弾へ統一' }),
     Object.freeze({ version: 'v2.0.37', date: '2026/08/17', summary: '途中参加用の盤面保存を廃止し、対戦通信を軽量化' }),
     Object.freeze({ version: 'v2.0.36', date: '2026/08/17', summary: '更新時のキャッシュを版番号で確実に入れ替えるよう改善' }),
@@ -3100,6 +3101,7 @@
   const FUEL_MAX = 102; // 全キャラの基本移動可能距離を従来の2倍にする
   const MOVE_SPEED = 95; // px/s
   const SPECIAL_CHARGE_MAX = 4; // 自分4手番=相手込み8ターンでMAX。新規挑戦は0、次戦へ残量を持ち越す
+  const BOSS_CPU_HP_MUL = 1.3; // 10連勝ごとのCPUボスだけ最大HPを30%増やす
 
   function isSpecialReady(u) {
     // 演習の「常時MAX」はここだけで判定する。本編・オンラインのゲージや通信値を
@@ -16539,6 +16541,13 @@
     }
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
+    if (isBossMatch) {
+      for (const u of units) {
+        if (u.team !== 'cpu') continue;
+        u.maxHp = Math.round(u.maxHp * BOSS_CPU_HP_MUL);
+        u.hp = u.maxHp;
+      }
+    }
     // 闘技場マップは外壁の天辺ではなく、左右から内側へ伸びる上段棚を開始位置にする。
     const mortarShelfStart = currentPattern === 'tieredBasin';
     // 陣営ごとに外側から内側へ並べ、2vs2でも左右対称にする。
@@ -16578,7 +16587,10 @@
     activeTouchPoints.clear();
     pinchState = null;
     specialArmed = false;
-    for (const u of units) u.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, carriedCharge[u.id] || 0));
+    for (const u of units) {
+      u.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, carriedCharge[u.id] || 0));
+      if (isBossMatch && u.team === 'cpu') u.specialCharge = SPECIAL_CHARGE_MAX;
+    }
     matchOver = false;
     matchEndPause = 0;
     matchEndReason = '';

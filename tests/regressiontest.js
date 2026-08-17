@@ -44,6 +44,17 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     JSON.stringify(rematch));
 }
 
+// ボス戦は見た目だけではなく、CPUの耐久と必殺チャージが強化される。
+{
+  const boss = kt.cpuBossRoundForTest();
+  check('10連勝ごとのボスCPUはHP+30%・必殺チャージMAXで開始する',
+    boss?.isBoss === true && boss.pattern === 'tieredBasin'
+      && boss.cpu.maxHp === Math.round(kt.character('iwa').maxHp * 1.3)
+      && boss.cpu.hp === boss.cpu.maxHp
+      && boss.cpu.specialCharge === 4,
+    JSON.stringify(boss));
+}
+
 // v171: 上端にあった横長の中断再開ボタンを出撃ギアの下へ移し、
 // 空いた場所では「カタモンを選択」を主役として見せる。
 {

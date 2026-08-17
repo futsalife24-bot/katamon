@@ -164,6 +164,23 @@ const HOOK = `
         Math.random = savedRandom;
       }
     },
+    cpuBossRoundForTest: () => {
+      const savedRandom = Math.random;
+      try {
+        Math.random = () => 0;
+        online = null;
+        battleMode = 'normal';
+        winStreak = 10;
+        selectedCustomAdapter = null;
+        setMatchFormat('1v1');
+        player.character = 'kyoryu';
+        cpu.character = 'iwa';
+        resetMatch(true);
+        return { isBoss: isBossMatch, pattern: currentPattern, cpu: { hp: cpu.hp, maxHp: cpu.maxHp, specialCharge: cpu.specialCharge } };
+      } finally {
+        Math.random = savedRandom;
+      }
+    },
     setTerrain: (pattern) => { newTerrain(pattern); },
     setFlatTerrainForTest: (surface = 420) => {
       const y = Math.max(0, Math.min(TERRAIN_BOTTOM_Y - 60, Number(surface)));
