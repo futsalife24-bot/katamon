@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.46-cache-control-panel';
+  const BUILD_ID = 'v2.0.47-cache-hill-layer';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.47', date: '2026/08/17', summary: '遠景の丘を軽量化' },
     { version: 'v2.0.46', date: '2026/08/17', summary: '静止コントロールパネルを軽量化' },
     { version: 'v2.0.45', date: '2026/08/17', summary: '移動同期の通信量を削減' },
     { version: 'v2.0.44', date: '2026/08/17', summary: 'ポインタ座標計算を軽量化' },
@@ -1697,6 +1698,13 @@
   terrainCanvas.width = STAGE_W;
   terrainCanvas.height = VH;
   const terrainCtx = terrainCanvas.getContext('2d');
+
+  // 遠景の丘はステージ中に変化しない。2層はカメラの追従率が違うため、別々に焼いて貼る。
+  const farHillCanvas = document.createElement('canvas');
+  const nearHillCanvas = document.createElement('canvas');
+  const farHillCtx = farHillCanvas.getContext('2d');
+  const nearHillCtx = nearHillCanvas.getContext('2d');
+  let hillArtKey = '';
 
   // 地形マスク全体から境界線を作る専用キャンバス。最上面の点を結ぶ方式だと、浮島や縦崖を
   // またいで長い線が出るため、実際の地形シルエットを膨張させて全周の輪郭だけを抜き出す。
@@ -11763,28 +11771,45 @@
       + Math.sin(p * 0.041 + 2.7) * amp * 0.18;
   }
 
-  function drawHillLayer(seedOffset, baseY, amp, color) {
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.beginPath();
+  function drawHillLayer(g, seedOffset, baseY, amp, color, offsetX = 0) {
+    g.save();
+    g.fillStyle = color;
+    g.beginPath();
     const fromX = -200, toX = STAGE_W + 200, step = 24;
-    ctx.moveTo(fromX, bgHillY(fromX, seedOffset, baseY, amp));
+    g.moveTo(fromX + offsetX, bgHillY(fromX, seedOffset, baseY, amp));
     for (let x = fromX + step; x <= toX; x += step) {
-      ctx.lineTo(x, bgHillY(x, seedOffset, baseY, amp));
+      g.lineTo(x + offsetX, bgHillY(x, seedOffset, baseY, amp));
     }
-    ctx.lineTo(toX, GROUND_MAX_Y + 50);
-    ctx.lineTo(fromX, GROUND_MAX_Y + 50);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(fromX, bgHillY(fromX, seedOffset, baseY, amp));
+    g.lineTo(toX + offsetX, GROUND_MAX_Y + 50);
+    g.lineTo(fromX + offsetX, GROUND_MAX_Y + 50);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.moveTo(fromX + offsetX, bgHillY(fromX, seedOffset, baseY, amp));
     for (let x = fromX + step; x <= toX; x += step) {
-      ctx.lineTo(x, bgHillY(x, seedOffset, baseY, amp));
+      g.lineTo(x + offsetX, bgHillY(x, seedOffset, baseY, amp));
     }
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
+    g.strokeStyle = 'rgba(255,255,255,0.10)';
+    g.lineWidth = 2;
+    g.stroke();
+    g.restore();
+  }
+
+  function hillArtSignature() {
+    return `${STAGE_W}|${VH}|${GROUND_MAX_Y}|${parallaxSeed}|${currentTheme.farHill}|${currentTheme.nearHill}`;
+  }
+
+  function rebuildHillArt() {
+    const key = hillArtSignature();
+    if (key === hillArtKey) return;
+    hillArtKey = key;
+    for (const layer of [farHillCanvas, nearHillCanvas]) {
+      layer.width = STAGE_W + 400;
+      layer.height = VH;
+    }
+    // 実座標の -200..STAGE_W+200 を、キャンバス上の 0..STAGE_W+400 へずらす。
+    drawHillLayer(farHillCtx, parallaxSeed, 220, 46, currentTheme.farHill, 200);
+    drawHillLayer(nearHillCtx, parallaxSeed + 500, 270, 60, currentTheme.nearHill, 200);
   }
 
   function drawCloudShape(cx, cy, r) {
@@ -11811,13 +11836,14 @@
     if (currentCustomAppearance?.decorationsEnabled === false) return;
     // 専用背景が読み込めたテーマでは、画像内の遠景を活かして二重の山・雲を描かない。
     if (getReadyStageBackground()) return;
+    rebuildHillArt();
     ctx.save();
     applyWorldCamera(0.15);
-    drawHillLayer(parallaxSeed, 220, 46, currentTheme.farHill);
+    ctx.drawImage(farHillCanvas, -200, 0);
     ctx.restore();
     ctx.save();
     applyWorldCamera(0.35);
-    drawHillLayer(parallaxSeed + 500, 270, 60, currentTheme.nearHill);
+    ctx.drawImage(nearHillCanvas, -200, 0);
     ctx.restore();
     ctx.save();
     applyWorldCamera(0.1);
