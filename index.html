@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.34-wind-console-reference-layout';
+  const BUILD_ID = 'v2.0.35-wind-next-inline';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    Object.freeze({ version: 'v2.0.35', date: '2026/08/17', summary: '風コンソールのNEXT予報を1行表示へ統一' }),
     Object.freeze({ version: 'v2.0.34', date: '2026/08/17', summary: '風コンソールを3レーンの視認性重視配置へ改善' }),
     Object.freeze({ version: 'v2.0.33', date: '2026/08/17', summary: '風コンソールの情報配置を分離して改善' }),
     Object.freeze({ version: 'v2.0.32', date: '2026/08/17', summary: '風コンソールの矢印色と文字配置を調整' }),
@@ -12504,7 +12505,7 @@
   }
 
   function drawWindNextBadge(cx, cy, expanded, nextArrow, color) {
-    const w = expanded ? 48 : 36;
+    const w = expanded ? 54 : 40;
     const h = expanded ? 15 : 11;
     ctx.save();
     ctx.fillStyle = 'rgba(2, 10, 15, 0.88)';
@@ -12515,12 +12516,9 @@
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    drawOutlinedText('NEXT', cx - w * 0.16, cy, {
-      baseline: 'middle', font: `900 ${expanded ? 8.5 : 6.2}px ${UI_FONT_HEAVY}`,
-      color: UI.brassLight, lineWidth: 1.5
-    });
-    drawOutlinedText(nextArrow, cx + w * 0.18, cy - (expanded ? 0.4 : 0.2), {
-      baseline: 'middle', font: `900 ${nextArrow === '無風' ? (expanded ? 8 : 6.4) : (expanded ? 16 : 12)}px ${UI_FONT_HEAVY}`,
+    const nextText = `NEXT ${nextArrow}`;
+    drawOutlinedText(nextText, cx, cy, {
+      baseline: 'middle', font: `900 ${nextArrow === '無風' ? (expanded ? 8 : 6.4) : (expanded ? 10 : 7.2)}px ${UI_FONT_HEAVY}`,
       color: '#fff3cf', lineWidth: expanded ? 2.4 : 1.8
     });
   }
@@ -12535,7 +12533,6 @@
     const arrowWidth = expanded ? 60 : 46;
     const arrowHeight = expanded ? 19 : 15;
     const nextArrow = forecast.calmWind ? '無風' : (forecast.dir < 0 ? '⇦' : '⇨');
-    const nextText = `NEXT ${nextArrow}`;
 
     if (!drawBattleHudAsset(battleHudImages.roundWind, cx - roundSize / 2, cardY, roundSize, roundSize)) {
       ctx.save();
