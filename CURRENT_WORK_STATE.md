@@ -4,7 +4,7 @@
 
 ## 現在の公開版
 
-- 最新公開版は **v2.0.56**。演習と戦闘の風力表示を同じ0〜10尺度へ統一する。
+- 最新公開版は **v2.0.58**。ONLINE入口とロビーのBGMをRemixへ統一する。
 - `index.html` の `BUILD_ID` と `sw.js` の `CACHE_VERSION` は、同じ版番号に保つ。
 - 最新の変更履歴は [docs/CHANGELOG.md](docs/CHANGELOG.md) に保存している。
 
@@ -398,6 +398,6 @@
 
 - 各PRで「何を / なぜ / やってはいけないこと / 実測テスト数」を、該当する未完了タスクまたは直近変更へ簡潔に追記する。
 - `CURRENT_WORK_STATE.md` が **30KB** を超える変更はCIで失敗する。完了済みの詳細は `docs/CHANGELOG.md` へ移す。
-# v2.0.57
+# v2.0.58
 
-- 公開部屋を一覧選択化。鍵付きはID参加。Console反映前に公開しない。旧実装で新テスト失敗確認、Stage3 483/483。
+- Remixへ差替（ONLINE待機の統一）。入口/ロビーのみ、戦闘曲は不変。旧曲でStage3失敗後、npm test 1,209件・Android 9/9。
