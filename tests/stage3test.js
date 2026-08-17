@@ -18,7 +18,7 @@ function check(name, value) {
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
     && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -28,25 +28,25 @@ function check(name, value) {
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
     && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
     anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
@@ -54,25 +54,25 @@ function check(name, value) {
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes("nextArrow === '無風'")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
     anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
     anchoredHudSource.includes('function drawWindForecastDivider(')
     && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
     && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('round wind console renders NEXT and its forecast as one centered text line',
     anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
     && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -81,7 +81,7 @@ function check(name, value) {
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -97,7 +97,7 @@ function check(name, value) {
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.56-wind-power-scale';"));
+    && hudSource.includes("const BUILD_ID = 'v2.0.57-public-room-browser';"));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -955,6 +955,14 @@ function check(name, value) {
     && htmlText.includes('id="onlineQuick"')
     && htmlText.includes('id="onlineCodeToggle"')
     && htmlText.includes('#onlineLobby.code-entry:not(.in-room) #onlineRoomInput'));
+  check('online entry offers explicit create and browse paths, and public rows show enough match information to choose',
+    htmlText.includes('id="onlineCreateMode"')
+    && htmlText.includes('id="onlineBrowseMode"')
+    && htmlText.includes('id="onlineRoomNameInput"')
+    && htmlText.includes('id="onlineRoomList"')
+    && htmlText.includes('hostName: entry.hostName')
+    && htmlText.includes('roomName: entry.roomName')
+    && htmlText.includes('playerCount: entry.playerCount'));
   check('the room code is shown once, with a small copy icon beside it',
     htmlText.includes('<div id="onlineRoomCodeRow">')
     && htmlText.includes('#onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }')
@@ -1468,7 +1476,7 @@ function check(name, value) {
   check('a listing can be withdrawn by its host, or by anyone once it has expired',
     openSeat['.write'].includes("data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)"));
   check('the index entry is shape-checked and cannot be parked far in the future',
-    openSeat['.validate'].includes("hasChildren(['format','hostUid','createdAt','expiresAt'])")
+    openSeat['.validate'].includes("hasChildren(['format','hostUid','hostName','roomName','playerCount','createdAt','expiresAt'])")
     && openSeat['.validate'].includes("newData.child('expiresAt').val() > now")
     && openSeat['.validate'].includes('now + 3600000')
     && openSeat.$other['.validate'] === false);
@@ -1487,9 +1495,11 @@ function check(name, value) {
   // ---- 候補の選び方 ----
   const NOW = 1000000;
   const A = 'AAAA2345', B = 'BBBB2345', C = 'CCCC2345', D = 'DDDD2345';
-  const alive = (extra = {}) => ({ format: '1v1', hostUid: 'other', createdAt: 500, expiresAt: NOW + 1000, ...extra });
+  const alive = (extra = {}) => ({ format: '1v1', hostUid: 'other', hostName: 'ホスト', roomName: 'だれでも歓迎', playerCount: 1, createdAt: 500, expiresAt: NOW + 1000, ...extra });
   check('a waiting room of the right format is a candidate',
     h.pickOpenCandidates({ [A]: alive() }, 'me', '1v1', NOW).map(r => r.code).join() === A);
+  check('public room rows retain the host name, room name, and player count needed to choose a match',
+    (() => { const row = h.pickOpenCandidates({ [A]: alive() }, 'me', '1v1', NOW)[0]; return row && row.hostName === 'ホスト' && row.roomName === 'だれでも歓迎' && row.playerCount === 1; })());
   check('an expired listing is never offered',
     h.pickOpenCandidates({ [A]: alive({ expiresAt: NOW - 1 }) }, 'me', '1v1', NOW).length === 0);
   check('a different match format is not offered',
@@ -1538,7 +1548,7 @@ function check(name, value) {
   host = quickHost({ slots: { p1: { uid: 'uid-p1' }, s1: { uid: 'uid-s1' } } });
   h.setOnlineForLogTest(host);
   h.syncQuickMatchListing();
-  check('any occupied seat, spectator included, ends the wait', !host.quickWaiting);
+  check('a spectator does not hide an otherwise joinable 1vs1 room', host.quickWaiting);
   host = quickHost({ phase: 'playing' });
   h.setOnlineForLogTest(host);
   h.syncQuickMatchListing();
@@ -2164,7 +2174,7 @@ function check(name, value) {
   // 落ち続け、再戦の準備すら作れなくなっていた。401は「鍵の期限切れ」と「ルール拒否」の
   // 両方で返るので、鍵を取り直して本当に新しくなった時だけ送り直す。
   check('an expired key is renewed and the write is sent once more, instead of failing for good',
-    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await firebaseFetchWithTimeout\(firebaseRequestUrl\(path, auth\), options\);/.test(htmlText));
+    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await firebaseFetchWithTimeout\(firebaseRequestUrl\(path, auth, query\), fetchOptions\);/.test(htmlText));
   check('a rules rejection is not mistaken for an expired key, so it never loops on the token endpoint',
     // force しない = 期限内なら同じ鍵が返る = 送り直さずそのまま失敗する
     /async function firebaseRequest\([\s\S]{0,900}ensureFirebaseAuth\(\)\.catch/.test(htmlText)

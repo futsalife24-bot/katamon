@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.56-wind-power-scale';
+const CACHE_VERSION = 'katamon-pwa-v2.0.57-public-room-browser';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
