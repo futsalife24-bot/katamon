@@ -601,6 +601,12 @@ const HOOK = `
       tutorial.stepIndex = TUTORIAL_STEPS.findIndex(step => step.key === key);
       applyTutorialStep();
     },
+    // チュートリアルの実際の発射経路。必殺の保留演出とターン解決待ちまで通す。
+    tutorialFireSpecialForTest: (vx0, vy0) => {
+      const u = localUnit();
+      launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, false, false);
+      awaitingResolve = true;
+    },
     tutorialHurtDummy: (amount) => { unitById('e1').hp -= amount; },
     tutorialSkipForTest: () => skipTutorial(),
     tutorialRecommended: () => tutorialIsRecommended(),

@@ -2411,6 +2411,13 @@ kt.setLocalSeat('p1');
   // 「必殺」は始めから溜まった状態にしておく。溜まるのを待たせない。
   kt.tutorialGoto('special');
   check('「必殺」の始めには必殺が溜まっている', kt.specialReady());
+  // 発射を押した瞬間だけで次の「足場を壊す」へ移ると、飛んでいる必殺が
+  // 次の項目まで勝手に達成してしまう。実際の必殺演出中も項目を保つこと。
+  kt.tutorialFireSpecialForTest(80, -500);
+  for (let i = 0; i < 60 * 1.6; i++) kt.step(1 / 60);
+  check('必殺を撃ったあとは、演出中に次の項目へ遷移しない',
+    kt.tutorialState().key === 'special' && kt.tutorialState().cleared,
+    JSON.stringify({ tutorial: kt.tutorialState(), state: kt.state(), projectiles: kt.projectiles().length }));
 
   // 最後は足場を壊して落とす。的の左右が底まで掘られていること。
   kt.tutorialGoto('terrain');
