@@ -145,11 +145,15 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   kt.setCharactersForTest('kyoryu', 'kyoryu');
   kt.clearProjectilesForTest();
 
+  const normalTrajectorySpecials = ['tori', 'mecha'];
   const characterProfilesStay = kt.chars().every(key => {
     const def = kt.character(key);
     const special = kt.shotPhysicsProfileForTest(key, true, false);
     const jump = kt.shotPhysicsProfileForTest(key, false, true);
-    const specialStays = key === 'tori' || (special.blastMul === (def.blastMul || 1)
+    const specialStays = normalTrajectorySpecials.includes(key)
+      ? special.blastMul === 1 && special.windMul === 1 && special.gravityMul === 1
+        && special.velScaleMul === 1 && special.guideMul === 1 && special.tBias === 1
+      : (special.blastMul === (def.blastMul || 1)
       && special.windMul === (def.windMul || 1)
       && special.gravityMul === (def.gravityMul || 1)
       && special.velScaleMul === (def.velScaleMul || 1)
@@ -163,7 +167,23 @@ check('キャラ選択は手前の最大7枚だけを描画する',
       && jump.guideMul === (def.guideMul || 1)
       && jump.tBias === (def.tBias || 1);
   });
-  check('フェニーチェ必殺以外の必殺技と、全キャラの跳躍は固有の弾道値を残す', characterProfilesStay);
+  check('フェニーチェとクロムギアの必殺は通常弾と同じ物理で、全キャラの跳躍は固有の弾道値を残す', characterProfilesStay);
+
+  const specialFlight = {};
+  for (const key of normalTrajectorySpecials) {
+    kt.clearProjectilesForTest();
+    kt.fireSpecialImmediateForTest(key, 120, -80);
+    specialFlight[key] = kt.projectileProfilesForTest();
+  }
+  kt.clearProjectilesForTest();
+  check('フェニーチェ必殺とクロムギア中央弾は通常弾と同じ初速・風・重力で飛ぶ',
+    specialFlight.tori.length === 1
+      && specialFlight.tori[0].vx === 120 && specialFlight.tori[0].vy === -80
+      && specialFlight.tori[0].windMul === 1 && specialFlight.tori[0].gravityMul === 1
+      && specialFlight.mecha.length === 3
+      && specialFlight.mecha[1].vx === 120 && specialFlight.mecha[1].vy === -80
+      && specialFlight.mecha.every(p => p.windMul === 1 && p.gravityMul === 1),
+    JSON.stringify(specialFlight));
 }
 
 // v146: 通常弾そのものはv135で共通化したが、岩と騎士だけ被ダメージ軽減が残り、
