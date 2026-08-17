@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.38-special-normal-trajectory';
+const CACHE_VERSION = 'katamon-pwa-v2.0.39-boss-cpu-bonus';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './',
