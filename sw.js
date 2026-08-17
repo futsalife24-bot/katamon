@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.42-remove-duplicate-app-shell-entry';
+const CACHE_VERSION = 'katamon-pwa-v2.0.43-optimize-dead-line-glow';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
