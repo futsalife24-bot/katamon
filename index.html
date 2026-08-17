@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.44-cache-canvas-bounds';
+  const BUILD_ID = 'v2.0.45-reduce-move-sync-traffic';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.45', date: '2026/08/17', summary: '移動同期の通信量を削減' },
     { version: 'v2.0.44', date: '2026/08/17', summary: 'ポインタ座標計算を軽量化' },
     { version: 'v2.0.43', date: '2026/08/17', summary: 'DEAD LINEの発光を軽量化' },
     Object.freeze({ version: 'v2.0.42', date: '2026/08/17', summary: 'Service Workerの重複した初回取得を削減' }),
@@ -7035,9 +7036,10 @@
   // fire が運ぶ着弾直前の座標でしか相手の位置が分からなかった。そのせいで
   // 「燃料が合わない」「撃たずに落下死しても伝わらない」という切断が続いた。
   // 送信量は燃料が頭打ちにする。1ターンの移動距離は最大でも fuelMax(約138px)、
-  // MOVE_SPEED 95px/s なので最長1.45秒。この間隔なら1ターン十数通で収まる。
-  const MOVE_SYNC_INTERVAL_SEC = 0.12;
-  const MOVE_SYNC_MIN_DELTA = 1.5; // これ未満の移動は送らない(静止中の無駄打ちを防ぐ)
+  // MOVE_SPEED 95px/s なので最長1.45秒。受信側は60px超だけ2倍速で追いつくため、
+  // 1秒4通・8px刻みでも歩行の見た目を保ちながら無駄な送信を減らせる。
+  const MOVE_SYNC_INTERVAL_SEC = 0.25;
+  const MOVE_SYNC_MIN_DELTA = 8; // これ未満の移動は送らない(静止中の無駄打ちを防ぐ)
   let moveSyncTimer = 0;
   let moveSyncPending = false;  // 前回送信後に動いたか。停止時の最終送信に使う
   let lastSentMoveX = null;
