@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.55-transient-state-reset';
+  const BUILD_ID = 'v2.0.56-wind-power-scale';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.56', date: '2026/08/17', summary: '演習と戦闘の風力表示を0〜10で統一' },
     { version: 'v2.0.55', date: '2026/08/17', summary: '試合の一時状態リセットを統一' },
     { version: 'v2.0.54', date: '2026/08/17', summary: '地形の基底データを開始時だけ同期' },
     { version: 'v2.0.53', date: '2026/08/17', summary: '地形描画のメモリを軽量化' },
@@ -4875,11 +4876,9 @@
       { key: 'calm', name: '無風', sub: '強さの指定は使わない' },
       { key: 'right', name: '右向き →', sub: '固定風' }
     ],
-    windStrength: [
-      { key: 'weak', name: '弱', sub: '風の強さ30%' },
-      { key: 'medium', name: '中', sub: '風の強さ60%' },
-      { key: 'strong', name: '強', sub: '風の強さ100%' }
-    ]
+    windStrength: Array.from({ length: 11 }, (_, level) => ({
+      key: String(level), name: String(level), sub: `風の強さ${level * 10}%`
+    }))
   });
   const FREE_TRAINING_INDEX_FIELD = Object.freeze({
     special: 'specialIndex', jump: 'jumpIndex', cpuAi: 'cpuAiIndex',
@@ -4900,7 +4899,7 @@
     jumpIndex: 0,
     cpuAiIndex: 1,
     windDirectionIndex: 0,
-    windStrengthIndex: 1
+    windStrengthIndex: 6
   };
   // 演習前は「誰と・どこで・何人で」だけに絞る。風や必殺など、試しながら変えたい
   // 条件は戦闘中のメニューへ置く。2vs2でだけ追加キャラ2体を間に差し込む。
@@ -5207,8 +5206,8 @@
     if (direction.key === 'random') return null;
     if (direction.key === 'calm') return { key: 'calm', dir: 1, strength: 0 };
     const strength = selectedFreeTrainingOption('windStrength');
-    const amount = strength.key === 'weak' ? 0.3 : strength.key === 'strong' ? 1 : 0.6;
-    return { key: `${direction.key}-${strength.key}`, dir: direction.key === 'left' ? -1 : 1, strength: amount };
+    const level = Math.max(0, Math.min(10, Number(strength.key)));
+    return { key: `${direction.key}-${level}`, dir: direction.key === 'left' ? -1 : 1, strength: level / 10 };
   }
 
   // 戦闘中メニューで風を変えた時は、次の切替まで古い風が残らないよう現在と予報を
@@ -5265,9 +5264,7 @@
     const selected = WIND_OPTIONS.find(option => option.key === key) || WIND_OPTIONS[0];
     setFreeTrainingOption('windDirection', selected.key === 'left' ? 'left'
       : selected.key === 'right' ? 'right' : selected.key === 'calm' ? 'calm' : 'random');
-    if (selected.strength >= 0.9) setFreeTrainingOption('windStrength', 'strong');
-    else if (selected.strength > 0 && selected.strength < 0.5) setFreeTrainingOption('windStrength', 'weak');
-    else setFreeTrainingOption('windStrength', 'medium');
+    setFreeTrainingOption('windStrength', String(Math.round(selected.strength * 10)));
   }
 
   function changeFreeOption(kind, direction) {
@@ -12466,13 +12463,13 @@
     });
   }
 
-  function drawExpandedWindConsole(cx, cardY, cardW, cardH, windLevel, forecast, fixedForecast, forecastText) {
+  function drawExpandedWindConsole(cx, cardY, cardW, cardH, windStrengthScale, forecast, fixedForecast, forecastText) {
     const frameX = cx - cardW / 2;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
     const zoneX = [frameX + cardW * 0.20, frameX + cardW * 0.50, frameX + cardW * 0.80];
     const zoneY = cardY + 34;
     const zoneW = 44, zoneH = 112;
-    const currentText = calmWind ? '無風' : `${wind.dir < 0 ? '←' : '→'} ${windLevel}`;
+    const currentText = calmWind ? '無風' : `${wind.dir < 0 ? '←' : '→'} ${windStrengthScale}`;
     const directionText = calmWind ? '停止' : (wind.dir < 0 ? '左へ' : '右へ');
 
     drawIronPlate(cx, cardY + cardH / 2, cardW, cardH, {
@@ -12512,7 +12509,7 @@
     drawOutlinedText('風向', zoneX[1], zoneY + 16, {
       baseline: 'middle', font: `900 7px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 2
     });
-    const windStrengthText = calmWind ? '無風' : windLevel;
+    const windStrengthText = calmWind ? '無風' : windStrengthScale;
     const windGaugeY = zoneY + 53;
     const windGaugeRadius = 19;
     ctx.save();
@@ -12653,7 +12650,7 @@
     });
   }
 
-  function drawUnifiedRoundWindConsole(cx, cardY, expanded, windLevel, windTitle, forecast, fixedForecast, forecastText) {
+  function drawUnifiedRoundWindConsole(cx, cardY, expanded, windStrengthScale, windTitle, forecast, fixedForecast, forecastText) {
     const roundSize = expanded ? 142 : 104;
     const roundCenterY = cardY + roundSize / 2;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
@@ -12680,7 +12677,7 @@
     drawOutlinedText(windTitle, cx, roundCenterY - inner * 0.70, {
       baseline: 'middle', font: `900 ${titleFont}px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2
     });
-    drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded, wind.dir, calmWind ? '無風' : windLevel,
+    drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded, wind.dir, calmWind ? '無風' : String(windStrengthScale),
       arrowWidth, arrowHeight, arrowColor, arrowFont);
     drawWindForecastDivider(cx, roundCenterY + inner * 0.38, expanded);
     drawWindNextBadge(cx, roundCenterY + inner * 0.68, expanded, nextArrow,
@@ -12696,22 +12693,21 @@
     const cardH = expanded ? 152 : 54;
     const layout = HUD_ASSET_LAYOUT.wind;
     const accent = calmWind ? '#72e8ff' : UI.brassLight;
-    const windLevel = wind.strength < 0.34 ? '弱' : wind.strength < 0.67 ? '中' : '強';
     const windStrengthScale = Math.round(wind.strength * 10);
-    const windTitle = calmWind ? '無風' : `現在の風 ${windStrengthScale}/10`;
+    const windTitle = calmWind ? '無風' : '現在の風';
     const forecast = nextWind || { dir: wind.dir, strength: wind.strength, calmWind };
     const fixedForecast = !!activeFixedWind() || battleMode === 'tutorial';
-    const forecastLevel = forecast.strength < 0.34 ? '弱' : forecast.strength < 0.67 ? '中' : '強';
+    const forecastStrengthScale = Math.round(forecast.strength * 10);
     const forecastText = fixedForecast
       ? '同じ'
-      : (forecast.calmWind ? '無風' : `${forecast.dir < 0 ? '←' : '→'} ${forecastLevel}`);
+      : (forecast.calmWind ? '無風' : `${forecast.dir < 0 ? '←' : '→'} ${forecastStrengthScale}`);
     const roundCardY = expanded ? 42 : 47;
     if (battleHudImages.roundWind.complete && battleHudImages.roundWind.naturalWidth > 0) {
-      drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windLevel, windTitle, forecast, fixedForecast, forecastText);
+      drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windStrengthScale, windTitle, forecast, fixedForecast, forecastText);
       return;
     }
     if (expanded) {
-      drawExpandedWindConsole(cx, cardY, cardW, cardH, windLevel, forecast, fixedForecast, forecastText);
+      drawExpandedWindConsole(cx, cardY, cardW, cardH, windStrengthScale, forecast, fixedForecast, forecastText);
       return;
     }
     if (!drawBattleHudAsset(battleHudImages.wind, cx - cardW / 2, cardY, cardW, cardH, layout.crop)) {
@@ -12730,7 +12726,7 @@
     drawOutlinedText('現在', leftX, infoY - 6, {
       align: 'center', font: `900 6px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 1.8
     });
-    drawOutlinedText(calmWind ? '無風' : `風${windLevel}`, leftX, infoY + 5, {
+    drawOutlinedText(calmWind ? '無風' : `風${windStrengthScale}`, leftX, infoY + 5, {
       align: 'center', font: `900 8px ${UI_FONT_HEAVY}`, color: accent, lineWidth: 2.2
     });
 
@@ -15675,7 +15671,7 @@
         };
       }
       return {
-        option: { name: customWind.strength ? `${Math.round(customWind.strength * 100)}%` : '指定なし', sub: 'ステージファイルの設定' },
+        option: { name: String(Math.round(customWind.strength * 10)), sub: 'ステージファイルの設定' },
         locked: true
       };
     }

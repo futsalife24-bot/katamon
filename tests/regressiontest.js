@@ -744,9 +744,10 @@ let practiceSpecialReady = false;
 let practiceJumpReady = null;
 let normalSpecialUnaffected = false;
 let practicePlayerOnlySpecial = false;
+let practiceWindPowerScale = null;
 if (freeTrainingOptions) {
   kt.setFreeTrainingForTest({
-    special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: 'strong'
+    special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: '10'
   });
   kt.startFreeMatch();
   kt.unitById('p1').specialCharge = 0;
@@ -764,9 +765,12 @@ if (freeTrainingOptions) {
   practicePlayerOnlySpecial = kt.specialReady()
     && !kt.specialReadyForTest(SEAT === 'p1' ? 'e1' : 'p1');
   kt.setFreeTrainingForTest({
-    special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: 'medium'
+    special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: '6'
   });
   kt.startFreeMatch();
+  kt.setFreeTrainingForTest({ windDirection: 'right', windStrength: '7' });
+  kt.startFreeMatch();
+  practiceWindPowerScale = kt.wind();
 }
 check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して切り替えられる',
   !!freeTrainingOptions
@@ -779,6 +783,12 @@ check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して�
     && normalSpecialUnaffected === true
     && practicePlayerOnlySpecial === true,
   JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
+check('practice WIND POWER uses the same 0-to-10 scale as the battle wind arrow',
+  Array.isArray(freeTrainingOptions?.windStrength)
+    && freeTrainingOptions.windStrength.map(option => option.key).join(',') === '0,1,2,3,4,5,6,7,8,9,10'
+    && practiceWindPowerScale?.dir === 1
+    && practiceWindPowerScale?.strength === 0.7,
+  JSON.stringify({ windStrength: freeTrainingOptions?.windStrength, practiceWindPowerScale }));
 const setupRowsBeforeBattle = kt.freeRows();
 const freeStageGroupBeforeBattle = kt.freeStageGroup();
 const trainingMenuRows = kt.freeTrainingMenuRows();
