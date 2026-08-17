@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.50-idle-frame-rate';
+const CACHE_VERSION = 'katamon-pwa-v2.0.51-wind-strength-scale';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
