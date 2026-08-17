@@ -1,8 +1,9 @@
 """index.html の <script> から、宣言が見つからない大文字識別子を洗い出す。
 STAGE_H のような「実行されるまで気付けない未定義参照」を静的に拾うのが目的。"""
 import io, re, sys
+from pathlib import Path
 
-path = 'C:/Users/futsa/OneDrive/デスクトップ/業務効率化/カタモン/index.html'
+path = Path(__file__).resolve().parents[1] / 'index.html'
 src = io.open(path, encoding='utf-8').read()
 script = re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', src, re.S)[0]
 
