@@ -625,10 +625,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.54-snapshot-terrain-delta';
+  const BUILD_ID = 'v2.0.55-transient-state-reset';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.55', date: '2026/08/17', summary: '試合の一時状態リセットを統一' },
     { version: 'v2.0.54', date: '2026/08/17', summary: '地形の基底データを開始時だけ同期' },
     { version: 'v2.0.53', date: '2026/08/17', summary: '地形描画のメモリを軽量化' },
     { version: 'v2.0.52', date: '2026/08/17', summary: '待機中も物理の進行量を維持' },
@@ -5899,6 +5900,42 @@
     } catch (err) { /* noop */ }
   }
 
+  // 開始・同期・結果画面から戻る時に、試合中だけ生きる状態を同じ内容で捨てる。
+  // 各呼び出し側が残すべき開始演出・ボス表示・順位送信状態は、この外で明示する。
+  function resetTransientBattleState() {
+    projectiles = [];
+    barucopters = [];
+    aimState = null;
+    moveDir = 0;
+    inputMode = null;
+    inputPointerId = null;
+    activeTouchPoints.clear();
+    pinchState = null;
+    specialArmed = false;
+    jumpArmed = false;
+    matchOver = false;
+    matchEndPause = 0;
+    matchEndReason = '';
+    turnSettle = TURN_SETTLE_SEC;
+    winner = null;
+    awaitingResolve = false;
+    cpuMoveDir = 0;
+    cpuMoveRemaining = 0;
+    cpuPhase = 'aim';
+    particles = [];
+    empRings = [];
+    scorpionRailSpikeBursts = [];
+    lightningBeams = [];
+    groundFlames = [];
+    floatTexts = [];
+    shakeTimer = 0;
+    specialAura = null;
+    specialFlash = { timer: 0, text: '' };
+    pendingShot = null;
+    cutIn = null;
+    menuOpen = false;
+  }
+
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
   function applySnapshot(data, options = {}) {
@@ -6003,22 +6040,7 @@
     // 跳躍後の向きは相手の座標が揃った後に再計算し、通信順で一瞬反転するのを防ぐ。
     for (const u of units) faceUnitTowardOpponent(u);
 
-    projectiles = [];
-    barucopters = [];
-    aimState = null;
-    moveDir = 0;
-    inputMode = null;
-    inputPointerId = null;
-    activeTouchPoints.clear();
-    pinchState = null;
-    specialArmed = false;
-    jumpArmed = false;
-    matchOver = false;
-    matchEndPause = 0;
-    matchEndReason = '';
-    turnSettle = TURN_SETTLE_SEC;
-    winner = null;
-    awaitingResolve = false;
+    resetTransientBattleState();
     turnOrder = Array.isArray(data.turnOrder) && data.turnOrder.length ? data.turnOrder.slice() : units.map(u => u.id);
     activeIndex = Math.max(0, Math.min(turnOrder.length - 1, Number(data.activeIndex) || 0));
     turnCount = data.turnCount;
@@ -6036,21 +6058,6 @@
     runStats = data.runStats;
     isBossMatch = data.isBossMatch;
     bossBannerTimer = 0;
-    cpuMoveDir = 0;
-    cpuMoveRemaining = 0;
-    cpuPhase = 'aim';
-    particles = [];
-    empRings = [];
-    scorpionRailSpikeBursts = [];
-    lightningBeams = [];
-    groundFlames = [];
-    floatTexts = [];
-    shakeTimer = 0;
-    specialAura = null;
-    specialFlash = { timer: 0, text: '' };
-    pendingShot = null;
-    cutIn = null;
-    menuOpen = false;
     if (isOnline()) {
       // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。
       // 開始時・ターン境界では、左右の席に関係なく行動キャラを映す。
@@ -13898,18 +13905,7 @@
   }
 
   function returnToTitleFromResult() {
-    projectiles = [];
-    barucopters = [];
-    aimState = null;
-    moveDir = 0;
-    inputMode = null;
-    awaitingResolve = false;
-    matchOver = false;
-    matchEndPause = 0;
-    matchEndReason = '';
-    turnSettle = TURN_SETTLE_SEC;
-    winner = null;
-    cutIn = null;
+    resetTransientBattleState();
     gamePhase = 'title';
     syncBgm(); // ステージ曲を止めてタイトル曲へ戻す判断はdirector側に任せる
   }
@@ -16662,25 +16658,11 @@
       }
       placed.push(u);
     }
-    projectiles = [];
-    barucopters = [];
-    aimState = null;
-    moveDir = 0;
-    inputMode = null;
-    inputPointerId = null;
-    activeTouchPoints.clear();
-    pinchState = null;
-    specialArmed = false;
+    resetTransientBattleState();
     for (const u of units) {
       u.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, carriedCharge[u.id] || 0));
       if (isBossMatch && u.team === 'cpu') u.specialCharge = SPECIAL_CHARGE_MAX;
     }
-    matchOver = false;
-    matchEndPause = 0;
-    matchEndReason = '';
-    turnSettle = TURN_SETTLE_SEC;
-    winner = null;
-    awaitingResolve = false;
     submitState = 'idle';
     submitRank = 0;
     submitRevealTimer = 0;
@@ -16688,27 +16670,12 @@
     turnOrder = units.map(u => u.id);
     activeIndex = 0;
     for (const u of units) { u.jumpAvailable = true; u.jumpShot = false; }
-    cpuMoveDir = 0;
-    cpuMoveRemaining = 0;
-    cpuPhase = 'aim';
     // 前の試合の思考時間を持ち越さない。0のまま残ると、手番へ入った最初の1フレームで撃つ。
     cpuThinkTimer = 0;
     // 開始カットインが終わるまで手番は始めない。オンラインのホストはこのあと
     // 通信を4往復してからカットインを出すので、その間ずっと止めておく必要がある。
     battleIntroPending = true;
-    particles = [];
-    empRings = [];
-    scorpionRailSpikeBursts = [];
-    lightningBeams = [];
-    groundFlames = [];
-    floatTexts = [];
-    shakeTimer = 0;
-    specialAura = null;
-    specialFlash = { timer: 0, text: '' };
-    pendingShot = null;
-    cutIn = null;
     focusCameraOn(localUnit().x, true, localUnit().y);
-    menuOpen = false;
     bossBannerTimer = isBossMatch ? 2.2 : 0;
     startTurn();
     // Firebaseホストは、このあと開始スナップショットの保存・送信を待つ。その間も
