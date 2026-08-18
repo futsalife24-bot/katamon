@@ -658,10 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.74-loading-character-priority';
+  const BUILD_ID = 'v2.0.75-loading-layout';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.75', date: '2026/08/18', summary: 'ローダーの円盤・文章・キャラの配置を整理' },
     { version: 'v2.0.74', date: '2026/08/18', summary: 'ローダーのキャラを右向き固定・優先読み込みへ更新' },
     { version: 'v2.0.73', date: '2026/08/18', summary: 'BGMの再生曲名をタイトルとBATTLEロゴへ表示' },
     { version: 'v2.0.72', date: '2026/08/18', summary: '起動ローダーを進捗ゲージとランダムキャラ演出へ更新' },
@@ -10938,10 +10939,11 @@
     ctx.fillRect(0, VH * 0.28, VW, VH * 0.5);
 
     const angle = (Date.now() % 3600) / 3600 * Math.PI * 2;
-    const spinnerY = VH / 2 - 100;
+    // 円盤石は文章との間隔を確保するため、小型化して上へ寄せる。
+    const spinnerY = VH / 2 - 155;
     const spinnerX = VW / 2;
     if (loadingEmblemReady) {
-      const emblemSize = 112;
+      const emblemSize = 58;
       ctx.save();
       ctx.translate(spinnerX, spinnerY);
       ctx.rotate(angle);
@@ -10952,9 +10954,9 @@
     } else {
       // エンブレムが間に合わない瞬間だけ、軽量な円弧を予備表示する。
       ctx.beginPath();
-      ctx.arc(VW / 2, spinnerY, 28, angle, angle + Math.PI * 1.45);
+      ctx.arc(VW / 2, spinnerY, 14, angle, angle + Math.PI * 1.45);
       ctx.strokeStyle = '#ffd24a';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.stroke();
     }
@@ -10965,7 +10967,8 @@
     const progressBarW = Math.min(360, VW - 52);
     const progressBarH = 16;
     const progressBarX = VW / 2 - progressBarW / 2;
-    const progressBarY = VH / 2 + 128;
+    // 文章の下にローダーキャラが収まるよう、ゲージを下へ移動する。
+    const progressBarY = VH / 2 + 170;
     const now = Date.now();
 
     // よくあるゲームのローディング演出。キャラはゲージの進捗に追従しつつ、

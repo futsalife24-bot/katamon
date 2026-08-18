@@ -46,7 +46,10 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
     && indexHtml.includes('const loadingCharacterImage = loadArtImage')
     && indexHtml.includes('const fallbackLoadingKey = primaryLoadingImgReady')
     && indexHtml.includes('if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1)')
-    && indexHtml.includes('ctx.rotate(markerAngle)'),
+    && indexHtml.includes('ctx.rotate(markerAngle)')
+    && indexHtml.includes('const spinnerY = VH / 2 - 155')
+    && indexHtml.includes('const emblemSize = 58')
+    && indexHtml.includes('const progressBarY = VH / 2 + 170'),
   'progress character loader missing');
 check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
   indexHtml.includes('rel="preload" as="video"')
