@@ -39,6 +39,12 @@ check('ロード中の石壁に更新時の読み込み案内を表示する',
     && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
     && indexHtml.includes("gamePhase === 'loading'"),
   'loading notice missing');
+check('ロード中は項目数ではなく0〜100%ゲージとランダムキャラを表示する',
+  indexHtml.includes('getCoreImageProgressRatio()')
+    && indexHtml.includes('const progressPercent = Math.round(progress * 100)')
+    && indexHtml.includes('const loadingCharacterKey = pickLoadingCharacter()')
+    && indexHtml.includes('ctx.rotate(markerAngle)'),
+  'progress character loader missing');
 check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
   indexHtml.includes('rel="preload" as="video"')
     && indexHtml.includes('battleStartLogoVideo.load()')
