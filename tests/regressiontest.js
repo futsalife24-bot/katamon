@@ -1463,7 +1463,7 @@ const coolKaiMoveLock = kt.turnEffectForTest(kt.seat());
 const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
 const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
 check('クールカイの必殺は小さいおにぎりを47発生成する',
-  kt.character('coolKai').name === 'クールカイ'
+  kt.character('coolKai').name === 'クール=カイ'
     && kt.character('coolKai').special === 'Amour 握り飯'
     && kt.character('coolKai').specialDesc === '手燭の油で作った47個の握り飯を配ってやる。'
     && kt.character('coolKai').maxHp === 66
