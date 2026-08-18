@@ -30,6 +30,16 @@
 <link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/room-bgm.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/stage-grass.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/stage-desert.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/stage-snow.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/stage-volcanic.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/stage-boss-arena.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/bonus-bgm-1.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/bonus-bgm-2.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/bonus-bgm-3.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/bonus-bgm-4.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
@@ -607,7 +617,7 @@
 </audio>
 <audio id="stageBgm" preload="auto"></audio>
 <audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>
-<!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
+<!-- おまけ曲の再生用。全曲の先読みは起動ローダー側で行う。 -->
 <audio id="bonusBgm" preload="none"></audio>
 
 <script src="shared/stage-core.js"></script>
@@ -658,10 +668,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.75-loading-layout';
+  const BUILD_ID = 'v2.0.76-bgm-sound-test';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.76', date: '2026/08/18', summary: '全BGMの起動先読みとサウンドテストを追加' },
     { version: 'v2.0.75', date: '2026/08/18', summary: 'ローダーの円盤・文章・キャラの配置を整理' },
     { version: 'v2.0.74', date: '2026/08/18', summary: 'ローダーのキャラを右向き固定・優先読み込みへ更新' },
     { version: 'v2.0.73', date: '2026/08/18', summary: 'BGMの再生曲名をタイトルとBATTLEロゴへ表示' },
@@ -940,6 +951,10 @@
       roomBgm.volume = ROOM_BGM_BASE_VOLUME * bgmGain;
       bonusBgm.volume = bonusBgmBaseVolume() * bgmGain;
     }
+    if (soundTestAudio) {
+      const track = SOUND_TEST_TRACKS[soundTestCurrent];
+      soundTestAudio.volume = track ? track.volume * bgmGain : 0;
+    }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
 
@@ -1155,6 +1170,8 @@
   // srcは押されるまで入れない。タイトル表示のために数MBを先読みさせないため。
   const bonusBgm = document.getElementById('bonusBgm');
   bonusBgm.volume = BONUS_BGM_BASE_VOLUME;
+  let soundTestAudio = null;
+  let soundTestCurrent = -1;
   // 曲ごとに録音レベルが違う(実測で-16.8〜-18.7dBFS)ので、体感音量が揃うよう個別に
   // 基準音量を持たせる。水準はタイトル曲より約2dB大きいところに合わせた。
   // 聴かせるための機能なので、背景として流すタイトル曲より少し前へ出す。
@@ -1169,6 +1186,40 @@
     { src: 'assets/bonus-bgm-4.mp3', volume: 0.54, label: 'おまけ4' },
     { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' }
   ];
+  // おまけのサウンドテストで選べる全BGM。起動時に同じ一覧を先読みして、
+  // おまけを開いた瞬間のsrc差し替え待ちをなくす。
+  const SOUND_TEST_TRACKS = Object.freeze([
+    { key: 'title', label: 'タイトルBGM', src: 'assets/title-bgm.mp3', volume: TITLE_BGM_BASE_VOLUME },
+    { key: 'room', label: 'ONLINEロビー', src: 'assets/room-bgm.mp3', volume: ROOM_BGM_BASE_VOLUME },
+    { key: 'grass', label: 'ステージ：草原', src: STAGE_BGM_SOURCES.grass, volume: STAGE_BGM_BASE_VOLUME },
+    { key: 'desert', label: 'ステージ：砂漠', src: STAGE_BGM_SOURCES.desert, volume: STAGE_BGM_BASE_VOLUME },
+    { key: 'snow', label: 'ステージ：雪原', src: STAGE_BGM_SOURCES.snow, volume: STAGE_BGM_BASE_VOLUME },
+    { key: 'volcanic', label: 'ステージ：火山', src: STAGE_BGM_SOURCES.volcanic, volume: STAGE_BGM_BASE_VOLUME },
+    { key: 'arena', label: 'ステージ：闘技場', src: STAGE_BGM_SOURCES.arena, volume: STAGE_BGM_BASE_VOLUME },
+    ...BONUS_BGM_TRACKS.slice(1).map((track, index) => ({
+      key: `bonus${index + 1}`,
+      label: track.label,
+      src: track.src,
+      volume: track.volume
+    }))
+  ]);
+  let startupBgmPreloadSettled = 0;
+  const startupBgmPreloads = SOUND_TEST_TRACKS.map(track => {
+    const audio = document.createElement('audio');
+    audio.preload = 'auto';
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      startupBgmPreloadSettled++;
+    };
+    audio.addEventListener('canplaythrough', settle, { once: true });
+    audio.addEventListener('error', settle, { once: true });
+    audio.src = track.src;
+    audio.load();
+    return audio;
+  });
+  const startupBgmPreloadCount = startupBgmPreloads.length;
   let bonusBgmTrack = 0;        // 0=止まっている / 1〜5=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
   function bonusBgmBaseVolume() {
@@ -1283,6 +1334,80 @@
     bonusBgm.pause();
     if (reset && bonusBgm.readyState > HTMLMediaElement.HAVE_NOTHING) bonusBgm.currentTime = 0;
   }
+  function soundTestTrackRect(index) {
+    return { x: soundTestModal.x, y: soundTestModal.y - 274 + index * 38, w: 408, h: 31 };
+  }
+  function stopSoundTestAudio(reset = true) {
+    if (!soundTestAudio) return;
+    soundTestAudio.pause();
+    if (reset && soundTestAudio.readyState > HTMLMediaElement.HAVE_NOTHING) {
+      try { soundTestAudio.currentTime = 0; } catch (_) { /* metadata may not be ready */ }
+    }
+  }
+  function openSoundTest() {
+    soundTestOpen = true;
+    soundTestCurrent = -1;
+    stopSoundTestAudio();
+    syncBgm();
+  }
+  function closeSoundTest() {
+    soundTestOpen = false;
+    soundTestCurrent = -1;
+    stopSoundTestAudio();
+    syncBgm();
+  }
+  function playSoundTestTrack(index) {
+    const track = SOUND_TEST_TRACKS[index];
+    if (!track) return;
+    if (!soundTestAudio) {
+      soundTestAudio = document.createElement('audio');
+      soundTestAudio.preload = 'auto';
+      soundTestAudio.loop = true;
+    }
+    soundTestAudio.pause();
+    soundTestAudio.src = track.src;
+    soundTestAudio.volume = bgmAudible() ? track.volume * volumeCurve(bgmVolume) : 0;
+    soundTestAudio.load();
+    soundTestCurrent = index;
+    const result = soundTestAudio.play();
+    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = soundTestAudio; });
+  }
+  function drawSoundTestModal() {
+    if (!soundTestOpen) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4, 8, 15, 0.78)';
+    ctx.fillRect(0, 0, VW, VH);
+    drawIronPlate(soundTestModal.x, soundTestModal.y, soundTestModal.w, soundTestModal.h, {
+      cut: 14, lineWidth: 2.5, rivets: true, rivetInset: 18, rivetRadius: 3,
+      fill: 'rgba(17, 27, 34, 0.98)', edge: UI.brass
+    });
+    drawOutlinedText('サウンドテスト', soundTestModal.x, soundTestModal.y - 315, {
+      font: `900 22px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
+    });
+    drawOutlinedText('聴きたい曲を選んでください', soundTestModal.x, soundTestModal.y - 291, {
+      font: `700 10px ${UI_FONT}`, color: UI.parchment, lineWidth: 3
+    });
+    SOUND_TEST_TRACKS.forEach((track, index) => {
+      const row = soundTestTrackRect(index);
+      const selected = index === soundTestCurrent;
+      drawIronPlate(row.x, row.y, row.w, row.h, {
+        cut: 6, lineWidth: selected ? 2 : 1, rivets: false,
+        fill: selected ? 'rgba(113, 83, 24, 0.78)' : 'rgba(29, 48, 51, 0.94)',
+        edge: selected ? UI.gold : UI.brassDark
+      });
+      drawOutlinedText(`♪ ${track.label}`, row.x, row.y + 4, {
+        font: `700 11px ${UI_FONT_HEAVY}`, color: selected ? UI.gold : UI.parchment, lineWidth: 3
+      });
+    });
+    drawIronPlate(soundTestCloseBtn.x, soundTestCloseBtn.y, soundTestCloseBtn.w, soundTestCloseBtn.h, {
+      cut: 9, lineWidth: 1.5, rivets: true, rivetInset: 10, rivetRadius: 2
+    });
+    drawOutlinedText('タイトルへ戻る', soundTestCloseBtn.x, soundTestCloseBtn.y + 4, {
+      font: `800 12px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+    });
+    ctx.restore();
+  }
   // ===== BGMディレクター(v57) =====
   // 遷移箇所は個別のplay/stopを呼ばず、必ずここ(syncBgm)を通す。
   // 同時に2曲が鳴る状態を構造的に不可能にするための一本化。
@@ -1294,6 +1419,7 @@
     return !!(onlineLobbyEl && onlineLobbyEl.classList.contains('open'));
   }
   function desiredBgm() {
+    if (soundTestOpen) return 'none';
     if (document.hidden) return 'none';
     if (!bgmAudible()) return 'none';
     // ルーム画面が開いている時はbattle判定より優先する。決着後「ロビーへ戻る」で開くロビーは
@@ -1335,6 +1461,11 @@
   // opts.restartStage === true の時だけステージ曲を頭から鳴らし直す(戦闘開始・再戦がこれに当たる)。
   function syncBgm(opts) {
     const restartStage = !!(opts && opts.restartStage);
+    if (soundTestOpen && gamePhase !== 'title') {
+      soundTestOpen = false;
+      soundTestCurrent = -1;
+      stopSoundTestAudio();
+    }
     // おまけ曲はタイトル周辺だけの機能。対戦やルームへ移ったら選択ごと解除して、
     // 次にタイトルへ戻った時に勝手に鳴り出さないようにする。
     // 非表示・ミュートでは解除しない(復帰したら続きから鳴らしたいため)。
@@ -3065,17 +3196,19 @@
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
     const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
     const woodUiSettled = titleWoodUiReady + titleWoodUiFailed >= Object.keys(titleWoodUiImages).length;
-    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled;
+    const bgmSettled = startupBgmPreloadSettled >= startupBgmPreloadCount;
+    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled && bgmSettled;
   }
 
   function getCoreImageProgress() {
     return characterImagesReady + characterImagesFailed
       + titleWoodUiReady + titleWoodUiFailed
       + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
-      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
+      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0)
+      + startupBgmPreloadSettled;
   }
   function getCoreImageProgressRatio() {
-    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2;
+    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2 + startupBgmPreloadCount;
     return Math.max(0, Math.min(1, getCoreImageProgress() / total));
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
@@ -5105,6 +5238,9 @@
   const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
   const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
   const titleBonusBtn = { x: 378, y: 799, w: 99, h: 81 };
+  const soundTestModal = { x: VW / 2, y: VH / 2, w: 500, h: 700 };
+  const soundTestCloseBtn = { x: VW / 2, y: VH / 2 + 310, w: 190, h: 44 };
+  let soundTestOpen = false;
   // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
   const TITLE_WOOD_SELECTION_OUTLINE = false;
   // 保守用の更新ボタンだけは、見本どおり木枠の外へ置いて従来の鉄板を残す。
@@ -16438,6 +16574,7 @@
       drawSoundToggle();
       drawSoundPanel();
       drawUpdateHistoryModal();
+      drawSoundTestModal();
       ctx.restore();
       return;
     }
@@ -16598,6 +16735,21 @@
     ensureBgmGraph();
     primeNormalImpactSound();
     primeSpecialCutinSound();
+    if (soundTestOpen) {
+      if (hitRect(p0, soundTestCloseBtn)) {
+        closeSoundTest();
+        playUiSound();
+      } else {
+        for (let i = 0; i < SOUND_TEST_TRACKS.length; i++) {
+          if (hitRect(p0, soundTestTrackRect(i))) {
+            playSoundTestTrack(i);
+            playUiSound();
+            break;
+          }
+        }
+      }
+      return;
+    }
     syncBgm();
     retryBgmOnUserGesture();
 
@@ -16683,9 +16835,7 @@
         playUiSound();
         // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
         ensureBgmGraph();
-        // 手動でも次曲を選べる。曲末はadvanceBonusBgmAfterEndが自動で次へ送る。
-        bonusBgmTrack = (bonusBgmTrack + 1) % BONUS_BGM_TRACKS.length;
-        syncBgm();
+        openSoundTest();
       } else if (hitRect(p0, titleRankingBtn)) {
         playUiSound();
         gamePhase = 'ranking';
