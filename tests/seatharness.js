@@ -267,6 +267,7 @@ const HOOK = `
       x: p.x,
       y: p.y,
       owner: p.owner,
+      radius: p.radius,
       blastMul: p.blastMul, windMul: p.windMul, gravityMul: p.gravityMul,
       terrainBlastMul: p.terrainBlastMul,
       knockbackSpeed: p.knockbackSpeed,
@@ -280,6 +281,7 @@ const HOOK = `
       dSmash: !!p.dSmash,
       barucopterMarker: !!p.barucopterMarker,
       barucopterBullet: !!p.barucopterBullet,
+      coolKaiOnigiri: !!p.coolKaiOnigiri,
       scorpionRail: !!p.scorpionRail,
       scorpionRailActive: !!p.scorpionRailActive,
       vx: p.vx,
@@ -882,7 +884,7 @@ const HOOK = `
     scrollUpdateHistoryForTest: (delta) => {
       if (typeof updateHistoryScrollBy === 'function') updateHistoryScrollBy(delta);
     },
-    bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind() }),
+    bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind(), stageSrc: stageBgm.src, stageTheme: stageBgmTheme }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
     bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),
     finishBonusTrackForTest: () => (

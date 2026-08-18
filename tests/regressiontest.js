@@ -34,6 +34,11 @@ const selectWheelCards = kt.selectWheelCards();
 check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
+check('ロード中の石壁に更新時の読み込み案内を表示する',
+  indexHtml.includes('更新時は読み込みに時間がかかる場合があります')
+    && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
+    && indexHtml.includes("gamePhase === 'loading'"),
+  'loading notice missing');
 
 // v209: CPU BATTLEの「つぎのバトルへ」は、同じ相手・ステージに張り付かない。
 // 乱数を固定しても直前の候補を外すため、旧実装なら実際に失敗する。
@@ -1450,6 +1455,27 @@ check('バルコプターの機銃1発は3ダメージで、着弾地点を小�
   JSON.stringify({ unit: barucopterDamageResult, surfaceCraterDelta: barucopterSurfaceCraterDelta }));
 kt.clearProjectilesForTest();
 
+// ===== v2.0.60: クールカイは小さいおにぎりを47発、固定の微バラツキで連射 =====
+const coolKaiNormalVelocity = kt.launchVelocityForTest('coolKai', 180, -96, false, false);
+const coolKaiSpecialIndex = kt.fireSpecialImmediateForTest('coolKai', coolKaiNormalVelocity.vx0, coolKaiNormalVelocity.vy0);
+const coolKaiProjectiles = kt.projectileProfilesForTest();
+const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
+const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
+check('クールカイの必殺は小さいおにぎりを47発生成する',
+  kt.character('coolKai').name === 'クールカイ'
+    && kt.character('coolKai').special === 'Amour 握り飯'
+    && kt.character('coolKai').specialDesc === '手燭の油で作った47個の握り飯を配ってやる。'
+    && coolKaiProjectiles.length === 47
+    && coolKaiSpecialIndex === 46
+    && coolKaiProjectiles.every(p => p.coolKaiOnigiri && !p.directHitOnly && p.radius === 3),
+  JSON.stringify({ def: kt.character('coolKai'), count: coolKaiProjectiles.length, projectiles: coolKaiProjectiles.slice(0, 2) }));
+check('クールカイのおにぎり47発は大きめの固定バラツキで飛ぶ',
+  coolKaiUniqueAngles.size >= 40
+    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) > 0.45
+    && coolKaiAngles.length === 47,
+  JSON.stringify({ unique: coolKaiUniqueAngles.size, angles: coolKaiAngles }));
+kt.clearProjectilesForTest();
+
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
 const dreadNormalVelocity = kt.launchVelocityForTest('doRednote', 180, -96, false, false);
 const dreadSpecialShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
@@ -1772,6 +1798,13 @@ kt.setPhase('battle');
 kt.syncBgm();
 check('対戦へ移るとおまけ曲の選択が解除される', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 check('対戦中はステージ曲が鳴るべき曲になる', kt.bgm().desired === 'stage', kt.bgm().desired);
+kt.setPhase('title');
+kt.startBattle('coolKai');
+check('クールカイを選んだ対戦は専用BGMを固定で流す',
+  kt.bgm().desired === 'stage'
+    && kt.bgm().stageTheme === 'coolKai'
+    && kt.bgm().stageSrc.includes('SIX ÉTERNEL ―愛はひとつじゃない―.mp3'),
+  JSON.stringify(kt.bgm()));
 kt.setPhase('title');
 kt.syncBgm();
 check('タイトルへ戻ってもおまけ曲は鳴り出さない',

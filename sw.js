@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.59-tutorial-turn-gate';
+const CACHE_VERSION = 'katamon-pwa-v2.0.62-loading-notice';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
@@ -38,7 +38,8 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v4-wind-console.png',
   './assets/ui/battle-hud/wind-console-round.webp',
   './assets/normal-impact-explosion.mp3',
-  './assets/special-cutin-edm-zap.mp3'
+  './assets/special-cutin-edm-zap.mp3',
+  './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
 ];
 
 self.addEventListener('install', event => {
