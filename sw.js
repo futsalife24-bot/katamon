@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.76-bgm-sound-test';
+const CACHE_VERSION = 'katamon-pwa-v2.0.77-cool-kai-bgm-continuation';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

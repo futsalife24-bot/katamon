@@ -669,10 +669,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.76-bgm-sound-test';
+  const BUILD_ID = 'v2.0.77-cool-kai-bgm-continuation';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.77', date: '2026/08/18', summary: 'クール=カイの連戦BGMを再生位置から継続' },
     { version: 'v2.0.76', date: '2026/08/18', summary: '全BGMの起動先読みとサウンドテストを追加' },
     { version: 'v2.0.75', date: '2026/08/18', summary: 'ローダーの円盤・文章・キャラの配置を整理' },
     { version: 'v2.0.74', date: '2026/08/18', summary: 'ローダーのキャラを右向き固定・優先読み込みへ更新' },
@@ -1474,7 +1475,15 @@
     const desired = desiredBgm();
     const current = currentBgmKind();
     if (desired === current) {
-      if (desired === 'stage' && restartStage) playStageBgm(currentThemeKey, true);
+      // クール=カイの連戦は結果画面を挟んでも同じstageBgm要素を使い続ける。
+      // 「つぎのバトルへ」で resetMatch が restartStage を渡しても、専用曲だけは
+      // 先頭へ戻さず、現在位置からそのまま再生する。タイトルへ戻った場合は
+      // stageBgm が一度止まるため、次の開始時には通常どおり先頭から再生される。
+      const continueCoolKaiBgm = desired === 'stage'
+        && current === 'stage'
+        && stageBgmTheme === 'coolKai'
+        && units.some(u => u.character === 'coolKai');
+      if (desired === 'stage' && restartStage && !continueCoolKaiBgm) playStageBgm(currentThemeKey, true);
       // 同じ「おまけ」でも曲が変わっていれば差し替える(1曲目→2曲目)。
       if (desired === 'bonus' && bonusBgmLoadedTrack !== bonusBgmTrack) playBonusBgm();
       return;
