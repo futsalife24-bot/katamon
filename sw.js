@@ -2,6 +2,8 @@ const CACHE_VERSION = 'katamon-pwa-v2.0.76-bgm-sound-test';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
+  './generated/content-studio-catalog.js',
+  './generated/content-studio-manifest.json',
   './manifest.webmanifest',
   './game-custom-stages.css',
   './game-custom-stages.js',
@@ -78,12 +80,37 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Stage Studioは子スコープのService Workerが管理する。ルートのオフライン
-  // フォールバックでゲーム本体index.htmlを返すと、編集画面がゲームへ化けるため除外する。
-  if (url.pathname.includes('/tools/stage-studio/')) return;
+  // 各Studioは子スコープ側のService Workerで管理する。
+  if (
+    url.pathname.includes('/tools/content-studio/')
+    || url.pathname.includes('/tools/stage-studio/')
+  ) return;
 
   // 音声・動画のRangeリクエストはブラウザに任せ、シークやループを壊さない。
   if (request.headers.has('range')) return;
+
+  // Content StudioのPRは生成カタログだけを更新し、ゲーム本体の版番号は変更しない。
+  // ここを通常のcache-firstにすると、既存端末が古いキャラクター一覧を保持し続ける。
+  // オンライン時は必ず再検証し、失敗時だけ最後の安全なコピーへ戻す。
+  const generatedContent = url.pathname.endsWith('/generated/content-studio-catalog.js')
+    || url.pathname.endsWith('/generated/content-studio-manifest.json');
+  if (generatedContent) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)
+          .then(cached => cached || caches.match(url.pathname.endsWith('.js')
+            ? './generated/content-studio-catalog.js'
+            : './generated/content-studio-manifest.json')))
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(

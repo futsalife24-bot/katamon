@@ -1,0 +1,126 @@
+name: Content Studio verification
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-studio-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Type, unit, integration, build and regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/content-studio/package-lock.json
+
+      - name: Install Content Studio dependencies
+        working-directory: tools/content-studio
+        run: npm ci
+
+      - name: Type-check Content Studio
+        working-directory: tools/content-studio
+        run: npm run typecheck
+
+      - name: Run Content Studio unit and integration tests
+        working-directory: tools/content-studio
+        run: npm test
+
+      - name: Build Content Studio PWA
+        working-directory: tools/content-studio
+        run: npm run build
+
+      - name: Check committed Pages bundle is current
+        run: test -z "$(git status --porcelain -- tools/content-studio/dist)"
+
+      - name: Build same-origin GitHub backend
+        working-directory: tools/content-studio
+        run: npm run server:build
+
+      - name: Check generated catalog is current
+        working-directory: tools/content-studio
+        run: npm run generate:catalog -- --check
+
+      - name: Run existing game seat tests
+        run: |
+          node tests/seattest.js p1
+          node tests/seattest.js e1
+
+      - name: Run existing game regression tests
+        run: |
+          node tests/regressiontest.js p1
+          node tests/regressiontest.js e1
+
+      - name: Run existing game result tests
+        run: node tests/resulttest.js
+
+      - name: Run existing game loopback tests
+        run: node tests/loopbacktest.js
+
+      - name: Run existing game stage 3 tests
+        run: node tests/stage3test.js
+
+      - name: Run existing game lobby simulation tests
+        run: node tests/lobbysimtest.js
+
+  android-e2e:
+    name: Android 13 portrait Chromium E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    defaults:
+      run:
+        working-directory: tools/content-studio
+        shell: bash
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/content-studio/package-lock.json
+
+      - name: Install Content Studio dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Android-equivalent E2E
+        run: npm run test:e2e
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-playwright-report
+          path: |
+            tools/content-studio/playwright-report/
+            tools/content-studio/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

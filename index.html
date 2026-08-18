@@ -624,6 +624,7 @@
 <script src="shared/stage-storage.js"></script>
 <script src="shared/stage-repository.js"></script>
 <script src="shared/stage-zip.js"></script>
+<script src="./generated/content-studio-catalog.js"></script>
 <script>
 (() => {
   'use strict';
@@ -2962,7 +2963,7 @@
   }
 
   // ===== キャラクター =====
-  const CHARACTERS = {
+  const LEGACY_CHARACTERS = {
     kyoryu: {
       key: 'kyoryu', name: 'ディラノ', asset: 'dirano', role: 'バランス型', roleEn: 'BALANCE',
       desc: '弾道ガイドが長く、風にも少し強い。初めてでも扱いやすい王道タイプ。',
@@ -3091,6 +3092,44 @@
       groundOffsetY: 31
     }
   };
+  // Content Studioの生成カタログは既存定義へ後付けする。既存17体は手書きのまま保持し、
+  // モーション移行時も能力・技・静止画像は上書きせず、検証済みの5動作参照だけを足す。
+  const CONTENT_STUDIO_MOTION_CLIPS = ['move-forward', 'move-backward', 'fire', 'hit', 'land'];
+  function safeGeneratedMotionPaths(value, extension) {
+    if (!value || typeof value !== 'object') return false;
+    return CONTENT_STUDIO_MOTION_CLIPS.every(clip => {
+      const path = value[clip];
+      return typeof path === 'string'
+        && path.startsWith('assets/content-studio/')
+        && !path.includes('..')
+        && path.endsWith(`/${clip}.${extension}`);
+    });
+  }
+  function loadGeneratedCharacters(catalog) {
+    if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.order) || !catalog.characters) return {};
+    const accepted = {};
+    for (const id of catalog.order) {
+      const character = catalog.characters[id];
+      if (character && character.legacyTargetId === id && Object.prototype.hasOwnProperty.call(LEGACY_CHARACTERS, id)) {
+        if (character.key !== id) continue;
+        if (!safeGeneratedMotionPaths(character.motionSheets, 'png')) continue;
+        if (!safeGeneratedMotionPaths(character.motionMetadata, 'json')) continue;
+        LEGACY_CHARACTERS[id].motionSheets = Object.freeze({ ...character.motionSheets });
+        LEGACY_CHARACTERS[id].motionMetadata = Object.freeze({ ...character.motionMetadata });
+        continue;
+      }
+      if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || !character || character.key !== id) continue;
+      if (Object.prototype.hasOwnProperty.call(LEGACY_CHARACTERS, id)) continue;
+      if (typeof character.name !== 'string' || typeof character.assetBase !== 'string') continue;
+      if (!character.assetBase.startsWith('assets/content-studio/') || character.assetBase.includes('..')) continue;
+      if (!Array.isArray(character.selectStats) || character.selectStats.length !== 3) continue;
+      accepted[id] = character;
+    }
+    return accepted;
+  }
+  const GENERATED_CHARACTERS = loadGeneratedCharacters(globalThis.__CONTENT_STUDIO_CATALOG__);
+  const CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
+
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
   const CHARACTER_FACES = {
     kyoryu: [0.64, 0.20, 0.36], medama: [0.58, 0.36, 0.38], iwa: [0.68, 0.40, 0.40],
@@ -3114,7 +3153,12 @@
     shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26]
   };
 
-  const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
+  for (const [id, character] of Object.entries(GENERATED_CHARACTERS)) {
+    CHARACTER_FACES[id] = Array.isArray(character.face) ? character.face : DEFAULT_FACE;
+    MATCHUP_FACES[id] = Array.isArray(character.matchupFace) ? character.matchupFace : CHARACTER_FACES[id];
+  }
+  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
+  const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
   // ロード画面のキャラは起動ごとに1体だけ抽選する。Web Cryptoを使い、
   // 対戦の再現用Math.random()の列へ表示演出の乱数を混ぜない。
   function pickLoadingCharacter() {
@@ -3163,19 +3207,24 @@
   let characterImagesFailed = 0;
   // 抽選した1体はループへ入る前に読み始める。最初の1体として優先されるため、
   // 全キャラを同時に投げるよりローダーへ実画像が届きやすい。
-  const loadingCharacterImage = loadArtImage(CHARACTERS[loadingCharacterKey].asset, {
+  function loadCharacterArt(key, opts = {}) {
+    const character = CHARACTERS[key];
+    const generatedBase = character.assetBase;
+    const assetStem = character.asset || key;
+    return loadArtImage(generatedBase || assetStem, {
+      ...opts,
+      webpBase: generatedBase || `assets/characters/runtime/${assetStem}`,
+      pngBase: generatedBase || `assets/characters/master/${assetStem}`
+    });
+  }
+  const loadingCharacterImage = loadCharacterArt(loadingCharacterKey, {
     highPriority: true,
-    webpBase: `assets/characters/runtime/${CHARACTERS[loadingCharacterKey].asset}`,
-    pngBase: `assets/characters/master/${CHARACTERS[loadingCharacterKey].asset}`,
     onReady: () => { characterImagesReady++; },
     onFailed: () => { characterImagesFailed++; }
   });
   for (const key of CHARACTER_LIST) {
-    const assetStem = CHARACTERS[key].asset;
-    charImages[key] = key === loadingCharacterKey ? loadingCharacterImage : loadArtImage(assetStem, {
+    charImages[key] = key === loadingCharacterKey ? loadingCharacterImage : loadCharacterArt(key, {
       highPriority: true,
-      webpBase: `assets/characters/runtime/${assetStem}`,
-      pngBase: `assets/characters/master/${assetStem}`,
       onReady: () => { characterImagesReady++; },
       onFailed: () => { characterImagesFailed++; }
     });
@@ -3444,6 +3493,7 @@
   const BOSS_CPU_HP_MUL = 1.3; // 10連勝ごとのCPUボスだけ最大HPを30%増やす
 
   function isSpecialReady(u) {
+    if (!u || CHARACTERS[u.character]?.specialEnabled === false) return false;
     // 演習の「常時MAX」はここだけで判定する。本編・オンラインのゲージや通信値を
     // 書き換えないので、対戦判定には混ざらない。
     return practiceSpecialAlwaysFullFor(u) || u.specialCharge >= SPECIAL_CHARGE_MAX;
@@ -4477,6 +4527,53 @@
     explodeDSmashDrill(p, impactX, impactY);
   }
 
+  // Content Studioが出力する宣言的な技だけを解釈する。文字列をコードとして評価せず、
+  // 既存の発射・爆発・回復・電磁波プリミティブへ安全に写像する。
+  function launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0) {
+    const skill = def && def.specialSkill;
+    if (!skill || skill.schemaVersion !== 1 || !skill.projectile || !skill.impact) return false;
+    const projectile = skill.projectile;
+    const impact = skill.impact;
+    const count = Math.max(1, Math.min(12, Math.round(Number(projectile.count) || 1)));
+    const speed = Math.max(0.1, Math.min(5, Number(projectile.speedMultiplier) || 1));
+    const power = Math.max(0.05, Math.min(5, Number(projectile.power) || 1));
+    const radius = Math.max(0.1, Math.min(5, Number(impact.radiusMultiplier) || 1));
+    const gravity = Math.max(0, Math.min(3, Number(projectile.gravityMultiplier)));
+    const knockback = Math.max(0, Math.min(500, Number(impact.knockback) || 0));
+
+    if (skill.selfEffect && Number(skill.selfEffect.heal) > 0) {
+      const heal = Math.min(Math.round(Number(skill.selfEffect.heal)), unit.maxHp - unit.hp);
+      unit.hp += heal;
+      if (heal > 0) spawnHealText(unit.x, unit.y - 32, heal);
+    }
+
+    // 確率効果は端末間でずれないよう、ターン・所有者・技IDから固定値を作る。
+    let hash = turnCount + 2166136261;
+    for (const char of `${owner}:${skill.id}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    const deterministicRoll = (hash >>> 0) / 4294967296;
+    const targetEffect = skill.targetEffect;
+    const useEmp = targetEffect && targetEffect.kind === 'movement-lock'
+      && deterministicRoll < Math.max(0, Math.min(1, Number(targetEffect.chance) || 0));
+
+    for (let index = 0; index < count; index++) {
+      const spread = count === 1 ? 0 : -14 + (28 * index) / (count - 1);
+      const velocity = rotateVec(vx0 * speed, vy0 * speed, spread);
+      fireProjectile(owner, anchor, velocity.vx, velocity.vy, {
+        blastMul: (def.blastMul || 1) * radius,
+        windMul: def.windMul != null ? def.windMul : 1,
+        gravityMul: Number.isFinite(gravity) ? gravity : 1,
+        damageMul: power,
+        pierce: Number(projectile.penetrationCount) > 0,
+        emp: !!useEmp,
+        empRadius: 90 * radius,
+        empTurns: targetEffect ? Math.max(1, Math.round(Number(targetEffect.durationTurns) || 1)) : 1,
+        noTerrain: !!useEmp,
+        knockbackSpeed: knockback
+      });
+    }
+    return true;
+  }
+
   // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
   function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
@@ -4503,7 +4600,9 @@
       return;
     }
 
-    if (activateSpecial && def.key === 'shinigami') {
+    if (activateSpecial && launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0)) {
+      // 生成キャラクターの宣言的テンプレートは上で処理済み。
+    } else if (activateSpecial && def.key === 'shinigami') {
       // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
       // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
       fireProjectile(owner, anchor, vx0, vy0, {
@@ -5960,6 +6059,13 @@
 
   function advanceTutorialStep() {
     tutorial.stepIndex++;
+    while (
+      tutorial.stepIndex < TUTORIAL_STEPS.length
+      && TUTORIAL_STEPS[tutorial.stepIndex].key === 'special'
+      && CHARACTERS[player.character]?.specialEnabled === false
+    ) {
+      tutorial.stepIndex++;
+    }
     if (tutorial.stepIndex >= TUTORIAL_STEPS.length) { finishTutorial(); return; }
     applyTutorialStep();
   }
@@ -15196,10 +15302,11 @@
 
   function drawSpecialButton() {
     const me = localUnit();
+    const def = CHARACTERS[me.character];
+    const specialEnabled = def.specialEnabled !== false;
     const ready = isSpecialReady(me);
     const active = ready && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
-    const chargeRatio = ready ? 1 : me.specialCharge / SPECIAL_CHARGE_MAX;
-    const def = CHARACTERS[me.character];
+    const chargeRatio = specialEnabled ? (ready ? 1 : me.specialCharge / SPECIAL_CHARGE_MAX) : 0;
     ctx.save();
     // 台座の影
     ctx.beginPath();
@@ -15212,7 +15319,7 @@
       specialBtn.x - specialBtn.r * 0.35, specialBtn.y - specialBtn.r * 0.4, specialBtn.r * 0.1,
       specialBtn.x, specialBtn.y, specialBtn.r
     );
-    if (specialArmed) {
+    if (specialArmed && specialEnabled) {
       sBody.addColorStop(0, '#ffb45e'); sBody.addColorStop(0.55, '#e0642a'); sBody.addColorStop(1, '#7a2410');
     } else if (ready) {
       sBody.addColorStop(0, '#574a26'); sBody.addColorStop(0.6, '#332c17'); sBody.addColorStop(1, '#15120a');
@@ -15257,11 +15364,11 @@
       font: `900 13px ${UI_FONT_HEAVY}`,
       color: ready ? UI.parchment : 'rgba(226,232,240,0.6)', lineWidth: 3.5
     });
-    drawOutlinedText(def.special, specialBtn.x, specialBtn.y + 2, {
+    drawOutlinedText(specialEnabled ? def.special : '未設定', specialBtn.x, specialBtn.y + 2, {
       font: `900 8px ${UI_FONT_HEAVY}`,
       color: ready ? UI.brassLight : 'rgba(226,232,240,0.5)', lineWidth: 3
     });
-    drawOutlinedText(ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`, specialBtn.x, specialBtn.y + 17, {
+    drawOutlinedText(specialEnabled ? (ready ? 'MAX' : `${me.specialCharge}/${SPECIAL_CHARGE_MAX}`) : '—', specialBtn.x, specialBtn.y + 17, {
       font: `900 11px ${UI_FONT_HEAVY}`,
       color: ready ? UI.gold : 'rgba(226,232,240,0.62)', lineWidth: 3
     });
