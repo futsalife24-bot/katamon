@@ -43,6 +43,9 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
   indexHtml.includes('getCoreImageProgressRatio()')
     && indexHtml.includes('const progressPercent = Math.round(progress * 100)')
     && indexHtml.includes('const loadingCharacterKey = pickLoadingCharacter()')
+    && indexHtml.includes('const loadingCharacterImage = loadArtImage')
+    && indexHtml.includes('const fallbackLoadingKey = primaryLoadingImgReady')
+    && indexHtml.includes('if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1)')
     && indexHtml.includes('ctx.rotate(markerAngle)'),
   'progress character loader missing');
 check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
