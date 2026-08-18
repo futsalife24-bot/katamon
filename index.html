@@ -657,11 +657,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.63-cool-kai-salvo';
+  const BUILD_ID = 'v2.0.64-cool-kai-visuals';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.63', date: '2026/08/18', summary: 'クールカイの表示・47連射・専用BGM先読みを調整' },
+    { version: 'v2.0.64', date: '2026/08/18', summary: 'クールカイの演習表示・接地・握り飯サイズを調整' },
     { version: 'v2.0.59', date: '2026/08/17', summary: 'チュートリアルは行動解決後に次の項目へ進行' },
     { version: 'v2.0.58', date: '2026/08/17', summary: 'ONLINEロビーのBGMをRemixへ更新' },
     { version: 'v2.0.57', date: '2026/08/17', summary: '公開部屋を一覧から選べるように改善' },
@@ -2885,7 +2885,9 @@
       maxHp: 88, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
-      imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 }
+      imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 },
+      // 素材の下側に残る透明余白ぶんだけ、地面アンカーへ見た目を寄せる。
+      groundOffsetY: 7
     }
   };
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
@@ -10155,12 +10157,13 @@
       const img = charImages[imageKey];
       if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
         // 正方形へ押し込まず、元画像の縦横比のまま置く。カードだけの縮尺を変えない。
+        const imageRect = characterImageRect(imageKey, img);
         const imageH = row.h - 26;
-        const imageW = imageH * (img.naturalWidth / img.naturalHeight);
+        const imageW = imageH * (imageRect.sw / imageRect.sh);
         ctx.save();
         ctx.translate(126, row.y + 8);
         if (freePreviewShouldMirror(kind, imageKey)) ctx.scale(-1, 1);
-        ctx.drawImage(img, -imageW / 2, -imageH / 2, imageW, imageH);
+        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -imageW / 2, -imageH / 2, imageW, imageH);
         ctx.restore();
       }
     } else {
@@ -12551,7 +12554,8 @@
     const imageRect = imgReady ? characterImageRect(u.character, img) : null;
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imageRect ? h * (imageRect.sw / imageRect.sh) : h;
-    const imgTopAbs = a.y + UNIT_RADIUS - h;
+    const groundOffsetY = CHARACTERS[u.character]?.groundOffsetY || 0;
+    const imgTopAbs = a.y + UNIT_RADIUS - h + groundOffsetY;
     const shakeX = actionSkipShakeOffset(u);
 
     ctx.save();
@@ -12574,9 +12578,9 @@
       if (facingLeft) ctx.scale(-1, 1);
       ctx.translate(0, -UNIT_RADIUS);
       if (imageRect) {
-        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h, w, h);
+        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
       } else {
-        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
       }
       ctx.restore();
     } else {
@@ -13439,15 +13443,15 @@
         ctx.moveTo(-24, 0); ctx.lineTo(8, 0);
         ctx.stroke();
       } else if (p.coolKaiOnigiri) {
-        // 小さい三角おにぎり。47発でも画面上で弾だと読める最小サイズにする。
+        // 見た目だけ3倍にする。radius=3の判定・ダメージ・地形破壊範囲は変更しない。
         ctx.shadowColor = '#fff1a8';
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = 15;
         ctx.fillStyle = '#fff8dc';
         ctx.beginPath();
-        ctx.moveTo(5, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath();
+        ctx.moveTo(15, 0); ctx.lineTo(-12, -12); ctx.lineTo(-12, 12); ctx.closePath();
         ctx.fill();
         ctx.fillStyle = '#27304d';
-        ctx.fillRect(-4, -1.2, 2.2, 2.4);
+        ctx.fillRect(-12, -3.6, 6.6, 7.2);
       } else if (p.scorpionRail) {
         // 毒針の芯と尾のような二股の残光で、地表を走るサソリ尾だと読めるようにする。
         ctx.shadowColor = '#8cf25a';
