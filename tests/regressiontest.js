@@ -1465,6 +1465,7 @@ check('クールカイの必殺は小さいおにぎりを47発生成する',
   kt.character('coolKai').name === 'クールカイ'
     && kt.character('coolKai').special === 'Amour 握り飯'
     && kt.character('coolKai').specialDesc === '手燭の油で作った47個の握り飯を配ってやる。'
+    && kt.character('coolKai').maxHp === 66
     && coolKaiProjectiles.length === 47
     && coolKaiSpecialIndex === 46
     && coolKaiProjectiles.every(p => p.coolKaiOnigiri && !p.directHitOnly && p.radius === 3),
@@ -1482,6 +1483,8 @@ check('クールカイのおにぎり47発は一定間隔の連射になって�
   JSON.stringify({ delays: coolKaiDelays }));
 check('クールカイのおにぎりは見た目だけ3倍で判定値を変えない',
   indexHtml.includes('ctx.moveTo(15, 0); ctx.lineTo(-12, -12); ctx.lineTo(-12, 12);')
+    && indexHtml.includes('const COOL_KAI_ONIGIRI_DAMAGE = 6;')
+    && indexHtml.includes('Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)')
     && coolKaiProjectiles.every(p => p.radius === 3),
   JSON.stringify({ radius: coolKaiProjectiles[0]?.radius }));
 check('演習のクールカイ表示も透明余白を切り出す',
