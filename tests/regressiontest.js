@@ -318,7 +318,7 @@ check('ロード中の石壁に更新時の読み込み案内を表示する',
     JSON.stringify(phases));
   check('オーラはキャラ画像の背後から上向きに描く',
     indexHtml.includes('function drawSpecialAura(u, a)')
-      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
+      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(indexHtml),
     'drawSpecialAuraの描画順が見つかりません');
   const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
     ? kt.specialCutInSoundProfile()
@@ -469,7 +469,7 @@ const shinigami = kt.character('shinigami');
     && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
     // 両者の間には描画理由のコメントもある。文字数ではなく同じ drawUnit 内の順序を見る。
-    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(html));
   // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
   // 中心にすると見えている上半分に当たらない(実機で指摘)。
   check('直撃の円をキャラの体へ上げている',
@@ -1480,6 +1480,13 @@ check('クールカイのおにぎり47発は一定間隔の連射になって�
     && coolKaiDelays[0] === 0
     && coolKaiDelays.every((delay, i) => Math.abs(delay - i * 0.075) < 1e-9),
   JSON.stringify({ delays: coolKaiDelays }));
+check('クールカイのおにぎりは見た目だけ3倍で判定値を変えない',
+  indexHtml.includes('ctx.moveTo(15, 0); ctx.lineTo(-12, -12); ctx.lineTo(-12, 12);')
+    && coolKaiProjectiles.every(p => p.radius === 3),
+  JSON.stringify({ radius: coolKaiProjectiles[0]?.radius }));
+check('演習のクールカイ表示も透明余白を切り出す',
+  /function drawFreeRow\([\s\S]{0,1800}characterImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
+  'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
 
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
