@@ -410,7 +410,8 @@ const EXPECTED_SPECIAL_NAMES = {
   tori: 'フレイムウェーブ',
   sumoeru: '職人カエル玉',
   iwa: 'Bインパクト',
-  medama: 'バインドスピット'
+  medama: 'バインドスピット',
+  nisenmono: 'プリズムビーム'
 };
 for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
   check(`${kt.character(key).name}の必殺技名は「${specialName}」`,
@@ -425,7 +426,7 @@ const EXPECTED_SPECIAL_FLAVORS = {
   iwa: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
   tori: '着弾から左右へ炎が広がり、6×3回ダメージ',
   barugerukan: 'マーキング弾を放ち、着弾地点へ機銃掃射',
-  nisenmono: '高速の貫通光線で、遠距離を射抜く',
+  nisenmono: '反射する貫通レーザーで敵を射抜く',
   burumutan: '与えたダメージ分、自分のHPを回復',
   sumoeru: '敵の近くで炸裂し、8方向へ中小弾を放つ',
   doRednote: '着弾後、相手に向かって地雷針が追尾する',
@@ -1210,6 +1211,30 @@ check('花火の接近信管は90pxを越えた敵には反応しない',
 check('花火の接近信管は発射者と同じ陣営には反応しない',
   kt.fireworkProximityProbeForTest('e1', 'e1', 0, 120) === null);
 
+// ===== v221: オベリスクの必殺を反射するプリズムビームへ更新 =====
+check('オベリスクの必殺技名は「プリズムビーム」',
+  kt.character('nisenmono').special === 'プリズムビーム', kt.character('nisenmono').special);
+check('プリズムビームは地形を壊さず敵を貫通する反射レーザー',
+  kt.character('nisenmono').specialDesc.includes('地形を壊さず')
+    && kt.character('nisenmono').specialDesc.includes('反射')
+    && kt.character('nisenmono').specialDesc.includes('貫通'),
+  kt.character('nisenmono').specialDesc);
+kt.startBattle('nisenmono');
+kt.disableCpuForTest();
+settle();
+const prismShot = kt.fireSpecialImmediateForTest('nisenmono', 300, 0);
+const prismProfile = kt.projectileProfilesForTest()[prismShot];
+check('プリズムビームは無風・無重力、地形破壊なし、反射上限と射程上限を持つ',
+  prismProfile?.prismBeam === true
+    && prismProfile?.pierce === true
+    && prismProfile?.noTerrain === true
+    && prismProfile?.windMul === 0
+    && prismProfile?.gravityMul === 0
+    && prismProfile?.prismMaxBounces === 4
+    && prismProfile?.prismMaxDistance === 1320,
+  JSON.stringify(prismProfile));
+kt.clearProjectilesForTest();
+
 // ===== v188: ルビデビの必殺は爆発しない直撃電撃 =====
 check('ルビデビの必殺説明は障害物無視や爆発ではなく直撃電撃を示す',
   kt.character('akuma').specialDesc.includes('直接ダメージ')
@@ -1512,7 +1537,9 @@ check('クール=カイの握り飯47発は見た目の回転だけ個別にラ�
     && coolKaiRotations.every(rotation => rotation >= 0 && rotation < Math.PI * 2),
   JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
-  /function drawFreeRow\([\s\S]{0,1800}characterImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
+  indexHtml.includes('function characterPreviewImageRect(key, img)')
+    && indexHtml.includes('previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 }')
+    && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
 

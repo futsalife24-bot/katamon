@@ -658,11 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.69-first-battle-media-debuff-hud';
+  const BUILD_ID = 'v2.0.71-prism-beam';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.69', date: '2026/08/18', summary: '初回BATTLE準備とデバフ状態表示を改善' },
+    { version: 'v2.0.71', date: '2026/08/18', summary: 'オベリスクの必殺をプリズムビームへ更新' },
     { version: 'v2.0.68', date: '2026/08/18', summary: '握り飯47発へ個別ランダム回転を追加' },
     { version: 'v2.0.67', date: '2026/08/18', summary: 'クール=カイへ名称を変更' },
     { version: 'v2.0.66', date: '2026/08/18', summary: 'クールカイ必殺後の自己移動封印を追加' },
@@ -2848,9 +2848,9 @@
     nisenmono: {
       key: 'nisenmono', name: 'オベリスク', asset: 'obelisk', role: '防御型', roleEn: 'GUARD',
       desc: '圧倒的な耐久で戦線を支える石像戦車。重く遅いが風には強い。',
-      selectStats: [5, 3, 1], specialDesc: '高速・貫通する光線弾を放つ', selectFlavor: '高速の貫通光線で、遠距離を射抜く',
+      selectStats: [5, 3, 1], specialDesc: '地形を壊さず敵を貫通し、壁で反射するプリズムビーム。反射か射程の限界で爆発する', selectFlavor: '反射する貫通レーザーで敵を射抜く',
       maxHp: 140, blastMul: 1.0, windMul: 0.55, fuelMul: 0.72, velScaleMul: 0.9, specialVelocityMul: 1.8, tBias: 1.2,
-      color: '#a7aab8', special: 'プリズム狙撃'
+      color: '#a7aab8', special: 'プリズムビーム'
     },
     burumutan: {
       key: 'burumutan', name: 'ブルームタン', asset: 'bloom-tan', role: '支援型', roleEn: 'SUPPORT',
@@ -2932,6 +2932,8 @@
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
       imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 },
+      // 演習選択では、接地調整前の上下余白を含めず見えている車体を大きく表示する。
+      previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 },
       // 素材の下側に残る透明余白ぶんだけ、地面アンカーへ見た目を寄せる。
       groundOffsetY: 31
     }
@@ -3220,6 +3222,16 @@
   }
   function characterImageRect(key, img) {
     const crop = CHARACTERS[key]?.imageCrop;
+    if (!crop) return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight };
+    return {
+      sx: img.naturalWidth * crop.sx,
+      sy: img.naturalHeight * crop.sy,
+      sw: img.naturalWidth * crop.sw,
+      sh: img.naturalHeight * crop.sh
+    };
+  }
+  function characterPreviewImageRect(key, img) {
+    const crop = CHARACTERS[key]?.previewImageCrop || CHARACTERS[key]?.imageCrop;
     if (!crop) return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight };
     return {
       sx: img.naturalWidth * crop.sx,
@@ -3687,6 +3699,8 @@
   });
   const B_IMPACT_TERRAIN_BLAST_MUL = 1.5;
   const B_IMPACT_KNOCKBACK_SPEED = 80;
+  const PRISM_BEAM_MAX_BOUNCES = 4;
+  const PRISM_BEAM_MAX_DISTANCE = 1320;
 
   function shotPhysicsProfile(def, useSpecial, useJump) {
     if (!useSpecial && !useJump) return NORMAL_SHOT_PROFILE;
@@ -3712,7 +3726,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,prismBeam,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
   let barucopters = []; // [{owner,x,y,targetX,targetY,shotsFired,shotTimer,departTimer}]
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
@@ -3771,6 +3785,10 @@
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
       normalImpactSound: !!opts.normalImpactSound,
       pierce: !!opts.pierce,
+      prismBeam: !!opts.prismBeam,
+      prismBounces: 0,
+      prismMaxBounces: opts.prismMaxBounces || PRISM_BEAM_MAX_BOUNCES,
+      prismMaxDistance: opts.prismMaxDistance || PRISM_BEAM_MAX_DISTANCE,
       dSmash: !!opts.dSmash,
       barucopterMarker: !!opts.barucopterMarker,
       barucopterBullet: !!opts.barucopterBullet,
@@ -4351,8 +4369,15 @@
         noTerrain: true
       });
     } else if (activateSpecial && def.key === 'nisenmono') {
-      // ニセンモノの必殺: 高速貫通レーザー
-      fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, { blastMul: def.blastMul * 1.2, windMul: def.windMul, pierce: true });
+      // オベリスクの必殺: 地形を壊さず、壁で反射しながら敵を貫通するプリズムビーム。
+      fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, {
+        blastMul: def.blastMul * 1.2,
+        windMul: 0,
+        gravityMul: 0,
+        pierce: true,
+        prismBeam: true,
+        noTerrain: true
+      });
     } else if (activateSpecial && def.key === 'burumutan') {
       // ブルームタンの必殺: 花弾が敵から実際に奪ったHPだけ、着弾時に発射者へ還元する。
       fireProjectile(owner, anchor, vx0, vy0, {
@@ -4882,6 +4907,51 @@
   function resolveProjectileSurfaceImpact(p, x = p.x, y = p.y) {
     if (!p) return;
     finishDirectLightningImpact(p, x, y);
+  }
+
+  function resolvePrismBeamUnitImpact(p, target) {
+    if (!p || !target || unitDefeated(target) || p.hitTargets.includes(target.id)) return false;
+    const ownerUnit = unitById(p.owner);
+    const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
+    if (remoteShot) noteRemoteDamageBaseline();
+    const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
+    const actualDamage = Math.max(1, Math.round(computeDamage(0, p.blastMul, p.damageMul) * takenMul));
+    target.hp = Math.max(0, target.hp - actualDamage);
+    const anchor = unitAnchor(target);
+    if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
+    creditDamage(p.owner, target, actualDamage);
+    p.hitTargets.push(target.id);
+    playCrackleSound(0.45);
+    checkMatchEnd();
+    return true;
+  }
+
+  function explodePrismBeam(p, x = p.x, y = p.y) {
+    if (!p) return;
+    explodeAt(x, y, p.blastMul, p.owner, p.damageMul, false, false, p.terrainBlastMul, 0, true);
+    p.prismBeamFinished = true;
+  }
+
+  function reflectPrismBeam(p, x = p.x, y = p.y) {
+    if (!p?.prismBeam) return false;
+    const speed = Math.max(1, Math.hypot(p.vx, p.vy));
+    const vxSign = Math.sign(p.vx) || 1;
+    const vySign = Math.sign(p.vy) || 1;
+    const probe = Math.max(4, p.radius + 3);
+    const horizontalWall = isSolidAt(x - vxSign * probe, y) === false;
+    const verticalWall = isSolidAt(x, y - vySign * probe) === false;
+    if (horizontalWall && !verticalWall) p.vx *= -1;
+    else if (verticalWall && !horizontalWall) p.vy *= -1;
+    else if (Math.abs(p.vx) >= Math.abs(p.vy)) p.vx *= -1;
+    else p.vy *= -1;
+    p.prismBounces++;
+    if (p.prismBounces >= p.prismMaxBounces || p.travelDistance >= p.prismMaxDistance) {
+      explodePrismBeam(p, x, y);
+      return true;
+    }
+    p.x = x + (p.vx / speed) * (p.radius + 2);
+    p.y = y + (p.vy / speed) * (p.radius + 2);
+    return true;
   }
 
   function resolveCoolKaiOnigiriUnitImpact(p, target, x = p.x, y = p.y) {
@@ -10220,7 +10290,7 @@
       const img = charImages[imageKey];
       if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
         // 正方形へ押し込まず、元画像の縦横比のまま置く。カードだけの縮尺を変えない。
-        const imageRect = characterImageRect(imageKey, img);
+        const imageRect = characterPreviewImageRect(imageKey, img);
         const imageH = row.h - 26;
         const imageW = imageH * (imageRect.sw / imageRect.sh);
         ctx.save();
@@ -11454,14 +11524,14 @@
     u.fallStartY = u.y;
   }
 
-  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0) {
+  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0, noTerrain = false) {
     blastMul = blastMul || 1;
     terrainBlastMul = terrainBlastMul || blastMul;
     const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
     const ownerTeam = teamOfOwner(owner);
     let drainedDamage = 0;
     if (remoteShot) noteRemoteDamageBaseline();
-    carveCrater(x, y, 44 * terrainBlastMul);
+    if (!noTerrain) carveCrater(x, y, 44 * terrainBlastMul);
     spawnExplosion(x, y, blastMul);
     triggerShake(4 + 4 * blastMul, 0.12 + 0.08 * blastMul);
     if (normalImpactSound) playNormalImpactSound();
@@ -13598,6 +13668,26 @@
         ctx.beginPath();
         ctx.arc(10, 0, 3.2, 0, Math.PI * 2);
         ctx.fill();
+      } else if (p.prismBeam) {
+        ctx.shadowColor = '#d4a7ff';
+        ctx.shadowBlur = 20;
+        const beam = ctx.createLinearGradient(-36, 0, 18, 0);
+        beam.addColorStop(0, 'rgba(123,73,255,0)');
+        beam.addColorStop(0.45, '#9c7cff');
+        beam.addColorStop(0.78, '#e4d8ff');
+        beam.addColorStop(1, '#ffffff');
+        ctx.strokeStyle = beam;
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(-36, 0);
+        ctx.lineTo(17, 0);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-24, 0);
+        ctx.lineTo(20, 0);
+        ctx.stroke();
       } else if (p.dSmash || p.pierce) {
         // 貫通弾は高密度のエネルギーボルト。芯・外光・速度線を分けて描く。
         ctx.shadowColor = '#5de8ff';
@@ -17542,6 +17632,17 @@
         p.y += p.vy * dt;
       }
 
+      if (p.prismBeam) {
+        const stepX = p.x - prevX;
+        const stepY = p.y - prevY;
+        p.travelDistance += Math.sqrt(stepX * stepX + stepY * stepY);
+        if (p.travelDistance >= p.prismMaxDistance) {
+          explodePrismBeam(p, p.x, p.y);
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
       if (p.firework && !p.fireworkShard) {
         const stepX = p.x - prevX;
         const stepY = p.y - prevY;
@@ -17660,6 +17761,8 @@
               spawnFireworkBurst(p);
             } else if (p.scorpionRail) {
               resolveScorpionRailImpact(p, u);
+            } else if (p.prismBeam) {
+              resolvePrismBeamUnitImpact(p, u);
             } else if (p.groundFlame) {
               resolveGroundFlameImpact(p, p.x, p.y);
             } else if (p.directHitOnly) {
@@ -17681,7 +17784,10 @@
       // 地形グリッドには入れないため、落下中のキャラが空中障害物へ着地することはない。
       const obstacleHit = (p.fireworkShard || p.ignoreObstacles) ? null : hitArenaObstacle(p.x, p.y, p.radius);
       if (obstacleHit) {
-        if (p.jump) {
+        if (p.prismBeam) {
+          reflectPrismBeam(p, obstacleHit.x, obstacleHit.y);
+          if (p.prismBeamFinished) projectiles.splice(i, 1);
+        } else if (p.jump) {
           teleportOwnerToImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.barucopterMarker) {
           startBarucopterBarrage(p, obstacleHit.x, obstacleHit.y);
@@ -17716,6 +17822,12 @@
 
       if (p.scorpionRail && !p.scorpionRailActive && isSolidAt(p.x, p.y)) {
         startScorpionRail(p, p.x, p.y);
+        continue;
+      }
+
+      if (p.prismBeam && isSolidAt(p.x, p.y)) {
+        reflectPrismBeam(p, p.x, p.y);
+        if (p.prismBeamFinished) projectiles.splice(i, 1);
         continue;
       }
 
