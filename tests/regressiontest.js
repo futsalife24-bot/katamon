@@ -1843,24 +1843,17 @@ const bonusTrackCount = kt.bonusTrackCount();
 check('おまけ曲が5曲登録されている', bonusTrackCount === 5, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 tapBonus();
-check('おまけを押すと1曲目を再生する',
-  kt.bgm().bonusTrack === 1 && kt.bgm().desired === 'bonus',
+check('おまけを押すと全BGMのサウンドテストを開く',
+  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'none'
+    && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
+    && indexHtml.includes('const startupBgmPreloadCount = startupBgmPreloads.length'),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
-let autoAdvanceNg = [];
-for (const expected of [2, 3, 4, 5, 1]) {
-  const advanced = kt.finishBonusTrackForTest();
-  if (advanced !== true || kt.bgm().bonusTrack !== expected || kt.bgm().desired !== 'bonus') {
-    autoAdvanceNg.push(`終了後=${kt.bgm().bonusTrack}/${kt.bgm().desired}`);
-  }
-}
-check('おまけ曲は終わるたび次曲へ進み、5曲目の後は1曲目へ戻る',
-  autoAdvanceNg.length === 0, autoAdvanceNg.join(', '));
-// 手動タップも従来どおり、次曲を選んで最後に停止できる。
-for (let n = 2; n <= bonusTrackCount; n++) tapBonus();
-tapBonus();
-check('手動で最後まで進めてもう一度押すと停止してタイトル曲へ戻る',
-  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
-  `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+check('サウンドテストはタイトル・ロビー・全ステージ・おまけ5曲を登録する',
+  indexHtml.includes("key: 'title'")
+    && indexHtml.includes("key: 'room'")
+    && indexHtml.includes("STAGE_BGM_SOURCES.coolKai")
+    && indexHtml.includes('...BONUS_BGM_TRACKS.slice(1)'),
+  'sound test track list missing');
 // 曲ごとに録音レベルが違うので、体感音量を揃えるための基準音量を個別に持つ。
 const trackVolumes = kt.bonusTrackVolumes();
 check('全曲に基準音量が設定されている',
@@ -1870,9 +1863,8 @@ check('おまけ曲はタイトル曲より大きい音量に設定されてい�
   trackVolumes.every(v => v > kt.titleBgmBaseVolume()),
   `おまけ=${JSON.stringify(trackVolumes)} タイトル=${kt.titleBgmBaseVolume()}`);
 
-// 対戦へ移ったら選択ごと解除する。次にタイトルへ戻った時に勝手に鳴り出さないため。
+// サウンドテストを閉じてから対戦へ移る。
 tapBonus();
-check('対戦前はおまけ曲を選んでいる', kt.bgm().bonusTrack === 1, String(kt.bgm().bonusTrack));
 kt.setPhase('battle');
 kt.syncBgm();
 check('対戦へ移るとおまけ曲の選択が解除される', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
