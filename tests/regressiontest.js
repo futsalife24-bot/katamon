@@ -1460,6 +1460,7 @@ const coolKaiNormalVelocity = kt.launchVelocityForTest('coolKai', 180, -96, fals
 const coolKaiSpecialIndex = kt.fireSpecialImmediateForTest('coolKai', coolKaiNormalVelocity.vx0, coolKaiNormalVelocity.vy0);
 const coolKaiProjectiles = kt.projectileProfilesForTest();
 const coolKaiMoveLock = kt.turnEffectForTest(kt.seat());
+const coolKaiRotations = coolKaiProjectiles.map(p => p.coolKaiRotation);
 const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
 const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
 check('クールカイの必殺は小さいおにぎりを47発生成する',
@@ -1492,6 +1493,11 @@ check('クールカイのおにぎりは見た目だけ3倍で判定値を変え
     && indexHtml.includes('Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)')
     && coolKaiProjectiles.every(p => p.radius === 3),
   JSON.stringify({ radius: coolKaiProjectiles[0]?.radius }));
+check('クール=カイの握り飯47発は見た目の回転だけ個別にランダム化する',
+  coolKaiRotations.length === 47
+    && new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size >= 40
+    && coolKaiRotations.every(rotation => rotation >= 0 && rotation < Math.PI * 2),
+  JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
   /function drawFreeRow\([\s\S]{0,1800}characterImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
   'drawFreeRowにキャラ画像の切り出しがありません');

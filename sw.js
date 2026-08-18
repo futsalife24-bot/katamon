@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.67-cool-kai-name';
+const CACHE_VERSION = 'katamon-pwa-v2.0.68-cool-kai-onigiri-rotation';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
