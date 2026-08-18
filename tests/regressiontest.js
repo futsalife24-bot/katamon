@@ -39,6 +39,19 @@ check('ロード中の石壁に更新時の読み込み案内を表示する',
     && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
     && indexHtml.includes("gamePhase === 'loading'"),
   'loading notice missing');
+check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
+  indexHtml.includes('rel="preload" as="video"')
+    && indexHtml.includes('battleStartLogoVideo.load()')
+    && indexHtml.includes('function primeFirstBattleMedia()')
+    && indexHtml.includes('primeFirstBattleMedia();'),
+  'first battle media preparation missing');
+check('BATTLE画面に全ユニットのデバフ名と残りターンを表示する',
+  indexHtml.includes('function debuffStatusEntries(u)')
+    && indexHtml.includes('function drawDebuffStatusStrip()')
+    && indexHtml.includes('行動不能 ${u.actionSkipTurns}手')
+    && indexHtml.includes('移動封印 ${u.moveLockTurns}手')
+    && indexHtml.includes('drawDebuffStatusStrip();'),
+  'debuff status strip missing');
 
 // v209: CPU BATTLEの「つぎのバトルへ」は、同じ相手・ステージに張り付かない。
 // 乱数を固定しても直前の候補を外すため、旧実装なら実際に失敗する。
