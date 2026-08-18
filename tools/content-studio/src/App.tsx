@@ -22,7 +22,7 @@ import { PartPreview } from './components/PartPreview';
 import { useStudioController, type StudioController } from './app/use-studio-controller';
 import { exportCharacterDatabaseJson, importAiProposalJson, listAiProposals, listCharacterRecords, seedCharacterDatabase } from './storage/db';
 import { searchCharacterRecords, type CharacterIdentityRecord } from './domain/character-db';
-import type { AiProposal } from './domain/ai-proposal';
+import { applyAiProposalToCharacter, type AiProposal } from './domain/ai-proposal';
 
 const SPECIAL_OPTIONS: Array<{ id: SpecialTemplate; label: string; help: string }> = [
   { id: 'single', label: '単発', help: '既存の通常弾に近い単発技です。' },
@@ -204,7 +204,7 @@ function CharacterDatabaseCard() {
   );
 }
 
-function AiProposalCard() {
+function AiProposalCard({ studio }: { studio: StudioController }) {
   const importRef = useRef<HTMLInputElement>(null);
   const [proposals, setProposals] = useState<AiProposal[]>([]);
   const [message, setMessage] = useState('');
@@ -219,13 +219,39 @@ function AiProposalCard() {
       setMessage(cause instanceof Error ? cause.message : 'AI提案を取り込めませんでした。');
     }
   };
+  const makeDraft = async (proposal: AiProposal) => {
+    const target = (await listCharacterRecords()).find((record) => record.slug === proposal.characterSlug);
+    if (!target) {
+      setMessage('対象キャラが台帳に見つかりません。最新のキャラクターDBを確認してください。');
+      return;
+    }
+    await studio.createNewDraft();
+    studio.updateDraft((draft) => {
+      const identity = target.legacyId ?? target.slug;
+      const character = applyAiProposalToCharacter({
+        ...draft.character,
+        id: identity,
+        slug: target.slug,
+        displayName: target.displayName,
+      }, proposal);
+      return {
+        ...draft,
+        title: `${target.displayName}・AI提案レビュー`,
+        character,
+        sourceIdentity: { id: identity, slug: target.slug },
+        lastStep: 'character',
+        historyStatus: 'dirty',
+      };
+    });
+    setMessage('提案を新しい下書きへ反映しました。画像・差分・検証を確認してから公開へ進んでください。');
+  };
   return (
     <section className="card" data-testid="ai-proposal-card">
       <div className="section-heading"><div><h2>AI提案JSON</h2><p>AIの提案を取り込み、検証してからプレビューへ進めます。自動公開はしません。</p></div><Status value={`${proposals.length}件`} good={proposals.length > 0} /></div>
       <input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importProposal(file); }} />
       <button className="secondary full-width" type="button" onClick={() => importRef.current?.click()}>AI提案JSONを読み込む</button>
       {message && <p className="support-note" role="status">{message}</p>}
-      {proposals.slice(0, 3).map((proposal) => <article className="draft-card" key={proposal.proposalId}><div className="draft-card__open"><b>{proposal.specialName}</b><span>{proposal.characterSlug}・{proposal.specialTemplate}・{proposal.status}</span></div><span className="support-note">{proposal.motionDirection || 'モーション指定なし'}</span></article>)}
+      {proposals.slice(0, 3).map((proposal) => <article className="draft-card" key={proposal.proposalId}><div className="draft-card__open"><b>{proposal.specialName}</b><span>{proposal.characterSlug}・{proposal.specialTemplate}・{proposal.status}</span></div><span className="support-note">{proposal.motionDirection || 'モーション指定なし'}</span><button className="text-button" type="button" onClick={() => void makeDraft(proposal)} data-testid={`apply-ai-proposal-${proposal.proposalId}`}>レビュー用下書きを作る</button></article>)}
     </section>
   );
 }
@@ -269,7 +295,7 @@ function Dashboard({ studio }: { studio: StudioController }) {
       </section>
 
       <CharacterDatabaseCard />
-      <AiProposalCard />
+      <AiProposalCard studio={studio} />
 
       <section className="card connection-card motion-only-note">
         <div><h2>生成AI・外部送信なし</h2><p>通常の画像処理と固定プリセットだけで動きます。画像を外部サービスへ送りません。</p></div>

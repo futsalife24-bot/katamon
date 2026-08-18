@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CHARACTER } from '../../src/domain/defaults';
-import { diffAiProposal, validateAiProposal, type AiProposal } from '../../src/domain/ai-proposal';
+import { applyAiProposalToCharacter, diffAiProposal, validateAiProposal, type AiProposal } from '../../src/domain/ai-proposal';
 
 const proposal: AiProposal = {
   schemaVersion: 1,
@@ -32,5 +32,15 @@ describe('AI proposal contract', () => {
     expect(diffs.map((diff) => diff.field)).toContain('specialName');
     expect(diffs.map((diff) => diff.field)).toContain('specialParameters.projectileCount');
     expect(current.specialName).toBe('旧技');
+  });
+
+  it('applies only reviewed performance fields and preserves identity', () => {
+    const current = { ...structuredClone(DEFAULT_CHARACTER), id: 'cool-kai', slug: 'cool-kai', displayName: 'クール=カイ' };
+    const next = applyAiProposalToCharacter(current, proposal);
+    expect(next.id).toBe('cool-kai');
+    expect(next.displayName).toBe('クール=カイ');
+    expect(next.specialName).toBe('Amour 握り飯');
+    expect(next.specialParameters.projectileCount).toBe(47);
+    expect(next.customImplementationNote).toContain('実験扱い');
   });
 });
