@@ -657,10 +657,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.66-cool-kai-special-self-lock';
+  const BUILD_ID = 'v2.0.67-cool-kai-name';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.67', date: '2026/08/18', summary: 'クール=カイへ名称を変更' },
     { version: 'v2.0.66', date: '2026/08/18', summary: 'クールカイ必殺後の自己移動封印を追加' },
     { version: 'v2.0.59', date: '2026/08/17', summary: 'チュートリアルは行動解決後に次の項目へ進行' },
     { version: 'v2.0.58', date: '2026/08/17', summary: 'ONLINEロビーのBGMをRemixへ更新' },
@@ -2879,7 +2880,7 @@
       color: '#b87cff', special: 'デスゲート', spriteScale: 1.21
     },
     coolKai: {
-      key: 'coolKai', name: 'クールカイ', asset: 'cool-kai', role: 'ネタ連射型', roleEn: 'GAG SALVO',
+      key: 'coolKai', name: 'クール=カイ', asset: 'cool-kai', role: 'ネタ連射型', roleEn: 'GAG SALVO',
       desc: '小さいおにぎりを47発も投げる規格外のネタキャラ。1発6ダメージで地形も削る。',
       selectStats: [3, 2, 5], specialDesc: '手燭の油で作った47個の握り飯を配ってやる。', selectFlavor: '大きめの微バラツキで握り飯を47発一斉発射',
       maxHp: 66, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
