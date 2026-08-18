@@ -17,6 +17,7 @@
 <link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/battle-start-logo.png" fetchpriority="high">
+<link rel="preload" as="video" href="assets/battle-start-logo.mp4" type="video/mp4">
 <link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-mode-board.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
@@ -657,10 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.68-cool-kai-onigiri-rotation';
+  const BUILD_ID = 'v2.0.69-first-battle-media-debuff-hud';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.69', date: '2026/08/18', summary: '初回BATTLE準備とデバフ状態表示を改善' },
     { version: 'v2.0.68', date: '2026/08/18', summary: '握り飯47発へ個別ランダム回転を追加' },
     { version: 'v2.0.67', date: '2026/08/18', summary: 'クール=カイへ名称を変更' },
     { version: 'v2.0.66', date: '2026/08/18', summary: 'クールカイ必殺後の自己移動封印を追加' },
@@ -1076,6 +1078,7 @@
     if (titleStartPending) return;
     // 最初のタップ(確実なユーザー操作)のうちにWebAudio経路を用意しておく
     ensureBgmGraph();
+    primeFirstBattleMedia();
     primeNormalImpactSound();
     primeSpecialCutinSound();
     titleStartPending = true;
@@ -1113,6 +1116,32 @@
   stageBgm.load();
   stageBgm.volume = STAGE_BGM_BASE_VOLUME;
   stageBgm.loop = true;
+  let firstBattleMediaPrimed = false;
+  function warmMediaElement(media) {
+    if (!media) return;
+    const previousMuted = media.muted;
+    const previousLoop = media.loop;
+    media.muted = true;
+    media.loop = false;
+    let result;
+    try { result = media.play(); } catch (_) { result = null; }
+    const done = () => {
+      media.pause();
+      try { media.currentTime = 0; } catch (_) { /* Safari may reject before metadata */ }
+      media.muted = previousMuted;
+      media.loop = previousLoop;
+    };
+    if (result && typeof result.then === 'function') result.then(done, done);
+    else done();
+  }
+  // 最初のユーザー操作中にデコードまで進める。preloadだけでは初回BATTLEの
+  // play()/動画フレーム描画が間に合わない端末があるため、無音で一度だけ温める。
+  function primeFirstBattleMedia() {
+    if (firstBattleMediaPrimed) return;
+    firstBattleMediaPrimed = true;
+    warmMediaElement(stageBgm);
+    if (typeof battleStartLogoVideo !== 'undefined') warmMediaElement(battleStartLogoVideo);
+  }
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
   // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
@@ -1166,10 +1195,25 @@
       applyAudioVolumes();
     }
     if (restart && stageBgm.readyState > HTMLMediaElement.HAVE_NOTHING) stageBgm.currentTime = 0;
-    const result = stageBgm.play();
-    const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
-    // 呼び出し元には何も返さない(従来どおり)。自動再生ブロックの再試行フラグだけ脇で拾う。
-    promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = stageBgm; });
+    const start = () => stageBgm.play();
+    const handleResult = (result) => {
+      const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
+      promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = stageBgm; });
+    };
+    if (stageBgm.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+      let settled = false;
+      const begin = () => {
+        if (settled) return;
+        settled = true;
+        stageBgm.removeEventListener('canplay', begin);
+        handleResult(start());
+      };
+      stageBgm.addEventListener('canplay', begin, { once: true });
+      setTimeout(begin, 3000);
+      return;
+    }
+    const result = start();
+    handleResult(result);
   }
   function stopStageBgm(reset = true) {
     if (stageBgmRestoreTimer !== null) {
@@ -3135,6 +3179,7 @@
   battleStartLogoVideo.loop = false;
   battleStartLogoVideo.addEventListener('ended', () => battleStartLogoVideo.pause());
   battleStartLogoVideo.src = 'assets/battle-start-logo.mp4';
+  battleStartLogoVideo.load();
   function battleStartLogoVideoReady() {
     return battleStartLogoVideo.readyState >= 2
       && battleStartLogoVideo.videoWidth > 0 && battleStartLogoVideo.videoHeight > 0;
@@ -14206,7 +14251,7 @@
     if (checkingSeats.length) {
       const who = checkingSeats.length === 1 ? firebaseSeatLabel(checkingSeats[0]) : '一部の席';
       const text = `${who}の切断を確認中…`;
-      const y = minimapTop() + MINIMAP.h + 13;
+      const y = minimapTop() + MINIMAP.h + 48;
       ctx.save();
       ctx.font = `900 11px ${UI_FONT_HEAVY}`;
       const w = ctx.measureText(text).width + 22;
@@ -14225,6 +14270,46 @@
         align: 'center', font: `900 11px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
       });
     }
+  }
+
+  function debuffStatusEntries(u) {
+    const entries = [];
+    if (u.actionSkipTurns > 0) entries.push(`行動不能 ${u.actionSkipTurns}手`);
+    if (u.moveLockTurns > 0) entries.push(`移動封印 ${u.moveLockTurns}手`);
+    return entries;
+  }
+
+  function drawDebuffStatusStrip() {
+    if (gamePhase !== 'battle' || matchOver) return;
+    const x = 13;
+    const y = minimapTop() + MINIMAP.h + 5;
+    const w = VW - 26;
+    const h = 35;
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,11,17,0.88)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, 7); else ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(199,131,53,0.72)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+
+    drawOutlinedText('デバフ状態', x + 8, y + 11, {
+      align: 'left', font: `900 8px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 2.5
+    });
+    const columnW = w / Math.max(1, units.length);
+    units.forEach((u, index) => {
+      const entries = debuffStatusEntries(u);
+      const label = CHARACTERS[u.character]?.name || u.label || u.id;
+      const status = entries.length ? entries.join(' / ') : '正常';
+      const color = entries.length ? (u.actionSkipTurns > 0 ? '#ffe14d' : '#9fe9ff') : 'rgba(207,220,226,0.72)';
+      const font = `900 ${units.length > 2 ? 7 : 8}px ${UI_FONT_HEAVY}`;
+      const text = fitText(`${label}  ${status}`, font, columnW - 8);
+      drawOutlinedText(text, x + columnW * index + columnW / 2, y + 26, {
+        align: 'center', font, color, lineWidth: 2.5
+      });
+    });
   }
 
   // ===== ミニマップ(ステージ全体とカメラの可視範囲を表示) =====
@@ -16224,6 +16309,7 @@
     // 判定は位置ではなく席で行う。試合中に左右をすれ違ってもカードが飛ばないように。
     drawUnitPanels();
     drawMinimap();
+    drawDebuffStatusStrip();
     drawTurnInfo();
     drawControlPanel();
     drawCameraSlider();
