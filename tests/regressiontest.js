@@ -1459,6 +1459,7 @@ kt.clearProjectilesForTest();
 const coolKaiNormalVelocity = kt.launchVelocityForTest('coolKai', 180, -96, false, false);
 const coolKaiSpecialIndex = kt.fireSpecialImmediateForTest('coolKai', coolKaiNormalVelocity.vx0, coolKaiNormalVelocity.vy0);
 const coolKaiProjectiles = kt.projectileProfilesForTest();
+const coolKaiMoveLock = kt.turnEffectForTest(kt.seat());
 const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
 const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
 check('クールカイの必殺は小さいおにぎりを47発生成する',
@@ -1470,9 +1471,13 @@ check('クールカイの必殺は小さいおにぎりを47発生成する',
     && coolKaiSpecialIndex === 46
     && coolKaiProjectiles.every(p => p.coolKaiOnigiri && !p.directHitOnly && p.radius === 3),
   JSON.stringify({ def: kt.character('coolKai'), count: coolKaiProjectiles.length, projectiles: coolKaiProjectiles.slice(0, 2) }));
+check('クールカイは必殺技後に6ターン移動不能になる',
+  coolKaiMoveLock?.moveLockTurns === 6,
+  JSON.stringify(coolKaiMoveLock));
 check('クールカイのおにぎり47発は大きめの固定バラツキで飛ぶ',
   coolKaiUniqueAngles.size >= 40
-    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) > 0.45
+    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) > 0.30
+    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) < 0.5
     && coolKaiAngles.length === 47,
   JSON.stringify({ unique: coolKaiUniqueAngles.size, angles: coolKaiAngles }));
 const coolKaiDelays = coolKaiProjectiles.map(p => p.coolKaiDelay);
