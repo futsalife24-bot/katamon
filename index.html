@@ -29,6 +29,7 @@
 <link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
@@ -603,7 +604,7 @@
 <audio id="titleBgm" preload="auto">
   <source src="assets/title-bgm.mp3" type="audio/mpeg">
 </audio>
-<audio id="stageBgm" preload="none"></audio>
+<audio id="stageBgm" preload="auto"></audio>
 <audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>
 <!-- おまけ曲。srcはボタンを押した時に初めて入れる(タイトル表示を重くしないため) -->
 <audio id="bonusBgm" preload="none"></audio>
@@ -656,11 +657,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.62-loading-notice';
+  const BUILD_ID = 'v2.0.63-cool-kai-salvo';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.62', date: '2026/08/18', summary: 'ロード中に更新時の読み込み案内を表示' },
+    { version: 'v2.0.63', date: '2026/08/18', summary: 'クールカイの表示・47連射・専用BGM先読みを調整' },
     { version: 'v2.0.59', date: '2026/08/17', summary: 'チュートリアルは行動解決後に次の項目へ進行' },
     { version: 'v2.0.58', date: '2026/08/17', summary: 'ONLINEロビーのBGMをRemixへ更新' },
     { version: 'v2.0.57', date: '2026/08/17', summary: '公開部屋を一覧から選べるように改善' },
@@ -1104,6 +1105,10 @@
     arena: 'assets/stage-boss-arena.mp3',
     coolKai: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
   };
+  // クールカイ戦の専用曲はタイトル表示前からブラウザへ先読みさせる。
+  // 実際の再生時は stageBgm を使うため、音量・AudioContext経路は既存仕様のまま。
+  stageBgm.src = STAGE_BGM_SOURCES.coolKai;
+  stageBgm.load();
   stageBgm.volume = STAGE_BGM_BASE_VOLUME;
   stageBgm.loop = true;
   let stageBgmTheme = null;
@@ -2878,7 +2883,9 @@
       desc: '小さいおにぎりを47発も投げる規格外のネタキャラ。1発2ダメージで地形も削る。',
       selectStats: [3, 2, 5], specialDesc: '手燭の油で作った47個の握り飯を配ってやる。', selectFlavor: '大きめの微バラツキで握り飯を47発一斉発射',
       maxHp: 88, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
-      color: '#d9e4ff', special: 'Amour 握り飯'
+      color: '#d9e4ff', special: 'Amour 握り飯',
+      // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
+      imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 }
     }
   };
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
@@ -3161,6 +3168,16 @@
     const img = charImages[key];
     if (!img || !img.naturalWidth || !img.naturalHeight) return design;
     return design * Math.sqrt(SPRITE_REFERENCE_ASPECT / (img.naturalWidth / img.naturalHeight));
+  }
+  function characterImageRect(key, img) {
+    const crop = CHARACTERS[key]?.imageCrop;
+    if (!crop) return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight };
+    return {
+      sx: img.naturalWidth * crop.sx,
+      sy: img.naturalHeight * crop.sy,
+      sw: img.naturalWidth * crop.sw,
+      sh: img.naturalHeight * crop.sh
+    };
   }
 
   // ===== ユニット =====
@@ -3662,13 +3679,18 @@
   // 乱数は通信対戦で端末差になるため使わない。中心角の平均が0になる固定ブレ。
   const BARUCOPTER_SPREAD_DEGREES = [-1.6, 1.1, -0.7, 0.4, 1.7, -1.3, 0.8, -0.2, 1.4, -1.6];
   const COOL_KAI_ONIGIRI_COUNT = 47;
-  // 乱数は通信対戦で端末差になるため使わない。47発とも同じ固定の大きめ微バラツキ。
-  const COOL_KAI_ONIGIRI_SPREAD_DEGREES = [
-    -16.5, 14.2, -13.4, 12.6, -11.8, 10.9, -10.1, 9.4, -8.7, 8.0, -7.3, 6.6, -5.9,
-    5.2, -4.5, 3.8, -3.1, 2.4, -1.7, 1.0, -0.3, 0, 0.3, -1.0, 1.7, -2.4, 3.1,
-    -3.8, 4.5, -5.2, 5.9, -6.6, 7.3, -8.0, 8.7, -9.4, 10.1, -10.9, 11.8, -12.6,
-    13.4, -14.2, 16.5, -15.1, 14.8, -13.9, 12.1
-  ];
+  const COOL_KAI_ONIGIRI_INTERVAL_SEC = 0.075;
+  // 端末間で同じ結果になるよう、Math.randomではなく固定seedの擬似乱数を使う。
+  // 規則的な扇状配置にはせず、47発それぞれを独立したランダム角度にする。
+  const COOL_KAI_ONIGIRI_SPREAD_DEGREES = Object.freeze((() => {
+    let state = 0xC001CA1;
+    const angles = [];
+    for (let i = 0; i < COOL_KAI_ONIGIRI_COUNT; i++) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      angles.push((state / 4294967296 * 2 - 1) * 18);
+    }
+    return angles;
+  })());
 
   function fireProjectile(owner, anchor, vx, vy, opts) {
     opts = opts || {};
@@ -3683,6 +3705,7 @@
       knockbackSpeed: opts.knockbackSpeed || 0,
       windMul,
       gravityMul,
+      coolKaiDelay: opts.coolKaiDelay != null ? opts.coolKaiDelay : 0,
       // 花火の接近信管も固定刻みの物理内で判定し、両端末で一致させる。
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
       normalImpactSound: !!opts.normalImpactSound,
@@ -4302,15 +4325,17 @@
         fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul * 0.85, windMul: 1 });
       }
     } else if (activateSpecial && def.key === 'coolKai') {
-      // クールカイの必殺: 握り飯を固定の大きめ微バラツキで47発。
+      // クールカイの必殺: 握り飯をランダム角度へ、一定間隔で47発連射。
       // 各弾は2ダメージ、着弾地点は小さく地形を削る。
-      for (const deg of COOL_KAI_ONIGIRI_SPREAD_DEGREES) {
+      for (let i = 0; i < COOL_KAI_ONIGIRI_SPREAD_DEGREES.length; i++) {
+        const deg = COOL_KAI_ONIGIRI_SPREAD_DEGREES[i];
         const v = rotateVec(vx0, vy0, deg);
         fireProjectile(owner, anchor, v.vx, v.vy, {
           radius: 3,
           windMul: 1,
           gravityMul: 1,
-          coolKaiOnigiri: true
+          coolKaiOnigiri: true,
+          coolKaiDelay: i * COOL_KAI_ONIGIRI_INTERVAL_SEC
         });
       }
     } else if (activateSpecial && def.key === 'akuma') {
@@ -10892,17 +10917,18 @@
     const imageCx = imageBox.x + imageBox.w / 2;
     const imageCy = imageBox.y + imageBox.h / 2;
     if (cReady) {
-      const imageScale = Math.min(104 / cImg.naturalWidth, 154 / cImg.naturalHeight);
-      const iw = cImg.naturalWidth * imageScale;
-      const ih = cImg.naturalHeight * imageScale;
+      const imageRect = characterImageRect(card.key, cImg);
+      const imageScale = Math.min(104 / imageRect.sw, 154 / imageRect.sh);
+      const iw = imageRect.sw * imageScale;
+      const ih = imageRect.sh * imageScale;
       if (def.facesLeft) {
         ctx.save();
         ctx.translate(imageCx, imageCy);
         ctx.scale(-1, 1);
-        ctx.drawImage(cImg, -iw / 2, -ih / 2, iw, ih);
+        ctx.drawImage(cImg, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -iw / 2, -ih / 2, iw, ih);
         ctx.restore();
       } else {
-        ctx.drawImage(cImg, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
+        ctx.drawImage(cImg, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
       }
     } else {
       ctx.beginPath();
@@ -12522,8 +12548,9 @@
     drawMoveLockChains(u, a, tilt, 'back');
 
     // 画像は接地ライン(groundY = a.y + UNIT_RADIUS)に底面を合わせて描画
+    const imageRect = imgReady ? characterImageRect(u.character, img) : null;
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
-    const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
+    const w = imageRect ? h * (imageRect.sw / imageRect.sh) : h;
     const imgTopAbs = a.y + UNIT_RADIUS - h;
     const shakeX = actionSkipShakeOffset(u);
 
@@ -12546,7 +12573,11 @@
       ctx.rotate(tilt);
       if (facingLeft) ctx.scale(-1, 1);
       ctx.translate(0, -UNIT_RADIUS);
-      ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+      if (imageRect) {
+        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h, w, h);
+      } else {
+        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+      }
       ctx.restore();
     } else {
       // 画像読み込み中のフォールバック(色付き円)
@@ -13214,8 +13245,9 @@
     const imgReady = img && img.complete && img.naturalWidth > 0;
     // 跳躍中のキャラ画像。地上の描画と同じ変換を使う。
     const facingLeft = spriteFlipForFacing(u, unitFacesLeftInWorld(u));
+    const imageRect = imgReady ? characterImageRect(u.character, img) : null;
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
-    const w = imgReady ? h * (img.naturalWidth / img.naturalHeight) : h;
+    const w = imageRect ? h * (imageRect.sw / imageRect.sh) : h;
     const angle = Math.atan2(p.vy, p.vx);
     ctx.save();
     // 本体は立ち姿のまま、弾道方向へ光の尾だけを伸ばす。
@@ -13237,7 +13269,11 @@
     ctx.globalAlpha = 0.98;
     if (imgReady) {
       if (facingLeft) ctx.scale(-1, 1);
-      ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+      if (imageRect) {
+        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h, w, h);
+      } else {
+        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+      }
     } else {
       ctx.fillStyle = '#8ee7ff';
       ctx.beginPath();
@@ -17374,6 +17410,10 @@
     // 弾の物理(花火の本体弾と、地形を細く削る8方向の拡散弾に対応)
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
+      if (p.coolKaiDelay > 0) {
+        p.coolKaiDelay = Math.max(0, p.coolKaiDelay - dt);
+        continue;
+      }
       const prevX = p.x;
       const prevY = p.y;
       p.prevX = prevX;
