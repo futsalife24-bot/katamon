@@ -658,10 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.73-bgm-now-playing-label';
+  const BUILD_ID = 'v2.0.74-loading-character-priority';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.74', date: '2026/08/18', summary: 'ローダーのキャラを右向き固定・優先読み込みへ更新' },
     { version: 'v2.0.73', date: '2026/08/18', summary: 'BGMの再生曲名をタイトルとBATTLEロゴへ表示' },
     { version: 'v2.0.72', date: '2026/08/18', summary: '起動ローダーを進捗ゲージとランダムキャラ演出へ更新' },
     { version: 'v2.0.71', date: '2026/08/18', summary: 'オベリスクの必殺をプリズムビームへ更新' },
@@ -3028,9 +3029,18 @@
   // Service Workerの新キャッシュが全アセットを安全に更新する。
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
+  // 抽選した1体はループへ入る前に読み始める。最初の1体として優先されるため、
+  // 全キャラを同時に投げるよりローダーへ実画像が届きやすい。
+  const loadingCharacterImage = loadArtImage(CHARACTERS[loadingCharacterKey].asset, {
+    highPriority: true,
+    webpBase: `assets/characters/runtime/${CHARACTERS[loadingCharacterKey].asset}`,
+    pngBase: `assets/characters/master/${CHARACTERS[loadingCharacterKey].asset}`,
+    onReady: () => { characterImagesReady++; },
+    onFailed: () => { characterImagesFailed++; }
+  });
   for (const key of CHARACTER_LIST) {
     const assetStem = CHARACTERS[key].asset;
-    charImages[key] = loadArtImage(assetStem, {
+    charImages[key] = key === loadingCharacterKey ? loadingCharacterImage : loadArtImage(assetStem, {
       highPriority: true,
       webpBase: `assets/characters/runtime/${assetStem}`,
       pngBase: `assets/characters/master/${assetStem}`,
@@ -10091,7 +10101,7 @@
       drawTitleWoodButtonText(titleFreeBtn, '演習', '条件を組んで開始', 'parchmentSmall');
       drawTitleWoodButtonText(titleRankingBtn, 'RANKING', '連勝記録', 'hanging');
         drawTitleWoodButtonText(titleBonusBtn, 'おまけ',
-        bonusBgmTrack ? `♪ ${currentBgmDisplayName()}` : 'BGMを聴く', 'shield');
+        bonusBgmTrack ? `おまけ${bonusBgmTrack}` : 'BGMを聴く', 'shield');
     } else {
       // 画像を読めない古い環境では、操作不能にせず従来の描画へ戻す。
       ctx.textAlign = 'center';
@@ -10129,7 +10139,7 @@
       drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
         font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
       });
-      drawOutlinedText(bonusBgmTrack ? `♪ ${currentBgmDisplayName()}` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
+      drawOutlinedText(bonusBgmTrack ? `おまけ${bonusBgmTrack}` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
         font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
       });
 
@@ -10975,7 +10985,15 @@
     ctx.fillStyle = 'rgba(255,255,255,.14)';
     ctx.fillRect(progressBarX, progressBarY + 2, progressBarW, 3);
 
-    const loadingImg = charImages[loadingCharacterKey];
+    const primaryLoadingImg = charImages[loadingCharacterKey];
+    const primaryLoadingImgReady = primaryLoadingImg && primaryLoadingImg.complete && primaryLoadingImg.naturalWidth > 0;
+    const fallbackLoadingKey = primaryLoadingImgReady ? loadingCharacterKey
+      : CHARACTER_LIST.find(key => {
+        const img = charImages[key];
+        return img && img.complete && img.naturalWidth > 0;
+      });
+    const loadingKey = fallbackLoadingKey || loadingCharacterKey;
+    const loadingImg = charImages[loadingKey];
     const loadingImgReady = loadingImg && loadingImg.complete && loadingImg.naturalWidth > 0;
     const markerX = progressBarX + progressBarW * progress;
     const markerY = progressBarY - 25 + Math.sin(now / 105) * 2.5;
@@ -10989,6 +11007,8 @@
       ctx.rotate(markerAngle);
       ctx.shadowColor = 'rgba(255,210,74,.72)';
       ctx.shadowBlur = 8;
+      // ローダー上のキャラは、素材が左向きでも常に右向きへ揃える。
+      if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1);
       ctx.drawImage(loadingImg, crop.sx, crop.sy, crop.sw, crop.sh, -markerW / 2, -markerH, markerW, markerH);
       ctx.restore();
     } else {

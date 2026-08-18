@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.73-bgm-now-playing-label';
+const CACHE_VERSION = 'katamon-pwa-v2.0.74-loading-character-priority';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
