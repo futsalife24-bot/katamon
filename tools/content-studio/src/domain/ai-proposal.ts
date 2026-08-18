@@ -83,3 +83,20 @@ export function diffAiProposal(current: CharacterForm, proposal: AiProposal): Pr
   if (proposal.implementationNote) add('implementationNote', current.customImplementationNote, proposal.implementationNote);
   return diffs;
 }
+
+/** Apply only the reviewed performance fields; identity and assets remain unchanged. */
+export function applyAiProposalToCharacter(current: CharacterForm, proposal: AiProposal): CharacterForm {
+  return {
+    ...structuredClone(current),
+    specialEnabled: true,
+    specialName: proposal.specialName,
+    specialDescription: proposal.specialDescription,
+    specialTemplate: proposal.specialTemplate,
+    specialParameters: { ...current.specialParameters, ...proposal.specialParameters },
+    customImplementationNote: [
+      current.customImplementationNote,
+      `AI提案 ${proposal.proposalId}（実験扱い・履歴v${proposal.sourceRevision}起点）`,
+      proposal.implementationNote,
+    ].filter(Boolean).join('\n'),
+  };
+}
