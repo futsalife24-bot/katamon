@@ -1,5 +1,9 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { ArtifactBundle, DraftRecord, PullRequestResult } from '../domain/types';
+import type { CharacterAssetVersionRecord, CharacterIdentityRecord, CharacterRevisionRecord } from '../domain/character-db';
+import { createInitialCharacterRecords } from '../domain/character-db';
+import type { AiProposal } from '../domain/ai-proposal';
+import { validateAiProposal } from '../domain/ai-proposal';
 import { createDraft } from '../domain/defaults';
 import { DRAFT_SCHEMA_VERSION } from '../domain/types';
 
@@ -54,6 +58,10 @@ interface AppMetaRecord {
 }
 
 interface StudioDbSchema extends DBSchema {
+  aiProposals: { key: string; value: AiProposal; indexes: { 'by-created-at': string } };
+  characterRecords: { key: string; value: CharacterIdentityRecord; indexes: { 'by-updated-at': string; 'by-slug': string } };
+  characterAssets: { key: string; value: CharacterAssetVersionRecord; indexes: { 'by-character': string; 'by-created-at': string } };
+  characterRevisions: { key: string; value: CharacterRevisionRecord; indexes: { 'by-character': string; 'by-created-at': string } };
   drafts: {
     key: string;
     value: DraftRecord;
@@ -81,7 +89,7 @@ interface StudioDbSchema extends DBSchema {
 }
 
 const DB_NAME = 'content-studio-v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let dbPromise: Promise<IDBPDatabase<StudioDbSchema>> | null = null;
 
 function openStudioDb(): Promise<IDBPDatabase<StudioDbSchema>> {
@@ -89,6 +97,25 @@ function openStudioDb(): Promise<IDBPDatabase<StudioDbSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<StudioDbSchema>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        if (!db.objectStoreNames.contains('aiProposals')) {
+          const store = db.createObjectStore('aiProposals', { keyPath: 'proposalId' });
+          store.createIndex('by-created-at', 'createdAt');
+        }
+        if (!db.objectStoreNames.contains('characterRecords')) {
+          const store = db.createObjectStore('characterRecords', { keyPath: 'characterId' });
+          store.createIndex('by-updated-at', 'updatedAt');
+          store.createIndex('by-slug', 'slug');
+        }
+        if (!db.objectStoreNames.contains('characterAssets')) {
+          const store = db.createObjectStore('characterAssets', { keyPath: 'id' });
+          store.createIndex('by-character', 'characterId');
+          store.createIndex('by-created-at', 'createdAt');
+        }
+        if (!db.objectStoreNames.contains('characterRevisions')) {
+          const store = db.createObjectStore('characterRevisions', { keyPath: 'id' });
+          store.createIndex('by-character', 'characterId');
+          store.createIndex('by-created-at', 'createdAt');
+        }
         if (!db.objectStoreNames.contains('drafts')) {
           const store = db.createObjectStore('drafts', { keyPath: 'id' });
           store.createIndex('by-updated-at', 'updatedAt');
@@ -120,6 +147,106 @@ function openStudioDb(): Promise<IDBPDatabase<StudioDbSchema>> {
     });
   }
   return dbPromise;
+}
+
+export async function saveAiProposal(proposal: AiProposal): Promise<void> {
+  const db = await openStudioDb();
+  await db.put('aiProposals', structuredClone(proposal));
+}
+
+export async function listAiProposals(): Promise<AiProposal[]> {
+  const db = await openStudioDb();
+  return (await db.getAllFromIndex('aiProposals', 'by-created-at')).reverse();
+}
+
+export async function importAiProposalJson(file: Blob, current?: { characterId: string; revision: number }): Promise<ReturnType<typeof validateAiProposal>> {
+  if (file.size > 256 * 1024) throw new Error('AI提案JSONは256KB以下にしてください。');
+  let raw: unknown;
+  try { raw = JSON.parse(await file.text()); } catch { throw new Error('AI提案JSONを読み込めませんでした。'); }
+  const result = validateAiProposal(raw, current);
+  if (result.proposal && result.errors.length === 0) await saveAiProposal(result.proposal);
+  return result;
+}
+
+export async function seedCharacterDatabase(): Promise<CharacterIdentityRecord[]> {
+  const db = await openStudioDb();
+  const existing = await db.getAll('characterRecords');
+  if (existing.length > 0) return existing;
+  const records = createInitialCharacterRecords();
+  const tx = db.transaction(['characterRecords', 'characterRevisions', 'characterAssets'], 'readwrite');
+  for (const record of records) {
+    await tx.objectStore('characterRecords').put(record);
+    await tx.objectStore('characterRevisions').put({
+      id: `${record.characterId}:r1`, characterId: record.characterId, revision: 1, reason: 'import',
+      changedFields: ['initial-import'], snapshot: structuredClone(record) as unknown as Record<string, unknown>, createdAt: record.createdAt,
+    });
+    await tx.objectStore('characterAssets').put({
+      id: `${record.characterId}:source-image:v1`, characterId: record.characterId, kind: 'source-image',
+      sourceRef: `legacy://${record.assetKey}`, contentHash: null, version: 1, status: 'needs-review', createdAt: record.createdAt,
+    });
+  }
+  await tx.done;
+  return records;
+}
+
+export async function listCharacterRecords(): Promise<CharacterIdentityRecord[]> {
+  const db = await openStudioDb();
+  return (await db.getAllFromIndex('characterRecords', 'by-updated-at')).reverse();
+}
+
+export async function saveCharacterRecord(
+  record: CharacterIdentityRecord,
+  reason: CharacterRevisionRecord['reason'] = 'edit',
+  changedFields: string[] = [],
+): Promise<CharacterIdentityRecord> {
+  const db = await openStudioDb();
+  const previous = await db.get('characterRecords', record.characterId);
+  const now = new Date().toISOString();
+  const saved = { ...structuredClone(record), currentRevision: (previous?.currentRevision ?? record.currentRevision - 1) + 1, updatedAt: now };
+  const tx = db.transaction(['characterRecords', 'characterRevisions'], 'readwrite');
+  await tx.objectStore('characterRecords').put(saved);
+  await tx.objectStore('characterRevisions').put({
+    id: `${saved.characterId}:r${saved.currentRevision}`, characterId: saved.characterId, revision: saved.currentRevision,
+    reason, changedFields, snapshot: structuredClone(saved) as unknown as Record<string, unknown>, createdAt: now,
+  });
+  await tx.done;
+  return saved;
+}
+
+export async function addCharacterAssetVersion(input: Omit<CharacterAssetVersionRecord, 'version' | 'status' | 'createdAt'>): Promise<CharacterAssetVersionRecord> {
+  const db = await openStudioDb();
+  const current = (await listCharacterAssets(input.characterId)).filter((asset) => asset.kind === input.kind);
+  const now = new Date().toISOString();
+  const saved: CharacterAssetVersionRecord = { ...input, version: (current[0]?.version ?? 0) + 1, status: 'current', createdAt: now };
+  const tx = db.transaction('characterAssets', 'readwrite');
+  for (const asset of current) await tx.store.put({ ...asset, status: 'superseded' });
+  await tx.store.put(saved);
+  await tx.done;
+  return saved;
+}
+
+export async function rollbackCharacterRecord(characterId: string, revision: number): Promise<CharacterIdentityRecord> {
+  const target = (await listCharacterRevisions(characterId)).find((item) => item.revision === revision);
+  if (!target) throw new Error('指定したキャラクター履歴が見つかりません。');
+  return saveCharacterRecord(target.snapshot as unknown as CharacterIdentityRecord, 'rollback', [`revision:${revision}`]);
+}
+
+export async function listCharacterRevisions(characterId: string): Promise<CharacterRevisionRecord[]> {
+  const db = await openStudioDb();
+  return (await db.getAllFromIndex('characterRevisions', 'by-character', characterId)).sort((a, b) => b.revision - a.revision);
+}
+
+export async function listCharacterAssets(characterId: string): Promise<CharacterAssetVersionRecord[]> {
+  const db = await openStudioDb();
+  return (await db.getAllFromIndex('characterAssets', 'by-character', characterId)).sort((a, b) => b.version - a.version);
+}
+
+export async function exportCharacterDatabaseJson(): Promise<Blob> {
+  const db = await openStudioDb();
+  const [characters, assets, revisions] = await Promise.all([
+    db.getAll('characterRecords'), db.getAll('characterAssets'), db.getAll('characterRevisions'),
+  ]);
+  return new Blob([JSON.stringify({ exportSchemaVersion: 1, exportedAt: new Date().toISOString(), characters, assets, revisions }, null, 2)], { type: 'application/json' });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

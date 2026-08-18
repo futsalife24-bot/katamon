@@ -20,6 +20,9 @@ import { ImageCanvas } from './components/ImageCanvas';
 import { MotionPreview } from './components/MotionPreview';
 import { PartPreview } from './components/PartPreview';
 import { useStudioController, type StudioController } from './app/use-studio-controller';
+import { exportCharacterDatabaseJson, importAiProposalJson, listAiProposals, listCharacterRecords, seedCharacterDatabase } from './storage/db';
+import { searchCharacterRecords, type CharacterIdentityRecord } from './domain/character-db';
+import type { AiProposal } from './domain/ai-proposal';
 
 const SPECIAL_OPTIONS: Array<{ id: SpecialTemplate; label: string; help: string }> = [
   { id: 'single', label: '単発', help: '既存の通常弾に近い単発技です。' },
@@ -164,6 +167,69 @@ function Status({ value, good }: { value: string; good?: boolean }) {
   return <span className={`status-pill ${good ? 'status-pill--good' : ''}`}>{value}</span>;
 }
 
+function CharacterDatabaseCard() {
+  const [records, setRecords] = useState<CharacterIdentityRecord[]>([]);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void (async () => {
+      try {
+        await seedCharacterDatabase();
+        setRecords(await listCharacterRecords());
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  const visible = searchCharacterRecords(records, query);
+  const download = async () => {
+    const blob = await exportCharacterDatabaseJson();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'content-studio-character-db.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <section className="card" data-testid="character-database-card">
+      <div className="section-heading"><div><h2>キャラクター台帳</h2><p>既存キャラの不変ID・slug・タグ・素材版・変更履歴を端末内で管理します。</p></div><Status value={loading ? '準備中' : `${records.length}体`} good={!loading && records.length > 0} /></div>
+      <div className="section-heading">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="名前・ID・slug・タグで検索" aria-label="キャラクター台帳を検索" />
+        <button className="text-button" type="button" onClick={() => void download()} disabled={loading}>DBを書き出す</button>
+      </div>
+      {!loading && <div className="draft-list">{visible.map((record) => <article className="draft-card" key={record.characterId}><div className="draft-card__open"><b>{record.displayName}</b><span>{record.slug}・素材v1・履歴v{record.currentRevision}</span></div><span className="support-note">{record.controlledTags.concat(record.freeTags).join(' / ')}</span></article>)}</div>}
+      {!loading && visible.length === 0 && <div className="empty-state"><b>該当キャラなし</b><span>名前・旧ID・slug・タグを確認してください。</span></div>}
+    </section>
+  );
+}
+
+function AiProposalCard() {
+  const importRef = useRef<HTMLInputElement>(null);
+  const [proposals, setProposals] = useState<AiProposal[]>([]);
+  const [message, setMessage] = useState('');
+  useEffect(() => { void listAiProposals().then(setProposals); }, []);
+  const importProposal = async (file: Blob) => {
+    try {
+      const result = await importAiProposalJson(file);
+      if (!result.proposal) throw new Error(result.errors.join(' / '));
+      setProposals(await listAiProposals());
+      setMessage(result.stale ? '取込済み。ただし対象キャラの履歴が古いため、公開前に最新コンテキストで再確認してください。' : '取込成功。現在は実験提案として保存されています。');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'AI提案を取り込めませんでした。');
+    }
+  };
+  return (
+    <section className="card" data-testid="ai-proposal-card">
+      <div className="section-heading"><div><h2>AI提案JSON</h2><p>AIの提案を取り込み、検証してからプレビューへ進めます。自動公開はしません。</p></div><Status value={`${proposals.length}件`} good={proposals.length > 0} /></div>
+      <input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importProposal(file); }} />
+      <button className="secondary full-width" type="button" onClick={() => importRef.current?.click()}>AI提案JSONを読み込む</button>
+      {message && <p className="support-note" role="status">{message}</p>}
+      {proposals.slice(0, 3).map((proposal) => <article className="draft-card" key={proposal.proposalId}><div className="draft-card__open"><b>{proposal.specialName}</b><span>{proposal.characterSlug}・{proposal.specialTemplate}・{proposal.status}</span></div><span className="support-note">{proposal.motionDirection || 'モーション指定なし'}</span></article>)}
+    </section>
+  );
+}
+
 function Dashboard({ studio }: { studio: StudioController }) {
   const importRef = useRef<HTMLInputElement>(null);
   const [legacyId, setLegacyId] = useState(LEGACY_CHARACTERS[0].id);
@@ -201,6 +267,9 @@ function Dashboard({ studio }: { studio: StudioController }) {
         <button className="secondary full-width" type="button" onClick={() => void studio.editLegacyCharacter(legacyId)} data-testid="edit-legacy-character">このキャラのモーションを作る</button>
         <p className="support-note">未対応キャラは従来の静止表示を継続します。一括上書きは行いません。</p>
       </section>
+
+      <CharacterDatabaseCard />
+      <AiProposalCard />
 
       <section className="card connection-card motion-only-note">
         <div><h2>生成AI・外部送信なし</h2><p>通常の画像処理と固定プリセットだけで動きます。画像を外部サービスへ送りません。</p></div>

@@ -1,4 +1,6 @@
 export * from './defaults';
+export * from './character-db';
+export * from './ai-proposal';
 export * from './legacy-characters';
 export * from './migrations';
 export * from './schemas';
