@@ -282,6 +282,7 @@ const HOOK = `
       barucopterMarker: !!p.barucopterMarker,
       barucopterBullet: !!p.barucopterBullet,
       coolKaiOnigiri: !!p.coolKaiOnigiri,
+      coolKaiDelay: Number(p.coolKaiDelay || 0),
       scorpionRail: !!p.scorpionRail,
       scorpionRailActive: !!p.scorpionRailActive,
       vx: p.vx,

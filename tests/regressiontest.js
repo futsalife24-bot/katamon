@@ -318,7 +318,7 @@ check('ロード中の石壁に更新時の読み込み案内を表示する',
     JSON.stringify(phases));
   check('オーラはキャラ画像の背後から上向きに描く',
     indexHtml.includes('function drawSpecialAura(u, a)')
-      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
+      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
     'drawSpecialAuraの描画順が見つかりません');
   const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
     ? kt.specialCutInSoundProfile()
@@ -469,7 +469,7 @@ const shinigami = kt.character('shinigami');
     && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
     // 両者の間には描画理由のコメントもある。文字数ではなく同じ drawUnit 内の順序を見る。
-    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
   // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
   // 中心にすると見えている上半分に当たらない(実機で指摘)。
   check('直撃の円をキャラの体へ上げている',
@@ -1455,7 +1455,7 @@ check('バルコプターの機銃1発は3ダメージで、着弾地点を小�
   JSON.stringify({ unit: barucopterDamageResult, surfaceCraterDelta: barucopterSurfaceCraterDelta }));
 kt.clearProjectilesForTest();
 
-// ===== v2.0.60: クールカイは小さいおにぎりを47発、固定の微バラツキで連射 =====
+// ===== v2.0.63: クールカイはランダム角度へ47発を順番に連射 =====
 const coolKaiNormalVelocity = kt.launchVelocityForTest('coolKai', 180, -96, false, false);
 const coolKaiSpecialIndex = kt.fireSpecialImmediateForTest('coolKai', coolKaiNormalVelocity.vx0, coolKaiNormalVelocity.vy0);
 const coolKaiProjectiles = kt.projectileProfilesForTest();
@@ -1474,6 +1474,12 @@ check('クールカイのおにぎり47発は大きめの固定バラツキで�
     && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) > 0.45
     && coolKaiAngles.length === 47,
   JSON.stringify({ unique: coolKaiUniqueAngles.size, angles: coolKaiAngles }));
+const coolKaiDelays = coolKaiProjectiles.map(p => p.coolKaiDelay);
+check('クールカイのおにぎり47発は一定間隔の連射になっている',
+  coolKaiDelays.length === 47
+    && coolKaiDelays[0] === 0
+    && coolKaiDelays.every((delay, i) => Math.abs(delay - i * 0.075) < 1e-9),
+  JSON.stringify({ delays: coolKaiDelays }));
 kt.clearProjectilesForTest();
 
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
