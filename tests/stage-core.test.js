@@ -119,6 +119,28 @@ test('all generated presets stay in bounds and non-blank presets validate', () =
   }
 });
 
+test('large stages use the 2160x960 terrain grid and keep 2v2 spawns valid', () => {
+  const stage = makeStage({
+    size: 'large',
+    preset: 'mountainCenter',
+    seed: 'large-stage-grid',
+    generationParameters: { playerCount: 4, elevation: 0.72, mountainCount: 4 }
+  });
+  const limits = core.getStageLimits(stage);
+  assert.equal(stage.stageWidth, 2160);
+  assert.equal(stage.stageHeight, 960);
+  assert.equal(stage.terrain.columns.length, 720);
+  assert.equal(limits.terrainBottom, 924);
+  assert.equal(stage.spawnPoints.length, 4);
+  assert.equal(core.validateStage(stage).valid, true);
+
+  const grid = core.segmentsToGrid(stage);
+  assert.equal(grid.length, 720 * 240);
+  const restored = core.gridToSegments(grid, stage);
+  assert.equal(restored.length, 720);
+  assert.equal(core.isSolidAt(stage, stage.spawnPoints[0].x, stage.spawnPoints[0].y + 16), true);
+});
+
 test('terrain grid editing round-trips and circle painting changes collision', () => {
   const stage = makeStage({ preset: 'flat' });
   const grid = core.segmentsToGrid(stage);
@@ -195,6 +217,49 @@ test('only the supported global wind gimmick and range are accepted', () => {
   const outOfRange = core.normalizeStage(valid);
   outOfRange.gimmicks[0].strength = 5;
   assert.ok(core.validateStage(outOfRange).errors.some((entry) => entry.code === 'wind_strength'));
+});
+
+test('material allowlist accepts a whole-stage steel material that never loses collision', () => {
+  assert.deepEqual(core.MATERIAL_CATALOG.terrain, {
+    id: 'terrain',
+    label: '通常地形',
+    type: 'destructible',
+    destructible: true,
+    enabled: true,
+    exportable: true,
+    requiresGameFeature: null
+  });
+  assert.deepEqual(core.MATERIAL_CATALOG.steel, {
+    id: 'steel',
+    label: '壊れない鋼鉄',
+    type: 'indestructible',
+    destructible: false,
+    enabled: true,
+    exportable: true,
+    requiresGameFeature: null
+  });
+
+  const valid = makeStage();
+  assert.equal(core.validateStage(valid).valid, true);
+
+  const steel = makeStage();
+  steel.materials[0] = { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' };
+  assert.equal(core.validateStage(steel).valid, true);
+  const steelGround = core.groundYAt(steel, 720);
+  const carvedSteel = core.carveCircle(steel, 720, steelGround + 8, 36);
+  assert.equal(core.isSolidAt(carvedSteel, 720, steelGround + 8), true, 'steel remains solid after a crater');
+
+  const unknown = makeStage();
+  unknown.materials[0].id = 'unknown';
+  assert.ok(core.validateStage(unknown).errors.some((entry) => entry.code === 'unsupported_material'));
+
+  const multiple = makeStage();
+  multiple.materials.push({ id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' });
+  assert.ok(core.validateStage(multiple).errors.some((entry) => entry.code === 'unsupported_material'));
+
+  const mismatchedSteel = makeStage();
+  mismatchedSteel.materials[0] = { id: 'steel', type: 'destructible', destructible: true, color: '#49515B' };
+  assert.ok(core.validateStage(mismatchedSteel).errors.some((entry) => entry.code === 'unsupported_material'));
 });
 
 test('game compatibility accepts only vNNN ranges containing the current build', () => {

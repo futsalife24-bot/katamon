@@ -1,12 +1,12 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.0-mvp';
+  const APP_VERSION = '1.8.1-character-assets';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
   const RAW_LIMITS = Core && Core.LIMITS ? Core.LIMITS : {};
-  const LIMITS = Object.assign({}, RAW_LIMITS, {
+  let LIMITS = Object.assign({}, RAW_LIMITS, {
     stageWidth: RAW_LIMITS.stageWidth || 1440,
     stageHeight: RAW_LIMITS.stageHeight || 660,
     terrainBottomY: RAW_LIMITS.terrainBottomY || RAW_LIMITS.terrainBottom || 636,
@@ -24,7 +24,7 @@
   });
   /* Fallback properties above deliberately mirror the shared module's fixed game dimensions. */
   const RAW_PHYSICS = Core && Core.PHYSICS ? Core.PHYSICS : {};
-  const PHYSICS = Object.assign({}, RAW_PHYSICS, {
+  let PHYSICS = Object.assign({}, RAW_PHYSICS, {
     fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
     gravity: RAW_PHYSICS.gravity || 650,
     windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
@@ -34,8 +34,53 @@
     deadLineY: Number.isFinite(RAW_PHYSICS.deadLineY) ? RAW_PHYSICS.deadLineY : LIMITS.terrainBottomY,
     fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
   });
-  const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'gimmicks', 'appearance', 'playtest', 'validate', 'export'];
+  function normalizedLimits(raw) {
+    raw = raw || RAW_LIMITS;
+    return Object.assign({}, raw, {
+      stageWidth: raw.stageWidth || 1440,
+      stageHeight: raw.stageHeight || 660,
+      terrainBottomY: raw.terrainBottomY || raw.terrainBottom || 636,
+      columnWidth: raw.columnWidth || 3,
+      rowHeight: raw.rowHeight || 4,
+      terrainColumns: raw.terrainColumns || raw.columns || 480,
+      terrainRows: raw.terrainRows || raw.rows || 165,
+      unitRadius: raw.unitRadius || 18,
+      maxSpawnPoints: raw.maxSpawnPoints || raw.maxSpawns || 4,
+      maxJsonBytes: raw.maxJsonBytes || raw.maxFileBytes || 2 * 1024 * 1024,
+      maxZipBytes: raw.maxZipBytes || 6 * 1024 * 1024,
+      maxTitleLength: raw.maxTitleLength || 48,
+      maxDescriptionLength: raw.maxDescriptionLength || 500,
+      maxAuthorLength: raw.maxAuthorLength || 32
+    });
+  }
+  function setRuntimeLimits(stage) {
+    const raw = Core && typeof Core.getStageLimits === 'function'
+      ? Core.getStageLimits(stage || { size: $('stageSize') && $('stageSize').value })
+      : RAW_LIMITS;
+    LIMITS = normalizedLimits(raw);
+    PHYSICS = Object.assign({}, RAW_PHYSICS, {
+      fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
+      gravity: RAW_PHYSICS.gravity || 650,
+      windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
+      velocityScale: RAW_PHYSICS.velocityScale || 7.8,
+      projectileRadius: RAW_PHYSICS.projectileRadius || 5,
+      normalBlastRadius: RAW_PHYSICS.normalBlastRadius || RAW_PHYSICS.defaultExplosionRadius || 44,
+      deadLineY: LIMITS.terrainBottomY,
+      fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
+    });
+  }
+  const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'playtest', 'validate', 'export'];
+  const SCREEN_ALIASES = Object.freeze({ gimmicks: 'playtest', appearance: 'terrain' });
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
+  const TERRAIN_TOOL_LABELS = Object.freeze({
+    draw: '描く', erase: '削る', guide: 'キャラ確認', fill: '塗りつぶし',
+    line: '線', rectangle: '四角', circle: '円', text: '文字'
+  });
+  const TERRAIN_PANEL_LABELS = Object.freeze({ brush: 'ブラシ', shape: '整形', display: '表示', appearance: '見た目', text: '文字' });
+  const TEXT_TERRAIN_FONTS = Object.freeze({
+    rock: '"RocknRoll One", sans-serif',
+    reggae: '"Reggae One", "RocknRoll One", sans-serif'
+  });
   const PRESET_LABELS = {
     flat: '平原', rolling: '丘陵', plateauLeft: '左高台', plateauRight: '右高台',
     mountainCenter: '中央山', valley: '渓谷', grandCanyon: '大峡谷', centerHole: '中央穴',
@@ -43,12 +88,46 @@
     fortress: '要塞', floatingIslands: '浮島', platforms: '複数足場', cave: '洞窟',
     elevation: '高低差重視', random: 'ランダム'
   };
-  const THEME_COLORS = {
-    grass: { sky: '#8fd3ff', terrain: '#476b38', gradient: ['#7fc8f2', '#d9f2ff'] },
-    desert: { sky: '#f3ca81', terrain: '#9a6635', gradient: ['#e8a95b', '#ffe3a7'] },
-    snow: { sky: '#a9cceb', terrain: '#6d8798', gradient: ['#8eb5d6', '#eaf7ff'] },
-    volcanic: { sky: '#4a2730', terrain: '#4a302c', gradient: ['#351c26', '#a64c35'] }
-  };
+  /* Keep these values aligned with the target game's canonical stage themes. */
+  const THEME_COLORS = Object.freeze({
+    grass: {
+      sky: '#1a2340', terrain: '#7a5a3a', gradient: ['#1a2340', '#4a5a8a'],
+      dirtTop: '#7a5a3a', dirtBottom: '#33241a', rim: '#9be08a', rimShadow: '#4f8a4f',
+      strata: 'rgba(255,222,160,0.10)', stoneLight: 'rgba(236,213,172,0.16)', stoneDark: 'rgba(38,24,16,0.20)'
+    },
+    desert: {
+      sky: '#3a2b1a', terrain: '#c9954a', gradient: ['#3a2b1a', '#c98a4a'],
+      dirtTop: '#c9954a', dirtBottom: '#5a3a1c', rim: '#e0c37a', rimShadow: '#a97f30',
+      strata: 'rgba(255,223,153,0.14)', stoneLight: 'rgba(255,226,168,0.18)', stoneDark: 'rgba(83,44,18,0.20)'
+    },
+    snow: {
+      sky: '#233047', terrain: '#e8eef5', gradient: ['#233047', '#7c9bb8'],
+      dirtTop: '#e8eef5', dirtBottom: '#6f7f93', rim: '#ffffff', rimShadow: '#b9cadd',
+      strata: 'rgba(214,240,255,0.17)', stoneLight: 'rgba(255,255,255,0.22)', stoneDark: 'rgba(62,87,116,0.17)'
+    },
+    volcanic: {
+      sky: '#200f14', terrain: '#5a4038', gradient: ['#200f14', '#8a3018'],
+      dirtTop: '#5a4038', dirtBottom: '#180f0d', rim: '#ff7a3a', rimShadow: '#a8371a',
+      strata: 'rgba(255,105,47,0.12)', stoneLight: 'rgba(255,142,91,0.13)', stoneDark: 'rgba(10,5,5,0.30)'
+    }
+  });
+  const BACKGROUND_SOURCES = Object.freeze({
+    grass: '../../assets/stage-grass-bg.jpg',
+    desert: '../../assets/stage-desert-bg.jpg',
+    snow: '../../assets/stage-snow-bg.jpg',
+    volcanic: '../../assets/stage-volcanic-bg.jpg'
+  });
+  const CHARACTER_SOURCES = Object.freeze({
+    kyoryu: ['../../assets/characters/runtime/dirano.webp', '../../assets/characters/master/dirano.png'],
+    medama: ['../../assets/characters/runtime/eyebolt.webp', '../../assets/characters/master/eyebolt.png'],
+    tori: ['../../assets/characters/runtime/fenice.webp', '../../assets/characters/master/fenice.png'],
+    iwa: ['../../assets/characters/runtime/gorocca.webp', '../../assets/characters/master/gorocca.png']
+  });
+  const SLOT_CHARACTER = Object.freeze({ p1: 'kyoryu', e1: 'medama', p2: 'tori', e2: 'iwa' });
+  const SPRITE_SIZE = 78;
+  const SPRITE_REFERENCE_ASPECT = 1.318;
+  const UNIT_HIT_RADIUS = 30;
+  const UNIT_HIT_RISE = 23;
   const LOW_POWER_AUTO_DETECTED = (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4)
     || (Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) <= 4);
   const ISSUE_MESSAGES = {
@@ -126,12 +205,56 @@
   };
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const nowIso = () => new Date().toISOString();
+  const normalizeScreen = (screen) => {
+    const candidate = SCREEN_ALIASES[screen] || screen;
+    return SCREEN_ORDER.includes(candidate) ? candidate : 'home';
+  };
+
+  function loadImageWithFallback(sources) {
+    const image = new Image();
+    let index = 0;
+    image.decoding = 'async';
+    image.onload = () => renderAllCanvases();
+    image.onerror = () => {
+      index += 1;
+      if (index < sources.length) image.src = sources[index];
+    };
+    image.src = sources[index];
+    return image;
+  }
+
+  const stageBackgroundImages = Object.fromEntries(Object.entries(BACKGROUND_SOURCES)
+    .map(([key, source]) => [key, loadImageWithFallback([source])]));
+  const characterImages = Object.fromEntries(Object.entries(CHARACTER_SOURCES)
+    .map(([key, sources]) => [key, loadImageWithFallback(sources)]));
+
+  const terrainNoiseTile = document.createElement('canvas');
+  terrainNoiseTile.width = 28;
+  terrainNoiseTile.height = 28;
+  (() => {
+    const context = terrainNoiseTile.getContext('2d');
+    const image = context.createImageData(28, 28);
+    let seed = 0x4b415441;
+    for (let index = 0; index < image.data.length; index += 4) {
+      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+      const value = seed & 1 ? 255 : 0;
+      image.data[index] = value;
+      image.data[index + 1] = value;
+      image.data[index + 2] = value;
+      image.data[index + 3] = Math.abs(seed >>> 24) % 47;
+    }
+    context.putImageData(image, 0, 0);
+  })();
 
   const state = {
     stage: null,
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
+    terrainInspectorPanel: 'brush',
+    characterGuides: [],
+    activeGuideIndex: 0,
+    guideDrag: null,
     activeSpawn: 'p1',
     undo: [],
     redo: [],
@@ -143,6 +266,11 @@
     lastWorldPoint: null,
     shapeStart: null,
     shapeBaseGrid: null,
+    textTerrainBusy: false,
+    textTerrainPreviewPoint: { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 },
+    textTerrainPreviewActive: true,
+    textTerrainDragActive: false,
+    textTerrainStampCount: 0,
     pinch: null,
     noiseCounter: 0,
     generationJob: null,
@@ -163,9 +291,14 @@
     appearanceBrightness: 1,
     deferredInstallPrompt: null,
     pwaUpdateRequested: false,
+    orientationLockActive: false,
+    orientationFullscreenEntered: false,
+    orientationGuideToken: 0,
     lowPowerMode: LOW_POWER_AUTO_DETECTED,
     lowPowerAutoDetected: LOW_POWER_AUTO_DETECTED,
-    toastTimer: null
+    toastTimer: null,
+    ready: false,
+    documentStarted: false
   };
 
   function coreReady() {
@@ -181,6 +314,80 @@
     state.toastTimer = setTimeout(() => { toast.hidden = true; }, duration || 2600);
   }
 
+  function isLandscapeViewport() {
+    return globalThis.innerWidth > globalThis.innerHeight;
+  }
+
+  function updateOrientationControls() {
+    const landscape = isLandscapeViewport();
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      const label = button.querySelector('[data-orientation-label]');
+      const icon = button.querySelector('[aria-hidden="true"]');
+      if (label) label.textContent = landscape ? '縦画面' : '横画面';
+      if (icon) icon.textContent = landscape ? '↕' : '↔';
+      button.dataset.orientation = landscape ? 'landscape' : 'portrait';
+      button.setAttribute('aria-label', landscape ? '縦画面へ戻す' : '横画面へ切り替える');
+    });
+    requestAnimationFrame(renderAllCanvases);
+  }
+
+  function showOrientationGuide(button) {
+    const controls = button && button.closest('.terrain-editor-dock, .panel, .playtest-control-dock, .screen');
+    const guide = controls && controls.querySelector('[data-orientation-guide]');
+    const token = ++state.orientationGuideToken;
+    if (guide) {
+      guide.hidden = false;
+      setTimeout(() => {
+        if (token === state.orientationGuideToken && !isLandscapeViewport()) guide.hidden = false;
+      }, 180);
+    }
+    showToast('この端末では自動回転できません。画面回転ロックを解除して、端末を横向きにしてください。', 5600);
+  }
+
+  async function togglePreferredOrientation(button) {
+    const orientation = globalThis.screen && globalThis.screen.orientation;
+    if (isLandscapeViewport()) {
+      try { if (orientation && typeof orientation.unlock === 'function') orientation.unlock(); } catch (_) {}
+      state.orientationLockActive = false;
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      showToast('縦向きへ戻す場合は端末を縦にしてください。');
+      updateOrientationControls();
+      return;
+    }
+
+    if (!orientation || typeof orientation.lock !== 'function') {
+      showOrientationGuide(button);
+      return;
+    }
+
+    try {
+      if (!document.fullscreenElement && document.documentElement && typeof document.documentElement.requestFullscreen === 'function') {
+        try {
+          await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        } catch (_) {
+          await document.documentElement.requestFullscreen();
+        }
+        state.orientationFullscreenEntered = true;
+      }
+      await orientation.lock('landscape');
+      state.orientationLockActive = true;
+      state.orientationGuideToken += 1;
+      document.querySelectorAll('[data-orientation-guide]').forEach((guide) => { guide.hidden = true; });
+      showToast('横画面に切り替えました。');
+      updateOrientationControls();
+    } catch (_) {
+      if (state.orientationFullscreenEntered && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        try { await document.exitFullscreen(); } catch (_) {}
+      }
+      state.orientationFullscreenEntered = false;
+      state.orientationLockActive = false;
+      showOrientationGuide(button);
+    }
+  }
+
   function readableError(error, fallback) {
     if (error && error.code && ISSUE_MESSAGES[error.code]) return ISSUE_MESSAGES[error.code];
     const text = error instanceof Error ? error.message : String(error || '');
@@ -194,6 +401,7 @@
   }
 
   function markDirty() {
+    state.documentStarted = true;
     state.dirty = true;
     state.editRevision += 1;
     state.lastValidation = null;
@@ -206,10 +414,15 @@
   }
 
   function navigate(screen, options) {
-    if (!SCREEN_ORDER.includes(screen)) return;
+    screen = normalizeScreen(screen);
+    const previousScreen = state.currentScreen;
     document.querySelectorAll('.screen').forEach((node) => node.classList.toggle('is-active', node.dataset.screen === screen));
     document.querySelectorAll('.step-tab').forEach((node) => node.classList.toggle('is-active', node.dataset.step === screen));
     state.currentScreen = screen;
+    if (screen !== 'terrain') {
+      collapseTerrainInspector();
+      collapseTerrainToolMenu();
+    }
     const active = document.querySelector(`.screen[data-screen="${screen}"]`);
     if (active) active.scrollTop = 0;
     if (!options || !options.fromHistory) {
@@ -221,6 +434,10 @@
     if (screen === 'playtest') resetPlaytest(false);
     if (screen === 'validate') renderValidation(state.lastValidation);
     if (screen === 'export') updateExportSummary();
+    if (state.ready && state.documentStarted && state.stage && previousScreen !== screen) {
+      clearTimeout(state.preferenceSaveTimer);
+      state.preferenceSaveTimer = setTimeout(() => saveDraftNow(true, true), 250);
+    }
   }
 
   function createFallbackStage(metadata) {
@@ -252,7 +469,7 @@
 
   function gridFromTerrain(terrain) {
     if (Core && typeof Core.gridFromTerrain === 'function') return Core.gridFromTerrain(terrain);
-    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain);
+    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain, state.stage);
     const grid = new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows);
     const columns = terrain && Array.isArray(terrain.columns) ? terrain.columns : [];
     for (let c = 0; c < Math.min(columns.length, LIMITS.terrainColumns); c++) {
@@ -268,7 +485,7 @@
   function columnsFromGrid(grid) {
     if (Core && typeof Core.terrainFromGrid === 'function') return Core.terrainFromGrid(grid);
     if (Core && typeof Core.gridToSegments === 'function') {
-      return Core.gridToSegments(grid).map((segments) => segments
+      return Core.gridToSegments(grid, state.stage).map((segments) => segments
         .map((segment) => [clamp(segment[0], 0, LIMITS.terrainBottomY), clamp(segment[1], 0, LIMITS.terrainBottomY)])
         .filter((segment) => segment[1] > segment[0]));
     }
@@ -293,6 +510,13 @@
     state.stage.terrain.columns = columnsFromGrid(state.grid);
   }
 
+  function selectedTerrainMaterial() {
+    if ($('terrainMaterial').value === 'steel') {
+      return { id: 'steel', type: 'indestructible', destructible: false, color: $('terrainColor').value };
+    }
+    return { id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value };
+  }
+
   function syncMetadataFromForm() {
     if (!state.stage) return;
     state.stage.title = $('stageTitle').value.trim().slice(0, LIMITS.maxTitleLength || 48) || 'ステージ';
@@ -302,6 +526,9 @@
 
   function syncStageToForm() {
     if (!state.stage) return;
+    $('stageSize').value = state.stage.stageWidth === 2160 && state.stage.stageHeight === 960 ? 'large' : 'standard';
+    $('stageWidth').value = state.stage.stageWidth || LIMITS.stageWidth;
+    $('stageHeight').value = state.stage.stageHeight || LIMITS.stageHeight;
     $('stageTitle').value = state.stage.title || 'ステージ';
     $('stageAuthor').value = state.stage.authorDisplayName || '作成者';
     $('stageDescription').value = state.stage.description || '';
@@ -325,9 +552,11 @@
     $('windStrength').value = Math.round((wind && Number(wind.strength) || 0.35) * 100);
     const background = state.stage.background || {};
     if (THEME_COLORS[background.theme]) $('themeSelect').value = background.theme;
+    $('backgroundMode').value = ['theme', 'gradient', 'color'].includes(background.mode) ? background.mode : 'theme';
     const editableBackground = background.mode === 'gradient' && background.gradient ? background.gradient.from : background.color;
     $('backgroundColor').value = /^#[0-9a-f]{6}$/i.test(editableBackground || '') ? editableBackground : THEME_COLORS[$('themeSelect').value].sky;
     $('terrainColor').value = state.stage.materials && /^#[0-9a-f]{6}$/i.test(state.stage.materials[0] && state.stage.materials[0].color || '') ? state.stage.materials[0].color : THEME_COLORS[$('themeSelect').value].terrain;
+    $('terrainMaterial').value = state.stage.materials && state.stage.materials[0] && state.stage.materials[0].id === 'steel' ? 'steel' : 'terrain';
     $('brightnessRange').value = Math.round(clamp(state.appearanceBrightness || 1, 0.6, 1.3) * 100);
     $('decorationsEnabled').checked = state.stage.decorations ? state.stage.decorations.enabled !== false : true;
     $('spawnCount').value = state.stage.spawnPoints && state.stage.spawnPoints.length >= 4 ? '4' : '2';
@@ -336,11 +565,35 @@
     updateExportSummary();
   }
 
+  function surfaceYAtGrid(grid, x) {
+    const column = clamp(Math.floor(x / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    for (let row = 0; row < LIMITS.terrainRows; row++) {
+      if (grid[row * LIMITS.terrainColumns + column]) return row * LIMITS.rowHeight;
+    }
+    return LIMITS.stageHeight;
+  }
+
+  function defaultCharacterGuides(grid) {
+    return [
+      { x: LIMITS.stageWidth * 0.28, character: 'kyoryu', direction: 'right' },
+      { x: LIMITS.stageWidth * 0.72, character: 'medama', direction: 'left' }
+    ].map((guide) => ({
+      x: guide.x,
+      y: surfaceYAtGrid(grid, guide.x) - LIMITS.unitRadius,
+      character: guide.character,
+      direction: guide.direction
+    }));
+  }
+
   function setStage(stage, options) {
     clearTimeout(state.autosaveTimer);
     state.dirty = false;
     state.stage = clone(stage);
+    setRuntimeLimits(state.stage);
     state.grid = gridFromTerrain(state.stage.terrain);
+    state.characterGuides = defaultCharacterGuides(state.grid);
+    state.activeGuideIndex = 0;
+    state.guideDrag = null;
     state.appearanceBrightness = 1;
     state.undo = [];
     state.redo = [];
@@ -363,7 +616,9 @@
       gimmicks: clone(state.stage.gimmicks || []),
       background: clone(state.stage.background || {}),
       decorations: clone(state.stage.decorations || {}),
-      materials: clone(state.stage.materials || [])
+      materials: clone(state.stage.materials || []),
+      characterGuides: clone(state.characterGuides || []),
+      appearanceBrightness: state.appearanceBrightness
     };
   }
 
@@ -374,6 +629,10 @@
     state.stage.background = clone(snapshot.background);
     state.stage.decorations = clone(snapshot.decorations);
     state.stage.materials = clone(snapshot.materials);
+    state.characterGuides = Array.isArray(snapshot.characterGuides) && snapshot.characterGuides.length
+      ? clone(snapshot.characterGuides)
+      : defaultCharacterGuides(snapshot.grid);
+    if (Number.isFinite(snapshot.appearanceBrightness)) state.appearanceBrightness = snapshot.appearanceBrightness;
     syncTerrainToStage();
     syncStageToForm();
     renderSpawnCards();
@@ -412,7 +671,9 @@
       gimmicks: clone(snapshot.gimmicks || []),
       background: clone(snapshot.background || {}),
       decorations: clone(snapshot.decorations || {}),
-      materials: clone(snapshot.materials || [])
+      materials: clone(snapshot.materials || []),
+      characterGuides: clone(snapshot.characterGuides || []),
+      appearanceBrightness: snapshot.appearanceBrightness
     };
   }
 
@@ -424,7 +685,11 @@
       gimmicks: clone(snapshot.gimmicks || []),
       background: clone(snapshot.background || {}),
       decorations: clone(snapshot.decorations || {}),
-      materials: clone(snapshot.materials || [])
+      materials: clone(snapshot.materials || []),
+      characterGuides: Array.isArray(snapshot.characterGuides) && snapshot.characterGuides.length
+        ? clone(snapshot.characterGuides)
+        : null,
+      appearanceBrightness: Number.isFinite(snapshot.appearanceBrightness) ? snapshot.appearanceBrightness : 1
     };
   }
 
@@ -535,11 +800,12 @@
       history: state.undo.slice(-12).map(serializeSnapshot),
       redoHistory: state.redo.slice(-12).map(serializeSnapshot),
       lastScreen: state.currentScreen,
-      editorState: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode },
-      editor: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode }
+      editorState: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode, characterGuides: clone(state.characterGuides) },
+      editor: { screen: state.currentScreen, view: clone(state.view), appearanceBrightness: state.appearanceBrightness, noiseCounter: state.noiseCounter, lowPowerMode: state.lowPowerMode, characterGuides: clone(state.characterGuides) }
     };
     try {
       await putDraft(record);
+      state.documentStarted = true;
       const savedLatestRevision = savingRevision === state.editRevision;
       if (savedLatestRevision) {
         state.dirty = false;
@@ -609,6 +875,7 @@
     const draftStage = record && record.stage ? record.stage : record;
     if (!draftStage || !draftStage.terrain) return showToast('下書きが壊れているため開けません。');
     setStage(draftStage, { skipSave: true });
+    state.documentStarted = true;
     const editor = record && (record.editorState || record.editor) || {};
     if (Array.isArray(record.history)) state.undo = record.history.map(deserializeSnapshot).filter(Boolean).slice(-state.maxHistory);
     if (Array.isArray(record.redoHistory)) state.redo = record.redoHistory.map(deserializeSnapshot).filter(Boolean).slice(-state.maxHistory);
@@ -616,11 +883,19 @@
     if (Number.isFinite(editor.appearanceBrightness)) state.appearanceBrightness = clamp(editor.appearanceBrightness, 0.6, 1.3);
     if (Number.isFinite(editor.noiseCounter)) state.noiseCounter = Math.max(0, Math.floor(editor.noiseCounter));
     if (typeof editor.lowPowerMode === 'boolean') state.lowPowerMode = editor.lowPowerMode;
+    if (Array.isArray(editor.characterGuides) && editor.characterGuides.length) {
+      state.characterGuides = editor.characterGuides.slice(0, 4).map((guide, index) => ({
+        x: clamp(Number(guide.x) || LIMITS.stageWidth * (index ? 0.72 : 0.28), 0, LIMITS.stageWidth),
+        y: clamp(Number(guide.y) || 0, -SPRITE_SIZE, LIMITS.stageHeight + SPRITE_SIZE),
+        character: CHARACTER_SOURCES[guide.character] ? guide.character : (index ? 'medama' : 'kyoryu'),
+        direction: guide.direction === 'left' ? 'left' : 'right'
+      }));
+    }
     updateLowPowerModeUi();
     syncStageToForm();
     updateHistoryButtons();
     $('saveState').textContent = '下書きを復元しました';
-    const restoredScreen = SCREEN_ORDER.includes(record.lastScreen) ? record.lastScreen : (SCREEN_ORDER.includes(editor.screen) ? editor.screen : 'terrain');
+    const restoredScreen = normalizeScreen(record.lastScreen || editor.screen || 'terrain');
     navigate(restoredScreen);
   }
 
@@ -735,7 +1010,7 @@
   }
 
   function paintCircle(grid, x, y, radius, solid) {
-    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid);
+    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid, state.stage);
     const minColumn = clamp(Math.floor((x - radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const maxColumn = clamp(Math.ceil((x + radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const minRow = clamp(Math.floor((y - radius) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
@@ -750,19 +1025,248 @@
     return grid;
   }
 
+  function imageReady(image) {
+    return !!(image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+  }
+
+  function drawImageCover(context, image, x, y, width, height) {
+    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+    const sourceWidth = width / scale;
+    const sourceHeight = height / scale;
+    const sourceX = Math.max(0, (image.naturalWidth - sourceWidth) / 2);
+    const sourceY = Math.max(0, (image.naturalHeight - sourceHeight) * 0.48);
+    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  }
+
+  function characterCollision(guide, grid) {
+    const centerX = Number(guide.x);
+    const centerY = Number(guide.y) - UNIT_HIT_RISE;
+    if (centerX - UNIT_HIT_RADIUS < 0 || centerX + UNIT_HIT_RADIUS > LIMITS.stageWidth
+        || centerY - UNIT_HIT_RADIUS < 0 || centerY + UNIT_HIT_RADIUS > LIMITS.stageHeight) return 'outside';
+    const minColumn = clamp(Math.floor((centerX - UNIT_HIT_RADIUS) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    const maxColumn = clamp(Math.floor((centerX + UNIT_HIT_RADIUS) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
+    const minRow = clamp(Math.floor((centerY - UNIT_HIT_RADIUS) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
+    const maxRow = clamp(Math.floor((centerY + UNIT_HIT_RADIUS) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
+    for (let column = minColumn; column <= maxColumn; column++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        if (!grid[row * LIMITS.terrainColumns + column]) continue;
+        const left = column * LIMITS.columnWidth;
+        const top = row * LIMITS.rowHeight;
+        const nearestX = clamp(centerX, left, left + LIMITS.columnWidth);
+        const nearestY = clamp(centerY, top, top + LIMITS.rowHeight);
+        const deltaX = centerX - nearestX;
+        const deltaY = centerY - nearestY;
+        if (deltaX * deltaX + deltaY * deltaY <= UNIT_HIT_RADIUS * UNIT_HIT_RADIUS) return 'overlap';
+      }
+    }
+    return null;
+  }
+
+  function nearestSafeCharacterGuide(guide, grid) {
+    const minimumX = UNIT_HIT_RADIUS;
+    const maximumX = LIMITS.stageWidth - UNIT_HIT_RADIUS;
+    const originX = clamp(Number(guide.x) || LIMITS.stageWidth / 2, minimumX, maximumX);
+    const candidates = [originX];
+    for (let column = 0; column < LIMITS.terrainColumns; column++) {
+      const x = clamp(column * LIMITS.columnWidth + LIMITS.columnWidth / 2, minimumX, maximumX);
+      if (Math.abs(x - originX) > 0.001) candidates.push(x);
+    }
+    let best = null;
+    let bestDistance = Infinity;
+    for (const x of candidates) {
+      const surfaceY = surfaceYAtGrid(grid, x);
+      if (surfaceY >= LIMITS.stageHeight) continue;
+      const candidate = Object.assign({}, guide, { x, y: surfaceY - LIMITS.unitRadius });
+      if (characterCollision(candidate, grid)) continue;
+      const deltaX = x - Number(guide.x || 0);
+      const deltaY = candidate.y - Number(guide.y || 0);
+      const distance = deltaX * deltaX + deltaY * deltaY;
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  function snapInvalidCharacterGuides() {
+    if ($('toolLock').checked) return showToast('ツールロック中です。解除するとキャラクターを移動できます。');
+    const invalid = state.characterGuides
+      .map((guide, index) => ({ index, guide, collision: characterCollision(guide, state.grid) }))
+      .filter((item) => item.collision);
+    if (!invalid.length) return showToast('赤いキャラクターはありません。現在の配置で安全です。');
+    const placements = invalid.map((item) => ({ index: item.index, guide: nearestSafeCharacterGuide(item.guide, state.grid) }))
+      .filter((item) => item.guide);
+    if (!placements.length) return showToast('安全に乗せられる足場がありません。先に地形を描いてください。', 5000);
+    pushUndo();
+    for (const placement of placements) state.characterGuides[placement.index] = placement.guide;
+    state.activeGuideIndex = placements[0].index;
+    setActiveTool('guide');
+    renderTerrainCanvas();
+    markDirty();
+    const unresolved = invalid.length - placements.length;
+    showToast(unresolved
+      ? `${placements.length}体を最寄りの安全位置へ移動しました。${unresolved}体は足場を見つけられませんでした。`
+      : `${placements.length}体を最寄りの安全位置へ移動しました。Undoで戻せます。`, 5000);
+  }
+
+  function drawCharacterAt(context, guide, grid, options) {
+    const settings = options || {};
+    const image = characterImages[guide.character] || characterImages.kyoryu;
+    const collision = settings.forceInvalid || characterCollision(guide, grid);
+    const enemyTeam = settings.team === 'cpu' || settings.team === 'enemy';
+    const teamTint = enemyTeam ? '255,150,120' : '120,190,255';
+    const ringTint = collision ? '255,72,72' : teamTint;
+    const hitY = guide.y - UNIT_HIT_RISE;
+    context.save();
+    context.fillStyle = `rgba(${ringTint},${collision ? 0.24 : 0.09})`;
+    context.strokeStyle = `rgba(${ringTint},${collision ? 0.98 : 0.56})`;
+    context.lineWidth = settings.active ? 3.5 : 1.8;
+    context.beginPath();
+    context.arc(guide.x, hitY, UNIT_HIT_RADIUS, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+
+    if (imageReady(image)) {
+      const aspect = image.naturalWidth / image.naturalHeight;
+      const spriteHeight = SPRITE_SIZE * Math.sqrt(SPRITE_REFERENCE_ASPECT / aspect);
+      const spriteWidth = spriteHeight * aspect;
+      context.save();
+      context.globalAlpha = settings.ghost ? 0.82 : 1;
+      context.translate(guide.x, guide.y + LIMITS.unitRadius);
+      if (guide.direction === 'left') context.scale(-1, 1);
+      if (collision) context.filter = 'sepia(1) saturate(7) hue-rotate(315deg) brightness(.9)';
+      context.drawImage(image, -spriteWidth / 2, -spriteHeight, spriteWidth, spriteHeight);
+      context.restore();
+    } else {
+      context.fillStyle = collision ? '#ef5c5c' : (enemyTeam ? '#ff9678' : '#78beff');
+      context.beginPath();
+      context.arc(guide.x, guide.y, LIMITS.unitRadius, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    if (collision) {
+      context.strokeStyle = '#ff4040';
+      context.lineWidth = 4;
+      context.beginPath();
+      context.moveTo(guide.x - 12, hitY - 12);
+      context.lineTo(guide.x + 12, hitY + 12);
+      context.moveTo(guide.x + 12, hitY - 12);
+      context.lineTo(guide.x - 12, hitY + 12);
+      context.stroke();
+    }
+    context.restore();
+    return collision;
+  }
+
+  function drawTerrain(context, columns, theme, terrainTop, showCollision, steel) {
+    const gradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
+    gradient.addColorStop(0, terrainTop);
+    gradient.addColorStop(1, theme.dirtBottom);
+    context.fillStyle = gradient;
+    for (let column = 0; column < columns.length; column++) {
+      const x = column * LIMITS.columnWidth;
+      for (const segment of columns[column]) {
+        context.fillRect(x, segment[0], LIMITS.columnWidth + 0.6, Math.max(0, segment[1] - segment[0]));
+      }
+    }
+
+    if (!state.lowPowerMode) {
+      context.save();
+      context.beginPath();
+      for (let column = 0; column < columns.length; column++) {
+        const x = column * LIMITS.columnWidth;
+        for (const segment of columns[column]) context.rect(x, segment[0], LIMITS.columnWidth + 0.7, Math.max(0, segment[1] - segment[0]));
+      }
+      context.clip();
+      context.fillStyle = context.createPattern(terrainNoiseTile, 'repeat');
+      context.fillRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
+      if (steel) {
+        context.strokeStyle = 'rgba(5,10,15,.78)';
+        context.lineWidth = 2;
+        for (let y = 18; y < LIMITS.terrainBottomY; y += 30) {
+          context.beginPath(); context.moveTo(0, y); context.lineTo(LIMITS.stageWidth, y); context.stroke();
+        }
+        context.strokeStyle = 'rgba(210,225,234,.18)';
+        context.lineWidth = 1;
+        for (let x = 18; x < LIMITS.stageWidth; x += 54) {
+          context.beginPath(); context.moveTo(x, 0); context.lineTo(x - 14, LIMITS.terrainBottomY); context.stroke();
+        }
+      }
+      context.lineCap = 'round';
+      context.strokeStyle = theme.strata;
+      context.lineWidth = 2;
+      for (let band = 0; band < 9; band++) {
+        const baseY = 246 + band * 44;
+        context.beginPath();
+        for (let x = -20; x <= LIMITS.stageWidth + 20; x += 18) {
+          const y = baseY + Math.sin(x * 0.012 + band * 1.7) * 6 + Math.sin(x * 0.031 + band) * 2;
+          if (x === -20) context.moveTo(x, y); else context.lineTo(x, y);
+        }
+        context.stroke();
+      }
+      for (let index = 0; index < 120; index++) {
+        const x = (index * 73.37 + 19) % LIMITS.stageWidth;
+        const y = 238 + ((index * 47.19 + 31) % Math.max(1, LIMITS.stageHeight - 260));
+        context.fillStyle = index % 3 === 0 ? theme.stoneLight : theme.stoneDark;
+        context.beginPath();
+        context.ellipse(x, y, 2.4 + (index % 5) * 0.9, 1.5 + (index % 3) * 0.8, Math.sin(index * 2.13) * 0.75, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.restore();
+    }
+
+    for (let column = 0; column < columns.length; column++) {
+      const segment = columns[column][0];
+      if (!segment) continue;
+      const x = column * LIMITS.columnWidth;
+      context.fillStyle = theme.rimShadow;
+      context.fillRect(x, segment[0] + 4, LIMITS.columnWidth + 0.7, 5);
+      context.fillStyle = showCollision ? 'rgba(255,226,94,.72)' : theme.rim;
+      context.fillRect(x, segment[0], LIMITS.columnWidth + 0.7, 5);
+    }
+  }
+
+  function mixHexColor(from, to, ratio) {
+    const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const read = (color, offset) => Number.parseInt(String(color).slice(offset, offset + 2), 16);
+    const channel = (a, b) => Math.round(a + (b - a) * safeRatio).toString(16).padStart(2, '0');
+    return `#${channel(read(from, 1), read(to, 1))}${channel(read(from, 3), read(to, 3))}${channel(read(from, 5), read(to, 5))}`;
+  }
+
+  function drawCharacterGuides(context, grid) {
+    let warningCount = 0;
+    state.characterGuides.forEach((guide, index) => {
+      if (drawCharacterAt(context, guide, grid, { active: index === state.activeGuideIndex, ghost: true, team: index ? 'cpu' : 'player' })) warningCount += 1;
+    });
+    const hint = $('characterGuideHint');
+    const panel = $('characterGuidePanel');
+    const snapButton = $('snapCharacterGuides');
+    if (hint) {
+      hint.dataset.state = warningCount ? 'warning' : 'ok';
+      hint.textContent = warningCount
+        ? `警告：${warningCount}体が地形または画面外と重なっています。ドラッグするか、安全位置へ移動できます。`
+        : '実ゲームと同じ寸法です。キャラ確認でドラッグでき、重なると赤く警告します。';
+    }
+    if (panel) panel.dataset.state = warningCount ? 'warning' : 'ok';
+    if (snapButton) snapButton.disabled = !warningCount;
+  }
+
   function drawStageScene(canvas, grid, options) {
     const prepared = resizeCanvas(canvas);
     if (!prepared || !state.stage) return;
-    const { context: context, width, height } = prepared;
+    const { context, width, height } = prepared;
     const settings = options || {};
     const transform = canvasTransform(canvas, !!settings.editable);
     const background = state.stage.background || {};
-    const theme = THEME_COLORS[background.theme] || THEME_COLORS.grass;
+    const themeKey = THEME_COLORS[background.theme] ? background.theme : 'grass';
+    const theme = THEME_COLORS[themeKey];
     const gradientColors = background.gradient && /^#[0-9a-f]{6}$/i.test(background.gradient.from || '') && /^#[0-9a-f]{6}$/i.test(background.gradient.to || '')
       ? [background.gradient.from, background.gradient.to] : theme.gradient;
     const backgroundGradient = context.createLinearGradient(0, 0, 0, height);
-    backgroundGradient.addColorStop(0, gradientColors[0]);
-    backgroundGradient.addColorStop(1, gradientColors[gradientColors.length - 1]);
+    const solidColor = /^#[0-9a-f]{6}$/i.test(background.color || '') ? background.color : theme.sky;
+    backgroundGradient.addColorStop(0, background.mode === 'color' ? solidColor : gradientColors[0]);
+    backgroundGradient.addColorStop(1, background.mode === 'color' ? solidColor : gradientColors[gradientColors.length - 1]);
     context.fillStyle = backgroundGradient;
     context.fillRect(0, 0, width, height);
 
@@ -773,36 +1277,21 @@
     context.translate(transform.offsetX, transform.offsetY);
     context.scale(transform.scale, transform.scale);
 
-    if (!state.lowPowerMode && state.stage.decorations && state.stage.decorations.enabled !== false) {
-      context.fillStyle = 'rgba(255,255,255,.12)';
-      for (let x = 100; x < LIMITS.stageWidth; x += 280) {
-        context.beginPath();
-        context.arc(x, 105 + (x % 3) * 24, 54, 0, Math.PI * 2);
-        context.fill();
-      }
-    }
+    const showGameBackground = background.mode === 'theme'
+      && state.stage.decorations && state.stage.decorations.enabled !== false
+      && imageReady(stageBackgroundImages[themeKey]);
+    if (showGameBackground) drawImageCover(context, stageBackgroundImages[themeKey], 0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
 
-    const material = state.stage.materials && state.stage.materials[0] || {};
-    const terrainTop = /^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.terrain;
-    const terrainBottom = theme.terrain;
-    const terrainGradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
-    terrainGradient.addColorStop(0, terrainTop);
-    terrainGradient.addColorStop(1, terrainBottom);
-    context.fillStyle = terrainGradient;
     const columns = columnsFromGrid(grid);
-    for (let column = 0; column < columns.length; column++) {
-      const x = column * LIMITS.columnWidth;
-      for (const segment of columns[column]) {
-        context.fillRect(x, segment[0], LIMITS.columnWidth + 0.45, Math.max(0, segment[1] - segment[0]));
-      }
-    }
-
-    if (settings.showCollision) {
-      context.fillStyle = 'rgba(255, 226, 94, .2)';
-      for (let column = 0; column < columns.length; column++) {
-        for (const segment of columns[column]) context.fillRect(column * LIMITS.columnWidth, segment[0], LIMITS.columnWidth + 0.5, Math.min(6, segment[1] - segment[0]));
-      }
-    }
+    const material = state.stage.materials && state.stage.materials[0] || {};
+    const steel = material.id === 'steel';
+    const terrainTop = steel ? '#71808C' : (/^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop);
+    const terrainTheme = Object.assign({}, theme, {
+      dirtBottom: mixHexColor(terrainTop, '#000000', 0.58),
+      rim: mixHexColor(terrainTop, '#ffffff', 0.34),
+      rimShadow: mixHexColor(terrainTop, '#000000', 0.36)
+    });
+    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision, steel);
 
     if (!state.lowPowerMode && settings.showGrid && transform.scale * 24 >= 10) {
       context.strokeStyle = 'rgba(255,255,255,.22)';
@@ -816,7 +1305,7 @@
     context.strokeStyle = 'rgba(255,255,255,.55)';
     context.lineWidth = 2 / transform.scale;
     context.strokeRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
-    context.strokeStyle = 'rgba(220,50,68,.6)';
+    context.strokeStyle = 'rgba(255,72,72,.72)';
     context.setLineDash([10 / transform.scale, 7 / transform.scale]);
     context.beginPath();
     context.moveTo(0, LIMITS.terrainBottomY);
@@ -824,7 +1313,20 @@
     context.stroke();
     context.setLineDash([]);
 
-    if (settings.spawns !== false) drawSpawnsOnContext(context, transform.scale);
+    if (settings.editable && state.activeTool === 'text' && state.textTerrainPreviewActive) {
+      const textSettings = textTerrainSettings();
+      if (textSettings.text) {
+        context.save();
+        context.globalAlpha = 0.5;
+        context.fillStyle = textSettings.solid ? '#ffe28a' : '#ff7777';
+        context.strokeStyle = textSettings.solid ? '#fff4bf' : '#ffb1b1';
+        drawTextTerrainGlyph(context, textSettings, state.textTerrainPreviewPoint || { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 });
+        context.restore();
+      }
+    }
+
+    if (settings.guides) drawCharacterGuides(context, grid);
+    if (settings.spawns === true) drawSpawnsOnContext(context, transform.scale, grid);
     if (Array.isArray(settings.testFallTrail) && settings.testFallTrail.length > 1) {
       context.strokeStyle = 'rgba(255, 207, 77, .9)';
       context.lineWidth = 3 / transform.scale;
@@ -835,30 +1337,20 @@
       context.setLineDash([]);
     }
     if (Number.isFinite(settings.testActorX)) {
-      const actorColumn = columns[clamp(Math.floor(settings.testActorX / LIMITS.columnWidth), 0, columns.length - 1)] || [];
-      const actorGround = actorColumn.length ? actorColumn[0][0] : LIMITS.stageHeight;
-      const actorY = Number.isFinite(settings.testActorY) ? settings.testActorY : actorGround - LIMITS.unitRadius;
+      const actorGround = surfaceYAtGrid(grid, settings.testActorX);
+      const actor = {
+        x: settings.testActorX,
+        y: Number.isFinite(settings.testActorY) ? settings.testActorY : actorGround - LIMITS.unitRadius,
+        character: 'kyoryu',
+        direction: Number($('shotAngle').value) > 90 ? 'left' : 'right'
+      };
       const actorDead = settings.testActorStatus === 'dead';
-      context.fillStyle = actorDead ? '#ef5c5c' : '#ffcf4d';
-      context.strokeStyle = '#ffffff';
-      context.lineWidth = 4 / transform.scale;
-      context.beginPath();
-      context.arc(settings.testActorX, actorY, LIMITS.unitRadius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
+      drawCharacterAt(context, actor, grid, { active: true, team: 'player', forceInvalid: actorDead ? 'outside' : null });
       if (actorDead) {
-        context.strokeStyle = '#521313';
-        context.lineWidth = 3 / transform.scale;
-        context.beginPath();
-        context.moveTo(settings.testActorX - 7, actorY - 7);
-        context.lineTo(settings.testActorX + 7, actorY + 7);
-        context.moveTo(settings.testActorX + 7, actorY - 7);
-        context.lineTo(settings.testActorX - 7, actorY + 7);
-        context.stroke();
         context.fillStyle = '#fff';
-        context.font = `700 ${15 / transform.scale}px system-ui, sans-serif`;
+        context.font = '700 15px system-ui, sans-serif';
         context.textAlign = 'center';
-        context.fillText('DEAD LINE', settings.testActorX, actorY - LIMITS.unitRadius - 10 / transform.scale);
+        context.fillText('DEAD LINE', actor.x, actor.y - SPRITE_SIZE - 10);
       }
     }
     if (Array.isArray(settings.trajectory) && settings.trajectory.length) drawTrajectoryOnContext(context, settings.trajectory, settings.impact, transform.scale);
@@ -874,26 +1366,24 @@
     }
   }
 
-  function drawSpawnsOnContext(context, scale) {
+  function drawSpawnsOnContext(context, scale, grid) {
     const spawns = Array.isArray(state.stage.spawnPoints) ? state.stage.spawnPoints : [];
     for (const spawn of spawns) {
-      const redTeam = spawn.team === 'player';
-      context.fillStyle = redTeam ? '#df4d5c' : '#3984d9';
-      context.strokeStyle = spawn.slot === state.activeSpawn ? '#ffe56a' : '#ffffff';
-      context.lineWidth = (spawn.slot === state.activeSpawn ? 5 : 3) / scale;
-      context.beginPath();
-      context.arc(spawn.x, spawn.y, LIMITS.unitRadius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
+      const active = spawn.slot === state.activeSpawn;
+      drawCharacterAt(context, Object.assign({}, spawn, { character: SLOT_CHARACTER[spawn.slot] || 'kyoryu' }), grid, {
+        active,
+        ghost: true,
+        team: spawn.team
+      });
       const direction = spawn.direction === 'left' ? -1 : 1;
-      context.strokeStyle = '#ffffff';
-      context.lineWidth = 3 / scale;
+      context.strokeStyle = active ? '#ffd24a' : '#fff5dc';
+      context.lineWidth = (active ? 4 : 2.5) / scale;
       context.beginPath();
-      context.moveTo(spawn.x, spawn.y);
-      context.lineTo(spawn.x + direction * 28, spawn.y);
-      context.lineTo(spawn.x + direction * 20, spawn.y - 7);
-      context.moveTo(spawn.x + direction * 28, spawn.y);
-      context.lineTo(spawn.x + direction * 20, spawn.y + 7);
+      context.moveTo(spawn.x, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 30, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 21, spawn.y + LIMITS.unitRadius);
+      context.moveTo(spawn.x + direction * 30, spawn.y + LIMITS.unitRadius + 7);
+      context.lineTo(spawn.x + direction * 21, spawn.y + LIMITS.unitRadius + 14);
       context.stroke();
     }
   }
@@ -931,7 +1421,7 @@
 
   function renderTerrainCanvas() {
     if (state.currentScreen !== 'terrain') return;
-    drawStageScene($('terrainCanvas'), state.grid, { editable: true, showGrid: $('showGrid').checked, showCollision: $('showCollision').checked });
+    drawStageScene($('terrainCanvas'), state.grid, { editable: true, guides: true, showGrid: $('showGrid').checked, showCollision: $('showCollision').checked });
     $('zoomLabel').textContent = `${Math.round(state.view.zoom * 100)}%`;
   }
 
@@ -1061,6 +1551,163 @@
     return true;
   }
 
+  function textTerrainSettings() {
+    const input = $('terrainTextInput');
+    const cleaned = Array.from(String(input.value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim()).slice(0, 8).join('');
+    if (input.value !== cleaned) input.value = cleaned;
+    return {
+      text: cleaned,
+      fontKey: TEXT_TERRAIN_FONTS[$('terrainTextFont').value] ? $('terrainTextFont').value : 'rock',
+      style: $('terrainTextStyle').value === 'outline' ? 'outline' : 'solid',
+      size: clamp(Number($('terrainTextSize').value) || 280, 80, 480),
+      thickness: clamp(Number($('terrainTextThickness').value) || 16, 4, 40),
+      solid: $('terrainTextOperation').value !== 'erase'
+    };
+  }
+
+  function textTerrainPlacementMode() {
+    const input = $('terrainTextPlacementMode');
+    return input && input.value === 'stamp' ? 'stamp' : 'move';
+  }
+
+  function updateTextTerrainPlacementUi(options) {
+    const mode = textTerrainPlacementMode();
+    const centerButton = $('placeTextCenter');
+    const confirmButton = $('confirmTextPlacement');
+    const help = $('terrainTextHelp');
+    const status = $('terrainTextStatus');
+    if (!centerButton || !confirmButton || !help || !status) return;
+    const resetPreview = !options || options.resetPreview !== false;
+    if (mode === 'move') {
+      centerButton.textContent = 'ステージ中央へ仮置き';
+      centerButton.classList.remove('primary');
+      centerButton.classList.add('secondary');
+      confirmButton.hidden = false;
+      help.textContent = '半透明の文字を指で移動し、「この位置で確定」を押します。出力時は安全な地形データへ変換されます。';
+      state.textTerrainPreviewActive = true;
+      state.textTerrainStampCount = 0;
+      if (resetPreview) state.textTerrainPreviewPoint = { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 };
+      status.textContent = '半透明の文字をドラッグして、置く位置を決めてください。';
+    } else {
+      centerButton.textContent = '連続配置を始める';
+      centerButton.classList.remove('secondary');
+      centerButton.classList.add('primary');
+      confirmButton.hidden = true;
+      help.textContent = '「連続配置を始める」を押したあと、マップをタップするたびに同じ文字を追加できます。';
+      state.textTerrainPreviewActive = false;
+      state.textTerrainStampCount = 0;
+      status.textContent = '連続配置を始めると、マップをタップして何個でも置けます。';
+    }
+    renderTerrainCanvas();
+  }
+
+  function configureTextTerrainContext(context, settings) {
+    let size = settings.size;
+    const family = TEXT_TERRAIN_FONTS[settings.fontKey] || TEXT_TERRAIN_FONTS.rock;
+    context.font = `400 ${size}px ${family}`;
+    const measuredWidth = context.measureText(settings.text).width;
+    const maxWidth = LIMITS.stageWidth * 0.9;
+    if (measuredWidth > maxWidth) {
+      size = Math.max(40, size * maxWidth / measuredWidth);
+      context.font = `400 ${size}px ${family}`;
+    }
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = settings.style === 'outline' ? Math.max(10, settings.thickness) : settings.thickness;
+  }
+
+  function drawTextTerrainGlyph(context, settings, point) {
+    configureTextTerrainContext(context, settings);
+    if (settings.style === 'outline') {
+      context.strokeText(settings.text, point.x, point.y);
+      return;
+    }
+    context.strokeText(settings.text, point.x, point.y);
+    context.fillText(settings.text, point.x, point.y);
+  }
+
+  async function rasterizeTextTerrain(settings, point) {
+    const family = TEXT_TERRAIN_FONTS[settings.fontKey] || TEXT_TERRAIN_FONTS.rock;
+    if (document.fonts && typeof document.fonts.load === 'function') {
+      try { await document.fonts.load(`400 ${settings.size}px ${family}`, settings.text); } catch (_) { /* fallback font remains usable */ }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = LIMITS.stageWidth;
+    canvas.height = LIMITS.stageHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return 0;
+    context.fillStyle = '#fff';
+    context.strokeStyle = '#fff';
+    drawTextTerrainGlyph(context, settings, point);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let changed = 0;
+    const rowLimit = Math.min(LIMITS.terrainRows, Math.ceil(LIMITS.terrainBottomY / LIMITS.rowHeight));
+    for (let row = 0; row < rowLimit; row++) {
+      const startY = row * LIMITS.rowHeight;
+      for (let column = 0; column < LIMITS.terrainColumns; column++) {
+        const startX = column * LIMITS.columnWidth;
+        let covered = false;
+        for (let y = startY; y < Math.min(startY + LIMITS.rowHeight, canvas.height) && !covered; y++) {
+          for (let x = startX; x < Math.min(startX + LIMITS.columnWidth, canvas.width); x++) {
+            if (pixels[(y * canvas.width + x) * 4 + 3] >= 32) { covered = true; break; }
+          }
+        }
+        if (!covered) continue;
+        const index = row * LIMITS.terrainColumns + column;
+        const next = settings.solid ? 1 : 0;
+        if (state.grid[index] !== next) { state.grid[index] = next; changed += 1; }
+      }
+    }
+    canvas.width = 1;
+    canvas.height = 1;
+    enforceTerrainBounds(state.grid);
+    return changed;
+  }
+
+  async function placeTextTerrain(point, options) {
+    if (state.textTerrainBusy) return;
+    const settings = textTerrainSettings();
+    const status = $('terrainTextStatus');
+    if (!settings.text) {
+      status.textContent = '文字を1文字以上入力してください。';
+      showToast('文字を入力してください。');
+      return;
+    }
+    state.textTerrainBusy = true;
+    status.textContent = '文字を地形へ変換しています…';
+    pushUndo();
+    try {
+      const changed = await rasterizeTextTerrain(settings, {
+        x: clamp(point.x, 0, LIMITS.stageWidth),
+        y: clamp(point.y, 0, LIMITS.terrainBottomY)
+      });
+      if (!changed) {
+        state.undo.pop();
+        updateHistoryButtons();
+        status.textContent = 'この位置では地形が変わりませんでした。位置か操作を変えてください。';
+        showToast('地形が変わりませんでした。');
+        return;
+      }
+      syncTerrainToStage();
+      resetPlaytest(false);
+      renderAllCanvases();
+      markDirty();
+      if (options && options.continuous) {
+        state.textTerrainStampCount += 1;
+        status.textContent = `連続配置: ${state.textTerrainStampCount}個目の「${settings.text}」を${settings.solid ? '追加' : '型抜き'}しました。`;
+      } else {
+        state.textTerrainPreviewActive = false;
+        status.textContent = `「${settings.text}」を地形へ${settings.solid ? '追加' : '型抜き'}しました（${changed}マス）。`;
+        collapseTerrainInspector();
+      }
+      showToast(`「${settings.text}」の文字地形を${settings.solid ? '置き' : '削り'}ました。`);
+    } finally {
+      state.textTerrainBusy = false;
+    }
+  }
+
   function beginTerrainPointer(event) {
     const canvas = $('terrainCanvas');
     try {
@@ -1070,8 +1717,44 @@
     }
     state.pointerMap.set(event.pointerId, eventPoint(canvas, event));
     if (state.pointerMap.size === 1) {
-      pushUndo();
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
+      if (state.activeTool === 'text') {
+        state.textTerrainPreviewPoint = world;
+        if (textTerrainPlacementMode() === 'stamp') {
+          state.pointerMap.delete(event.pointerId);
+          void placeTextTerrain(world, { continuous: true });
+        } else {
+          state.textTerrainPreviewActive = true;
+          state.textTerrainDragActive = true;
+          $('terrainTextStatus').textContent = '文字を移動中です。指を離してから「この位置で確定」を押してください。';
+          renderTerrainCanvas();
+        }
+        return;
+      }
+      if (state.activeTool === 'guide') {
+        let selectedIndex = -1;
+        let selectedDistance = Infinity;
+        state.characterGuides.forEach((guide, index) => {
+          const distance = Math.hypot(guide.x - world.x, (guide.y - 32) - world.y);
+          if (distance < selectedDistance && distance <= 150) {
+            selectedIndex = index;
+            selectedDistance = distance;
+          }
+        });
+        if (selectedIndex < 0) {
+          state.pointerMap.delete(event.pointerId);
+          showToast('動かすキャラクターをタップしてください。');
+          return;
+        }
+        pushUndo();
+        state.activeGuideIndex = selectedIndex;
+        const guide = state.characterGuides[selectedIndex];
+        state.guideDrag = { index: selectedIndex, offsetX: guide.x - world.x, offsetY: guide.y - world.y };
+        state.strokeActive = true;
+        renderTerrainCanvas();
+        return;
+      }
+      pushUndo();
       state.lastWorldPoint = world;
       if (state.activeTool === 'fill') {
         if (!floodFill(world)) {
@@ -1096,10 +1779,13 @@
       if (state.strokeActive && state.undo.length) {
         const beforeStroke = state.undo.pop();
         state.grid = beforeStroke.grid.slice();
+        state.characterGuides = clone(beforeStroke.characterGuides || state.characterGuides);
         state.redo.length = 0;
         updateHistoryButtons();
       }
       state.strokeActive = false;
+      state.textTerrainDragActive = false;
+      state.guideDrag = null;
       state.shapeStart = null;
       state.shapeBaseGrid = null;
       const points = Array.from(state.pointerMap.values());
@@ -1129,8 +1815,21 @@
       renderAllCanvases();
       return;
     }
+    if (state.pointerMap.size === 1 && state.activeTool === 'text' && state.textTerrainDragActive
+      && textTerrainPlacementMode() === 'move') {
+      state.textTerrainPreviewPoint = screenToWorld(canvas, event.clientX, event.clientY, true);
+      renderTerrainCanvas();
+      return;
+    }
     if (state.pointerMap.size === 1 && state.strokeActive && (event.buttons || event.pointerType === 'touch' || event.pointerType === 'pen')) {
       const world = screenToWorld(canvas, event.clientX, event.clientY, true);
+      if (state.activeTool === 'guide' && state.guideDrag) {
+        const guide = state.characterGuides[state.guideDrag.index];
+        guide.x = clamp(world.x + state.guideDrag.offsetX, -SPRITE_SIZE, LIMITS.stageWidth + SPRITE_SIZE);
+        guide.y = clamp(world.y + state.guideDrag.offsetY, -SPRITE_SIZE, LIMITS.stageHeight + SPRITE_SIZE);
+        renderTerrainCanvas();
+        return;
+      }
       if (state.activeTool === 'fill') return;
       if (SHAPE_TOOLS.has(state.activeTool)) previewShape(world);
       else paintInterpolated(state.lastWorldPoint || world, world);
@@ -1143,11 +1842,17 @@
     state.pointerMap.delete(event.pointerId);
     if (state.pointerMap.size < 2) state.pinch = null;
     if (!state.pointerMap.size) {
+      if (state.textTerrainDragActive) {
+        state.textTerrainDragActive = false;
+        $('terrainTextStatus').textContent = '位置を調整しました。「この位置で確定」を押すと地形になります。';
+        renderTerrainCanvas();
+      }
       if (state.strokeActive) {
         state.strokeActive = false;
         state.lastWorldPoint = null;
         state.shapeStart = null;
         state.shapeBaseGrid = null;
+        state.guideDrag = null;
         syncTerrainToStage();
         resetPlaytest(false);
         markDirty();
@@ -1325,7 +2030,7 @@
     const container = $('spawnCards');
     if (!container || !state.stage) return;
     container.replaceChildren();
-    const labels = { p1: '赤チーム1', e1: '青チーム1', p2: '赤チーム2', e2: '青チーム2' };
+    const labels = { p1: 'プレイヤー1（青）', e1: '相手1（赤）', p2: 'プレイヤー2（青）', e2: '相手2（赤）' };
     for (const spawn of state.stage.spawnPoints || []) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -1333,7 +2038,7 @@
       button.dataset.slot = spawn.slot;
       button.setAttribute('aria-pressed', String(spawn.slot === state.activeSpawn));
       const dot = document.createElement('span');
-      dot.className = `team-dot ${spawn.team === 'player' ? 'red' : 'blue'}`;
+      dot.className = `team-dot ${spawn.team === 'player' ? 'blue' : 'red'}`;
       const text = document.createElement('span');
       const strong = document.createElement('strong');
       strong.textContent = labels[spawn.slot] || spawn.slot;
@@ -1404,18 +2109,15 @@
     if (pushHistoryFirst) pushUndo();
     const preset = $('themeSelect').value;
     const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
+    const mode = ['theme', 'gradient', 'color'].includes($('backgroundMode').value) ? $('backgroundMode').value : 'theme';
     state.stage.background = Object.assign({}, state.stage.background, {
-      mode: 'gradient',
+      mode,
       theme: preset,
       color: $('backgroundColor').value,
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    if (!Array.isArray(state.stage.materials) || !state.stage.materials.length) state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' }];
-    state.stage.materials[0].id = 'terrain';
-    state.stage.materials[0].type = 'destructible';
-    state.stage.materials[0].destructible = true;
-    state.stage.materials[0].color = $('terrainColor').value;
+    state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     updateAppearance();
     renderAllCanvases();
@@ -1430,12 +2132,9 @@
   }
 
   function updateAppearance() {
-    const preview = $('appearancePreview');
-    const preset = $('themeSelect').value;
-    const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
-    preview.style.background = `linear-gradient(${$('backgroundColor').value} 0%, ${theme.gradient[1]} 62%, ${$('terrainColor').value} 62%)`;
-    preview.style.filter = `brightness(${Number($('brightnessRange').value) / 100})`;
+    state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     $('brightnessOutput').textContent = $('brightnessRange').value;
+    renderTerrainCanvas();
   }
 
   function updateLowPowerModeUi() {
@@ -1474,6 +2173,8 @@
     $('angleOutput').textContent = $('shotAngle').value;
     $('powerOutput').textContent = $('shotPower').value;
     $('brightnessOutput').textContent = $('brightnessRange').value;
+    $('terrainTextSizeOutput').textContent = $('terrainTextSize').value;
+    $('terrainTextThicknessOutput').textContent = $('terrainTextThickness').value;
   }
 
   function generationParameters() {
@@ -1498,7 +2199,8 @@
       title: $('stageTitle').value.trim() || 'ステージ',
       description: $('stageDescription').value.trim(),
       authorDisplayName: $('stageAuthor').value.trim() || '作成者',
-      theme: $('themeSelect').value
+      theme: $('themeSelect').value,
+      size: $('stageSize').value === 'large' ? 'large' : 'standard'
     };
   }
 
@@ -1514,10 +2216,11 @@
     const themeKey = THEME_COLORS[requestedTheme] ? requestedTheme : 'grass';
     const theme = THEME_COLORS[themeKey];
     stage.background = {
-      mode: 'gradient', theme: themeKey, color: theme.gradient[0],
+      mode: 'theme', theme: themeKey, color: theme.gradient[0],
       gradient: { from: theme.gradient[0], to: theme.gradient[1] }
     };
-    if (stage.materials && stage.materials[0]) stage.materials[0].color = theme.terrain;
+    stage.materials = [selectedTerrainMaterial()];
+    stage.materials[0].color = $('terrainColor').value || theme.terrain;
     state.generationJob = null;
     setGenerationBusy(false);
     setStage(stage);
@@ -1813,11 +2516,15 @@
     state.testTrajectory = Array.isArray(result.points) ? result.points : [];
     state.testImpact = result.hit || result.impact || null;
     if (state.testImpact) {
-      paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
-      enforceTerrainBounds(state.testGrid);
-      const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
       const impactMessage = `着弾 x ${Math.round(state.testImpact.x)} / y ${Math.round(state.testImpact.y)}。爆発範囲と地形破壊を反映しました。`;
-      $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      if (testStage.materials && testStage.materials[0] && testStage.materials[0].destructible === false) {
+        $('testResult').textContent = `${impactMessage} 鋼鉄なので地形は削れません。`;
+      } else {
+        paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
+        enforceTerrainBounds(state.testGrid);
+        const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
+        $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      }
     } else {
       $('testResult').textContent = '砲弾は地形へ当たらず画面外へ出ました。角度や威力を調整してください。';
     }
@@ -1830,17 +2537,13 @@
     applyWindFromForm(false);
     const preset = $('themeSelect').value;
     const theme = THEME_COLORS[preset] || THEME_COLORS.grass;
+    const mode = ['theme', 'gradient', 'color'].includes($('backgroundMode').value) ? $('backgroundMode').value : 'theme';
     state.stage.background = Object.assign({}, state.stage.background, {
-      mode: 'gradient', theme: preset, color: $('backgroundColor').value,
+      mode, theme: preset, color: $('backgroundColor').value,
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    if (state.stage.materials && state.stage.materials[0]) {
-      state.stage.materials[0].id = 'terrain';
-      state.stage.materials[0].type = 'destructible';
-      state.stage.materials[0].destructible = true;
-      state.stage.materials[0].color = $('terrainColor').value;
-    }
+    state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     return clone(state.stage);
   }
@@ -2085,6 +2788,7 @@
         }
       }
       setStage(stageDocument, { skipSave: true });
+      state.documentStarted = true;
       await saveDraftNow(true, true);
       navigate('terrain');
       showToast(`「${state.stage.title}」を安全にインポートしました。`);
@@ -2125,13 +2829,95 @@
   }
 
   function setActiveTool(tool) {
-    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill'];
+    const supported = ['draw', 'erase', 'line', 'rectangle', 'circle', 'fill', 'guide', 'text'];
     state.activeTool = supported.includes(tool) ? tool : 'draw';
     document.querySelectorAll('[data-tool]').forEach((button) => {
       const selected = button.dataset.tool === state.activeTool;
       button.classList.toggle('is-selected', selected);
       button.setAttribute('aria-pressed', String(selected));
+      button.setAttribute('aria-checked', String(selected));
     });
+    const label = $('activeTerrainTool');
+    const toolLabel = TERRAIN_TOOL_LABELS[state.activeTool] || TERRAIN_TOOL_LABELS.draw;
+    if (label) label.textContent = toolLabel;
+    const toggle = $('terrainToolMenuToggle');
+    if (toggle) toggle.setAttribute('aria-label', `選択中: ${toolLabel}。押して地形ツールを切り替える`);
+    collapseTerrainToolMenu();
+    if (state.activeTool === 'text') {
+      updateTextTerrainPlacementUi({ resetPreview: true });
+      setTerrainInspector('text');
+    } else {
+      state.textTerrainPreviewActive = false;
+      state.textTerrainDragActive = false;
+    }
+  }
+
+  function collapseTerrainToolMenu(options) {
+    const menu = $('terrainToolMenu');
+    const toggle = $('terrainToolMenuToggle');
+    if (!menu || !toggle) return;
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    if (options && options.focusToggle) {
+      try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+    }
+  }
+
+  function toggleTerrainToolMenu() {
+    const menu = $('terrainToolMenu');
+    const toggle = $('terrainToolMenuToggle');
+    if (!menu || !toggle) return;
+    if (!menu.hidden) return collapseTerrainToolMenu({ focusToggle: true });
+    collapseTerrainInspector();
+    menu.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+  }
+
+  function collapseTerrainInspector(options) {
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    if (!inspector || !toggle) return;
+    inspector.hidden = true;
+    inspector.dataset.open = 'false';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.classList.remove('is-open');
+    document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => { panel.hidden = true; });
+    if (options && options.focusToggle) {
+      try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+    }
+  }
+
+  function setTerrainInspector(panelName, options) {
+    const supported = ['brush', 'shape', 'display', 'appearance', 'text'];
+    const selectedPanel = supported.includes(panelName) ? panelName : 'brush';
+    const inspector = $('terrainInspector');
+    const toggle = $('terrainPaletteToggle');
+    const open = !options || options.open !== false;
+    state.terrainInspectorPanel = selectedPanel;
+    inspector.hidden = !open;
+    inspector.dataset.open = String(open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-label', open ? '編集設定を閉じる' : `${TERRAIN_PANEL_LABELS[selectedPanel]}設定を開く`);
+    $('terrainInspectorSummary').textContent = TERRAIN_PANEL_LABELS[selectedPanel];
+    document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
+      const selected = button.dataset.terrainPanel === selectedPanel;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    document.querySelectorAll('[data-terrain-panel-content]').forEach((panel) => {
+      panel.hidden = !open || panel.dataset.terrainPanelContent !== selectedPanel;
+    });
+  }
+
+  function toggleTerrainInspector() {
+    const inspector = $('terrainInspector');
+    if (inspector && !inspector.hidden) collapseTerrainInspector();
+    else {
+      collapseTerrainToolMenu();
+      setTerrainInspector(state.terrainInspectorPanel || 'brush');
+    }
   }
 
   function randomSeed() {
@@ -2294,6 +3080,11 @@
     ['reliefRange', 'smoothRange', 'platformRange', 'densityRange', 'valleyRange', 'mountainRange', 'cavityRange', 'difficultyRange']
       .forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('randomizeSeed').addEventListener('click', () => { $('seedInput').value = randomSeed(); });
+    $('stageSize').addEventListener('change', () => {
+      const limits = Core && typeof Core.getStageLimits === 'function' ? Core.getStageLimits({ size: $('stageSize').value }) : RAW_LIMITS;
+      $('stageWidth').value = limits.stageWidth || 1440;
+      $('stageHeight').value = limits.stageHeight || 660;
+    });
     $('generateStage').addEventListener('click', startGeneration);
     $('cancelGeneration').addEventListener('click', cancelGeneration);
 
@@ -2303,6 +3094,25 @@
     $('toolRectangle').addEventListener('click', () => setActiveTool('rectangle'));
     $('toolCircle').addEventListener('click', () => setActiveTool('circle'));
     $('toolFill').addEventListener('click', () => setActiveTool('fill'));
+    $('toolGuide').addEventListener('click', () => setActiveTool('guide'));
+    $('toolText').addEventListener('click', () => setActiveTool('text'));
+    $('terrainToolMenuToggle').addEventListener('click', toggleTerrainToolMenu);
+    $('toolLock').addEventListener('change', () => collapseTerrainToolMenu({ focusToggle: true }));
+    $('snapCharacterGuides').addEventListener('click', snapInvalidCharacterGuides);
+    document.querySelectorAll('[data-orientation-toggle]').forEach((button) => {
+      button.addEventListener('click', () => togglePreferredOrientation(button));
+    });
+    document.querySelectorAll('[data-orientation-dismiss]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.orientationGuideToken += 1;
+        button.closest('[data-orientation-guide]').hidden = true;
+      });
+    });
+    document.querySelectorAll('[data-terrain-panel]').forEach((button) => {
+      button.addEventListener('click', () => setTerrainInspector(button.dataset.terrainPanel));
+    });
+    $('terrainPaletteToggle').addEventListener('click', toggleTerrainInspector);
+    $('terrainInspectorClose').addEventListener('click', () => collapseTerrainInspector({ focusToggle: true }));
     $('undoButton').addEventListener('click', undo);
     $('redoButton').addEventListener('click', redo);
     $('undoGlobal').addEventListener('click', undo);
@@ -2323,6 +3133,30 @@
     $('symmetrizeTerrain').addEventListener('click', () => runTerrainOperation('左右対称化', symmetrizeTerrainGrid));
     $('brushSize').addEventListener('input', updateRangeOutputs);
     $('brushHardness').addEventListener('input', updateRangeOutputs);
+    ['terrainTextSize', 'terrainTextThickness'].forEach((id) => $(id).addEventListener('input', () => {
+      updateRangeOutputs();
+      renderTerrainCanvas();
+    }));
+    ['terrainTextInput', 'terrainTextFont', 'terrainTextStyle', 'terrainTextOperation'].forEach((id) => $(id).addEventListener('input', () => {
+      textTerrainSettings();
+      renderTerrainCanvas();
+    }));
+    $('terrainTextPlacementMode').addEventListener('change', () => updateTextTerrainPlacementUi({ resetPreview: true }));
+    $('placeTextCenter').addEventListener('click', () => {
+      if (textTerrainPlacementMode() === 'stamp') {
+        state.textTerrainStampCount = 0;
+        state.textTerrainPreviewActive = false;
+        $('terrainTextStatus').textContent = '連続配置中です。マップをタップすると文字を追加できます。';
+        collapseTerrainInspector();
+        showToast('マップをタップして文字を置けます。');
+        return;
+      }
+      state.textTerrainPreviewPoint = { x: LIMITS.stageWidth / 2, y: LIMITS.stageHeight / 2 };
+      state.textTerrainPreviewActive = true;
+      $('terrainTextStatus').textContent = '中央へ仮置きしました。文字を指で好きな位置へ移動できます。';
+      renderTerrainCanvas();
+    });
+    $('confirmTextPlacement').addEventListener('click', () => void placeTextTerrain(state.textTerrainPreviewPoint));
     $('showGrid').addEventListener('change', renderTerrainCanvas);
     $('showCollision').addEventListener('change', renderTerrainCanvas);
     $('zoomOut').addEventListener('click', () => setZoom(state.view.zoom / 1.25));
@@ -2360,9 +3194,32 @@
     $('windStrength').addEventListener('change', () => applyWindFromForm(true));
 
     $('themeSelect').addEventListener('change', applyThemeDefaults);
+    $('backgroundMode').addEventListener('change', () => applyAppearanceFromForm(true));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('input', updateAppearance));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
+    $('terrainMaterial').addEventListener('change', () => applyAppearanceFromForm(true));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
+
+    document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {
+      control.addEventListener('change', () => {
+        if (!control.closest('[data-terrain-panel-content="text"]')) collapseTerrainInspector();
+      });
+    });
+    document.querySelectorAll('.terrain-operation-row button').forEach((button) => {
+      button.addEventListener('click', () => collapseTerrainInspector());
+    });
+    document.querySelectorAll('.terrain-tool-menu .tool-button').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.dataset.tool !== 'text') collapseTerrainInspector();
+      });
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('#terrainToolMenu, #terrainToolMenuToggle')) collapseTerrainToolMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !$('terrainToolMenu').hidden) collapseTerrainToolMenu({ focusToggle: true });
+    });
 
     ['shotAngle', 'shotPower'].forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('moveTestLeft').addEventListener('click', () => moveTestActor(-1));
@@ -2379,9 +3236,12 @@
 
     globalThis.addEventListener('online', updateConnectivity);
     globalThis.addEventListener('offline', updateConnectivity);
+    globalThis.addEventListener('orientationchange', updateOrientationControls);
+    globalThis.addEventListener('resize', updateOrientationControls);
+    document.addEventListener('fullscreenchange', updateOrientationControls);
     globalThis.addEventListener('popstate', () => {
       const screen = location.hash.slice(1);
-      navigate(SCREEN_ORDER.includes(screen) ? screen : 'home', { fromHistory: true });
+      navigate(normalizeScreen(screen), { fromHistory: true });
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && state.dirty) saveDraftNow(true);
@@ -2407,6 +3267,8 @@
     setActiveTool('draw');
     updateLowPowerModeUi();
     updateHistoryButtons();
+    setTerrainInspector('brush', { open: false });
+    updateOrientationControls();
     $('appVersion').textContent = `${APP_VERSION}${Core && Core.GENERATOR_VERSION ? ` / 生成器 ${Core.GENERATOR_VERSION}` : ''}`;
 
     if (coreReady()) {
@@ -2433,9 +3295,11 @@
 
     refreshDraftList();
     refreshStorageEstimate();
-    const firstScreen = 'home';
+    const requestedScreen = location.hash.slice(1);
+    const firstScreen = requestedScreen ? normalizeScreen(requestedScreen) : 'home';
     history.replaceState({ stageStudioScreen: firstScreen }, '', `#${firstScreen}`);
     navigate(firstScreen, { fromHistory: true });
+    state.ready = true;
   }
 
   initialize();

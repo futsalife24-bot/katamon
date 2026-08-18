@@ -333,7 +333,7 @@ export const draftRecordSchema = z
     historyStatus: z.enum(['clean', 'dirty', 'corrupt']),
     mockScenario: z.enum(['success', 'network-offline', 'tests-failed', 'conflict']),
     sourceIdentity: z.object({ id: safeIdentifierSchema, slug: safeIdentifierSchema }).nullable().default(null),
-    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami']).nullable().default(null),
+    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai']).nullable().default(null),
   })
   .strict();
 

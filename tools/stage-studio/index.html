@@ -3,20 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#111827">
+  <meta name="theme-color" content="#070a0c">
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="スマートフォンで対象ゲーム用ステージを作成・検証・共有できるオフライン対応ツール">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="preload" as="font" href="../../assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
+  <link rel="preload" as="font" href="../../assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../../assets/fonts/katamon-fonts.css?v=1">
+  <link rel="stylesheet" href="./styles-1.4.0-mvp.css?v=3">
   <title>Stage Studio</title>
 </head>
 <body>
   <div id="app" class="app" data-testid="stage-studio">
     <header class="app-header">
-      <div>
+      <picture class="app-emblem" aria-hidden="true">
+        <source srcset="../../assets/loading-emblem.webp" type="image/webp">
+        <img src="../../assets/loading-emblem.png" alt="" width="52" height="52">
+      </picture>
+      <div class="header-title">
         <p class="eyebrow">対象ゲーム用ステージ作成ツール</p>
         <h1>Stage Studio</h1>
       </div>
@@ -37,7 +44,7 @@
     <main id="mainContent" class="screen-stack">
       <section id="screen-home" class="screen is-active" data-screen="home" data-testid="screen-home" aria-labelledby="homeTitle">
         <div class="screen-heading">
-          <div><span class="step-number">1 / 10</span><h2 id="homeTitle">ホーム</h2></div>
+          <div><span class="step-number">1 / 8</span><h2 id="homeTitle">ホーム</h2></div>
           <span id="saveState" class="save-state" role="status">準備中…</span>
         </div>
 
@@ -58,6 +65,18 @@
             <div class="panel-title-row"><h3>最近作成したステージ</h3><button id="refreshDrafts" class="text-button" type="button">更新</button></div>
             <div id="draftList" class="draft-list" data-testid="draft-list"><p class="muted">下書きを確認しています…</p></div>
           </article>
+          <article class="panel usage-panel">
+            <h3>利用方法</h3>
+            <ol>
+              <li>新規作成またはプリセットから生成</li>
+              <li>ゲーム画面を見ながら地形・背景・出撃地点を編集</li>
+              <li>風を設定して移動・砲撃・地形破壊をテスト</li>
+              <li>検証後、JSONまたはZIPで共有</li>
+              <li>対象ゲームへインポートし、カスタムバトルで選択</li>
+            </ol>
+            <p id="installGuide">ブラウザのメニューからホーム画面へ追加できます。</p>
+            <button id="installButton" class="secondary wide" type="button" hidden>アプリとしてインストール</button>
+          </article>
           <article class="panel stats-panel">
             <h3>端末の状態</h3>
             <dl>
@@ -68,24 +87,12 @@
             </dl>
             <label class="check-row low-power-setting"><input id="lowPowerMode" type="checkbox"><span>軽量表示（Canvas解像度・装飾を抑える）</span></label>
             <p id="lowPowerHint" class="muted">端末性能を確認しています…</p>
-            <button id="installButton" class="secondary wide" type="button" hidden>アプリとしてインストール</button>
-            <details class="help-details">
-              <summary>利用方法</summary>
-              <ol>
-                <li>新規作成またはプリセット生成</li>
-                <li>地形・出撃地点・風を編集</li>
-                <li>テスト後に検証</li>
-                <li>JSONまたはZIPで共有</li>
-                <li>対象ゲームへインポート</li>
-              </ol>
-              <p id="installGuide">ブラウザのメニューからホーム画面へ追加できます。</p>
-            </details>
           </article>
         </div>
       </section>
 
       <section class="screen" data-screen="new" aria-labelledby="newTitle">
-        <div class="screen-heading"><div><span class="step-number">2 / 10</span><h2 id="newTitle">新規作成</h2></div></div>
+        <div class="screen-heading"><div><span class="step-number">2 / 8</span><h2 id="newTitle">新規作成</h2></div></div>
         <div class="panel form-grid">
           <label>ステージ名<input id="stageTitle" maxlength="48" value="サンプルステージ" autocomplete="off"></label>
           <label>作成者表示名<input id="stageAuthor" maxlength="32" value="作成者" autocomplete="off"></label>
@@ -100,13 +107,14 @@
       </section>
 
       <section class="screen" data-screen="generate" aria-labelledby="generateTitle">
-        <div class="screen-heading"><div><span class="step-number">3 / 10</span><h2 id="generateTitle">自動生成</h2></div></div>
+        <div class="screen-heading"><div><span class="step-number">3 / 8</span><h2 id="generateTitle">自動生成</h2></div></div>
         <div class="panel form-grid compact">
           <label>プリセット<select id="presetSelect" data-testid="preset-select"></select></label>
           <label>シード<input id="seedInput" data-testid="seed-input" maxlength="64" value="stage-studio-001" inputmode="text" autocomplete="off"></label>
+          <label>ステージサイズ<select id="stageSize"><option value="standard">標準（1440 × 660）</option><option value="large">大型（2160 × 960）</option></select></label>
           <label>ステージ幅<input id="stageWidth" type="number" value="1440" readonly aria-describedby="fixedSizeHelp"></label>
           <label>編集領域の高さ<input id="stageHeight" type="number" value="660" readonly aria-describedby="fixedSizeHelp"></label>
-          <p id="fixedSizeHelp" class="muted full">MVPは対象ゲームと同じ固定サイズです。地形の下端は636pxです。</p>
+          <p id="fixedSizeHelp" class="muted full">大型は横に広く、上の足場を活かせます。地形の下端は標準636px・大型924pxです。</p>
           <label>高低差 <output id="reliefOutput">55</output><input id="reliefRange" type="range" min="0" max="100" value="55"></label>
           <label>滑らかさ <output id="smoothOutput">60</output><input id="smoothRange" type="range" min="0" max="100" value="60"></label>
           <label>足場数 <output id="platformOutput">2</output><input id="platformRange" type="range" min="0" max="8" value="2"></label>
@@ -128,46 +136,105 @@
       </section>
 
       <section class="screen editor-screen" data-screen="terrain" aria-labelledby="terrainTitle">
-        <div class="screen-heading"><div><span class="step-number">4 / 10</span><h2 id="terrainTitle">地形編集</h2></div><span class="gesture-hint">1本指: 編集 / 2本指: 移動・拡大</span></div>
-        <div class="canvas-card">
-          <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
-          <div class="canvas-zoom" aria-label="表示倍率">
-            <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+        <div class="screen-heading"><div><span class="step-number">4 / 8</span><h2 id="terrainTitle">地形・見た目</h2></div><span class="gesture-hint">1本指: 編集 / 2本指: 移動・拡大</span></div>
+        <div class="terrain-workspace" data-testid="terrain-workspace">
+          <div class="canvas-card">
+            <canvas id="terrainCanvas" data-testid="terrain-canvas" width="720" height="360" aria-label="地形編集キャンバス"></canvas>
+          </div>
+          <div class="terrain-editor-dock" data-testid="terrain-tools">
+            <div class="terrain-stage-controls" data-testid="terrain-stage-controls" aria-label="ステージ表示操作">
+              <button class="stage-orientation-button" type="button" data-orientation-toggle data-testid="orientation-toggle"><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+              <div class="stage-zoom" aria-label="表示倍率">
+                <button id="zoomOut" type="button" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" type="button" aria-label="拡大">＋</button><button id="zoomReset" type="button">全体</button>
+              </div>
+              <button id="terrainPaletteToggle" class="stage-setting-button" type="button" data-testid="terrain-palette-toggle" aria-controls="terrainInspector" aria-expanded="false"><span aria-hidden="true">◈</span><span>設定</span></button>
+            </div>
+            <div class="orientation-guide stage-control-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
+            <div class="terrain-history-row" aria-label="編集履歴とツール選択">
+              <button id="undoButton" class="tool-button" type="button" data-testid="undo">↶ 戻す</button>
+              <button id="terrainToolMenuToggle" class="active-tool-status" type="button" data-testid="terrain-tool-menu-toggle" aria-controls="terrainToolMenu" aria-expanded="false"><span>選択中</span><strong id="activeTerrainTool">描く</strong><span class="active-tool-chevron" aria-hidden="true">▼</span></button>
+              <button id="redoButton" class="tool-button" type="button" data-testid="redo">進む ↷</button>
+            </div>
+            <div id="terrainToolMenu" class="terrain-tool-menu" role="menu" aria-label="地形ツールを選択" data-testid="terrain-tool-menu" hidden>
+              <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw"><span aria-hidden="true">●</span><small>描く</small></button>
+              <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase"><span aria-hidden="true">◇</span><small>削る</small></button>
+              <button id="toolGuide" class="tool-button" type="button" data-tool="guide"><span aria-hidden="true">♟</span><small>キャラ</small></button>
+              <button id="toolFill" class="tool-button" type="button" data-tool="fill"><span aria-hidden="true">▰</span><small>塗る</small></button>
+              <button id="toolLine" class="tool-button" type="button" data-tool="line"><span aria-hidden="true">╱</span><small>線</small></button>
+              <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle"><span aria-hidden="true">□</span><small>四角</small></button>
+              <button id="toolCircle" class="tool-button" type="button" data-tool="circle"><span aria-hidden="true">○</span><small>円</small></button>
+              <button id="toolText" class="tool-button" type="button" data-tool="text" data-testid="tool-text"><span aria-hidden="true">字</span><small>文字</small></button>
+              <label class="tool-lock-button" title="誤操作を防ぐ"><input id="toolLock" type="checkbox"><span aria-hidden="true">🔒</span><small>ロック</small></label>
+            </div>
+          </div>
+          <div id="characterGuidePanel" class="character-guide-panel" data-state="ok">
+            <p id="characterGuideHint" role="status">キャラ確認を選ぶと、実ゲームと同じ寸法のキャラクターをドラッグできます。地形と当たり判定が重なると赤く警告します。</p>
+            <button id="snapCharacterGuides" class="secondary" type="button" disabled>赤いキャラを安全位置へ</button>
           </div>
         </div>
-        <div class="tool-row" role="toolbar" aria-label="地形ツール">
-          <button id="toolDraw" class="tool-button is-selected" type="button" data-tool="draw" data-testid="tool-draw">描く</button>
-          <button id="toolErase" class="tool-button" type="button" data-tool="erase" data-testid="tool-erase">削る</button>
-          <button id="toolLine" class="tool-button" type="button" data-tool="line">線</button>
-          <button id="toolRectangle" class="tool-button" type="button" data-tool="rectangle">四角</button>
-          <button id="toolCircle" class="tool-button" type="button" data-tool="circle">円</button>
-          <button id="toolFill" class="tool-button" type="button" data-tool="fill">塗りつぶし</button>
-          <button id="undoButton" class="tool-button" type="button" data-testid="undo">戻す</button>
-          <button id="redoButton" class="tool-button" type="button" data-testid="redo">やり直す</button>
-          <button id="clearTerrain" class="tool-button danger-outline" type="button">全消去</button>
+
+        <div id="terrainInspector" class="terrain-inspector" data-testid="terrain-inspector" data-open="false" hidden>
+          <div class="terrain-inspector-header"><strong>編集設定</strong><span id="terrainInspectorSummary">ブラシ</span><button id="terrainInspectorClose" type="button" aria-label="編集設定を閉じる">閉じる</button></div>
+          <div class="terrain-inspector-tabs" role="tablist" aria-label="地形編集の設定">
+            <button id="terrainTabBrush" class="is-selected" type="button" role="tab" aria-selected="true" aria-controls="terrainPanelBrush" data-terrain-panel="brush">ブラシ</button>
+            <button id="terrainTabShape" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelShape" data-terrain-panel="shape">整形</button>
+            <button id="terrainTabDisplay" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelDisplay" data-terrain-panel="display">表示</button>
+            <button id="terrainTabAppearance" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelAppearance" data-terrain-panel="appearance">見た目</button>
+            <button id="terrainTabText" type="button" role="tab" aria-selected="false" aria-controls="terrainPanelText" data-terrain-panel="text">文字</button>
+          </div>
+          <section id="terrainPanelBrush" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabBrush" data-terrain-panel-content="brush">
+            <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
+            <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
+            <label class="full">地形素材<select id="terrainMaterial"><option value="terrain">通常（破壊可能）</option><option value="steel">壊れない鋼鉄</option></select></label>
+            <p class="muted full material-status">鋼鉄は弾が当たっても削れません。キャラクターは通常どおり乗れます。</p>
+          </section>
+          <section id="terrainPanelShape" class="terrain-inspector-panel panel" role="tabpanel" aria-labelledby="terrainTabShape" data-terrain-panel-content="shape" hidden>
+            <div class="terrain-operation-row" aria-label="地形の全体処理">
+              <button id="smoothTerrain" type="button">滑らか</button>
+              <button id="flattenTerrain" type="button">平坦化</button>
+              <button id="noiseTerrain" type="button">ノイズ</button>
+              <button id="mirrorTerrain" type="button">左右反転</button>
+              <button id="symmetrizeTerrain" type="button">左右対称化</button>
+              <button id="clearTerrain" class="danger-outline" type="button">全消去</button>
+            </div>
+          </section>
+          <section id="terrainPanelDisplay" class="terrain-inspector-panel panel form-grid compact" role="tabpanel" aria-labelledby="terrainTabDisplay" data-terrain-panel-content="display" hidden>
+            <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
+            <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
+            <p class="muted full">ズームはマップ下の倍率ボタン、移動は二本指で操作できます。</p>
+          </section>
+          <section id="terrainPanelAppearance" class="terrain-inspector-panel panel form-grid appearance-settings" role="tabpanel" aria-labelledby="terrainTabAppearance" data-terrain-panel-content="appearance" hidden>
+            <h3 class="full">背景と地面の見た目</h3>
+            <label>背景表示<select id="backgroundMode"><option value="theme">ゲーム背景</option><option value="gradient">グラデーション</option><option value="color">単色</option></select></label>
+            <label>テーマ<select id="themeSelect"><option value="grass">草原</option><option value="desert">砂漠</option><option value="snow">雪原</option><option value="volcanic">火山</option></select></label>
+            <label>背景色<input id="backgroundColor" type="color" value="#1a2340"></label>
+            <label>地形色<input id="terrainColor" type="color" value="#7a5a3a"></label>
+            <label>明るさ <output id="brightnessOutput">100</output>%<input id="brightnessRange" type="range" min="60" max="130" value="100"></label>
+            <label class="check-row"><input id="decorationsEnabled" type="checkbox" checked><span>ゲーム背景・装飾を表示</span></label>
+          </section>
+          <section id="terrainPanelText" class="terrain-inspector-panel panel form-grid text-terrain-settings" role="tabpanel" aria-labelledby="terrainTabText" data-terrain-panel-content="text" hidden>
+            <label class="full">地形にする文字<input id="terrainTextInput" type="text" value="ア" maxlength="8" inputmode="text" autocomplete="off" aria-describedby="terrainTextHelp"></label>
+            <label>書体<select id="terrainTextFont"><option value="rock">ポップ</option><option value="reggae">演出</option></select></label>
+            <label>形<select id="terrainTextStyle"><option value="solid">塗り文字</option><option value="outline">輪郭文字</option></select></label>
+            <label>大きさ <output id="terrainTextSizeOutput">280</output>px<input id="terrainTextSize" type="range" min="80" max="480" step="10" value="280"></label>
+            <label>補強 <output id="terrainTextThicknessOutput">16</output>px<input id="terrainTextThickness" type="range" min="4" max="40" step="2" value="16"></label>
+            <label class="full">地形操作<select id="terrainTextOperation"><option value="add">文字を足す</option><option value="erase">文字の形で削る</option></select></label>
+            <label class="full">置き方<select id="terrainTextPlacementMode"><option value="move">移動して1個置く</option><option value="stamp">タップで連続配置</option></select></label>
+            <button id="placeTextCenter" class="secondary full" type="button">ステージ中央へ仮置き</button>
+            <button id="confirmTextPlacement" class="primary full" type="button">この位置で確定</button>
+            <p id="terrainTextHelp" class="muted full">半透明の文字を指で移動し、「この位置で確定」を押します。出力時は文字ではなく安全な地形データへ変換されます。</p>
+            <p id="terrainTextStatus" class="notice-inline full" role="status">「ア」の半透明プレビューを表示中です。</p>
+          </section>
         </div>
-        <div class="terrain-operation-row" aria-label="地形の全体処理">
-          <button id="smoothTerrain" type="button">滑らか</button>
-          <button id="flattenTerrain" type="button">平坦化</button>
-          <button id="noiseTerrain" type="button">ノイズ</button>
-          <button id="mirrorTerrain" type="button">左右反転</button>
-          <button id="symmetrizeTerrain" type="button">左右対称化</button>
-        </div>
-        <div class="panel form-grid compact">
-          <label>ブラシサイズ <output id="brushOutput">36</output>px<input id="brushSize" type="range" min="8" max="140" value="36"></label>
-          <label>ブラシ硬さ <output id="hardnessOutput">100</output>%<input id="brushHardness" type="range" min="20" max="100" value="100"></label>
-          <label>地形素材<select id="terrainMaterial"><option value="destructible">通常（破壊可能）</option></select></label>
-          <label class="check-row"><input id="showGrid" type="checkbox"><span>グリッド表示</span></label>
-          <label class="check-row"><input id="showCollision" type="checkbox" checked><span>当たり判定表示</span></label>
-          <label class="check-row"><input id="toolLock" type="checkbox"><span>ツールをロック</span></label>
-        </div>
-        <details class="help-details"><summary>追加編集ツールについて</summary><p>線・四角・円は始点から終点までドラッグします。滑らか・平坦化・ノイズ・左右反転・左右対称化は地形全体へ適用され、Undoで戻せます。多角形、範囲移動・コピー、上下反転、一部対称化は将来機能です。</p></details>
+        <details class="help-details"><summary>追加編集ツールについて</summary><p>線・四角・円は始点から終点までドラッグします。文字は内容と大きさを決め、マップをタップして置きます。滑らか・平坦化・ノイズ・左右反転・左右対称化は地形全体へ適用され、Undoで戻せます。多角形、範囲移動・コピー、上下反転、一部対称化は将来機能です。</p></details>
       </section>
 
       <section class="screen editor-screen" data-screen="spawns" aria-labelledby="spawnsTitle">
-        <div class="screen-heading"><div><span class="step-number">5 / 10</span><h2 id="spawnsTitle">出撃地点</h2></div><span class="gesture-hint">配置先を選び、地面をタップ</span></div>
+        <div class="screen-heading"><div><span class="step-number">5 / 8</span><h2 id="spawnsTitle">出撃地点</h2></div><span class="gesture-hint">配置先を選び、地面をタップ</span></div>
         <div class="canvas-card"><canvas id="spawnCanvas" data-testid="spawn-canvas" width="720" height="360" aria-label="出撃地点配置キャンバス"></canvas></div>
         <div class="panel form-grid compact">
+          <button class="stage-orientation-button full" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+          <div class="orientation-guide stage-control-guide full" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
           <label>出撃人数<select id="spawnCount"><option value="2">2人（1対1）</option><option value="4">4人（2対2）</option></select></label>
           <button id="autoPlaceSpawns" class="secondary" type="button">安全な位置へ自動配置</button>
           <button id="toggleSpawnFacing" class="secondary" type="button">選択中の向きを反転</button>
@@ -176,51 +243,37 @@
         <p id="spawnHint" class="notice-inline" role="status">赤チーム1の配置先をタップしてください。</p>
       </section>
 
-      <section class="screen" data-screen="gimmicks" aria-labelledby="gimmicksTitle">
-        <div class="screen-heading"><div><span class="step-number">6 / 10</span><h2 id="gimmicksTitle">ギミック</h2></div></div>
-        <article class="panel feature-panel">
-          <div><span class="feature-icon" aria-hidden="true">風</span><div><h3>ステージ全体の風</h3><p>対象ゲームで対応済みのギミックです。</p></div></div>
+      <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
+        <div class="screen-heading"><div><span class="step-number">6 / 8</span><h2 id="playtestTitle">テスト・風</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
+        <div class="playtest-stage-shell">
+          <div class="canvas-card"><canvas id="testCanvas" data-testid="test-canvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
+          <div class="playtest-control-dock" data-testid="playtest-controls" aria-label="テストプレイ操作">
+            <button class="stage-orientation-button" type="button" data-orientation-toggle><span aria-hidden="true">↔</span><span data-orientation-label>横画面</span></button>
+            <div class="orientation-guide stage-control-guide" data-orientation-guide role="status" hidden><strong>端末を横向きに</strong><span>画面回転ロックを解除して、端末を横へ回してください。</span><button type="button" data-orientation-dismiss>閉じる</button></div>
+            <div class="test-controls">
+              <button id="moveTestLeft" type="button">← 移動</button>
+              <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
+              <button id="moveTestRight" type="button">移動 →</button>
+              <button id="resetTest" class="secondary" type="button" aria-label="テストをリセット">リセット</button>
+            </div>
+            <div class="playtest-aim-controls">
+              <label>砲撃角度 <span><output id="angleOutput">45</output>°</span><input id="shotAngle" type="range" min="5" max="175" value="45"></label>
+              <label>砲撃威力 <span><output id="powerOutput">65</output>%</span><input id="shotPower" type="range" min="10" max="100" value="65"></label>
+            </div>
+            <p class="actor-status">キャラクター状態: <strong id="testActorStatus" data-state="grounded">接地</strong></p>
+          </div>
+        </div>
+        <p id="testResult" class="notice-inline" role="status">角度と威力を決めてテスト砲撃してください。</p>
+        <div class="panel form-grid compact playtest-wind-settings">
           <label class="switch-row"><span>風を有効にする</span><input id="windEnabled" type="checkbox" checked></label>
           <label>風向き<select id="windDirection"><option value="-1">左向き</option><option value="1" selected>右向き</option></select></label>
-          <label>強さ <output id="windOutput">35</output>%<input id="windStrength" type="range" min="0" max="100" value="35"></label>
-        </article>
-        <article class="panel future-panel">
-          <h3>将来機能</h3>
-          <p>ワープ、回復地点、移動床、重力変化などは対象ゲーム側が未対応のため、MVPの出力には含めません。</p>
-        </article>
-      </section>
-
-      <section class="screen" data-screen="appearance" aria-labelledby="appearanceTitle">
-        <div class="screen-heading"><div><span class="step-number">7 / 10</span><h2 id="appearanceTitle">背景・見た目</h2></div></div>
-        <div class="panel form-grid">
-          <label>テーマ<select id="themeSelect"><option value="grass">草原</option><option value="desert">砂漠</option><option value="snow">雪原</option><option value="volcanic">火山</option></select></label>
-          <label>背景色（グラデーション上）<input id="backgroundColor" type="color" value="#8fd3ff"></label>
-          <label>地形色<input id="terrainColor" type="color" value="#476b38"></label>
-          <label>明るさ <output id="brightnessOutput">100</output>%<input id="brightnessRange" type="range" min="60" max="130" value="100"></label>
-          <label class="check-row"><input id="decorationsEnabled" type="checkbox" checked><span>背景装飾を表示</span></label>
+          <label class="full">風の強さ <output id="windOutput">35</output>%<input id="windStrength" type="range" min="0" max="100" value="35"></label>
         </div>
-        <div id="appearancePreview" class="appearance-preview"><span>キャラクターの見やすさ確認</span><i class="preview-character red"></i><i class="preview-character blue"></i></div>
-      </section>
-
-      <section class="screen editor-screen" data-screen="playtest" aria-labelledby="playtestTitle">
-        <div class="screen-heading"><div><span class="step-number">8 / 10</span><h2 id="playtestTitle">テストプレイ</h2></div><span class="physics-badge">共有ゲーム物理</span></div>
-        <div class="canvas-card"><canvas id="testCanvas" width="720" height="360" aria-label="テストプレイキャンバス"></canvas></div>
-        <div class="panel form-grid compact">
-          <label>砲撃角度 <output id="angleOutput">45</output>°<input id="shotAngle" type="range" min="5" max="175" value="45"></label>
-          <label>砲撃威力 <output id="powerOutput">65</output>%<input id="shotPower" type="range" min="10" max="100" value="65"></label>
-        </div>
-        <div class="test-controls">
-          <button id="moveTestLeft" type="button">← 移動</button>
-          <button id="fireTest" class="primary" type="button" data-testid="test-play">テスト砲撃</button>
-          <button id="moveTestRight" type="button">移動 →</button>
-          <button id="resetTest" class="secondary" type="button">テストをリセット</button>
-        </div>
-        <p class="actor-status">キャラクター状態: <strong id="testActorStatus" data-state="grounded">接地</strong></p>
-        <p id="testResult" class="notice-inline" role="status">角度と威力を決めてテスト砲撃してください。</p>
+        <details class="help-details"><summary>将来のギミック</summary><p>ワープ、回復地点、移動床、重力変化などは対象ゲーム側が未対応のため、現在の出力には含めません。</p></details>
       </section>
 
       <section class="screen" data-screen="validate" aria-labelledby="validateTitle">
-        <div class="screen-heading"><div><span class="step-number">9 / 10</span><h2 id="validateTitle">検証</h2></div></div>
+        <div class="screen-heading"><div><span class="step-number">7 / 8</span><h2 id="validateTitle">検証</h2></div></div>
         <div id="validationSummary" class="validation-summary is-idle" data-testid="validation-summary">
           <strong>まだ検証していません</strong><span>保存・共有前に確認してください。</span>
         </div>
@@ -232,7 +285,7 @@
       </section>
 
       <section class="screen" data-screen="export" aria-labelledby="exportTitle">
-        <div class="screen-heading"><div><span class="step-number">10 / 10</span><h2 id="exportTitle">保存・共有</h2></div></div>
+        <div class="screen-heading"><div><span class="step-number">8 / 8</span><h2 id="exportTitle">保存・共有</h2></div></div>
         <article class="panel export-summary">
           <h3 id="exportStageTitle">サンプルステージ</h3>
           <dl><div><dt>作成者</dt><dd id="exportAuthor">作成者</dd></div><div><dt>形式</dt><dd>JSON / ZIP</dd></div><div><dt>推定容量</dt><dd id="exportFileSize">計算中</dd></div><div><dt>対応</dt><dd id="exportCompatibility">対象ゲーム</dd></div><div><dt>検証</dt><dd id="exportValidation">未検証</dd></div><div><dt>警告</dt><dd id="exportWarningCount">—</dd></div><div><dt>ハッシュ</dt><dd id="exportHash">未生成</dd></div></dl>
@@ -256,11 +309,9 @@
       <button class="step-tab" type="button" data-step="generate"><span>3</span>生成</button>
       <button class="step-tab" type="button" data-step="terrain"><span>4</span>地形</button>
       <button class="step-tab" type="button" data-step="spawns" data-testid="spawn-step"><span>5</span>出撃</button>
-      <button class="step-tab" type="button" data-step="gimmicks"><span>6</span>風</button>
-      <button class="step-tab" type="button" data-step="appearance"><span>7</span>見た目</button>
-      <button class="step-tab" type="button" data-step="playtest"><span>8</span>テスト</button>
-      <button class="step-tab" type="button" data-step="validate"><span>9</span>検証</button>
-      <button class="step-tab" type="button" data-step="export"><span>10</span>共有</button>
+      <button class="step-tab" type="button" data-step="playtest"><span>6</span>テスト</button>
+      <button class="step-tab" type="button" data-step="validate"><span>7</span>検証</button>
+      <button class="step-tab" type="button" data-step="export"><span>8</span>共有</button>
     </nav>
   </div>
 
@@ -272,6 +323,6 @@
   <script src="../../shared/stage-core.js" defer></script>
   <script src="../../shared/stage-storage.js" defer></script>
   <script src="../../shared/stage-zip.js" defer></script>
-  <script src="./app.js" defer></script>
+  <script src="./app-1.7.0.js" defer></script>
 </body>
 </html>

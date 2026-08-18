@@ -57,7 +57,7 @@ export const canonicalCharacterRecordSchema = z
     assets: generatedAssetPathsSchema,
     spriteMetadata: spriteMetadataSchema,
     motionMetadata: motionMetadataMapSchema.optional(),
-    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami']).optional(),
+    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai']).optional(),
     generatorVersion: z.string().min(1).max(32),
   })
   .strict()

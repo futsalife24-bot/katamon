@@ -26,11 +26,97 @@ let pid = 1;
 function down(x, y) { const id = pid++; canvas.__fire('pointerdown', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now(), button: 0 }); return id; }
 function move(id, x, y) { canvas.__fire('pointermove', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
 function up(id, x, y) { win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() }); }
+function touchDown(x, y) { const id = pid++; canvas.__fire('pointerdown', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now(), button: 0 }); return id; }
+function touchMoveWindow(id, x, y) { win.__fire('pointermove', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now() }); }
+function touchUp(id, x, y) { win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: true, timeStamp: Date.now() }); }
 
 const selectWheelCards = kt.selectWheelCards();
 check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
+check('ロード中の石壁に更新時の読み込み案内を表示する',
+  indexHtml.includes('更新時は読み込みに時間がかかる場合があります')
+    && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
+    && indexHtml.includes("gamePhase === 'loading'"),
+  'loading notice missing');
+check('ロード中は項目数ではなく0〜100%ゲージとランダムキャラを表示する',
+  indexHtml.includes('getCoreImageProgressRatio()')
+    && indexHtml.includes('const progressPercent = Math.round(progress * 100)')
+    && indexHtml.includes('const loadingCharacterKey = pickLoadingCharacter()')
+    && indexHtml.includes('const loadingCharacterImage = loadCharacterArt')
+    && indexHtml.includes('const fallbackLoadingKey = primaryLoadingImgReady')
+    && indexHtml.includes('if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1)')
+    && indexHtml.includes('ctx.rotate(markerAngle)')
+    && indexHtml.includes('const spinnerY = VH / 2 - 155')
+    && indexHtml.includes('const emblemSize = 58')
+    && indexHtml.includes('const progressBarY = VH / 2 + 170'),
+  'progress character loader missing');
+check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
+  indexHtml.includes('rel="preload" as="video"')
+    && indexHtml.includes('battleStartLogoVideo.load()')
+    && indexHtml.includes('function primeFirstBattleMedia()')
+    && indexHtml.includes('primeFirstBattleMedia();'),
+  'first battle media preparation missing');
+check('BATTLE画面に全ユニットのデバフ名と残りターンを表示する',
+  indexHtml.includes('function debuffStatusEntries(u)')
+    && indexHtml.includes('function drawDebuffStatusStrip()')
+    && indexHtml.includes('行動不能 ${u.actionSkipTurns}手')
+    && indexHtml.includes('移動封印 ${u.moveLockTurns}手')
+    && indexHtml.includes('drawDebuffStatusStrip();'),
+  'debuff status strip missing');
+
+// v209: CPU BATTLEの「つぎのバトルへ」は、同じ相手・ステージに張り付かない。
+// 乱数を固定しても直前の候補を外すため、旧実装なら実際に失敗する。
+{
+  const rematch = kt.cpuBattleRematchForTest();
+  check('CPU BATTLE連戦は相手とステージ種別を直前から引き直す',
+    !!rematch && rematch.cpu !== 'kyoryu' && rematch.pattern !== 'plateauLeft',
+    JSON.stringify(rematch));
+}
+
+// ボス戦は見た目だけではなく、CPUの耐久と必殺チャージが強化される。
+{
+  const boss = kt.cpuBossRoundForTest();
+  check('10連勝ごとのボスCPUはHP+30%・必殺チャージMAXで開始する',
+    boss?.isBoss === true && boss.pattern === 'tieredBasin'
+      && boss.cpu.maxHp === Math.round(kt.character('iwa').maxHp * 1.3)
+      && boss.cpu.hp === boss.cpu.maxHp
+      && boss.cpu.specialCharge === 4,
+    JSON.stringify(boss));
+}
+
+// v171: 上端にあった横長の中断再開ボタンを出撃ギアの下へ移し、
+// 空いた場所では「カタモンを選択」を主役として見せる。
+{
+  const info = kt.selectScreenInfo();
+  const drawnWithSave = kt.drawSelectForTest(true);
+  check('キャラ選択の見出しは「カタモンを選択」を大きく描く',
+    info.heading === 'カタモンを選択'
+      && info.headingFontSize >= 30
+      && drawnWithSave.includes('カタモンを選択')
+      && !drawnWithSave.includes('モンスターを選択'),
+    JSON.stringify({ info, drawnWithSave }));
+  check('中断再開は出撃より小さい下側ギアとして噛み合わせる',
+    Number.isFinite(info.sortie.outerRadius)
+      && Number.isFinite(info.resume.outerRadius)
+      && info.resume.y > info.sortie.y
+      && info.resume.outerRadius < info.sortie.outerRadius
+      && info.resume.y - info.sortie.y < info.resume.outerRadius + info.sortie.outerRadius,
+    JSON.stringify(info));
+  check('中断再開ギアは丸い見た目と同じ範囲だけ押せる',
+    kt.selectResumeHitForTest(info.resume.x, info.resume.y)
+      && !kt.selectResumeHitForTest(info.resume.x + info.resume.w / 2 - 1, info.resume.y + info.resume.h / 2 - 1),
+    JSON.stringify(info.resume));
+  check('中断データがある時は小型ギアに再開と表示する',
+    drawnWithSave.includes('再開')
+      && drawnWithSave.includes('中断対戦')
+      && !drawnWithSave.includes('▶ 中断した対戦を再開'),
+    drawnWithSave.join('/'));
+  const drawnWithoutSave = kt.drawSelectForTest(false);
+  check('中断データが無い時は再開ギアを表示しない',
+    !drawnWithoutSave.includes('再開') && !drawnWithoutSave.includes('中断対戦'),
+    drawnWithoutSave.join('/'));
+}
 
 // v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。
 // 必殺技と跳躍は通常弾ではないため、従来のキャラ固有値を残す。
@@ -60,19 +146,123 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     firedProfiles.every(p => p.blastMul === 1 && p.windMul === 1 && p.gravityMul === 1),
     JSON.stringify(firedProfiles));
 
+  // v203: Bインパクトは爆風の威力を残しつつ、地形だけ通常弾の1.5倍に抑える。
+  // 命中者は大きく位置を飛ばさず、短い浮き上がりと横移動で「少し吹き飛ぶ」。
+  kt.setCharactersForTest('iwa', 'iwa');
+  const bImpactTarget = kt.unitById('e1');
+  let bImpactGroundX = kt.stageW() * 0.5;
+  for (let x = kt.stageW() * 0.2; x <= kt.stageW() * 0.8; x += 12) {
+    if (kt.groundYAt(x) < kt.deadLineY() - 80) { bImpactGroundX = x; break; }
+  }
+  kt.placeOnGround(bImpactTarget.id, bImpactGroundX);
+  // 地形生成によっては足場がデッドライン間際になるため、吹き飛び検証だけは安全な高さへ固定する。
+  kt.setUnitPositionForTest(bImpactTarget.id, bImpactTarget.x, Math.min(bImpactTarget.y, kt.deadLineY() - 150));
+  kt.setUnitHpForTest(bImpactTarget.id, bImpactTarget.maxHp);
+  kt.clearProjectilesForTest();
+  const bImpactIndex = kt.fireSpecialImmediateForUnitForTest('p1', 'iwa', 260, -180);
+  const bImpactProfile = kt.projectileProfilesForTest()[bImpactIndex];
+  const bImpactCratersBefore = kt.craters();
+  const bImpactTargetBefore = { x: bImpactTarget.x, y: bImpactTarget.y };
+  // 最大HPでも先に倒れず、地形穴にも巻き込まれない距離で「生存中の命中者が少し飛ぶ」を測る。
+  kt.detonateProjectileForTest(bImpactIndex, bImpactTarget.x - 180, bImpactTarget.y);
+  const bImpactCrater = kt.craterHistory()[bImpactCratersBefore];
+  check('Bインパクトの地形破壊半径は通常弾44pxの1.5倍',
+    bImpactProfile?.terrainBlastMul === 1.5 && Math.abs((bImpactCrater?.r || 0) - 66) < 0.0001,
+    JSON.stringify({ profile: bImpactProfile, crater: bImpactCrater }));
+  const bImpactHitUnit = kt.unitById(bImpactTarget.id);
+  const bImpactAfterHit = {
+    grounded: bImpactHitUnit.grounded,
+    vy: bImpactHitUnit.vy,
+    knockbackVx: bImpactHitUnit.knockbackVx,
+    hp: bImpactHitUnit.hp
+  };
+  const bImpactAfterStep = kt.updateFallingForTest(bImpactTarget.id, 0.1);
+  check('Bインパクト命中者は少しだけ上方かつ爆心から外側へ吹き飛ぶ',
+    bImpactAfterHit.grounded === false && bImpactAfterHit.vy < 0
+      && bImpactAfterStep.x > bImpactTargetBefore.x
+      && bImpactAfterStep.x - bImpactTargetBefore.x <= 20,
+    JSON.stringify({ before: bImpactTargetBefore, hit: bImpactAfterHit, step: bImpactAfterStep }));
+  kt.placeOnGround(bImpactTarget.id, bImpactTargetBefore.x);
+  kt.setCharactersForTest('kyoryu', 'kyoryu');
+  kt.clearProjectilesForTest();
+
+  const normalTrajectorySpecials = ['tori', 'mecha'];
   const characterProfilesStay = kt.chars().every(key => {
     const def = kt.character(key);
     const special = kt.shotPhysicsProfileForTest(key, true, false);
     const jump = kt.shotPhysicsProfileForTest(key, false, true);
-    return special.blastMul === (def.blastMul || 1)
+    const specialStays = normalTrajectorySpecials.includes(key)
+      ? special.blastMul === 1 && special.windMul === 1 && special.gravityMul === 1
+        && special.velScaleMul === 1 && special.guideMul === 1 && special.tBias === 1
+      : (special.blastMul === (def.blastMul || 1)
       && special.windMul === (def.windMul || 1)
       && special.gravityMul === (def.gravityMul || 1)
       && special.velScaleMul === (def.velScaleMul || 1)
       && special.guideMul === (def.guideMul || 1)
-      && special.tBias === (def.tBias || 1)
-      && JSON.stringify(jump) === JSON.stringify(special);
+      && special.tBias === (def.tBias || 1));
+    return specialStays
+      && jump.blastMul === (def.blastMul || 1)
+      && jump.windMul === (def.windMul || 1)
+      && jump.gravityMul === (def.gravityMul || 1)
+      && jump.velScaleMul === (def.velScaleMul || 1)
+      && jump.guideMul === (def.guideMul || 1)
+      && jump.tBias === (def.tBias || 1);
   });
-  check('必殺技と跳躍は従来のキャラ固有の弾道値を残す', characterProfilesStay);
+  check('フェニーチェとクロムギアの必殺は通常弾と同じ物理で、全キャラの跳躍は固有の弾道値を残す', characterProfilesStay);
+
+  const specialFlight = {};
+  for (const key of normalTrajectorySpecials) {
+    kt.clearProjectilesForTest();
+    kt.fireSpecialImmediateForTest(key, 120, -80);
+    specialFlight[key] = kt.projectileProfilesForTest();
+  }
+  kt.clearProjectilesForTest();
+  check('フェニーチェ必殺とクロムギア中央弾は通常弾と同じ初速・風・重力で飛ぶ',
+    specialFlight.tori.length === 1
+      && specialFlight.tori[0].vx === 120 && specialFlight.tori[0].vy === -80
+      && specialFlight.tori[0].windMul === 1 && specialFlight.tori[0].gravityMul === 1
+      && specialFlight.mecha.length === 3
+      && specialFlight.mecha[1].vx === 120 && specialFlight.mecha[1].vy === -80
+      && specialFlight.mecha.every(p => p.windMul === 1 && p.gravityMul === 1),
+    JSON.stringify(specialFlight));
+}
+
+// v146: 通常弾そのものはv135で共通化したが、岩と騎士だけ被ダメージ軽減が残り、
+// 同じ通常弾を同じ位置へ当てても最終ダメージが揃っていなかった。HPと移動力は維持し、
+// 防御補正と、実際に生成された通常弾の命中結果が全16キャラで同じことを確認する。
+{
+  const defenseProfiles = kt.chars().map(key => ({ key, multiplier: kt.defenseMultiplierForTest(key) }));
+  check('全16キャラの防御補正は等倍で共通',
+    defenseProfiles.every(p => p.multiplier === 1), JSON.stringify(defenseProfiles));
+
+  const originalPositions = ['p1', 'e1'].map(id => {
+    const u = kt.unitById(id);
+    return { id, x: u.x, y: u.y };
+  });
+  const normalImpacts = [];
+  for (const key of kt.chars()) {
+    kt.setCharactersForTest('kyoryu', key);
+    const shooter = kt.unitById('p1');
+    const target = kt.unitById('e1');
+    // 地形を削った結果が後続の検査へ漏れないよう、画面外で同じ命中計算だけを通す。
+    shooter.x = 100; shooter.y = -300;
+    target.x = 700; target.y = -300;
+    kt.clearProjectilesForTest();
+    kt.fireForTest(100, -200, { unitId: 'p1' });
+    const projectile = kt.projectileProfilesForTest()[0];
+    const before = target.hp;
+    const detonated = kt.detonateProjectileForTest(0, target.x, target.y);
+    normalImpacts.push({ key, detonated, blastMul: projectile?.blastMul, damage: before - target.hp });
+  }
+  kt.clearProjectilesForTest();
+  kt.setCharactersForTest('kyoryu', 'kyoryu');
+  for (const pos of originalPositions) {
+    const u = kt.unitById(pos.id);
+    u.x = pos.x; u.y = pos.y;
+  }
+  check('同じ位置へ直撃した通常弾は全16キャラに同じ爆風と45ダメージ',
+    normalImpacts.every(hit => hit.detonated && hit.blastMul === 1 && hit.damage === 45),
+    JSON.stringify(normalImpacts));
 }
 
 // v138: Pixabayの爆発音は通常弾の着弾だけに使う。
@@ -106,6 +296,19 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     soundRoute && soundRoute.afterNormal === soundRoute.before + 1
       && soundRoute.afterSpecial === soundRoute.afterNormal,
     JSON.stringify(soundRoute));
+
+  let titleImpactRoute = null;
+  try {
+    kt.setNormalImpactBufferForTest();
+    const before = kt.decodedAudioStartsForTest();
+    kt.triggerTitleWallImpactForTest();
+    titleImpactRoute = { before, after: kt.decodedAudioStartsForTest() };
+  } catch (err) {
+    titleImpactRoute = { error: String(err && err.message || err) };
+  }
+  check('the TAP TO START cannonball uses the same decoded explosion sample at wall impact',
+    titleImpactRoute && titleImpactRoute.after === titleImpactRoute.before + 1,
+    JSON.stringify(titleImpactRoute));
   kt.clearProjectilesForTest();
 }
 
@@ -140,13 +343,28 @@ check('キャラ選択は手前の最大7枚だけを描画する',
     JSON.stringify(phases));
   check('オーラはキャラ画像の背後から上向きに描く',
     indexHtml.includes('function drawSpecialAura(u, a)')
-      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(indexHtml),
+      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(indexHtml),
     'drawSpecialAuraの描画順が見つかりません');
+  const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
+    ? kt.specialCutInSoundProfile()
+    : null;
+  const specialCutInSoundAsset = typeof kt.specialCutInSoundAsset === 'function'
+    ? kt.specialCutInSoundAsset()
+    : null;
+  check('必殺カットイン音はEDM Zapの短く鋭い音源を効果音設定の経路で鳴らす',
+    !!specialCutInSound
+      && specialCutInSound.duckMs >= 350
+      && specialCutInSound.duckMs <= 600
+      && specialCutInSound.sampleGain === 0.28
+      && specialCutInSoundAsset
+      && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3'
+      && /function playSpecialSound\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
+    JSON.stringify({ specialCutInSound, specialCutInSoundAsset }));
   kt.clearProjectilesForTest();
 }
 
 // v134: キャラ選択の紹介文・型・性能目盛りはゲーム内容と合っていないため出さない。
-// 一旦はキャラ名と必殺技名だけで選べる画面にする。
+// v147: 最大HPと、今後内容を決める必殺技の仮説明欄だけを加える。
 {
   kt.setPhase('select');
   kt.resetDrawnText();
@@ -156,15 +374,86 @@ check('キャラ選択は手前の最大7枚だけを描画する',
   check('キャラ選択にはキャラ名と必殺技名を描く',
     drawn.includes(focused.name) && drawn.includes('必殺技') && drawn.includes(focused.special),
     drawn.join('/'));
+  check('キャラ選択には選んだキャラの最大HPを描く',
+    drawn.includes(`HP ${focused.maxHp}`),
+    drawn.join('/'));
+  check('キャラ選択には選んだキャラらしい必殺技紹介を描く',
+    typeof focused.selectFlavor === 'string' && focused.selectFlavor.length > 0
+      && drawn.includes(focused.selectFlavor)
+      && !drawn.includes('(仮)雰囲気解説')
+      && kt.chars().every(key => {
+        const character = kt.character(key);
+        return typeof character.selectFlavor === 'string' && character.selectFlavor.length > 0;
+      }),
+    drawn.join('/'));
+  const presentation = kt.selectCardPresentation();
+  check('キャラ選択カードは木板と紙札の意匠にする',
+    !!presentation
+      && presentation.cardMaterial === 'wood'
+      && presentation.descriptionMaterial === 'parchment'
+      && presentation.neonAccent === false,
+    JSON.stringify(presentation));
   check('キャラ選択には型と性能目盛りを描かない',
     !drawn.includes('耐久') && !drawn.includes('火力') && !drawn.includes('機動')
       && !kt.chars().map(key => kt.character(key)).some(d => drawn.includes(d.role) || drawn.includes(d.roleEn)),
     drawn.join('/'));
   const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
   const selectCard = /function drawWheelSelectCard\(card, def\) \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  function drawFixedSelectSortieButton/.exec(html);
-  check('キャラ選択には紹介文と必殺技の説明文を描かない',
+  check('キャラ選択には古い紹介文と古い必殺技説明を描かない',
     !!selectCard && !/def\.(?:desc|specialDesc|selectStats|role|roleEn)\b/.test(selectCard[1]),
     selectCard ? '古い情報の参照が残っています' : 'カード描画関数が見つかりません');
+}
+
+// v180: キャラクターの表示名を、種族名から固有名へ更新する。
+const EXPECTED_CHARACTER_NAMES = {
+  kyoryu: 'ディラノ', medama: 'アイボルト', iwa: 'ゴーロッカ', tori: 'フェニーチェ',
+  barugerukan: 'バルゲルカン', nisenmono: 'オベリスク', burumutan: 'ブルームタン', sumoeru: 'スモエル',
+  doRednote: 'ドレッドアロー', mocchario: 'モッチャリオ', mecha: 'クロムギア', akuma: 'ルビデビ',
+  jinba: 'アスタウロス', kishi: 'パラディエ', neko: 'にゃんタンク', shinigami: 'ヨミガマ'
+};
+check('全キャラクターの表示名が確定した名前になっている',
+  Object.entries(EXPECTED_CHARACTER_NAMES).every(([key, name]) => kt.character(key).name === name),
+  JSON.stringify(Object.fromEntries(Object.keys(EXPECTED_CHARACTER_NAMES).map(key => [key, kt.character(key).name]))));
+
+// v191: 必殺技の性能は変えず、キャラクター性が伝わる固有名へ統一する。
+const EXPECTED_SPECIAL_NAMES = {
+  barugerukan: 'バルコプター',
+  burumutan: 'ドレインシード',
+  tori: 'フレイムウェーブ',
+  sumoeru: '職人カエル玉',
+  iwa: 'Bインパクト',
+  medama: 'バインドスピット',
+  nisenmono: 'プリズムビーム'
+};
+for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
+  check(`${kt.character(key).name}の必殺技名は「${specialName}」`,
+    kt.character(key).special === specialName,
+    kt.character(key).special);
+}
+
+// v208: キャラ選択の必殺技説明は雰囲気文ではなく、実際の性能を短く示す。
+const EXPECTED_SPECIAL_FLAVORS = {
+  kyoryu: '高威力・大爆風の砲弾を放つ',
+  medama: '命中相手を2手番、行動不能にする',
+  iwa: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
+  tori: '着弾から左右へ炎が広がり、6×3回ダメージ',
+  barugerukan: 'マーキング弾を放ち、着弾地点へ機銃掃射',
+  nisenmono: '反射する貫通レーザーで敵を射抜く',
+  burumutan: '与えたダメージ分、自分のHPを回復',
+  sumoeru: '敵の近くで炸裂し、8方向へ中小弾を放つ',
+  doRednote: '着弾後、相手に向かって地雷針が追尾する',
+  mocchario: '大爆風のレーザー砲を発射',
+  mecha: '3発の高速弾を狭い扇状に連射',
+  akuma: '風と重力を無視して直進し、直接ダメージ',
+  jinba: '地面着弾後、中・小・小の連続爆発で掘進',
+  kishi: 'HPを15払って、超高威力の一撃',
+  neko: '大爆風で吹き飛ばし、次の手番をスキップ',
+  shinigami: '着弾地点の真下へ、縦穴を掘る'
+};
+for (const [key, flavor] of Object.entries(EXPECTED_SPECIAL_FLAVORS)) {
+  check(`${kt.character(key).name}の必殺技説明は性能を示す`,
+    kt.character(key).selectFlavor === flavor,
+    kt.character(key).selectFlavor);
 }
 
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
@@ -206,7 +495,7 @@ const shinigami = kt.character('shinigami');
     && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
     // 両者の間には描画理由のコメントもある。文字数ではなく同じ drawUnit 内の順序を見る。
-    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1500}ctx\.drawImage\(img, -w \/ 2, UNIT_RADIUS - h, w, h\);/.test(html));
+    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(html));
   // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
   // 中心にすると見えている上半分に当たらない(実機で指摘)。
   check('直撃の円をキャラの体へ上げている',
@@ -214,8 +503,8 @@ const shinigami = kt.character('shinigami');
     && html.includes('return { x: u.x, y: u.y - UNIT_HIT_RISE };'));
   // 見えている輪と実際の判定が同じ中心を使うこと。別々だと嘘の表示になる。
   check('見えている輪と実際の判定が同じ中心を使う',
-    // 呼び出しは2か所(可視化と直撃判定)。定義側は数えない。
-    (html.match(/const a = unitHitCenter\(u\);/g) || []).length === 2);
+    // 可視化・直撃判定・花火の接近信管が同じ中心を使う。定義側は数えない。
+    (html.match(/const a = unitHitCenter\(u\);/g) || []).length === 3);
   // 上げるのは直撃の円だけ。発射基点と爆風の基準を動かすと、足元へ撃った時の距離が
   // 変わってダメージが全キャラぶん変わる。
   check('発射基点と爆風の基準は動かしていない',
@@ -229,6 +518,11 @@ const shinigami = kt.character('shinigami');
   const fs2 = require('fs'), path2 = require('path');
   const html = fs2.readFileSync(path2.join(__dirname, '..', 'index.html'), 'utf8');
   const vs = kt.vsPlate();
+  const matchupStart = html.indexOf('function drawMatchupCutIn() {');
+  const matchupEnd = html.indexOf('function drawCutIn()', matchupStart);
+  const matchupBody = matchupStart >= 0 && matchupEnd > matchupStart
+    ? html.slice(matchupStart, matchupEnd)
+    : '';
   check('砲弾の素材5点をassetsから読み込んでいる',
     ['ally1', 'foe1', 'ally2', 'foe2', 'badge'].every(k => /^vs-(plate-(ally|foe)-[12]|badge)\.png$/.test(vs.srcs[k] || '')),
     JSON.stringify(vs.srcs));
@@ -240,6 +534,15 @@ const shinigami = kt.character('shinigami');
     vs.slots.ally1.length === 1 && vs.slots.foe1.length === 1
     && vs.slots.ally2.length === 2 && vs.slots.foe2.length === 2,
     JSON.stringify(Object.entries(vs.slots).map(([k, v]) => k + ':' + v.length)));
+  check('VS紋章は前面、上下の砲弾カードは中央から離れて4人を読める',
+    matchupBody.indexOf('const badge = vsPlateImages.badge;') > matchupBody.indexOf('drawVsPlate(cutIn.right, true, foeSlide, flash);')
+    && matchupBody.indexOf('const badge = vsPlateImages.badge;') > matchupBody.indexOf('drawVsPlate(cutIn.left, false, allySlide, flash);')
+    && html.includes('const VS_ALLY_OFFSET = { x: -48, y: -84 };')
+    && html.includes('const VS_FOE_OFFSET = { x: 40, y: 70 };')
+    && html.includes('const VS_BADGE_W = 104;')
+    && html.includes('const VS_BADGE_OFFSET_Y = -6;')
+    && matchupBody.includes('ctx.translate(VW / 2, VS_CENTER_Y + VS_BADGE_OFFSET_Y);'),
+    matchupBody.slice(matchupBody.indexOf('drawVsPlate(cutIn.right'), matchupBody.indexOf('drawVsPlate(cutIn.right') + 540));
   // 窓は絵に対する比率で持つ。0〜1を外れると、顔が砲弾からはみ出す。
   check('窓の位置は絵に対する比率で、必ず絵の内側に収まる',
     Object.values(vs.slots).every(list => list.every(([x0, y0, x1, y1]) =>
@@ -440,6 +743,23 @@ check('復元後も手番が一致',
   JSON.stringify(after.state));
 check('復元しても席は動かない', after.seat === SEAT, after.seat);
 
+// v207: CPU BATTLEは、弾や演出の途中ではなく安全なターン開始状態を自動保存する。
+// これによりアプリを終了しても、最大でその手番の最初から再開できる。
+kt.clearSuspendedForTest();
+kt.startTurnForTest();
+const turnStartAutoSave = kt.loadSuspendedForTest();
+check('CPU BATTLEはターン開始時に中断データを自動保存する',
+  !!turnStartAutoSave
+    && turnStartAutoSave.battleMode === 'normal'
+    && turnStartAutoSave.turnCount === kt.state().turnCount
+    && turnStartAutoSave.activeIndex === kt.state().activeIndex,
+  JSON.stringify(turnStartAutoSave && {
+    battleMode: turnStartAutoSave.battleMode,
+    turnCount: turnStartAutoSave.turnCount,
+    activeIndex: turnStartAutoSave.activeIndex
+  }));
+kt.clearSuspendedForTest();
+
 // ---- 3. フリーモード ----
 kt.startFree();
 check('フリーモードに入る', kt.mode() === 'free', kt.mode());
@@ -448,6 +768,225 @@ check('フリーモードのキャラ設定が反映される',
   kt.unitById('p1').character === kt.chars()[fc.playerIndex] &&
   kt.unitById('e1').character === kt.chars()[fc.cpuIndex],
   `${kt.unitById('p1').character}/${kt.unitById('e1').character}`);
+const freeTrainingOptions = kt.freeTrainingOptions();
+let trainingRules = null;
+let practiceWind = null;
+let practiceSpecialReady = false;
+let practiceJumpReady = null;
+let normalSpecialUnaffected = false;
+let practicePlayerOnlySpecial = false;
+let practiceWindPowerScale = null;
+if (freeTrainingOptions) {
+  kt.setFreeTrainingForTest({
+    special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: '10'
+  });
+  kt.startFreeMatch();
+  kt.unitById('p1').specialCharge = 0;
+  trainingRules = kt.practiceRulesForTest();
+  practiceWind = kt.wind();
+  practiceSpecialReady = kt.specialReady();
+  practiceJumpReady = kt.refreshPracticeJumpForTest('p1');
+  kt.setBattleModeForTest('normal');
+  normalSpecialUnaffected = !kt.specialReady();
+  kt.setBattleModeForTest('free');
+  kt.setFreeTrainingForTest({ special: 'player' });
+  kt.startFreeMatch();
+  kt.unitById('p1').specialCharge = 0;
+  kt.unitById('e1').specialCharge = 0;
+  practicePlayerOnlySpecial = kt.specialReady()
+    && !kt.specialReadyForTest(SEAT === 'p1' ? 'e1' : 'p1');
+  kt.setFreeTrainingForTest({
+    special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: '6'
+  });
+  kt.startFreeMatch();
+  kt.setFreeTrainingForTest({ windDirection: 'right', windStrength: '7' });
+  kt.startFreeMatch();
+  practiceWindPowerScale = kt.wind();
+}
+check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して切り替えられる',
+  !!freeTrainingOptions
+    && Object.keys(freeTrainingOptions).join(',') === 'special,jump,cpuAi,windDirection,windStrength'
+    && trainingRules?.specialAlwaysFull === true
+    && trainingRules?.jumpEachTurn === true
+    && trainingRules?.cpuEnabled === false
+    && practiceWind?.dir === 1 && practiceWind?.strength === 1
+    && practiceSpecialReady === true && practiceJumpReady === true
+    && normalSpecialUnaffected === true
+    && practicePlayerOnlySpecial === true,
+  JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
+check('practice WIND POWER uses the same 0-to-10 scale as the battle wind arrow',
+  Array.isArray(freeTrainingOptions?.windStrength)
+    && freeTrainingOptions.windStrength.map(option => option.key).join(',') === '0,1,2,3,4,5,6,7,8,9,10'
+    && practiceWindPowerScale?.dir === 1
+    && practiceWindPowerScale?.strength === 0.7,
+  JSON.stringify({ windStrength: freeTrainingOptions?.windStrength, practiceWindPowerScale }));
+const setupRowsBeforeBattle = kt.freeRows();
+const freeStageGroupBeforeBattle = kt.freeStageGroup();
+const trainingMenuRows = kt.freeTrainingMenuRows();
+check('演習前はキャラ・地形・ステージサイズ・人数だけを選び、練習条件は戦闘メニューにまとめる',
+  Object.keys(setupRowsBeforeBattle).join(',') === 'player,cpu,terrain,customStage,stageSize,format'
+    && !!trainingMenuRows
+    && Object.keys(trainingMenuRows).join(',') === 'special,jump,cpuAi,windDirection,windStrength',
+  JSON.stringify({ setupRowsBeforeBattle, trainingMenuRows }));
+check('カスタムステージはSTAGEの直下にあり、ほかの演習条件と重ならない',
+  setupRowsBeforeBattle.customStage.y - setupRowsBeforeBattle.terrain.y === 56
+    && setupRowsBeforeBattle.stageSize.y - setupRowsBeforeBattle.customStage.y === 56,
+  JSON.stringify({ terrain: setupRowsBeforeBattle.terrain, customStage: setupRowsBeforeBattle.customStage, stageSize: setupRowsBeforeBattle.stageSize }));
+check('STAGEは左の共通欄から通常・カスタムの上下2択へ分かれる',
+  !!freeStageGroupBeforeBattle
+    && freeStageGroupBeforeBattle.label.h === freeStageGroupBeforeBattle.outer.h
+    && freeStageGroupBeforeBattle.normal.y === setupRowsBeforeBattle.terrain.y
+    && freeStageGroupBeforeBattle.custom.y === setupRowsBeforeBattle.customStage.y
+    && freeStageGroupBeforeBattle.normal.x === freeStageGroupBeforeBattle.custom.x
+    && freeStageGroupBeforeBattle.normal.w === freeStageGroupBeforeBattle.custom.w
+    && freeStageGroupBeforeBattle.normal.x > freeStageGroupBeforeBattle.label.x,
+  JSON.stringify({ stageGroup: freeStageGroupBeforeBattle, rows: setupRowsBeforeBattle }));
+const customStageLauncherCss = require('fs').readFileSync(require('path').join(__dirname, '..', 'game-custom-stages.css'), 'utf8');
+const customStageLauncherJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'game-custom-stages.js'), 'utf8');
+check('カスタムステージはSTAGEの下段へ収まる色付きの選択ボタンである',
+  /#customStageLauncher\s*\{[^}]*border:\s*1px solid rgba\(102, 190, 184, \.82\)[^}]*background:\s*linear-gradient\(180deg, rgba\(37, 83, 88, \.96\), rgba\(12, 38, 43, \.98\)\)/s.test(customStageLauncherCss),
+  customStageLauncherCss.match(/#customStageLauncher\s*\{[^}]*\}/s)?.[0]);
+const freePreviewDirections = kt.chars().map(key => ({
+  key,
+  playerMirrored: kt.freePreviewShouldMirror('player', key),
+  enemyMirrored: kt.freePreviewShouldMirror('cpu', key),
+    facesLeft: !!kt.character(key).facesLeft
+}));
+check('演習設定のキャラ画像は味方を右向き・相手を左向きへ素材ごとに揃える',
+  freePreviewDirections.every(item => item.playerMirrored === item.facesLeft
+    && item.enemyMirrored !== item.facesLeft),
+  JSON.stringify(freePreviewDirections));
+check('サウンド設定を開いている間はカスタムステージのボタンを前面へ出さない',
+  /soundPanelOpen,/.test(indexHtml)
+    && /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs),
+  JSON.stringify({ stateHasSoundPanel: /soundPanelOpen,/.test(indexHtml), launcherHidesForSoundPanel: /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs) }));
+kt.clearSuspendedForTest();
+kt.startFreeMatch();
+kt.endFreeTrainingForTest();
+check('演習を終了すると中断セーブを作らずタイトルへ戻る',
+  kt.gamePhaseForTest() === 'title' && !kt.suspendedSavePresentForTest(),
+  JSON.stringify({ phase: kt.gamePhaseForTest(), hasSave: kt.suspendedSavePresentForTest() }));
+// 「最遠」はステージの横幅を端から端まで見渡せる全景であること。
+// v159はHUD下から操作盤までへステージ全高を収める倍率を「最遠」としたため、
+// 標準でも横幅の約51%しか見えず、スライダーを端まで動かしても全景にできなかった。
+kt.setCameraZoomForTest(0.38);
+kt.startFreeMatch();
+const standardFreeCamera = kt.cameraForTest();
+const oneOnOneBattleTop = 176;
+const standardWidthCoverage = standardFreeCamera.visibleWidth / 1440;
+check('標準の最遠視点はマップ横幅100%を見渡せる',
+  Math.abs(standardWidthCoverage - 1) <= 0.001
+    && Math.abs(standardFreeCamera.stageBottomY - kt.controlPanelY()) <= 1
+    && standardFreeCamera.stageTopY >= oneOnOneBattleTop
+    && Math.abs(standardFreeCamera.zoom - 540 / 1440) <= 0.001,
+  JSON.stringify({ standardFreeCamera, standardWidthCoverage }));
+
+// 大型を選んだ時だけ、実戦の地形・保存データまで大型寸法へ切り替わること。
+// 旧実装では stageSize を受け取らず、ここは常に標準 (1440 / 660 / 480列) のままになる。
+kt.changeFreeOption('stageSize', 1);
+// 大型でも同じ「最遠」の意味を守り、横幅を全部表示すること。
+// 標準の「最遠」から切り替えた時も、生の倍率ではなくスライダー上の距離を引き継ぐ。
+kt.startFreeMatch();
+const largeFreeSnapshot = kt.buildSnapshotForTest();
+const largeFreeCamera = kt.cameraForTest();
+const largeWidthCoverage = largeFreeCamera.visibleWidth / 2160;
+check('演習で大型を選ぶと2160×960・720列の戦場になる',
+  largeFreeSnapshot.stageW === 2160
+    && largeFreeSnapshot.stageH === 960
+    && largeFreeSnapshot.segments.length === 720
+    && largeFreeSnapshot.units.length === 2,
+  JSON.stringify({
+    stageW: largeFreeSnapshot.stageW,
+    stageH: largeFreeSnapshot.stageH,
+    columns: largeFreeSnapshot.segments.length,
+    units: largeFreeSnapshot.units.length
+  }));
+check('大型の最遠視点もマップ横幅100%を見渡せる',
+  Math.abs(largeWidthCoverage - 1) <= 0.001
+    && Math.abs(largeFreeCamera.stageBottomY - kt.controlPanelY()) <= 1
+    && largeFreeCamera.stageTopY >= oneOnOneBattleTop
+    && Math.abs(largeFreeCamera.zoom - 540 / 2160) <= 0.001
+    && Math.abs(largeFreeCamera.sliderValue - standardFreeCamera.sliderValue) <= 0.01
+    && Math.abs(largeWidthCoverage - standardWidthCoverage) <= 0.001,
+  JSON.stringify({ standardFreeCamera, largeFreeCamera, standardWidthCoverage, largeWidthCoverage }));
+
+// 大型闘技場は横幅だけ2160へ広がっても、三段棚・外壁・吊り障害物が標準用のY座標に
+// 残っていた。そのため全景にすると上側へ固まり、下半分がほぼ空になっていた。
+// 標準(660高)の構図を大型(960高)へ同比率で広げ、縦の空間も使うことを固定する。
+kt.setTerrain('tieredBasin');
+const largeArenaLayout = kt.arenaLayoutForTest();
+const largeArenaScale = 960 / 660;
+const expectedLargeShelves = [
+  { y: 365 * largeArenaScale, bottom: 387 * largeArenaScale, reach: 0.205 },
+  { y: 445 * largeArenaScale, bottom: 468 * largeArenaScale, reach: 0.235 },
+  { y: 525 * largeArenaScale, bottom: 549 * largeArenaScale, reach: 0.265 }
+];
+const sameNumber = (actual, expected) => Math.abs(actual - expected) <= 1e-9;
+check('大型闘技場は外壁と三段足場を高さ960へ広げる',
+  sameNumber(largeArenaLayout.wallBottom, 625 * largeArenaScale)
+    && largeArenaLayout.shelves.length === expectedLargeShelves.length
+    && largeArenaLayout.shelves.every((shelf, index) => (
+      sameNumber(shelf.y, expectedLargeShelves[index].y)
+        && sameNumber(shelf.bottom, expectedLargeShelves[index].bottom)
+        && shelf.reach === expectedLargeShelves[index].reach
+    )),
+  JSON.stringify(largeArenaLayout));
+check('大型闘技場の吊り障害物も高さ960の範囲へ広げる',
+  largeArenaLayout.obstacles.length >= 2
+    && largeArenaLayout.obstacles.every(obstacle => (
+      obstacle.anchorY >= 92 * largeArenaScale
+        && obstacle.anchorY < 126 * largeArenaScale
+        && obstacle.y >= 238 * largeArenaScale
+        && obstacle.y < 426 * largeArenaScale
+    )),
+  JSON.stringify(largeArenaLayout.obstacles));
+const largeArenaLeftSpawn = kt.placeOnGround('p1', kt.stageW() * 0.18);
+const largeArenaRightSpawn = kt.placeOnGround('e1', kt.stageW() * 0.82);
+check('大型闘技場の出撃位置は広げた上段足場に乗る',
+  largeArenaLeftSpawn.y > 480 && largeArenaRightSpawn.y > 480,
+  JSON.stringify({ largeArenaLeftSpawn, largeArenaRightSpawn }));
+// v157/v158は大型の遠い保存値を自動で660/960（表示69%）へ補正していた。
+// 新しい距離設定がまだ無い端末でこの値を生倍率として読むと、修正版でも大型だけ
+// 途中の距離から始まるため、旧版が作った69%は「最遠」として一度だけ移行する。
+kt.setCameraZoomForTest(660 / 960);
+kt.startFreeMatch();
+const migratedLegacyLargeCamera = kt.cameraForTest();
+check('旧版が大型へ保存した69%は、新しい最遠視点へ移行する',
+  migratedLegacyLargeCamera.sliderValue <= 0.01
+    && Math.abs(migratedLegacyLargeCamera.zoom - largeFreeCamera.zoom) <= 0.01,
+  JSON.stringify({ largeFreeCamera, migratedLegacyLargeCamera }));
+// 最遠からスライダーで拡大した時は、地図中央ではなく手番キャラへ縦横とも寄ること。
+// 全景は中央しか基準にできないため、その中心を保つと両端のキャラが画面外へ消えてしまう。
+// 大型の上段にいるキャラは地面固定のままだと縦にも消えるため、地面の接地は全景中だけ。
+const largeCameraCenterBeforeZoom = kt.cameraForTest();
+const largeActingXBeforeZoom = kt.activeUnit().x;
+const largeActingYBeforeZoom = kt.activeUnit().y;
+kt.setCameraSliderValueForTest(1);
+const largeCameraCenterAfterZoom = kt.cameraForTest();
+check('全景から拡大すると手番キャラへ縦横とも寄る',
+  largeActingXBeforeZoom >= largeCameraCenterAfterZoom.x
+    && largeActingXBeforeZoom <= largeCameraCenterAfterZoom.x + largeCameraCenterAfterZoom.visibleWidth
+    && largeActingYBeforeZoom >= largeCameraCenterAfterZoom.y
+    && largeActingYBeforeZoom <= largeCameraCenterAfterZoom.y + largeCameraCenterAfterZoom.visibleHeight,
+  JSON.stringify({ actingX: largeActingXBeforeZoom, actingY: largeActingYBeforeZoom, before: largeCameraCenterBeforeZoom, after: largeCameraCenterAfterZoom }));
+// 以降の既存ケースは標準サイズ前提なので、ここで元へ戻す。
+kt.changeFreeOption('stageSize', -1);
+kt.startFreeMatch();
+kt.setTerrain('tieredBasin');
+const standardArenaLayout = kt.arenaLayoutForTest();
+check('標準闘技場の従来配置は変えない',
+  standardArenaLayout.wallBottom === 625
+    && JSON.stringify(standardArenaLayout.shelves) === JSON.stringify([
+      { y: 365, bottom: 387, reach: 0.205 },
+      { y: 445, bottom: 468, reach: 0.235 },
+      { y: 525, bottom: 549, reach: 0.265 }
+    ])
+    && standardArenaLayout.obstacles.every(obstacle => (
+      obstacle.anchorY >= 92 && obstacle.anchorY < 126
+        && obstacle.y >= 238 && obstacle.y < 426
+    )),
+  JSON.stringify(standardArenaLayout));
+
 let freeThrew = null;
 try { playMatch(60000); } catch (e) { freeThrew = e; }
 check('フリーモードも例外なく決着', !freeThrew && kt.state().matchOver === true,
@@ -669,69 +1208,628 @@ check('素材の向きが違う組み合わせでも両方が相手を向く',
   kt.facesLeftInWorld('p1') === false && kt.facesLeftInWorld('e1') === true,
   `${rightFacing}(p1)=${kt.facesLeftInWorld('p1')} / ${leftFacing}(e1)=${kt.facesLeftInWorld('e1')}`);
 
-// ===== Issue #3: 花火(スモエルの必殺)は弧の頂点で開く =====
-// 以前は飛行中に必殺ボタンを押して起爆していた。合図の通信が届くまでに弾が進むため、
-// 端末ごとに違う場所で開き、削れ方もダメージも食い違っていた。
-// 炸裂の時刻と位置を発射時に数式で確定させたので、通信も刻みも結果に影響しない。
-// 本体の爆発半径は 44*1.15=50.6px、拡散弾は 22/15/9.7px。25pxを境に区別できる。
-const MAIN_BLAST_MIN_R = 25;
-function craterRadii(craterString) {
-  return craterString ? craterString.split('|').map(s => Number(s.split(',')[2])) : [];
-}
+// ===== v183: 花火(スモエルの必殺)は接近信管でゆっくり開く =====
+const fireworkConfig = kt.fireworkConfigForTest();
+check('花火の接近信管は敵の90px手前で反応し、120px飛ぶまで起動しない',
+  fireworkConfig.proximityRadius === 90 && fireworkConfig.armDistance === 120,
+  JSON.stringify(fireworkConfig));
+check('花火の8方向弾は従来の半速180px毎秒でゆっくり開く',
+  fireworkConfig.shardSpeed === 180,
+  JSON.stringify(fireworkConfig));
+check('花火の各方向は根元2発が中弾、先端1発が小弾になる',
+  fireworkConfig.shardBlasts.join(',') === '0.72,0.56,0.24',
+  JSON.stringify(fireworkConfig));
 
-kt.startBattle('sumoeru');
+check('花火の接近信管は起動距離前には敵が範囲内でも反応しない',
+  kt.fireworkProximityProbeForTest('p1', 'e1', 80, 119) === null);
+check('花火の接近信管は起動後、90px以内の敵に反応する',
+  kt.fireworkProximityProbeForTest('p1', 'e1', 90, 120) === 'e1');
+check('花火の接近信管は90pxを越えた敵には反応しない',
+  kt.fireworkProximityProbeForTest('p1', 'e1', 91, 120) === null);
+check('花火の接近信管は発射者と同じ陣営には反応しない',
+  kt.fireworkProximityProbeForTest('e1', 'e1', 0, 120) === null);
+
+// ===== v221: オベリスクの必殺を反射するプリズムビームへ更新 =====
+check('オベリスクの必殺技名は「プリズムビーム」',
+  kt.character('nisenmono').special === 'プリズムビーム', kt.character('nisenmono').special);
+check('プリズムビームは地形を壊さず敵を貫通する反射レーザー',
+  kt.character('nisenmono').specialDesc.includes('地形を壊さず')
+    && kt.character('nisenmono').specialDesc.includes('反射')
+    && kt.character('nisenmono').specialDesc.includes('貫通'),
+  kt.character('nisenmono').specialDesc);
+kt.startBattle('nisenmono');
 kt.disableCpuForTest();
+settle();
+const prismShot = kt.fireSpecialImmediateForTest('nisenmono', 300, 0);
+const prismProfile = kt.projectileProfilesForTest()[prismShot];
+check('プリズムビームは無風・無重力、地形破壊なし、反射上限と射程上限を持つ',
+  prismProfile?.prismBeam === true
+    && prismProfile?.pierce === true
+    && prismProfile?.noTerrain === true
+    && prismProfile?.windMul === 0
+    && prismProfile?.gravityMul === 0
+    && prismProfile?.prismMaxBounces === 4
+    && prismProfile?.prismMaxDistance === 1320,
+  JSON.stringify(prismProfile));
+kt.clearProjectilesForTest();
 
-// 上へ大きく撃つ → 頂点で空中炸裂する(本体の爆発は起きず、拡散弾だけ)
-const upShot = () => kt.fireForTest(300, -520, { unitId: 'p1', useSpecial: true });
-// 地形はランダムで、上空に浮島が生成されると頂点へ届く前に着弾してしまう。
-// 空が開けている地形を引くまで作り直す。空中炸裂しない実装では何度作り直しても
-// 条件を満たせないので、この用意が失敗すること自体で退行を検知できる。
-let fireworkSnap = null;
-for (let attempt = 0; attempt < 20 && !fireworkSnap; attempt++) {
-  kt.setTerrain('rolling');
-  kt.setCharactersForTest('sumoeru', 'sumoeru');
-  kt.fillCharges();
-  kt.placeOnGround('p1', Math.round(kt.stageW() * 0.25));
-  kt.placeOnGround('e1', Math.round(kt.stageW() * 0.75));
-  const probe = kt.snapshot();
-  const radii = craterRadii(runShotWithStep(1 / 60, probe, upShot, 6).craters);
-  if (radii.length > 0 && radii.every(r => r < MAIN_BLAST_MIN_R)) fireworkSnap = probe;
+// ===== v188: ルビデビの必殺は爆発しない直撃電撃 =====
+check('ルビデビの必殺説明は障害物無視や爆発ではなく直撃電撃を示す',
+  kt.character('akuma').specialDesc.includes('直接ダメージ')
+    && !kt.character('akuma').specialDesc.includes('障害物を無視'),
+  kt.character('akuma').specialDesc);
+kt.startBattle('akuma');
+kt.disableCpuForTest();
+settle();
+const rubideviShot = kt.fireSpecialImmediateForTest('akuma', 300, 0);
+const rubideviProfile = kt.projectileProfilesForTest()[rubideviShot];
+check('ルビデビの電撃は風・重力だけを無視し、空中障害物には遮られる',
+  rubideviProfile?.windMul === 0
+    && rubideviProfile?.gravityMul === 0
+    && rubideviProfile?.ignoreObstacles === false
+    && rubideviProfile?.lightning === true,
+  JSON.stringify(rubideviProfile));
+check('ルビデビの電撃は爆風と地形破壊を使わない直撃専用弾である',
+  rubideviProfile?.directHitOnly === true && rubideviProfile?.noTerrain === true,
+  JSON.stringify(rubideviProfile));
+const rubideviTarget = kt.unitById('e1');
+const rubideviHpBefore = rubideviTarget.hp;
+const rubideviCratersBefore = kt.craters();
+const rubideviVisualsBefore = kt.impactVisualCountsForTest();
+kt.resolveProjectileUnitImpactForTest(rubideviShot, 'e1');
+const rubideviVisualsAfter = kt.impactVisualCountsForTest();
+check('ルビデビの直撃は相手だけへダメージを与え、爆発も地形破壊も起こさない',
+  rubideviTarget.hp < rubideviHpBefore
+    && kt.craters() === rubideviCratersBefore
+    && rubideviVisualsAfter.explosions === rubideviVisualsBefore.explosions
+    && rubideviVisualsAfter.lightningRemnants === rubideviVisualsBefore.lightningRemnants + 1,
+  JSON.stringify({
+    hp: [rubideviHpBefore, rubideviTarget.hp],
+    craters: [rubideviCratersBefore, kt.craters()],
+    visuals: [rubideviVisualsBefore, rubideviVisualsAfter]
+  }));
+kt.clearProjectilesForTest();
+const rubideviGroundShot = kt.fireSpecialImmediateForTest('akuma', 0, 300);
+const rubideviGroundCraters = kt.craters();
+const rubideviGroundVisuals = kt.impactVisualCountsForTest();
+kt.resolveProjectileSurfaceImpactForTest(rubideviGroundShot, rubideviTarget.x, rubideviTarget.y + 30);
+const rubideviGroundAfter = kt.impactVisualCountsForTest();
+check('ルビデビの電撃は地面や空中障害物で止まっても爆発・地形破壊しない',
+  kt.craters() === rubideviGroundCraters
+    && rubideviGroundAfter.explosions === rubideviGroundVisuals.explosions
+    && rubideviGroundAfter.lightningRemnants === rubideviGroundVisuals.lightningRemnants + 1,
+  JSON.stringify({
+    craters: [rubideviGroundCraters, kt.craters()],
+    visuals: [rubideviGroundVisuals, rubideviGroundAfter]
+  }));
+
+// ===== v189: フェニーチェの必殺は通常弾と同じ弾道から左右へ地走り炎 =====
+check('フェニーチェの必殺説明は旧・超高速弾ではなく左右へ広がる炎を示す',
+  kt.character('tori').specialDesc.includes('左右')
+    && kt.character('tori').specialDesc.includes('炎')
+    && !kt.character('tori').specialDesc.includes('超高速'),
+  kt.character('tori').specialDesc);
+const feniceNormalVelocity = kt.launchVelocityForTest('tori', 70, -45, false, false);
+const feniceSpecialVelocity = kt.launchVelocityForTest('tori', 70, -45, true, false);
+check('フェニーチェの必殺弾は同じ引っぱりなら通常弾と同じ初速になる',
+  feniceSpecialVelocity.vx0 === feniceNormalVelocity.vx0
+    && feniceSpecialVelocity.vy0 === feniceNormalVelocity.vy0,
+  JSON.stringify({ normal: feniceNormalVelocity, special: feniceSpecialVelocity }));
+kt.startBattle('tori');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest();
+const feniceShooter = kt.localUnit();
+const feniceTarget = kt.foeUnit();
+kt.placeOnGround(feniceShooter.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(feniceTarget.id, Math.round(kt.stageW() * 0.55));
+const feniceShot = kt.fireSpecialImmediateForTest('tori', 300, -180);
+const feniceProfile = kt.projectileProfilesForTest()[feniceShot];
+check('フェニーチェの必殺弾は通常弾と同じ風・重力を受け、フレイムウェーブの印だけを持つ',
+  feniceProfile?.windMul === 1
+    && feniceProfile?.gravityMul === 1
+    && feniceProfile?.groundFlame === true,
+  JSON.stringify(feniceProfile));
+const feniceHpBefore = feniceTarget.hp;
+const feniceCratersBefore = kt.craters();
+const feniceVisualsBefore = kt.impactVisualCountsForTest();
+const feniceFlamePoints = kt.resolveGroundFlameImpactForTest(feniceShot, feniceTarget.x, feniceTarget.y);
+const feniceVisualsAfter = kt.impactVisualCountsForTest();
+const feniceTickConfig = kt.groundFlameConfigForTest();
+check('フェニーチェの炎は着弾点から地面に沿って左右3か所ずつへ広がる',
+  Array.isArray(feniceFlamePoints)
+    && feniceFlamePoints.length === 7
+    && feniceFlamePoints.filter(point => point.direction < 0).length === 3
+    && feniceFlamePoints.filter(point => point.direction > 0).length === 3
+    && feniceFlamePoints.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
+  JSON.stringify(feniceFlamePoints));
+const feniceNewCraters = kt.craterHistory().slice(feniceCratersBefore);
+check('フレイムウェーブの各炎は6ダメージを0.5秒間隔で3回与える設定',
+  feniceTickConfig?.damage === 6
+    && feniceTickConfig?.ticks === 3
+    && feniceTickConfig?.interval === 0.5,
+  JSON.stringify(feniceTickConfig));
+check('フレイムウェーブは着火時の1回目だけ6ダメージを与える',
+  feniceTarget.hp === feniceHpBefore - 6,
+  JSON.stringify({ hp: [feniceHpBefore, feniceTarget.hp], flames: kt.groundFlamesForTest() }));
+const feniceHpAfterFirstTick = feniceTarget.hp;
+for (let i = 0; i < 29; i++) kt.step(1 / 60);
+check('フレイムウェーブは0.5秒に達する前には追撃しない',
+  feniceHpAfterFirstTick === feniceHpBefore - 6
+    && feniceTarget.hp === feniceHpAfterFirstTick,
+  JSON.stringify({ hp: feniceTarget.hp, flames: kt.groundFlamesForTest() }));
+for (let i = 0; i < 2; i++) kt.step(1 / 60);
+check('フレイムウェーブは約0.5秒後に2回目の6ダメージを与える',
+  feniceTarget.hp === feniceHpBefore - 12,
+  JSON.stringify({ hp: feniceTarget.hp, flames: kt.groundFlamesForTest() }));
+for (let i = 0; i < 31; i++) kt.step(1 / 60);
+const feniceHpAfterThirdTick = feniceTarget.hp;
+for (let i = 0; i < 31; i++) kt.step(1 / 60);
+check('フレイムウェーブは3回目で止まり、4回目のダメージを出さない',
+  feniceHpAfterThirdTick === feniceHpBefore - 18
+    && feniceTarget.hp === feniceHpAfterThirdTick,
+  JSON.stringify({ hp: [feniceHpBefore, feniceHpAfterThirdTick, feniceTarget.hp], flames: kt.groundFlamesForTest() }));
+check('フェニーチェのフレイムウェーブは持続ダメージと小削りだけを起こし、大爆発には戻らない',
+  feniceNewCraters.length === 7
+    && feniceNewCraters.every(crater => crater.r <= 12)
+    && feniceVisualsAfter.groundFlames === feniceVisualsBefore.groundFlames + 7
+    && feniceVisualsAfter.explosions === feniceVisualsBefore.explosions,
+  JSON.stringify({
+    hp: [feniceHpBefore, feniceTarget.hp],
+    craters: feniceNewCraters,
+    visuals: [feniceVisualsBefore, feniceVisualsAfter]
+  }));
+
+// ===== v190: ブルームタンの必殺は固定回復ではなく、敵へ実際に与えたダメージを吸収 =====
+check('ブルームタンの必殺説明は固定30回復ではなく与えたダメージ分の回復を示す',
+  kt.character('burumutan').specialDesc.includes('与えたダメージ')
+    && !kt.character('burumutan').specialDesc.includes('30回復'),
+  kt.character('burumutan').specialDesc);
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomOwner = kt.localUnit();
+const bloomMissTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomMissTarget.id, Math.round(kt.stageW() * 0.8));
+const bloomMissShot = kt.fireSpecialWithHpForTest('burumutan', 40, 260, -180);
+const bloomMissProfile = kt.projectileProfilesForTest()[bloomMissShot];
+check('ブルームタンは必殺弾を発射しただけでは回復せず、吸収弾の印を持つ',
+  bloomOwner.hp === 40 && bloomMissProfile?.drainHeal === true,
+  JSON.stringify({ hp: bloomOwner.hp, profile: bloomMissProfile }));
+kt.detonateProjectileForTest(bloomMissShot, kt.stageW() / 2, 80);
+check('ブルームタンの必殺弾が相手へ当たらなければ回復しない',
+  bloomOwner.hp === 40,
+  `hp=${bloomOwner.hp}`);
+
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomDrainOwner = kt.localUnit();
+const bloomDrainTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomDrainOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomDrainTarget.id, Math.round(kt.stageW() * 0.8));
+bloomDrainTarget.hp = 20;
+const bloomDrainShot = kt.fireSpecialWithHpForTest('burumutan', 40, 260, -180);
+kt.detonateProjectileForTest(bloomDrainShot, bloomDrainTarget.x, bloomDrainTarget.y);
+check('ブルームタンは過剰ダメージで水増しせず、敵から実際に奪ったHPだけ回復する',
+  bloomDrainTarget.hp === 0
+    && bloomDrainOwner.hp === 60
+    && kt.damageTexts().includes('+20'),
+  JSON.stringify({ ownerHp: bloomDrainOwner.hp, targetHp: bloomDrainTarget.hp, texts: kt.damageTexts() }));
+
+kt.startBattle('burumutan');
+kt.disableCpuForTest();
+settle();
+const bloomCapOwner = kt.localUnit();
+const bloomCapTarget = kt.foeUnit();
+kt.setFlatTerrainForTest();
+kt.placeOnGround(bloomCapOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(bloomCapTarget.id, Math.round(kt.stageW() * 0.8));
+bloomCapTarget.hp = 20;
+const bloomCapShot = kt.fireSpecialWithHpForTest('burumutan', 105, 260, -180);
+const bloomCapProfile = kt.projectileProfilesForTest()[bloomCapShot];
+kt.detonateProjectileForTest(bloomCapShot, bloomCapTarget.x, bloomCapTarget.y);
+check('ブルームタンの吸収回復は最大HPを超えない',
+  bloomCapOwner.hp === bloomCapOwner.maxHp
+    && bloomCapTarget.hp === 0
+    && bloomCapProfile?.drainHeal === true,
+  JSON.stringify({ ownerHp: bloomCapOwner.hp, maxHp: bloomCapOwner.maxHp, targetHp: bloomCapTarget.hp, profile: bloomCapProfile }));
+
+// ===== v204: バルゲルカンはマーカー地点へ仮ヘリから10発の機銃掃射 =====
+kt.startBattle('barugerukan');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest();
+const barucopterOwner = kt.localUnit();
+const barucopterTarget = kt.foeUnit();
+kt.placeOnGround(barucopterOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(barucopterTarget.id, Math.round(kt.stageW() * 0.8));
+kt.clearProjectilesForTest();
+const barucopterMarkerIndex = kt.fireSpecialImmediateForTest('barugerukan', 260, -180);
+const barucopterMarkerProfiles = kt.projectileProfilesForTest();
+check('バルゲルカンの必殺は「バルコプター」のマーキング弾1発で始まる',
+  kt.character('barugerukan').special === 'バルコプター'
+    && kt.character('barugerukan').specialDesc.includes('10発')
+    && barucopterMarkerProfiles.length === 1
+    && barucopterMarkerProfiles[barucopterMarkerIndex]?.barucopterMarker === true,
+  JSON.stringify({ def: kt.character('barugerukan'), projectiles: barucopterMarkerProfiles }));
+const barucopterMark = { x: barucopterTarget.x, y: barucopterTarget.y };
+const barucopterStarted = kt.startBarucopterForTest(barucopterMarkerIndex, barucopterMark.x, barucopterMark.y);
+check('マーキング後は上端固定ではなく自キャラ座標の真上450pxへバルコプターが現れる',
+  barucopterStarted?.owner === barucopterOwner.id
+    && Math.abs(barucopterStarted?.x - barucopterOwner.x) < 0.001
+    && barucopterStarted?.y === barucopterOwner.y - 450
+    && barucopterStarted?.targetX === barucopterMark.x
+    && barucopterStarted?.targetY === barucopterMark.y,
+  JSON.stringify({ owner: { x: barucopterOwner.x, y: barucopterOwner.y }, barrage: barucopterStarted }));
+kt.stepBarucoptersForTest(2);
+const barucopterBullets = kt.projectileProfilesForTest();
+const barucopterAngles = barucopterBullets.map(p => Math.atan2(p.vy, p.vx));
+const uniqueBarucopterAngles = new Set(barucopterAngles.map(angle => angle.toFixed(4)));
+const barucopterAimAngle = barucopterStarted
+  ? Math.atan2(barucopterStarted.targetY - barucopterStarted.y, barucopterStarted.targetX - barucopterStarted.x)
+  : 0;
+const averageBarucopterAngle = barucopterAngles.length
+  ? Math.atan2(
+      barucopterAngles.reduce((sum, angle) => sum + Math.sin(angle), 0),
+      barucopterAngles.reduce((sum, angle) => sum + Math.cos(angle), 0)
+    )
+  : Infinity;
+const barucopterAngleDelta = Math.atan2(
+  Math.sin(averageBarucopterAngle - barucopterAimAngle),
+  Math.cos(averageBarucopterAngle - barucopterAimAngle)
+);
+check('バルコプターはマーカーへ無風・無重力の機銃を10発だけ連射する',
+  barucopterBullets.length === 10
+    && barucopterBullets.every(p => p.barucopterBullet && p.windMul === 0 && p.gravityMul === 0),
+  JSON.stringify(barucopterBullets));
+check('10発の機銃はマーカー方向を中心にほんの僅かだけ固定でブレる',
+  uniqueBarucopterAngles.size >= 5
+    && Math.abs(barucopterAngleDelta) < 0.03,
+  JSON.stringify({ aim: barucopterAimAngle, average: averageBarucopterAngle, delta: barucopterAngleDelta, angles: barucopterAngles }));
+let barucopterDamageResult = null;
+if (barucopterBullets.length > 0) {
+  const hpBefore = barucopterTarget.hp;
+  const cratersBefore = kt.craters();
+  kt.resolveProjectileUnitImpactForTest(0, barucopterTarget.id);
+  barucopterDamageResult = {
+    damage: hpBefore - barucopterTarget.hp,
+    craterDelta: kt.craters() - cratersBefore
+  };
 }
-check('上へ撃った花火は空中で開く(本体の爆発が起きない)', fireworkSnap !== null,
-  '20回地形を作り直しても空中炸裂しなかった');
-if (!fireworkSnap) fireworkSnap = kt.snapshot();
-const fw60 = runShotWithStep(1 / 60, fireworkSnap, upShot, 6);
-const fw120 = runShotWithStep(1 / 120, fireworkSnap, upShot, 6);
-const fw30 = runShotWithStep(1 / 30, fireworkSnap, upShot, 6);
-check('花火が炸裂して地形を削っている', craterRadii(fw60.craters).length > 0,
-  `craters=${craterRadii(fw60.craters).length}`);
-check('花火の炸裂位置が60fpsと120fpsで完全一致する', fw60.craters === fw120.craters,
-  `60=${fw60.craters.slice(0, 90)} / 120=${fw120.craters.slice(0, 90)}`);
-check('花火の炸裂位置が60fpsと30fpsで完全一致する', fw60.craters === fw30.craters,
-  `60=${fw60.craters.slice(0, 90)} / 30=${fw30.craters.slice(0, 90)}`);
+const barucopterSurfaceCratersBefore = kt.craters();
+const barucopterSurfaceHit = kt.resolveBarucopterBulletSurfaceImpactForTest(1, barucopterTarget.x, barucopterTarget.y);
+const barucopterSurfaceCraterDelta = kt.craters() - barucopterSurfaceCratersBefore;
+check('バルコプターの機銃1発は3ダメージで、着弾地点を小さく削る',
+  barucopterDamageResult?.damage === 3
+    && barucopterDamageResult?.craterDelta === 0
+    && barucopterSurfaceHit === true
+    && barucopterSurfaceCraterDelta === 1,
+  JSON.stringify({ unit: barucopterDamageResult, surfaceCraterDelta: barucopterSurfaceCraterDelta }));
+kt.clearProjectilesForTest();
 
-// 下へ撃つ → 頂点が無いので空中では開かず、着弾して開く(本体の爆発あり)
-const downShot = () => kt.fireForTest(300, 260, { unitId: 'p1', useSpecial: true });
-const fwDown = runShotWithStep(1 / 60, fireworkSnap, downShot, 6);
-check('下へ撃った花火は着弾して開く(本体の爆発が起きる)',
-  craterRadii(fwDown.craters).some(r => r >= MAIN_BLAST_MIN_R),
-  `半径=${craterRadii(fwDown.craters).join(',')}`);
+// ===== v2.0.63: クールカイはランダム角度へ47発を順番に連射 =====
+const coolKaiNormalVelocity = kt.launchVelocityForTest('coolKai', 180, -96, false, false);
+const coolKaiSpecialIndex = kt.fireSpecialImmediateForTest('coolKai', coolKaiNormalVelocity.vx0, coolKaiNormalVelocity.vy0);
+const coolKaiProjectiles = kt.projectileProfilesForTest();
+const coolKaiMoveLock = kt.turnEffectForTest(kt.seat());
+const coolKaiRotations = coolKaiProjectiles.map(p => p.coolKaiRotation);
+const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
+const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
+check('クールカイの必殺は小さいおにぎりを47発生成する',
+  kt.character('coolKai').name === 'クール=カイ'
+    && kt.character('coolKai').special === 'Amour 握り飯'
+    && kt.character('coolKai').specialDesc === '手燭の油で作った47個の握り飯を配ってやる。'
+    && kt.character('coolKai').maxHp === 66
+    && coolKaiProjectiles.length === 47
+    && coolKaiSpecialIndex === 46
+    && coolKaiProjectiles.every(p => p.coolKaiOnigiri && !p.directHitOnly && p.radius === 3),
+  JSON.stringify({ def: kt.character('coolKai'), count: coolKaiProjectiles.length, projectiles: coolKaiProjectiles.slice(0, 2) }));
+check('クールカイは必殺技後に6ターン移動不能になる',
+  coolKaiMoveLock?.moveLockTurns === 6,
+  JSON.stringify(coolKaiMoveLock));
+check('クールカイのおにぎり47発は大きめの固定バラツキで飛ぶ',
+  coolKaiUniqueAngles.size >= 40
+    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) > 0.30
+    && Math.max(...coolKaiAngles) - Math.min(...coolKaiAngles) < 0.5
+    && coolKaiAngles.length === 47,
+  JSON.stringify({ unique: coolKaiUniqueAngles.size, angles: coolKaiAngles }));
+const coolKaiDelays = coolKaiProjectiles.map(p => p.coolKaiDelay);
+check('クールカイのおにぎり47発は一定間隔の連射になっている',
+  coolKaiDelays.length === 47
+    && coolKaiDelays[0] === 0
+    && coolKaiDelays.every((delay, i) => Math.abs(delay - i * 0.075) < 1e-9),
+  JSON.stringify({ delays: coolKaiDelays }));
+check('クールカイのおにぎりは見た目だけ3倍で判定値を変えない',
+  indexHtml.includes('ctx.moveTo(15, 0); ctx.lineTo(-12, -12); ctx.lineTo(-12, 12);')
+    && indexHtml.includes('const COOL_KAI_ONIGIRI_DAMAGE = 6;')
+    && indexHtml.includes('Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)')
+    && coolKaiProjectiles.every(p => p.radius === 3),
+  JSON.stringify({ radius: coolKaiProjectiles[0]?.radius }));
+check('クール=カイの握り飯47発は見た目の回転だけ個別にランダム化する',
+  coolKaiRotations.length === 47
+    && new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size >= 40
+    && coolKaiRotations.every(rotation => rotation >= 0 && rotation < Math.PI * 2),
+  JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
+check('演習のクールカイ表示も透明余白を切り出す',
+  indexHtml.includes('function characterPreviewImageRect(key, img)')
+    && indexHtml.includes('previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 }')
+    && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
+  'drawFreeRowにキャラ画像の切り出しがありません');
+kt.clearProjectilesForTest();
 
-// ほぼ水平 → 頂点が自分の拡散弾の届く範囲(180px)に入るので空中では開かない
-const flatShot = () => kt.fireForTest(200, -100, { unitId: 'p1', useSpecial: true });
-const fwFlat = runShotWithStep(1 / 60, fireworkSnap, flatShot, 6);
-check('頂点が近すぎる水平撃ちは空中で開かない(自爆しない)',
-  craterRadii(fwFlat.craters).some(r => r >= MAIN_BLAST_MIN_R),
-  `半径=${craterRadii(fwFlat.craters).join(',')}`);
+// ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
+const dreadNormalVelocity = kt.launchVelocityForTest('doRednote', 180, -96, false, false);
+const dreadSpecialShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+const dreadRailProfile = kt.projectileProfilesForTest()[dreadSpecialShot];
+check('ドレッドアローの必殺は高速貫通ではなく、照準どおりのスコーピオンレールである',
+  kt.character('doRednote').special === 'スコーピオンレール'
+    && kt.character('doRednote').specialDesc.includes('地表')
+    && !kt.character('doRednote').specialDesc.includes('高速')
+    && !kt.character('doRednote').specialDesc.includes('貫通')
+    && dreadRailProfile?.scorpionRail === true
+    && dreadRailProfile?.pierce === false
+    && dreadRailProfile?.vx === dreadNormalVelocity.vx0
+    && dreadRailProfile?.vy === dreadNormalVelocity.vy0,
+  JSON.stringify({ def: kt.character('doRednote'), profile: dreadRailProfile, normal: dreadNormalVelocity }));
+const dreadRailStart = kt.startScorpionRailForTest(dreadSpecialShot, 360, 420);
+const dreadRailConfig = kt.scorpionRailConfigForTest();
+check('スコーピオンレールは地面へ刺さった後に地表を這う状態へ切り替わる',
+  dreadRailStart?.active === true
+    && dreadRailStart?.pierce === true
+    && dreadRailStart?.vy === 0
+    && Math.abs(dreadRailStart?.vx || 0) === dreadRailConfig?.speed
+    && dreadRailConfig?.range >= 180
+    && dreadRailConfig?.carveRadius > 0
+    && dreadRailConfig?.damage >= 20,
+  JSON.stringify({ start: dreadRailStart, config: dreadRailConfig }));
+const dreadStepTerrain = kt.setScorpionRailStepTerrainForTest(620, 420, 320);
+const dreadTargetedShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+kt.setUnitPositionForTest(kt.foeUnit().id, 580, 410);
+kt.setUnitHpForTest(kt.foeUnit().id, kt.foeUnit().maxHp);
+const dreadTargetedStart = kt.startScorpionRailForTest(dreadTargetedShot, 620, 350);
+check('スコーピオンレールは壁面でも最も近い相手がいる向きへ走り出す',
+  dreadTargetedStart?.active === true && dreadTargetedStart?.vx === 0 && dreadTargetedStart?.vy > 0,
+  JSON.stringify({ target: kt.foeUnit(), start: dreadTargetedStart }));
+const dreadClimbShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
+kt.startScorpionRailForTest(dreadClimbShot, 560, dreadStepTerrain.floorY, 1);
+const dreadClimb = kt.advanceScorpionRailForTest(dreadClimbShot, 230);
+const dreadClimbedVertically = dreadClimb?.points.some(point => point.x >= 610 && point.y < 390);
+check('スコーピオンレールは地形から離れず、壁を登って上面へ回り込む',
+  dreadClimb?.moved >= 225
+    && dreadClimbedVertically
+    && dreadClimb?.x > dreadStepTerrain.wallX
+    && dreadClimb?.y < dreadStepTerrain.topY
+    && dreadClimb?.attached === true,
+  JSON.stringify({ terrain: dreadStepTerrain, climb: dreadClimb }));
+check('スコーピオンレールは太い残光と長い軌跡でショックウェーブを描く',
+  dreadRailConfig?.waveWidth >= 14 && dreadRailConfig?.trailLength >= 80,
+  JSON.stringify(dreadRailConfig));
+// v205: 地表を走るショックウェーブが敵へ触れた時だけ、足元から毒針を突き上げる。
+kt.startBattle('doRednote');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest();
+const dreadSpikeOwner = kt.localUnit();
+const dreadSpikeTarget = kt.foeUnit();
+kt.placeOnGround(dreadSpikeOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(dreadSpikeTarget.id, Math.round(kt.stageW() * 0.55));
+kt.setUnitHpForTest(dreadSpikeTarget.id, dreadSpikeTarget.maxHp);
+const dreadSpikeShot = kt.fireSpecialImmediateForTest('doRednote', 240, -120);
+kt.startScorpionRailForTest(dreadSpikeShot, Math.round(kt.stageW() * 0.42), 420);
+const dreadSpikeHpBefore = dreadSpikeTarget.hp;
+const dreadSpikeCratersBefore = kt.craters();
+const dreadSpikeVisualsBefore = kt.impactVisualCountsForTest();
+kt.resolveProjectileUnitImpactForTest(dreadSpikeShot, dreadSpikeTarget.id);
+const dreadSpikeVisualsAfter = kt.impactVisualCountsForTest();
+const dreadSpikeConfig = kt.scorpionRailSpikeConfigForTest();
+check('スコーピオンレールのショックウェーブ命中時は下から3本の毒針演出だけを出す',
+  dreadSpikeConfig?.count === 3
+    && dreadSpikeConfig?.life >= 0.4
+    && dreadSpikeConfig?.height >= 40
+    && dreadSpikeTarget.hp === dreadSpikeHpBefore - dreadRailConfig.damage
+    && kt.craters() === dreadSpikeCratersBefore
+    && dreadSpikeVisualsAfter.scorpionRailSpikes === dreadSpikeVisualsBefore.scorpionRailSpikes + dreadSpikeConfig.count,
+  JSON.stringify({ config: dreadSpikeConfig, hp: [dreadSpikeHpBefore, dreadSpikeTarget.hp], craters: [dreadSpikeCratersBefore, kt.craters()], visuals: [dreadSpikeVisualsBefore, dreadSpikeVisualsAfter] }));
+// v206: 実画面の描画まで通し、命中直後に例外でゲーム全体を止めない。
+let dreadSpikeDrawn = false;
+let dreadSpikeDrawError = '';
+try {
+  dreadSpikeDrawn = kt.drawScorpionRailImpactSpikesForTest();
+} catch (error) {
+  dreadSpikeDrawError = error?.message || String(error);
+}
+check('スコーピオンレールの毒針演出は描画時にも例外を出さない',
+  dreadSpikeDrawn && !dreadSpikeDrawError,
+  dreadSpikeDrawError || '描画できませんでした');
+const dreadVsSpecial = kt.vsSpecialTextForTest('doRednote');
+check('長い必殺技名も開始カットインで省略せず全文を表示する',
+  dreadVsSpecial?.text === 'スコーピオンレール' && dreadVsSpecial?.fontSize >= 7,
+  JSON.stringify(dreadVsSpecial));
+
+// ===== v194: Dスマッシュは地面への着弾後に中→小→小の連続爆発で掘り進む =====
+check('Dスマッシュの説明は地面へ着弾後に中小小の爆発で掘り進む性能を示す',
+  kt.character('jinba').specialDesc.includes('着弾')
+    && kt.character('jinba').specialDesc.includes('中・小・小')
+    && kt.character('jinba').specialDesc.includes('掘り進む'),
+  kt.character('jinba').specialDesc);
+kt.startBattle('jinba');
+kt.disableCpuForTest();
+settle();
+kt.setFlatTerrainForTest(420);
+const dSmashOwner = kt.localUnit();
+const dSmashTarget = kt.foeUnit();
+kt.placeOnGround(dSmashOwner.id, Math.round(kt.stageW() * 0.2));
+kt.placeOnGround(dSmashTarget.id, Math.round(kt.stageW() * 0.8));
+const dSmashShot = kt.fireSpecialImmediateForTest('jinba', 60, 220);
+const dSmashInitialProfile = kt.projectileProfilesForTest()[dSmashShot];
+check('Dスマッシュは地面へ当たる前から地形を無視せず、専用の着弾判定を持つ',
+  dSmashInitialProfile?.dSmash === true && dSmashInitialProfile?.pierce === false,
+  JSON.stringify(dSmashInitialProfile));
+const dSmashConfig = kt.dSmashConfigForTest();
+const dSmashCratersBefore = kt.craters();
+for (let i = 0; i < 600 && kt.projectiles().length; i++) kt.step(1 / 60);
+const dSmashCraters = kt.craterHistory().slice(dSmashCratersBefore);
+check('Dスマッシュは地面への着弾後に爆発を3回だけ起こす',
+  dSmashCraters.length === 3 && kt.projectiles().length === 0,
+  JSON.stringify({ config: dSmashConfig, craters: dSmashCraters, projectiles: kt.projectiles().length }));
+const dSmashPairsOverlap = dSmashCraters.slice(1).every((crater, index) => {
+  const previous = dSmashCraters[index];
+  return Math.hypot(crater.x - previous.x, crater.y - previous.y) <= crater.r + previous.r;
+});
+const dSmashDrillCenterDistance = dSmashCraters.length === 3
+  ? Math.hypot(dSmashCraters[2].x - dSmashCraters[0].x, dSmashCraters[2].y - dSmashCraters[0].y)
+  : 0;
+check('Dスマッシュの爆発は中→小→小で隙間なく、従来の掘削距離を保つ',
+  dSmashCraters.length === 3
+    && dSmashCraters[0].r > dSmashCraters[1].r
+    && dSmashCraters[1].r === dSmashCraters[2].r
+    && dSmashPairsOverlap
+    && dSmashDrillCenterDistance >= dSmashConfig.stride * 2 - 0.1,
+  JSON.stringify({ config: dSmashConfig, centerDistance: dSmashDrillCenterDistance, craters: dSmashCraters }));
+check('Dスマッシュは着弾時の進行方向へ爆発しながら地中を掘り進む',
+  dSmashCraters.length === 3
+    && dSmashCraters[1].x > dSmashCraters[0].x
+    && dSmashCraters[2].x > dSmashCraters[1].x
+    && dSmashCraters[1].y > dSmashCraters[0].y
+    && dSmashCraters[2].y > dSmashCraters[1].y,
+  JSON.stringify(dSmashCraters));
 
 // ===== タイトルの「おまけ」ボタン =====
-// 押すたび 1曲目 → 2曲目 → 停止 を繰り返す。BGMの切り替えは syncBgm へ一本化して
-// あるので、ここでも「いま鳴るべき曲(desired)」が正しく変わることで確認する。
+// 曲が終わるたび 1曲目 → 2曲目 → 3曲目 → 4曲目 → 1曲目… と自動で送り、
+// 手動タップの次曲／停止も残す。BGMの切り替えは syncBgm へ一本化しているので、
+// ここでも「いま鳴るべき曲(desired)」が正しく変わることで確認する。
 const btns = kt.titleBtnRects();
 function rectsOverlap(a, b) {
   return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
 }
+const updateHistoryInfo = kt.titleUpdateHistoryInfo();
+check('タイトル最下部の更新履歴はBUILD_IDと同じv番号を表示する',
+  !!updateHistoryInfo.history
+    && updateHistoryInfo.build.startsWith(updateHistoryInfo.history.version + '-'),
+  JSON.stringify(updateHistoryInfo));
+check('タイトル最下部の更新履歴は日付と変更内容を持つ',
+  !!updateHistoryInfo.history
+    && /^\d{4}\/\d{2}\/\d{2}$/.test(updateHistoryInfo.history.date)
+    && updateHistoryInfo.history.summary.length > 0,
+  JSON.stringify(updateHistoryInfo.history));
+const titleHistoryPanelDraw = indexHtml.slice(
+  indexHtml.indexOf('titleUpdateHistoryPanel.x - 8'),
+  indexHtml.indexOf('function updateHistoryContentViewport')
+);
+check('タイトル最下部の更新履歴パネルは内容を表示しない',
+  !/LATEST_UPDATE_HISTORY\.summary/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
+check('title update history text is vertically centered in its panel',
+  /titleUpdateHistoryPanel\.y \+ 4/.test(titleHistoryPanelDraw)
+    && !/titleUpdateHistoryPanel\.y - 2/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
+check('更新履歴は最新版ボタンの横に収まり、操作領域と重ならない',
+  !!updateHistoryInfo.panel
+    && !rectsOverlap(updateHistoryInfo.update, updateHistoryInfo.panel)
+    && updateHistoryInfo.panel.x > updateHistoryInfo.update.x
+    && updateHistoryInfo.panel.y === updateHistoryInfo.update.y
+    && updateHistoryInfo.update.x - updateHistoryInfo.update.w / 2 >= 0
+    && updateHistoryInfo.panel.x + updateHistoryInfo.panel.w / 2 <= kt.viewW(),
+  JSON.stringify(updateHistoryInfo));
+check('更新履歴一覧の枠は縦に広い',
+  !!updateHistoryInfo.modal && updateHistoryInfo.modal.h >= 640,
+  JSON.stringify(updateHistoryInfo.modal));
+check('update history modal leaves room for its heading above the viewport',
+  !!updateHistoryInfo.modal
+    && updateHistoryInfo.modal.h >= 740
+    && updateHistoryInfo.modal.contentViewport.top >= updateHistoryInfo.modal.y - 195,
+  JSON.stringify(updateHistoryInfo.modal));
+const updateHistoryModalDraw = indexHtml.slice(
+  indexHtml.indexOf('function drawUpdateHistoryModal'),
+  indexHtml.indexOf('function drawFreeArrow')
+);
+check('update history heading and subtitle sit higher above the cards',
+  /VW \/ 2, VH \/ 2 - 260/.test(updateHistoryModalDraw)
+    && /VW \/ 2, VH \/ 2 - 230/.test(updateHistoryModalDraw),
+  updateHistoryModalDraw);
+check('the first update-history card is not styled as a tappable highlight',
+  !/index === 0 \? UI\.gold/.test(updateHistoryModalDraw),
+  updateHistoryModalDraw);
+check('title update history label uses the larger fitting font',
+  /font: `900 10px \$\{UI_FONT_HEAVY\}`/.test(titleHistoryPanelDraw),
+  titleHistoryPanelDraw);
+check('更新履歴は最新から過去版まで日付と内容を一覧データに持つ',
+  updateHistoryInfo.entries.length >= 4
+    && updateHistoryInfo.entries[0]?.version === updateHistoryInfo.history?.version
+    && updateHistoryInfo.entries.every(entry => /^v\d+(?:\.\d+){0,2}$/.test(entry.version)
+      && /^\d{4}\/\d{2}\/\d{2}$/.test(entry.date) && entry.summary.length > 0)
+    && updateHistoryInfo.entries.some(entry => entry.version === 'v200')
+    && updateHistoryInfo.entries.some(entry => entry.version === 'v199'),
+  JSON.stringify(updateHistoryInfo.entries));
+kt.setPhase('title');
+down(updateHistoryInfo.panel.x, updateHistoryInfo.panel.y);
+const openedUpdateHistory = kt.titleUpdateHistoryInfo();
+check('タイトルの更新履歴をタップすると過去版一覧が開く',
+  openedUpdateHistory.open === true
+    && !!openedUpdateHistory.modal
+    && !!openedUpdateHistory.close,
+  JSON.stringify(openedUpdateHistory));
+check('更新履歴の内容はモーダル内にクリップされ、閉じるボタンの外へ出ない',
+  !!openedUpdateHistory.modal
+    && openedUpdateHistory.modal.contentViewport
+    && openedUpdateHistory.modal.contentViewport.bottom < openedUpdateHistory.close.y
+    && openedUpdateHistory.modal.contentViewport.top > openedUpdateHistory.modal.y - openedUpdateHistory.modal.h / 2
+    && openedUpdateHistory.modal.contentViewport.bottom <= openedUpdateHistory.modal.y + openedUpdateHistory.modal.h / 2
+    && openedUpdateHistory.modal.maxScroll > 0,
+  JSON.stringify(openedUpdateHistory.modal));
+kt.scrollUpdateHistoryForTest(240);
+const scrolledUpdateHistory = kt.titleUpdateHistoryInfo();
+check('更新履歴は一覧位置を保持してスクロールできる',
+  scrolledUpdateHistory.open === true
+    && scrolledUpdateHistory.modal.scroll > 0
+    && scrolledUpdateHistory.modal.scroll <= scrolledUpdateHistory.modal.maxScroll,
+  JSON.stringify(scrolledUpdateHistory.modal));
+const touchStartScroll = scrolledUpdateHistory.modal.scroll;
+const touchId = touchDown(scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top + 100);
+touchMoveWindow(touchId, scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top - 120);
+const touchScrolledUpdateHistory = kt.titleUpdateHistoryInfo();
+check('指をモーダル外へ動かしても更新履歴のタッチスクロールを継続する',
+  touchScrolledUpdateHistory.modal.scroll > touchStartScroll,
+  JSON.stringify(touchScrolledUpdateHistory.modal));
+touchUp(touchId, scrolledUpdateHistory.modal.x, scrolledUpdateHistory.modal.contentViewport.top - 120);
+const fourthEntryY = scrolledUpdateHistory.modal.contentViewport.top + 26 + 3 * 64;
+const fourthStartScroll = scrolledUpdateHistory.modal.scroll;
+const fourthTouchId = touchDown(scrolledUpdateHistory.modal.x, fourthEntryY);
+touchMoveWindow(fourthTouchId, scrolledUpdateHistory.modal.x, fourthEntryY - 120);
+const fourthTouchScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴4件目から指を始めてもスクロールできる',
+  fourthTouchScrolled.modal.scroll > fourthStartScroll,
+  JSON.stringify({ fourthEntryY, modal: fourthTouchScrolled.modal }));
+touchUp(fourthTouchId, scrolledUpdateHistory.modal.x, fourthEntryY - 120);
+const lowerEdgeStartScroll = kt.titleUpdateHistoryInfo().modal.scroll;
+const lowerEdgeY = scrolledUpdateHistory.modal.contentViewport.bottom + 4;
+const lowerEdgeTouchId = touchDown(scrolledUpdateHistory.modal.x, lowerEdgeY);
+touchMoveWindow(lowerEdgeTouchId, scrolledUpdateHistory.modal.x, lowerEdgeY - 120);
+const lowerEdgeScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴の下段カード付近から指を始めてもスクロールを掴める',
+  lowerEdgeScrolled.modal.scroll > lowerEdgeStartScroll,
+  JSON.stringify({ lowerEdgeY, modal: lowerEdgeScrolled.modal }));
+touchUp(lowerEdgeTouchId, scrolledUpdateHistory.modal.x, lowerEdgeY - 120);
+const rightStartScroll = kt.titleUpdateHistoryInfo().modal.scroll;
+const rightStartX = scrolledUpdateHistory.modal.contentViewport.x + scrolledUpdateHistory.modal.contentViewport.w - 20;
+const rightStartY = scrolledUpdateHistory.modal.contentViewport.top + 100;
+const rightTouchId = touchDown(rightStartX, rightStartY);
+touchMoveWindow(rightTouchId, rightStartX, rightStartY - 120);
+const rightScrolled = kt.titleUpdateHistoryInfo();
+check('更新履歴の右半分から指を始めてもスクロールを掴める',
+  rightScrolled.modal.scroll > rightStartScroll,
+  JSON.stringify({ rightStartX, rightStartY, modal: rightScrolled.modal }));
+touchUp(rightTouchId, rightStartX, rightStartY - 120);
+if (openedUpdateHistory.close) down(openedUpdateHistory.close.x, openedUpdateHistory.close.y);
+check('更新履歴は閉じるボタンでタイトルへ戻る',
+  openedUpdateHistory.open === true
+    && kt.titleUpdateHistoryInfo().open === false
+    && kt.phase() === 'title',
+  JSON.stringify(kt.titleUpdateHistoryInfo()));
 const otherTitleBtns = [btns.cpu, btns.online, btns.free, btns.ranking, btns.update];
 check('おまけボタンが他のタイトルボタンと重ならない',
   otherTitleBtns.every(b => !rectsOverlap(btns.bonus, b)),
@@ -739,27 +1837,29 @@ check('おまけボタンが他のタイトルボタンと重ならない',
 check('おまけボタンが画面内に収まっている',
   btns.bonus.y - btns.bonus.h / 2 > 0 && btns.bonus.y + btns.bonus.h / 2 < kt.viewH(),
   JSON.stringify(btns.bonus));
+check('おまけの盾と押せる範囲を従来より上へ寄せる',
+  btns.bonus.y <= 800,
+  JSON.stringify(btns.bonus));
 
 kt.setPhase('title');
 const bonusBtn = kt.bonusBtn();
 function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
 
 const bonusTrackCount = kt.bonusTrackCount();
-check('おまけ曲が4曲登録されている', bonusTrackCount === 4, String(bonusTrackCount));
+check('おまけ曲が5曲登録されている', bonusTrackCount === 5, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
-// 曲数ぶん押すと1曲ずつ進み、最後にもう一度押すと停止してタイトル曲へ戻る。
-let cycleNg = [];
-for (let n = 1; n <= bonusTrackCount; n++) {
-  tapBonus();
-  if (kt.bgm().bonusTrack !== n) cycleNg.push(`${n}回目=${kt.bgm().bonusTrack}`);
-  if (kt.bgm().desired !== 'bonus') cycleNg.push(`${n}回目のdesired=${kt.bgm().desired}`);
-}
-check('押すたびに1曲ずつ進み、どの曲でもおまけ曲が鳴るべき曲になる',
-  cycleNg.length === 0, cycleNg.join(', '));
 tapBonus();
-check('最後まで進めてもう一度押すと停止してタイトル曲へ戻る',
-  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
+check('おまけを押すと全BGMのサウンドテストを開く',
+  kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'none'
+    && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
+    && indexHtml.includes('const startupBgmPreloadCount = startupBgmPreloads.length'),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+check('サウンドテストはタイトル・ロビー・全ステージ・おまけ5曲を登録する',
+  indexHtml.includes("key: 'title'")
+    && indexHtml.includes("key: 'room'")
+    && indexHtml.includes("STAGE_BGM_SOURCES.coolKai")
+    && indexHtml.includes('...BONUS_BGM_TRACKS.slice(1)'),
+  'sound test track list missing');
 // 曲ごとに録音レベルが違うので、体感音量を揃えるための基準音量を個別に持つ。
 const trackVolumes = kt.bonusTrackVolumes();
 check('全曲に基準音量が設定されている',
@@ -769,18 +1869,108 @@ check('おまけ曲はタイトル曲より大きい音量に設定されてい�
   trackVolumes.every(v => v > kt.titleBgmBaseVolume()),
   `おまけ=${JSON.stringify(trackVolumes)} タイトル=${kt.titleBgmBaseVolume()}`);
 
-// 対戦へ移ったら選択ごと解除する。次にタイトルへ戻った時に勝手に鳴り出さないため。
+// サウンドテストを閉じてから対戦へ移る。
 tapBonus();
-check('対戦前はおまけ曲を選んでいる', kt.bgm().bonusTrack === 1, String(kt.bgm().bonusTrack));
 kt.setPhase('battle');
 kt.syncBgm();
 check('対戦へ移るとおまけ曲の選択が解除される', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 check('対戦中はステージ曲が鳴るべき曲になる', kt.bgm().desired === 'stage', kt.bgm().desired);
 kt.setPhase('title');
+kt.startBattle('coolKai');
+check('クールカイを選んだ対戦は専用BGMを固定で流す',
+  kt.bgm().desired === 'stage'
+    && kt.bgm().stageTheme === 'coolKai'
+    && kt.bgm().stageSrc.includes('SIX ÉTERNEL ―愛はひとつじゃない―.mp3'),
+  JSON.stringify(kt.bgm()));
+kt.setPhase('title');
 kt.syncBgm();
+check('おまけ5とBATTLEロゴは専用曲名を表示する',
+  indexHtml.includes("src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'")
+    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―'")
+    && indexHtml.includes('drawBgmNowPlayingLabel(748, UI.gold)'),
+  'BGM display label missing');
 check('タイトルへ戻ってもおまけ曲は鳴り出さない',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+
+// ===== v184: にゃんタンクは移動封印ではなく次の手番をスキップさせる =====
+check('にゃんタンクの必殺説明は次の手番を行動不能にする',
+  kt.character('neko').specialDesc.includes('次の手番をスキップ')
+    && indexHtml.includes('actionSkip: true'));
+kt.startBattle('neko');
+kt.disableCpuForTest();
+const nyanTarget = kt.unitById('e1');
+kt.emitNyanDisableForTest(nyanTarget.x, nyanTarget.y, 20, 'p1');
+const nyanEffect = kt.turnEffectForTest('e1');
+const nyanSaved = kt.buildSnapshotForTest().units.find(u => u.id === 'e1');
+check('猫だまし命中は移動封印を付けず行動不能を1手付ける',
+  nyanEffect.moveLockTurns === 0 && nyanEffect.actionSkipTurns === 1
+    && nyanSaved.actionSkipTurns === 1,
+  JSON.stringify({ effect: nyanEffect, saved: nyanSaved }));
+const nyanVisual = typeof kt.actionSkipVisualForTest === 'function' ? kt.actionSkipVisualForTest('e1') : null;
+check('行動不能は移動封印と異なる頭上の星と電撃で表示する',
+  nyanVisual?.effect === 'stunned' && nyanVisual?.placement === 'head'
+    && nyanVisual?.icon === 'stars' && nyanVisual?.electric === true
+    && indexHtml.includes('drawActionSkipEffects(u, { x: a.x + shakeX, y: a.y }, imgTopAbs);'),
+  JSON.stringify(nyanVisual));
+const nyanStunConfig = typeof kt.actionSkipStunConfigForTest === 'function'
+  ? kt.actionSkipStunConfigForTest() : null;
+check('行動不能の付与演出と手番の震えは従来の1.5倍にする',
+  nyanStunConfig?.duration === 1.875
+    && nyanStunConfig?.hitFlashDuration === 1.68
+    && nyanStunConfig?.effectDurationMultiplier === 1.5
+    && nyanStunConfig?.shakePx >= 3
+    && indexHtml.includes("kind: 'actionSkip'")
+    && indexHtml.includes('actionSkipShakeOffset(u)'),
+  JSON.stringify(nyanStunConfig));
+const nyanTurnBefore = kt.state().turnCount;
+kt.endTurnForTest();
+const nyanSequenceStart = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('猫だまし命中の結果表示中は行動不能の震え演出を開始しない',
+  nyanSequenceStart?.waitingForHitFlash === true
+    && nyanSequenceStart?.presentationVisible === false
+    && nyanSequenceStart?.timer === nyanSequenceStart?.duration,
+  JSON.stringify(nyanSequenceStart));
+check('行動不能の手番へ一度移り、震え演出中は状態をまだ消費しない',
+  kt.state().turnOrder[kt.state().activeIndex] === 'e1'
+    && kt.state().turnCount === nyanTurnBefore + 1
+    && kt.turnEffectForTest('e1').actionSkipTurns === 1
+    && kt.hasCutIn(),
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+for (let i = 0; i < 78; i++) kt.step(1 / 60); // 1.3秒。命中結果は1.68秒なのでまだ表示中。
+const nyanSequenceDuringHit = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('命中結果を見せている1.3秒間は行動不能演出の時間を消費しない',
+  kt.specialFlashForTest()?.timer > 0
+    && nyanSequenceDuringHit?.presentationVisible === false
+    && nyanSequenceDuringHit?.timer === nyanSequenceDuringHit?.duration,
+  JSON.stringify({ flash: kt.specialFlashForTest(), sequence: nyanSequenceDuringHit }));
+for (let i = 0; i < 24; i++) kt.step(1 / 60); // 合計1.7秒。命中結果が終わり、ここから震え始める。
+const nyanSequenceAfterHit = typeof kt.actionSkipSequenceForTest === 'function'
+  ? kt.actionSkipSequenceForTest() : null;
+check('猫だまし命中の結果表示が消えてから行動不能の震え演出を開始する',
+  !kt.specialFlashForTest()
+    && nyanSequenceAfterHit?.waitingForHitFlash === false
+    && nyanSequenceAfterHit?.presentationVisible === true
+    && nyanSequenceAfterHit?.timer < nyanSequenceAfterHit?.duration,
+  JSON.stringify({ flash: kt.specialFlashForTest(), sequence: nyanSequenceAfterHit }));
+for (let i = 0; i < 78; i++) kt.step(1 / 60); // 震え開始から約1.3秒。
+check('従来の震え時間を過ぎても1.5倍の演出中はまだスキップしない',
+  kt.state().turnOrder[kt.state().activeIndex] === 'e1'
+    && kt.turnEffectForTest('e1').actionSkipTurns === 1
+    && kt.hasCutIn(),
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+for (let i = 0; i < 36; i++) kt.step(1 / 60); // 残り約0.6秒を見せ切る。
+check('行動不能になったキャラの次の手番は操作させず自動で飛ばす',
+  kt.state().turnOrder[kt.state().activeIndex] === 'p1'
+    && kt.state().turnCount === nyanTurnBefore + 2
+    && kt.turnEffectForTest('e1').actionSkipTurns === 0,
+  JSON.stringify({ state: kt.state(), effect: kt.turnEffectForTest('e1') }));
+check('オンライン状態は震えスキップが完了してから送る',
+  indexHtml.includes('endTurn(() => netSyncTurn(acted))')
+    && !indexHtml.includes('if (!waitingForPeerResult) netSyncTurn(acted);'),
+  '震え途中の手番を送ると、遅延した相手側で古い状態へ巻き戻る');
 
 // ===== Issue #20: 2vs2(CPU4体) =====
 // 「1vs1を壊さないこと」が最優先なので、まず1vs1側の不変を押さえてから2vs2を見る。
@@ -794,17 +1984,32 @@ check('演習の既定は1vs1で、参加は2体のまま',
   kt.matchFormat() === '1v1' && kt.units.length === 2 && !kt.is2v2(),
   `${kt.matchFormat()} 人数=${kt.units.length}`);
 const panels1v1 = (() => { kt.resetPanels(); kt.render(); return kt.panels(); })();
-check('1vs1の名前カードは従来どおり2枚・高さ40・上端46',
-  panels1v1.length === 2 && panels1v1.every(p => p.h === 40 && p.cardY === 46),
+check('1vs1の名前カードは2枚・広い専用枠高さ72・上端44',
+  panels1v1.length === 2 && panels1v1.every(p => p.h === 74 && p.cardY === 50),
   JSON.stringify(panels1v1));
-check('1vs1のターン帯・ミニマップ・HUD下端は従来の位置のまま',
-  kt.turnBarTop() === 94 && kt.minimapTop() === 120 && kt.hudBottom() === 116,
+check('1vs1の司令盤はターン帯・ミニマップ・HUD下端を拡張位置へ揃える',
+  kt.turnBarTop() === 158 && kt.minimapTop() === 190 && kt.hudBottom() === 270,
   `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
 const spawn1v1 = kt.units.map(u => Math.round((u.x / kt.stageW()) * 1000) / 1000);
 
 kt.setFreeFormat('2v2');
 kt.startFreeMatch();
 const vs2v2 = kt.matchupCutIn();
+const setup2v2Rows = kt.freeRows();
+const allyBefore = kt.freeConfig().allyIndex;
+const foe2Before = kt.freeConfig().foe2Index;
+kt.changeFreeOption('ally', 1);
+kt.changeFreeOption('foe2', 2);
+const setup2v2Config = kt.freeConfig();
+kt.startFreeMatch();
+check('2vs2の演習では追加2体も選択でき、キャラ行と設定行がそれぞれ揃う',
+  !!setup2v2Rows.ally && !!setup2v2Rows.foe2
+    && ['player', 'cpu', 'ally', 'foe2'].every(key => setup2v2Rows[key].h === 82)
+    && setup2v2Rows.terrain.h === 48 && setup2v2Rows.format.h === 48
+    && kt.unitById('p2').character === kt.chars()[setup2v2Config.allyIndex]
+    && kt.unitById('e2').character === kt.chars()[setup2v2Config.foe2Index]
+    && setup2v2Config.allyIndex !== allyBefore && setup2v2Config.foe2Index !== foe2Before,
+  JSON.stringify({ rows: setup2v2Rows, config: setup2v2Config, p2: kt.unitById('p2').character, e2: kt.unitById('e2').character }));
 check('2vs2のVSカットインは p1＆p2 vs e1＆e2 の順',
   vs2v2
     && vs2v2.left.map(entry => entry.id).join(',') === 'p1,p2'
@@ -865,8 +2070,8 @@ check('名前カードはターン帯に重ならない',
   lowestPanelBottom <= kt.turnBarTop(), `最下端=${lowestPanelBottom} ターン帯上端=${kt.turnBarTop()}`);
 check('名前カードはミニマップに重ならない',
   lowestPanelBottom <= kt.minimapTop(), `最下端=${lowestPanelBottom} ミニマップ上端=${kt.minimapTop()}`);
-check('2vs2はターン帯とミニマップがカード2段ぶん下がる',
-  kt.turnBarTop() === 128 && kt.minimapTop() === 154 && kt.hudBottom() === 150,
+check('2vs2は司令盤のターン帯とミニマップをカード2段ぶん下げる',
+  kt.turnBarTop() === 220 && kt.minimapTop() === 252 && kt.hudBottom() === 332,
   `帯=${kt.turnBarTop()} 地図=${kt.minimapTop()} HUD=${kt.hudBottom()}`);
 
 // 4体ぶんのHPが実際に読み取れること(パネルに出る値がユニットのHPと一致する)。
@@ -906,8 +2111,8 @@ const empEnemy = kt.unitById('e1');
 kt.clearSpecialFlashForTest();
 kt.emitEmpForTest(empEnemy.x, empEnemy.y, 20, 'p1', 2);
 const empHitFlash = kt.specialFlashForTest();
-check('電磁波が敵へ命中した時だけ移動不可カットインを出す',
-  !!empHitFlash && empHitFlash.text.includes('電磁波命中') && empHitFlash.text.includes('移動不可'),
+check('バインドスピットが敵へ命中した時だけ移動不可カットインを出す',
+  !!empHitFlash && empHitFlash.text.includes('バインドスピット命中') && empHitFlash.text.includes('移動不可'),
   JSON.stringify(empHitFlash));
 const empLockVisual = kt.moveLockVisualForTest('e1');
 check('移動封印中は文字や電気ではなく、足元を前後から囲む鎖と南京錠を割り当てる',
@@ -1033,9 +2238,11 @@ check('演習に対戦方式の行が増えている',
   !!kt.freeRows().format && kt.formatOptions().join(',') === '1v1,2v2',
   JSON.stringify(kt.freeRows().format) + ' ' + kt.formatOptions().join(','));
 const fr = kt.freeRows();
+const freeStart = kt.freeStartBtn();
 check('対戦方式の行は開始ボタンと重ならない',
-  fr.format.y + fr.format.h / 2 < 716 - 64 / 2 && fr.format.y - fr.format.h / 2 > fr.wind.y + fr.wind.h / 2,
-  JSON.stringify(fr));
+  fr.format.y + fr.format.h / 2 < freeStart.y - freeStart.h / 2
+    && fr.format.y - fr.format.h / 2 > fr.terrain.y + fr.terrain.h / 2,
+  JSON.stringify({ format: fr.format, terrain: fr.terrain, freeStart }));
 // 行ごとの当たり判定(中心 row.y+7、高さ row.h)が上下の行と食い合わないこと。
 const rowBands = Object.entries(fr)
   .map(([k, r]) => ({ k, top: r.y + 7 - r.h / 2, bottom: r.y + 7 + r.h / 2 }))
@@ -1047,12 +2254,13 @@ check('演習の各行の当たり判定が重なっていない',
 // 実際に左右の矢印を押して対戦方式が切り替わること。
 kt.setPhase('freeSetup');
 kt.setFreeFormat('1v1');
-const arrowY = fr.format.y + 7;
+const arrowY = kt.freeRows().format.y;
 up(down(500, arrowY), 500, arrowY); // 右矢印
 check('演習画面の右矢印で1vs1→2vs2へ切り替わる',
   kt.formatOptions()[kt.freeConfig().formatIndex] === '2v2',
   kt.formatOptions()[kt.freeConfig().formatIndex]);
-up(down(40, arrowY), 40, arrowY);  // 左矢印
+const secondArrowY = kt.freeRows().format.y;
+up(down(190, secondArrowY), 190, secondArrowY);  // 左矢印
 check('演習画面の左矢印で2vs2→1vs1へ戻る',
   kt.formatOptions()[kt.freeConfig().formatIndex] === '1v1',
   kt.formatOptions()[kt.freeConfig().formatIndex]);
@@ -1231,7 +2439,7 @@ kt.setLocalSeat('p1');
   check('1vs1では役割・HP・必殺技が実際に描かれる',
     one.defs.every(d => one.drawn.includes(d.role)
       && one.drawn.includes(`HP ${d.maxHp}`)
-      && one.drawn.includes(`必殺 ${d.special}`)),
+      && one.drawn.includes(d.special)),
     one.defs.map(d => d.role + '/' + d.maxHp + '/' + d.special).join(' ') + ' drawn=' + one.drawn.join('/'));
   const two = shown('2v2');
   check('2vs2では窓が狭いので出さない',
@@ -1318,6 +2526,13 @@ kt.setLocalSeat('p1');
   // 「必殺」は始めから溜まった状態にしておく。溜まるのを待たせない。
   kt.tutorialGoto('special');
   check('「必殺」の始めには必殺が溜まっている', kt.specialReady());
+  // 発射を押した瞬間だけで次の「足場を壊す」へ移ると、飛んでいる必殺が
+  // 次の項目まで勝手に達成してしまう。実際の必殺演出中も項目を保つこと。
+  kt.tutorialFireSpecialForTest(80, -500);
+  for (let i = 0; i < 60 * 1.6; i++) kt.step(1 / 60);
+  check('必殺を撃ったあとは、演出中に次の項目へ遷移しない',
+    kt.tutorialState().key === 'special' && kt.tutorialState().cleared,
+    JSON.stringify({ tutorial: kt.tutorialState(), state: kt.state(), projectiles: kt.projectiles().length }));
 
   // 最後は足場を壊して落とす。的の左右が底まで掘られていること。
   kt.tutorialGoto('terrain');
@@ -1416,14 +2631,118 @@ kt.setLocalSeat('p1');
   check('一度通すか飛ばすと、タイトルで勧めなくなる', kt.tutorialRecommended() === false);
 }
 
-// タイトルの「あそび方」は、ほかのボタンと重ならないこと。
+// タイトルの「チュートリアル」は、ほかのボタンと重ならないこと。
 {
   const b = kt.titleBtnRects();
   const others = [b.cpu, b.online, b.free, b.bonus, b.ranking, b.update];
-  check('「あそび方」ボタンが他のタイトルボタンと重ならない',
+  check('「チュートリアル」ボタンが他のタイトルボタンと重ならない',
     others.every(o => !rectsOverlap(b.tutorial, o)), JSON.stringify(b.tutorial));
-  check('「あそび方」ボタンが画面内に収まっている',
+  check('「チュートリアル」ボタンが画面内に収まっている',
     b.tutorial.y - b.tutorial.h / 2 > 0 && b.tutorial.y + b.tutorial.h / 2 < kt.viewH());
+
+  // 高さ54の小ボタンへ高さ64の大ボタンと同じ文字位置を使うと、23pxの見出しが上枠へ食い込む。
+  // 実際に描画された座標を見て、左右どちらも小ボタン専用の位置になっていることを固定する。
+  kt.setPhase('title');
+  kt.setTitleWoodUiReadyForTest();
+  kt.resetDrawnText();
+  kt.render();
+  const titleText = kt.drawnTextDetails();
+  const titleMenuTextSizes = titleText.filter(entry => ['チュートリアル', '演習', 'はじめての方へ', '条件を組んで開始', 'もう一度おさらい'].includes(entry.text));
+  check('タイトルメニューのチュートリアル・演習文字を読みやすい大きさにする',
+    titleMenuTextSizes.some(entry => /21px/.test(entry.font))
+      && titleMenuTextSizes.filter(entry => /px/.test(entry.font)).some(entry => /11px/.test(entry.font)),
+    JSON.stringify(titleMenuTextSizes));
+  const tutorialLabel = titleText.find(entry => entry.text === 'チュートリアル');
+  const freeLabel = titleText.find(entry => entry.text === '演習');
+  const tutorialSub = titleText.find(entry => entry.text === 'もう一度おさらい');
+  const freeSub = titleText.find(entry => entry.text === '条件を組んで開始');
+  check('タイトルの「チュートリアル」「演習」は見出しを上げ、説明との間隔を広げる',
+    tutorialLabel && freeLabel
+      && tutorialSub && freeSub
+      && tutorialLabel.y <= b.tutorial.y - 4
+      && freeLabel.y <= b.free.y - 4
+      && tutorialSub.y - tutorialLabel.y >= 14
+      && freeSub.y - freeLabel.y >= 14,
+    JSON.stringify({ tutorialLabel, tutorialSub, freeLabel, freeSub, tutorial: b.tutorial, free: b.free }));
+  check('羊皮紙の文字は茶色ではなく深い青緑で読み分けられる',
+    tutorialLabel && freeLabel
+      && tutorialLabel.fillStyle === '#123f3d'
+      && freeLabel.fillStyle === '#123f3d',
+    JSON.stringify({ tutorialLabel, freeLabel }));
+  const bonusLabel = titleText.find(entry => entry.text === 'おまけ');
+  const bonusSub = titleText.find(entry => entry.text === 'BGMを聴く');
+  check('おまけの見出しと説明は盾の上側へ揃う',
+    bonusLabel && bonusSub
+      && bonusLabel.y <= b.bonus.y - 15
+      && bonusSub.y <= b.bonus.y + 8,
+    JSON.stringify({ bonusLabel, bonusSub, bonus: b.bonus }));
+
+  // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
+  // 画像名だけ置いて実際の配置が旧UIのまま、という実装を通さない。
+  const woodUi = kt.titleWoodUiInfo();
+  const expectedWoodAssets = [
+    'assets/title-mode-board.webp',
+    'assets/title-shield-button.webp',
+    'assets/title-hanging-sign.webp',
+    'assets/title-parchment-button.webp'
+  ];
+  check('タイトルが提供された4種類の木板UI素材を使う',
+    !!woodUi && expectedWoodAssets.every(src => (
+      Object.values(woodUi.assets).includes(src)
+        && require('fs').existsSync(require('path').join(__dirname, '..', src))
+    )),
+    woodUi ? JSON.stringify(woodUi.assets) : '木板UIなし');
+  if (woodUi) {
+    const expectedKinds = {
+      cpu: 'parchment', online: 'parchment',
+      tutorial: 'parchment', free: 'parchment',
+      ranking: 'hangingSign', bonus: 'shield'
+    };
+    check('指定どおりCPU／ONLINE／チュートリアル／演習は羊皮紙、RANKINGは吊り看板、おまけは盾を使う',
+      Object.entries(expectedKinds).every(([role, asset]) => (
+        woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
+      )),
+      JSON.stringify(woodUi.imageRects));
+    check('おまけの盾素材も少し上へ寄せる',
+      woodUi.imageRects.bonus.y <= 805,
+      JSON.stringify(woodUi.imageRects.bonus));
+    check('木枠と中のボタン素材を同じ割合で一回り大きくする',
+      woodUi.board.w >= 450 && woodUi.board.h >= 430
+        && woodUi.imageRects.cpu.w >= 295 && woodUi.imageRects.cpu.h >= 80
+        && woodUi.imageRects.tutorial.w >= 185 && woodUi.imageRects.tutorial.h >= 50
+        && woodUi.imageRects.bonus.w >= 120 && woodUi.imageRects.bonus.h >= 110,
+      JSON.stringify({ board: woodUi.board, imageRects: woodUi.imageRects }));
+    check('中断データがあっても黄色い選択囲いを出さない',
+      woodUi.selectionOutline === false, String(woodUi.selectionOutline));
+    check('RANKINGは左上へ寄せ、矢尻だけがチュートリアル付近へ届く',
+      woodUi.imageRects.ranking.x < woodUi.imageRects.tutorial.x
+        && woodUi.imageRects.ranking.y - woodUi.imageRects.ranking.h / 2
+          <= woodUi.imageRects.tutorial.y + woodUi.imageRects.tutorial.h / 2 + 12,
+      JSON.stringify({ ranking: woodUi.imageRects.ranking, tutorial: woodUi.imageRects.tutorial }));
+    check('木板内はCPU→ONLINE、中央はチュートリアル→演習、下段はRANKING→おまけの順で、更新ボタンは木枠の外にある',
+      woodUi.buttons.cpu.y < woodUi.buttons.online.y
+        && woodUi.buttons.online.y < woodUi.buttons.tutorial.y
+        && woodUi.buttons.tutorial.y === woodUi.buttons.free.y
+        && woodUi.buttons.tutorial.x < woodUi.buttons.free.x
+        && woodUi.buttons.tutorial.w < woodUi.buttons.cpu.w
+        && woodUi.buttons.ranking.y > woodUi.buttons.tutorial.y
+        && woodUi.buttons.bonus.y > woodUi.buttons.free.y
+        && woodUi.buttons.ranking.x < woodUi.buttons.bonus.x
+        && woodUi.buttons.update.y - woodUi.buttons.update.h / 2 > woodUi.board.y + woodUi.board.h,
+      JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
+    check('木板と全ボタンがタイトル画面内に収まり、押せる場所が重ならない',
+      woodUi.board.x >= 0 && woodUi.board.y >= 0
+        && woodUi.board.x + woodUi.board.w <= kt.viewW()
+        && woodUi.board.y + woodUi.board.h <= kt.viewH()
+        && Object.values(woodUi.buttons).every(button => (
+          button.x - button.w / 2 >= 0 && button.x + button.w / 2 <= kt.viewW()
+            && button.y - button.h / 2 >= 0 && button.y + button.h / 2 <= kt.viewH()
+        ))
+        && Object.values(woodUi.buttons).every((button, index, all) => (
+          all.slice(index + 1).every(other => !rectsOverlap(button, other))
+        )),
+      JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
+  }
 }
 
 // ===== 描き直しの節約(v129) =====

@@ -3,22 +3,23 @@
  * They are intentionally not migrated or rewritten by Content Studio.
  */
 export const LEGACY_CHARACTERS = [
-  { id: 'kyoryu', slug: 'kyoryu', displayName: '恐竜', asset: 'kyoryu', facesLeft: false },
-  { id: 'medama', slug: 'medama', displayName: '目玉', asset: 'medama', facesLeft: false },
-  { id: 'iwa', slug: 'iwa', displayName: '岩', asset: 'iwa', facesLeft: false },
-  { id: 'tori', slug: 'tori', displayName: '鳥', asset: 'tori', facesLeft: false },
+  { id: 'kyoryu', slug: 'kyoryu', displayName: 'ディラノ', asset: 'dirano', facesLeft: false },
+  { id: 'medama', slug: 'medama', displayName: 'アイボルト', asset: 'eyebolt', facesLeft: false },
+  { id: 'iwa', slug: 'iwa', displayName: 'ゴーロッカ', asset: 'gorocca', facesLeft: false },
+  { id: 'tori', slug: 'tori', displayName: 'フェニーチェ', asset: 'fenice', facesLeft: false },
   { id: 'barugerukan', slug: 'barugerukan', displayName: 'バルゲルカン', asset: 'barugerukan', facesLeft: false },
-  { id: 'nisenmono', slug: 'nisenmono', displayName: 'ニセンモノ', asset: 'nisenmono', facesLeft: false },
-  { id: 'burumutan', slug: 'burumutan', displayName: 'ブルームタン', asset: 'burumutan', facesLeft: false },
+  { id: 'nisenmono', slug: 'nisenmono', displayName: 'オベリスク', asset: 'obelisk', facesLeft: false },
+  { id: 'burumutan', slug: 'burumutan', displayName: 'ブルームタン', asset: 'bloom-tan', facesLeft: false },
   { id: 'sumoeru', slug: 'sumoeru', displayName: 'スモエル', asset: 'sumoeru', facesLeft: true },
-  { id: 'doRednote', slug: 'do-rednote', displayName: '弩レッドノート', asset: 'do-rednote', facesLeft: true },
+  { id: 'doRednote', slug: 'do-rednote', displayName: 'ドレッドアロー', asset: 'dread-arrow', facesLeft: true },
   { id: 'mocchario', slug: 'mocchario', displayName: 'モッチャリオ', asset: 'mocchario', facesLeft: false },
-  { id: 'mecha', slug: 'mecha', displayName: 'メカ', asset: 'mecha', facesLeft: false },
-  { id: 'akuma', slug: 'akuma', displayName: '悪魔', asset: 'akuma', facesLeft: true },
-  { id: 'jinba', slug: 'jinba', displayName: '人馬', asset: 'jinba', facesLeft: false },
-  { id: 'kishi', slug: 'kishi', displayName: '騎士', asset: 'kishi', facesLeft: true },
-  { id: 'neko', slug: 'neko', displayName: '猫', asset: 'neko', facesLeft: true },
-  { id: 'shinigami', slug: 'shinigami', displayName: '死神', asset: 'shinigami', facesLeft: false },
+  { id: 'mecha', slug: 'mecha', displayName: 'クロムギア', asset: 'chrome-gear', facesLeft: false },
+  { id: 'akuma', slug: 'akuma', displayName: 'ルビデビ', asset: 'rubidevi', facesLeft: true },
+  { id: 'jinba', slug: 'jinba', displayName: 'アスタウロス', asset: 'astauros', facesLeft: false },
+  { id: 'kishi', slug: 'kishi', displayName: 'パラディエ', asset: 'paladier', facesLeft: true },
+  { id: 'neko', slug: 'neko', displayName: 'にゃんタンク', asset: 'nyan-tank', facesLeft: true },
+  { id: 'shinigami', slug: 'shinigami', displayName: 'ヨミガマ', asset: 'yomigama', facesLeft: false },
+  { id: 'coolKai', slug: 'cool-kai', displayName: 'クール=カイ', asset: 'cool-kai', facesLeft: false },
 ] as const;
 
 export type LegacyCharacterId = (typeof LEGACY_CHARACTERS)[number]['id'];
@@ -31,7 +32,7 @@ export function getLegacyRepositoryIdentity(id: LegacyCharacterId): { id: string
   const character = LEGACY_CHARACTERS.find((candidate) => candidate.id === id);
   if (!character) throw new Error('既存キャラクターが見つかりません。');
   return {
-    id: character.id === 'doRednote' ? character.slug : character.id,
+    id: /^[a-z][a-z0-9-]{0,23}$/u.test(character.id) ? character.id : character.slug,
     slug: character.slug,
   };
 }

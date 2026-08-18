@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { createDraft } from '../domain/defaults';
-import { LEGACY_CHARACTERS, spriteMetadataSchema, validateCharacter } from '../domain';
+import { getLegacyRepositoryIdentity, LEGACY_CHARACTERS, spriteMetadataSchema, validateCharacter } from '../domain';
 import type {
   ArtifactBundle,
   DraftRecord,
@@ -868,7 +868,7 @@ export function useStudioController(): StudioController {
     try {
       await autosaveRef.current.flush();
       const next = createDraft();
-      const repositoryId = record.id === 'doRednote' ? 'do-rednote' : record.id;
+      const repositoryId = getLegacyRepositoryIdentity(record.id).id;
       next.title = `${record.displayName}へモーションを追加`;
       next.character = {
         ...next.character,

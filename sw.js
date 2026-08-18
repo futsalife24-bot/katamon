@@ -1,6 +1,6 @@
-const CACHE_VERSION = 'katamon-pwa-v138-stage-studio-mvp';
+const CACHE_VERSION = 'katamon-pwa-v2.0.76-bgm-sound-test';
+const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
-  './',
   './index.html',
   './generated/content-studio-catalog.js',
   './generated/content-studio-manifest.json',
@@ -17,18 +17,43 @@ const APP_SHELL = [
   './assets/icon-512.png',
   './assets/icon-maskable-512.png',
   './assets/loading-emblem.webp',
+  './assets/fonts/katamon-fonts.css',
+  './assets/fonts/rocknroll-one-regular.ttf',
+  './assets/fonts/reggae-one-display.woff2',
   './assets/title-logo.webp',
+  './assets/title-mode-board.webp',
+  './assets/title-shield-button.webp',
+  './assets/title-hanging-sign.webp',
+  './assets/title-parchment-button.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
-  './assets/normal-impact-explosion.mp3?v=1'
+  './assets/battle-start-logo.png',
+  './assets/battle-start-logo.mp4',
+  './assets/ui/battle-hud/player-card-ally.png',
+  './assets/ui/battle-hud/player-card-enemy.png',
+  './assets/ui/battle-hud/wind-console.png',
+  './assets/ui/battle-hud/minimap-frame.png',
+  './assets/ui/battle-hud/v3/player-card-ally.png',
+  './assets/ui/battle-hud/v3/player-card-enemy.png',
+  './assets/ui/battle-hud/v3/wind-console.png',
+  './assets/ui/battle-hud/v3/turn-ribbon.png',
+  './assets/ui/battle-hud/v4-wind-console.png',
+  './assets/ui/battle-hud/wind-console-round.webp',
+  './assets/normal-impact-explosion.mp3',
+  './assets/special-cutin-edm-zap.mp3',
+  './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => cache.addAll(APP_SHELL.map(asset => new Request(asset, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
@@ -40,6 +65,11 @@ self.addEventListener('activate', event => {
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then(clients => Promise.all(clients.map(client => client.postMessage({
+        type: 'KATAMON_UPDATE_READY',
+        build: BUILD_ID
+      }))))
   );
 });
 
@@ -84,7 +114,7 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
@@ -99,9 +129,9 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then(cached => {
+    caches.match(request).then(cached => {
       if (cached) return cached;
-      return fetch(request).then(response => {
+      return fetch(new Request(request, { cache: 'reload' })).then(response => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));

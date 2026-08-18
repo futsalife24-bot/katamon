@@ -58,7 +58,8 @@ export async function fetchLegacyImage(record: LegacyCharacter, fetchImpl: typeo
     throw new Error('既存キャラクターの画像参照が安全ではありません。');
   }
   for (const extension of ['webp', 'png'] as const) {
-    const response = await fetchImpl(new URL(`assets/${record.asset}.${extension}`, repositoryRootUrl()), { cache: 'no-store' });
+    const directory = extension === 'webp' ? 'runtime' : 'master';
+    const response = await fetchImpl(new URL(`assets/characters/${directory}/${record.asset}.${extension}`, repositoryRootUrl()), { cache: 'no-store' });
     if (response.status === 404) continue;
     if (!response.ok) throw new Error('既存キャラクター画像を読み込めませんでした。');
     const blob = await response.blob();

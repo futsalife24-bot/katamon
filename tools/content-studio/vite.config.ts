@@ -5,15 +5,17 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const legacyAssets = new Set(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'do-rednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami']);
+const legacyAssets = new Set(['dirano', 'eyebolt', 'gorocca', 'fenice', 'barugerukan', 'obelisk', 'bloom-tan', 'sumoeru', 'dread-arrow', 'mocchario', 'chrome-gear', 'rubidevi', 'astauros', 'paladier', 'nyan-tank', 'yomigama', 'cool-kai']);
 
 function repositoryAssetMiddleware() {
   return async (request: { url?: string }, response: { statusCode: number; setHeader(name: string, value: string): void; end(body?: Uint8Array): void }, next: () => void) => {
-    const match = /^\/([a-z0-9-]+)\.(webp|png)$/u.exec(request.url ?? '');
-    if (!match || !legacyAssets.has(match[1])) return next();
+    const match = /^\/characters\/(runtime|master)\/([a-z0-9-]+)\.(webp|png)$/u.exec(request.url ?? '');
+    if (!match || !legacyAssets.has(match[2])) return next();
+    const [, directory, asset, extension] = match;
+    if ((directory === 'runtime' && extension !== 'webp') || (directory === 'master' && extension !== 'png')) return next();
     try {
-      const bytes = await readFile(resolve(repositoryRoot, 'assets', `${match[1]}.${match[2]}`));
-      response.setHeader('Content-Type', match[2] === 'webp' ? 'image/webp' : 'image/png');
+      const bytes = await readFile(resolve(repositoryRoot, 'assets', 'characters', directory, `${asset}.${extension}`));
+      response.setHeader('Content-Type', extension === 'webp' ? 'image/webp' : 'image/png');
       response.end(bytes);
     } catch {
       response.statusCode = 404;
