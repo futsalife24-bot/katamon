@@ -1512,7 +1512,9 @@ check('クール=カイの握り飯47発は見た目の回転だけ個別にラ�
     && coolKaiRotations.every(rotation => rotation >= 0 && rotation < Math.PI * 2),
   JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
-  /function drawFreeRow\([\s\S]{0,1800}characterImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
+  indexHtml.includes('function characterPreviewImageRect(key, img)')
+    && indexHtml.includes('previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 }')
+    && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
 

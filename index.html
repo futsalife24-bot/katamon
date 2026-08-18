@@ -658,11 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.69-first-battle-media-debuff-hud';
+  const BUILD_ID = 'v2.0.70-cool-kai-practice-crop';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.69', date: '2026/08/18', summary: '初回BATTLE準備とデバフ状態表示を改善' },
+    { version: 'v2.0.70', date: '2026/08/18', summary: 'クール=カイの演習選択画像を接地後の切り出しへ更新' },
     { version: 'v2.0.68', date: '2026/08/18', summary: '握り飯47発へ個別ランダム回転を追加' },
     { version: 'v2.0.67', date: '2026/08/18', summary: 'クール=カイへ名称を変更' },
     { version: 'v2.0.66', date: '2026/08/18', summary: 'クールカイ必殺後の自己移動封印を追加' },
@@ -2932,6 +2932,8 @@
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
       imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 },
+      // 演習選択では、接地調整前の上下余白を含めず見えている車体を大きく表示する。
+      previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 },
       // 素材の下側に残る透明余白ぶんだけ、地面アンカーへ見た目を寄せる。
       groundOffsetY: 31
     }
@@ -3220,6 +3222,16 @@
   }
   function characterImageRect(key, img) {
     const crop = CHARACTERS[key]?.imageCrop;
+    if (!crop) return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight };
+    return {
+      sx: img.naturalWidth * crop.sx,
+      sy: img.naturalHeight * crop.sy,
+      sw: img.naturalWidth * crop.sw,
+      sh: img.naturalHeight * crop.sh
+    };
+  }
+  function characterPreviewImageRect(key, img) {
+    const crop = CHARACTERS[key]?.previewImageCrop || CHARACTERS[key]?.imageCrop;
     if (!crop) return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight };
     return {
       sx: img.naturalWidth * crop.sx,
@@ -10220,7 +10232,7 @@
       const img = charImages[imageKey];
       if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
         // 正方形へ押し込まず、元画像の縦横比のまま置く。カードだけの縮尺を変えない。
-        const imageRect = characterImageRect(imageKey, img);
+        const imageRect = characterPreviewImageRect(imageKey, img);
         const imageH = row.h - 26;
         const imageW = imageH * (imageRect.sw / imageRect.sh);
         ctx.save();
