@@ -1876,6 +1876,11 @@ check('クールカイを選んだ対戦は専用BGMを固定で流す',
     && kt.bgm().stageTheme === 'coolKai'
     && kt.bgm().stageSrc.includes('SIX ÉTERNEL ―愛はひとつじゃない―.mp3'),
   JSON.stringify(kt.bgm()));
+check('クール=カイの連戦は専用BGMを先頭へ戻さず継続する',
+  indexHtml.includes('const continueCoolKaiBgm = desired === \'stage\'')
+    && indexHtml.includes("stageBgmTheme === 'coolKai'")
+    && indexHtml.includes('!continueCoolKaiBgm'),
+  'continuous dedicated BGM guard missing');
 kt.setPhase('title');
 kt.syncBgm();
 check('おまけ5とBATTLEロゴは専用曲名を表示する',
