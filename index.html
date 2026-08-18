@@ -658,10 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.71-prism-beam';
+  const BUILD_ID = 'v2.0.72-loading-progress-character';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.72', date: '2026/08/18', summary: '起動ローダーを進捗ゲージとランダムキャラ演出へ更新' },
     { version: 'v2.0.71', date: '2026/08/18', summary: 'オベリスクの必殺をプリズムビームへ更新' },
     { version: 'v2.0.68', date: '2026/08/18', summary: '握り飯47発へ個別ランダム回転を追加' },
     { version: 'v2.0.67', date: '2026/08/18', summary: 'クール=カイへ名称を変更' },
@@ -2962,6 +2963,17 @@
   };
 
   const CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
+  // ロード画面のキャラは起動ごとに1体だけ抽選する。Web Cryptoを使い、
+  // 対戦の再現用Math.random()の列へ表示演出の乱数を混ぜない。
+  function pickLoadingCharacter() {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const seed = new Uint32Array(1);
+      crypto.getRandomValues(seed);
+      return CHARACTER_LIST[seed[0] % CHARACTER_LIST.length];
+    }
+    return CHARACTER_LIST[Math.floor((Date.now() % 100000) / 100000 * CHARACTER_LIST.length)];
+  }
+  const loadingCharacterKey = pickLoadingCharacter();
 
   // ===== 起動時に読む絵(v130でWebPへ) =====
   // キャラ16体とロゴで3.83MBあり、**読み込み画面はこれを全部待ってから明ける**。
@@ -3031,6 +3043,10 @@
       + titleWoodUiReady + titleWoodUiFailed
       + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
       + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
+  }
+  function getCoreImageProgressRatio() {
+    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2;
+    return Math.max(0, Math.min(1, getCoreImageProgress() / total));
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
   let loadingEmblemReady = false;
@@ -10912,6 +10928,56 @@
     }
 
     const readyToStart = gamePhase === 'press';
+    const progress = readyToStart ? 1 : getCoreImageProgressRatio();
+    const progressPercent = Math.round(progress * 100);
+    const progressBarW = Math.min(360, VW - 52);
+    const progressBarH = 16;
+    const progressBarX = VW / 2 - progressBarW / 2;
+    const progressBarY = VH / 2 + 128;
+    const now = Date.now();
+
+    // よくあるゲームのローディング演出。キャラはゲージの進捗に追従しつつ、
+    // 足踏みするような小さな揺れだけを加える。判定やゲーム進行には影響しない。
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.68)';
+    ctx.fillRect(progressBarX - 10, progressBarY - 10, progressBarW + 20, progressBarH + 20);
+    ctx.strokeStyle = 'rgba(255,210,74,.82)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(progressBarX - 1, progressBarY - 1, progressBarW + 2, progressBarH + 2);
+    const progressGradient = ctx.createLinearGradient(progressBarX, 0, progressBarX + progressBarW, 0);
+    progressGradient.addColorStop(0, '#b87927');
+    progressGradient.addColorStop(0.55, '#ffd24a');
+    progressGradient.addColorStop(1, '#fff0a6');
+    ctx.fillStyle = progressGradient;
+    ctx.fillRect(progressBarX, progressBarY, progressBarW * progress, progressBarH);
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    ctx.fillRect(progressBarX, progressBarY + 2, progressBarW, 3);
+
+    const loadingImg = charImages[loadingCharacterKey];
+    const loadingImgReady = loadingImg && loadingImg.complete && loadingImg.naturalWidth > 0;
+    const markerX = progressBarX + progressBarW * progress;
+    const markerY = progressBarY - 25 + Math.sin(now / 105) * 2.5;
+    const markerAngle = Math.sin(now / 145) * 0.055;
+    if (loadingImgReady) {
+      const crop = characterImageRect(loadingCharacterKey, loadingImg);
+      const markerH = 48;
+      const markerW = markerH * crop.sw / crop.sh;
+      ctx.save();
+      ctx.translate(markerX, markerY + Math.sin(now / 82) * 1.5);
+      ctx.rotate(markerAngle);
+      ctx.shadowColor = 'rgba(255,210,74,.72)';
+      ctx.shadowBlur = 8;
+      ctx.drawImage(loadingImg, crop.sx, crop.sy, crop.sw, crop.sh, -markerW / 2, -markerH, markerW, markerH);
+      ctx.restore();
+    } else {
+      // キャラ画像の読込前も「キャラがいる場所」が消えないよう簡易マーカーを出す。
+      ctx.fillStyle = '#ffd24a';
+      ctx.beginPath();
+      ctx.arc(markerX, markerY - 18, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
     const pulse = 0.55 + Math.sin(Date.now() / 260) * 0.28;
     ctx.textAlign = 'center';
     if (readyToStart) {
@@ -10927,7 +10993,7 @@
       ctx.fillText('NOW LOADING...', VW / 2, VH / 2 + 30);
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
       ctx.font = '400 11px ' + UI_FONT;
-      ctx.fillText(`ゲーム画像を準備しています ${getCoreImageProgress()}/${CHARACTER_LIST.length + 6}`, VW / 2, VH / 2 + 53);
+      ctx.fillText(`ゲームを準備しています ${progressPercent}%`, VW / 2, VH / 2 + 53);
       ctx.fillStyle = 'rgba(255,255,255,0.78)';
       ctx.font = '400 10px ' + UI_FONT;
       ctx.fillText('更新時は読み込みに時間がかかる場合があります', VW / 2, VH / 2 + 76);
