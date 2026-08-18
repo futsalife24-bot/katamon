@@ -249,6 +249,7 @@
   const state = {
     stage: null,
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
+    materialGrid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
     terrainInspectorPanel: 'brush',
@@ -508,6 +509,21 @@
   function syncTerrainToStage() {
     if (!state.stage) return;
     state.stage.terrain.columns = columnsFromGrid(state.grid);
+    const columns = Array.from({ length: LIMITS.terrainColumns }, () => []);
+    for (let c = 0; c < LIMITS.terrainColumns; c++) {
+      let start = -1;
+      for (let r = 0; r <= LIMITS.terrainRows; r++) {
+        const steel = r < LIMITS.terrainRows && state.grid[r * LIMITS.terrainColumns + c] && state.materialGrid[r * LIMITS.terrainColumns + c];
+        if (steel && start < 0) start = r;
+        if (!steel && start >= 0) { columns[c].push([start * LIMITS.rowHeight, Math.min(r * LIMITS.rowHeight, LIMITS.terrainBottomY), 'steel']); start = -1; }
+      }
+    }
+    state.stage.terrain.materialSegments = columns;
+    const hasSteel = columns.some((column) => column.length);
+    if (hasSteel && !state.stage.materials.some((material) => material.id === 'steel')) {
+      state.stage.materials.push({ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' });
+    }
+    if (!hasSteel) state.stage.materials = state.stage.materials.filter((material) => material.id !== 'steel');
   }
 
   function selectedTerrainMaterial() {
@@ -591,6 +607,13 @@
     state.stage = clone(stage);
     setRuntimeLimits(state.stage);
     state.grid = gridFromTerrain(state.stage.terrain);
+    state.materialGrid = new Uint8Array(state.grid.length);
+    (state.stage.terrain.materialSegments || []).forEach((column, c) => (column || []).forEach((segment) => {
+      if (segment[2] !== 'steel') return;
+      const from = Math.max(0, Math.floor(segment[0] / LIMITS.rowHeight));
+      const to = Math.min(LIMITS.terrainRows, Math.ceil(segment[1] / LIMITS.rowHeight));
+      for (let r = from; r < to; r++) state.materialGrid[r * LIMITS.terrainColumns + c] = 1;
+    }));
     state.characterGuides = defaultCharacterGuides(state.grid);
     state.activeGuideIndex = 0;
     state.guideDrag = null;
@@ -612,6 +635,7 @@
   function captureSnapshot() {
     return {
       grid: state.grid.slice(),
+      materialGrid: state.materialGrid.slice(),
       spawnPoints: clone(state.stage.spawnPoints || []),
       gimmicks: clone(state.stage.gimmicks || []),
       background: clone(state.stage.background || {}),
@@ -624,6 +648,7 @@
 
   function restoreSnapshot(snapshot) {
     state.grid = snapshot.grid.slice();
+    state.materialGrid = snapshot.materialGrid ? snapshot.materialGrid.slice() : new Uint8Array(state.grid.length);
     state.stage.spawnPoints = clone(snapshot.spawnPoints);
     state.stage.gimmicks = clone(snapshot.gimmicks);
     state.stage.background = clone(snapshot.background);
@@ -1292,6 +1317,19 @@
       rimShadow: mixHexColor(terrainTop, '#000000', 0.36)
     });
     drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision, steel);
+    if (state.materialGrid && state.materialGrid.some((value) => value)) {
+      context.save();
+      context.fillStyle = '#39444f';
+      for (let row = 0; row < LIMITS.terrainRows; row++) for (let column = 0; column < LIMITS.terrainColumns; column++) {
+        if (state.materialGrid[row * LIMITS.terrainColumns + column]) {
+          context.fillRect(column * LIMITS.columnWidth, row * LIMITS.rowHeight, LIMITS.columnWidth + 0.6, LIMITS.rowHeight + 0.4);
+        }
+      }
+      context.strokeStyle = 'rgba(210,225,234,.28)';
+      context.lineWidth = 1;
+      for (let y = 18; y < LIMITS.terrainBottomY; y += 30) { context.beginPath(); context.moveTo(0, y); context.lineTo(LIMITS.stageWidth, y); context.stroke(); }
+      context.restore();
+    }
 
     if (!state.lowPowerMode && settings.showGrid && transform.scale * 24 >= 10) {
       context.strokeStyle = 'rgba(255,255,255,.22)';
@@ -1471,6 +1509,8 @@
       activeBrushRadius(),
       solid == null ? state.activeTool !== 'erase' : solid
     );
+    const material = $('terrainMaterial').value === 'steel' ? 1 : 0;
+    paintCircle(state.materialGrid, clamp(point.x, 0, LIMITS.stageWidth), clamp(point.y, 0, LIMITS.terrainBottomY), activeBrushRadius(), solid === false ? 0 : material);
     enforceTerrainBounds(target);
   }
 
@@ -2117,7 +2157,11 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [selectedTerrainMaterial()];
+    const terrainMaterial = selectedTerrainMaterial();
+    state.stage.materials = [terrainMaterial];
+    if (state.materialGrid && state.materialGrid.some((value) => value)) {
+      state.stage.materials.push({ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' });
+    }
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     updateAppearance();
     renderAllCanvases();

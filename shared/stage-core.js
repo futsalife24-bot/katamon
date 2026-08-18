@@ -198,6 +198,14 @@
               }
             }
           },
+          materialSegments: {
+            type: 'array', minItems: STANDARD_LIMITS.columns, maxItems: LARGE_LIMITS.columns,
+            items: { type: 'array', maxItems: 32, items: { type: 'array', prefixItems: [
+              { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom },
+              { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom },
+              { enum: ['terrain', 'steel'] }
+            ], minItems: 3, maxItems: 3 } }
+          },
           destructible: { const: true },
           minimumThickness: { type: 'number', minimum: 4, maximum: 64 }
         }
@@ -205,7 +213,7 @@
       materials: {
         type: 'array',
         minItems: 1,
-        maxItems: 1,
+        maxItems: 2,
         items: {
           anyOf: [
             {
@@ -838,7 +846,8 @@
   function carveCircle(stage, x, y, radius) {
     activateStageLimits(stage);
     var next = normalizeStage(stage);
-    if (next.materials[0] && next.materials[0].destructible !== true) return next;
+    var hasMaterialOverrides = (next.terrain.materialSegments || []).some(function (column) { return column.length; });
+    if (!hasMaterialOverrides && next.materials.length === 1 && next.materials[0].destructible !== true) return next;
     var grid = segmentsToGrid(next);
     paintCircle(grid, x, y, radius, false, next);
     next.terrain.columns = gridToSegments(grid, next);
@@ -1099,11 +1108,28 @@
     }
 
     var materials = Array.isArray(input.materials) ? input.materials : [];
-    if (materials.length !== 1 || materials.some(function (material) {
+    if (materials.length < 1 || materials.length > 2 || materials.some(function (material) {
       var expected = material && MATERIAL_CATALOG[material.id];
       return !expected || !expected.enabled || material.type !== expected.type || material.destructible !== expected.destructible;
     })) {
       errors.push(issue('unsupported_material', '$.materials', '地形素材の種類と壊れ方の組み合わせが正しくありません。'));
+    }
+    var materialIds = Object.create(null);
+    materials.forEach(function (material) {
+      if (material && materialIds[material.id]) errors.push(issue('unsupported_material', '$.materials', '同じ地形素材が重複しています。'));
+      if (material) materialIds[material.id] = true;
+    });
+    var materialSegments = input.terrain && input.terrain.materialSegments;
+    if (materialSegments != null) {
+      if (!Array.isArray(materialSegments) || materialSegments.length !== columns.length) {
+        errors.push(issue('material_segments_shape', '$.terrain.materialSegments', '素材区分の列数が地形と一致しません。'));
+      } else materialSegments.forEach(function (entries, columnIndex) {
+        (entries || []).forEach(function (segment) {
+          if (!Array.isArray(segment) || segment.length !== 3 || !materialIds[segment[2]]) {
+            errors.push(issue('material_segment_invalid', '$.terrain.materialSegments[' + columnIndex + ']', '地形素材区分が不正です。'));
+          }
+        });
+      });
     }
     var gimmicks = Array.isArray(input.gimmicks) ? input.gimmicks : [];
     if (gimmicks.length > LIMITS.maxGimmicks) errors.push(issue('gimmick_limit', '$.gimmicks', 'ギミック数が上限を超えています。'));
@@ -1169,6 +1195,25 @@
     return result;
   }
 
+  function normalizeMaterialSegments(columns, source) {
+    var result = blankColumns();
+    if (!Array.isArray(source)) return result;
+    for (var column = 0; column < LIMITS.columns; column += 1) {
+      var geometry = Array.isArray(columns[column]) ? columns[column] : [];
+      var entries = Array.isArray(source[column]) ? source[column] : [];
+      result[column] = entries.map(function (segment) {
+        return [roundNumber(clamp(segment && segment[0], 0, LIMITS.terrainBottom), 3),
+          roundNumber(clamp(segment && segment[1], 0, LIMITS.terrainBottom), 3),
+          segment && segment[2] === 'steel' ? 'steel' : 'terrain'];
+      }).filter(function (segment) {
+        return segment[1] > segment[0] && geometry.some(function (base) {
+          return segment[0] >= base[0] && segment[1] <= base[1];
+        });
+      });
+    }
+    return result;
+  }
+
   function normalizeStage(input) {
     input = input || {};
     activateStageLimits(input);
@@ -1198,6 +1243,7 @@
       maxBuild: input.gameCompatibility && input.gameCompatibility.maxBuild != null ? safeText(input.gameCompatibility.maxBuild, 40, null) : null
     };
     base.terrain.columns = normalizeColumns(input.terrain && input.terrain.columns);
+    base.terrain.materialSegments = normalizeMaterialSegments(base.terrain.columns, input.terrain && input.terrain.materialSegments);
     base.terrain.minimumThickness = roundNumber(clamp(input.terrain && input.terrain.minimumThickness || LIMITS.minimumTerrainThickness, 4, 64), 3);
     base.materials = (Array.isArray(input.materials) ? input.materials : base.materials).slice(0, 4).map(function (material) {
       return {
@@ -1498,6 +1544,7 @@
       stageWidth: normalized.stageWidth,
       stageHeight: normalized.stageHeight,
       segments: clone(normalized.terrain.columns),
+      materialSegments: clone(normalized.terrain.materialSegments || []),
       pattern: 'custom',
       startOnIsland: false,
       themeKey: normalized.background.theme,
@@ -1508,7 +1555,9 @@
       format: normalized.battleRules.format,
       appearance: {
         background: clone(normalized.background),
-        terrainMaterial: normalized.materials[0] && normalized.materials[0].id === 'steel' ? 'steel' : 'terrain',
+        terrainMaterial: normalized.materials[0] && normalized.materials[0].id === 'steel' && !(normalized.terrain.materialSegments || []).some(function (column) { return column.length; }) ? 'steel' : 'terrain',
+        ...(normalized.terrain.materialSegments && normalized.terrain.materialSegments.some(function (column) { return column.length; })
+          ? { terrainMaterialSegments: clone(normalized.terrain.materialSegments) } : {}),
         terrainColor: normalized.materials[0] && normalized.materials[0].color
           ? normalized.materials[0].color
           : '#7A5435',

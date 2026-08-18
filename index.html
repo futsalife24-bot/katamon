@@ -669,10 +669,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.77-cool-kai-bgm-continuation';
+  const BUILD_ID = 'v2.0.78-steel-terrain-material';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.78', date: '2026/08/19', summary: 'ステージの一部へ鋼鉄素材を配置し、爆風は通して地形掘削を制御' },
     { version: 'v2.0.77', date: '2026/08/18', summary: 'クール=カイの連戦BGMを再生位置から継続' },
     { version: 'v2.0.76', date: '2026/08/18', summary: '全BGMの起動先読みとサウンドテストを追加' },
     { version: 'v2.0.75', date: '2026/08/18', summary: 'ローダーの円盤・文章・キャラの配置を整理' },
@@ -1905,6 +1906,7 @@
   let currentCustomAppearance = null;
   // カスタムステージだけが選べる地形素材。公式地形は従来どおり壊れる土のままにする。
   let currentTerrainMaterial = 'terrain';
+  let currentTerrainMaterialSegments = [];
   let parallaxSeed = 0; // 遠景の山の形を試合ごとに変えるための位相オフセット
 
   function mixHexColor(from, to, ratio) {
@@ -1919,6 +1921,7 @@
     if (!appearance) {
       currentCustomAppearance = null;
       currentTerrainMaterial = 'terrain';
+      currentTerrainMaterialSegments = [];
       currentTheme = THEMES[currentThemeKey];
       return;
     }
@@ -1932,10 +1935,12 @@
         gradient: { ...(background.gradient || {}) }
       },
       terrainMaterial: appearance.terrainMaterial === 'steel' ? 'steel' : 'terrain',
+      terrainMaterialSegments: Array.isArray(appearance.terrainMaterialSegments) ? appearance.terrainMaterialSegments : [],
       terrainColor: appearance.terrainColor,
       decorationsEnabled: appearance.decorationsEnabled !== false
     };
     currentTerrainMaterial = currentCustomAppearance.terrainMaterial;
+    currentTerrainMaterialSegments = currentCustomAppearance.terrainMaterialSegments;
     currentTheme = { ...THEMES[currentThemeKey], sky: THEMES[currentThemeKey].sky.slice() };
 
     if (currentCustomAppearance.background.mode === 'color') {
@@ -2398,6 +2403,9 @@
       for (const seg of segments[c]) {
         const top = seg[0], bottom = seg[1];
         if (bottom <= top) continue;
+        const materialSegments = currentTerrainMaterialSegments[c] || [];
+        const steel = materialSegments.some((material) => material[2] === 'steel' && material[0] <= top && material[1] >= bottom);
+        terrainCtx.fillStyle = steel ? '#39444f' : grad;
         terrainCtx.fillRect(x, top, COL_W + 0.6, bottom - top);
         const r0 = Math.max(0, Math.floor(top / ROW_H));
         const r1 = Math.min(ROWS - 1, Math.ceil(bottom / ROW_H));
@@ -2412,7 +2420,7 @@
     terrainCtx.fillRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
     terrainCtx.restore();
     drawTerrainDetails();
-    if (currentTerrainMaterial === 'steel') {
+    if (currentTerrainMaterial === 'steel' || currentTerrainMaterialSegments.some((column) => column.length)) {
       // 闘技場の鉄球と同じ黒鉄寄りの板金感。地形の形はそのまま、表面だけを鋼鉄にする。
       terrainCtx.save();
       terrainCtx.globalCompositeOperation = 'source-atop';
@@ -2464,11 +2472,20 @@
   function carveCraterInternal(cx, cy, radius, refreshRim = true) {
     if (currentTerrainMaterial === 'steel') return false;
     markTerrainArtDirty();
+    const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
+    const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
+    const rowFrom = Math.max(0, Math.floor((cy - radius) / ROW_H));
+    const rowTo = Math.min(ROWS - 1, Math.ceil((cy + radius) / ROW_H));
+    const r2 = radius * radius;
+    let carved = false;
     terrainCtx.save();
     terrainCtx.globalCompositeOperation = 'destination-out';
-    terrainCtx.beginPath();
-    terrainCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-    terrainCtx.fill();
+    for (let c = colFrom; c <= colTo; c++) for (let r = rowFrom; r <= rowTo; r++) {
+      const px = (c + 0.5) * COL_W, py = (r + 0.5) * ROW_H;
+      if (px - cx < -radius || px - cx > radius || py - cy < -radius || py - cy > radius) continue;
+      const steel = (currentTerrainMaterialSegments[c] || []).some((segment) => segment[2] === 'steel' && py >= segment[0] && py < segment[1]);
+      if (!steel && (px - cx) * (px - cx) + (py - cy) * (py - cy) <= r2) { terrainCtx.fillRect(c * COL_W, r * ROW_H, COL_W + 1, ROW_H + 1); carved = true; }
+    }
     terrainCtx.restore();
     bridgeCtx.save();
     bridgeCtx.globalCompositeOperation = 'destination-out';
@@ -2483,24 +2500,20 @@
     arenaDecorationCtx.fill();
     arenaDecorationCtx.restore();
 
-    const colFrom = Math.max(0, Math.floor((cx - radius) / COL_W));
-    const colTo = Math.min(TERRAIN_COLS - 1, Math.ceil((cx + radius) / COL_W));
-    const rowFrom = Math.max(0, Math.floor((cy - radius) / ROW_H));
-    const rowTo = Math.min(ROWS - 1, Math.ceil((cy + radius) / ROW_H));
-    const r2 = radius * radius;
     for (let c = colFrom; c <= colTo; c++) {
       const colCx = (c + 0.5) * COL_W;
       for (let r = rowFrom; r <= rowTo; r++) {
         const rowCy = (r + 0.5) * ROW_H;
         const dx = colCx - cx, dy = rowCy - cy;
-        if (dx * dx + dy * dy <= r2) solidGrid[r * TERRAIN_COLS + c] = 0;
+        const steel = (currentTerrainMaterialSegments[c] || []).some((segment) => segment[2] === 'steel' && rowCy >= segment[0] && rowCy < segment[1]);
+        if (!steel && dx * dx + dy * dy <= r2) { solidGrid[r * TERRAIN_COLS + c] = 0; carved = true; }
       }
     }
     rescanColumnsFromGrid(colFrom, colTo);
     if (refreshRim) rebuildTerrainRim();
     // ミニマップの地形は地形が変わった時だけ描き直す。毎フレームの全グリッド走査を避ける。
     minimapTerrainDirty = true;
-    return true;
+    return carved;
   }
 
   let craterHistory = []; // 中断/再開のため、実発射で開いたクレーターを再生可能な形で記録
@@ -4298,6 +4311,12 @@
   function carveDeathGate(p, x, y, distance) {
     const radius = deathGateCarveRadius(distance, p.maxDistance);
     if (carveCraterInternal(x, y, radius, false)) craterHistory.push({ x, y, r: radius });
+  }
+
+  function isSteelTerrainAt(x, y) {
+    const column = Math.floor(x / COL_W);
+    if (column < 0 || column >= TERRAIN_COLS) return false;
+    return (currentTerrainMaterialSegments[column] || []).some((segment) => segment[2] === 'steel' && y >= segment[0] && y < segment[1]);
   }
 
   // Dスマッシュは地面へ触れるまでは通常の衝突判定を持ち、着弾した瞬間だけ
@@ -18058,7 +18077,13 @@
         while (p.deathGateCarves * DEATH_GATE_CARVE_STRIDE < carvedLimit) {
           const distance = Math.min((p.deathGateCarves + 1) * DEATH_GATE_CARVE_STRIDE, p.maxDistance);
           const back = stepLen > 0 ? (p.travelDistance - distance) / stepLen : 0;
-          carveDeathGate(p, p.x - stepX * back, p.y - stepY * back, distance);
+          const carveX = p.x - stepX * back;
+          const carveY = p.y - stepY * back;
+          if (isSteelTerrainAt(carveX, carveY)) {
+            p.travelDistance = p.maxDistance;
+            break;
+          }
+          carveDeathGate(p, carveX, carveY, distance);
           p.deathGateCarves++;
           queueTerrainRimRebuild();
         }
