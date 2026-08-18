@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.64-cool-kai-visuals';
+const CACHE_VERSION = 'katamon-pwa-v2.0.65-cool-kai-power-grounding';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
