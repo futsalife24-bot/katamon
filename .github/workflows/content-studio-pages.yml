@@ -42,6 +42,9 @@ jobs:
 
       - name: Assemble Pages artifact
         run: |
+          mkdir -p pages-artifact
+          git archive --format=tar HEAD | tar -x -C pages-artifact
+          rm -rf pages-artifact/tools/content-studio
           mkdir -p pages-artifact/tools/content-studio
           cp -R tools/content-studio/dist/. pages-artifact/tools/content-studio/
 
