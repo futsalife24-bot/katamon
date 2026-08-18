@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.70-cool-kai-practice-crop';
+const CACHE_VERSION = 'katamon-pwa-v2.0.71-prism-beam';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

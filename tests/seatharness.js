@@ -278,6 +278,11 @@ const HOOK = `
       directHitOnly: !!p.directHitOnly,
       groundFlame: !!p.groundFlame,
       pierce: !!p.pierce,
+      prismBeam: !!p.prismBeam,
+      prismBounces: Number(p.prismBounces || 0),
+      prismMaxBounces: Number(p.prismMaxBounces || 0),
+      prismMaxDistance: Number(p.prismMaxDistance || 0),
+      travelDistance: Number(p.travelDistance || 0),
       dSmash: !!p.dSmash,
       barucopterMarker: !!p.barucopterMarker,
       barucopterBullet: !!p.barucopterBullet,
@@ -421,7 +426,9 @@ const HOOK = `
       const p = projectiles[index];
       const target = unitById(unitId);
       if (!p || !target) return false;
-      if (p.scorpionRail && typeof resolveScorpionRailImpact === 'function') {
+      if (p.prismBeam && typeof resolvePrismBeamUnitImpact === 'function') {
+        resolvePrismBeamUnitImpact(p, target);
+      } else if (p.scorpionRail && typeof resolveScorpionRailImpact === 'function') {
         resolveScorpionRailImpact(p, target);
       } else if (p.barucopterBullet && typeof resolveBarucopterBulletUnitImpact === 'function') {
         resolveBarucopterBulletUnitImpact(p, target, p.x, p.y);
