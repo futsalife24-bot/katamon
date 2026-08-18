@@ -893,7 +893,7 @@ const HOOK = `
     scrollUpdateHistoryForTest: (delta) => {
       if (typeof updateHistoryScrollBy === 'function') updateHistoryScrollBy(delta);
     },
-    bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind(), stageSrc: stageBgm.src, stageTheme: stageBgmTheme }),
+    bgm: () => ({ bonusTrack: bonusBgmTrack, desired: desiredBgm(), current: currentBgmKind(), displayName: currentBgmDisplayName(), stageSrc: stageBgm.src, stageTheme: stageBgmTheme }),
     bonusTrackCount: () => BONUS_BGM_TRACKS.length - 1,
     bonusTrackVolumes: () => BONUS_BGM_TRACKS.slice(1).map(t => t.volume),
     finishBonusTrackForTest: () => (

@@ -1834,20 +1834,20 @@ const bonusBtn = kt.bonusBtn();
 function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
 
 const bonusTrackCount = kt.bonusTrackCount();
-check('おまけ曲が4曲登録されている', bonusTrackCount === 4, String(bonusTrackCount));
+check('おまけ曲が5曲登録されている', bonusTrackCount === 5, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 tapBonus();
 check('おまけを押すと1曲目を再生する',
   kt.bgm().bonusTrack === 1 && kt.bgm().desired === 'bonus',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
 let autoAdvanceNg = [];
-for (const expected of [2, 3, 4, 1]) {
+for (const expected of [2, 3, 4, 5, 1]) {
   const advanced = kt.finishBonusTrackForTest();
   if (advanced !== true || kt.bgm().bonusTrack !== expected || kt.bgm().desired !== 'bonus') {
     autoAdvanceNg.push(`終了後=${kt.bgm().bonusTrack}/${kt.bgm().desired}`);
   }
 }
-check('おまけ曲は終わるたび次曲へ進み、4曲目の後は1曲目へ戻る',
+check('おまけ曲は終わるたび次曲へ進み、5曲目の後は1曲目へ戻る',
   autoAdvanceNg.length === 0, autoAdvanceNg.join(', '));
 // 手動タップも従来どおり、次曲を選んで最後に停止できる。
 for (let n = 2; n <= bonusTrackCount; n++) tapBonus();
@@ -1880,6 +1880,11 @@ check('クールカイを選んだ対戦は専用BGMを固定で流す',
   JSON.stringify(kt.bgm()));
 kt.setPhase('title');
 kt.syncBgm();
+check('おまけ5とBATTLEロゴは専用曲名を表示する',
+  indexHtml.includes("src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'")
+    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―'")
+    && indexHtml.includes('drawBgmNowPlayingLabel(748, UI.gold)'),
+  'BGM display label missing');
 check('タイトルへ戻ってもおまけ曲は鳴り出さない',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'title',
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);

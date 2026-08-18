@@ -658,10 +658,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.72-loading-progress-character';
+  const BUILD_ID = 'v2.0.73-bgm-now-playing-label';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.73', date: '2026/08/18', summary: 'BGMの再生曲名をタイトルとBATTLEロゴへ表示' },
     { version: 'v2.0.72', date: '2026/08/18', summary: '起動ローダーを進捗ゲージとランダムキャラ演出へ更新' },
     { version: 'v2.0.71', date: '2026/08/18', summary: 'オベリスクの必殺をプリズムビームへ更新' },
     { version: 'v2.0.68', date: '2026/08/18', summary: '握り飯47発へ個別ランダム回転を追加' },
@@ -1160,12 +1161,13 @@
     null,
     // アセットを差し替える版ではBUILD_ID/CACHE_VERSIONを必ず上げる。個別の
     // クエリ文字列には依存せず、新しいキャッシュを丸ごと作り直して更新する。
-    { src: 'assets/bonus-bgm-1.mp3', volume: 0.53 },
-    { src: 'assets/bonus-bgm-2.mp3', volume: 0.56 },
-    { src: 'assets/bonus-bgm-3.mp3', volume: 0.45 },
-    { src: 'assets/bonus-bgm-4.mp3', volume: 0.54 }
+    { src: 'assets/bonus-bgm-1.mp3', volume: 0.53, label: 'おまけ1' },
+    { src: 'assets/bonus-bgm-2.mp3', volume: 0.56, label: 'Celtic Battle Mix' },
+    { src: 'assets/bonus-bgm-3.mp3', volume: 0.45, label: 'SoulTech Alt Rock Mix' },
+    { src: 'assets/bonus-bgm-4.mp3', volume: 0.54, label: 'おまけ4' },
+    { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' }
   ];
-  let bonusBgmTrack = 0;        // 0=止まっている / 1〜4=その曲を選んでいる
+  let bonusBgmTrack = 0;        // 0=止まっている / 1〜5=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
   function bonusBgmBaseVolume() {
     const track = BONUS_BGM_TRACKS[bonusBgmTrack];
@@ -1310,6 +1312,23 @@
     if (!bonusBgm.paused) return 'bonus';
     if (!titleBgm.paused || titleBgmLoopTimer !== null) return 'title';
     return 'none';
+  }
+  const BGM_DISPLAY_NAMES = Object.freeze({
+    title: 'タイトルBGM', room: 'ONLINEロビー',
+    grass: '草原ステージ', desert: '砂漠ステージ', snow: '雪原ステージ',
+    volcanic: '火山ステージ', arena: '闘技場ステージ',
+    coolKai: 'SIX ÉTERNEL ―愛はひとつじゃない―'
+  });
+  function currentBgmDisplayName() {
+    const kind = currentBgmKind();
+    if (kind === 'bonus') return BONUS_BGM_TRACKS[bonusBgmTrack]?.label || `おまけ${bonusBgmTrack}`;
+    if (kind === 'stage') return BGM_DISPLAY_NAMES[stageBgmTheme] || 'BATTLE BGM';
+    return BGM_DISPLAY_NAMES[kind] || 'BGM停止中';
+  }
+  function drawBgmNowPlayingLabel(y, color = UI.gold) {
+    drawOutlinedText(`♪ ${currentBgmDisplayName()}`, VW / 2, y, {
+      align: 'center', font: `900 10px ${UI_FONT_HEAVY}`, color, lineWidth: 3
+    });
   }
   // opts.restartStage === true の時だけステージ曲を頭から鳴らし直す(戦闘開始・再戦がこれに当たる)。
   function syncBgm(opts) {
@@ -10071,8 +10090,8 @@
         tutorialIsRecommended());
       drawTitleWoodButtonText(titleFreeBtn, '演習', '条件を組んで開始', 'parchmentSmall');
       drawTitleWoodButtonText(titleRankingBtn, 'RANKING', '連勝記録', 'hanging');
-      drawTitleWoodButtonText(titleBonusBtn, 'おまけ',
-        bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', 'shield');
+        drawTitleWoodButtonText(titleBonusBtn, 'おまけ',
+        bonusBgmTrack ? `♪ ${currentBgmDisplayName()}` : 'BGMを聴く', 'shield');
     } else {
       // 画像を読めない古い環境では、操作不能にせず従来の描画へ戻す。
       ctx.textAlign = 'center';
@@ -10110,7 +10129,7 @@
       drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
         font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
       });
-      drawOutlinedText(bonusBgmTrack ? `♪ ${bonusBgmTrack}曲目 再生中` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
+      drawOutlinedText(bonusBgmTrack ? `♪ ${currentBgmDisplayName()}` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
         font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
       });
 
@@ -10146,6 +10165,9 @@
     drawOutlinedText('›', titleUpdateHistoryPanel.x + 118, titleUpdateHistoryPanel.y + 6, {
       font: `900 19px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
     });
+
+    // タイトル画面の空きスペースへ、いま流れているBGMを常時表示する。
+    drawBgmNowPlayingLabel(866, bonusBgmTrack ? UI.gold : UI.brassLabel);
 
     ctx.save();
     ctx.textAlign = 'center';
@@ -14962,6 +14984,8 @@
     drawOutlinedText(cutIn.left.length > 1 || cutIn.right.length > 1 ? '2 vs 2' : '1 vs 1', VW / 2, 706, {
       font: `900 14px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
     });
+    // BATTLE STARTロゴの場面でも、現在流れている曲を確認できるようにする。
+    drawBgmNowPlayingLabel(748, UI.gold);
     ctx.restore();
   }
 
