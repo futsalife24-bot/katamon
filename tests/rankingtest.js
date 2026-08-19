@@ -115,6 +115,29 @@ check('旧形式のcharacter空欄行を読み、次の記録を追加できる'
   assert.equal(board.top.find(row => row.streak === 6).character, 'sumoeru');
 });
 
+check('hidden列がTRUEの行だけランキング表示から除外する', () => {
+  const moderated = loadRanking([
+    ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character', 'hidden'],
+    ['2026-08', 'visible', '表示', 9, 80, new Date(), 'kyoryu', 'FALSE'],
+    ['2026-08', 'hidden', '非表示', 99, 500, new Date(), 'iwa', true]
+  ]);
+  const board = moderated.context.getTop('visible');
+  assert.equal(board.total, 1);
+  assert.deepEqual(Array.from(board.top, row => row.name), ['表示']);
+  assert.equal(moderated.context.getTop('hidden').me, null);
+});
+
+check('hidden列は空欄・false・0を表示扱いにする', () => {
+  const values = ['', false, 0, 'false'];
+  values.forEach((value, index) => {
+    const moderated = loadRanking([
+      ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character', 'hidden'],
+      ['2026-08', `visible-${index}`, '表示', 9, 80, new Date(), 'kyoryu', value]
+    ]);
+    assert.equal(moderated.context.getTop(`visible-${index}`).total, 1);
+  });
+});
+
 check('数式として解釈される先頭記号を名前の文字列として保存する', () => {
   const formula = loadRanking();
   const names = ['=1+1', '+SUM(A1:A2)', '-10+20', '@IMPORTDATA'];
