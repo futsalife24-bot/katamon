@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.83-stage-clear-achievements';
+const CACHE_VERSION = 'katamon-pwa-v2.0.84-resume-pointer-fix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
