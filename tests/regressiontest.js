@@ -55,6 +55,11 @@ check('キャラ選択画面に解放進捗を表示し、基本実績を自動�
     && indexHtml.includes("grantUnlockAchievement('login-7-days')")
     && indexHtml.includes("grantUnlockAchievement('streak-3')"),
   'unlock progress summary or achievements missing');
+check('CPU戦の勝利をステージクリア・ボス撃破実績へ接続する',
+  indexHtml.includes("grantUnlockAchievement('stage-clear')")
+    && indexHtml.includes('stage-clear-${currentPattern}')
+    && indexHtml.includes("grantUnlockAchievement('boss-defeated')"),
+  'stage clear achievement hooks missing');
 check('ロード中の石壁に更新時の読み込み案内を表示する',
   indexHtml.includes('更新時は読み込みに時間がかかる場合があります')
     && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
