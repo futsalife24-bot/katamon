@@ -11,7 +11,7 @@
 
 var SHEET_NAME = 'ranking';
 // 列を増やす時は末尾に足すこと。既存行の意味が変わらずに済む。
-var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character'];
+var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character', 'hidden'];
 
 // 異常値の足切り。これを超える申告は保存せず捨てる。
 var MAX_STREAK = 200;
@@ -72,6 +72,7 @@ function getSheet() {
   // 書き込んだ値と読み戻した値が一致しなくなる。該当列は必ず書式をテキストに固定する。
   sheet.getRange('A:B').setNumberFormat('@');
   sheet.getRange('G:G').setNumberFormat('@');
+  sheet.getRange('H:H').setNumberFormat('@');
   return sheet;
 }
 
@@ -98,10 +99,16 @@ function readRows(sheet) {
       streak: Number(values[i][3]) || 0,
       efficiency: Number(values[i][4]) || 0,
       updatedAt: values[i][5],
-      character: String(values[i][6] == null ? '' : values[i][6])
+      character: String(values[i][6] == null ? '' : values[i][6]),
+      hidden: isHiddenValue(values[i][7])
     });
   }
   return rows;
+}
+
+/** 管理シートのhidden列はTRUE/1だけを非表示として扱う。空欄や文字列falseは表示する。 */
+function isHiddenValue(value) {
+  return value === true || value === 1 || String(value == null ? '' : value).trim().toLowerCase() === 'true';
 }
 
 /** 連勝数が主、同数なら与ダメ効率で決める。 */
@@ -186,7 +193,7 @@ function submitScore(params) {
       updated = true;
     } else if (mine.length < MAX_RECORDS_PER_PLAYER) {
       // 旧形式の1件だけの行も残したまま、同じ端末の2件目・3件目を追加する。
-      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date(), entry.character]);
+      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date(), entry.character, false]);
       updated = true;
     } else {
       // 3件を超えたら、その端末の最下位記録を上回る時だけ置き換える。
@@ -225,7 +232,7 @@ function getTop(deviceId) {
 
 function buildBoard(deviceId) {
   var period = currentPeriod();
-  var rows = readRows(getSheet()).filter(function (r) { return r.period === period; });
+  var rows = readRows(getSheet()).filter(function (r) { return r.period === period && !r.hidden; });
   rows.sort(compareRankingRows);
 
   var top = [];
