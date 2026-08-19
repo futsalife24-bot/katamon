@@ -2407,6 +2407,18 @@
         const steel = materialSegments.some((material) => material[2] === 'steel' && material[0] <= top && material[1] >= bottom);
         terrainCtx.fillStyle = steel ? '#39444f' : grad;
         terrainCtx.fillRect(x, top, COL_W + 0.6, bottom - top);
+        // 一部鋼鉄は土の地形を残したまま、指定された帯だけを鋼鉄として描く。
+        // 衝突判定と同じ区間を描画にも使うことで、見た目と接地判定のズレを防ぐ。
+        if (!steel) {
+          for (const material of materialSegments) {
+            if (material[2] !== 'steel') continue;
+            const steelTop = Math.max(top, material[0]);
+            const steelBottom = Math.min(bottom, material[1]);
+            if (steelBottom <= steelTop) continue;
+            terrainCtx.fillStyle = '#39444f';
+            terrainCtx.fillRect(x, steelTop, COL_W + 0.6, steelBottom - steelTop);
+          }
+        }
         const r0 = Math.max(0, Math.floor(top / ROW_H));
         const r1 = Math.min(ROWS - 1, Math.ceil(bottom / ROW_H));
         for (let r = r0; r <= r1; r++) solidGrid[r * TERRAIN_COLS + c] = 1;
@@ -2721,7 +2733,21 @@
     }
   }
 
+  const OFFICIAL_STEEL_STAGE_DEFS = Object.freeze({
+    grassSteelPartial: { theme: 'grass', base: 'rolling', material: 'partial', name: '草原・鋼鉄帯' },
+    grassSteelWhole: { theme: 'grass', base: 'plateauLeft', material: 'whole', name: '草原・鋼鉄原' },
+    desertSteelPartial: { theme: 'desert', base: 'valley', material: 'partial', name: '砂漠・鋼鉄谷' },
+    desertSteelWhole: { theme: 'desert', base: 'plateauRight', material: 'whole', name: '砂漠・鋼鉄台地' },
+    snowSteelPartial: { theme: 'snow', base: 'platforms', material: 'partial', name: '雪原・鋼鉄足場' },
+    snowSteelWhole: { theme: 'snow', base: 'mountainCenter', material: 'whole', name: '雪原・鋼鉄峰' },
+    volcanicSteelPartial: { theme: 'volcanic', base: 'crater', material: 'partial', name: '火山・鋼鉄火口' },
+    volcanicSteelWhole: { theme: 'volcanic', base: 'rolling', material: 'whole', name: '火山・鋼鉄地殻' }
+  });
+
   function generateTerrain(pattern) {
+    const requestedPattern = pattern;
+    const steelStage = OFFICIAL_STEEL_STAGE_DEFS[requestedPattern] || null;
+    pattern = steelStage ? steelStage.base : pattern;
     // 闘技場マップは少し出やすくして、横長ステージの階層戦を体験しやすくする。
     const patterns = ['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'tieredBasin'];
     const p = pattern || patterns[Math.floor(Math.random() * patterns.length)];
@@ -2873,7 +2899,26 @@
       }
     }
 
-    return { pattern: p, segments, startOnIsland, bridge };
+    let terrainMaterial = 'terrain';
+    const terrainMaterialSegments = Array.from({ length: TERRAIN_COLS }, () => []);
+    if (steelStage?.material === 'whole') terrainMaterial = 'steel';
+    if (steelStage?.material === 'partial') {
+      const zones = [[0.12, 0.25], [0.43, 0.57], [0.75, 0.88]];
+      for (let c = 0; c < TERRAIN_COLS; c++) {
+        const t = c / Math.max(1, TERRAIN_COLS - 1);
+        if (!segments[c]?.length || !zones.some(([from, to]) => t >= from && t <= to)) continue;
+        const base = segments[c][segments[c].length - 1];
+        const bottom = Math.min(base[1], base[0] + ROW_H * 5);
+        if (bottom > base[0]) terrainMaterialSegments[c].push([base[0], bottom, 'steel']);
+      }
+    }
+    return {
+      pattern: steelStage ? requestedPattern : p,
+      segments, startOnIsland, bridge,
+      themeKey: steelStage?.theme || null,
+      terrainMaterial,
+      terrainMaterialSegments
+    };
   }
 
   let currentPattern = null;
@@ -2951,9 +2996,11 @@
   }
 
   function newTerrain(pattern) {
-    applyStageAppearance(THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)], null);
     parallaxSeed = Math.random() * 10000;
     const r = generateTerrain(pattern);
+    applyStageAppearance(r.themeKey || THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)], null);
+    currentTerrainMaterial = r.terrainMaterial || 'terrain';
+    currentTerrainMaterialSegments = r.terrainMaterialSegments || [];
     currentPattern = r.pattern;
     rebuildArenaObstacles();
     currentSegments = r.segments;
@@ -2968,7 +3015,7 @@
 
   // 中断データからの地形復元:未破壊の地形を作り直し、記録しておいたクレーターを同じ順で開け直す
   function loadTerrainFromSave(segments, craters, pattern, wasStartOnIsland, themeKey, savedParallaxSeed, savedBridge, appearance) {
-    applyStageAppearance(themeKey, pattern === 'custom' ? appearance : null);
+    applyStageAppearance(themeKey, appearance || null);
     parallaxSeed = savedParallaxSeed || 0;
     currentPattern = pattern;
     rebuildArenaObstacles();
@@ -5395,7 +5442,15 @@
     { key: 'valley', name: '中央谷', sub: '中央へ落ち込む谷間' },
     { key: 'rolling', name: '丘陵', sub: '起伏が続く基本地形' },
     { key: 'bridge', name: '大橋', sub: '中央の細い橋が勝負所' },
-    { key: 'tieredBasin', name: '闘技場マップ', sub: '黒鉄の三段落下デスマッチ' }
+    { key: 'tieredBasin', name: '闘技場マップ', sub: '黒鉄の三段落下デスマッチ' },
+    { key: 'grassSteelPartial', name: '草原・鋼鉄帯', sub: '一部鋼鉄・草原背景' },
+    { key: 'grassSteelWhole', name: '草原・鋼鉄原', sub: '全面鋼鉄・草原背景' },
+    { key: 'desertSteelPartial', name: '砂漠・鋼鉄谷', sub: '一部鋼鉄・砂漠背景' },
+    { key: 'desertSteelWhole', name: '砂漠・鋼鉄台地', sub: '全面鋼鉄・砂漠背景' },
+    { key: 'snowSteelPartial', name: '雪原・鋼鉄足場', sub: '一部鋼鉄・雪原背景' },
+    { key: 'snowSteelWhole', name: '雪原・鋼鉄峰', sub: '全面鋼鉄・雪原背景' },
+    { key: 'volcanicSteelPartial', name: '火山・鋼鉄火口', sub: '一部鋼鉄・火山背景' },
+    { key: 'volcanicSteelWhole', name: '火山・鋼鉄地殻', sub: '全面鋼鉄・火山背景' }
   ];
   const WIND_OPTIONS = [
     { key: 'random', name: 'ランダム', sub: '4ターンごとに変化', dir: 1, strength: 0 },
@@ -6312,6 +6367,12 @@
       snapshot.bridge = currentBridge;
       snapshot.themeKey = currentThemeKey;
       snapshot.parallaxSeed = parallaxSeed;
+      // カスタムステージは customStage.appearance が正本。公式ステージだけ、
+      // 公式パターンと一緒に素材メタデータを送ってオンライン復元する。
+      if (currentPattern !== 'custom') {
+        snapshot.terrainMaterial = currentTerrainMaterial;
+        snapshot.terrainMaterialSegments = currentTerrainMaterialSegments;
+      }
     }
     return snapshot;
   }
@@ -6526,6 +6587,8 @@
         bridge: localTerrain.bridge,
         themeKey: localTerrain.themeKey,
         parallaxSeed: localTerrain.parallaxSeed,
+        terrainMaterial: localTerrain.terrainMaterial,
+        terrainMaterialSegments: localTerrain.terrainMaterialSegments,
         customStage: localTerrain.customStage,
         customStageIdentity: localTerrain.customStageIdentity
       };
@@ -6577,7 +6640,10 @@
       selectedCustomAdapter ? selectedCustomAdapter.themeKey : data.themeKey,
       selectedCustomAdapter ? selectedCustomAdapter.parallaxSeed : data.parallaxSeed,
       selectedCustomAdapter ? null : data.bridge,
-      selectedCustomAdapter?.appearance
+      selectedCustomAdapter?.appearance || {
+        terrainMaterial: data.terrainMaterial,
+        terrainMaterialSegments: Array.isArray(data.terrainMaterialSegments) ? data.terrainMaterialSegments : []
+      }
     );
     // 途中まで溜まった物理の刻みは持ち越さない。ターン境界の状態から始め直す(Issue #9)。
     resetPhysicsClock();
@@ -7041,7 +7107,7 @@
   const NET_CONTROL_TYPES = new Set(['join', 'hello', 'ready', 'bye', 'commit', 'reveal', 'ping', 'move']);
   const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'move', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
   function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
-  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'custom']);
+  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', ...Object.keys(OFFICIAL_STEEL_STAGE_DEFS), 'custom']);
   // スナップショットに入るユニットの並び。setMatchFormat が units を作る順と必ず同じにする。
   // 2vs2は味方と敵が交互(p1→e1→p2→e2)で、この並びがそのまま手番の順になる。
   const SNAPSHOT_UNIT_IDS_1V1 = ['p1', 'e1'];
@@ -7061,6 +7127,16 @@
     return Array.isArray(segments) && segments.length === terrainColumns && segments.every(column =>
       Array.isArray(column) && column.length <= 8 && column.every(segment =>
         Array.isArray(segment) && segment.length === 2
+        && isFiniteIn(segment[0], 0, terrainBottom) && isFiniteIn(segment[1], 0, terrainBottom) && segment[1] > segment[0]
+      )
+    );
+  }
+  function hasSafeTerrainMaterialSegments(segments, limits = null) {
+    const terrainColumns = limits?.terrainColumns || TERRAIN_COLS;
+    const terrainBottom = limits?.terrainBottom || DEAD_LINE_Y;
+    return Array.isArray(segments) && segments.length === terrainColumns && segments.every(column =>
+      Array.isArray(column) && column.length <= 8 && column.every(segment =>
+        Array.isArray(segment) && segment.length === 3 && segment[2] === 'steel'
         && isFiniteIn(segment[0], 0, terrainBottom) && isFiniteIn(segment[1], 0, terrainBottom) && segment[1] > segment[0]
       )
     );
@@ -7115,6 +7191,8 @@
     if (snap.battleMode !== 'normal') return 'snap.battleMode';
     const limits = snapshotLimits(snap);
     if (includeTerrain && !hasSafeTerrainSegments(snap.segments, limits)) return 'snap.segments';
+    if (includeTerrain && snap.terrainMaterial != null && !['terrain', 'steel'].includes(snap.terrainMaterial)) return 'snap.terrainMaterial';
+    if (includeTerrain && snap.terrainMaterialSegments != null && !hasSafeTerrainMaterialSegments(snap.terrainMaterialSegments, limits)) return 'snap.terrainMaterialSegments';
     // 着弾中心は弾の当たり判定で画面端を少し越えうる。最大クレーター半径のぶんだけ
     // 余白を許可しつつ、極端な座標は従来どおり通信境界で弾く。
     if (!Array.isArray(snap.craters) || snap.craters.length > 400 || !snap.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr) && isFiniteIn(cr.x, -600, limits.stageWidth + 600) && isFiniteIn(cr.y, -600, limits.stageHeight + 600) && isFiniteIn(cr.r, 1, 600))) return 'snap.craters';
@@ -7123,7 +7201,7 @@
       const customStageReason = customStageSnapshotValidationReason(snap);
       if (customStageReason) return customStageReason;
       if (!isFiniteIn(snap.parallaxSeed, 0, 10000) || !hasSafeBridge(snap.bridge, limits)) return 'snap.world';
-    } else if (['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'customStage', 'customStageIdentity'].some(key => Object.prototype.hasOwnProperty.call(snap, key))) {
+    } else if (['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'terrainMaterial', 'terrainMaterialSegments', 'customStage', 'customStageIdentity'].some(key => Object.prototype.hasOwnProperty.call(snap, key))) {
       return 'snap.terrainDelta';
     }
     if (!isFiniteIn(snap.simTimeMs, 0, 24 * 60 * 60 * 1000)) return 'snap.world';
@@ -7175,6 +7253,14 @@
         const segments = normalizeRtdbDenseArray(column);
         if (!segments) return column;
         return segments.map(segment => normalizeRtdbDenseArray(segment) || segment);
+      });
+    }
+    const materialColumns = normalizeRtdbDenseArray(normalized.terrainMaterialSegments);
+    if (materialColumns) {
+      normalized.terrainMaterialSegments = materialColumns.map(column => {
+        if (column === null) return [];
+        const materials = normalizeRtdbDenseArray(column);
+        return materials ? materials.map(segment => normalizeRtdbDenseArray(segment) || segment) : column;
       });
     }
     if (normalized.customStage && typeof normalized.customStage === 'object' && !Array.isArray(normalized.customStage)) {
@@ -7601,6 +7687,9 @@
     if (Object.prototype.hasOwnProperty.call(snap, 'pattern') && snap.pattern !== baseline.pattern) return 'pattern';
     if (Object.prototype.hasOwnProperty.call(snap, 'themeKey') && snap.themeKey !== baseline.themeKey) return 'themeKey';
     if (Object.prototype.hasOwnProperty.call(snap, 'parallaxSeed') && snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
+    if (Object.prototype.hasOwnProperty.call(snap, 'terrainMaterial') && snap.terrainMaterial !== baseline.terrainMaterial) return 'terrainMaterial';
+    if (Object.prototype.hasOwnProperty.call(snap, 'terrainMaterialSegments')
+        && stableFirebaseJson(snap.terrainMaterialSegments) !== stableFirebaseJson(baseline.terrainMaterialSegments)) return 'terrainMaterialSegments';
     // 現在の風は前のターンから全員に予告済みなので一致を要求できる。
     // 新しい次の風は行動側がこのターン境界で抽選するため、ここでは比較せず受け入れて同期する。
     if (!snap.wind || !baseline.wind || snap.wind.dir !== baseline.wind.dir
