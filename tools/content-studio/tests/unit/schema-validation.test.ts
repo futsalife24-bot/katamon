@@ -37,6 +37,18 @@ describe('characterFormSchema', () => {
       'slug.canonical_case_collision',
     ]));
   });
+
+  it('accepts a streak, login and achievement unlock contract while rejecting invalid targets', () => {
+    expect(characterFormSchema.safeParse(sampleCharacter({
+      unlock: { enabled: true, type: 'streak', target: 30, achievementId: '', description: '連戦30勝で解放' },
+    })).success).toBe(true);
+    expect(characterFormSchema.safeParse(sampleCharacter({
+      unlock: { enabled: true, type: 'achievement', target: 1, achievementId: 'steel-stage-clear', description: '鋼鉄ステージを突破' },
+    })).success).toBe(true);
+    expect(characterFormSchema.safeParse(sampleCharacter({
+      unlock: { enabled: true, type: 'wins', target: 0, achievementId: '', description: '' },
+    })).success).toBe(false);
+  });
 });
 
 describe('security boundaries', () => {

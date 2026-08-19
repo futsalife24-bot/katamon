@@ -670,10 +670,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.80-cool-kai-special-voice';
+  const BUILD_ID = 'v2.0.81-character-unlocks';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.81', date: '2026/08/19', summary: 'Studio管理のキャラ解放条件と進捗判定を追加' },
     { version: 'v2.0.80', date: '2026/08/19', summary: 'クール=カイの必殺技に握り飯ボイスを追加' },
     { version: 'v2.0.79', date: '2026/08/19', summary: '最新版の有無を表示し、最新版ならリロードせず通知' },
     { version: 'v2.0.78', date: '2026/08/19', summary: 'ステージの一部へ鋼鉄素材を配置し、爆風は通して地形掘削を制御' },
@@ -3247,6 +3248,19 @@
   const GENERATED_CHARACTERS = loadGeneratedCharacters(globalThis.__CONTENT_STUDIO_CATALOG__);
   const CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
 
+  function normalizeCharacterUnlock(value) {
+    if (!value || typeof value !== 'object') return { enabled: false, type: 'always', target: 0, achievementId: '', description: '' };
+    const type = ['always', 'wins', 'streak', 'login-days', 'achievement'].includes(value.type) ? value.type : 'always';
+    return {
+      enabled: value.enabled === true,
+      type,
+      target: Number.isSafeInteger(value.target) && value.target > 0 ? Math.min(value.target, 999999) : 0,
+      achievementId: typeof value.achievementId === 'string' ? value.achievementId.slice(0, 64) : '',
+      description: typeof value.description === 'string' ? value.description.slice(0, 120) : ''
+    };
+  }
+  function characterUnlock(def) { return normalizeCharacterUnlock(def?.unlock); }
+
   // 必殺カットインの顔アップ用。元画像に対する [中心X, 中心Y, 切り出し幅] の比率。
   const CHARACTER_FACES = {
     kyoryu: [0.64, 0.20, 0.36], medama: [0.58, 0.36, 0.38], iwa: [0.68, 0.40, 0.40],
@@ -5759,6 +5773,10 @@
   // 出撃の入口。中断データがある間は必ずここで一度止める。
   // 戻り値は「そのまま試合を始めたか」。呼び出し側の分岐を減らすために返している。
   function requestNewMatch(key) {
+    if (!isCharacterUnlocked(key)) {
+      showTitleNotice(`未解放です: ${unlockConditionLabel(characterUnlock(CHARACTERS[key]))}`);
+      return false;
+    }
     if (hasSuspendedSave) { pendingNewMatchKey = key; return false; }
     selectCharacterAndStart(key);
     return true;
@@ -5794,6 +5812,7 @@
   }
 
   function selectCharacterAndStart(key) {
+    if (!isCharacterUnlocked(key)) return false;
     pendingNewMatchKey = null;
     clearSuspendedMatch();
     hasSuspendedSave = false;
@@ -5806,6 +5825,7 @@
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
+    return true;
   }
 
   // CPU BATTLEの連戦用。直前と同じ顔ぶれ・地形種別を続けず、毎試合の新鮮さを保つ。
@@ -5986,7 +6006,13 @@
     battleMode = 'free';
     const format = (FORMAT_OPTIONS[freeModeConfig.formatIndex] || FORMAT_OPTIONS[0]).key;
     setMatchFormat(format);
-    player.character = CHARACTER_LIST[freeModeConfig.playerIndex];
+    const selectedPlayerKey = CHARACTER_LIST[freeModeConfig.playerIndex];
+    if (!isCharacterUnlocked(selectedPlayerKey)) {
+      showTitleNotice(`未解放です: ${unlockConditionLabel(characterUnlock(CHARACTERS[selectedPlayerKey]))}`);
+      battleMode = 'title';
+      return false;
+    }
+    player.character = selectedPlayerKey;
     cpu.character = CHARACTER_LIST[freeModeConfig.cpuIndex];
     if (is2v2()) {
       ally2.character = CHARACTER_LIST[freeModeConfig.allyIndex];
@@ -5997,6 +6023,7 @@
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
+    return true;
   }
 
 
@@ -8583,12 +8610,85 @@
   const BATTLE_RECORD_MAX_PROCESSED = 500;
   const BATTLE_RECORD_MAX_RIVALS = 100;
   const RIVAL_ID_PURPOSE = 'katamon-rival-v1:';
+  const CHARACTER_UNLOCK_KEY = 'katamon_character_unlock_v1';
+  const CHARACTER_UNLOCK_VERSION = 1;
 
   function emptyBattleCounts() { return { wins: 0, losses: 0, draws: 0 }; }
   function emptyBattleRecord() {
     return { version: BATTLE_RECORD_VERSION, total: emptyBattleCounts(), characters: {}, rivals: {}, recent: [], processedRoundIds: [] };
   }
   let battleRecord = emptyBattleRecord();
+  let characterUnlockProgress = { version: CHARACTER_UNLOCK_VERSION, totalWins: 0, loginDates: [], bestStreak: 0, achievements: {}, unlocked: {} };
+
+  function normalizeUnlockProgress(value) {
+    const clean = { version: CHARACTER_UNLOCK_VERSION, totalWins: 0, loginDates: [], bestStreak: 0, achievements: {}, unlocked: {} };
+    if (!value || typeof value !== 'object') return clean;
+    if (Number.isSafeInteger(value.totalWins) && value.totalWins >= 0) clean.totalWins = Math.min(value.totalWins, 999999);
+    if (Array.isArray(value.loginDates)) clean.loginDates = [...new Set(value.loginDates.filter(date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(date)))].slice(-366);
+    if (Number.isSafeInteger(value.bestStreak) && value.bestStreak >= 0) clean.bestStreak = Math.min(value.bestStreak, 999999);
+    if (value.achievements && typeof value.achievements === 'object') {
+      for (const [id, count] of Object.entries(value.achievements)) {
+        if (/^[a-z0-9._-]{1,64}$/iu.test(id) && Number.isSafeInteger(count) && count > 0) clean.achievements[id] = Math.min(count, 999999);
+      }
+    }
+    if (value.unlocked && typeof value.unlocked === 'object') {
+      for (const [id, unlocked] of Object.entries(value.unlocked)) {
+        if (/^[a-z][a-z0-9-]{0,23}$/u.test(id) && unlocked === true) clean.unlocked[id] = true;
+      }
+    }
+    return clean;
+  }
+  function saveCharacterUnlockProgress() {
+    try { localStorage.setItem(CHARACTER_UNLOCK_KEY, JSON.stringify(characterUnlockProgress)); } catch (_) { /* 保存不可でも対戦は止めない */ }
+  }
+  function loadCharacterUnlockProgress() {
+    try {
+      const raw = localStorage.getItem(CHARACTER_UNLOCK_KEY);
+      characterUnlockProgress = normalizeUnlockProgress(raw ? JSON.parse(raw) : null);
+    } catch (_) { characterUnlockProgress = normalizeUnlockProgress(null); }
+    return characterUnlockProgress;
+  }
+  function grantUnlockAchievement(id, amount = 1) {
+    if (!/^[a-z0-9._-]{1,64}$/iu.test(id)) return;
+    const current = Number.isSafeInteger(characterUnlockProgress.achievements[id]) ? characterUnlockProgress.achievements[id] : 0;
+    characterUnlockProgress.achievements[id] = Math.min(999999, current + Math.max(1, Math.floor(amount)));
+    saveCharacterUnlockProgress();
+  }
+  function unlockConditionLabel(unlock) {
+    if (!unlock.enabled || unlock.type === 'always') return 'いつでも使用可能';
+    if (unlock.description) return unlock.description;
+    if (unlock.type === 'wins') return `累計${unlock.target}勝で解放`;
+    if (unlock.type === 'streak') return `連勝${unlock.target}回で解放`;
+    if (unlock.type === 'login-days') return `${unlock.target}日ログインで解放`;
+    return `実績「${unlock.achievementId}」で解放`;
+  }
+  function isCharacterUnlocked(key) {
+    const def = CHARACTERS[key];
+    const unlock = characterUnlock(def);
+    if (!unlock.enabled || unlock.type === 'always') return true;
+    if (characterUnlockProgress.unlocked[key] === true) return true;
+    const met = unlock.type === 'wins'
+      ? characterUnlockProgress.totalWins >= unlock.target
+      : unlock.type === 'streak'
+        ? characterUnlockProgress.bestStreak >= unlock.target
+        : unlock.type === 'login-days'
+          ? characterUnlockProgress.loginDates.length >= unlock.target
+          : Number(characterUnlockProgress.achievements[unlock.achievementId] || 0) >= Math.max(1, unlock.target);
+    if (met) {
+      characterUnlockProgress.unlocked[key] = true;
+      saveCharacterUnlockProgress();
+    }
+    return met;
+  }
+  function recordUnlockLogin() {
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (!characterUnlockProgress.loginDates.includes(date)) {
+      characterUnlockProgress.loginDates.push(date);
+      characterUnlockProgress.loginDates = characterUnlockProgress.loginDates.slice(-366);
+      saveCharacterUnlockProgress();
+    }
+  }
 
   function safeBattleCount(value) {
     return Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 999999) : 0;
@@ -11680,6 +11780,21 @@
       ctx.fillText(def.selectFlavor, textX + contentW / 2, top + 164);
     }
 
+    if (!isCharacterUnlocked(card.key)) {
+      ctx.fillStyle = 'rgba(5,8,12,0.78)';
+      ctx.fillRect(left + 5, top + 5, main.w - 10, main.h - 10);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffe2a1';
+      ctx.font = `900 26px ${UI_FONT_HEAVY}`;
+      ctx.fillText('🔒', left + 56, top + 88);
+      ctx.font = `900 12px ${UI_FONT_HEAVY}`;
+      ctx.fillText('未解放', left + 56, top + 112);
+      ctx.fillStyle = '#fff1cf';
+      ctx.font = `900 10px ${UI_FONT}`;
+      const condition = characterUnlock(def).description || unlockConditionLabel(characterUnlock(def));
+      ctx.fillText(condition.slice(0, 18), left + main.w / 2 + 26, top + 158);
+    }
+
     ctx.restore();
   }
 
@@ -12206,6 +12321,11 @@
     if (isDraw()) return;
     if (winner === 'player') {
       winStreak++;
+      characterUnlockProgress.totalWins = Math.min(999999, characterUnlockProgress.totalWins + 1);
+      characterUnlockProgress.bestStreak = Math.max(characterUnlockProgress.bestStreak, winStreak);
+      grantUnlockAchievement('first-win');
+      if (characterUnlockProgress.totalWins >= 10) grantUnlockAchievement('ten-wins');
+      saveCharacterUnlockProgress();
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
@@ -18550,6 +18670,8 @@
   newTerrain(); // 選択画面の背景として地形だけ先に用意
   loadRankingProfile();
   loadBattleRecord();
+  loadCharacterUnlockProgress();
+  recordUnlockLogin();
   // 部屋へ入る前に匿名IDを作り始める。送信時にも待ち直すので、未完了でも生IDへ戻すことはない。
   localRivalId().catch(() => '');
   // 前回オフラインで送れなかった記録があれば、起動時に送り直す

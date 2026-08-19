@@ -614,6 +614,23 @@ function DetailsStep({ studio }: { studio: StudioController }) {
       </div>
       <Field label="説明"><textarea rows={4} maxLength={500} value={character.description} onChange={(event) => set('description', event.target.value)} /></Field>
       <Field label="タグ" hint="カンマ区切り、最大20個"><input value={character.tags.join(', ')} onChange={(event) => set('tags', event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 20))} /></Field>
+      <details className="controls-card" open>
+        <summary>解放条件</summary>
+        <p className="field-help">現在は全キャラを開放したまま運用し、条件を有効にしたキャラだけゲーム内でロックします。</p>
+        <Toggle label="このキャラを条件付きで解放する" checked={character.unlock.enabled} onChange={(enabled) => set('unlock', { ...character.unlock, enabled })} />
+        <div className="two-columns">
+          <Field label="条件の種類"><select value={character.unlock.type} disabled={!character.unlock.enabled} onChange={(event) => set('unlock', { ...character.unlock, type: event.target.value as CharacterForm['unlock']['type'] })}>
+            <option value="always">常時解放</option>
+            <option value="wins">累計勝利数</option>
+            <option value="streak">連勝突破数</option>
+            <option value="login-days">ログイン日数</option>
+            <option value="achievement">実績達成</option>
+          </select></Field>
+          <Field label="目標値" hint="勝利数・連勝数・ログイン日数"><input type="number" inputMode="numeric" min="0" max="999999" disabled={!character.unlock.enabled || character.unlock.type === 'always' || character.unlock.type === 'achievement'} value={character.unlock.target} onChange={(event) => set('unlock', { ...character.unlock, target: Number(event.target.value) })} /></Field>
+        </div>
+        <Field label="実績ID" hint="実績条件の時だけ使用。例: steel-stage-clear"><input autoCapitalize="none" disabled={!character.unlock.enabled || character.unlock.type !== 'achievement'} maxLength={64} value={character.unlock.achievementId} onChange={(event) => set('unlock', { ...character.unlock, achievementId: event.target.value })} /></Field>
+        <Field label="解放条件の説明" hint="キャラ選択画面に表示する短い説明"><input maxLength={120} disabled={!character.unlock.enabled} value={character.unlock.description} onChange={(event) => set('unlock', { ...character.unlock, description: event.target.value })} placeholder="連戦を30勝突破で解放" /></Field>
+      </details>
       <Field label="HP"><input type="number" inputMode="numeric" min="1" max="999" value={character.maxHp} onChange={(event) => set('maxHp', Number(event.target.value))} /></Field>
       <div className="four-columns">{stat('attack', '攻撃')}{stat('defense', '防御')}{stat('speed', '速度')}{stat('weight', '重量')}</div>
       <div className="two-columns">

@@ -47,6 +47,21 @@ export const assetReferenceSchema = z
   .regex(/^[a-z][a-z0-9-]*$/u, '許可された参照名を指定してください')
   .refine((value) => getUnsafePathReason(value) === null, '安全な参照名を指定してください');
 
+export const characterUnlockSchema = z.object({
+  enabled: z.boolean(),
+  type: z.enum(['always', 'wins', 'streak', 'login-days', 'achievement']),
+  target: z.number().int().min(0).max(999999),
+  achievementId: z.string().trim().max(64).regex(/^$|^[a-z0-9][a-z0-9._-]*$/iu, '実績IDは英数字・ドット・ハイフン・アンダースコアで指定してください'),
+  description: optionalPlainText(120),
+}).superRefine((unlock, context) => {
+  if (unlock.enabled && unlock.type !== 'always' && unlock.target < 1) {
+    context.addIssue({ code: 'custom', path: ['target'], message: '解放条件の目標値は1以上にしてください' });
+  }
+  if (unlock.enabled && unlock.type === 'achievement' && unlock.achievementId.length === 0) {
+    context.addIssue({ code: 'custom', path: ['achievementId'], message: '実績IDが必要です' });
+  }
+});
+
 const cropPointSchema = z.object({
   x: z.number().finite().min(0).max(1),
   y: z.number().finite().min(0).max(1),
@@ -138,6 +153,7 @@ export const characterFormSchema = z
       .max(32)
       .regex(/^[a-z0-9][a-z0-9._-]*$/iu, '安全なバージョンを指定してください')
       .refine((value) => !value.includes('..'), '連続するピリオドは使用できません'),
+    unlock: characterUnlockSchema,
   })
   .strict()
   .superRefine((character, context) => {

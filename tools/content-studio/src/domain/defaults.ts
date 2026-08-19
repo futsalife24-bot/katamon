@@ -72,6 +72,13 @@ export const DEFAULT_CHARACTER: CharacterForm = {
   },
   customImplementationNote: '',
   implementationVersion: '1',
+  unlock: {
+    enabled: false,
+    type: 'always',
+    target: 0,
+    achievementId: '',
+    description: '',
+  },
 };
 
 export function createDraft(id: string = crypto.randomUUID()): DraftRecord {
