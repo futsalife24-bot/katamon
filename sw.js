@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.80-cool-kai-special-voice';
+const CACHE_VERSION = 'katamon-pwa-v2.0.81-character-unlocks';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

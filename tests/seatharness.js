@@ -736,6 +736,15 @@ const HOOK = `
     coolKaiSpecialVoiceAsset: () => (typeof COOL_KAI_SPECIAL_VOICE_URL === 'string'
       ? { url: COOL_KAI_SPECIAL_VOICE_URL, gain: COOL_KAI_SPECIAL_VOICE_GAIN }
       : null),
+    characterUnlockForTest: key => ({
+      unlocked: typeof isCharacterUnlocked === 'function' ? isCharacterUnlocked(key) : null,
+      condition: typeof unlockConditionLabel === 'function' ? unlockConditionLabel(characterUnlock(CHARACTERS[key])) : null,
+      progress: typeof characterUnlockProgress === 'object' ? structuredClone(characterUnlockProgress) : null
+    }),
+    setCharacterUnlockProgressForTest: value => {
+      characterUnlockProgress = normalizeUnlockProgress(value);
+      saveCharacterUnlockProgress();
+    },
     proto: () => PROTO_VERSION,
     stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, snapshotValidationReason, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, stateSnapshotMismatchReason, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, advanceFirebaseLobbyLiveness, firebaseSeatStale, onlineErrorTitle, canLeaveFirebaseLobby, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken,
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,

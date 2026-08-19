@@ -5,6 +5,12 @@ on:
     branches: [master]
     paths:
       - 'tools/content-studio/**'
+      - 'index.html'
+      - 'sw.js'
+      - 'generated/**'
+      - 'assets/**'
+      - 'game-custom-stages.css'
+      - 'manifest.webmanifest'
       - '.github/workflows/content-studio-pages.yml'
   workflow_dispatch:
 

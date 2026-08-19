@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { characterFormSchema, spriteMetadataSchema } from '../domain/schemas.js';
 import { getLegacyRepositoryIdentity, type LegacyCharacterId } from '../domain/legacy-characters.js';
 import { convertSkillTemplate, NORMAL_SKILL_DEFINITION, type DeclarativeSkillDefinition } from '../domain/skills.js';
-import { GENERATOR_VERSION, type CharacterForm, type MotionClipId, type SpriteMetadata } from '../domain/types.js';
+import { GENERATOR_VERSION, type CharacterForm, type CharacterUnlock, type MotionClipId, type SpriteMetadata } from '../domain/types.js';
 import { isAllowedGeneratedPath } from '../domain/validation.js';
 import type { GeneratedAssetPaths } from './paths.js';
 import { stableJsonFile, stableStringify } from './stable.js';
@@ -161,6 +161,7 @@ export interface CompatibilityCharacter {
   normalSkill: typeof NORMAL_SKILL_DEFINITION;
   specialSkill: DeclarativeSkillDefinition | null;
   implementationVersion: string;
+  unlock: CharacterUnlock;
   legacyTargetId?: string;
 }
 
@@ -210,6 +211,7 @@ export function createCompatibilityCharacter(record: CanonicalCharacterRecord): 
     normalSkill: NORMAL_SKILL_DEFINITION,
     specialSkill: character.specialEnabled ? skill.definition : null,
     implementationVersion: character.implementationVersion,
+    unlock: character.unlock,
     ...(record.legacyTargetId ? { legacyTargetId: record.legacyTargetId } : {}),
   };
 }

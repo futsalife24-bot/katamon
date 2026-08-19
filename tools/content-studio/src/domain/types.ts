@@ -127,6 +127,16 @@ export type SpecialTemplate =
   | 'emp'
   | 'custom-required';
 
+export type CharacterUnlockType = 'always' | 'wins' | 'streak' | 'login-days' | 'achievement';
+
+export interface CharacterUnlock {
+  enabled: boolean;
+  type: CharacterUnlockType;
+  target: number;
+  achievementId: string;
+  description: string;
+}
+
 export interface SkillParameters {
   power: number;
   projectileCount: number;
@@ -182,6 +192,7 @@ export interface CharacterForm {
   specialParameters: SkillParameters;
   customImplementationNote: string;
   implementationVersion: string;
+  unlock: CharacterUnlock;
 }
 
 export interface ImageInfo {

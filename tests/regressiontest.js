@@ -34,6 +34,21 @@ const selectWheelCards = kt.selectWheelCards();
 check('キャラ選択は手前の最大7枚だけを描画する',
   selectWheelCards.rendered === Math.min(7, selectWheelCards.total) && selectWheelCards.focused,
   JSON.stringify(selectWheelCards));
+const unlockState = typeof kt.characterUnlockForTest === 'function' ? kt.characterUnlockForTest('coolKai') : null;
+check('キャラ解放の進捗を端末内へ保存し、既存キャラは移行直後も全開放する',
+  !!unlockState
+    && unlockState.unlocked === true
+    && unlockState.progress
+    && typeof unlockState.progress.totalWins === 'number'
+    && indexHtml.includes("const CHARACTER_UNLOCK_KEY = 'katamon_character_unlock_v1'")
+    && indexHtml.includes('recordUnlockLogin()'),
+  JSON.stringify(unlockState));
+check('Studioの解放条件をゲームカタログへ受け渡し、選択画面で未解放表示する',
+  indexHtml.includes('function normalizeCharacterUnlock(value)')
+    && indexHtml.includes('function isCharacterUnlocked(key)')
+    && indexHtml.includes("if (!isCharacterUnlocked(card.key))")
+    && indexHtml.includes('未解放'),
+  'character unlock bridge missing');
 check('ロード中の石壁に更新時の読み込み案内を表示する',
   indexHtml.includes('更新時は読み込みに時間がかかる場合があります')
     && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")

@@ -52,7 +52,7 @@ jobs:
         run: npm run build
 
       - name: Check committed Pages bundle is current
-        run: test -z "$(git status --porcelain -- tools/content-studio/dist)"
+        run: git diff --ignore-all-space --exit-code -- tools/content-studio/dist
 
       - name: Build same-origin GitHub backend
         working-directory: tools/content-studio
