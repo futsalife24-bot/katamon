@@ -198,6 +198,38 @@ test('custom steel stage keeps real game collision after an explosion', async ()
   assert.equal(kt.isSolidAt(sampleX, 212), true, 'a real battle explosion cannot remove steel collision');
 });
 
+test('partial steel stage lets Yomigama carve normal ground but stops at steel', async () => {
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+  const sampleColumn = Math.floor(stage.spawnPoints[0].x / Core.LIMITS.columnWidth);
+  stage.materials = [
+    { id: 'terrain', type: 'destructible', destructible: true, color: '#8A5C32' },
+    { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }
+  ];
+  stage.terrain.materialSegments = Array.from({ length: stage.terrain.columns.length }, (_, column) => (
+    column >= sampleColumn - 4 && column <= sampleColumn + 4 ? [[550, 580, 'steel']] : []
+  ));
+  const finalized = await Core.finalizeStage(stage, { touchUpdatedAt: false });
+  const adapter = await bridge.selectStage(finalized);
+  assert.ok(adapter.appearance.terrainMaterialSegments, 'partial material segments reach the game adapter');
+  assert.equal(adapter.appearance.terrainMaterialSegments[sampleColumn][0][2], 'steel');
+  await bridge.startSelectedStage(finalized);
+  for (let i = 0; i < 50; i++) kt.step(0.1);
+
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 520), true, 'the lower normal platform is initially solid');
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 565), true, 'the steel section is initially solid');
+  kt.spawnDeathGateForTest('p1', finalized.spawnPoints[0].x, 600);
+  assert.ok(kt.projectileProfilesForTest().some((projectile) => projectile.deathGateScythe), 'Yomigama creates the vertical scythe');
+  for (let i = 0; i < 20; i++) kt.step(0.1);
+
+  const carvedNormal = [584, 590, 596, 602, 608, 614, 620, 626].some((y) => !kt.isSolidAt(finalized.spawnPoints[0].x, y));
+  assert.equal(carvedNormal, true, 'Yomigama carves the normal ground below steel');
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 565), true, 'Yomigama stops before carving the steel section');
+});
+
 test('custom battle keeps the official suspended save in an isolated slot', async () => {
   const harness = require('./seatharness.js');
   const kt = harness.kt();
