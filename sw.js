@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.84-resume-pointer-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.85-exit-confirm-redesign';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
@@ -42,7 +42,8 @@ const APP_SHELL = [
   './assets/normal-impact-explosion.mp3',
   './assets/special-cutin-edm-zap.mp3',
   './assets/cool-kai-special-voice.mp3',
-  './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
+  './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
+  './assets/device-exit-seal.png'
 ];
 
 self.addEventListener('install', event => {
