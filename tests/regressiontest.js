@@ -2956,6 +2956,32 @@ check('中断再開・観戦用の状態復元でも次の風が一致する',
   JSON.stringify(kt.windForecast()) === JSON.stringify(forecastBeforeSave),
   `${JSON.stringify(forecastBeforeSave)}→${JSON.stringify(kt.windForecast())}`);
 
+const steelStagePatterns = [
+  ['grassSteelPartial', 'grass'], ['grassSteelWhole', 'grass'],
+  ['desertSteelPartial', 'desert'], ['desertSteelWhole', 'desert'],
+  ['snowSteelPartial', 'snow'], ['snowSteelWhole', 'snow'],
+  ['volcanicSteelPartial', 'volcanic'], ['volcanicSteelWhole', 'volcanic']
+];
+const steelStageChecks = steelStagePatterns.map(([pattern, theme]) => {
+  const result = kt.newTerrainForTest(pattern);
+  const partial = pattern.endsWith('Partial');
+  return result.pattern === pattern && result.themeKey === theme
+    && (partial
+      ? result.material === 'terrain' && result.materialSegments.some(column => column.length > 0)
+      : result.material === 'steel' && result.materialSegments.every(column => column.length === 0));
+});
+check('各背景に一部鋼鉄・全面鋼鉄の公式ステージが追加されている',
+  steelStageChecks.every(Boolean), JSON.stringify(steelStageChecks));
+
+kt.newTerrainForTest('grassSteelPartial');
+const steelStageSnapshot = kt.buildSnapshotForTest();
+check('鋼鉄ステージの素材情報が開始スナップショットへ保存される',
+  steelStageSnapshot.pattern === 'grassSteelPartial'
+    && steelStageSnapshot.terrainMaterial === 'terrain'
+    && Array.isArray(steelStageSnapshot.terrainMaterialSegments)
+    && steelStageSnapshot.terrainMaterialSegments.some(column => column.length > 0),
+  JSON.stringify({ pattern: steelStageSnapshot.pattern, material: steelStageSnapshot.terrainMaterial }));
+
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
 console.log(`\n${pass} passed, ${fail} failed`);

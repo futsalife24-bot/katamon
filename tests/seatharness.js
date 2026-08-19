@@ -143,6 +143,15 @@ const HOOK = `
     }),
     step: (dt) => update(dt),
     startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
+    newTerrainForTest: (pattern) => {
+      newTerrain(pattern);
+      return {
+        pattern: currentPattern,
+        themeKey: currentThemeKey,
+        material: currentTerrainMaterial,
+        materialSegments: currentTerrainMaterialSegments.map(column => column.map(segment => segment.slice()))
+      };
+    },
     // v209: CPU BATTLE の連戦で、相手とステージ種別を直前から必ず引き直す。
     // 乱数を0へ固定して、旧実装でも例外で止まらず「同じまま」を検出できるようにする。
     cpuBattleRematchForTest: () => {

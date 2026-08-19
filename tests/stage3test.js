@@ -165,7 +165,7 @@ function check(name, value) {
   const safeSnap = app.snapshot();
   function terrainDeltaFrom(snap) {
     const delta = JSON.parse(JSON.stringify(snap));
-    for (const key of ['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'customStage', 'customStageIdentity']) delete delta[key];
+    for (const key of ['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'terrainMaterial', 'terrainMaterialSegments', 'customStage', 'customStageIdentity']) delete delta[key];
     return delta;
   }
   const terrainDeltaState = terrainDeltaFrom(safeSnap);
