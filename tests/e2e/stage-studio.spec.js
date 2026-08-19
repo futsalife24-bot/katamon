@@ -452,7 +452,7 @@ test.describe('対象ゲームの端末戻る操作', () => {
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveCSS('font-family', /Reggae One/);
     await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
     await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One"'))).toBe(true);
-    await expect(page.locator('#deviceBackConfirmCrest')).toHaveCount(0);
+    await expect(page.locator('#deviceBackSeal')).toHaveCount(1);
     await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('カタモンを閉じる？');
     await expect(page.locator('#deviceBackConfirmNote')).toHaveText('終了すると、カタモンを閉じます。');
     await expect(page.locator('#deviceBackExit small')).toHaveText('カタモンを終了する');

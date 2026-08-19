@@ -438,55 +438,59 @@
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
     position: relative; isolation: isolate;
-    width: min(382px, 100%); box-sizing: border-box; padding: 48px 21px 22px;
-    text-align: center; border: 4px solid #6c4322; border-radius: 5px 5px 13px 13px;
+    width: min(398px, 100%); box-sizing: border-box; padding: 82px 24px 24px;
+    text-align: center; border: 3px solid #c78335; border-radius: 18px;
     background:
-      repeating-linear-gradient(176deg, rgba(255,204,123,.06) 0 2px, transparent 2px 26px),
-      linear-gradient(90deg, rgba(18,9,4,.46), transparent 14%, transparent 86%, rgba(18,9,4,.46)),
-      linear-gradient(180deg, #5d371c, #301a0d 55%, #1c0d06);
-    box-shadow: 0 0 0 2px #1b0c04, 0 19px 48px rgba(0,0,0,.78), inset 0 0 0 2px rgba(248,190,102,.14);
+      linear-gradient(90deg, rgba(0,0,0,.44), transparent 15%, transparent 85%, rgba(0,0,0,.44)),
+      repeating-linear-gradient(165deg, rgba(255,226,161,.035) 0 1px, transparent 1px 23px),
+      linear-gradient(180deg, #26353a, #101b20 48%, #080f13);
+    box-shadow: 0 0 0 2px #111a1e, 0 0 0 5px rgba(199,131,53,.22), 0 24px 58px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -18px 30px rgba(0,0,0,.3);
   }
   #deviceBackConfirmPanel::before,
   #deviceBackConfirmPanel::after {
-    content: ""; position: absolute; top: 16px; width: 10px; height: 10px; border-radius: 50%;
+    content: ""; position: absolute; top: 18px; width: 11px; height: 11px; border-radius: 50%;
     background: radial-gradient(circle at 34% 30%, #fff0a0, #a96b24 42%, #301805 76%);
     box-shadow: 0 1px 0 #000, 0 0 0 2px rgba(31,16,6,.75);
   }
-  #deviceBackConfirmPanel::before { left: 17px; }
-  #deviceBackConfirmPanel::after { right: 17px; }
+  #deviceBackConfirmPanel::before { left: 20px; }
+  #deviceBackConfirmPanel::after { right: 20px; }
+  #deviceBackConfirmPanel > #deviceBackSeal {
+    position: absolute; z-index: 3; top: -67px; left: 50%; width: 126px; height: 126px;
+    transform: translateX(-50%); object-fit: contain; filter: drop-shadow(0 8px 9px rgba(0,0,0,.8));
+    pointer-events: none;
+  }
   #deviceBackConfirmKicker {
-    position: absolute; top: -28px; left: 50%; transform: translateX(-50%); z-index: 2;
-    width: min(258px, 78vw); box-sizing: border-box; margin: 0; padding: 12px 14px 10px;
-    color: #ffe2a1; font: 400 16px/1 var(--katamon-font-display); letter-spacing: .06em;
-    background: linear-gradient(180deg, #714722, #3a1e0c 62%, #241006);
-    border: 3px solid #3a210f; border-radius: 4px;
-    box-shadow: inset 0 1px 0 rgba(255,220,152,.28), 0 4px 0 #170904, 0 7px 12px rgba(0,0,0,.55);
+    position: relative; z-index: 2; width: fit-content; max-width: 100%; box-sizing: border-box;
+    margin: 0 auto 10px; padding: 6px 18px 5px; color: #d39b4b;
+    font: 400 13px/1 var(--katamon-font-ui); letter-spacing: .18em;
+    background: rgba(8,15,19,.72); border: 1px solid rgba(199,131,53,.6); border-radius: 999px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 9px rgba(0,0,0,.35);
   }
   #deviceBackConfirmTitle {
-    margin: 0 0 8px; color: #fff0c9;
-    font: 400 22px/1.4 var(--katamon-font-display);
-    letter-spacing: .04em; text-shadow: 0 2px 0 #170904;
+    margin: 0 0 9px; color: #fff0c9;
+    font: 400 24px/1.35 var(--katamon-font-display);
+    letter-spacing: .08em; text-shadow: 0 2px 0 #070b0d, 0 0 14px rgba(255,210,74,.18);
   }
   #deviceBackConfirmNote {
-    margin: 0 0 17px; padding: 0 8px;
-    color: #e2c391; font: 400 12px/1.55 var(--katamon-font-ui);
-    text-shadow: 0 1px 0 #180a04;
+    margin: 0 0 21px; padding: 0 8px;
+    color: #b6c7c8; font: 400 12px/1.55 var(--katamon-font-ui);
+    text-shadow: 0 1px 0 #05090b;
   }
   #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 12px; }
   #deviceBackConfirmActions .deviceBackLever {
-    position: relative; min-height: 56px; padding: 9px 18px 9px 50px; overflow: hidden;
-    border: 3px solid #24130a; border-radius: 5px; color: #fff5dc;
+    position: relative; min-height: 60px; padding: 9px 18px 9px 58px; overflow: hidden;
+    border: 2px solid rgba(199,131,53,.78); border-radius: 10px; color: #fff5dc;
     font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 0 rgba(0,0,0,.28), 0 4px 0 #130804, 0 8px 12px rgba(0,0,0,.3);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 0 rgba(0,0,0,.28), 0 5px 0 #070d10, 0 8px 12px rgba(0,0,0,.3);
   }
   #deviceBackConfirmActions .deviceBackLever::before {
     content: ""; position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-    width: 22px; height: 22px; border-radius: 50%;
+    width: 26px; height: 26px; border-radius: 50%;
     background: radial-gradient(circle at 34% 29%, #ffe7a0, #bd7427 38%, #48230d 72%);
-    box-shadow: 0 0 0 3px rgba(24,12,6,.8), 0 1px 2px #000;
+    box-shadow: 0 0 0 3px rgba(5,12,15,.9), 0 1px 2px #000, 0 0 10px rgba(255,210,74,.18);
   }
   #deviceBackConfirmActions .deviceBackLever::after {
-    content: ""; position: absolute; left: 23px; top: 50%; width: 23px; height: 7px;
+    content: ""; position: absolute; left: 28px; top: 50%; width: 25px; height: 7px;
     transform: translateY(-50%); transform-origin: left center; border-radius: 7px;
     background: linear-gradient(180deg, #c0c6bc, #53605d 48%, #15201e 52%);
     box-shadow: 0 1px 1px rgba(0,0,0,.65);
@@ -604,6 +608,7 @@
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
+    <img id="deviceBackSeal" src="assets/device-exit-seal.png" alt="" aria-hidden="true" draggable="false">
     <p id="deviceBackConfirmKicker">カタモンを閉じる？</p>
     <h2 id="deviceBackConfirmTitle">今はここまでにする？</h2>
     <p id="deviceBackConfirmNote">終了すると、カタモンを閉じます。</p>
@@ -670,10 +675,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.84-resume-pointer-fix';
+  const BUILD_ID = 'v2.0.85-exit-confirm-redesign';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
     { version: 'v2.0.80', date: '2026/08/19', summary: 'クール=カイの必殺技に握り飯ボイスを追加' },
