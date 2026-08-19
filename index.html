@@ -437,27 +437,11 @@
   }
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
-    position: relative; isolation: isolate;
-    width: min(398px, 100%); box-sizing: border-box; padding: 82px 24px 24px;
-    text-align: center; border: 3px solid #c78335; border-radius: 18px;
-    background:
-      linear-gradient(90deg, rgba(0,0,0,.44), transparent 15%, transparent 85%, rgba(0,0,0,.44)),
-      repeating-linear-gradient(165deg, rgba(255,226,161,.035) 0 1px, transparent 1px 23px),
-      linear-gradient(180deg, #26353a, #101b20 48%, #080f13);
-    box-shadow: 0 0 0 2px #111a1e, 0 0 0 5px rgba(199,131,53,.22), 0 24px 58px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -18px 30px rgba(0,0,0,.3);
-  }
-  #deviceBackConfirmPanel::before,
-  #deviceBackConfirmPanel::after {
-    content: ""; position: absolute; top: 18px; width: 11px; height: 11px; border-radius: 50%;
-    background: radial-gradient(circle at 34% 30%, #fff0a0, #a96b24 42%, #301805 76%);
-    box-shadow: 0 1px 0 #000, 0 0 0 2px rgba(31,16,6,.75);
-  }
-  #deviceBackConfirmPanel::before { left: 20px; }
-  #deviceBackConfirmPanel::after { right: 20px; }
-  #deviceBackConfirmPanel > #deviceBackSeal {
-    position: absolute; z-index: 3; top: -67px; left: 50%; width: 126px; height: 126px;
-    transform: translateX(-50%); object-fit: contain; filter: drop-shadow(0 8px 9px rgba(0,0,0,.8));
-    pointer-events: none;
+    position: relative; isolation: isolate; display: flex; flex-direction: column;
+    justify-content: center; width: min(414px, 100%); min-height: 552px; box-sizing: border-box;
+    padding: 112px 45px 52px; text-align: center; border: 0; border-radius: 0;
+    background: #080b0d url("assets/exit-confirm-frame.png") center / 100% 100% no-repeat;
+    filter: drop-shadow(0 24px 36px rgba(0,0,0,.82));
   }
   #deviceBackConfirmKicker {
     position: relative; z-index: 2; width: fit-content; max-width: 100%; box-sizing: border-box;
@@ -476,39 +460,25 @@
     color: #b6c7c8; font: 400 12px/1.55 var(--katamon-font-ui);
     text-shadow: 0 1px 0 #05090b;
   }
-  #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 14px; }
   #deviceBackConfirmActions .deviceBackLever {
-    position: relative; min-height: 60px; padding: 9px 18px 9px 58px; overflow: hidden;
-    border: 2px solid rgba(199,131,53,.78); border-radius: 10px; color: #fff5dc;
+    position: relative; min-height: 76px; padding: 11px 17px 10px 76px; overflow: hidden;
+    border: 0; border-radius: 0; color: #fff5dc;
     font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 0 rgba(0,0,0,.28), 0 5px 0 #070d10, 0 8px 12px rgba(0,0,0,.3);
+    background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
+    filter: drop-shadow(0 5px 5px rgba(0,0,0,.46));
   }
-  #deviceBackConfirmActions .deviceBackLever::before {
-    content: ""; position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-    width: 26px; height: 26px; border-radius: 50%;
-    background: radial-gradient(circle at 34% 29%, #ffe7a0, #bd7427 38%, #48230d 72%);
-    box-shadow: 0 0 0 3px rgba(5,12,15,.9), 0 1px 2px #000, 0 0 10px rgba(255,210,74,.18);
-  }
-  #deviceBackConfirmActions .deviceBackLever::after {
-    content: ""; position: absolute; left: 28px; top: 50%; width: 25px; height: 7px;
-    transform: translateY(-50%); transform-origin: left center; border-radius: 7px;
-    background: linear-gradient(180deg, #c0c6bc, #53605d 48%, #15201e 52%);
-    box-shadow: 0 1px 1px rgba(0,0,0,.65);
-  }
-  #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.25), 0 1px 0 #130804; }
-  #deviceBackConfirmActions .deviceBackLever:active::after { transform: translateY(-50%) rotate(18deg); }
+  #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px) scale(.99); filter: brightness(1.15) drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
   #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 16px; line-height: 1.25; letter-spacing: .04em; }
   #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .82; }
   #deviceBackStay {
-    background: linear-gradient(180deg, #416864, #203e3e 58%, #102625) !important;
-    border-color: #173331 !important;
+    background-image: url("assets/exit-confirm-stay.png") !important;
   }
   #deviceBackExit {
-    background: linear-gradient(180deg, #69423b, #382420 58%, #211310) !important;
-    border-color: #24130f !important; color: #f1d9c7 !important;
+    background-image: url("assets/exit-confirm-exit.png") !important; color: #f1d9c7 !important;
   }
   @media (max-height: 620px) {
-    #deviceBackConfirmPanel { padding-top: 42px; transform: scale(.92); }
+    #deviceBackConfirmPanel { min-height: 500px; padding-top: 84px; padding-bottom: 36px; transform: scale(.92); }
   }
 </style>
 </head>
@@ -608,7 +578,6 @@
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
-    <img id="deviceBackSeal" src="assets/device-exit-seal.png" alt="" aria-hidden="true" draggable="false">
     <p id="deviceBackConfirmKicker">カタモンを閉じる？</p>
     <h2 id="deviceBackConfirmTitle">今はここまでにする？</h2>
     <p id="deviceBackConfirmNote">終了すると、カタモンを閉じます。</p>
@@ -675,10 +644,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.85-exit-confirm-redesign';
+  const BUILD_ID = 'v2.0.86-exit-confirm-assets';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.86', date: '2026/08/20', summary: '退出確認の枠とボタンを生成画像のゲーム素材へ置換' },
     { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
