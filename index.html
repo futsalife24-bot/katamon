@@ -669,10 +669,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.78-steel-terrain-material';
+  const BUILD_ID = 'v2.0.79-update-notice';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.79', date: '2026/08/19', summary: '最新版の有無を表示し、最新版ならリロードせず通知' },
     { version: 'v2.0.78', date: '2026/08/19', summary: 'ステージの一部へ鋼鉄素材を配置し、爆風は通して地形掘削を制御' },
     { version: 'v2.0.77', date: '2026/08/18', summary: 'クール=カイの連戦BGMを再生位置から継続' },
     { version: 'v2.0.76', date: '2026/08/18', summary: '全BGMの起動先読みとサウンドテストを追加' },
@@ -5430,6 +5431,7 @@
   let updateHistoryMaxScroll = 0;
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
+  let updateAvailableBuild = '';
   let safeUpdateReloadStarted = false;
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
@@ -10515,10 +10517,22 @@
     }
 
     drawIronPlate(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w, titleUpdateBtn.h, {
-      cut: 8, lineWidth: 1.5, rivets: false
+      cut: 8, lineWidth: updateAvailableBuild ? 2.5 : 1.5, rivets: false,
+      edge: updateAvailableBuild ? '#ffd76a' : undefined,
+      fill: updateAvailableBuild ? 'rgba(91,54,13,0.96)' : undefined
     });
-    drawOutlinedText(updateRequestInFlight ? '更新中...' : '最新版を取得', titleUpdateBtn.x, titleUpdateBtn.y + 4, {
-      font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    if (updateAvailableBuild) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,215,106,0.88)';
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = '#ffd76a';
+      ctx.lineWidth = 2;
+      angularPlatePath(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w + 4, titleUpdateBtn.h + 4, 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawOutlinedText(updateRequestInFlight ? '更新中...' : (updateAvailableBuild ? '更新あり・取得' : '最新版を取得'), titleUpdateBtn.x, titleUpdateBtn.y + 4, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: updateAvailableBuild ? '#ffe7a3' : UI.brassLabel, lineWidth: 3
     });
 
     drawIronPlate(
@@ -16384,13 +16398,23 @@
   async function forceGameUpdate() {
     if (updateRequestInFlight) return;
     updateRequestInFlight = true;
+    let updateDetected = !!(pendingGameUpdateBuild && pendingGameUpdateBuild !== BUILD_ID);
     try {
       if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.getRegistration();
         if (registration) {
           await registration.update();
+          // registration.update() の完了直後はactivate通知が次のタスクで届くことがある。
+          // 少しだけ待ち、更新が無い場合だけ「最新版です」と確定する。
+          if (!updateDetected) await new Promise(resolve => setTimeout(resolve, 700));
+          updateDetected = !!(pendingGameUpdateBuild && pendingGameUpdateBuild !== BUILD_ID);
           if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
+      }
+      if (!updateDetected) {
+        updateRequestInFlight = false;
+        showTitleNotice('最新版です');
+        return;
       }
       if ('caches' in window) {
         const keys = await caches.keys();
@@ -16412,17 +16436,17 @@
   function queueGameUpdateReload(build) {
     if (typeof build !== 'string' || !build || build === BUILD_ID) return;
     pendingGameUpdateBuild = build;
+    updateAvailableBuild = build;
+    showTitleNotice('新しいバージョンがあります。「最新版を取得」を押してください');
   }
 
   function applyPendingGameUpdateIfSafe() {
     if (!pendingGameUpdateBuild || safeUpdateReloadStarted) return;
     if (gamePhase !== 'title') return;
     if (roomScreenOpen()) return;
-    safeUpdateReloadStarted = true;
-    const latestUrl = new URL(location.href);
-    latestUrl.searchParams.set('v', pendingGameUpdateBuild);
-    latestUrl.searchParams.set('refresh', Date.now().toString());
-    location.replace(latestUrl.href);
+    // 更新はユーザーがボタンを押した時だけ実行する。ここではタイトル上の
+    // 「更新あり」表示を維持し、対戦終了直後の勝手なリロードを防ぐ。
+    return;
   }
 
   function drawFireButton() {
