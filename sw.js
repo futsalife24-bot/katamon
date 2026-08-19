@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.82-character-unlock-progress';
+const CACHE_VERSION = 'katamon-pwa-v2.0.83-stage-clear-achievements';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
