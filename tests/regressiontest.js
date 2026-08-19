@@ -49,6 +49,12 @@ check('Studioの解放条件をゲームカタログへ受け渡し、選択画�
     && indexHtml.includes("if (!isCharacterUnlocked(card.key))")
     && indexHtml.includes('未解放'),
   'character unlock bridge missing');
+check('キャラ選択画面に解放進捗を表示し、基本実績を自動記録する',
+  indexHtml.includes('function characterUnlockProgressSummary()')
+    && indexHtml.includes('characterUnlockProgressSummary()')
+    && indexHtml.includes("grantUnlockAchievement('login-7-days')")
+    && indexHtml.includes("grantUnlockAchievement('streak-3')"),
+  'unlock progress summary or achievements missing');
 check('ロード中の石壁に更新時の読み込み案内を表示する',
   indexHtml.includes('更新時は読み込みに時間がかかる場合があります')
     && indexHtml.includes("ctx.fillText('更新時は読み込みに時間がかかる場合があります'")
