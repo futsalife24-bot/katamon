@@ -56,6 +56,7 @@ jobs:
           git status --short -- tools/content-studio/dist
           git diff --stat -- tools/content-studio/dist
           git diff -- tools/content-studio/dist/index.html | head -100
+          git diff --ignore-all-space --stat -- tools/content-studio/dist
 
       - name: Check committed Pages bundle is current
         run: test -z "$(git status --porcelain -- tools/content-studio/dist)"
