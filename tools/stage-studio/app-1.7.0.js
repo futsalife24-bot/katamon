@@ -508,6 +508,9 @@
 
   function syncTerrainToStage() {
     if (!state.stage) return;
+    const wasWholeSteel = Array.isArray(state.stage.materials)
+      && state.stage.materials.length === 1
+      && state.stage.materials[0] && state.stage.materials[0].id === 'steel';
     state.stage.terrain.columns = columnsFromGrid(state.grid);
     const columns = Array.from({ length: LIMITS.terrainColumns }, () => []);
     for (let c = 0; c < LIMITS.terrainColumns; c++) {
@@ -523,7 +526,7 @@
     if (hasSteel && !state.stage.materials.some((material) => material.id === 'steel')) {
       state.stage.materials.push({ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' });
     }
-    if (!hasSteel) state.stage.materials = state.stage.materials.filter((material) => material.id !== 'steel');
+    if (!hasSteel && !wasWholeSteel) state.stage.materials = state.stage.materials.filter((material) => material.id !== 'steel');
   }
 
   function selectedTerrainMaterial() {
@@ -561,6 +564,7 @@
     if (Number.isFinite(params.cavityRate)) $('cavityRange').value = Math.round(params.cavityRate * 100);
     if (Number.isFinite(params.difficulty)) $('difficultyRange').value = Math.round(params.difficulty * 100);
     $('generationPlayerCount').value = params.playerCount === 4 ? '4' : '2';
+    $('generationSteelMode').value = ['none', 'partial', 'whole'].includes(params.steelMode) ? params.steelMode : 'none';
     $('symmetryInput').checked = !!params.symmetric;
     const wind = Array.isArray(state.stage.gimmicks) ? state.stage.gimmicks.find((item) => item && item.type === 'globalWind') : null;
     $('windEnabled').checked = !!(wind && wind.enabled !== false);
@@ -2240,7 +2244,8 @@
       destructibleRate: 1,
       hardTerrainRate: 0,
       playerCount: Number($('generationPlayerCount').value) === 4 ? 4 : 2,
-      difficulty: Number($('difficultyRange').value) / 100
+      difficulty: Number($('difficultyRange').value) / 100,
+      steelMode: ['none', 'partial', 'whole'].includes($('generationSteelMode').value) ? $('generationSteelMode').value : 'none'
     };
   }
 
@@ -2269,8 +2274,10 @@
       mode: 'theme', theme: themeKey, color: theme.gradient[0],
       gradient: { from: theme.gradient[0], to: theme.gradient[1] }
     };
-    stage.materials = [selectedTerrainMaterial()];
-    stage.materials[0].color = $('terrainColor').value || theme.terrain;
+    const generatedSteel = Array.isArray(stage.materials) && stage.materials.some((material) => material && material.id === 'steel');
+    if (!generatedSteel) stage.materials = [selectedTerrainMaterial()];
+    const generatedTerrain = stage.materials.find((material) => material && material.id === 'terrain');
+    if (generatedTerrain) generatedTerrain.color = $('terrainColor').value || theme.terrain;
     state.generationJob = null;
     setGenerationBusy(false);
     setStage(stage);
@@ -2593,7 +2600,13 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [selectedTerrainMaterial()];
+    const hasPartialSteel = Array.isArray(state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    const isWholeSteel = Array.isArray(state.stage.materials)
+      && state.stage.materials.length === 1
+      && state.stage.materials[0] && state.stage.materials[0].id === 'steel'
+      && !hasPartialSteel;
+    if (!isWholeSteel) state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     return clone(state.stage);
   }

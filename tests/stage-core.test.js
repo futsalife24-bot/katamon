@@ -262,6 +262,19 @@ test('material allowlist accepts a whole-stage steel material that never loses c
   assert.ok(core.validateStage(mismatchedSteel).errors.some((entry) => entry.code === 'unsupported_material'));
 });
 
+test('generator can deterministically create partial and whole steel stages', () => {
+  const partial = makeStage({ preset: 'rolling', generationParameters: { steelMode: 'partial' } });
+  const whole = makeStage({ preset: 'rolling', generationParameters: { steelMode: 'whole' } });
+  const partialAgain = makeStage({ preset: 'rolling', generationParameters: { steelMode: 'partial' } });
+  assert.deepEqual(partial.terrain.materialSegments, partialAgain.terrain.materialSegments);
+  assert.equal(partial.materials.some((material) => material.id === 'steel'), true);
+  assert.equal(partial.terrain.materialSegments.some((column) => column.length > 0), true);
+  assert.equal(core.validateStage(partial).valid, true);
+  assert.deepEqual(whole.materials, [{ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }]);
+  assert.equal(whole.terrain.materialSegments.some((column) => column.length > 0), false);
+  assert.equal(core.validateStage(whole).valid, true);
+});
+
 test('game compatibility accepts only vNNN ranges containing the current build', () => {
   const accepted = makeStage();
   accepted.gameCompatibility = { gameId: core.GAME_ID, minBuild: 'v100', maxBuild: 'v200' };
