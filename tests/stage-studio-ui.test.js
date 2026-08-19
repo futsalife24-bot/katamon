@@ -124,6 +124,15 @@ test('terrain editor uses a canvas-first workspace with contextual inspector and
   assert.match(studioApp, /snapCharacterGuides.*snapInvalidCharacterGuides/);
 });
 
+test('generator exposes none, partial and whole steel modes', () => {
+  assert.match(studioHtml, /id="generationSteelMode"/);
+  assert.match(studioHtml, /value="partial">一部を鋼鉄/);
+  assert.match(studioHtml, /value="whole">全面を鋼鉄/);
+  assert.match(studioApp, /steelMode: \['none', 'partial', 'whole'\]/);
+  assert.match(studioApp, /const isWholeSteel = Array\.isArray\(state\.stage\.materials\)/);
+  assert.match(studioApp, /if \(!isWholeSteel\) state\.stage\.materials = \[selectedTerrainMaterial\(\)\];/);
+});
+
 test('terrain settings use a floating palette that collapses after choosing a value', () => {
   const canvasEnd = studioHtml.indexOf('</div>', studioHtml.indexOf('data-testid="terrain-canvas"'));
   const paletteIndex = studioHtml.indexOf('data-testid="terrain-palette-toggle"');

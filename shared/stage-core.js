@@ -626,7 +626,8 @@
       cavityRate: roundNumber(clamp(input.cavityRate == null ? 0.08 : input.cavityRate, 0, 0.35), 3),
       smoothness: roundNumber(clamp(input.smoothness == null ? 0.65 : input.smoothness, 0, 1), 3),
       playerCount: input.playerCount === 4 ? 4 : 2,
-      difficulty: roundNumber(clamp(input.difficulty == null ? 0.5 : input.difficulty, 0, 1), 3)
+      difficulty: roundNumber(clamp(input.difficulty == null ? 0.5 : input.difficulty, 0, 1), 3),
+      steelMode: ['none', 'partial', 'whole'].indexOf(input.steelMode) >= 0 ? input.steelMode : 'none'
     };
   }
 
@@ -773,6 +774,28 @@
       return merged;
     });
     stage.terrain.columns = columns;
+    if (parameters.steelMode === 'whole') {
+      stage.materials = [{ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }];
+    } else if (parameters.steelMode === 'partial') {
+      var steelSegments = columns.map(function () { return []; });
+      var steelZones = [
+        [0.12 + random() * 0.08, 0.24 + random() * 0.08],
+        [0.43 + random() * 0.08, 0.57 + random() * 0.08],
+        [0.76 + random() * 0.08, 0.88 + random() * 0.06]
+      ];
+      columns.forEach(function (segments, column) {
+        var t = column / Math.max(1, LIMITS.columns - 1);
+        if (!segments.length || !steelZones.some(function (zone) { return t >= zone[0] && t <= zone[1]; })) return;
+        var baseSegment = segments[segments.length - 1];
+        var capBottom = Math.min(baseSegment[1], baseSegment[0] + Math.max(18, LIMITS.rowHeight * 5));
+        if (capBottom > baseSegment[0]) steelSegments[column] = [[baseSegment[0], capBottom, 'steel']];
+      });
+      stage.materials = [
+        { id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' },
+        { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }
+      ];
+      stage.terrain.materialSegments = steelSegments;
+    }
     stage.spawnPoints = makeSpawns(columns, format);
     if (options.wind && Number(options.wind.strength) > 0) {
       stage.gimmicks = [{
