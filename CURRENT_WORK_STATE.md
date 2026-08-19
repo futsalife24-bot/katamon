@@ -1,6 +1,13 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-08-19 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-08-20 / GitHub正本: `futsalife24-bot/katamon` の `master`
+
+## v2.0.86 オンライン入室直後の誤退出防止（未公開）
+
+- 修正ブランチ: `fix/v2086-online-lobby-seat-loss`（`master`の`0ea3d03`から作成）。
+- 過去の`lobbyState`名簿だけで自席を失ったと確定せず、Firebaseの`slots`正本を再取得して確認してからだけタイトルへ戻す。
+- 同じ確認通信は同時に1本だけとし、Firebaseルール・20秒心拍・90秒の席解放条件は変更しない。
+- 自動テストは`npm test`が成功。公開前に、Chrome通常・Chromeシークレット・スマホの3参加者で、入室・120秒待機・再参加を各3回確認する。
 
 ## v2.0.85 退出確認画面リメイク
 
