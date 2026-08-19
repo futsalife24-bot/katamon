@@ -51,6 +51,11 @@ jobs:
         working-directory: tools/content-studio
         run: npm run build
 
+      - name: Diagnose committed Pages bundle drift
+        run: |
+          git status --short -- tools/content-studio/dist
+          git diff --stat -- tools/content-studio/dist
+
       - name: Check committed Pages bundle is current
         run: test -z "$(git status --porcelain -- tools/content-studio/dist)"
 
