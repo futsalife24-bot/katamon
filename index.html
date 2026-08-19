@@ -670,10 +670,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.83-stage-clear-achievements';
+  const BUILD_ID = 'v2.0.84-resume-pointer-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
     { version: 'v2.0.80', date: '2026/08/19', summary: 'クール=カイの必殺技に握り飯ボイスを追加' },
     { version: 'v2.0.79', date: '2026/08/19', summary: '最新版の有無を表示し、最新版ならリロードせず通知' },
@@ -17343,10 +17344,9 @@
       // 確認中は他の操作をすべて飲み込む。裏のホイールが回ると、何を確認しているのか
       // 分からなくなるため。枠の外を叩いた時は取り消し扱い。
       if (pendingNewMatchKey) {
-        playUiSound();
-        if (hitRect(p0, newMatchResumeBtn)) resolveNewMatchConfirm('resume');
-        else if (hitRect(p0, newMatchStartBtn)) resolveNewMatchConfirm('start');
-        else resolveNewMatchConfirm('cancel');
+        inputMode = 'newMatchConfirm';
+        inputPointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
         return;
       }
       if (hitRect(p0, selectBackBtn)) {
@@ -17355,7 +17355,9 @@
         return;
       }
       if (hasSuspendedSave && hitSelectResumeGear(p0)) {
-        resumeSuspendedMatch();
+        inputMode = 'selectResume';
+        inputPointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
         return;
       }
       const tappedCard = getSelectCardAtPoint(p0);
@@ -17589,6 +17591,27 @@
       saveAudioSettings();
       // 決めた音量を耳で確認できるよう、離した瞬間に一度だけ鳴らす
       if (key === 'sfx') playUiSound();
+      return;
+    }
+    if (inputMode === 'newMatchConfirm' && e.pointerId === inputPointerId) {
+      const p = canvasPointFromEvent(e);
+      inputMode = null;
+      inputPointerId = null;
+      if (e.type !== 'pointerup') return;
+      playUiSound();
+      if (hitRect(p, newMatchResumeBtn)) resolveNewMatchConfirm('resume');
+      else if (hitRect(p, newMatchStartBtn)) resolveNewMatchConfirm('start');
+      else resolveNewMatchConfirm('cancel');
+      return;
+    }
+    if (inputMode === 'selectResume' && e.pointerId === inputPointerId) {
+      const p = canvasPointFromEvent(e);
+      inputMode = null;
+      inputPointerId = null;
+      if (e.type === 'pointerup' && hasSuspendedSave && hitSelectResumeGear(p)) {
+        playUiSound();
+        resumeSuspendedMatch();
+      }
       return;
     }
     if (inputMode === 'start' && e.pointerId === inputPointerId) {

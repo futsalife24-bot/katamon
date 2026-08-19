@@ -142,6 +142,21 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
   check('中断データが無い時は再開ギアを表示しない',
     !drawnWithoutSave.includes('再開') && !drawnWithoutSave.includes('中断対戦'),
     drawnWithoutSave.join('/'));
+  check('中断再開のタッチ操作はpointerupで一度だけ確定する',
+    indexHtml.includes("inputMode = 'newMatchConfirm';")
+      && indexHtml.includes("inputMode = 'selectResume';")
+      && /inputMode === 'newMatchConfirm'[\s\S]*?resolveNewMatchConfirm\('resume'\)/.test(indexHtml)
+      && /inputMode === 'selectResume'[\s\S]*?resumeSuspendedMatch\(\)/.test(indexHtml),
+    'resume actions must be committed from pointerup');
+  kt.setPhase('battle');
+  kt.save();
+  kt.setHasSave(true);
+  kt.setPhase('select');
+  const resumePointerId = down(info.resume.x, info.resume.y);
+  up(resumePointerId, info.resume.x, info.resume.y);
+  check('再開ギアを押して離すと中断データからバトルへ戻る',
+    kt.phase() === 'battle' && kt.load() === null,
+    JSON.stringify({ phase: kt.phase(), hasSave: kt.load() !== null }));
 }
 
 // v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。
