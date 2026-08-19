@@ -733,6 +733,9 @@ const HOOK = `
     specialCutInSoundAsset: () => (typeof SPECIAL_CUTIN_SOUND_URL === 'string'
       ? { url: SPECIAL_CUTIN_SOUND_URL, gain: SPECIAL_CUTIN_SOUND_GAIN }
       : null),
+    coolKaiSpecialVoiceAsset: () => (typeof COOL_KAI_SPECIAL_VOICE_URL === 'string'
+      ? { url: COOL_KAI_SPECIAL_VOICE_URL, gain: COOL_KAI_SPECIAL_VOICE_GAIN }
+      : null),
     proto: () => PROTO_VERSION,
     stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, snapshotValidationReason, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, stateSnapshotMismatchReason, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, advanceFirebaseLobbyLiveness, firebaseSeatStale, onlineErrorTitle, canLeaveFirebaseLobby, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken,
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,

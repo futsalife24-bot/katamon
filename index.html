@@ -41,6 +41,7 @@
 <link rel="preload" as="audio" href="assets/bonus-bgm-3.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/bonus-bgm-4.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/cool-kai-special-voice.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
@@ -669,10 +670,12 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.78-steel-terrain-material';
+  const BUILD_ID = 'v2.0.80-cool-kai-special-voice';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.80', date: '2026/08/19', summary: 'クール=カイの必殺技に握り飯ボイスを追加' },
+    { version: 'v2.0.79', date: '2026/08/19', summary: '最新版の有無を表示し、最新版ならリロードせず通知' },
     { version: 'v2.0.78', date: '2026/08/19', summary: 'ステージの一部へ鋼鉄素材を配置し、爆風は通して地形掘削を制御' },
     { version: 'v2.0.77', date: '2026/08/18', summary: 'クール=カイの連戦BGMを再生位置から継続' },
     { version: 'v2.0.76', date: '2026/08/18', summary: '全BGMの起動先読みとサウンドテストを追加' },
@@ -1103,6 +1106,7 @@
     primeFirstBattleMedia();
     primeNormalImpactSound();
     primeSpecialCutinSound();
+    primeCoolKaiSpecialVoice();
     titleStartPending = true;
     titleStartFailed = false;
     // 通常は実際の再生開始と同時にタイトルへ進む。端末側の音源準備が停止しても、
@@ -1540,10 +1544,14 @@
   const TITLE_WALL_IMPACT_SOUND_GAIN = 0.26;
   const SPECIAL_CUTIN_SOUND_URL = 'assets/special-cutin-edm-zap.mp3';
   const SPECIAL_CUTIN_SOUND_GAIN = 0.28;
+  const COOL_KAI_SPECIAL_VOICE_URL = 'assets/cool-kai-special-voice.mp3';
+  const COOL_KAI_SPECIAL_VOICE_GAIN = 0.72;
   let normalImpactBuffer = null;
   let normalImpactLoadPromise = null;
   let specialCutinBuffer = null;
   let specialCutinLoadPromise = null;
+  let coolKaiSpecialVoiceBuffer = null;
+  let coolKaiSpecialVoiceLoadPromise = null;
   function getAudioCtx() {
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -1706,6 +1714,31 @@
       });
     return specialCutinLoadPromise;
   }
+  function primeCoolKaiSpecialVoice() {
+    if (coolKaiSpecialVoiceBuffer) return Promise.resolve(coolKaiSpecialVoiceBuffer);
+    if (coolKaiSpecialVoiceLoadPromise) return coolKaiSpecialVoiceLoadPromise;
+    let ac;
+    try {
+      ac = getAudioCtx();
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+    coolKaiSpecialVoiceLoadPromise = fetch(COOL_KAI_SPECIAL_VOICE_URL)
+      .then(response => {
+        if (!response.ok) throw new Error('cool kai special voice fetch failed');
+        return response.arrayBuffer();
+      })
+      .then(bytes => ac.decodeAudioData(bytes))
+      .then(buffer => {
+        coolKaiSpecialVoiceBuffer = buffer;
+        return buffer;
+      })
+      .catch(() => {
+        coolKaiSpecialVoiceLoadPromise = null;
+        return null;
+      });
+    return coolKaiSpecialVoiceLoadPromise;
+  }
   // 花火の拡散弾用の軽い破裂音。爆発音は音源が9本もあり、0.5秒に24発鳴らすと
   // 音が潰れるうえ負荷も跳ねるので、専用の軽い音にしたうえで鳴らす数を間引く。
   let lastCrackleAt = -1e9;
@@ -1726,11 +1759,26 @@
     fallbackStartHz: 1760,
     fallbackEndHz: 840
   });
-  function playSpecialSound() {
+  function playSpecialSound(def) {
     const s = SPECIAL_CUTIN_SOUND_PROFILE;
     // オーラの直後だけBGMを引かせ、鋭いカットイン音を前へ出す。
     duckStageBgm(s.duckMs);
     if (!sfxAudible()) return;
+    if (def?.key === 'coolKai') {
+      if (!coolKaiSpecialVoiceBuffer) {
+        primeCoolKaiSpecialVoice();
+        playTone(220, 0.16, 'triangle', 0.1, 120, 0, 0.004);
+        return;
+      }
+      const ac = getAudioCtx();
+      const src = ac.createBufferSource();
+      const gain = ac.createGain();
+      src.buffer = coolKaiSpecialVoiceBuffer;
+      gain.gain.value = COOL_KAI_SPECIAL_VOICE_GAIN;
+      src.connect(gain).connect(getSfxDestination(ac));
+      src.start();
+      return;
+    }
     if (!specialCutinBuffer) {
       primeSpecialCutinSound();
       playTone(s.fallbackStartHz, 0.14, 'square', 0.13, s.fallbackEndHz, 0, 0.002);
@@ -5430,6 +5478,7 @@
   let updateHistoryMaxScroll = 0;
   let updateRequestInFlight = false;
   let pendingGameUpdateBuild = '';
+  let updateAvailableBuild = '';
   let safeUpdateReloadStarted = false;
   const rankingBackBtn = { x: 62, y: 32, w: 104, h: 34 };
   const rankingNameBtn = { x: VW - 120, y: 32, w: 128, h: 34 }; // 右上のサウンドボタンと重ねない
@@ -10515,10 +10564,22 @@
     }
 
     drawIronPlate(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w, titleUpdateBtn.h, {
-      cut: 8, lineWidth: 1.5, rivets: false
+      cut: 8, lineWidth: updateAvailableBuild ? 2.5 : 1.5, rivets: false,
+      edge: updateAvailableBuild ? '#ffd76a' : undefined,
+      fill: updateAvailableBuild ? 'rgba(91,54,13,0.96)' : undefined
     });
-    drawOutlinedText(updateRequestInFlight ? '更新中...' : '最新版を取得', titleUpdateBtn.x, titleUpdateBtn.y + 4, {
-      font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+    if (updateAvailableBuild) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,215,106,0.88)';
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = '#ffd76a';
+      ctx.lineWidth = 2;
+      angularPlatePath(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w + 4, titleUpdateBtn.h + 4, 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawOutlinedText(updateRequestInFlight ? '更新中...' : (updateAvailableBuild ? '更新あり・取得' : '最新版を取得'), titleUpdateBtn.x, titleUpdateBtn.y + 4, {
+      font: `900 12px ${UI_FONT_HEAVY}`, color: updateAvailableBuild ? '#ffe7a3' : UI.brassLabel, lineWidth: 3
     });
 
     drawIronPlate(
@@ -16384,13 +16445,23 @@
   async function forceGameUpdate() {
     if (updateRequestInFlight) return;
     updateRequestInFlight = true;
+    let updateDetected = !!(pendingGameUpdateBuild && pendingGameUpdateBuild !== BUILD_ID);
     try {
       if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.getRegistration();
         if (registration) {
           await registration.update();
+          // registration.update() の完了直後はactivate通知が次のタスクで届くことがある。
+          // 少しだけ待ち、更新が無い場合だけ「最新版です」と確定する。
+          if (!updateDetected) await new Promise(resolve => setTimeout(resolve, 700));
+          updateDetected = !!(pendingGameUpdateBuild && pendingGameUpdateBuild !== BUILD_ID);
           if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
+      }
+      if (!updateDetected) {
+        updateRequestInFlight = false;
+        showTitleNotice('最新版です');
+        return;
       }
       if ('caches' in window) {
         const keys = await caches.keys();
@@ -16412,17 +16483,17 @@
   function queueGameUpdateReload(build) {
     if (typeof build !== 'string' || !build || build === BUILD_ID) return;
     pendingGameUpdateBuild = build;
+    updateAvailableBuild = build;
+    showTitleNotice('新しいバージョンがあります。「最新版を取得」を押してください');
   }
 
   function applyPendingGameUpdateIfSafe() {
     if (!pendingGameUpdateBuild || safeUpdateReloadStarted) return;
     if (gamePhase !== 'title') return;
     if (roomScreenOpen()) return;
-    safeUpdateReloadStarted = true;
-    const latestUrl = new URL(location.href);
-    latestUrl.searchParams.set('v', pendingGameUpdateBuild);
-    latestUrl.searchParams.set('refresh', Date.now().toString());
-    location.replace(latestUrl.href);
+    // 更新はユーザーがボタンを押した時だけ実行する。ここではタイトル上の
+    // 「更新あり」表示を維持し、対戦終了直後の勝手なリロードを防ぐ。
+    return;
   }
 
   function drawFireButton() {
@@ -18020,7 +18091,7 @@
         if (pendingShot.phase === 'aura') {
           specialAura = null;
           triggerSpecialFlash(pendingShot.text, pendingShot.def);
-          playSpecialSound();
+          playSpecialSound(pendingShot.def);
           pendingShot.phase = 'cutin';
           pendingShot.timer = SPECIAL_FLASH_DURATION;
         } else {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.78-steel-terrain-material';
+const CACHE_VERSION = 'katamon-pwa-v2.0.80-cool-kai-special-voice';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
@@ -41,6 +41,7 @@ const APP_SHELL = [
   './assets/ui/battle-hud/wind-console-round.webp',
   './assets/normal-impact-explosion.mp3',
   './assets/special-cutin-edm-zap.mp3',
+  './assets/cool-kai-special-voice.mp3',
   './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
 ];
 

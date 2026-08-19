@@ -358,8 +358,19 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
       && specialCutInSound.sampleGain === 0.28
       && specialCutInSoundAsset
       && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3'
-      && /function playSpecialSound\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
+      && /function playSpecialSound\(def\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
     JSON.stringify({ specialCutInSound, specialCutInSoundAsset }));
+  const coolKaiSpecialVoiceAsset = typeof kt.coolKaiSpecialVoiceAsset === 'function'
+    ? kt.coolKaiSpecialVoiceAsset()
+    : null;
+  check('クール=カイの必殺技は専用の握り飯ボイスを鳴らす',
+    coolKaiSpecialVoiceAsset
+      && coolKaiSpecialVoiceAsset.url === 'assets/cool-kai-special-voice.mp3'
+      && coolKaiSpecialVoiceAsset.gain === 0.72
+      && indexHtml.includes("if (def?.key === 'coolKai')")
+      && indexHtml.includes('COOL_KAI_SPECIAL_VOICE_URL')
+      && indexHtml.includes('playSpecialSound(pendingShot.def);'),
+    JSON.stringify(coolKaiSpecialVoiceAsset));
   kt.clearProjectilesForTest();
 }
 
