@@ -432,8 +432,9 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /id="deviceBackConfirmActions" class="deviceBackLevers"/);
   assert.match(html, /id="deviceBackStay" class="deviceBackLever deviceBackLever--stay"/);
   assert.match(html, /id="deviceBackExit" class="deviceBackLever deviceBackLever--exit"/);
-  assert.match(html, /#deviceBackConfirmKicker\s*\{[\s\S]*position:\s*absolute/);
-  assert.match(html, /\.deviceBackLever::before\s*\{[\s\S]*border-radius:\s*50%/);
+  assert.match(html, /url\("assets\/exit-confirm-frame\.png"\)/);
+  assert.match(html, /url\("assets\/exit-confirm-stay\.png"\)/);
+  assert.match(html, /url\("assets\/exit-confirm-exit\.png"\)/);
   const fontCss = fs.readFileSync(path.join(root, 'assets', 'fonts', 'katamon-fonts.css'), 'utf8');
   assert.match(fontCss, /font-family:\s*"RocknRoll One"/);
   assert.match(fontCss, /font-family:\s*"Reggae One"/);
@@ -442,10 +443,13 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v2\.0\.85-exit-confirm-redesign/);
+  assert.match(html, /v2\.0\.86-exit-confirm-assets/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v2\.0.85-exit-confirm-redesign/);
+  assert.match(serviceWorker, /katamon-pwa-v2\.0\.86-exit-confirm-assets/);
+  assert.match(serviceWorker, /assets\/exit-confirm-frame\.png/);
+  assert.match(serviceWorker, /assets\/exit-confirm-stay\.png/);
+  assert.match(serviceWorker, /assets\/exit-confirm-exit\.png/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });
