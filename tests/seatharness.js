@@ -283,6 +283,9 @@ const HOOK = `
       prismMaxBounces: Number(p.prismMaxBounces || 0),
       prismMaxDistance: Number(p.prismMaxDistance || 0),
       travelDistance: Number(p.travelDistance || 0),
+      deathGateScythe: !!p.deathGateScythe,
+      deathGateCarves: Number(p.deathGateCarves || 0),
+      maxDistance: Number(p.maxDistance || 0),
       dSmash: !!p.dSmash,
       barucopterMarker: !!p.barucopterMarker,
       barucopterBullet: !!p.barucopterBullet,
@@ -420,6 +423,11 @@ const HOOK = `
       applyCharacter(u, key);
       u.hp = Math.max(0, Math.min(u.maxHp, Number(hp)));
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, true, true, false);
+      return projectiles.length - 1;
+    },
+    spawnDeathGateForTest: (ownerId, x, y) => {
+      if (typeof spawnDeathGate !== 'function') return -1;
+      spawnDeathGate({ owner: ownerId }, x, y);
       return projectiles.length - 1;
     },
     resolveProjectileUnitImpactForTest: (index, unitId) => {
