@@ -87,6 +87,9 @@ test('all editing canvases use game assets, terrain texture and real character d
   assert.match(studioApp, /dirtBottom: mixHexColor\(terrainTop, '#000000', 0\.58\)/);
   assert.match(studioApp, /rim: mixHexColor\(terrainTop, '#ffffff', 0\.34\)/);
   assert.match(studioApp, /rimShadow: mixHexColor\(terrainTop, '#000000', 0\.36\)/);
+  assert.match(studioApp, /const hasMaterialOverrides = Array\.isArray\(state\.stage\.terrain && state\.stage\.terrain\.materialSegments\)/);
+  assert.match(studioApp, /const material = state\.stage\.materials && \(state\.stage\.materials\.find\(\(item\) => item && item\.id === 'terrain'\)/);
+  assert.match(studioApp, /const steel = material\.id === 'steel' && !hasMaterialOverrides;/);
   assert.match(studioApp, /Array\.isArray\(snapshot\.characterGuides\) && snapshot\.characterGuides\.length[\s\S]*?: null/);
   assert.match(studioApp, /state\.ready && state\.documentStarted && state\.stage && previousScreen !== screen/);
   assert.match(studioApp, /drawStageScene\(\$\('terrainCanvas'\)/);

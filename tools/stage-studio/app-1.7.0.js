@@ -571,8 +571,11 @@
     $('backgroundMode').value = ['theme', 'gradient', 'color'].includes(background.mode) ? background.mode : 'theme';
     const editableBackground = background.mode === 'gradient' && background.gradient ? background.gradient.from : background.color;
     $('backgroundColor').value = /^#[0-9a-f]{6}$/i.test(editableBackground || '') ? editableBackground : THEME_COLORS[$('themeSelect').value].sky;
-    $('terrainColor').value = state.stage.materials && /^#[0-9a-f]{6}$/i.test(state.stage.materials[0] && state.stage.materials[0].color || '') ? state.stage.materials[0].color : THEME_COLORS[$('themeSelect').value].terrain;
-    $('terrainMaterial').value = state.stage.materials && state.stage.materials[0] && state.stage.materials[0].id === 'steel' ? 'steel' : 'terrain';
+    const baseMaterial = state.stage.materials && (state.stage.materials.find((item) => item && item.id === 'terrain') || state.stage.materials[0]);
+    $('terrainColor').value = baseMaterial && /^#[0-9a-f]{6}$/i.test(baseMaterial.color || '') ? baseMaterial.color : THEME_COLORS[$('themeSelect').value].terrain;
+    const hasMaterialOverrides = Array.isArray(state.stage.terrain && state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    $('terrainMaterial').value = !hasMaterialOverrides && state.stage.materials && state.stage.materials[0] && state.stage.materials[0].id === 'steel' ? 'steel' : 'terrain';
     $('brightnessRange').value = Math.round(clamp(state.appearanceBrightness || 1, 0.6, 1.3) * 100);
     $('decorationsEnabled').checked = state.stage.decorations ? state.stage.decorations.enabled !== false : true;
     $('spawnCount').value = state.stage.spawnPoints && state.stage.spawnPoints.length >= 4 ? '4' : '2';
@@ -1308,8 +1311,11 @@
     if (showGameBackground) drawImageCover(context, stageBackgroundImages[themeKey], 0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
 
     const columns = columnsFromGrid(grid);
-    const material = state.stage.materials && state.stage.materials[0] || {};
-    const steel = material.id === 'steel';
+    const hasMaterialOverrides = Array.isArray(state.stage.terrain && state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    const material = state.stage.materials && (state.stage.materials.find((item) => item && item.id === 'terrain') || state.stage.materials[0]) || {};
+    // 部分鋼鉄ステージは通常地面をベースにし、鋼鉄区画だけをオーバーレイする。
+    const steel = material.id === 'steel' && !hasMaterialOverrides;
     const terrainTop = steel ? '#71808C' : (/^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop);
     const terrainTheme = Object.assign({}, theme, {
       dirtBottom: mixHexColor(terrainTop, '#000000', 0.58),
