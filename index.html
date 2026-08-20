@@ -41,6 +41,7 @@
 <link rel="preload" as="audio" href="assets/bonus-bgm-3.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/bonus-bgm-4.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
+<link rel="preload" as="audio" href="assets/six-eternel-dopagaki-remix.mp3" type="audio/mpeg">
 <link rel="preload" as="audio" href="assets/cool-kai-special-voice.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
@@ -438,47 +439,64 @@
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
     position: relative; isolation: isolate; display: flex; flex-direction: column;
-    justify-content: center; width: min(414px, 100%); min-height: 552px; box-sizing: border-box;
-    padding: 112px 45px 52px; text-align: center; border: 0; border-radius: 0;
-    background: #080b0d url("assets/exit-confirm-frame.png") center / 100% 100% no-repeat;
-    filter: drop-shadow(0 24px 36px rgba(0,0,0,.82));
+    justify-content: center; width: min(414px, 100%); min-height: 570px; box-sizing: border-box;
+    padding: 86px 34px 48px; text-align: center; border: 0; border-radius: 0;
+    background: #5d351d url("assets/title-mode-board.webp") center / 100% 100% no-repeat;
+    filter: drop-shadow(0 18px 28px rgba(0,0,0,.64));
   }
+  #deviceBackConfirmPanel::before {
+    content: ""; position: absolute; z-index: 0; inset: 0 0 auto; height: 70px;
+    background: #673719;
+    border-bottom: 1px solid rgba(255,210,111,.22);
+  }
+  #deviceBackConfirmPanel > * { position: relative; z-index: 1; }
   #deviceBackConfirmKicker {
     position: relative; z-index: 2; width: fit-content; max-width: 100%; box-sizing: border-box;
-    margin: 0 auto 10px; padding: 6px 18px 5px; color: #d39b4b;
+    margin: 0 auto 10px; padding: 6px 18px 5px; color: #ffe6a7;
     font: 400 13px/1 var(--katamon-font-ui); letter-spacing: .18em;
-    background: rgba(8,15,19,.72); border: 1px solid rgba(199,131,53,.6); border-radius: 999px;
+    background: rgba(53,31,18,.78); border: 1px solid rgba(255,210,111,.72); border-radius: 999px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 9px rgba(0,0,0,.35);
   }
   #deviceBackConfirmTitle {
-    margin: 0 0 9px; color: #fff0c9;
+    margin: 0 0 9px; color: #fff4d6;
     font: 400 24px/1.35 var(--katamon-font-display);
-    letter-spacing: .08em; text-shadow: 0 2px 0 #070b0d, 0 0 14px rgba(255,210,74,.18);
+    letter-spacing: .08em;
+    -webkit-text-stroke: 1px rgba(45,22,10,.86);
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 #070b0d, 0 4px 8px rgba(0,0,0,.72), 0 0 14px rgba(255,210,74,.18);
   }
   #deviceBackConfirmNote {
     margin: 0 0 21px; padding: 0 8px;
-    color: #b6c7c8; font: 400 12px/1.55 var(--katamon-font-ui);
-    text-shadow: 0 1px 0 #05090b;
+    color: #f3dfbd; font: 400 12px/1.55 var(--katamon-font-ui);
+    text-shadow: 0 1px 0 #3a2113;
   }
   #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 14px; }
   #deviceBackConfirmActions .deviceBackLever {
-    position: relative; min-height: 76px; padding: 11px 17px 10px 76px; overflow: hidden;
+    position: relative; min-height: 108px; padding: 18px 38px 16px; overflow: hidden;
     border: 0; border-radius: 0; color: #fff5dc;
+    display: flex; flex-direction: column; justify-content: center;
     font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
-    background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
+    background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
     filter: drop-shadow(0 5px 5px rgba(0,0,0,.46));
   }
   #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px) scale(.99); filter: brightness(1.15) drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
-  #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 16px; line-height: 1.25; letter-spacing: .04em; }
-  #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .82; }
+  #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 17px; line-height: 1.25; letter-spacing: .04em; }
+  #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 3px; font-size: 11px; line-height: 1.25; opacity: .82; }
   #deviceBackStay {
-    background-image: url("assets/exit-confirm-stay.png") !important;
+    background-image: url("assets/exit-confirm-stay-v2.png") !important;
+    color: #fff5dc !important;
+  }
+  #deviceBackStay strong {
+    -webkit-text-stroke: .8px rgba(5,42,35,.9);
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 rgba(4,31,26,.92), 0 3px 6px rgba(0,0,0,.58);
   }
   #deviceBackExit {
-    background-image: url("assets/exit-confirm-exit.png") !important; color: #f1d9c7 !important;
+    background-image: url("assets/exit-confirm-exit-v2.png") !important; color: #4b2a18 !important;
+    text-shadow: 0 1px 0 rgba(255,255,255,.5);
   }
   @media (max-height: 620px) {
-    #deviceBackConfirmPanel { min-height: 500px; padding-top: 84px; padding-bottom: 36px; transform: scale(.92); }
+    #deviceBackConfirmPanel { min-height: 520px; padding-top: 72px; padding-bottom: 34px; transform: scale(.92); }
   }
 </style>
 </head>
@@ -644,12 +662,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.87-hamilton-cloud-special';
+  const BUILD_ID = 'v2.0.91-hamilton-cloud-special';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.87', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
-    { version: 'v2.0.86', date: '2026/08/20', summary: '退出確認の枠とボタンを生成画像のゲーム素材へ置換' },
+    { version: 'v2.0.91', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
+    { version: 'v2.0.90', date: '2026/08/20', summary: 'クール=カイのBATTLE曲とおまけ末尾へドパガキリミックスを追加' },
+    { version: 'v2.0.89', date: '2026/08/20', summary: '退出確認ボタンの文字が収まるよう縦幅を調整' },
+    { version: 'v2.0.88', date: '2026/08/20', summary: '退出確認ボタンを横長の透過素材へ再調整' },
     { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
@@ -1113,7 +1133,7 @@
     snow: 'assets/stage-snow.mp3',
     volcanic: 'assets/stage-volcanic.mp3',
     arena: 'assets/stage-boss-arena.mp3',
-    coolKai: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
+    coolKai: 'assets/six-eternel-dopagaki-remix.mp3'
   };
   // クールカイ戦の専用曲はタイトル表示前からブラウザへ先読みさせる。
   // 実際の再生時は stageBgm を使うため、音量・AudioContext経路は既存仕様のまま。
@@ -1170,7 +1190,8 @@
     { src: 'assets/bonus-bgm-2.mp3', volume: 0.56, label: 'Celtic Battle Mix' },
     { src: 'assets/bonus-bgm-3.mp3', volume: 0.45, label: 'SoulTech Alt Rock Mix' },
     { src: 'assets/bonus-bgm-4.mp3', volume: 0.54, label: 'おまけ4' },
-    { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' }
+    { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' },
+    { src: 'assets/six-eternel-dopagaki-remix.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）' }
   ];
   // おまけのサウンドテストで選べる全BGM。起動時に同じ一覧を先読みして、
   // おまけを開いた瞬間のsrc差し替え待ちをなくす。
@@ -1206,7 +1227,7 @@
     return audio;
   });
   const startupBgmPreloadCount = startupBgmPreloads.length;
-  let bonusBgmTrack = 0;        // 0=止まっている / 1〜5=その曲を選んでいる
+  let bonusBgmTrack = 0;        // 0=止まっている / 1〜6=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
   function bonusBgmBaseVolume() {
     const track = BONUS_BGM_TRACKS[bonusBgmTrack];
@@ -1431,7 +1452,7 @@
     title: 'タイトルBGM', room: 'ONLINEロビー',
     grass: '草原ステージ', desert: '砂漠ステージ', snow: '雪原ステージ',
     volcanic: '火山ステージ', arena: '闘技場ステージ',
-    coolKai: 'SIX ÉTERNEL ―愛はひとつじゃない―'
+    coolKai: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）'
   });
   function currentBgmDisplayName() {
     const kind = currentBgmKind();
