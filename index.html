@@ -649,10 +649,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.93-battle-bgm-prime';
+  const BUILD_ID = 'v2.0.94-dread-arrow-facing';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.94', date: '2026/08/20', summary: 'ドレッドアローの新画像の向きを正しく修正' },
     { version: 'v2.0.93', date: '2026/08/20', summary: '出撃前に必要な1曲だけ準備してBGM開始を高速化' },
     { version: 'v2.0.92', date: '2026/08/20', summary: '更新時にBGM・画像を取り直さない節約キャッシュへ改善' },
     { version: 'v2.0.91', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
@@ -3120,7 +3121,7 @@
       desc: '弩とサソリ尾を備えた狙撃戦車。刺した地面から毒針を走らせて追い詰める。',
       selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表から坂や壁を登る毒針の衝撃波', selectFlavor: '着弾後、相手に向かって地雷針が追尾する',
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
-      color: '#f14b46', special: 'スコーピオンレール', facesLeft: true
+      color: '#f14b46', special: 'スコーピオンレール', facesLeft: false
     },
     hamulton: {
       key: 'hamulton', name: 'ハムルトン', asset: 'hamulton', role: '妨害型', roleEn: 'CONTROL',

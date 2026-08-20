@@ -521,6 +521,7 @@ check('デスゲートはDEAD LINEの下から固定射程',
   deathGate.range === 260 && deathGate.speed === 310 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.curvePower === 3 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
+const dreadArrow = kt.character('doRednote');
 // facesLeft は「元画像がどちら向きか」であって「敵を向くか」ではない。敵の方を向くことは
 // 後段の向き検査(全キャラ・左右両配置)で確認している。ここは画像を差し替えた時に
 // 設定の追随漏れへ気づくための固定。2026-08-03に右向きの絵へ差し替えたため false。
@@ -674,6 +675,9 @@ const shinigami = kt.character('shinigami');
 check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
+check('ドレッドアローの新画像は右向きなので反転しない',
+  !dreadArrow.facesLeft,
+  JSON.stringify(dreadArrow));
 kt.startBattle('shinigami');
 const vs1v1 = kt.matchupCutIn();
 check('1vs1の開始時は両陣営1体ずつのVSカットイン',
@@ -1244,7 +1248,7 @@ check('左向き素材のキャラが検査対象に含まれている', facesLe
 // 相手に背を向ける。絵と設定が合っているかは自動では判定できない(人の目でしか分からない)
 // ので、せめて設定が意図せず変わったことに気づけるようにする。
 // 画像を差し替えた時は、実機で向きを確認したうえでこの一覧も更新すること。
-const EXPECTED_LEFT_FACING = ['sumoeru', 'doRednote', 'akuma', 'kishi', 'neko'];
+const EXPECTED_LEFT_FACING = ['sumoeru', 'akuma', 'kishi', 'neko'];
 const actualLeftFacing = kt.chars().filter(k => kt.character(k).facesLeft);
 check('左向き素材として登録されているキャラの一覧が変わっていない',
   actualLeftFacing.join(',') === EXPECTED_LEFT_FACING.join(','),
