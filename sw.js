@@ -1,5 +1,13 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.90-cool-kai-dopagaki-remix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.92-smart-asset-cache';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
+const ASSET_CACHE = 'katamon-assets-v1';
+// 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
+const ASSET_REFRESH = [
+  './assets/characters/master/dread-arrow.png',
+  './assets/characters/runtime/dread-arrow.webp',
+  './assets/characters/master/hamulton.png',
+  './assets/characters/runtime/hamulton.webp',
+];
 const APP_SHELL = [
   './index.html',
   './generated/content-studio-catalog.js',
@@ -53,6 +61,8 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
       .then(cache => cache.addAll(APP_SHELL.map(asset => new Request(asset, { cache: 'reload' }))))
+      .then(() => caches.open(ASSET_CACHE))
+      .then(cache => Promise.all(ASSET_REFRESH.map(asset => cache.delete(asset))))
       .then(() => self.skipWaiting())
   );
 });
@@ -129,6 +139,21 @@ self.addEventListener('fetch', event => {
         })
         .catch(() => caches.match(request)
           .then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // 大きい画像・音声・動画は更新ごとに捨てず、同じURLなら前回の取得結果を再利用する。
+  // 素材を差し替える時だけURLを変えるため、普段の更新で全素材を再取得しない。
+  if (url.pathname.includes('/assets/')) {
+    event.respondWith(
+      caches.open(ASSET_CACHE).then(cache => cache.match(request).then(cached => {
+        if (cached) return cached;
+        return fetch(request).then(response => {
+          if (response.ok) cache.put(request, response.clone());
+          return response;
+        });
+      }))
     );
     return;
   }

@@ -1904,7 +1904,8 @@ tapBonus();
 check('おまけを押すと全BGMのサウンドテストを開く',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'none'
     && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
-    && indexHtml.includes('const startupBgmPreloadCount = startupBgmPreloads.length'),
+    && indexHtml.includes('const startupBgmPreloadCount = 0')
+    && !indexHtml.includes('const startupBgmPreloads ='),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
 check('サウンドテストはタイトル・ロビー・全ステージ・おまけ6曲を登録する',
   indexHtml.includes("key: 'title'")

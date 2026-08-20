@@ -571,7 +571,8 @@ function check(name, value) {
     { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756' },
     { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
     { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
-    { key: 'doRednote', stem: 'dread-arrow', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
+    { key: 'doRednote', stem: 'dread-arrow', webp: 'd620300581dd', png: '8054db6d5daf' },
+    { key: 'hamulton', stem: 'hamulton', webp: '8c0204d58c18', png: 'ddc24e4725aa' },
     { key: 'mocchario', stem: 'mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
     { key: 'mecha', stem: 'chrome-gear', webp: 'ec5ac42f758b', png: '086923d116e6' },
     { key: 'akuma', stem: 'rubidevi', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
@@ -1029,13 +1030,13 @@ function check(name, value) {
     && !/#onlineCharacterPreview\s*\{[^}]*object-fit:\s*cover;[^}]*\}/.test(htmlText));
   const sumoeruRoomPreview = h.onlineCharacterPreviewForTest('sumoeru');
   const medamaRoomPreview = h.onlineCharacterPreviewForTest('medama');
-  check('changing the room character updates its image, name and all seventeen choices',
+  check('changing the room character updates its image, name and all eighteen choices',
     sumoeruRoomPreview && medamaRoomPreview
     && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
     && sumoeruRoomPreview.alt === 'スモエル'
     && medamaRoomPreview.character === 'medama' && /eyebolt\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
     && medamaRoomPreview.alt === 'アイボルト'
-    && medamaRoomPreview.options === 17);
+    && medamaRoomPreview.options === 18);
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')
