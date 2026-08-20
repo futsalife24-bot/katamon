@@ -445,7 +445,7 @@
   }
   #deviceBackConfirmPanel::before {
     content: ""; position: absolute; z-index: 0; inset: 0 0 auto; height: 70px;
-    background: linear-gradient(rgba(104,57,27,.98), rgba(76,39,20,.94));
+    background: #673719;
     border-bottom: 1px solid rgba(255,210,111,.22);
   }
   #deviceBackConfirmPanel > * { position: relative; z-index: 1; }
@@ -468,21 +468,21 @@
   }
   #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 14px; }
   #deviceBackConfirmActions .deviceBackLever {
-    position: relative; min-height: 76px; padding: 17px 24px 13px; overflow: hidden;
+    position: relative; min-height: 72px; padding: 14px 24px 12px; overflow: hidden;
     border: 0; border-radius: 0; color: #fff5dc;
     font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
-    background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
+    background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
     filter: drop-shadow(0 5px 5px rgba(0,0,0,.46));
   }
   #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px) scale(.99); filter: brightness(1.15) drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
   #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 16px; line-height: 1.25; letter-spacing: .04em; }
   #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .82; }
   #deviceBackStay {
-    background-image: url("assets/title-shield-button.webp") !important;
+    background-image: url("assets/exit-confirm-stay-v2.png") !important;
     color: #fff5dc !important;
   }
   #deviceBackExit {
-    background-image: url("assets/title-parchment-button.webp") !important; color: #4b2a18 !important;
+    background-image: url("assets/exit-confirm-exit-v2.png") !important; color: #4b2a18 !important;
     text-shadow: 0 1px 0 rgba(255,255,255,.5);
   }
   @media (max-height: 620px) {
@@ -652,11 +652,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.87-exit-confirm-friendly-ui';
+  const BUILD_ID = 'v2.0.88-exit-confirm-buttons-v2';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.87', date: '2026/08/20', summary: '退出確認を木製ボードと既存の透過ボタンへ刷新' },
+    { version: 'v2.0.88', date: '2026/08/20', summary: '退出確認ボタンを横長の透過素材へ再調整' },
     { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
