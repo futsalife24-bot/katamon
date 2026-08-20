@@ -678,6 +678,11 @@ check('死神は右向きの元画像で、戦闘中だけ2割大きく表示す
 check('ドレッドアローの新画像は右向きなので反転しない',
   !dreadArrow.facesLeft,
   JSON.stringify(dreadArrow));
+check('ドレッドアローとクール=カイは透明余白を除いて大きく表示する',
+  dreadArrow.imageCrop?.sw <= 0.72 && dreadArrow.imageCrop?.sh <= 0.65
+    && kt.character('coolKai').imageCrop?.sx >= 0.12
+    && kt.character('coolKai').previewImageCrop?.sw <= 0.72,
+  JSON.stringify({ dreadArrow: dreadArrow.imageCrop, coolKai: kt.character('coolKai').imageCrop }));
 kt.startBattle('shinigami');
 const vs1v1 = kt.matchupCutIn();
 check('1vs1の開始時は両陣営1体ずつのVSカットイン',
@@ -1615,7 +1620,7 @@ check('クール=カイの握り飯47発は見た目の回転だけ個別にラ�
   JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
   indexHtml.includes('function characterPreviewImageRect(key, img)')
-    && indexHtml.includes('previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 }')
+    && indexHtml.includes('previewImageCrop: { sx: 0.14, sy: 0.35, sw: 0.72, sh: 0.51 }')
     && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
