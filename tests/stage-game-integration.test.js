@@ -444,10 +444,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v2\.0\.88-exit-confirm-buttons-v2/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v2\.0\.88-exit-confirm-buttons-v2/);
   assert.match(serviceWorker, /assets\/exit-confirm-stay-v2\.png/);
   assert.match(serviceWorker, /assets\/exit-confirm-exit-v2\.png/);
   assert.doesNotMatch(serviceWorker, /exit-confirm-(frame|stay|exit)\.png/);

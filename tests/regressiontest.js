@@ -1898,7 +1898,7 @@ const bonusBtn = kt.bonusBtn();
 function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
 
 const bonusTrackCount = kt.bonusTrackCount();
-check('おまけ曲が5曲登録されている', bonusTrackCount === 5, String(bonusTrackCount));
+check('おまけ曲が6曲登録されている', bonusTrackCount === 6, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 tapBonus();
 check('おまけを押すと全BGMのサウンドテストを開く',
@@ -1906,7 +1906,7 @@ check('おまけを押すと全BGMのサウンドテストを開く',
     && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
     && indexHtml.includes('const startupBgmPreloadCount = startupBgmPreloads.length'),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
-check('サウンドテストはタイトル・ロビー・全ステージ・おまけ5曲を登録する',
+check('サウンドテストはタイトル・ロビー・全ステージ・おまけ6曲を登録する',
   indexHtml.includes("key: 'title'")
     && indexHtml.includes("key: 'room'")
     && indexHtml.includes("STAGE_BGM_SOURCES.coolKai")
@@ -1932,7 +1932,7 @@ kt.startBattle('coolKai');
 check('クールカイを選んだ対戦は専用BGMを固定で流す',
   kt.bgm().desired === 'stage'
     && kt.bgm().stageTheme === 'coolKai'
-    && kt.bgm().stageSrc.includes('SIX ÉTERNEL ―愛はひとつじゃない―.mp3'),
+    && kt.bgm().stageSrc.includes('six-eternel-dopagaki-remix.mp3'),
   JSON.stringify(kt.bgm()));
 check('クール=カイの連戦は専用BGMを先頭へ戻さず継続する',
   indexHtml.includes('const continueCoolKaiBgm = desired === \'stage\'')
@@ -1941,9 +1941,9 @@ check('クール=カイの連戦は専用BGMを先頭へ戻さず継続する',
   'continuous dedicated BGM guard missing');
 kt.setPhase('title');
 kt.syncBgm();
-check('おまけ5とBATTLEロゴは専用曲名を表示する',
-  indexHtml.includes("src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'")
-    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―'")
+check('おまけ6とBATTLEロゴはドパガキリミックス名を表示する',
+  indexHtml.includes("src: 'assets/six-eternel-dopagaki-remix.mp3'")
+    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）'")
     && indexHtml.includes('drawBgmNowPlayingLabel(748, UI.gold)'),
   'BGM display label missing');
 check('タイトルへ戻ってもおまけ曲は鳴り出さない',
