@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.86-exit-confirm-assets';
+const CACHE_VERSION = 'katamon-pwa-v2.0.87-hamilton-cloud-special';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',

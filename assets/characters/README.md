@@ -20,6 +20,7 @@
 | `burumutan` | ブルームタン | `bloom-tan` |
 | `sumoeru` | スモエル | `sumoeru` |
 | `doRednote` | ドレッドアロー | `dread-arrow` |
+| `hamulton` | ハムルトン | `hamulton` |
 | `mocchario` | モッチャリオ | `mocchario` |
 | `mecha` | クロムギア | `chrome-gear` |
 | `akuma` | ルビデビ | `rubidevi` |

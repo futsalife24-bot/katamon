@@ -644,10 +644,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.86-exit-confirm-assets';
+  const BUILD_ID = 'v2.0.87-hamilton-cloud-special';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.87', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
     { version: 'v2.0.86', date: '2026/08/20', summary: '退出確認の枠とボタンを生成画像のゲーム素材へ置換' },
     { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
@@ -3122,6 +3123,15 @@
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
       color: '#f14b46', special: 'スコーピオンレール', facesLeft: true
     },
+    hamulton: {
+      key: 'hamulton', name: 'ハムルトン', asset: 'hamulton', role: '妨害型', roleEn: 'CONTROL',
+      desc: '巨大グローブ砲で、相手の狙いをかく乱する戦略型戦車。雲から逃げる判断を迫る。',
+      selectStats: [3, 3, 4], specialDesc: '着弾地点に3敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。', selectFlavor: 'まさかの一発で、狙いを見失わせる雲を残す',
+      maxHp: 92, blastMul: 0.95, windMul: 0.9, fuelMul: 1.1, velScaleMul: 1.0, guideMul: 1.0, specialVelocityMul: 1.0, tBias: 1.0,
+      color: '#f0bd4f', special: 'まさかのホウヒ',
+      imageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 },
+      previewImageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 }
+    },
     mocchario: {
       key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
       desc: '口から高火力砲を放つ重量級。機動力を捨てて爆風で制圧する。',
@@ -3245,7 +3255,7 @@
     burumutan: [0.62, 0.60, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
     mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
     jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34],
-    shinigami: [0.50, 0.38, 0.42], coolKai: [0.73, 0.53, 0.28]
+    shinigami: [0.50, 0.38, 0.42], coolKai: [0.73, 0.53, 0.28], hamulton: [0.42, 0.45, 0.32]
   };
   const DEFAULT_FACE = [0.5, 0.3, 0.42];
 
@@ -3258,14 +3268,14 @@
     burumutan: [0.50, 0.55, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.18, 0.80, 0.30],
     mocchario: [0.62, 0.34, 0.34], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
     jinba: [0.52, 0.20, 0.26], kishi: [0.43, 0.28, 0.28], neko: [0.55, 0.33, 0.32],
-    shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26]
+    shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26], hamulton: [0.42, 0.45, 0.32]
   };
 
   for (const [id, character] of Object.entries(GENERATED_CHARACTERS)) {
     CHARACTER_FACES[id] = Array.isArray(character.face) ? character.face : DEFAULT_FACE;
     MATCHUP_FACES[id] = Array.isArray(character.matchupFace) ? character.matchupFace : CHARACTER_FACES[id];
   }
-  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
+  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'hamulton', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
   const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
   // ロード画面のキャラは起動ごとに1体だけ抽選する。Web Cryptoを使い、
   // 対戦の再現用Math.random()の列へ表示演出の乱数を混ぜない。
@@ -4065,6 +4075,10 @@
 
   let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,prismBeam,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
   let barucopters = []; // [{owner,x,y,targetX,targetY,shotsFired,shotTimer,departTimer}]
+  // ハムルトンの雲はターン境界でだけ更新する。固定刻みの経過時間に依存させないため、
+  // 1vs1/2vs2とも「敵チームの行動回数3回」という同じ契約で残る。
+  let creamClouds = []; // [{x,y,radius,owner,enemyTurnsLeft}]
+  const CREAM_CLOUD_RADIUS = 76;
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   // v212の300pxから1.5倍。機銃の照準・弾道はこの出現位置から変えずに保つ。
@@ -4152,6 +4166,7 @@
       groundFlame: !!opts.groundFlame,
       drainHeal: !!opts.drainHeal,
       firework: !!opts.firework,
+      creamCloudMarker: !!opts.creamCloudMarker,
       jump: opts.jump != null ? !!opts.jump : !!(unitById(owner) && unitById(owner).jumpShot),
       fireworkShard: !!opts.fireworkShard,
       deathGateMarker: !!opts.deathGateMarker,
@@ -4716,6 +4731,9 @@
 
     if (activateSpecial && launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0)) {
       // 生成キャラクターの宣言的テンプレートは上で処理済み。
+    } else if (activateSpecial && def.key === 'hamulton') {
+      // 通常弾と同じ弾道で地点を指定し、着弾後だけ視界を遮る雲へ変える。直接ダメージは与えない。
+      fireProjectile(owner, anchor, vx0, vy0, { windMul: 1, gravityMul: 1, creamCloudMarker: true, noTerrain: true });
     } else if (activateSpecial && def.key === 'shinigami') {
       // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
       // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
@@ -5084,6 +5102,24 @@
   let pendingShot = null;    // 必殺のオーラ→カットインを見せ終わるまで発射を待たせる
   let lightningBeams = [];   // 着弾後に一瞬だけ残る電撃の残像
   let groundFlames = [];     // フェニーチェの着弾点から左右へ時間差で灯る炎
+
+  function spawnCreamCloud(p, x, y) {
+    if (!p || !p.creamCloudMarker) return;
+    // 同じハムルトンが再使用した時は、古い雲を残さず置き換える。
+    creamClouds = creamClouds.filter(cloud => cloud.owner !== p.owner);
+    creamClouds.push({ x, y, radius: CREAM_CLOUD_RADIUS, owner: p.owner, enemyTurnsLeft: 3 });
+  }
+  function unitIsInCreamCloud(unit) {
+    if (!unit || unitDefeated(unit)) return false;
+    const anchor = unitAnchor(unit);
+    return creamClouds.some(cloud => Math.hypot(anchor.x - cloud.x, anchor.y - cloud.y) <= cloud.radius + UNIT_RADIUS);
+  }
+  function advanceCreamCloudsForTurn(unit) {
+    if (!unit) return;
+    creamClouds = creamClouds
+      .map(cloud => teamOfOwner(cloud.owner) !== unit.team ? { ...cloud, enemyTurnsLeft: cloud.enemyTurnsLeft - 1 } : cloud)
+      .filter(cloud => cloud.enemyTurnsLeft > 0);
+  }
 
   const GROUND_FLAME_SIDE_COUNT = 3;
   const GROUND_FLAME_STRIDE = 42;
@@ -6408,6 +6444,7 @@
       activeIndex, turnCount,
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
       nextWind: nextWind ? { ...nextWind } : { dir: wind.dir, strength: wind.strength, calmWind },
+      creamClouds: creamClouds.map(cloud => ({ x: cloud.x, y: cloud.y, radius: cloud.radius, owner: cloud.owner, enemyTurnsLeft: cloud.enemyTurnsLeft })),
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, y: cameraY, zoom: cameraZoom }
     };
@@ -6593,6 +6630,7 @@
   function resetTransientBattleState() {
     projectiles = [];
     barucopters = [];
+    creamClouds = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
@@ -6734,6 +6772,10 @@
     for (const u of units) faceUnitTowardOpponent(u);
 
     resetTransientBattleState();
+    creamClouds = Array.isArray(data.creamClouds)
+      ? data.creamClouds.filter(cloud => cloud && isFiniteIn(Number(cloud.x), -100, STAGE_W + 100) && isFiniteIn(Number(cloud.y), -100, STAGE_H + 100) && isFirebaseUnitId(cloud.owner) && Number.isInteger(cloud.enemyTurnsLeft) && cloud.enemyTurnsLeft > 0 && cloud.enemyTurnsLeft <= 3)
+        .map(cloud => ({ x: Number(cloud.x), y: Number(cloud.y), radius: CREAM_CLOUD_RADIUS, owner: cloud.owner, enemyTurnsLeft: cloud.enemyTurnsLeft }))
+      : [];
     turnOrder = Array.isArray(data.turnOrder) && data.turnOrder.length ? data.turnOrder.slice() : units.map(u => u.id);
     activeIndex = Math.max(0, Math.min(turnOrder.length - 1, Number(data.activeIndex) || 0));
     turnCount = data.turnCount;
@@ -12397,6 +12439,7 @@
       activeIndex = (activeIndex + 1) % turnOrder.length;
       const next = activeUnit();
       if (next.hp <= 0) continue;
+      advanceCreamCloudsForTurn(next);
       if (next.actionSkipTurns > 0) {
         showActionSkipTurn(next, () => {
           next.actionSkipTurns--;
@@ -13906,7 +13949,7 @@
     // 悪魔の必殺を構えている間は弾が直進するので、ガイドも重力・風を切って直線にする。
     const straightGuide = specialArmed && isSpecialReady(me) && def.key === 'akuma';
     const gravity = straightGuide ? 0 : GRAVITY * shotProfile.gravityMul;
-    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul;
+    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul * (unitIsInCreamCloud(me) ? 0.5 : 1);
     const steps = 14;
     const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul;
 
@@ -15714,6 +15757,21 @@
     ctx.restore();
   }
 
+  function drawCreamClouds() {
+    for (const cloud of creamClouds) {
+      ctx.save();
+      const glow = ctx.createRadialGradient(cloud.x, cloud.y - 12, 8, cloud.x, cloud.y, cloud.radius);
+      glow.addColorStop(0, 'rgba(255,249,194,0.78)');
+      glow.addColorStop(0.55, 'rgba(255,222,91,0.48)');
+      glow.addColorStop(1, 'rgba(242,183,51,0.05)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.ellipse(cloud.x, cloud.y - 10, cloud.radius, cloud.radius * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,241,157,0.74)';
+      for (const offset of [-0.45, 0, 0.42]) { ctx.beginPath(); ctx.arc(cloud.x + cloud.radius * offset, cloud.y - 22 - Math.abs(offset) * 10, cloud.radius * 0.25, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+
   function drawGroundFlames() {
     for (const flame of groundFlames) {
       if (flame.delay > 0) continue;
@@ -17042,6 +17100,7 @@
     drawParticles();
     for (const u of units) drawUnit(u);
     drawScorpionRailImpactSpikes();
+    drawCreamClouds();
     drawGroundFlames();
     drawFloatTexts();
     ctx.restore();
@@ -18452,6 +18511,8 @@
               resolveCoolKaiOnigiriUnitImpact(p, u, p.x, p.y);
             } else if (p.deathGateMarker) {
               spawnDeathGate(p, p.x, p.y);
+            } else if (p.creamCloudMarker) {
+              spawnCreamCloud(p, p.x, p.y);
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
             } else if (p.firework) {
@@ -18495,6 +18556,8 @@
           resolveCoolKaiOnigiriSurfaceImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.deathGateMarker) {
           spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.creamCloudMarker) {
+          spawnCreamCloud(p, obstacleHit.x, obstacleHit.y);
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         } else if (p.firework) {
@@ -18535,6 +18598,7 @@
         else if (p.barucopterBullet) resolveBarucopterBulletSurfaceImpact(p, p.x, p.y);
         else if (p.coolKaiOnigiri) resolveCoolKaiOnigiriSurfaceImpact(p, p.x, p.y);
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
+        else if (p.creamCloudMarker) spawnCreamCloud(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
           explodeProjectileAt(p, p.x, p.y);
