@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.89-exit-confirm-buttons-v3';
+const CACHE_VERSION = 'katamon-pwa-v2.0.90-cool-kai-dopagaki-remix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
@@ -43,6 +43,7 @@ const APP_SHELL = [
   './assets/special-cutin-edm-zap.mp3',
   './assets/cool-kai-special-voice.mp3',
   './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
+  './assets/six-eternel-dopagaki-remix.mp3',
   './assets/device-exit-seal.png',
   './assets/exit-confirm-stay-v2.png',
   './assets/exit-confirm-exit-v2.png'

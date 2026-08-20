@@ -557,7 +557,8 @@ function check(name, value) {
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3' },
     { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3' },
     { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3' },
-    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' }
+    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' },
+    { file: 'assets/six-eternel-dopagaki-remix.mp3', hash: 'ee5912711914', url: 'assets/six-eternel-dopagaki-remix.mp3' }
   ];
   const pinNg = [];
   for (const pin of BONUS_TRACK_PINS) {
