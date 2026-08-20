@@ -77,11 +77,14 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
     && indexHtml.includes('const emblemSize = 58')
     && indexHtml.includes('const progressBarY = VH / 2 + 170'),
   'progress character loader missing');
-check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
+check('対戦開始前に必要な1曲だけとロゴ動画を準備する',
   indexHtml.includes('rel="preload" as="video"')
     && indexHtml.includes('battleStartLogoVideo.load()')
     && indexHtml.includes('function primeFirstBattleMedia()')
-    && indexHtml.includes('primeFirstBattleMedia();'),
+    && indexHtml.includes('primeFirstBattleMedia();')
+    && indexHtml.includes('function primeStageBgm(themeKey)')
+    && indexHtml.includes('primeStageBgm(currentThemeKey);')
+    && !indexHtml.includes("stageBgm.src = STAGE_BGM_SOURCES.coolKai;"),
   'first battle media preparation missing');
 check('BATTLE画面に全ユニットのデバフ名と残りターンを表示する',
   indexHtml.includes('function debuffStatusEntries(u)')
