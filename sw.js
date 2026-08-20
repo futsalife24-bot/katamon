@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.88-exit-confirm-buttons-v2';
+const CACHE_VERSION = 'katamon-pwa-v2.0.89-exit-confirm-buttons-v3';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
