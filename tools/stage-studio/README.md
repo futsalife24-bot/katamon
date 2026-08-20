@@ -2,7 +2,7 @@
 
 Stage Studioは、対象ゲーム用のカスタムステージをスマートフォンで作成する静的Webアプリです。アカウント、サーバー、AI APIは使いません。地形生成・編集・検証・端末保存・JSON/ZIP出力までブラウザ内で完結します。
 
-現在のMVPバージョンは`1.7.0-text-placement`です。
+現在のMVPバージョンは`1.8.1-character-assets`です。
 
 公開版: https://futsalife24-bot.github.io/katamon/tools/stage-studio/
 

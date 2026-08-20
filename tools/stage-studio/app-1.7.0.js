@@ -1,12 +1,12 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.7.0-text-placement';
+  const APP_VERSION = '1.8.1-character-assets';
   const Core = globalThis.StageCore || null;
   const StageZip = globalThis.StageZip || null;
   const SharedStorage = globalThis.StageStorage || null;
   const RAW_LIMITS = Core && Core.LIMITS ? Core.LIMITS : {};
-  const LIMITS = Object.assign({}, RAW_LIMITS, {
+  let LIMITS = Object.assign({}, RAW_LIMITS, {
     stageWidth: RAW_LIMITS.stageWidth || 1440,
     stageHeight: RAW_LIMITS.stageHeight || 660,
     terrainBottomY: RAW_LIMITS.terrainBottomY || RAW_LIMITS.terrainBottom || 636,
@@ -24,7 +24,7 @@
   });
   /* Fallback properties above deliberately mirror the shared module's fixed game dimensions. */
   const RAW_PHYSICS = Core && Core.PHYSICS ? Core.PHYSICS : {};
-  const PHYSICS = Object.assign({}, RAW_PHYSICS, {
+  let PHYSICS = Object.assign({}, RAW_PHYSICS, {
     fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
     gravity: RAW_PHYSICS.gravity || 650,
     windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
@@ -34,6 +34,41 @@
     deadLineY: Number.isFinite(RAW_PHYSICS.deadLineY) ? RAW_PHYSICS.deadLineY : LIMITS.terrainBottomY,
     fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
   });
+  function normalizedLimits(raw) {
+    raw = raw || RAW_LIMITS;
+    return Object.assign({}, raw, {
+      stageWidth: raw.stageWidth || 1440,
+      stageHeight: raw.stageHeight || 660,
+      terrainBottomY: raw.terrainBottomY || raw.terrainBottom || 636,
+      columnWidth: raw.columnWidth || 3,
+      rowHeight: raw.rowHeight || 4,
+      terrainColumns: raw.terrainColumns || raw.columns || 480,
+      terrainRows: raw.terrainRows || raw.rows || 165,
+      unitRadius: raw.unitRadius || 18,
+      maxSpawnPoints: raw.maxSpawnPoints || raw.maxSpawns || 4,
+      maxJsonBytes: raw.maxJsonBytes || raw.maxFileBytes || 2 * 1024 * 1024,
+      maxZipBytes: raw.maxZipBytes || 6 * 1024 * 1024,
+      maxTitleLength: raw.maxTitleLength || 48,
+      maxDescriptionLength: raw.maxDescriptionLength || 500,
+      maxAuthorLength: raw.maxAuthorLength || 32
+    });
+  }
+  function setRuntimeLimits(stage) {
+    const raw = Core && typeof Core.getStageLimits === 'function'
+      ? Core.getStageLimits(stage || { size: $('stageSize') && $('stageSize').value })
+      : RAW_LIMITS;
+    LIMITS = normalizedLimits(raw);
+    PHYSICS = Object.assign({}, RAW_PHYSICS, {
+      fixedDt: RAW_PHYSICS.fixedDt || 1 / 120,
+      gravity: RAW_PHYSICS.gravity || 650,
+      windAccelerationMax: RAW_PHYSICS.windAccelerationMax || RAW_PHYSICS.windAccelMax || 260,
+      velocityScale: RAW_PHYSICS.velocityScale || 7.8,
+      projectileRadius: RAW_PHYSICS.projectileRadius || 5,
+      normalBlastRadius: RAW_PHYSICS.normalBlastRadius || RAW_PHYSICS.defaultExplosionRadius || 44,
+      deadLineY: LIMITS.terrainBottomY,
+      fallTrigger: Number.isFinite(RAW_PHYSICS.fallTrigger) ? RAW_PHYSICS.fallTrigger : 22
+    });
+  }
   const SCREEN_ORDER = ['home', 'new', 'generate', 'terrain', 'spawns', 'playtest', 'validate', 'export'];
   const SCREEN_ALIASES = Object.freeze({ gimmicks: 'playtest', appearance: 'terrain' });
   const SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
@@ -83,10 +118,10 @@
     volcanic: '../../assets/stage-volcanic-bg.jpg'
   });
   const CHARACTER_SOURCES = Object.freeze({
-    kyoryu: ['../../assets/kyoryu.webp', '../../assets/kyoryu.png'],
-    medama: ['../../assets/medama.webp', '../../assets/medama.png'],
-    tori: ['../../assets/tori.webp', '../../assets/tori.png'],
-    iwa: ['../../assets/iwa.webp', '../../assets/iwa.png']
+    kyoryu: ['../../assets/characters/runtime/dirano.webp', '../../assets/characters/master/dirano.png'],
+    medama: ['../../assets/characters/runtime/eyebolt.webp', '../../assets/characters/master/eyebolt.png'],
+    tori: ['../../assets/characters/runtime/fenice.webp', '../../assets/characters/master/fenice.png'],
+    iwa: ['../../assets/characters/runtime/gorocca.webp', '../../assets/characters/master/gorocca.png']
   });
   const SLOT_CHARACTER = Object.freeze({ p1: 'kyoryu', e1: 'medama', p2: 'tori', e2: 'iwa' });
   const SPRITE_SIZE = 78;
@@ -214,6 +249,7 @@
   const state = {
     stage: null,
     grid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
+    materialGrid: new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows),
     currentScreen: 'home',
     activeTool: 'draw',
     terrainInspectorPanel: 'brush',
@@ -434,7 +470,7 @@
 
   function gridFromTerrain(terrain) {
     if (Core && typeof Core.gridFromTerrain === 'function') return Core.gridFromTerrain(terrain);
-    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain);
+    if (Core && typeof Core.segmentsToGrid === 'function') return Core.segmentsToGrid(terrain.columns || terrain, state.stage);
     const grid = new Uint8Array(LIMITS.terrainColumns * LIMITS.terrainRows);
     const columns = terrain && Array.isArray(terrain.columns) ? terrain.columns : [];
     for (let c = 0; c < Math.min(columns.length, LIMITS.terrainColumns); c++) {
@@ -450,7 +486,7 @@
   function columnsFromGrid(grid) {
     if (Core && typeof Core.terrainFromGrid === 'function') return Core.terrainFromGrid(grid);
     if (Core && typeof Core.gridToSegments === 'function') {
-      return Core.gridToSegments(grid).map((segments) => segments
+      return Core.gridToSegments(grid, state.stage).map((segments) => segments
         .map((segment) => [clamp(segment[0], 0, LIMITS.terrainBottomY), clamp(segment[1], 0, LIMITS.terrainBottomY)])
         .filter((segment) => segment[1] > segment[0]));
     }
@@ -472,7 +508,32 @@
 
   function syncTerrainToStage() {
     if (!state.stage) return;
+    const wasWholeSteel = Array.isArray(state.stage.materials)
+      && state.stage.materials.length === 1
+      && state.stage.materials[0] && state.stage.materials[0].id === 'steel';
     state.stage.terrain.columns = columnsFromGrid(state.grid);
+    const columns = Array.from({ length: LIMITS.terrainColumns }, () => []);
+    for (let c = 0; c < LIMITS.terrainColumns; c++) {
+      let start = -1;
+      for (let r = 0; r <= LIMITS.terrainRows; r++) {
+        const steel = r < LIMITS.terrainRows && state.grid[r * LIMITS.terrainColumns + c] && state.materialGrid[r * LIMITS.terrainColumns + c];
+        if (steel && start < 0) start = r;
+        if (!steel && start >= 0) { columns[c].push([start * LIMITS.rowHeight, Math.min(r * LIMITS.rowHeight, LIMITS.terrainBottomY), 'steel']); start = -1; }
+      }
+    }
+    state.stage.terrain.materialSegments = columns;
+    const hasSteel = columns.some((column) => column.length);
+    if (hasSteel && !state.stage.materials.some((material) => material.id === 'steel')) {
+      state.stage.materials.push({ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' });
+    }
+    if (!hasSteel && !wasWholeSteel) state.stage.materials = state.stage.materials.filter((material) => material.id !== 'steel');
+  }
+
+  function selectedTerrainMaterial() {
+    if ($('terrainMaterial').value === 'steel') {
+      return { id: 'steel', type: 'indestructible', destructible: false, color: $('terrainColor').value };
+    }
+    return { id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value };
   }
 
   function syncMetadataFromForm() {
@@ -484,6 +545,9 @@
 
   function syncStageToForm() {
     if (!state.stage) return;
+    $('stageSize').value = state.stage.stageWidth === 2160 && state.stage.stageHeight === 960 ? 'large' : 'standard';
+    $('stageWidth').value = state.stage.stageWidth || LIMITS.stageWidth;
+    $('stageHeight').value = state.stage.stageHeight || LIMITS.stageHeight;
     $('stageTitle').value = state.stage.title || 'ステージ';
     $('stageAuthor').value = state.stage.authorDisplayName || '作成者';
     $('stageDescription').value = state.stage.description || '';
@@ -500,6 +564,7 @@
     if (Number.isFinite(params.cavityRate)) $('cavityRange').value = Math.round(params.cavityRate * 100);
     if (Number.isFinite(params.difficulty)) $('difficultyRange').value = Math.round(params.difficulty * 100);
     $('generationPlayerCount').value = params.playerCount === 4 ? '4' : '2';
+    $('generationSteelMode').value = ['none', 'partial', 'whole'].includes(params.steelMode) ? params.steelMode : 'none';
     $('symmetryInput').checked = !!params.symmetric;
     const wind = Array.isArray(state.stage.gimmicks) ? state.stage.gimmicks.find((item) => item && item.type === 'globalWind') : null;
     $('windEnabled').checked = !!(wind && wind.enabled !== false);
@@ -510,7 +575,11 @@
     $('backgroundMode').value = ['theme', 'gradient', 'color'].includes(background.mode) ? background.mode : 'theme';
     const editableBackground = background.mode === 'gradient' && background.gradient ? background.gradient.from : background.color;
     $('backgroundColor').value = /^#[0-9a-f]{6}$/i.test(editableBackground || '') ? editableBackground : THEME_COLORS[$('themeSelect').value].sky;
-    $('terrainColor').value = state.stage.materials && /^#[0-9a-f]{6}$/i.test(state.stage.materials[0] && state.stage.materials[0].color || '') ? state.stage.materials[0].color : THEME_COLORS[$('themeSelect').value].terrain;
+    const baseMaterial = state.stage.materials && (state.stage.materials.find((item) => item && item.id === 'terrain') || state.stage.materials[0]);
+    $('terrainColor').value = baseMaterial && /^#[0-9a-f]{6}$/i.test(baseMaterial.color || '') ? baseMaterial.color : THEME_COLORS[$('themeSelect').value].terrain;
+    const hasMaterialOverrides = Array.isArray(state.stage.terrain && state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    $('terrainMaterial').value = !hasMaterialOverrides && state.stage.materials && state.stage.materials[0] && state.stage.materials[0].id === 'steel' ? 'steel' : 'terrain';
     $('brightnessRange').value = Math.round(clamp(state.appearanceBrightness || 1, 0.6, 1.3) * 100);
     $('decorationsEnabled').checked = state.stage.decorations ? state.stage.decorations.enabled !== false : true;
     $('spawnCount').value = state.stage.spawnPoints && state.stage.spawnPoints.length >= 4 ? '4' : '2';
@@ -543,7 +612,15 @@
     clearTimeout(state.autosaveTimer);
     state.dirty = false;
     state.stage = clone(stage);
+    setRuntimeLimits(state.stage);
     state.grid = gridFromTerrain(state.stage.terrain);
+    state.materialGrid = new Uint8Array(state.grid.length);
+    (state.stage.terrain.materialSegments || []).forEach((column, c) => (column || []).forEach((segment) => {
+      if (segment[2] !== 'steel') return;
+      const from = Math.max(0, Math.floor(segment[0] / LIMITS.rowHeight));
+      const to = Math.min(LIMITS.terrainRows, Math.ceil(segment[1] / LIMITS.rowHeight));
+      for (let r = from; r < to; r++) state.materialGrid[r * LIMITS.terrainColumns + c] = 1;
+    }));
     state.characterGuides = defaultCharacterGuides(state.grid);
     state.activeGuideIndex = 0;
     state.guideDrag = null;
@@ -565,6 +642,7 @@
   function captureSnapshot() {
     return {
       grid: state.grid.slice(),
+      materialGrid: state.materialGrid.slice(),
       spawnPoints: clone(state.stage.spawnPoints || []),
       gimmicks: clone(state.stage.gimmicks || []),
       background: clone(state.stage.background || {}),
@@ -577,6 +655,7 @@
 
   function restoreSnapshot(snapshot) {
     state.grid = snapshot.grid.slice();
+    state.materialGrid = snapshot.materialGrid ? snapshot.materialGrid.slice() : new Uint8Array(state.grid.length);
     state.stage.spawnPoints = clone(snapshot.spawnPoints);
     state.stage.gimmicks = clone(snapshot.gimmicks);
     state.stage.background = clone(snapshot.background);
@@ -963,7 +1042,7 @@
   }
 
   function paintCircle(grid, x, y, radius, solid) {
-    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid);
+    if (Core && typeof Core.paintCircle === 'function') return Core.paintCircle(grid, x, y, radius, solid, state.stage);
     const minColumn = clamp(Math.floor((x - radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const maxColumn = clamp(Math.ceil((x + radius) / LIMITS.columnWidth), 0, LIMITS.terrainColumns - 1);
     const minRow = clamp(Math.floor((y - radius) / LIMITS.rowHeight), 0, LIMITS.terrainRows - 1);
@@ -1112,7 +1191,7 @@
     return collision;
   }
 
-  function drawTerrain(context, columns, theme, terrainTop, showCollision) {
+  function drawTerrain(context, columns, theme, terrainTop, showCollision, steel) {
     const gradient = context.createLinearGradient(0, 180, 0, LIMITS.terrainBottomY);
     gradient.addColorStop(0, terrainTop);
     gradient.addColorStop(1, theme.dirtBottom);
@@ -1134,6 +1213,18 @@
       context.clip();
       context.fillStyle = context.createPattern(terrainNoiseTile, 'repeat');
       context.fillRect(0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
+      if (steel) {
+        context.strokeStyle = 'rgba(5,10,15,.78)';
+        context.lineWidth = 2;
+        for (let y = 18; y < LIMITS.terrainBottomY; y += 30) {
+          context.beginPath(); context.moveTo(0, y); context.lineTo(LIMITS.stageWidth, y); context.stroke();
+        }
+        context.strokeStyle = 'rgba(210,225,234,.18)';
+        context.lineWidth = 1;
+        for (let x = 18; x < LIMITS.stageWidth; x += 54) {
+          context.beginPath(); context.moveTo(x, 0); context.lineTo(x - 14, LIMITS.terrainBottomY); context.stroke();
+        }
+      }
       context.lineCap = 'round';
       context.strokeStyle = theme.strata;
       context.lineWidth = 2;
@@ -1224,14 +1315,31 @@
     if (showGameBackground) drawImageCover(context, stageBackgroundImages[themeKey], 0, 0, LIMITS.stageWidth, LIMITS.stageHeight);
 
     const columns = columnsFromGrid(grid);
-    const material = state.stage.materials && state.stage.materials[0] || {};
-    const terrainTop = /^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop;
+    const hasMaterialOverrides = Array.isArray(state.stage.terrain && state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    const material = state.stage.materials && (state.stage.materials.find((item) => item && item.id === 'terrain') || state.stage.materials[0]) || {};
+    // 部分鋼鉄ステージは通常地面をベースにし、鋼鉄区画だけをオーバーレイする。
+    const steel = material.id === 'steel' && !hasMaterialOverrides;
+    const terrainTop = steel ? '#71808C' : (/^#[0-9a-f]{6}$/i.test(material.color || '') ? material.color : theme.dirtTop);
     const terrainTheme = Object.assign({}, theme, {
       dirtBottom: mixHexColor(terrainTop, '#000000', 0.58),
       rim: mixHexColor(terrainTop, '#ffffff', 0.34),
       rimShadow: mixHexColor(terrainTop, '#000000', 0.36)
     });
-    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision);
+    drawTerrain(context, columns, terrainTheme, terrainTop, !!settings.showCollision, steel);
+    if (state.materialGrid && state.materialGrid.some((value) => value)) {
+      context.save();
+      context.fillStyle = '#39444f';
+      for (let row = 0; row < LIMITS.terrainRows; row++) for (let column = 0; column < LIMITS.terrainColumns; column++) {
+        if (state.materialGrid[row * LIMITS.terrainColumns + column]) {
+          context.fillRect(column * LIMITS.columnWidth, row * LIMITS.rowHeight, LIMITS.columnWidth + 0.6, LIMITS.rowHeight + 0.4);
+        }
+      }
+      context.strokeStyle = 'rgba(210,225,234,.28)';
+      context.lineWidth = 1;
+      for (let y = 18; y < LIMITS.terrainBottomY; y += 30) { context.beginPath(); context.moveTo(0, y); context.lineTo(LIMITS.stageWidth, y); context.stroke(); }
+      context.restore();
+    }
 
     if (!state.lowPowerMode && settings.showGrid && transform.scale * 24 >= 10) {
       context.strokeStyle = 'rgba(255,255,255,.22)';
@@ -1411,6 +1519,8 @@
       activeBrushRadius(),
       solid == null ? state.activeTool !== 'erase' : solid
     );
+    const material = $('terrainMaterial').value === 'steel' ? 1 : 0;
+    paintCircle(state.materialGrid, clamp(point.x, 0, LIMITS.stageWidth), clamp(point.y, 0, LIMITS.terrainBottomY), activeBrushRadius(), solid === false ? 0 : material);
     enforceTerrainBounds(target);
   }
 
@@ -2057,7 +2167,11 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
+    const terrainMaterial = selectedTerrainMaterial();
+    state.stage.materials = [terrainMaterial];
+    if (state.materialGrid && state.materialGrid.some((value) => value)) {
+      state.stage.materials.push({ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' });
+    }
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     updateAppearance();
     renderAllCanvases();
@@ -2130,7 +2244,8 @@
       destructibleRate: 1,
       hardTerrainRate: 0,
       playerCount: Number($('generationPlayerCount').value) === 4 ? 4 : 2,
-      difficulty: Number($('difficultyRange').value) / 100
+      difficulty: Number($('difficultyRange').value) / 100,
+      steelMode: ['none', 'partial', 'whole'].includes($('generationSteelMode').value) ? $('generationSteelMode').value : 'none'
     };
   }
 
@@ -2139,7 +2254,8 @@
       title: $('stageTitle').value.trim() || 'ステージ',
       description: $('stageDescription').value.trim(),
       authorDisplayName: $('stageAuthor').value.trim() || '作成者',
-      theme: $('themeSelect').value
+      theme: $('themeSelect').value,
+      size: $('stageSize').value === 'large' ? 'large' : 'standard'
     };
   }
 
@@ -2158,7 +2274,10 @@
       mode: 'theme', theme: themeKey, color: theme.gradient[0],
       gradient: { from: theme.gradient[0], to: theme.gradient[1] }
     };
-    if (stage.materials && stage.materials[0]) stage.materials[0].color = theme.terrain;
+    const generatedSteel = Array.isArray(stage.materials) && stage.materials.some((material) => material && material.id === 'steel');
+    if (!generatedSteel) stage.materials = [selectedTerrainMaterial()];
+    const generatedTerrain = stage.materials.find((material) => material && material.id === 'terrain');
+    if (generatedTerrain) generatedTerrain.color = $('terrainColor').value || theme.terrain;
     state.generationJob = null;
     setGenerationBusy(false);
     setStage(stage);
@@ -2454,11 +2573,15 @@
     state.testTrajectory = Array.isArray(result.points) ? result.points : [];
     state.testImpact = result.hit || result.impact || null;
     if (state.testImpact) {
-      paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
-      enforceTerrainBounds(state.testGrid);
-      const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
       const impactMessage = `着弾 x ${Math.round(state.testImpact.x)} / y ${Math.round(state.testImpact.y)}。爆発範囲と地形破壊を反映しました。`;
-      $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      if (testStage.materials && testStage.materials[0] && testStage.materials[0].destructible === false) {
+        $('testResult').textContent = `${impactMessage} 鋼鉄なので地形は削れません。`;
+      } else {
+        paintCircle(state.testGrid, state.testImpact.x, state.testImpact.y, PHYSICS.normalBlastRadius, false);
+        enforceTerrainBounds(state.testGrid);
+        const settled = settleTestActor('爆発で足場が崩れ', state.testActorX);
+        $('testResult').textContent = settled.fell ? `${impactMessage} ${settled.message}` : `${impactMessage} キャラクターは足場へ接地しています。`;
+      }
     } else {
       $('testResult').textContent = '砲弾は地形へ当たらず画面外へ出ました。角度や威力を調整してください。';
     }
@@ -2477,7 +2600,13 @@
       gradient: { from: $('backgroundColor').value, to: theme.gradient[1] }
     });
     state.stage.decorations = Object.assign({}, state.stage.decorations, { enabled: $('decorationsEnabled').checked });
-    state.stage.materials = [{ id: 'terrain', type: 'destructible', destructible: true, color: $('terrainColor').value }];
+    const hasPartialSteel = Array.isArray(state.stage.terrain.materialSegments)
+      && state.stage.terrain.materialSegments.some((column) => Array.isArray(column) && column.length);
+    const isWholeSteel = Array.isArray(state.stage.materials)
+      && state.stage.materials.length === 1
+      && state.stage.materials[0] && state.stage.materials[0].id === 'steel'
+      && !hasPartialSteel;
+    if (!isWholeSteel) state.stage.materials = [selectedTerrainMaterial()];
     state.appearanceBrightness = Number($('brightnessRange').value) / 100;
     return clone(state.stage);
   }
@@ -3014,6 +3143,11 @@
     ['reliefRange', 'smoothRange', 'platformRange', 'densityRange', 'valleyRange', 'mountainRange', 'cavityRange', 'difficultyRange']
       .forEach((id) => $(id).addEventListener('input', updateRangeOutputs));
     $('randomizeSeed').addEventListener('click', () => { $('seedInput').value = randomSeed(); });
+    $('stageSize').addEventListener('change', () => {
+      const limits = Core && typeof Core.getStageLimits === 'function' ? Core.getStageLimits({ size: $('stageSize').value }) : RAW_LIMITS;
+      $('stageWidth').value = limits.stageWidth || 1440;
+      $('stageHeight').value = limits.stageHeight || 660;
+    });
     $('generateStage').addEventListener('click', startGeneration);
     $('cancelGeneration').addEventListener('click', cancelGeneration);
 
@@ -3126,6 +3260,7 @@
     $('backgroundMode').addEventListener('change', () => applyAppearanceFromForm(true));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('input', updateAppearance));
     ['backgroundColor', 'terrainColor', 'brightnessRange'].forEach((id) => $(id).addEventListener('change', () => applyAppearanceFromForm(true)));
+    $('terrainMaterial').addEventListener('change', () => applyAppearanceFromForm(true));
     $('decorationsEnabled').addEventListener('change', () => applyAppearanceFromForm(true));
 
     document.querySelectorAll('[data-terrain-panel-content] input, [data-terrain-panel-content] select').forEach((control) => {

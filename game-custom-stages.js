@@ -17,7 +17,7 @@
   launcher.id = 'customStageLauncher';
   launcher.type = 'button';
   launcher.hidden = true;
-  launcher.textContent = 'カスタムステージ';
+  launcher.textContent = 'カスタムステージを選ぶ';
   launcher.setAttribute('data-testid', 'custom-stage-button');
 
   var overlay = document.createElement('section');
@@ -171,15 +171,25 @@
     gradient.addColorStop(1, to);
     context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
-    context.fillStyle = stage.materials && stage.materials[0] ? stage.materials[0].color : '#7A5435';
+    var material = stage.materials && stage.materials[0] || {};
+    context.fillStyle = material.id === 'steel' ? '#3d4955' : (material.color || '#7A5435');
     var columns = stage.terrain && stage.terrain.columns || [];
-    var scaleX = width / core.LIMITS.stageWidth;
-    var scaleY = height / core.LIMITS.stageHeight;
+    var limits = core.getStageLimits ? core.getStageLimits(stage) : core.LIMITS;
+    var scaleX = width / limits.stageWidth;
+    var scaleY = height / limits.stageHeight;
     columns.forEach(function (segments, columnIndex) {
       segments.forEach(function (segment) {
-        context.fillRect(columnIndex * core.LIMITS.columnWidth * scaleX, segment[0] * scaleY, Math.max(1, core.LIMITS.columnWidth * scaleX + 1), (segment[1] - segment[0]) * scaleY);
+        context.fillRect(columnIndex * limits.columnWidth * scaleX, segment[0] * scaleY, Math.max(1, limits.columnWidth * scaleX + 1), (segment[1] - segment[0]) * scaleY);
       });
     });
+    if (material.id === 'steel') {
+      context.save();
+      context.globalCompositeOperation = 'source-atop';
+      context.strokeStyle = 'rgba(4,8,12,.72)';
+      context.lineWidth = 1;
+      for (var y = 8; y < height; y += 12) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+      context.restore();
+    }
     (stage.spawnPoints || []).forEach(function (spawn) {
       context.beginPath();
       context.fillStyle = spawn.team === 'enemy' ? '#ff6b6b' : '#4fc3f7';
@@ -468,13 +478,31 @@
     }
   });
 
+  function placeLauncher(state) {
+    var placement = state && state.customStageLauncherRect;
+    var gameCanvas = document.getElementById('game');
+    if (!placement || !gameCanvas) return;
+    var bounds = gameCanvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    // 本編Canvasの仮想解像度は540x960。CSS上の実寸へこの基準から写すことで、
+    // 縦長端末でもカスタムステージ入口をSTAGE直下の行へ重ねられる。
+    var scaleX = bounds.width / 540;
+    var scaleY = bounds.height / 960;
+    launcher.style.left = (bounds.left + placement.x * scaleX) + 'px';
+    launcher.style.top = (bounds.top + placement.y * scaleY) + 'px';
+    launcher.style.width = (placement.w * scaleX) + 'px';
+    launcher.style.height = (placement.h * scaleY) + 'px';
+  }
+
   setInterval(function () {
     var gameBridge = bridge();
     var state = gameBridge && gameBridge.getState ? gameBridge.getState() : null;
     // カスタムステージは演習設定の地形欄から使う。起動前やタイトルへ固定ボタンを
     // 重ねると、本編の開始演出より先に見え続けるためfreeSetupだけで表示する。
     launcher.hidden = overlay.classList.contains('open') || !state || state.onlineActive
+      || state.soundPanelOpen
       || state.gamePhase !== 'freeSetup';
+    if (!launcher.hidden) placeLauncher(state);
   }, 250);
 
   globalThis.CustomStageManager = Object.freeze({

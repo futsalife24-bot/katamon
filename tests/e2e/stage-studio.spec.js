@@ -210,7 +210,7 @@ async function createValidatedStage(page, options = {}) {
   await page.goto(STUDIO_URL);
   await expect(page.getByTestId('stage-studio')).toBeVisible();
   await expect(page.getByTestId('screen-home')).toBeVisible();
-  await expect(page.locator('#appVersion')).toContainText('1.7.0-text-placement');
+  await expect(page.locator('#appVersion')).toContainText('1.8.1-character-assets');
   await expect(page.locator('body')).toHaveCSS('font-family', /RocknRoll One/);
   await expect(page.locator('.app-header h1')).toHaveCSS('font-family', /Reggae One/);
   await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
@@ -306,7 +306,8 @@ async function createValidatedStage(page, options = {}) {
     await expect(page.locator('#terrainTextStatus')).toContainText('「ア」を地形へ追加しました');
     await expect(page.getByTestId('terrain-inspector')).toBeHidden();
   }
-  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveAttribute('disabled', '');
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).not.toBeDisabled();
+  await expect(page.locator('#terrainMaterial option[value="steel"]')).toHaveText('壊れない鋼鉄');
   await expect(page.locator('#backgroundMode')).toHaveValue('theme');
   await openTerrainInspector(page, 'appearance');
   await page.locator('#themeSelect').selectOption('grass');
@@ -428,22 +429,36 @@ async function importIntoGameAndStart(page, filePath) {
 }
 
 test.describe('対象ゲームの端末戻る操作', () => {
-  test('起動前とタイトルで、終了前に確認を表示する', async ({ page }) => {
+  test('起動前とタイトルで、終了前に確認を表示する', async ({ page }, testInfo) => {
     await page.goto(GAME_URL);
     const canvas = page.getByTestId('battle-canvas');
     const confirm = page.locator('#deviceBackConfirm');
     await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase)).toBe('press');
-    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+    const closeWatcherSupported = await page.evaluate(() => typeof window.CloseWatcher === 'function');
+    if (testInfo.project.name.startsWith('android-chromium')) {
+      expect(closeWatcherSupported).toBe(true);
+    }
+    if (closeWatcherSupported) {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(false);
+    } else {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+    }
 
-    await page.evaluate(() => history.back());
+    if (closeWatcherSupported) await page.keyboard.press('Escape');
+    else await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
-    await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('アプリを閉じますか？');
+    await expect(page.locator('#deviceBackConfirmTitle')).toHaveText('今はここまでにする？');
     await expect(page.locator('#deviceBackConfirm')).toHaveCSS('font-family', /RocknRoll One/);
     await expect(page.locator('#deviceBackConfirmTitle')).toHaveCSS('font-family', /Reggae One/);
     await expect.poll(() => page.evaluate(() => document.fonts.check('400 16px "RocknRoll One"'))).toBe(true);
     await expect.poll(() => page.evaluate(() => document.fonts.check('400 24px "Reggae One"'))).toBe(true);
-    await expect(page.locator('#deviceBackConfirmCrest')).toBeVisible();
-    await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('RETURN GATE');
+    await expect(page.locator('#deviceBackSeal')).toHaveCount(0);
+    await expect(page.locator('#deviceBackConfirmKicker')).toHaveText('カタモンを閉じる？');
+    await expect(page.locator('#deviceBackConfirmNote')).toHaveText('終了すると、カタモンを閉じます。');
+    await expect(page.locator('#deviceBackExit small')).toHaveText('カタモンを終了する');
+    await expect(page.locator('#deviceBackConfirmActions')).toHaveClass(/deviceBackLevers/);
+    await expect(page.locator('#deviceBackStay')).toHaveClass(/deviceBackLever--stay/);
+    await expect(page.locator('#deviceBackExit')).toHaveClass(/deviceBackLever--exit/);
     await expect(confirm).toHaveCSS('background-image', /wall\.jpg/);
     const stayBox = await page.locator('#deviceBackStay').boundingBox();
     const exitBox = await page.locator('#deviceBackExit').boundingBox();
@@ -454,7 +469,8 @@ test.describe('対象ゲームの端末戻る操作', () => {
 
     await tapCanvas(page, canvas, 0.5, 0.5);
     await expect.poll(() => page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState().gamePhase), { timeout: 15_000 }).toBe('title');
-    await page.evaluate(() => history.back());
+    if (closeWatcherSupported) await page.keyboard.press('Escape');
+    else await page.evaluate(() => history.back());
     await expect(confirm).toBeVisible();
     await page.locator('#deviceBackStay').click();
     await page.goto('about:blank');
@@ -463,8 +479,20 @@ test.describe('対象ゲームの端末戻る操作', () => {
   test('終了を選んだ時だけ前のページへ戻る', async ({ page }) => {
     await page.goto(STUDIO_URL);
     await page.goto(GAME_URL);
-    await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
-    await page.evaluate(() => history.back());
+    const closeWatcherSupported = await page.evaluate(() => typeof window.CloseWatcher === 'function');
+    if (closeWatcherSupported) {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(false);
+      // v138〜v164の再読み込みなどで同じゲームURLのガードが3枚残った実機状態を再現する。
+      await page.evaluate(() => {
+        history.pushState({ legacyKatamonGuard: 1 }, '', '?legacy-guard=1');
+        history.pushState({ legacyKatamonGuard: 2 }, '', '?legacy-guard=2');
+        history.pushState({ legacyKatamonGuard: 3 }, '', '?legacy-guard=3');
+      });
+      await page.keyboard.press('Escape');
+    } else {
+      await expect.poll(() => page.evaluate(() => history.state?.katamonGuard === true)).toBe(true);
+      await page.evaluate(() => history.back());
+    }
     await expect(page.locator('#deviceBackConfirm')).toBeVisible();
     await page.locator('#deviceBackExit').click();
     await expect(page).toHaveURL(/\/tools\/stage-studio\/(?:#home)?$/, { timeout: 15_000 });

@@ -1,7 +1,9 @@
-const CACHE_VERSION = 'katamon-pwa-v147-character-card-wood-design';
+const CACHE_VERSION = 'katamon-pwa-v2.0.90-cool-kai-dopagaki-remix';
+const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
-  './',
   './index.html',
+  './generated/content-studio-catalog.js',
+  './generated/content-studio-manifest.json',
   './manifest.webmanifest',
   './game-custom-stages.css',
   './game-custom-stages.js',
@@ -19,17 +21,44 @@ const APP_SHELL = [
   './assets/fonts/rocknroll-one-regular.ttf',
   './assets/fonts/reggae-one-display.woff2',
   './assets/title-logo.webp',
+  './assets/title-mode-board.webp',
+  './assets/title-shield-button.webp',
+  './assets/title-hanging-sign.webp',
+  './assets/title-parchment-button.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
-  './assets/normal-impact-explosion.mp3?v=3'
+  './assets/battle-start-logo.png',
+  './assets/battle-start-logo.mp4',
+  './assets/ui/battle-hud/player-card-ally.png',
+  './assets/ui/battle-hud/player-card-enemy.png',
+  './assets/ui/battle-hud/wind-console.png',
+  './assets/ui/battle-hud/minimap-frame.png',
+  './assets/ui/battle-hud/v3/player-card-ally.png',
+  './assets/ui/battle-hud/v3/player-card-enemy.png',
+  './assets/ui/battle-hud/v3/wind-console.png',
+  './assets/ui/battle-hud/v3/turn-ribbon.png',
+  './assets/ui/battle-hud/v4-wind-console.png',
+  './assets/ui/battle-hud/wind-console-round.webp',
+  './assets/normal-impact-explosion.mp3',
+  './assets/special-cutin-edm-zap.mp3',
+  './assets/cool-kai-special-voice.mp3',
+  './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
+  './assets/six-eternel-dopagaki-remix.mp3',
+  './assets/device-exit-seal.png',
+  './assets/exit-confirm-stay-v2.png',
+  './assets/exit-confirm-exit-v2.png'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => cache.addAll(APP_SHELL.map(asset => new Request(asset, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
@@ -41,6 +70,11 @@ self.addEventListener('activate', event => {
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then(clients => Promise.all(clients.map(client => client.postMessage({
+        type: 'KATAMON_UPDATE_READY',
+        build: BUILD_ID
+      }))))
   );
 });
 
@@ -51,16 +85,41 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Stage Studioは子スコープのService Workerが管理する。ルートのオフライン
-  // フォールバックでゲーム本体index.htmlを返すと、編集画面がゲームへ化けるため除外する。
-  if (url.pathname.includes('/tools/stage-studio/')) return;
+  // 各Studioは子スコープ側のService Workerで管理する。
+  if (
+    url.pathname.includes('/tools/content-studio/')
+    || url.pathname.includes('/tools/stage-studio/')
+  ) return;
 
   // 音声・動画のRangeリクエストはブラウザに任せ、シークやループを壊さない。
   if (request.headers.has('range')) return;
 
-  if (request.mode === 'navigate') {
+  // Content StudioのPRは生成カタログだけを更新し、ゲーム本体の版番号は変更しない。
+  // ここを通常のcache-firstにすると、既存端末が古いキャラクター一覧を保持し続ける。
+  // オンライン時は必ず再検証し、失敗時だけ最後の安全なコピーへ戻す。
+  const generatedContent = url.pathname.endsWith('/generated/content-studio-catalog.js')
+    || url.pathname.endsWith('/generated/content-studio-manifest.json');
+  if (generatedContent) {
     event.respondWith(
       fetch(request)
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)
+          .then(cached => cached || caches.match(url.pathname.endsWith('.js')
+            ? './generated/content-studio-catalog.js'
+            : './generated/content-studio-manifest.json')))
+    );
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
@@ -75,9 +134,9 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then(cached => {
+    caches.match(request).then(cached => {
       if (cached) return cached;
-      return fetch(request).then(response => {
+      return fetch(new Request(request, { cache: 'reload' })).then(response => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));

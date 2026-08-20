@@ -1,0 +1,71 @@
+name: Content Studio Pages deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'tools/content-studio/**'
+      - 'index.html'
+      - 'sw.js'
+      - 'generated/**'
+      - 'assets/**'
+      - 'game-custom-stages.css'
+      - 'manifest.webmanifest'
+      - '.github/workflows/content-studio-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: content-studio-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/content-studio/package-lock.json
+
+      - name: Install Content Studio dependencies
+        working-directory: tools/content-studio
+        run: npm ci
+
+      - name: Build Content Studio PWA
+        working-directory: tools/content-studio
+        run: npm run build
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p pages-artifact
+          git archive --format=tar HEAD | tar -x -C pages-artifact
+          rm -rf pages-artifact/tools/content-studio
+          mkdir -p pages-artifact/tools/content-studio
+          cp -R tools/content-studio/dist/. pages-artifact/tools/content-studio/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-artifact
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -40,6 +40,26 @@ async function lowerPlatformStage() {
   return Core.finalizeStage(stage, { touchUpdatedAt: false });
 }
 
+async function largePlatformStage() {
+  const stage = Core.generateStage({
+    size: 'large',
+    preset: 'mountainCenter',
+    seed: 'game-integration-large-stage',
+    title: '大型テストステージ',
+    format: '2v2',
+    generationParameters: { playerCount: 4 }
+  });
+  const limits = Core.getStageLimits(stage);
+  for (const spawn of stage.spawnPoints) {
+    const center = Math.floor(spawn.x / limits.columnWidth);
+    for (let column = center - 8; column <= center + 8; column += 1) {
+      stage.terrain.columns[column] = [[320, 352], [760, limits.terrainBottom]];
+    }
+    spawn.y = 760 - limits.unitRadius;
+  }
+  return Core.finalizeStage(stage, { touchUpdatedAt: false });
+}
+
 test('custom stage adapter starts an actual local battle with terrain, lower spawn and wind', async () => {
   // seatharnessはindex.htmlの本体スクリプトをCanvas/DOMスタブ上で実行する。
   // StageCoreを先にglobalThisへ公開すると、実ブラウザと同じ共有モジュール経路になる。
@@ -56,6 +76,7 @@ test('custom stage adapter starts an actual local battle with terrain, lower spa
   assert.equal(adapter.contentHash, stage.checksums.contentHash);
   assert.deepEqual(adapter.appearance, {
     background: stage.background,
+    terrainMaterial: 'terrain',
     terrainColor: '#8A5C32',
     decorationsEnabled: false
   });
@@ -131,6 +152,84 @@ test('custom stage adapter starts an actual local battle with terrain, lower spa
   assert.equal(kt.appearanceForTest().custom.decorationsEnabled, false, 'snapshot restore reapplies custom appearance');
 });
 
+test('large custom stage uses the 2160x960 field, upper terrain and four-player spawn map in battle', async () => {
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const stage = await largePlatformStage();
+  const bridge = globalThis.KatamonCustomStageBridge;
+
+  const adapter = await bridge.selectStage(stage);
+  assert.equal(adapter.stageSize, 'large');
+  assert.equal(adapter.stageWidth, 2160);
+  assert.equal(adapter.stageHeight, 960);
+
+  await bridge.startSelectedStage(stage);
+  const snapshot = kt.buildSnapshotForTest();
+  assert.equal(snapshot.stageW, 2160);
+  assert.equal(snapshot.stageH, 960);
+  assert.equal(snapshot.segments.length, 720);
+  assert.equal(snapshot.units.length, 4);
+  const upperX = stage.spawnPoints[0].x;
+  assert.equal(kt.isSolidAt(upperX, 332), true, 'large-stage upper platform reaches the real collision mask');
+
+  kt.applySnapshotForTest(snapshot);
+  const restored = kt.buildSnapshotForTest();
+  assert.equal(restored.stageW, 2160, 'large dimensions survive a snapshot restore');
+  assert.equal(restored.segments.length, 720, 'large terrain columns survive a snapshot restore');
+});
+
+test('custom steel stage keeps real game collision after an explosion', async () => {
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const steelStage = await lowerPlatformStage();
+  steelStage.materials[0] = { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' };
+  const stage = await Core.finalizeStage(steelStage, { touchUpdatedAt: false });
+
+  const adapter = await bridge.selectStage(stage);
+  assert.equal(adapter.appearance.terrainMaterial, 'steel');
+  await bridge.startSelectedStage(stage);
+
+  const sampleX = stage.spawnPoints[0].x;
+  assert.equal(kt.isSolidAt(sampleX, 212), true, 'steel upper platform enters the real collision mask');
+  kt.carveCraterForTest(sampleX, 212, 30);
+  assert.equal(kt.isSolidAt(sampleX, 212), true, 'a real battle explosion cannot remove steel collision');
+});
+
+test('partial steel stage lets Yomigama carve normal ground but stops at steel', async () => {
+  globalThis.StageCore = Core;
+  const harness = require('./seatharness.js');
+  const kt = harness.kt();
+  const bridge = globalThis.KatamonCustomStageBridge;
+  const stage = await lowerPlatformStage();
+  const sampleColumn = Math.floor(stage.spawnPoints[0].x / Core.LIMITS.columnWidth);
+  stage.materials = [
+    { id: 'terrain', type: 'destructible', destructible: true, color: '#8A5C32' },
+    { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }
+  ];
+  stage.terrain.materialSegments = Array.from({ length: stage.terrain.columns.length }, (_, column) => (
+    column >= sampleColumn - 4 && column <= sampleColumn + 4 ? [[550, 580, 'steel']] : []
+  ));
+  const finalized = await Core.finalizeStage(stage, { touchUpdatedAt: false });
+  const adapter = await bridge.selectStage(finalized);
+  assert.ok(adapter.appearance.terrainMaterialSegments, 'partial material segments reach the game adapter');
+  assert.equal(adapter.appearance.terrainMaterialSegments[sampleColumn][0][2], 'steel');
+  await bridge.startSelectedStage(finalized);
+  for (let i = 0; i < 50; i++) kt.step(0.1);
+
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 520), true, 'the lower normal platform is initially solid');
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 565), true, 'the steel section is initially solid');
+  kt.spawnDeathGateForTest('p1', finalized.spawnPoints[0].x, 600);
+  assert.ok(kt.projectileProfilesForTest().some((projectile) => projectile.deathGateScythe), 'Yomigama creates the vertical scythe');
+  for (let i = 0; i < 20; i++) kt.step(0.1);
+
+  const carvedNormal = [584, 590, 596, 602, 608, 614, 620, 626].some((y) => !kt.isSolidAt(finalized.spawnPoints[0].x, y));
+  assert.equal(carvedNormal, true, 'Yomigama carves the normal ground below steel');
+  assert.equal(kt.isSolidAt(finalized.spawnPoints[0].x, 565), true, 'Yomigama stops before carving the steel section');
+});
+
 test('custom battle keeps the official suspended save in an isolated slot', async () => {
   const harness = require('./seatharness.js');
   const kt = harness.kt();
@@ -183,7 +282,7 @@ test('changing a stage-owned free battle option clears the selected custom stage
   const bridge = globalThis.KatamonCustomStageBridge;
   const stage = await lowerPlatformStage();
 
-  for (const kind of ['format', 'wind', 'terrain']) {
+  for (const kind of ['format', 'wind', 'windStrength', 'terrain']) {
     await bridge.selectStage(stage);
     assert.equal(bridge.getState().selectedStageId, stage.stageId);
     kt.changeFreeOption(kind, 1);
@@ -263,7 +362,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /\(battleMode === 'free' \|\| onlineCustomStageActive\(\)\) && selectedCustomAdapter/);
   assert.match(html, /battleMode === 'normal' && online && online\.kind === 'firebase'/);
   assert.match(html, /const ONLINE_CUSTOM_STAGE_MAX_BYTES = 256 \* 1024/);
-  assert.match(html, /const includeCustomStage = !!\(selectedCustomStage && \(battleMode === 'free' \|\| onlineCustomStageActive\(\)\)\)/);
+  assert.match(html, /const includeTerrain = options\.includeTerrain !== false;/);
+  assert.match(html, /const includeCustomStage = includeTerrain && !!\(selectedCustomStage && \(battleMode === 'free' \|\| onlineCustomStageActive\(\)\)\)/);
   assert.match(html, /customStageIdentity: includeCustomStage \? customStageIdentity\(selectedCustomStage\) : null/);
   assert.match(html, /StageCore\.compareStageIdentity\(identity, data\.customStageIdentity\)/);
   assert.match(html, /firebaseOccupiedPlayerSeats\(\)\.every\(seat => seat === online\.seat \|\| online\.startAcks\[seat\]\)/);
@@ -276,7 +376,9 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /StageCore\.compareStageIdentity\(sourceIdentity, adapterIdentity\)/);
   assert.match(html, /StageCore\?\.PHYSICS\?\.deadLineY/);
   assert.match(html, /StageCore\?\.PHYSICS\?\.fallTrigger/);
-  assert.match(html, /\['terrain', 'wind', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /if \(kind === 'wind'\) \{[\s\S]*?selectedCustomStage = null/);
+  assert.match(html, /\['terrain', 'stageSize', 'format'\]\.includes\(kind\)/);
+  assert.match(html, /\['windStrength'\]\.includes\(kind\)/);
   assert.match(html, /const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1'/);
   assert.match(html, /startFreeMatch\(\{ preserveOfficialSuspend: true \}\)/);
 
@@ -292,7 +394,8 @@ test('game integration isolates official stages while online custom starts are i
   assert.doesNotMatch(studioApp, /const hadController =/);
   assert.match(studioApp, /if \(!saved \|\| state\.dirty \|\| !durable\)/);
   assert.match(studioApp, /shareFailed = true[\s\S]{0,180}blobDownload\(file, file\.name\)/);
-  assert.match(serviceWorker, /caches\.match\(request, \{ ignoreSearch: true \}\)/);
+  assert.doesNotMatch(serviceWorker, /ignoreSearch\s*:\s*true/);
+  assert.match(serviceWorker, /cache\.addAll\(APP_SHELL\.map\(asset => new Request\(asset, \{ cache: 'reload' \}\)\)\)/);
 
   assert.match(manager, /listCustom\(\)/);
   assert.match(manager, /putCustom\(migrated\)/);
@@ -300,6 +403,7 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(manager, /createLocalProvider/);
   assert.doesNotMatch(manager, /storageModule\.open\(/);
   assert.match(manager, /verifyStageHash\(migrated\)/);
+  assert.match(manager, /core\.getStageLimits \? core\.getStageLimits\(stage\) : core\.LIMITS/);
   assert.match(manager, /readStageBundle\(file\)/);
   assert.match(manager, /createStageBundle\(finalized\)/);
   assert.match(manager, /state\.onlineActive/);
@@ -321,9 +425,17 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(managerCss, /#customStageSelection\s*\{[^}]*white-space:\s*pre-line/s);
   assert.match(managerCss, /\.custom-stage-action-overlay\.open\s*\{\s*display:\s*grid/);
   assert.match(managerCss, /url\("assets\/wall\.jpg"\)/);
-  assert.match(html, /id="deviceBackConfirmCrest"/);
-  assert.match(html, /id="deviceBackConfirmKicker">RETURN GATE/);
-  assert.match(html, /#deviceBackConfirmNote\s*\{[\s\S]*linear-gradient\(145deg, #f0d49a/);
+  assert.doesNotMatch(html, /id="deviceBackConfirmCrest"/);
+  assert.match(html, /id="deviceBackConfirmKicker">カタモンを閉じる？/);
+  assert.match(html, /id="deviceBackConfirmNote">終了すると、カタモンを閉じます。/);
+  assert.match(html, /id="deviceBackExit"[\s\S]*カタモンを終了する/);
+  assert.match(html, /id="deviceBackConfirmActions" class="deviceBackLevers"/);
+  assert.match(html, /id="deviceBackStay" class="deviceBackLever deviceBackLever--stay"/);
+  assert.match(html, /id="deviceBackExit" class="deviceBackLever deviceBackLever--exit"/);
+  assert.match(html, /url\("assets\/title-mode-board\.webp"\)/);
+  assert.match(html, /url\("assets\/exit-confirm-stay-v2\.png"\)/);
+  assert.match(html, /url\("assets\/exit-confirm-exit-v2\.png"\)/);
+  assert.doesNotMatch(html, /exit-confirm-(frame|stay|exit)\.png/);
   const fontCss = fs.readFileSync(path.join(root, 'assets', 'fonts', 'katamon-fonts.css'), 'utf8');
   assert.match(fontCss, /font-family:\s*"RocknRoll One"/);
   assert.match(fontCss, /font-family:\s*"Reggae One"/);
@@ -332,10 +444,11 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /const UI_FONT = '"RocknRoll One"/);
   assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
-  assert.match(html, /v147-character-card-wood-design/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
   assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
-  assert.match(serviceWorker, /katamon-pwa-v147-character-card-wood-design/);
+  assert.match(serviceWorker, /assets\/exit-confirm-stay-v2\.png/);
+  assert.match(serviceWorker, /assets\/exit-confirm-exit-v2\.png/);
+  assert.doesNotMatch(serviceWorker, /exit-confirm-(frame|stay|exit)\.png/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
 });

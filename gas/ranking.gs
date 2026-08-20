@@ -11,7 +11,7 @@
 
 var SHEET_NAME = 'ranking';
 // 列を増やす時は末尾に足すこと。既存行の意味が変わらずに済む。
-var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character'];
+var HEADERS = ['period', 'deviceId', 'name', 'streak', 'efficiency', 'updatedAt', 'character', 'hidden'];
 
 // 異常値の足切り。これを超える申告は保存せず捨てる。
 var MAX_STREAK = 200;
@@ -22,6 +22,7 @@ var MAX_NAME_LENGTH = 12;
 var DAILY_SUBMIT_LIMIT = 60;
 
 var TOP_COUNT = 20;
+var MAX_RECORDS_PER_PLAYER = 3;
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -71,6 +72,7 @@ function getSheet() {
   // 書き込んだ値と読み戻した値が一致しなくなる。該当列は必ず書式をテキストに固定する。
   sheet.getRange('A:B').setNumberFormat('@');
   sheet.getRange('G:G').setNumberFormat('@');
+  sheet.getRange('H:H').setNumberFormat('@');
   return sheet;
 }
 
@@ -97,10 +99,16 @@ function readRows(sheet) {
       streak: Number(values[i][3]) || 0,
       efficiency: Number(values[i][4]) || 0,
       updatedAt: values[i][5],
-      character: String(values[i][6] == null ? '' : values[i][6])
+      character: String(values[i][6] == null ? '' : values[i][6]),
+      hidden: isHiddenValue(values[i][7])
     });
   }
   return rows;
+}
+
+/** 管理シートのhidden列はTRUE/1だけを非表示として扱う。空欄や文字列falseは表示する。 */
+function isHiddenValue(value) {
+  return value === true || value === 1 || String(value == null ? '' : value).trim().toLowerCase() === 'true';
 }
 
 /** 連勝数が主、同数なら与ダメ効率で決める。 */
@@ -109,10 +117,24 @@ function isBetter(a, b) {
   return a.efficiency > b.efficiency;
 }
 
+/** ランキング全体の表示順。上位3件の切り出しと順位計算で共通に使う。 */
+function compareRankingRows(a, b) {
+  if (a.streak !== b.streak) return b.streak - a.streak;
+  if (a.efficiency !== b.efficiency) return b.efficiency - a.efficiency;
+  return String(a.name).localeCompare(String(b.name));
+}
+
+function sameScore(a, b) {
+  return a.streak === b.streak && a.efficiency === b.efficiency;
+}
+
 function sanitizeName(raw) {
   var name = String(raw == null ? '' : raw).replace(/[\r\n\t]/g, ' ').trim();
   if (!name) name = 'ななし';
   if (name.length > MAX_NAME_LENGTH) name = name.substring(0, MAX_NAME_LENGTH);
+  // Sheetsは先頭の = + - @ を数式として解釈し得る。アポストロフィを付けて
+  // 文字列として保存し、ランキング名から管理シートへ式を持ち込ませない。
+  if (/^[=+\-@]/.test(name)) name = "'" + name;
   return name;
 }
 
@@ -159,27 +181,37 @@ function submitScore(params) {
   try {
     var sheet = getSheet();
     var rows = readRows(sheet);
-    var mine = null;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].period === entry.period && rows[i].deviceId === entry.deviceId) {
-        mine = rows[i];
-        break;
+    var mine = rows.filter(function (row) {
+      return row.period === entry.period && row.deviceId === entry.deviceId;
+    });
+    var updated = false;
+    var same = mine.find(function (row) { return sameScore(row, entry); });
+    if (same) {
+      // 同じスコアの再送は新しい記録を増やさず、名前と使用キャラだけ最新にする。
+      sheet.getRange(same.rowIndex, 3, 1, 5)
+        .setValues([[entry.name, entry.streak, entry.efficiency, new Date(), entry.character]]);
+      updated = true;
+    } else if (mine.length < MAX_RECORDS_PER_PLAYER) {
+      // 旧形式の1件だけの行も残したまま、同じ端末の2件目・3件目を追加する。
+      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date(), entry.character, false]);
+      updated = true;
+    } else {
+      // 3件を超えたら、その端末の最下位記録を上回る時だけ置き換える。
+      var worst = mine.slice().sort(compareRankingRows).pop();
+      if (isBetter(entry, worst)) {
+        sheet.getRange(worst.rowIndex, 3, 1, 5)
+          .setValues([[entry.name, entry.streak, entry.efficiency, new Date(), entry.character]]);
+        updated = true;
       }
     }
 
-    var updated = false;
-    if (!mine) {
-      sheet.appendRow([entry.period, entry.deviceId, entry.name, entry.streak, entry.efficiency, new Date(), entry.character]);
-      updated = true;
-    } else if (isBetter(entry, mine)) {
-      // 自己ベストを更新した時だけ上書きする。使用キャラも記録時のものへ差し替える。
-      sheet.getRange(mine.rowIndex, 3, 1, 5)
-        .setValues([[entry.name, entry.streak, entry.efficiency, new Date(), entry.character]]);
-      updated = true;
-    } else if (mine.name !== entry.name) {
-      // スコアが伸びていなくても、名前の変更だけは反映する
-      sheet.getRange(mine.rowIndex, 3).setValue(entry.name);
-    }
+    // スコアが伸びていなくても、同じ端末の既存行へ名前変更を反映する。
+    var currentMine = readRows(sheet).filter(function (row) {
+      return row.period === entry.period && row.deviceId === entry.deviceId;
+    });
+    currentMine.forEach(function (row) {
+      if (row.name !== entry.name) sheet.getRange(row.rowIndex, 3).setValue(entry.name);
+    });
 
     // 書き込みを確定させてから読み戻す。挟まないと直前の変更が見えないことがある。
     SpreadsheetApp.flush();
@@ -200,12 +232,8 @@ function getTop(deviceId) {
 
 function buildBoard(deviceId) {
   var period = currentPeriod();
-  var rows = readRows(getSheet()).filter(function (r) { return r.period === period; });
-  rows.sort(function (a, b) {
-    if (a.streak !== b.streak) return b.streak - a.streak;
-    if (a.efficiency !== b.efficiency) return b.efficiency - a.efficiency;
-    return String(a.name).localeCompare(String(b.name));
-  });
+  var rows = readRows(getSheet()).filter(function (r) { return r.period === period && !r.hidden; });
+  rows.sort(compareRankingRows);
 
   var top = [];
   for (var i = 0; i < Math.min(TOP_COUNT, rows.length); i++) {

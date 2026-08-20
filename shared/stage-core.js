@@ -9,7 +9,7 @@
   var GENERATOR_VERSION = '1.0.0';
   var GAME_ID = 'katamon';
   var GAME_BUILD = 'v138';
-  var LIMITS = Object.freeze({
+  var STANDARD_LIMITS = Object.freeze({
     stageWidth: 1440,
     stageHeight: 660,
     terrainBottom: 636,
@@ -30,13 +30,44 @@
     unitRadius: 16,
     minimumTerrainThickness: 12
   });
+  var LARGE_LIMITS = Object.freeze({
+    stageWidth: 2160,
+    stageHeight: 960,
+    terrainBottom: 924,
+    columnWidth: 3,
+    rowHeight: 4,
+    columns: 720,
+    rows: 240,
+    maxSpawns: 4,
+    maxGimmicks: 16,
+    maxSegments: 6144,
+    maxFileBytes: 2 * 1024 * 1024,
+    maxTitleLength: 48,
+    maxDescriptionLength: 500,
+    maxAuthorLength: 32,
+    maxSeedLength: 96,
+    maxJsonDepth: 14,
+    maxObjectNodes: 90000,
+    unitRadius: 16,
+    minimumTerrainThickness: 12
+  });
+  var STAGE_SIZES = Object.freeze({ standard: STANDARD_LIMITS, large: LARGE_LIMITS });
+  // 内部の地形処理はこの値を読む。公開する LIMITS は従来互換の標準サイズのままにする。
+  var LIMITS = STANDARD_LIMITS;
+  function stageSizeKey(input) {
+    if (input && (input.size === 'large' || input.stageSize === 'large'
+      || (Number(input.stageWidth) === LARGE_LIMITS.stageWidth && Number(input.stageHeight) === LARGE_LIMITS.stageHeight))) return 'large';
+    return 'standard';
+  }
+  function getStageLimits(input) { return STAGE_SIZES[stageSizeKey(input)]; }
+  function activateStageLimits(input) { LIMITS = getStageLimits(input); return LIMITS; }
   var PHYSICS = Object.freeze({
     gravity: 650,
     windAccelMax: 260,
     velocityScale: 7.8,
     fixedDt: 1 / 120,
     defaultExplosionRadius: 44,
-    deadLineY: LIMITS.terrainBottom,
+    deadLineY: STANDARD_LIMITS.terrainBottom,
     fallTrigger: 22
   });
   var PRESET_DEFINITIONS = [
@@ -77,12 +108,12 @@
     }),
     steel: Object.freeze({
       id: 'steel',
-      label: '鋼鉄',
+      label: '壊れない鋼鉄',
       type: 'indestructible',
       destructible: false,
-      enabled: false,
-      exportable: false,
-      requiresGameFeature: 'indestructible-terrain-v1'
+      enabled: true,
+      exportable: true,
+      requiresGameFeature: null
     })
   });
   var SLOT_ORDER = ['p1', 'e1', 'p2', 'e2'];
@@ -128,8 +159,8 @@
           maxBuild: { type: ['string', 'null'], pattern: '^v[0-9]{1,9}$', maxLength: 40 }
         }
       },
-      stageWidth: { const: LIMITS.stageWidth },
-      stageHeight: { const: LIMITS.stageHeight },
+      stageWidth: { enum: [STANDARD_LIMITS.stageWidth, LARGE_LIMITS.stageWidth] },
+      stageHeight: { enum: [STANDARD_LIMITS.stageHeight, LARGE_LIMITS.stageHeight] },
       coordinateSystem: {
         type: 'object',
         additionalProperties: false,
@@ -151,21 +182,29 @@
           encoding: { const: 'column-segments-v1' },
           columns: {
             type: 'array',
-            minItems: LIMITS.columns,
-            maxItems: LIMITS.columns,
+            minItems: STANDARD_LIMITS.columns,
+            maxItems: LARGE_LIMITS.columns,
             items: {
               type: 'array',
               maxItems: 32,
               items: {
                 type: 'array',
                 prefixItems: [
-                  { type: 'number', minimum: 0, maximum: LIMITS.terrainBottom },
-                  { type: 'number', minimum: 0, maximum: LIMITS.terrainBottom }
+                  { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom },
+                  { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom }
                 ],
                 minItems: 2,
                 maxItems: 2
               }
             }
+          },
+          materialSegments: {
+            type: 'array', minItems: STANDARD_LIMITS.columns, maxItems: LARGE_LIMITS.columns,
+            items: { type: 'array', maxItems: 32, items: { type: 'array', prefixItems: [
+              { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom },
+              { type: 'number', minimum: 0, maximum: LARGE_LIMITS.terrainBottom },
+              { enum: ['terrain', 'steel'] }
+            ], minItems: 3, maxItems: 3 } }
           },
           destructible: { const: true },
           minimumThickness: { type: 'number', minimum: 4, maximum: 64 }
@@ -174,17 +213,32 @@
       materials: {
         type: 'array',
         minItems: 1,
-        maxItems: 1,
+        maxItems: 2,
         items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['id', 'type', 'destructible'],
-          properties: {
-            id: { const: 'terrain' },
-            type: { const: 'destructible' },
-            destructible: { const: true },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
-          }
+          anyOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'type', 'destructible'],
+              properties: {
+                id: { const: 'terrain' },
+                type: { const: 'destructible' },
+                destructible: { const: true },
+                color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+              }
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'type', 'destructible'],
+              properties: {
+                id: { const: 'steel' },
+                type: { const: 'indestructible' },
+                destructible: { const: false },
+                color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }
+              }
+            }
+          ]
         }
       },
       spawnPoints: {
@@ -200,8 +254,8 @@
             slot: { enum: SLOT_ORDER },
             team: { enum: ['player', 'enemy'] },
             order: { type: 'integer', minimum: 1, maximum: 4 },
-            x: { type: 'number', minimum: 0, maximum: LIMITS.stageWidth },
-            y: { type: 'number', minimum: -64, maximum: LIMITS.stageHeight },
+            x: { type: 'number', minimum: 0, maximum: LARGE_LIMITS.stageWidth },
+            y: { type: 'number', minimum: -64, maximum: LARGE_LIMITS.stageHeight },
             direction: { enum: ['left', 'right'] }
           }
         }
@@ -428,6 +482,7 @@
 
   function createStageDocument(options) {
     options = options || {};
+    activateStageLimits(options);
     var now = new Date().toISOString();
     var format = options.format === '2v2' ? '2v2' : '1v1';
     return {
@@ -571,12 +626,14 @@
       cavityRate: roundNumber(clamp(input.cavityRate == null ? 0.08 : input.cavityRate, 0, 0.35), 3),
       smoothness: roundNumber(clamp(input.smoothness == null ? 0.65 : input.smoothness, 0, 1), 3),
       playerCount: input.playerCount === 4 ? 4 : 2,
-      difficulty: roundNumber(clamp(input.difficulty == null ? 0.5 : input.difficulty, 0, 1), 3)
+      difficulty: roundNumber(clamp(input.difficulty == null ? 0.5 : input.difficulty, 0, 1), 3),
+      steelMode: ['none', 'partial', 'whole'].indexOf(input.steelMode) >= 0 ? input.steelMode : 'none'
     };
   }
 
   function generateStage(options) {
     options = options || {};
+    activateStageLimits(options);
     var requestedPreset = PRESET_KEYS.indexOf(options.preset) >= 0 ? options.preset : 'rolling';
     var preset = requestedPreset;
     var parameters = normalizeGenerationParameters(options.generationParameters || options.parameters);
@@ -592,7 +649,8 @@
       seed: options.seed || 'stage-studio',
       preset: requestedPreset,
       format: format,
-      theme: options.theme
+      theme: options.theme,
+      size: stageSizeKey(options)
     });
     // randomは選ばれた形ではなく、利用者が指定したrandom自体を保存する。
     // これで保存済みseed + generatorVersion + preset + parametersから同じ乱数列を再現できる。
@@ -716,6 +774,28 @@
       return merged;
     });
     stage.terrain.columns = columns;
+    if (parameters.steelMode === 'whole') {
+      stage.materials = [{ id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }];
+    } else if (parameters.steelMode === 'partial') {
+      var steelSegments = columns.map(function () { return []; });
+      var steelZones = [
+        [0.12 + random() * 0.08, 0.24 + random() * 0.08],
+        [0.43 + random() * 0.08, 0.57 + random() * 0.08],
+        [0.76 + random() * 0.08, 0.88 + random() * 0.06]
+      ];
+      columns.forEach(function (segments, column) {
+        var t = column / Math.max(1, LIMITS.columns - 1);
+        if (!segments.length || !steelZones.some(function (zone) { return t >= zone[0] && t <= zone[1]; })) return;
+        var baseSegment = segments[segments.length - 1];
+        var capBottom = Math.min(baseSegment[1], baseSegment[0] + Math.max(18, LIMITS.rowHeight * 5));
+        if (capBottom > baseSegment[0]) steelSegments[column] = [[baseSegment[0], capBottom, 'steel']];
+      });
+      stage.materials = [
+        { id: 'terrain', type: 'destructible', destructible: true, color: '#7A5435' },
+        { id: 'steel', type: 'indestructible', destructible: false, color: '#49515B' }
+      ];
+      stage.terrain.materialSegments = steelSegments;
+    }
     stage.spawnPoints = makeSpawns(columns, format);
     if (options.wind && Number(options.wind.strength) > 0) {
       stage.gimmicks = [{
@@ -728,7 +808,8 @@
     return normalizeStage(stage);
   }
 
-  function segmentsToGrid(input) {
+  function segmentsToGrid(input, sizeHint) {
+    activateStageLimits(sizeHint || input);
     var columns = input && input.terrain ? input.terrain.columns : input;
     columns = Array.isArray(columns) ? columns : blankColumns();
     var grid = new Uint8Array(LIMITS.columns * LIMITS.rows);
@@ -744,7 +825,8 @@
     return grid;
   }
 
-  function gridToSegments(grid) {
+  function gridToSegments(grid, sizeHint) {
+    activateStageLimits(sizeHint);
     if (!grid || grid.length !== LIMITS.columns * LIMITS.rows) throw new Error('地形グリッドのサイズが不正です。');
     var columns = blankColumns();
     for (var column = 0; column < LIMITS.columns; column += 1) {
@@ -761,7 +843,8 @@
     return columns;
   }
 
-  function paintCircle(grid, worldX, worldY, radius, solid) {
+  function paintCircle(grid, worldX, worldY, radius, solid, sizeHint) {
+    activateStageLimits(sizeHint);
     if (!grid || grid.length !== LIMITS.columns * LIMITS.rows) throw new Error('地形グリッドのサイズが不正です。');
     worldX = clamp(worldX, 0, LIMITS.stageWidth);
     worldY = clamp(worldY, 0, LIMITS.stageHeight);
@@ -784,16 +867,20 @@
   }
 
   function carveCircle(stage, x, y, radius) {
+    activateStageLimits(stage);
     var next = normalizeStage(stage);
+    var hasMaterialOverrides = (next.terrain.materialSegments || []).some(function (column) { return column.length; });
+    if (!hasMaterialOverrides && next.materials.length === 1 && next.materials[0].destructible !== true) return next;
     var grid = segmentsToGrid(next);
-    paintCircle(grid, x, y, radius, false);
-    next.terrain.columns = gridToSegments(grid);
+    paintCircle(grid, x, y, radius, false, next);
+    next.terrain.columns = gridToSegments(grid, next);
     next.updatedAt = new Date().toISOString();
     next.checksums.contentHash = '';
     return next;
   }
 
   function isSolidAt(stage, x, y) {
+    activateStageLimits(stage);
     if (!stage || !stage.terrain || !Array.isArray(stage.terrain.columns)) return false;
     if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= LIMITS.stageWidth || y >= LIMITS.stageHeight) return false;
     var column = Math.floor(x / LIMITS.columnWidth);
@@ -802,6 +889,7 @@
   }
 
   function groundYAt(stage, x, referenceY) {
+    activateStageLimits(stage);
     if (!stage || !stage.terrain || !Array.isArray(stage.terrain.columns)) return LIMITS.stageHeight;
     var column = Math.max(0, Math.min(LIMITS.columns - 1, Math.floor(Number(x) / LIMITS.columnWidth)));
     var segments = stage.terrain.columns[column] || [];
@@ -835,6 +923,7 @@
   }
 
   function traceProjectile(stage, options) {
+    activateStageLimits(stage);
     options = options || {};
     var wind = getGlobalWind(stage);
     var state = {
@@ -928,6 +1017,7 @@
   }
 
   function validateStage(input) {
+    activateStageLimits(input);
     var errors = securityScan(input);
     var warnings = [];
     var metrics = { segmentCount: 0, fileBytes: 0, leftMeanHeight: null, rightMeanHeight: null };
@@ -957,7 +1047,7 @@
         errors.push(issue('compatibility_unsupported', '$.gameCompatibility', 'このステージは現在のゲームバージョンに対応していません。'));
       }
     }
-    if (input.stageWidth !== LIMITS.stageWidth || input.stageHeight !== LIMITS.stageHeight) errors.push(issue('stage_size', '$', 'このゲームで使えるステージサイズは1440×660です。'));
+    if (input.stageWidth !== LIMITS.stageWidth || input.stageHeight !== LIMITS.stageHeight) errors.push(issue('stage_size', '$', 'このゲームで使えるステージサイズは標準1440×660または大型2160×960です。'));
     if (!input.coordinateSystem || input.coordinateSystem.origin !== 'top-left' || input.coordinateSystem.terrainColumnWidth !== LIMITS.columnWidth || input.coordinateSystem.terrainRowHeight !== LIMITS.rowHeight) {
       errors.push(issue('coordinate_system', '$.coordinateSystem', '座標系が対象ゲームと一致しません。'));
     }
@@ -1041,10 +1131,28 @@
     }
 
     var materials = Array.isArray(input.materials) ? input.materials : [];
-    if (materials.length !== 1 || materials.some(function (material) {
-      return !material || material.id !== MATERIAL_CATALOG.terrain.id || material.type !== MATERIAL_CATALOG.terrain.type || material.destructible !== MATERIAL_CATALOG.terrain.destructible;
+    if (materials.length < 1 || materials.length > 2 || materials.some(function (material) {
+      var expected = material && MATERIAL_CATALOG[material.id];
+      return !expected || !expected.enabled || material.type !== expected.type || material.destructible !== expected.destructible;
     })) {
-      errors.push(issue('unsupported_material', '$.materials', '未対応の地形素材が含まれています。MVPは破壊可能地形だけに対応します。'));
+      errors.push(issue('unsupported_material', '$.materials', '地形素材の種類と壊れ方の組み合わせが正しくありません。'));
+    }
+    var materialIds = Object.create(null);
+    materials.forEach(function (material) {
+      if (material && materialIds[material.id]) errors.push(issue('unsupported_material', '$.materials', '同じ地形素材が重複しています。'));
+      if (material) materialIds[material.id] = true;
+    });
+    var materialSegments = input.terrain && input.terrain.materialSegments;
+    if (materialSegments != null) {
+      if (!Array.isArray(materialSegments) || materialSegments.length !== columns.length) {
+        errors.push(issue('material_segments_shape', '$.terrain.materialSegments', '素材区分の列数が地形と一致しません。'));
+      } else materialSegments.forEach(function (entries, columnIndex) {
+        (entries || []).forEach(function (segment) {
+          if (!Array.isArray(segment) || segment.length !== 3 || !materialIds[segment[2]]) {
+            errors.push(issue('material_segment_invalid', '$.terrain.materialSegments[' + columnIndex + ']', '地形素材区分が不正です。'));
+          }
+        });
+      });
     }
     var gimmicks = Array.isArray(input.gimmicks) ? input.gimmicks : [];
     if (gimmicks.length > LIMITS.maxGimmicks) errors.push(issue('gimmick_limit', '$.gimmicks', 'ギミック数が上限を超えています。'));
@@ -1110,8 +1218,28 @@
     return result;
   }
 
+  function normalizeMaterialSegments(columns, source) {
+    var result = blankColumns();
+    if (!Array.isArray(source)) return result;
+    for (var column = 0; column < LIMITS.columns; column += 1) {
+      var geometry = Array.isArray(columns[column]) ? columns[column] : [];
+      var entries = Array.isArray(source[column]) ? source[column] : [];
+      result[column] = entries.map(function (segment) {
+        return [roundNumber(clamp(segment && segment[0], 0, LIMITS.terrainBottom), 3),
+          roundNumber(clamp(segment && segment[1], 0, LIMITS.terrainBottom), 3),
+          segment && segment[2] === 'steel' ? 'steel' : 'terrain'];
+      }).filter(function (segment) {
+        return segment[1] > segment[0] && geometry.some(function (base) {
+          return segment[0] >= base[0] && segment[1] <= base[1];
+        });
+      });
+    }
+    return result;
+  }
+
   function normalizeStage(input) {
     input = input || {};
+    activateStageLimits(input);
     var base = createStageDocument({
       stageId: input.stageId,
       title: input.title,
@@ -1123,7 +1251,8 @@
       seed: input.seed,
       preset: input.generation && input.generation.preset,
       format: input.battleRules && input.battleRules.format,
-      theme: input.background && input.background.theme
+      theme: input.background && input.background.theme,
+      size: stageSizeKey(input)
     });
     base.schemaVersion = input.schemaVersion || SCHEMA_VERSION;
     base.generation = {
@@ -1137,11 +1266,13 @@
       maxBuild: input.gameCompatibility && input.gameCompatibility.maxBuild != null ? safeText(input.gameCompatibility.maxBuild, 40, null) : null
     };
     base.terrain.columns = normalizeColumns(input.terrain && input.terrain.columns);
+    base.terrain.materialSegments = normalizeMaterialSegments(base.terrain.columns, input.terrain && input.terrain.materialSegments);
     base.terrain.minimumThickness = roundNumber(clamp(input.terrain && input.terrain.minimumThickness || LIMITS.minimumTerrainThickness, 4, 64), 3);
     base.materials = (Array.isArray(input.materials) ? input.materials : base.materials).slice(0, 4).map(function (material) {
       return {
         id: safeText(material && material.id, 32, 'terrain').replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'terrain',
-        type: material && material.type === 'destructible' ? 'destructible' : safeText(material && material.type, 32, 'destructible'),
+        type: material && (material.type === 'destructible' || material.type === 'indestructible')
+          ? material.type : safeText(material && material.type, 32, 'destructible'),
         destructible: material && material.destructible === true,
         color: safeColor(material && material.color, '#7A5435')
       };
@@ -1414,6 +1545,7 @@
   }
 
   function toGameAdapter(stage) {
+    activateStageLimits(stage);
     var result = validateStage(stage);
     if (!result.valid) {
       var error = new Error(result.errors[0] ? result.errors[0].message : 'ステージをゲーム用に変換できません。');
@@ -1431,7 +1563,11 @@
       gameCompatibility: clone(normalized.gameCompatibility),
       title: normalized.title,
       authorDisplayName: normalized.authorDisplayName,
+      stageSize: stageSizeKey(normalized),
+      stageWidth: normalized.stageWidth,
+      stageHeight: normalized.stageHeight,
       segments: clone(normalized.terrain.columns),
+      materialSegments: clone(normalized.terrain.materialSegments || []),
       pattern: 'custom',
       startOnIsland: false,
       themeKey: normalized.background.theme,
@@ -1442,6 +1578,9 @@
       format: normalized.battleRules.format,
       appearance: {
         background: clone(normalized.background),
+        terrainMaterial: normalized.materials[0] && normalized.materials[0].id === 'steel' && !(normalized.terrain.materialSegments || []).some(function (column) { return column.length; }) ? 'steel' : 'terrain',
+        ...(normalized.terrain.materialSegments && normalized.terrain.materialSegments.some(function (column) { return column.length; })
+          ? { terrainMaterialSegments: clone(normalized.terrain.materialSegments) } : {}),
         terrainColor: normalized.materials[0] && normalized.materials[0].color
           ? normalized.materials[0].color
           : '#7A5435',
@@ -1461,7 +1600,9 @@
     GENERATOR_VERSION: GENERATOR_VERSION,
     GAME_ID: GAME_ID,
     GAME_BUILD: GAME_BUILD,
-    LIMITS: LIMITS,
+    LIMITS: STANDARD_LIMITS,
+    STAGE_SIZES: STAGE_SIZES,
+    getStageLimits: getStageLimits,
     PHYSICS: PHYSICS,
     PRESETS: PRESETS,
     MATERIAL_CATALOG: MATERIAL_CATALOG,
