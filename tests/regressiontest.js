@@ -683,6 +683,15 @@ check('ドレッドアローとクール=カイは透明余白を除いて大き
     && kt.character('coolKai').imageCrop?.sx >= 0.12
     && kt.character('coolKai').previewImageCrop?.sw <= 0.72,
   JSON.stringify({ dreadArrow: dreadArrow.imageCrop, coolKai: kt.character('coolKai').imageCrop }));
+check('キャラ選択の必殺技詳細はVSカットインなしの通信不要デモを開く',
+  indexHtml.includes("function startSpecialDemo(key)")
+    && indexHtml.includes("battleMode = 'demo';")
+    && indexHtml.includes("if (battleMode !== 'demo' && !(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();")
+    && indexHtml.includes("if (battleMode !== 'demo') primeStageBgm(currentThemeKey);")
+    && indexHtml.includes("if (specialDemo) return;")
+    && indexHtml.includes("ctx.fillText('詳細 ▶'")
+    && indexHtml.includes("drawOutlinedText('必殺技デモ'"),
+  '必殺技デモの独立した開始・演出省略・入力停止がありません');
 kt.startBattle('shinigami');
 const vs1v1 = kt.matchupCutIn();
 check('1vs1の開始時は両陣営1体ずつのVSカットイン',
