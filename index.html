@@ -30,19 +30,6 @@
 <link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/room-bgm.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-grass.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-desert.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-snow.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-volcanic.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-boss-arena.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-1.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-2.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-3.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-4.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/six-eternel-dopagaki-remix.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/cool-kai-special-voice.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
@@ -662,10 +649,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.91-hamilton-cloud-special';
+  const BUILD_ID = 'v2.0.92-smart-asset-cache';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.92', date: '2026/08/20', summary: '更新時にBGM・画像を取り直さない節約キャッシュへ改善' },
     { version: 'v2.0.91', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
     { version: 'v2.0.90', date: '2026/08/20', summary: 'クール=カイのBATTLE曲とおまけ末尾へドパガキリミックスを追加' },
     { version: 'v2.0.89', date: '2026/08/20', summary: '退出確認ボタンの文字が収まるよう縦幅を調整' },
@@ -1193,8 +1181,7 @@
     { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' },
     { src: 'assets/six-eternel-dopagaki-remix.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）' }
   ];
-  // おまけのサウンドテストで選べる全BGM。起動時に同じ一覧を先読みして、
-  // おまけを開いた瞬間のsrc差し替え待ちをなくす。
+  // サウンドテストで選べる全BGM。通信量を守るため、選択するまでダウンロードしない。
   const SOUND_TEST_TRACKS = Object.freeze([
     { key: 'title', label: 'タイトルBGM', src: 'assets/title-bgm.mp3', volume: TITLE_BGM_BASE_VOLUME },
     { key: 'room', label: 'ONLINEロビー', src: 'assets/room-bgm.mp3', volume: ROOM_BGM_BASE_VOLUME },
@@ -1210,23 +1197,7 @@
       volume: track.volume
     }))
   ]);
-  let startupBgmPreloadSettled = 0;
-  const startupBgmPreloads = SOUND_TEST_TRACKS.map(track => {
-    const audio = document.createElement('audio');
-    audio.preload = 'auto';
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      startupBgmPreloadSettled++;
-    };
-    audio.addEventListener('canplaythrough', settle, { once: true });
-    audio.addEventListener('error', settle, { once: true });
-    audio.src = track.src;
-    audio.load();
-    return audio;
-  });
-  const startupBgmPreloadCount = startupBgmPreloads.length;
+  const startupBgmPreloadCount = 0;
   let bonusBgmTrack = 0;        // 0=止まっている / 1〜6=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
   function bonusBgmBaseVolume() {
@@ -3340,8 +3311,8 @@
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
-  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げる。これにより
-  // Service Workerの新キャッシュが全アセットを安全に更新する。
+  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げ、sw.jsの
+  // ASSET_REFRESHへ対象パスを追加する。ほかの素材は端末内キャッシュを再利用する。
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   // 抽選した1体はループへ入る前に読み始める。最初の1体として優先されるため、
@@ -3384,19 +3355,17 @@
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
     const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
     const woodUiSettled = titleWoodUiReady + titleWoodUiFailed >= Object.keys(titleWoodUiImages).length;
-    const bgmSettled = startupBgmPreloadSettled >= startupBgmPreloadCount;
-    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled && bgmSettled;
+    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled;
   }
 
   function getCoreImageProgress() {
     return characterImagesReady + characterImagesFailed
       + titleWoodUiReady + titleWoodUiFailed
       + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
-      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0)
-      + startupBgmPreloadSettled;
+      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
   }
   function getCoreImageProgressRatio() {
-    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2 + startupBgmPreloadCount;
+    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2;
     return Math.max(0, Math.min(1, getCoreImageProgress() / total));
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。

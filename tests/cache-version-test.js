@@ -16,6 +16,12 @@ function assertCacheVersionContract(html, worker) {
   assert.doesNotMatch(worker, /\?v=\d+/, 'APP_SHELLのアセットを ?v= で版管理してはいけません。');
   assert.match(worker, /cache\.addAll\(APP_SHELL\.map\(asset => new Request\(asset, \{ cache: 'reload' \}\)\)\)/,
     '新しいCACHE_VERSIONではAPP_SHELLをネットワークから再取得してください。');
+  assert.match(worker, /const ASSET_CACHE = 'katamon-assets-v1';/,
+    '大型素材用の永続キャッシュを定義してください。');
+  assert.match(worker, /url\.pathname\.includes\('\/assets\/'\)/,
+    'assets配下は永続キャッシュから配信してください。');
+  assert.match(worker, /ASSET_REFRESH\.map\(asset => cache\.delete\(asset\)\)/,
+    '差し替えた素材だけを永続キャッシュから更新できるようにしてください。');
 }
 
 assertCacheVersionContract(indexHtml, serviceWorker);
@@ -28,4 +34,4 @@ assert.throws(
   '旧式の版不一致を検出できること',
 );
 
-console.log('キャッシュ版管理契約: BUILD_ID/CACHE_VERSION一致・クエリ非依存（2/2 passed）');
+console.log('キャッシュ版管理契約: BUILD_ID/CACHE_VERSION一致・素材の永続キャッシュ（2/2 passed）');
