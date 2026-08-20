@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.86-exit-confirm-assets';
+const CACHE_VERSION = 'katamon-pwa-v2.0.87-exit-confirm-friendly-ui';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const APP_SHELL = [
   './index.html',
@@ -43,10 +43,7 @@ const APP_SHELL = [
   './assets/special-cutin-edm-zap.mp3',
   './assets/cool-kai-special-voice.mp3',
   './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
-  './assets/device-exit-seal.png',
-  './assets/exit-confirm-frame.png',
-  './assets/exit-confirm-stay.png',
-  './assets/exit-confirm-exit.png'
+  './assets/device-exit-seal.png'
 ];
 
 self.addEventListener('install', event => {
