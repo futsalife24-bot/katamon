@@ -1,7 +1,7 @@
 'use strict';
 
 const CACHE_PREFIX = 'stage-studio-';
-const CACHE_NAME = `${CACHE_PREFIX}1.7.0-text-placement`;
+const CACHE_NAME = `${CACHE_PREFIX}1.8.1-character-assets`;
 const OFFLINE_MARKER = new URL('./.offline-marker', self.location.href).href;
 const APP_SHELL = [
   './',
@@ -20,14 +20,14 @@ const APP_SHELL = [
   '../../assets/stage-desert-bg.jpg',
   '../../assets/stage-snow-bg.jpg',
   '../../assets/stage-volcanic-bg.jpg',
-  '../../assets/kyoryu.webp',
-  '../../assets/kyoryu.png',
-  '../../assets/medama.webp',
-  '../../assets/medama.png',
-  '../../assets/tori.webp',
-  '../../assets/tori.png',
-  '../../assets/iwa.webp',
-  '../../assets/iwa.png',
+  '../../assets/characters/runtime/dirano.webp',
+  '../../assets/characters/master/dirano.png',
+  '../../assets/characters/runtime/eyebolt.webp',
+  '../../assets/characters/master/eyebolt.png',
+  '../../assets/characters/runtime/fenice.webp',
+  '../../assets/characters/master/fenice.png',
+  '../../assets/characters/runtime/gorocca.webp',
+  '../../assets/characters/master/gorocca.png',
   '../../assets/apple-touch-icon.png',
   '../../assets/icon-192.png',
   '../../assets/icon-512.png',

@@ -22,7 +22,7 @@ test('Stage Studio shares the two-font Katamon hierarchy', () => {
   assert.match(studioCss, /\.screen-heading h2\s*\{[^}]*var\(--katamon-font-display\)/);
   assert.match(studioSw, /rocknroll-one-regular\.ttf/);
   assert.match(studioSw, /reggae-one-display\.woff2/);
-  assert.match(studioSw, /1\.7\.0-text-placement/);
+  assert.match(studioSw, /1\.8\.1-character-assets/);
 });
 
 test('Stage Studio presents the requested eight-screen mobile flow', () => {
@@ -72,7 +72,7 @@ test('playtest actions stay in a dock directly below the map while wind settings
 test('all editing canvases use game assets, terrain texture and real character dimensions', () => {
   for (const asset of [
     'stage-grass-bg.jpg', 'stage-desert-bg.jpg', 'stage-snow-bg.jpg', 'stage-volcanic-bg.jpg',
-    'kyoryu.webp', 'medama.webp', 'tori.webp', 'iwa.webp'
+    'dirano.webp', 'eyebolt.webp', 'fenice.webp', 'gorocca.webp'
   ]) assert.match(studioApp, new RegExp(asset.replace('.', '\\.')));
   assert.match(studioApp, /const SPRITE_SIZE = 78;/);
   assert.match(studioApp, /const UNIT_HIT_RADIUS = 30;/);
@@ -87,6 +87,9 @@ test('all editing canvases use game assets, terrain texture and real character d
   assert.match(studioApp, /dirtBottom: mixHexColor\(terrainTop, '#000000', 0\.58\)/);
   assert.match(studioApp, /rim: mixHexColor\(terrainTop, '#ffffff', 0\.34\)/);
   assert.match(studioApp, /rimShadow: mixHexColor\(terrainTop, '#000000', 0\.36\)/);
+  assert.match(studioApp, /const hasMaterialOverrides = Array\.isArray\(state\.stage\.terrain && state\.stage\.terrain\.materialSegments\)/);
+  assert.match(studioApp, /const material = state\.stage\.materials && \(state\.stage\.materials\.find\(\(item\) => item && item\.id === 'terrain'\)/);
+  assert.match(studioApp, /const steel = material\.id === 'steel' && !hasMaterialOverrides;/);
   assert.match(studioApp, /Array\.isArray\(snapshot\.characterGuides\) && snapshot\.characterGuides\.length[\s\S]*?: null/);
   assert.match(studioApp, /state\.ready && state\.documentStarted && state\.stage && previousScreen !== screen/);
   assert.match(studioApp, /drawStageScene\(\$\('terrainCanvas'\)/);
@@ -119,6 +122,15 @@ test('terrain editor uses a canvas-first workspace with contextual inspector and
   assert.match(studioApp, /\.filter\(\(item\) => item\.collision\)/);
   assert.match(studioApp, /state\.characterGuides\[placement\.index\] = placement\.guide/);
   assert.match(studioApp, /snapCharacterGuides.*snapInvalidCharacterGuides/);
+});
+
+test('generator exposes none, partial and whole steel modes', () => {
+  assert.match(studioHtml, /id="generationSteelMode"/);
+  assert.match(studioHtml, /value="partial">一部を鋼鉄/);
+  assert.match(studioHtml, /value="whole">全面を鋼鉄/);
+  assert.match(studioApp, /steelMode: \['none', 'partial', 'whole'\]/);
+  assert.match(studioApp, /const isWholeSteel = Array\.isArray\(state\.stage\.materials\)/);
+  assert.match(studioApp, /if \(!isWholeSteel\) state\.stage\.materials = \[selectedTerrainMaterial\(\)\];/);
 });
 
 test('terrain settings use a floating palette that collapses after choosing a value', () => {
@@ -172,19 +184,19 @@ test('editing canvases expose an external landscape control with a safe iOS fall
   assert.match(studioApp, /addEventListener\('orientationchange', updateOrientationControls\)/);
 });
 
-test('steel remains a disabled future material and cannot enter exported state', () => {
-  assert.match(studioHtml, /<option value="steel" disabled>壊れない鋼鉄（準備中）<\/option>/);
-  assert.match(studioApp, /state\.stage\.materials = \[\{ id: 'terrain', type: 'destructible', destructible: true, color: \$\('terrainColor'\)\.value \}\];/);
-  assert.doesNotMatch(studioApp, /id:\s*['"]steel['"]/);
+test('Stage Studio offers the whole-stage steel material and exports its indestructible declaration', () => {
+  assert.match(studioHtml, /<option value="steel">壊れない鋼鉄<\/option>/);
+  assert.match(studioApp, /function selectedTerrainMaterial\(\)/);
+  assert.match(studioApp, /id: 'steel', type: 'indestructible', destructible: false/);
 });
 
 test('game-style UI and PWA shell ship the new visual assets with a cache bump', () => {
   assert.match(studioCss, /--primary:\s*#c78335/);
   assert.match(studioCss, /--text:\s*#fff5dc/);
   assert.match(studioCss, /\.terrain-tool-menu\s*\{[^}]*grid-template-columns:\s*repeat\(5,/);
-  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.7\.0-text-placement`/);
+  assert.match(studioSw, /CACHE_NAME\s*=\s*`\$\{CACHE_PREFIX\}1\.8\.1-character-assets`/);
   assert.match(studioSw, /stage-grass-bg\.jpg/);
-  assert.match(studioSw, /kyoryu\.webp/);
+  assert.match(studioSw, /characters\/runtime\/dirano\.webp/);
   assert.match(studioHtml, /styles-1\.4\.0-mvp\.css/);
   assert.match(studioHtml, /app-1\.7\.0\.js/);
   assert.match(studioSw, /request\.destination === 'script'[\s\S]*fetch\(request, \{ cache: 'no-cache' \}\)[\s\S]*cache\.match\(request/);

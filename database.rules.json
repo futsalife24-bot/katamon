@@ -4,11 +4,15 @@
     ".write": false,
     "open": {
       ".read": "auth != null",
+      ".indexOn": ["createdAt"],
       "$room": {
         ".write": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && ((newData.exists() && newData.child('hostUid').val() === auth.uid && root.child('rooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid && root.child('rooms').child($room).child('expiresAt').val() > now) || (data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)))",
-        ".validate": "!newData.exists() || (newData.hasChildren(['format','hostUid','createdAt','expiresAt']) && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 3600000)",
+        ".validate": "!newData.exists() || (newData.hasChildren(['format','hostUid','hostName','roomName','playerCount','createdAt','expiresAt']) && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 3600000)",
         "format": { ".validate": "newData.val() === '1v1' || newData.val() === '2v2'" },
         "hostUid": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+        "hostName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12" },
+        "roomName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24" },
+        "playerCount": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
         "createdAt": { ".validate": "newData.isNumber()" },
         "expiresAt": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
@@ -29,11 +33,12 @@
 
         "settings": {
           ".write": "auth != null && data.parent().child('slots').child('p1').child('uid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('round').child('status').val() === 'lobby'",
-          ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','revision'])",
+          ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','format','stageSize','revision'])",
           "terrain": { ".validate": "newData.val() === 'random' || newData.val() === 'plateauLeft' || newData.val() === 'plateauRight' || newData.val() === 'mountainCenter' || newData.val() === 'valley' || newData.val() === 'rolling' || newData.val() === 'bridge' || newData.val() === 'tieredBasin'" },
           "wind": { ".validate": "newData.val() === 'random' || newData.val() === 'left' || newData.val() === 'calm' || newData.val() === 'right'" },
           "turnsPerPlayer": { ".validate": "newData.val() === 10 || newData.val() === 15 || newData.val() === 20" },
           "format": { ".validate": "newData.val() === '1v1' || newData.val() === '2v2'" },
+          "stageSize": { ".validate": "newData.val() === 'standard' || newData.val() === 'large'" },
           "revision": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100000" },
           "$other": { ".validate": false }
         },
@@ -72,10 +77,6 @@
             ".validate": "newData.hasChildren(['createdAt'])",
             "createdAt": { ".validate": "newData.isNumber()" },
 
-            "latestSnapshot": {
-              ".write": "auth != null && root.child('rooms').child($room).child('expiresAt').val() > now && root.child('rooms').child($room).child('round').child('id').val() === $roundId && (root.child('rooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid || root.child('rooms').child($room).child('slots').child('e1').child('uid').val() === auth.uid)"
-            },
-
             "messages": {
               "$message": {
                 ".write": "auth != null && !data.exists() && newData.exists() && root.child('rooms').child($room).child('expiresAt').val() > now && (root.child('rooms').child($room).child('round').child('id').val() === $roundId || (newData.child('t').val() === 'lobbyState' && newData.child('seat').val() === 'p1')) && newData.child('from').val() === auth.uid && root.child('rooms').child($room).child('slots').child(newData.child('seat').val()).child('uid').val() === auth.uid && (newData.child('seat').val() === 'p1' || newData.child('seat').val() === 'e1' || newData.child('seat').val() === 's1' || newData.child('seat').val() === 's2') && (newData.child('t').val() !== 'settings' && newData.child('t').val() !== 'lobbyState' && newData.child('t').val() !== 'start' || newData.child('seat').val() === 'p1')",
@@ -89,13 +90,14 @@
                 "status": { ".validate": "newData.isString() && newData.val().length <= 16" },
                 "nextRoundId": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
                 "autoReady": { ".validate": "newData.isBoolean()" },
-                "settings": { ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','revision'])" },
+                "settings": { ".validate": "newData.hasChildren(['terrain','wind','turnsPerPlayer','format','stageSize','revision'])" },
                 "slots": { ".validate": "newData.hasChildren()" },
                 "vote": { ".validate": "newData.isBoolean()" },
                 "value": { ".validate": "newData.isBoolean()" },
                 "name": { ".validate": "newData.isString() && newData.val().length <= 12" },
+                "rivalId": { ".validate": "(newData.parent().child('t').val() === 'presence' || newData.parent().child('t').val() === 'lobbyState') && newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
                 "hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
-                "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko' || newData.val() === 'shinigami'" },
+                "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko' || newData.val() === 'shinigami' || newData.val() === 'coolKai'" },
                 "nonce": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
                 "snap": { ".validate": "newData.hasChildren(['units','turnOrder','activeIndex','turnCount','wind'])" },
                 "unitId": { ".validate": "(newData.parent().child('seat').val() === 'p1' && newData.val() === 'p1') || (newData.parent().child('seat').val() === 'e1' && newData.val() === 'e1') || (newData.parent().child('seat').val() === 's1' && newData.val() === 'p2') || (newData.parent().child('seat').val() === 's2' && newData.val() === 'e2') || (newData.parent().child('seat').val() === 'p1' && newData.val() === 'e1' && !root.child('rooms').child($room).child('slots').child('e1').exists()) || (newData.parent().child('seat').val() === 'p1' && newData.val() === 'p2' && !root.child('rooms').child($room).child('slots').child('s1').exists()) || (newData.parent().child('seat').val() === 'p1' && newData.val() === 'e2' && !root.child('rooms').child($room).child('slots').child('s2').exists())" },

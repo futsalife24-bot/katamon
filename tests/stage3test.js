@@ -11,6 +11,82 @@ function check(name, value) {
 
 (async () => {
   console.log('=== stage3 ===');
+  const anchoredHudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check('battle HUD crops transparent asset margins and uses measured content anchors',
+    anchoredHudSource.includes('const HUD_ASSET_LAYOUT = Object.freeze({')
+    && anchoredHudSource.includes('ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);')
+    && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
+    && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
+    && !anchoredHudSource.includes("String(text).includes('橋')"));
+  check('battle HUD name and HP text use the middle baseline at the measured window center',
+    anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
+    && anchoredHudSource.includes('centerY: 0.31')
+    && anchoredHudSource.includes('centerY: 0.32')
+    && anchoredHudSource.includes('const labelY = cardY + h * layout.text.centerY;')
+    && (anchoredHudSource.match(/baseline: 'middle'/g) || []).length >= 2);
+  check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
+    anchoredHudSource.includes('function drawWindStrengthArrow(')
+    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;"));
+  check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
+    anchoredHudSource.includes('function drawWindNextBadge(')
+    && anchoredHudSource.includes('const strengthPlateW = width * 0.43;'));
+  check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
+    anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
+    && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.70')
+    && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
+  check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
+    anchoredHudSource.includes("if (label === '無風')")
+    && anchoredHudSource.includes("ctx.fillStyle = color;")
+    && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.70')
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
+  check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
+    anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
+    && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
+    && anchoredHudSource.includes('const strengthPlateH = height * 0.78;')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.70')
+    && anchoredHudSource.includes("nextArrow === '無風'")
+    && anchoredHudSource.includes('const w = expanded ? 54 : 40;'));
+  check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
+    anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
+    && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
+    && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
+    && anchoredHudSource.includes('roundCenterY - inner * 0.70')
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
+  check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
+    anchoredHudSource.includes('function drawWindForecastDivider(')
+    && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
+    && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
+    && anchoredHudSource.includes('roundCenterY - inner * 0.70')
+    && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38'));
+  check('round wind console renders NEXT and its forecast as one centered text line',
+    anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
+    && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16"));
+  check('battle HUD HP gauges are centered vertically on their measured rail anchors',
+    anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
+    && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
+    && anchoredHudSource.includes('const hpBarY = cardY + h * layout.hp.centerY - hpBarH / 2;'));
+  check('1vs1と2vs2の風情報は同じ丸形フレーム内へ統一して表示する',
+    anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
+    && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
+    && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;'));
+  check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
+    anchoredHudSource.includes('const expanded = is2v2();')
+    && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
+    && anchoredHudSource.includes('drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windStrengthScale, windTitle, forecast, fixedForecast, forecastText);'));
+  check('丸形コンソールは現在風・強さ入り矢印・NEXT方向の3行で表示する',
+    anchoredHudSource.includes('function drawWindStrengthArrow(')
+    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
+    && anchoredHudSource.includes('arrowWidth, arrowHeight, arrowColor, arrowFont);')
+    && !anchoredHudSource.includes("const forecastLabel = fixedForecast ? '次の風: 同じ' : '次の風';"));
+  const hudSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  check('battle HUD reserves the centered round wind console and keeps the stage title layer clear',
+    hudSource.includes("roundWind: 'wind-console-round.webp'")
+    && hudSource.includes('const roundSize = expanded ? 142 : 104;')
+    && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
+    && !hudSource.includes('VW / 2, 35'));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -76,6 +152,18 @@ function check(name, value) {
   check('fair first player is deterministic', firstA === firstB && (firstA === 'p1' || firstA === 'e1'));
   app.startBattle('kyoryu');
   const safeSnap = app.snapshot();
+  function terrainDeltaFrom(snap) {
+    const delta = JSON.parse(JSON.stringify(snap));
+    for (const key of ['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'terrainMaterial', 'terrainMaterialSegments', 'customStage', 'customStageIdentity']) delete delta[key];
+    return delta;
+  }
+  const terrainDeltaState = terrainDeltaFrom(safeSnap);
+  check('Firebase v3 turn state sends craters but omits the immutable terrain base after start',
+    !Object.prototype.hasOwnProperty.call(terrainDeltaState, 'segments')
+    && !Object.prototype.hasOwnProperty.call(terrainDeltaState, 'bridge')
+    && Array.isArray(terrainDeltaState.craters)
+    && h.validateFirebaseMessage(firebasePacket('state', { actionId, unitId: 'p1', snap: terrainDeltaState }))
+    && h.stateSnapshotMismatchReason(terrainDeltaState, safeSnap) === '');
   check('Firebase state accepts a complete safe snapshot', h.validateFirebaseMessage({ v: 2, from: 'peer', t: 'state', sentAt: Date.now(), actionId, snap: safeSnap }));
   const missingWindForecast = JSON.parse(JSON.stringify(safeSnap));
   delete missingWindForecast.nextWind;
@@ -307,12 +395,101 @@ function check(name, value) {
   const cacheId = /const CACHE_VERSION = 'katamon-pwa-([^']+)'/.exec(swText);
   check('BUILD_ID matches the service worker cache version', !!buildId && !!cacheId && buildId[1] === cacheId[1],
     `${buildId && buildId[1]} vs ${cacheId && cacheId[1]}`);
+  check('battle HUD uses the expanded readable layout',
+    /const HUD_BASE_BOTTOM = 270;/.test(readRepoFile('index.html'))
+      && /const TURN_BAR_BASE_Y = 158;/.test(readRepoFile('index.html'))
+      && /const MINIMAP = \{ x: 13, y: 190, w: VW - 26, h: 72 \}/.test(readRepoFile('index.html')),
+    'battle HUD is still using the compact top layout');
+  check('battle HUD keeps team accents and removes the obsolete bridge label',
+    /自軍/.test(readRepoFile('index.html'))
+      && /敵軍/.test(readRepoFile('index.html'))
+      && !readRepoFile('index.html').includes("drawOutlinedText('司令ブリッジ'"),
+    'battle HUD still draws the obsolete bridge label');
 
-  // 音源はURL末尾の ?v=N がキャッシュの鍵になる。同じURLのまま中身を差し替えると、
-  // ブラウザは保存済みの古い曲を鳴らし続ける。v98で bonus-bgm-2 をCeltic版へ替えた際に
-  // ?v=1 のままだったため、2曲目に旧Hard Rock版が鳴る不具合が実機で出た。
-  // 中身のハッシュとURLを一緒に固定し、片方だけ変えたらここで気づけるようにする。
-  // 音源を差し替える時は、このハッシュと index.html の ?v=N を必ず両方更新すること。
+  check('battle HUD uses the supplied player frames and unified round wind asset',
+    ['player-card-ally.png', 'player-card-enemy.png', 'minimap-frame.png']
+      .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', file)))
+      && ['player-card-ally.png', 'player-card-enemy.png', 'wind-console.png', 'turn-ribbon.png']
+        .every(file => require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v3', file)))
+      && require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'v4-wind-console.png'))
+      && require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'ui', 'battle-hud', 'wind-console-round.webp'))
+      && readRepoFile('index.html').includes('battleHudImages')
+      && readRepoFile('index.html').includes('player-card-ally.png')
+      && readRepoFile('index.html').includes('player-card-enemy.png')
+      && readRepoFile('index.html').includes('turn-ribbon.png')
+      && readRepoFile('index.html').includes('minimap-frame.png')
+      && readRepoFile('index.html').includes('wind-console-round.webp')
+      && readRepoFile('index.html').includes('drawBattleHudAsset'),
+    'supplied battle HUD frame assets are not wired into the renderer');
+
+  check('battle HUD text and gauges use wide HP-first windows',
+    /const contentX = barX \+ w \* layout\.text\.left;/.test(readRepoFile('index.html'))
+      && /const innerX = barX \+ w \* layout\.hp\.left;/.test(readRepoFile('index.html'))
+      && /const fuelX = barX \+ w \* layout\.fuel\.left;/.test(readRepoFile('index.html'))
+      && /const hpBarH = Math\.max\(6, h \* layout\.hp\.h\);/.test(readRepoFile('index.html'))
+      && /const fuelBarH = Math\.max\(3, h \* layout\.fuel\.h\);/.test(readRepoFile('index.html'))
+      && /const centerX = frameX \+ cardW \* layout\.centerX;/.test(readRepoFile('index.html'))
+      && /drawOutlinedText\(forecastText, rightX/.test(readRepoFile('index.html')),
+    'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
+  check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
+    /const w = HUD_CARD_W;/.test(readRepoFile('index.html'))
+      && /function showTacticalStrip\(\) \{[\s\S]{0,100}is2v2\(\) \|\| STAGE_W === 2160/.test(readRepoFile('index.html'))
+      && /function drawMinimap\(\) \{\s*if \(!showTacticalStrip\(\)\) return;/.test(readRepoFile('index.html')),
+    '2vs2 card reuse or contextual minimap visibility is missing');
+  check('battle HUD preserves asset proportions and leaves the wind forecast visible',
+    ['const HUD_CARD_W = 184;', 'const PANEL_1V1 = { h: 74, rows: [50] };',
+      'const PANEL_2V2 = { h: 74, rows: [50, 128] };', 'const TURN_BAR_BASE_Y = 158;',
+      'const MINIMAP = { x: 13, y: 190, w: VW - 26, h: 72 }', 'cardH = expanded ? 152 : 54;',
+      'drawOutlinedText(forecastText, rightX'].every(text => readRepoFile('index.html').includes(text)),
+    'HUD assets are being squashed, overlapped, or the forecast label is hidden');
+  check('battle HUD turn ribbon has separate left, center, and right data zones',
+    /v3\/turn-ribbon\.png/.test(readRepoFile('index.html'))
+      && /drawOutlinedText\(turnCounter, VW \/ 2, barY \+ 17/.test(readRepoFile('index.html'))
+      && /battleHudImages\.turn/.test(readRepoFile('index.html')),
+    'turn information remains a cramped single text line');
+
+  check('battle-start logo is preloaded, cached, and drawn from the Drive PNG',
+    require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.png'))
+      && readRepoFile('index.html').includes('assets/battle-start-logo.png')
+      && swText.includes("'./assets/battle-start-logo.png'")
+      && readRepoFile('index.html').includes('battleStartLogoImage, 608, 1776, 2880, 1608'),
+    'BATTLE START logo asset wiring is incomplete');
+  check('battle-start logo video is preloaded, cached, and drawn above the old logo position',
+    require('fs').existsSync(require('path').join(__dirname, '..', 'assets', 'battle-start-logo.mp4'))
+      && readRepoFile('index.html').includes("assets/battle-start-logo.mp4")
+      && swText.includes("'./assets/battle-start-logo.mp4'")
+      && /const BATTLE_START_LOGO_Y = 180;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideoCanvas,\s*\n?\s*VW \/ 2 - logoW \/ 2,\s*BATTLE_START_LOGO_Y/.test(readRepoFile('index.html')),
+    'BATTLE START logo video wiring or upward position is incomplete');
+  check('battle-start video uses compositing instead of per-pixel background removal',
+    /ctx\.globalCompositeOperation = 'screen';[\s\S]{0,300}ctx\.drawImage\(battleStartLogoVideoCanvas/.test(readRepoFile('index.html'))
+      && !/battleStartLogoVideoCtx\.getImageData\([\s\S]{0,500}battleStartLogoVideoCtx\.putImageData\(/.test(readRepoFile('index.html')),
+    'BATTLE START video still performs expensive per-pixel background removal');
+  check('battle-start video is 1.95x and stops after one playback',
+    /const BATTLE_START_LOGO_SCALE = 1\.95;/.test(readRepoFile('index.html'))
+      && /const logoW = 300 \* BATTLE_START_LOGO_SCALE;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideo\.loop = false;/.test(readRepoFile('index.html'))
+      && /battleStartLogoVideo\.addEventListener\('ended',[\s\S]{0,120}battleStartLogoVideo\.pause\(\)/.test(readRepoFile('index.html')),
+    'BATTLE START video size or one-shot playback is not configured');
+  check('battle-start video playback rate is 1.3x without changing the render path',
+    /battleStartLogoVideo\.playbackRate = 1\.3;/.test(readRepoFile('index.html')),
+    'BATTLE START video playback rate is not 1.3x');
+  check('battle-start video reapplies 1.3x at playback start',
+    /battleStartLogoVideo\.defaultPlaybackRate = 1\.3;/.test(readRepoFile('index.html'))
+      && /function startBattleStartLogoVideo\(\)[\s\S]{0,180}battleStartLogoVideo\.playbackRate = 1\.3;/.test(readRepoFile('index.html')),
+    'BATTLE START video does not lock 1.3x when playback starts');
+  check('battle-start video scale is increased by another 1.3x',
+    /const BATTLE_START_LOGO_SCALE = 1\.95;/.test(readRepoFile('index.html')),
+    'BATTLE START video scale is not 1.95x');
+  check('VS plate drawing clips the asset to its rounded shell shape',
+    /roundRect\(-pw \/ 2, -ph \/ 2, pw, ph, ph \* 0\.46\)[\s\S]{0,120}ctx\.clip\(\);[\s\S]{0,120}ctx\.drawImage\(img/.test(readRepoFile('index.html')),
+    'VS plate image is not clipped before drawing');
+  check('VS plate flash does not paint a transient rectangular color block',
+    !/if \(flash > 0\) \{[\s\S]{0,500}ctx\.fill\(\);[\s\S]{0,80}ctx\.restore\(\);\s*\}\s*ctx\.restore\(\);/.test(readRepoFile('index.html')),
+    'VS plate flash still uses a full-plate fill');
+
+  // 音源を差し替える版では、BUILD_ID/CACHE_VERSIONを上げて新しいAPP_SHELLを
+  // 再取得する。個別のクエリ文字列に頼らず、ハッシュと実際の参照先を固定する。
   const crypto = require('crypto');
   // ファイルが無い時に例外で死ぬと、テスト全体の出力ごと消える(実際に消えた)。
   // 「無い」を値として返し、検査の側で不合格として報告させる。
@@ -326,15 +503,18 @@ function check(name, value) {
     }
   };
   const htmlForAudio = readRepoFile('index.html');
+  check('online entry and every lobby screen use the approved Lobby Remix asset',
+    fileHash('assets/room-bgm.mp3') === '77eea099dfc3'
+      && htmlForAudio.includes('<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>'));
   // v145: 通常弾の着弾音は外部URLを直接再生せず、同梱した指定素材をWebAudioで鳴らす。
   // キャッシュ一覧から外すと、ホーム画面追加後のオフライン対戦だけ昔の合成音へ戻ってしまう。
   let thirdPartyAudio = '';
   try { thirdPartyAudio = readRepoFile('assets/SOUND_LICENSES.md'); } catch (_) { /* 下の検査で不合格にする */ }
   check('the pinned Pixabay normal impact sound is present',
     fileHash('assets/normal-impact-explosion.mp3') === 'ffae7663a709');
-  check('the normal impact sound is versioned in code and cached for offline play',
-    htmlForAudio.includes("assets/normal-impact-explosion.mp3?v=3")
-      && swText.includes("'./assets/normal-impact-explosion.mp3?v=3'")
+  check('the normal impact sound is cached for offline play under the build cache',
+    htmlForAudio.includes("assets/normal-impact-explosion.mp3")
+      && swText.includes("'./assets/normal-impact-explosion.mp3'")
       && htmlForAudio.includes('normalImpactSound: !activateSpecial && !activateJump'));
   const normalImpactGain = Number((/const NORMAL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
   const titleWallImpactGain = Number((/const TITLE_WALL_IMPACT_SOUND_GAIN = ([0-9.]+);/.exec(htmlForAudio) || [])[1]);
@@ -349,87 +529,118 @@ function check(name, value) {
       && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-cartoon-explosion-567193/')
       && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
       && thirdPartyAudio.includes('2026-08-09'));
+  check('the EDM Zap special cut-in sound is pinned, cached and licensed',
+    fileHash('assets/special-cutin-edm-zap.mp3') === 'dc50a111cbea'
+      && htmlForAudio.includes("assets/special-cutin-edm-zap.mp3")
+      && swText.includes("'./assets/special-cutin-edm-zap.mp3'")
+      && thirdPartyAudio.includes('EDM Zap')
+      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/edm-zap-246568/')
+      && thirdPartyAudio.includes('2026-08-10'));
+  check('the Cool Kai special voice is pinned, preloaded and cached',
+    fileHash('assets/cool-kai-special-voice.mp3') === '06459291b238'
+      && htmlForAudio.includes("assets/cool-kai-special-voice.mp3")
+      && swText.includes("'./assets/cool-kai-special-voice.mp3'")
+      && htmlForAudio.includes('primeCoolKaiSpecialVoice();')
+      && htmlForAudio.includes("def?.key === 'coolKai'"));
   const BONUS_TRACK_PINS = [
-    { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3?v=1' },
-    { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3?v=2' },
-    { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3?v=1' },
-    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3?v=1' }
+    { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3' },
+    { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3' },
+    { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3' },
+    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' },
+    { file: 'assets/six-eternel-dopagaki-remix.mp3', hash: 'ee5912711914', url: 'assets/six-eternel-dopagaki-remix.mp3' }
   ];
   const pinNg = [];
   for (const pin of BONUS_TRACK_PINS) {
     const actual = fileHash(pin.file);
-    if (actual !== pin.hash) pinNg.push(`${pin.file} の中身が変わっている(${actual})のに ?v= が据え置き`);
+    if (actual !== pin.hash) pinNg.push(`${pin.file} の中身が変わっている(${actual})。BUILD_ID/CACHE_VERSIONを上げること`);
     if (!htmlForAudio.includes(`'${pin.url}'`)) pinNg.push(`${pin.url} が index.html に無い`);
   }
-  check('bonus BGM files and their cache-busting URLs stay in sync',
+  check('bonus BGM files and their build-cached URLs stay in sync',
     pinNg.length === 0, pinNg.join(' / '));
-  const bonusUrls = (htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3\?v=\d+/g) || []);
-  check('every bonus BGM URL is unique', new Set(bonusUrls).size === bonusUrls.length, bonusUrls.join(', '));
+  const bonusUrls = [...new Set(htmlForAudio.match(/assets\/bonus-bgm-\d+\.mp3/g) || [])];
+  check('every bonus BGM URL is registered once by the sound-test source list', bonusUrls.length === 4,
+    bonusUrls.join(', '));
 
-  // キャラ画像も同じ理由で版が要る。URLが同じままだと Service Worker もブラウザも
-  // 古い絵を持ち続け、中身を入れ替えても表に出ない(v115で実際に出なかった)。
-  // 画像を差し替えたらこの表のハッシュと CHARACTER_ASSET_VERSION の両方を更新すること。
+  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げる。個別のURL版数は使わない。
   const CHARACTER_ASSET_PINS = [
-    { key: 'kyoryu', base: 'assets/kyoryu', webp: 'c13291632f36', png: 'd7e8126f2075' },
-    { key: 'medama', base: 'assets/medama', webp: '29c0f8b99547', png: 'f1d5608f8625' },
-    { key: 'iwa', base: 'assets/iwa', webp: 'e5bc1c5714d2', png: '283307e2478f' },
-    { key: 'tori', base: 'assets/tori', webp: '1396a2448001', png: 'b4f372180210' },
-    { key: 'barugerukan', base: 'assets/barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
-    { key: 'nisenmono', base: 'assets/nisenmono', webp: '19933146097d', png: 'ff4991ae8756', version: 2 },
-    { key: 'burumutan', base: 'assets/burumutan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
-    { key: 'sumoeru', base: 'assets/sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
-    { key: 'doRednote', base: 'assets/do-rednote', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
-    { key: 'mocchario', base: 'assets/mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
-    { key: 'mecha', base: 'assets/mecha', webp: 'ec5ac42f758b', png: '086923d116e6' },
-    { key: 'akuma', base: 'assets/akuma', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
-    { key: 'jinba', base: 'assets/jinba', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
-    { key: 'kishi', base: 'assets/kishi', webp: '52e362107fa5', png: '54142e9e8e56' },
-    { key: 'neko', base: 'assets/neko', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
-    { key: 'shinigami', base: 'assets/shinigami', webp: 'ea291207269c', png: '806d572ce13d' }
+    { key: 'kyoryu', stem: 'dirano', webp: 'c13291632f36', png: 'd7e8126f2075' },
+    { key: 'medama', stem: 'eyebolt', webp: '29c0f8b99547', png: 'f1d5608f8625' },
+    { key: 'iwa', stem: 'gorocca', webp: 'e5bc1c5714d2', png: '283307e2478f' },
+    { key: 'tori', stem: 'fenice', webp: '1396a2448001', png: 'b4f372180210' },
+    { key: 'barugerukan', stem: 'barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
+    { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756' },
+    { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
+    { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
+    { key: 'doRednote', stem: 'dread-arrow', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
+    { key: 'mocchario', stem: 'mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
+    { key: 'mecha', stem: 'chrome-gear', webp: 'ec5ac42f758b', png: '086923d116e6' },
+    { key: 'akuma', stem: 'rubidevi', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
+    { key: 'jinba', stem: 'astauros', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
+    { key: 'kishi', stem: 'paladier', webp: '52e362107fa5', png: '54142e9e8e56' },
+    { key: 'neko', stem: 'nyan-tank', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
+    { key: 'shinigami', stem: 'yomigama', webp: 'ea291207269c', png: '806d572ce13d' }
   ];
-  const versionMapSrc = /const CHARACTER_ASSET_VERSION = \{([^}]*)\}/.exec(htmlForAudio);
-  const declaredVersions = {};
-  for (const [, k, v] of (versionMapSrc ? versionMapSrc[1] : '').matchAll(/(\w+):\s*(\d+)/g)) declaredVersions[k] = Number(v);
+  const repoRoot = path.join(__dirname, '..');
+  const legacyCharacterStems = [
+    'kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru',
+    'do-rednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami'
+  ];
+  check('character assets use display-name based master/runtime directories',
+    CHARACTER_ASSET_PINS.every(({ stem }) =>
+      fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${stem}.png`))
+      && fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'runtime', `${stem}.webp`)))
+    && CHARACTER_ASSET_PINS.every(({ key, stem }) =>
+      new RegExp(`\\n    ${key}: \\{[\\s\\S]*?key: '${key}', name: '[^']+', asset: '${stem}'`).test(htmlForAudio))
+    && legacyCharacterStems.every((stem) =>
+      !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.png`))
+      && !fs.existsSync(path.join(repoRoot, 'assets', `${stem}.webp`))));
   const charNg = [];
   for (const pin of CHARACTER_ASSET_PINS) {
     // v130から実際に配るのは .webp。読めない端末が落ちてくる先の .png も一緒に留める。
     // 片方だけ差し替えると、端末によって別の絵が出る。
-    if (fileHash(pin.base + '.webp') !== pin.webp) {
-      charNg.push(`${pin.base}.webp の中身が変わっている(${fileHash(pin.base + '.webp')})。CHARACTER_ASSET_VERSION の ?v= を上げること`);
+    const webpPath = `assets/characters/runtime/${pin.stem}.webp`;
+    const pngPath = `assets/characters/master/${pin.stem}.png`;
+    if (fileHash(webpPath) !== pin.webp) {
+      charNg.push(`${webpPath} の中身が変わっている(${fileHash(webpPath)})。BUILD_ID/CACHE_VERSIONを上げること`);
     }
-    if (fileHash(pin.base + '.png') !== pin.png) {
-      charNg.push(`${pin.base}.png の中身が変わっている(${fileHash(pin.base + '.png')})。webp と食い違っていないか確かめること`);
-    }
-    if (declaredVersions[pin.key] !== pin.version) {
-      charNg.push(`${pin.key} の版が食い違う(宣言=${declaredVersions[pin.key]} 期待=${pin.version})`);
+    if (fileHash(pngPath) !== pin.png) {
+      charNg.push(`${pngPath} の中身が変わっている(${fileHash(pngPath)})。webp と食い違っていないか確かめること`);
     }
   }
-  check('character images and their cache-busting versions stay in sync', charNg.length === 0, charNg.join(' / '));
+  check('character images stay in sync with the build cache', charNg.length === 0, charNg.join(' / '));
   // v130: webp を先に読み、読めなかった時だけ同じ名前の png へ落とす。
   check('the art loader asks for webp first and falls back to png',
-    /img\.src = `assets\/\$\{baseName\}\.webp\$\{suffix\}`;/.test(htmlForAudio)
-    && /img\.src = `assets\/\$\{baseName\}\.png\$\{suffix\}`;/.test(htmlForAudio)
+    /img\.src = `\$\{webpBase\}\.webp`;/.test(htmlForAudio)
+    && /img\.src = `\$\{pngBase\}\.png`;/.test(htmlForAudio)
     && htmlForAudio.includes('if (!triedPng) {'));
-  check('the character image URL actually carries the version',
-    htmlForAudio.includes('version: CHARACTER_ASSET_VERSION[key],')
-    && /const suffix = opts\.version \? `\?v=\$\{opts\.version\}` : '';/.test(htmlForAudio));
+  check('character images rely on the build cache instead of per-asset query versions',
+    !htmlForAudio.includes('CHARACTER_ASSET_VERSION') && !htmlForAudio.includes('?v='));
   // 落とし先の png を消すと、古い端末で絵が1枚も出なくなる。
   check('the png fallbacks still exist on disk',
-    CHARACTER_ASSET_PINS.every(pin => require('fs').existsSync(require('path').join(__dirname, '..', pin.base + '.png'))));
+    CHARACTER_ASSET_PINS.every(pin => fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', `${pin.stem}.png`))));
+  check('the Barucopter uses its dedicated WebP helicopter art instead of the Barugerukan body art',
+    fs.existsSync(path.join(repoRoot, 'assets', 'characters', 'master', 'barugerukan-helicopter.webp'))
+      && htmlForAudio.includes("const BARUCOPTER_IMAGE_PATH = 'assets/characters/master/barugerukan-helicopter.webp';")
+      && /function getBarucopterImage\(\)[\s\S]*?BARUCOPTER_IMAGE_PATH/.test(htmlForAudio)
+      && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 294;/.test(htmlForAudio),
+    '透過を直した専用ヘリ画像を遅延読込し、従来の3倍で表示すること');
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
   check('the preload hints point at webp',
-    ['loading-emblem', 'title-logo', 'kyoryu', 'medama', 'iwa', 'tori'].every(n =>
+    ['loading-emblem', 'title-logo'].every(n =>
       htmlForAudio.includes(`<link rel="preload" as="image" href="assets/${n}.webp" type="image/webp"`))
-    && !/rel="preload" as="image" href="assets\/(loading-emblem|title-logo|kyoryu|medama|iwa|tori)\.png/.test(htmlForAudio));
+    && ['dirano', 'eyebolt', 'gorocca', 'fenice'].every(stem =>
+      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/characters/runtime/${stem}.webp" type="image/webp"`))
+    && !/rel="preload" as="image" href="assets\/(?:characters\/master\/)?(?:loading-emblem|title-logo|dirano|eyebolt|gorocca|fenice)\.png/.test(htmlForAudio));
   // ロビーのエンブレムはDOMの<img>。JSを通らないので picture で振り分ける。
   check('the lobby emblem falls back through <picture>',
     /<source srcset="assets\/loading-emblem\.webp" type="image\/webp">/.test(htmlForAudio)
     && /<img id="onlineLobbyEmblem" src="assets\/loading-emblem\.png"/.test(htmlForAudio)
     && htmlForAudio.includes('#onlineLobbyBody picture { display: block; }'));
   // 起動時に読む絵の合計。ここが膨らむと読み込み画面が長くなる(v130で3.83MB→0.74MB)。
-  const startupArtBytes = ['title-logo', 'loading-emblem']
-    .concat(CHARACTER_ASSET_PINS.map(pin => pin.base.replace('assets/', '')))
-    .reduce((sum, n) => sum + require('fs').statSync(require('path').join(__dirname, '..', 'assets', n + '.webp')).size, 0);
+  const startupArtFiles = ['assets/title-logo.webp', 'assets/loading-emblem.webp']
+    .concat(CHARACTER_ASSET_PINS.map(pin => `assets/characters/runtime/${pin.stem}.webp`));
+  const startupArtBytes = startupArtFiles
+    .reduce((sum, file) => sum + fs.statSync(path.join(repoRoot, file)).size, 0);
   check('the images the loading screen waits for stay under 1MB',
     startupArtBytes < 1024 * 1024, `${(startupArtBytes / 1024).toFixed(0)}KB`);
 
@@ -438,7 +649,7 @@ function check(name, value) {
     h.validateFirebaseMessage(validV3Fire)
     && !h.validateFirebaseMessage({ ...validV3Fire, roundId: 'bad' })
     && !h.validateFirebaseMessage({ ...validV3Fire, seat: 's1', actionId: 'bad' }));
-  const validV3State = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'state', sentAt: Date.now(), actionId, unitId: 'e1', snap: safeSnap };
+  const validV3State = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'state', sentAt: Date.now(), actionId, unitId: 'e1', snap: terrainDeltaState };
   const validV3Result = { v: 3, from: 'peer', seat: 'e1', roundId, t: 'result', sentAt: Date.now(), actionId, unitId: 'e1', winner: 'player', reason: '撃破', units: safeSnap.units.map(u => ({ id: u.id, hp: u.hp })) };
   check('Firebase v3 state/result require the action unit to match the sender seat',
     h.validateFirebaseMessage(validV3State) && h.validateFirebaseMessage(validV3Result)
@@ -475,11 +686,27 @@ function check(name, value) {
   // (揃えないと、コードは正しいのにチェックアウトの仕方だけで落ちる)
   const htmlText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   check('title offers an in-game force-update action that refreshes the worker and clears old app caches',
-    htmlText.includes("const titleUpdateBtn = { x: VW / 2, y: 906, w: 250, h: 30 };")
+    /const titleUpdateBtn = \{ x: \d+, y: \d+, w: \d+, h: 30 \};/.test(htmlText)
     && htmlText.includes('async function forceGameUpdate()')
     && htmlText.includes('await registration.update();')
     && htmlText.includes("key.startsWith('katamon-pwa-')")
     && htmlText.includes("latestUrl.searchParams.set('refresh', Date.now().toString());"));
+  check('title shows an available update prominently and does not reload when already current',
+    htmlText.includes("updateAvailableBuild ? '更新あり・取得' : '最新版を取得'")
+    && htmlText.includes("showTitleNotice('新しいバージョンがあります。「最新版を取得」を押してください')")
+    && htmlText.includes("showTitleNotice('最新版です')")
+    && htmlText.includes('if (!updateDetected) {')
+    && htmlText.includes('updateRequestInFlight = false;'));
+  const serviceWorkerText = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8').replace(/\r\n/g, '\n');
+  check('a newly activated worker refreshes a stale page only after it is safely back on the title',
+    serviceWorkerText.includes("type: 'KATAMON_UPDATE_READY'")
+    && serviceWorkerText.includes("self.clients.matchAll({ type: 'window', includeUncontrolled: true })")
+    && serviceWorkerText.includes("fetch(request, { cache: 'no-store' })")
+    && htmlText.includes("navigator.serviceWorker.addEventListener('message'")
+    && htmlText.includes('function queueGameUpdateReload(build)')
+    && htmlText.includes("if (gamePhase !== 'title') return;")
+    && htmlText.includes('if (roomScreenOpen()) return;')
+    && htmlText.includes('applyPendingGameUpdateIfSafe();'));
   const firebaseLeaveStart = htmlText.indexOf('function leaveFirebaseLobby()');
   const firebaseLeaveEnd = htmlText.indexOf('function beginOnline(', firebaseLeaveStart);
   const firebaseLeaveSrc = firebaseLeaveStart >= 0 && firebaseLeaveEnd > firebaseLeaveStart
@@ -655,8 +882,9 @@ function check(name, value) {
   check('move is applied immediately instead of waiting behind cut-ins',
     htmlText.includes("'ping', 'move']")
     && htmlText.includes("|| msg.t === 'ping' || msg.t === 'move') {\n        applyNetMessage(msg);"));
-  check('move send rate is capped and skips sub-pixel jitter',
-    htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.12;') && htmlText.includes('const MOVE_SYNC_MIN_DELTA'));
+  check('move sync sends no faster than four times a second and skips short walk deltas',
+    htmlText.includes('const MOVE_SYNC_INTERVAL_SEC = 0.25;')
+    && htmlText.includes('const MOVE_SYNC_MIN_DELTA = 8;'));
   // 撃つ側は人でも空席のCPUでも netSendFire を通る。最後の位置はそこで必ず1回送る。
   check('the mover flushes its last position before firing',
     htmlText.includes('if (moveSyncPending) sendMoveUpdate(unit);'));
@@ -666,7 +894,7 @@ function check(name, value) {
     htmlText.includes('resetMoveSync();') && htmlText.includes('for (const u of units) u.netWalkTargetX = null;'));
   check('slot claim falls back to a plain PUT when the conditional PUT is denied',
     htmlText.includes('if (response.status !== 401) throw new Error')
-    && htmlText.includes('const plain = await fetch(url, { method: \'PUT\'')
+    && htmlText.includes('const plain = await firebaseFetchWithTimeout(url, { method: \'PUT\'')
     && htmlText.includes('if (plain.status === 401) return false;'));
   // 2vs2では相手が3人になる。自分以外の対戦者席から届いたものだけを受け取る。
   check('only the other player seats can supply commit/reveal data',
@@ -712,7 +940,7 @@ function check(name, value) {
     && htmlText.includes("online.participantRole === 'spectator' ? `決着:${matchEndReason"));
   check('the host can still change settings after the guest has readied',
     htmlText.includes("const canEdit = isFirebaseHost() && online.phase === 'lobby';")
-    && htmlText.includes('[onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.disabled = !canEdit; });')
+    && htmlText.includes('[onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.disabled = !canEdit; });')
     && htmlText.includes('onlineTerrainEl.disabled = !canEdit || hasCustomStage;'));
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
@@ -733,6 +961,14 @@ function check(name, value) {
     && htmlText.includes('id="onlineQuick"')
     && htmlText.includes('id="onlineCodeToggle"')
     && htmlText.includes('#onlineLobby.code-entry:not(.in-room) #onlineRoomInput'));
+  check('online entry offers explicit create and browse paths, and public rows show enough match information to choose',
+    htmlText.includes('id="onlineCreateMode"')
+    && htmlText.includes('id="onlineBrowseMode"')
+    && htmlText.includes('id="onlineRoomNameInput"')
+    && htmlText.includes('id="onlineRoomList"')
+    && htmlText.includes('hostName: entry.hostName')
+    && htmlText.includes('roomName: entry.roomName')
+    && htmlText.includes('playerCount: entry.playerCount'));
   check('the room code is shown once, with a small copy icon beside it',
     htmlText.includes('<div id="onlineRoomCodeRow">')
     && htmlText.includes('#onlineLobby.in-room #onlineRoomInput, #onlineLobby.in-room #onlineRoomHint { display: none; }')
@@ -744,8 +980,9 @@ function check(name, value) {
     !htmlText.includes("onlineCopyBtn.style.display"));
   // ルームにいるのが誰なのか分かるよう、ランキングと同じ表示名を出す。
   check('the ranking name is broadcast with presence and lobbyState',
-    htmlText.includes("netSend({ t: 'presence', name: localPlayerName() })")
-    && htmlText.includes("settings: online.settings, name: localPlayerName() }"));
+    htmlText.includes("sendFirebaseIdentityPacket({ t: 'presence' })")
+    && htmlText.includes("sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings })")
+    && /async function sendFirebaseIdentityPacket\(packet\)[\s\S]{0,500}name: localPlayerName\(\)/.test(htmlText));
   check('received names are remembered per seat and shown in the roster',
     htmlText.includes('function rememberFirebaseName(msg)')
     && htmlText.includes('function firebaseSeatName(seat)')
@@ -763,7 +1000,7 @@ function check(name, value) {
     && (seatRowSrc.match(/\.textContent = /g) || []).length >= 3);
   check('the seat board renders four seat rows by clearing and re-appending, not string concatenation',
     htmlText.includes('while (onlineSlotsEl.firstChild) onlineSlotsEl.removeChild(onlineSlotsEl.firstChild);')
-    && htmlText.includes('FIREBASE_SEATS.forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));'));
+    && htmlText.includes('firebaseLobbySeatOrder().forEach(seat => onlineSlotsEl.appendChild(buildFirebaseSeatRow(seat, slots)));'));
   check('each seat row marks occupied/empty with a filled/hollow dot and colors it by seat kind (brass for players, gray for spectators)',
     seatRowSrc.includes("mark.textContent = occupied ? '●' : '○';")
     && htmlText.includes('.onlineSeatRow.occupied.player .seatMark { color: #ffd24a; }')
@@ -784,8 +1021,21 @@ function check(name, value) {
     && h.validateFirebaseMessage(firebasePacket('presence'))
     && !h.validateFirebaseMessage(firebasePacket('presence', { name: 'あ'.repeat(13) })));
   check('the character picker is hidden until you are actually in a room',
-    htmlText.includes('#onlineCharacter { display: none; }')
-    && htmlText.includes('#onlineLobby.in-room #onlineCharacter { display: block; }'));
+    htmlText.includes('#onlineCharacterPicker { display: none; }')
+    && htmlText.includes('#onlineLobby.in-room #onlineCharacterPicker { display: flex; }'));
+  check('the room character picker shows the whole monster without cropping it',
+    htmlText.includes('id="onlineCharacterPreview"')
+    && /#onlineCharacterPreview\s*\{[^}]*object-fit:\s*contain;[^}]*\}/.test(htmlText)
+    && !/#onlineCharacterPreview\s*\{[^}]*object-fit:\s*cover;[^}]*\}/.test(htmlText));
+  const sumoeruRoomPreview = h.onlineCharacterPreviewForTest('sumoeru');
+  const medamaRoomPreview = h.onlineCharacterPreviewForTest('medama');
+  check('changing the room character updates its image, name and all seventeen choices',
+    sumoeruRoomPreview && medamaRoomPreview
+    && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
+    && sumoeruRoomPreview.alt === 'スモエル'
+    && medamaRoomPreview.character === 'medama' && /eyebolt\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
+    && medamaRoomPreview.alt === 'アイボルト'
+    && medamaRoomPreview.options === 17);
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')
@@ -802,13 +1052,13 @@ function check(name, value) {
     htmlText.includes("const announced = await netSend({ t: 'lobbyState', status: 'lobby', nextRoundId: nextId, autoReady: autoReady === true })")
     && htmlText.includes("if (announced !== true) throw new Error('Next round handoff could not be sent.');")
     && htmlText.includes('return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });'));
-  // 花火は飛行中に起爆パケットを送らない。炸裂の時刻と位置は発射時に数式で確定する。
+  // 花火は飛行中に起爆パケットを送らない。両端末が固定刻みで同じ接近判定を行う。
   // ここが破れると、通信の遅れがそのまま炸裂位置のズレとして戻る(Issue #3)。
-  check('the firework bursts from launch data and sends no mid-flight detonation packet',
+  check('the firework uses deterministic proximity physics and sends no mid-flight detonation packet',
     !htmlText.includes("netSend({ t: 'boom'")
-    && htmlText.includes('function fireworkApexBurst(')
-    && htmlText.includes('p.apexBurst && p.fireworkTimer >= p.apexBurst.t')
-    && htmlText.includes('p.x = p.apexBurst.x;'));
+    && htmlText.includes('function fireworkProximityTarget(p)')
+    && htmlText.includes('p.travelDistance < FIREWORK_ARM_DISTANCE')
+    && htmlText.includes('fireworkProximityTarget(p)'));
   // 更新前の端末から届く boom は受理して無視する。拒否すると対戦が中断してしまう。
   check('an incoming boom from an older client is accepted and ignored',
     htmlText.includes("if (msg.t === 'boom') return isFirebaseUnitId(msg.unitId)")
@@ -818,8 +1068,9 @@ function check(name, value) {
     && htmlText.includes("online.pendingStart = msg;")
     && htmlText.includes("if (msg.t === 'fire' || msg.t === 'boom')")
     && htmlText.includes("if (online.pendingStart) {\n        const pendingStart = online.pendingStart;"));
-  check('the host stores the start snapshot and start packet before leaving the lobby',
-    htmlText.includes('if (online.transport.saveSnapshot) await online.transport.saveSnapshot(snap);')
+  check('the host sends the start packet without persisting a spectator snapshot',
+    !htmlText.includes('saveSnapshot')
+    && !htmlText.includes('latestSnapshot')
     && htmlText.includes("const startSent = await netSend({ t: 'start', snap });")
     && htmlText.includes("if (startSent !== true) throw new Error('Match start could not be sent.');"));
   check('a rematch clears the guest start-verification latch before accepting the next start',
@@ -835,8 +1086,8 @@ function check(name, value) {
     && !firebaseBeginSrc.includes('clearSuspendedMatch();'));
   check('online snapshots keep each camera local and focus the acting unit',
     htmlText.includes("if (isOnline()) {\n      // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。")
-    && htmlText.includes('focusCameraOn(activeUnit().x, true);')
-    && htmlText.includes('activeIndex = firstIndex;\n      focusCameraOn(activeUnit().x, true);'));
+    && htmlText.includes('focusCameraOn(activeUnit().x, true, activeUnit().y);')
+    && htmlText.includes('activeIndex = firstIndex;\n      focusCameraOn(activeUnit().x, true, activeUnit().y);'));
   // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない(ユーザー指摘)。
   // 対戦者は結果画面のボタンで続行を選び、ロビーのポップアップは開かない。
   check('the battle view-distance slider changes only the local camera and never sends a network message',
@@ -844,6 +1095,11 @@ function check(name, value) {
     && htmlText.includes('function setCameraZoomFromSlider(point)')
     && htmlText.includes("if (inputMode === 'cameraSlider') {")
     && htmlText.includes('drawCameraSlider();'));
+  check('camera readouts distinguish view distance from the visible field width',
+    htmlText.includes('function cameraDistanceLabel()')
+    && htmlText.includes('function cameraWidthCoveragePercent()')
+    && htmlText.includes('`視点距離 ${cameraDistanceLabel()}`')
+    && htmlText.includes('`横 ${cameraWidthCoveragePercent()}%`'));
   const resetMatchSrc = htmlText.match(/function resetMatch\(carrySpecialCharge\) \{[\s\S]*?\n  \}/)?.[0] || '';
   check('the battle view distance is remembered instead of resetting on a new turn or rematch',
     htmlText.includes("const CAMERA_ZOOM_KEY = 'katamon_camera_zoom_v1';")
@@ -851,6 +1107,19 @@ function check(name, value) {
     && htmlText.includes('function saveCameraZoom()')
     && htmlText.includes('let cameraZoom = loadCameraZoom();')
     && !resetMatchSrc.includes('cameraZoom = DEFAULT_CAMERA_ZOOM;'));
+  const functionSource = name => {
+    const start = htmlText.indexOf(`function ${name}`);
+    const end = htmlText.indexOf('\n  function ', start + 1);
+    return start < 0 ? '' : htmlText.slice(start, end < 0 ? undefined : end);
+  };
+  const applySnapshotSrc = functionSource('applySnapshot(data, options = {})');
+  const returnToTitleSrc = functionSource('returnToTitleFromResult()');
+  const fullResetMatchSrc = functionSource('resetMatch(carrySpecialCharge)');
+  check('snapshot apply, rematch, and result exit share one complete transient battle-state reset',
+    htmlText.includes('function resetTransientBattleState()')
+    && applySnapshotSrc.includes('resetTransientBattleState();')
+    && fullResetMatchSrc.includes('resetTransientBattleState();')
+    && returnToTitleSrc.includes('resetTransientBattleState();'));
   check('players choose on the result screen, not in a popup that hides the outcome',
     htmlText.includes('function firebaseResultChoiceVisible()')
     && htmlText.includes("drawResultButton(continueBtn, 'このまま再戦'")
@@ -940,7 +1209,7 @@ function check(name, value) {
   check('the turn does not advance while waiting for the peer to declare the result',
     // 2vs2は1体倒れても試合は続く。「誰か倒れた」で待つと手番が二度と進まない。
     htmlText.includes("const waitingForPeerResult = isOnline() && !matchOver && (!teamAlive('player') || !teamAlive('cpu'));")
-    && htmlText.includes('if (!waitingForPeerResult) endTurn();'));
+    && htmlText.includes('if (!waitingForPeerResult) endTurn(() => netSyncTurn(acted));'));
   check('the remote action is still marked resolved while waiting, so the result correlates',
     /waitingForPeerResult[\s\S]{0,400}online\.remoteAction\.resolved = true;/.test(htmlText));
   check('rules keep the per-round message log append-only', msg['.write'].includes('!data.exists()'));
@@ -993,10 +1262,9 @@ function check(name, value) {
   check('rules permit heartbeat and presence without actionId',
     msg['.validate'].includes("newData.child('t').val() === 'ping'")
     && msg.t['.validate'].includes("newData.val() === 'ping'") && msg.t['.validate'].includes("newData.val() === 'presence'"));
-  check('rules let only the two players publish the spectator snapshot for the current round',
-    rules.rounds.$roundId.latestSnapshot['.write'].includes("child('round').child('id').val() === $roundId")
-    && rules.rounds.$roundId.latestSnapshot['.write'].includes("child('e1').child('uid').val() === auth.uid")
-    && !rules.rounds.$roundId.latestSnapshot['.write'].includes("child('s1')"));
+  check('rules do not retain a persisted snapshot for mid-match spectators',
+    !Object.hasOwn(rules.rounds.$roundId, 'latestSnapshot')
+    && !htmlText.includes('latestSnapshot'));
   // 削除はホスト本人か、部屋が期限切れの時だけ(固定コードの簡単対戦部屋が
   // 放置で永久に詰む欠陥の修正。2026-07-27にConsoleへ反映済み)。
   // 「有効な部屋を他人が消せない」ことmust含めて固定する。
@@ -1089,6 +1357,17 @@ function check(name, value) {
     htmlText.includes("claimedAt: firebaseServerNow(auth), seenAt: { '.sv': 'timestamp' }"));
   check('the heartbeat writes a server timestamp, not a client clock',
     /slots\/\$\{seat\}\/seenAt`[\s\S]{0,220}'\.sv': 'timestamp'/.test(htmlText));
+  // 電波不良時に小さな生存印の失敗を、部屋全体の取得で増幅させない。3回続いたら
+  // 利用者へ知らせてハートビートを止め、Firebase直通信には共通の10秒上限を設ける。
+  check('heartbeat retries only the slots roster, stops after three failures, and Firebase requests time out',
+    htmlText.includes('const FIREBASE_REQUEST_TIMEOUT_MS = 10000;')
+    && htmlText.includes('const FIREBASE_SEAT_HEARTBEAT_MAX_FAILURES = 3;')
+    && /async function checkOwnFirebaseSeatLost\(\)[\s\S]{0,700}firebaseRequest\(`rooms\/\$\{checking\.room\}\/slots`/.test(htmlText)
+    && !/async function checkOwnFirebaseSeatLost\(\)[\s\S]{0,700}firebaseRequest\(`rooms\/\$\{checking\.room\}`, checking\.auth\)/.test(htmlText)
+    && /function scheduleFirebaseSeatHeartbeat\(\)[\s\S]{0,700}heartbeatStopped/.test(htmlText)
+    && /function sendFirebaseSeatHeartbeat\(\)[\s\S]{0,1100}seatHeartbeatFailures[\s\S]{0,500}FIREBASE_SEAT_HEARTBEAT_MAX_FAILURES/.test(htmlText)
+    && htmlText.includes("window.addEventListener('online', handleFirebaseNetworkOnline);")
+    && htmlText.includes("window.addEventListener('offline', handleFirebaseNetworkOffline);"));
   check('the client uses the same strict 90-second seenAt boundary as the rules',
     !h.firebaseSeatHeartbeatAllowsRelease(200000, 200000 - h.seatStaleReleaseMs())
     && h.firebaseSeatHeartbeatAllowsRelease(200001, 200000 - h.seatStaleReleaseMs()));
@@ -1203,7 +1482,7 @@ function check(name, value) {
   check('a listing can be withdrawn by its host, or by anyone once it has expired',
     openSeat['.write'].includes("data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)"));
   check('the index entry is shape-checked and cannot be parked far in the future',
-    openSeat['.validate'].includes("hasChildren(['format','hostUid','createdAt','expiresAt'])")
+    openSeat['.validate'].includes("hasChildren(['format','hostUid','hostName','roomName','playerCount','createdAt','expiresAt'])")
     && openSeat['.validate'].includes("newData.child('expiresAt').val() > now")
     && openSeat['.validate'].includes('now + 3600000')
     && openSeat.$other['.validate'] === false);
@@ -1222,9 +1501,11 @@ function check(name, value) {
   // ---- 候補の選び方 ----
   const NOW = 1000000;
   const A = 'AAAA2345', B = 'BBBB2345', C = 'CCCC2345', D = 'DDDD2345';
-  const alive = (extra = {}) => ({ format: '1v1', hostUid: 'other', createdAt: 500, expiresAt: NOW + 1000, ...extra });
+  const alive = (extra = {}) => ({ format: '1v1', hostUid: 'other', hostName: 'ホスト', roomName: 'だれでも歓迎', playerCount: 1, createdAt: 500, expiresAt: NOW + 1000, ...extra });
   check('a waiting room of the right format is a candidate',
     h.pickOpenCandidates({ [A]: alive() }, 'me', '1v1', NOW).map(r => r.code).join() === A);
+  check('public room rows retain the host name, room name, and player count needed to choose a match',
+    (() => { const row = h.pickOpenCandidates({ [A]: alive() }, 'me', '1v1', NOW)[0]; return row && row.hostName === 'ホスト' && row.roomName === 'だれでも歓迎' && row.playerCount === 1; })());
   check('an expired listing is never offered',
     h.pickOpenCandidates({ [A]: alive({ expiresAt: NOW - 1 }) }, 'me', '1v1', NOW).length === 0);
   check('a different match format is not offered',
@@ -1273,7 +1554,7 @@ function check(name, value) {
   host = quickHost({ slots: { p1: { uid: 'uid-p1' }, s1: { uid: 'uid-s1' } } });
   h.setOnlineForLogTest(host);
   h.syncQuickMatchListing();
-  check('any occupied seat, spectator included, ends the wait', !host.quickWaiting);
+  check('a spectator does not hide an otherwise joinable 1vs1 room', host.quickWaiting);
   host = quickHost({ phase: 'playing' });
   h.setOnlineForLogTest(host);
   h.syncQuickMatchListing();
@@ -1343,9 +1624,9 @@ function check(name, value) {
   h.setOnlineForLogTest(lobbyWith('2v2'));
   check('a 2vs2 lobby turns every seat into a player seat',
     h.firebasePlayerSeats().join() === 'p1,e1,s1,s2' && h.firebaseLobbyIs2v2());
-  check('the 2vs2 seat labels say which team each seat is on',
+  check('the 2vs2 seat labels are relative to the local player',
     [h.firebaseSeatLabel('p1'), h.firebaseSeatLabel('s1'), h.firebaseSeatLabel('e1'), h.firebaseSeatLabel('s2')].join('/')
-      === 'P1 ホスト/P2 味方/E1 敵チーム/E2 敵チーム');
+      === 'P1 自分/P2 味方/E1 敵1/E2 敵2');
   // 対戦方式はホストから後から届く。届いた時点で s1 の人は観戦者から対戦者へ変わる。
   const late = lobbyWith('1v1', 's1');
   h.setOnlineForLogTest(late);
@@ -1375,8 +1656,10 @@ function check(name, value) {
     h.normalizeLobbySettings({}).format === '1v1'
     && h.normalizeLobbySettings({ format: '2v2' }).format === '2v2'
     && h.normalizeLobbySettings({ format: 'nonsense' }).format === '1v1');
-  check('rules accept the format field in settings and nothing else new',
+  check('rules accept format and stage size in settings and nothing else new',
     rules.settings.format['.validate'] === "newData.val() === '1v1' || newData.val() === '2v2'"
+    && rules.settings.stageSize['.validate'] === "newData.val() === 'standard' || newData.val() === 'large'"
+    && rules.settings['.validate'].includes("'stageSize'")
     && rules.settings.$other['.validate'] === false);
   check('only the host can still change the settings, format included',
     rules.settings['.write'].includes("child('p1').child('uid').val() === auth.uid")
@@ -1388,6 +1671,42 @@ function check(name, value) {
     for (const seat of ['p1', 'e1', 's1', 's2']) slots[seat] = seats.includes(seat) ? { uid: 'uid-' + seat } : null;
     return slots;
   }
+  // v162までは全端末が p1,e1,s1,s2 の固定順だったため、ホスト以外では自分の行が
+  // 先頭にならず、味方と敵の表示までホスト視点のままだった。実際のDOMを4席それぞれで
+  // 組み立て、自分→味方→敵1→敵2の順と、その行に載る人物が一致することを固定する。
+  function rendered2v2RowsFor(seat) {
+    const o = lobbyWith('2v2', seat);
+    o.slots = seated('p1', 'e1', 's1', 's2');
+    o.seatNames = { p1: 'NAME-p1', e1: 'NAME-e1', s1: 'NAME-s1', s2: 'NAME-s2' };
+    o.selfReady = false;
+    o.seatReady = {};
+    h.setOnlineForLogTest(o);
+    return h.renderLobbySeats();
+  }
+  function renderedSeatPart(row, className) {
+    const part = row.parts.find(text => text.includes(`:${className}:`));
+    return part ? part.slice(part.indexOf(`:${className}:`) + className.length + 2) : '';
+  }
+  const relativeSeatTails = {
+    p1: ['NAME-s1', 'NAME-e1', 'NAME-s2'],
+    s1: ['NAME-p1', 'NAME-e1', 'NAME-s2'],
+    e1: ['NAME-s2', 'NAME-p1', 'NAME-s1'],
+    s2: ['NAME-e1', 'NAME-p1', 'NAME-s1']
+  };
+  for (const seat of ['p1', 's1', 'e1', 's2']) {
+    const rows = rendered2v2RowsFor(seat);
+    const labels = rows.map(row => renderedSeatPart(row, 'seatLabel'));
+    const names = rows.map(row => renderedSeatPart(row, 'seatName'));
+    check(`2vs2 ${seat} sees self, ally, enemy 1, enemy 2 in that order`,
+      rows[0].cls.includes(' mine')
+      && labels.join('/') === 'P1 自分/P2 味方/E1 敵1/E2 敵2'
+      && names.slice(1).join('/') === relativeSeatTails[seat].join('/'));
+  }
+  const seatLabelCss = (htmlText.match(/\.onlineSeatRow \.seatLabel\s*\{([^}]*)\}/) || [])[1] || '';
+  check('every occupied name and empty-seat label starts at the same horizontal position',
+    /flex:\s*0 0 \d+px/.test(seatLabelCss)
+    && /width:\s*\d+px/.test(seatLabelCss)
+    && !/min-width:\s*\d+px/.test(seatLabelCss));
   function readyLobby(format, occupied, readySeats) {
     const o = lobbyWith(format, 'p1');
     o.slots = seated(...occupied);
@@ -1468,24 +1787,24 @@ function check(name, value) {
     && !h.validateFirebaseMessage(packetFor('s1', 'p3', { t: 'boom' })));
   const roster2v2 = snap2v2.units.map(u => ({ id: u.id, hp: u.hp }));
   check('a result carries all four units in 2vs2 and keeps the fixed order',
-    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
     && h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2 }))
     && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: [roster2v2[0], roster2v2[2], roster2v2[1], roster2v2[3]] }))
     && !h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'result', winner: 'player', reason: '撃破', units: roster2v2.slice(0, 3) })));
   // 席とユニットの対応は、通信データの検証と席の門の両方で同じ表を使う。
   h.setOnlineForLogTest(lobbyWith('2v2'));
   check('s1 may only ever act as p2, in both the payload check and the seat gate',
-    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
-    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: snap2v2 }))
-    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 }))
-    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: snap2v2 })));
+    h.validateFirebaseMessage(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && h.firebasePacketSeatAllowed(packetFor('s1', 'p2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && !h.validateFirebaseMessage(packetFor('s1', 'e2', { t: 'state', snap: terrainDeltaFrom(snap2v2) }))
+    && !h.firebasePacketSeatAllowed(packetFor('s1', 'e2', { t: 'state', snap: terrainDeltaFrom(snap2v2) })));
   // ホストは空席のキャラだけを動かせる。人が座っている席へは手を出せない。
   // ルール側の例外(!slots.$seat.exists())とまったく同じ条件をクライアントでも見る。
   {
     const hostLobby = lobbyWith('2v2');
     hostLobby.slots = seated('p1', 'e1');
     h.setOnlineForLogTest(hostLobby);
-    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: snap2v2 });
+    const hostActs = unitId => packetFor('p1', unitId, { t: 'state', snap: terrainDeltaFrom(snap2v2) });
     check('the host may act for the empty seats and for nobody else’s',
       h.validateFirebaseMessage(hostActs('p2')) && h.firebasePacketSeatAllowed(hostActs('p2'))
       && h.validateFirebaseMessage(hostActs('e2')) && h.firebasePacketSeatAllowed(hostActs('e2'))
@@ -1738,16 +2057,20 @@ function check(name, value) {
   check('the ready toggle shows its state in the styling, not only in the label',
     htmlText.includes("onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);")
     && htmlText.includes('#onlineLobbyButtons #onlineReady.is-ready'));
+  check('ready comes before start so the primary launch action stays at the bottom',
+    htmlText.indexOf('<button id="onlineReady" type="button">準備完了</button>')
+      < htmlText.indexOf('<button id="onlineStart" type="button">対戦開始</button>'));
   // 英数字の羅列だけでは何なのか分からない、という指摘。見出しを1つ添える。
   check('the room code says what it is',
     htmlText.includes('<span id="onlineRoomCodeLabel">部屋ID</span>')
     && htmlText.includes('#onlineRoomCodeLabel {')
     && htmlText.includes('placeholder="相手の部屋ID 8文字"')
     && !htmlText.includes('>合言葉を使う</button>'));
-  // タイトルの CPU BATTLE と ONLINE BATTLE が同じ鋼色で、文字を読むまで見分けが付かなかった。
-  // 位置と大きさは変えていない(タイトルの配置は別のテストが固定している)。
-  check('the title tells its two battle buttons apart by colour, without moving them',
-    /kind === 'online'[\s\S]{0,300}steel\.addColorStop\(0, '#6a5a3a'\)/.test(htmlText));
+  // v168では主対戦を同じ盾意匠で一段に並べ、CPU／ONLINEを位置と文字で見分ける。
+  check('the title presents CPU and ONLINE as separate side-by-side shield controls',
+    htmlText.includes("shield: loadArtImage('title-shield-button'")
+    && htmlText.includes("drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE'")
+    && htmlText.includes("drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE'"));
 
   // ---- 4人ぶんの伏せ合い(Issue #26 段C) ----
   // 実際の受信経路(netReceiveInner)へ commit / reveal を流し、席ごとに覚えられるか見る。
@@ -1848,7 +2171,7 @@ function check(name, value) {
   // 対戦方式のドロップダウンだけ change が繋がっておらず、2vs2を選んでも一切送られて
   // いなかった。次の描画で `1 vs 1` へ戻るだけで、席の名前も1vs1のままだった。
   check('the match-format dropdown actually sends the change, like the other settings',
-    htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl].forEach(el => { if (el) el.addEventListener(\'change\''));
+    htmlText.includes('[onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.addEventListener(\'change\''));
   // ほかに人が座っていない2vs2(1人＋CPU3体)では、検証する相手の公開が届かない。
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',
@@ -1857,7 +2180,7 @@ function check(name, value) {
   // 落ち続け、再戦の準備すら作れなくなっていた。401は「鍵の期限切れ」と「ルール拒否」の
   // 両方で返るので、鍵を取り直して本当に新しくなった時だけ送り直す。
   check('an expired key is renewed and the write is sent once more, instead of failing for good',
-    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await fetch\(firebaseRequestUrl\(path, auth\), options\);/.test(htmlText));
+    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await firebaseFetchWithTimeout\(firebaseRequestUrl\(path, auth, query\), fetchOptions\);/.test(htmlText));
   check('a rules rejection is not mistaken for an expired key, so it never loops on the token endpoint',
     // force しない = 期限内なら同じ鍵が返る = 送り直さずそのまま失敗する
     /async function firebaseRequest\([\s\S]{0,900}ensureFirebaseAuth\(\)\.catch/.test(htmlText)
@@ -1902,6 +2225,110 @@ function check(name, value) {
       (twoVsTwo.match(/CPUが担当/g) || []).length === 3
       && !oneVsOne.includes('CPUが担当'));
   }
+
+  // ---- 端末内の相手別戦績(Issue #5 / v162) ----
+  // まずこの入口だけを追加した状態で現行版を走らせ、機能が無いので実際にFAILすることを確認する。
+  // 以降は実装が存在する時だけ進め、古い版でもハーネスの例外で出力全体が消えないようにする。
+  const battle = h.battleRecordFeature();
+  check('the device-local rival record feature exists', !!battle);
+  if (battle) {
+    battle.reset();
+    const rawDeviceId = 'local-device-id-1234';
+    const rivalId = await battle.deriveRivalId(rawDeviceId);
+    const expectedRivalId = require('crypto').createHash('sha256').update(`katamon-rival-v1:${rawDeviceId}`).digest('hex');
+    const identity = await battle.identityFields(rawDeviceId, 'メロニキ');
+    check('rivalId is a purpose-separated SHA-256 value, never the raw device ID',
+      rivalId === expectedRivalId && /^[0-9a-f]{64}$/.test(rivalId)
+      && identity.rivalId === rivalId && identity.name === 'メロニキ'
+      && !JSON.stringify(identity).includes(rawDeviceId));
+    check('only presence and lobbyState accept a well-formed rivalId',
+      h.validateFirebaseMessage(firebasePacket('presence', { rivalId, seat: 'e1' }))
+      && h.validateFirebaseMessage(firebasePacket('lobbyState', { rivalId, status: 'lobby' }))
+      && !h.validateFirebaseMessage(firebasePacket('presence', { rivalId: 'bad', seat: 'e1' }))
+      && !h.validateFirebaseMessage(firebasePacket('ready', { rivalId })));
+
+    const rivalA = 'a'.repeat(64);
+    const rivalB = 'b'.repeat(64);
+    const winRound = '1'.repeat(48);
+    check('a win is recorded once and an identical result resend is ignored',
+      battle.record({ matchId: winRound, outcome: 'win', character: 'kyoryu', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '撃破', playedAt: 1000 })
+      && !battle.record({ matchId: winRound, outcome: 'win', character: 'kyoryu', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '撃破', playedAt: 1001 }));
+    check('a rematch with a new round ID is counted, including a timeout loss',
+      battle.record({ matchId: '2'.repeat(48), outcome: 'loss', character: 'medama', rivals: [{ id: rivalA, name: 'ライバルA' }], reason: '時間切れ', playedAt: 2000 }));
+    check('a draw against another opponent is kept separately',
+      battle.record({ matchId: '3'.repeat(48), outcome: 'draw', character: 'kyoryu', rivals: [{ id: rivalB, name: 'ライバルB' }], reason: '相討ち', playedAt: 3000 }));
+    const recorded = battle.snapshot();
+    check('lifetime, character and opponent totals all use the local player perspective',
+      recorded.total.wins === 1 && recorded.total.losses === 1 && recorded.total.draws === 1
+      && recorded.characters.kyoryu.wins === 1 && recorded.characters.kyoryu.draws === 1
+      && recorded.characters.medama.losses === 1
+      && recorded.rivals[rivalA].wins === 1 && recorded.rivals[rivalA].losses === 1
+      && recorded.rivals[rivalB].draws === 1);
+    battle.reload();
+    const afterReload = battle.snapshot();
+    check('the same browser profile keeps its records after a reload',
+      afterReload.total.wins === 1 && afterReload.total.losses === 1 && afterReload.total.draws === 1
+      && afterReload.rivals[rivalA].name === 'ライバルA');
+    check('host and guest read the same team result from opposite perspectives',
+      battle.outcomeForSeat('player', 'p1') === 'win'
+      && battle.outcomeForSeat('player', 's1') === 'win'
+      && battle.outcomeForSeat('player', 'e1') === 'loss'
+      && battle.outcomeForSeat('player', 's2') === 'loss'
+      && battle.outcomeForSeat('draw', 'e1') === 'draw');
+    const beforeCpuOnly = JSON.stringify(battle.snapshot());
+    check('an all-CPU opponent team creates no pretend human record',
+      !battle.record({ matchId: '4'.repeat(48), outcome: 'win', character: 'kyoryu', rivals: [], reason: '撃破', playedAt: 4000 })
+      && JSON.stringify(battle.snapshot()) === beforeCpuOnly);
+
+    const lobby = seatedLobby('1v1', 'p1', ['p1', 'e1']);
+    lobby.seatNames = { e1: 'ライバルA' };
+    lobby.seatRivalIds = { e1: rivalA };
+    lobby.selfCharacter = 'kyoryu';
+    lobby.roundRivals = null;
+    lobby.roundOpponentSeats = null;
+    h.setOnlineForLogTest(lobby);
+    const roomRecordText = battle.renderLobbyText();
+    check('the room shows lifetime, selected-monster and opponent records without sending their values',
+      roomRecordText.includes('この端末の対人戦績')
+      && roomRecordText.includes('通算')
+      && roomRecordText.includes('ディラノ')
+      && roomRecordText.includes('ライバルA')
+      && roomRecordText.includes('1勝') && roomRecordText.includes('1敗'));
+    battle.freezeRoundRivals();
+    lobby.phase = 'results';
+    const resultRows = battle.resultRows();
+    check('the result screen has both the lifetime and current-opponent records',
+      resultRows.some(row => row.includes('通算'))
+      && resultRows.some(row => row.includes('ライバルA')));
+
+    localStorage.setItem(battle.key(), '{broken json');
+    battle.reload();
+    const recovered = battle.snapshot();
+    check('a corrupted local record recovers to an empty safe shape',
+      recovered.total.wins === 0 && recovered.total.losses === 0 && recovered.total.draws === 0
+      && Object.keys(recovered.rivals).length === 0 && recovered.processedRoundIds.length === 0);
+    const lateIdentityLobby = seatedLobby('1v1', 'p1', ['p1', 'e1']);
+    lateIdentityLobby.phase = 'results';
+    lateIdentityLobby.currentRoundId = '5'.repeat(48);
+    lateIdentityLobby.roundOpponentSeats = ['e1'];
+    lateIdentityLobby.roundRivals = [];
+    lateIdentityLobby.unitCharacters = { p1: 'kyoryu', e1: 'medama' };
+    h.setOnlineForLogTest(lateIdentityLobby);
+    battle.setResultState('player', '撃破');
+    battle.rememberIdentity({ seat: 'e1', rivalId: rivalA, name: '遅れて届いた相手' });
+    const lateRecorded = battle.snapshot();
+    check('an identity packet arriving after the result still records that round once',
+      lateRecorded.total.wins === 1 && lateRecorded.rivals[rivalA]?.wins === 1);
+    battle.setResultState(null, '', false);
+    check('Firebase Rules accept only a 64-character lowercase rivalId on identity packets',
+      rulesText.includes('"rivalId": { ".validate": "(newData.parent().child(\'t\').val() === \'presence\' || newData.parent().child(\'t\').val() === \'lobbyState\')')
+      && rulesText.includes('newData.val().matches(/^[0-9a-f]{64}$/)'));
+    check('record values never appear in any Firebase packet path',
+      !/netSend\(\{[^}]*\b(?:wins|losses|draws|battleRecord)\b/.test(htmlText)
+      && !rulesText.includes('"wins"') && !rulesText.includes('"losses"') && !rulesText.includes('"draws"'));
+    check('the Canvas result banner actually draws the record rows',
+      /function drawResultBanner\(\)[\s\S]{0,4200}firebaseBattleRecordResultRows\(\)/.test(htmlText));
+  }
   // v119: 開始データを受け取る側にもVSカットインを出す。
   // resetMatch を通るのはホストだけなので、ここを落とすとタブ2つのQAで
   // 「配る側には出るが、受け取る側には出ない」という左右差になる。
@@ -1917,6 +2344,11 @@ function check(name, value) {
   // 起動前・タイトル・ロビーで端末の戻る操作を押しても、確認なしでアプリを抜けない。
   check('the device back trap stays armed outside battle too',
     /function backTrapWanted\(\) \{\s*return exitBackSteps === 0;\s*\}/.test(htmlText));
+  check('the unused canvas yes/no confirmation path is fully removed while device back confirmation remains',
+    !htmlText.includes('function openConfirmDialog(')
+    && !htmlText.includes('function drawConfirmDialog(')
+    && !htmlText.includes('let confirmDialog = null')
+    && htmlText.includes('function openDeviceBackConfirm()'));
   check('non-battle screens and an open online room use the global exit confirmation',
     /if \(gamePhase !== 'battle' \|\| roomScreenOpen\(\)\) \{\s*openDeviceBackConfirm\(\);/.test(htmlText));
   check('the global exit confirmation is above every game overlay and has two explicit choices',
@@ -1924,8 +2356,80 @@ function check(name, value) {
     && htmlText.includes('z-index: 200')
     && htmlText.includes('id="deviceBackStay"')
     && htmlText.includes('id="deviceBackExit"'));
-  check('only an explicit exit choice passes both guarded history entries',
-    /function confirmDeviceExit\(\)[\s\S]{0,220}exitBackSteps = 2;[\s\S]{0,160}continueConfirmedDeviceExit\(\);/.test(htmlText));
+  check('CloseWatcher cancels the close request before showing the in-game confirmation',
+    /new window\.CloseWatcher\(\)[\s\S]{0,500}addEventListener\('cancel',[\s\S]{0,240}event\.preventDefault\(\);[\s\S]{0,160}handleDeviceBackRequest\(\);/.test(htmlText));
+  check('explicit exit counts legacy same-app entries and requests only one history traversal',
+    /function confirmedDeviceExitHistoryDelta\(\)[\s\S]{0,1400}normalizedDeviceBackAppLocation\(entries\[index\]\.url\)/.test(htmlText)
+    && /function continueConfirmedDeviceExit\(historyDelta = 1\)[\s\S]{0,260}history\.go\(-Math\.max\(1, historyDelta\)\)/.test(htmlText)
+    && /function confirmDeviceExit\(\)[\s\S]{0,300}exitBackSteps = 1;[\s\S]{0,120}destroyDeviceBackCloseWatcher\(\);[\s\S]{0,300}continueConfirmedDeviceExit\(historyDelta\);/.test(htmlText));
+  check('standalone launch attempts window close instead of relying on a missing back entry',
+    /function closeStandaloneDeviceBackWindow\(\)[\s\S]{0,500}window\.close\(\);[\s\S]{0,450}if \(closeStandaloneDeviceBackWindow\(\)\)/.test(htmlText));
+  check('fallback reload reuses an existing Katamon guard instead of stacking another one',
+    /function armBackTrap\(\)[\s\S]{0,220}history\.state && history\.state\.katamonGuard === true[\s\S]{0,100}backTrapDepth = 1;/.test(htmlText));
+  const deadLineSource = htmlText.match(/function drawDeadLine\(\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('DEAD LINE uses layered strokes instead of an expensive shadow blur across the screen',
+    deadLineSource.includes('const glowLayers = [')
+    && deadLineSource.includes('lineWidth: 11')
+    && deadLineSource.includes('lineWidth: 6')
+    && deadLineSource.includes('lineWidth: 2.5')
+    && !deadLineSource.includes('shadowBlur'));
+  const pointFromEventSource = htmlText.match(/function canvasPointFromEvent\(e\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('pointer coordinates reuse bounds refreshed by resize instead of measuring layout for every move',
+    htmlText.includes('let cachedCanvasBounds = null;')
+    && /function resize\(\)[\s\S]{0,1800}cachedCanvasBounds = canvas\.getBoundingClientRect\(\);/.test(htmlText)
+    && pointFromEventSource.includes('const rect = cachedCanvasBounds;')
+    && !pointFromEventSource.includes('getBoundingClientRect'));
+  const controlPanelSource = htmlText.match(/function drawControlPanel\(\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('the static control panel is built once offscreen and battle frames only blit it',
+    htmlText.includes('const controlPanelCanvas = document.createElement(\'canvas\');')
+    && htmlText.includes('function rebuildControlPanelArt()')
+    && controlPanelSource.includes('rebuildControlPanelArt();')
+    && controlPanelSource.includes('ctx.drawImage(controlPanelCanvas, 0, CONTROL_PANEL_Y);')
+    && /rebuildControlPanelArt\(\);[\s\S]{0,100}ctx\.drawImage\(controlPanelCanvas, 0, CONTROL_PANEL_Y\);[\s\S]{0,100}return;/.test(controlPanelSource));
+  const parallaxSource = htmlText.match(/function drawParallax\(\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('static parallax hills are built once offscreen while clouds stay live',
+    htmlText.includes("const farHillCanvas = document.createElement('canvas');")
+    && htmlText.includes("const nearHillCanvas = document.createElement('canvas');")
+    && htmlText.includes('function rebuildHillArt()')
+    && parallaxSource.includes('rebuildHillArt();')
+    && parallaxSource.includes('ctx.drawImage(farHillCanvas, -200, 0);')
+    && parallaxSource.includes('ctx.drawImage(nearHillCanvas, -200, 0);')
+    && parallaxSource.includes('drawClouds();'));
+  const updateSource = htmlText.match(/function update\(dt\)[\s\S]*?\n  \}/)?.[0] || '';
+  const physicsSource = htmlText.match(/function stepWorldPhysics\(dt\)[\s\S]*?\n  \}/)?.[0] || '';
+  const barucopterImpactSource = htmlText.match(/function resolveBarucopterBulletSurfaceImpact\([\s\S]*?\n  \}/)?.[0] || '';
+  check('terrain rim redraws are queued across physics substeps and flushed once per frame',
+    htmlText.includes('function queueTerrainRimRebuild()')
+    && htmlText.includes('function flushTerrainRimRebuild()')
+    && updateSource.includes('flushTerrainRimRebuild();')
+    && physicsSource.includes('queueTerrainRimRebuild();')
+    && !physicsSource.includes('rebuildTerrainRim();')
+    && barucopterImpactSource.includes('queueTerrainRimRebuild();')
+    && !barucopterImpactSource.includes('rebuildTerrainRim();'));
+  const gameLoopSource = htmlText.match(/function gameLoop\(ts\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('quiet battle waiting draws at 30fps but active battle remains at full rate',
+    htmlText.includes('const IDLE_BATTLE_FRAME_MS = 1000 / 30;')
+    && htmlText.includes('function canUseIdleBattleFrameRate()')
+    && gameLoopSource.includes('canUseIdleBattleFrameRate()')
+    && gameLoopSource.includes('IDLE_BATTLE_FRAME_MS'));
+  const terrainCanvasSource = htmlText.match(/const terrainCanvas = document\.createElement\('canvas'\);[\s\S]*?function stageDimensionsFor/)?.[0] || '';
+  check('terrain-only offscreen canvases stop at the terrain bottom instead of reserving the control-panel area',
+    (terrainCanvasSource.match(/\.height = TERRAIN_BOTTOM_Y;/g) || []).length === 7
+    && !terrainCanvasSource.includes('.height = VH;'));
+  const snapshotSource = htmlText.match(/function buildSnapshot\(options = \{\}\)[\s\S]*?\n  \}/)?.[0] || '';
+  const netSyncTurnSource = htmlText.match(/function netSyncTurn\(actedUnit\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('turn-boundary state omits immutable terrain while match start keeps the complete base terrain',
+    snapshotSource.includes('const includeTerrain = options.includeTerrain !== false;')
+    && snapshotSource.includes('if (includeTerrain) {')
+    && netSyncTurnSource.includes('buildSnapshot({ includeTerrain: false })')
+    && htmlText.includes('applySnapshot(msg.snap, { preserveTerrain: true });'));
+  check('30fps idle battle frames preserve a full 1/30-second fixed-step budget',
+    gameLoopSource.includes('const dt = Math.min(0.034, (ts - lastTime) / 1000);'));
+  check('the battle wind console puts its 0-to-10 number directly inside the current-wind arrow',
+    htmlText.includes('const windStrengthScale = Math.round(wind.strength * 10);')
+    && htmlText.includes("const windTitle = calmWind ? '無風' : '現在の風';")
+    && htmlText.includes("calmWind ? '無風' : windStrengthScale")
+    && htmlText.includes("drawOutlinedText(windTitle, cx, roundCenterY - inner * 0.70"));
   h.setOnlineForLogTest(null);
   h.setMatchFormat('1v1');
 
