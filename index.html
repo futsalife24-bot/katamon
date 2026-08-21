@@ -30,18 +30,6 @@
 <link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
 <link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
 <link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/room-bgm.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-grass.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-desert.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-snow.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-volcanic.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/stage-boss-arena.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-1.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-2.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-3.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/bonus-bgm-4.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3" type="audio/mpeg">
-<link rel="preload" as="audio" href="assets/cool-kai-special-voice.mp3" type="audio/mpeg">
 <link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
@@ -437,78 +425,65 @@
   }
   #deviceBackConfirm.open { display: flex; }
   #deviceBackConfirmPanel {
-    position: relative; isolation: isolate;
-    width: min(398px, 100%); box-sizing: border-box; padding: 82px 24px 24px;
-    text-align: center; border: 3px solid #c78335; border-radius: 18px;
-    background:
-      linear-gradient(90deg, rgba(0,0,0,.44), transparent 15%, transparent 85%, rgba(0,0,0,.44)),
-      repeating-linear-gradient(165deg, rgba(255,226,161,.035) 0 1px, transparent 1px 23px),
-      linear-gradient(180deg, #26353a, #101b20 48%, #080f13);
-    box-shadow: 0 0 0 2px #111a1e, 0 0 0 5px rgba(199,131,53,.22), 0 24px 58px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.16), inset 0 -18px 30px rgba(0,0,0,.3);
+    position: relative; isolation: isolate; display: flex; flex-direction: column;
+    justify-content: center; width: min(414px, 100%); min-height: 570px; box-sizing: border-box;
+    padding: 86px 34px 48px; text-align: center; border: 0; border-radius: 0;
+    background: #5d351d url("assets/title-mode-board.webp") center / 100% 100% no-repeat;
+    filter: drop-shadow(0 18px 28px rgba(0,0,0,.64));
   }
-  #deviceBackConfirmPanel::before,
-  #deviceBackConfirmPanel::after {
-    content: ""; position: absolute; top: 18px; width: 11px; height: 11px; border-radius: 50%;
-    background: radial-gradient(circle at 34% 30%, #fff0a0, #a96b24 42%, #301805 76%);
-    box-shadow: 0 1px 0 #000, 0 0 0 2px rgba(31,16,6,.75);
+  #deviceBackConfirmPanel::before {
+    content: ""; position: absolute; z-index: 0; inset: 0 0 auto; height: 70px;
+    background: #673719;
+    border-bottom: 1px solid rgba(255,210,111,.22);
   }
-  #deviceBackConfirmPanel::before { left: 20px; }
-  #deviceBackConfirmPanel::after { right: 20px; }
-  #deviceBackConfirmPanel > #deviceBackSeal {
-    position: absolute; z-index: 3; top: -67px; left: 50%; width: 126px; height: 126px;
-    transform: translateX(-50%); object-fit: contain; filter: drop-shadow(0 8px 9px rgba(0,0,0,.8));
-    pointer-events: none;
-  }
+  #deviceBackConfirmPanel > * { position: relative; z-index: 1; }
   #deviceBackConfirmKicker {
     position: relative; z-index: 2; width: fit-content; max-width: 100%; box-sizing: border-box;
-    margin: 0 auto 10px; padding: 6px 18px 5px; color: #d39b4b;
+    margin: 0 auto 10px; padding: 6px 18px 5px; color: #ffe6a7;
     font: 400 13px/1 var(--katamon-font-ui); letter-spacing: .18em;
-    background: rgba(8,15,19,.72); border: 1px solid rgba(199,131,53,.6); border-radius: 999px;
+    background: rgba(53,31,18,.78); border: 1px solid rgba(255,210,111,.72); border-radius: 999px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 9px rgba(0,0,0,.35);
   }
   #deviceBackConfirmTitle {
-    margin: 0 0 9px; color: #fff0c9;
+    margin: 0 0 9px; color: #fff4d6;
     font: 400 24px/1.35 var(--katamon-font-display);
-    letter-spacing: .08em; text-shadow: 0 2px 0 #070b0d, 0 0 14px rgba(255,210,74,.18);
+    letter-spacing: .08em;
+    -webkit-text-stroke: 1px rgba(45,22,10,.86);
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 #070b0d, 0 4px 8px rgba(0,0,0,.72), 0 0 14px rgba(255,210,74,.18);
   }
   #deviceBackConfirmNote {
     margin: 0 0 21px; padding: 0 8px;
-    color: #b6c7c8; font: 400 12px/1.55 var(--katamon-font-ui);
-    text-shadow: 0 1px 0 #05090b;
+    color: #f3dfbd; font: 400 12px/1.55 var(--katamon-font-ui);
+    text-shadow: 0 1px 0 #3a2113;
   }
-  #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  #deviceBackConfirmActions.deviceBackLevers { display: grid; grid-template-columns: 1fr; gap: 14px; }
   #deviceBackConfirmActions .deviceBackLever {
-    position: relative; min-height: 60px; padding: 9px 18px 9px 58px; overflow: hidden;
-    border: 2px solid rgba(199,131,53,.78); border-radius: 10px; color: #fff5dc;
+    position: relative; min-height: 108px; padding: 18px 38px 16px; overflow: hidden;
+    border: 0; border-radius: 0; color: #fff5dc;
+    display: flex; flex-direction: column; justify-content: center;
     font-family: var(--katamon-font-ui); cursor: pointer; text-align: left;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -3px 0 rgba(0,0,0,.28), 0 5px 0 #070d10, 0 8px 12px rgba(0,0,0,.3);
+    background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
+    filter: drop-shadow(0 5px 5px rgba(0,0,0,.46));
   }
-  #deviceBackConfirmActions .deviceBackLever::before {
-    content: ""; position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-    width: 26px; height: 26px; border-radius: 50%;
-    background: radial-gradient(circle at 34% 29%, #ffe7a0, #bd7427 38%, #48230d 72%);
-    box-shadow: 0 0 0 3px rgba(5,12,15,.9), 0 1px 2px #000, 0 0 10px rgba(255,210,74,.18);
-  }
-  #deviceBackConfirmActions .deviceBackLever::after {
-    content: ""; position: absolute; left: 28px; top: 50%; width: 25px; height: 7px;
-    transform: translateY(-50%); transform-origin: left center; border-radius: 7px;
-    background: linear-gradient(180deg, #c0c6bc, #53605d 48%, #15201e 52%);
-    box-shadow: 0 1px 1px rgba(0,0,0,.65);
-  }
-  #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.25), 0 1px 0 #130804; }
-  #deviceBackConfirmActions .deviceBackLever:active::after { transform: translateY(-50%) rotate(18deg); }
-  #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 16px; line-height: 1.25; letter-spacing: .04em; }
-  #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; opacity: .82; }
+  #deviceBackConfirmActions .deviceBackLever:active { transform: translateY(3px) scale(.99); filter: brightness(1.15) drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+  #deviceBackConfirmActions .deviceBackLever strong { display: block; font-size: 17px; line-height: 1.25; letter-spacing: .04em; }
+  #deviceBackConfirmActions .deviceBackLever small { display: block; margin-top: 3px; font-size: 11px; line-height: 1.25; opacity: .82; }
   #deviceBackStay {
-    background: linear-gradient(180deg, #416864, #203e3e 58%, #102625) !important;
-    border-color: #173331 !important;
+    background-image: url("assets/exit-confirm-stay-v2.png") !important;
+    color: #fff5dc !important;
+  }
+  #deviceBackStay strong {
+    -webkit-text-stroke: .8px rgba(5,42,35,.9);
+    paint-order: stroke fill;
+    text-shadow: 0 2px 0 rgba(4,31,26,.92), 0 3px 6px rgba(0,0,0,.58);
   }
   #deviceBackExit {
-    background: linear-gradient(180deg, #69423b, #382420 58%, #211310) !important;
-    border-color: #24130f !important; color: #f1d9c7 !important;
+    background-image: url("assets/exit-confirm-exit-v2.png") !important; color: #4b2a18 !important;
+    text-shadow: 0 1px 0 rgba(255,255,255,.5);
   }
   @media (max-height: 620px) {
-    #deviceBackConfirmPanel { padding-top: 42px; transform: scale(.92); }
+    #deviceBackConfirmPanel { min-height: 520px; padding-top: 72px; padding-bottom: 34px; transform: scale(.92); }
   }
 </style>
 </head>
@@ -608,7 +583,6 @@
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
-    <img id="deviceBackSeal" src="assets/device-exit-seal.png" alt="" aria-hidden="true" draggable="false">
     <p id="deviceBackConfirmKicker">カタモンを閉じる？</p>
     <h2 id="deviceBackConfirmTitle">今はここまでにする？</h2>
     <p id="deviceBackConfirmNote">終了すると、カタモンを閉じます。</p>
@@ -675,11 +649,20 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';
+  const BUILD_ID = 'v2.0.97-online-lobby-seat-loss-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
-    { version: 'v2.0.86', date: '2026/08/20', summary: 'オンライン入室直後の誤った退出を防止' },
+    { version: 'v2.0.97', date: '2026/08/21', summary: 'オンライン入室直後の誤った退出を防止' },
+    { version: 'v2.0.96', date: '2026/08/20', summary: '必殺技の詳細から試し打ちデモを再生' },
+    { version: 'v2.0.95', date: '2026/08/20', summary: 'ドレッドアロー・クール=カイの絵を大きく表示' },
+    { version: 'v2.0.94', date: '2026/08/20', summary: 'ドレッドアローの新画像の向きを正しく修正' },
+    { version: 'v2.0.93', date: '2026/08/20', summary: '出撃前に必要な1曲だけ準備してBGM開始を高速化' },
+    { version: 'v2.0.92', date: '2026/08/20', summary: '更新時にBGM・画像を取り直さない節約キャッシュへ改善' },
+    { version: 'v2.0.91', date: '2026/08/20', summary: 'ハムルトンと、狙いをかく乱する必殺「まさかのホウヒ」を追加。ドレッドアロー画像を更新' },
+    { version: 'v2.0.90', date: '2026/08/20', summary: 'クール=カイのBATTLE曲とおまけ末尾へドパガキリミックスを追加' },
+    { version: 'v2.0.89', date: '2026/08/20', summary: '退出確認ボタンの文字が収まるよう縦幅を調整' },
+    { version: 'v2.0.88', date: '2026/08/20', summary: '退出確認ボタンを横長の透過素材へ再調整' },
     { version: 'v2.0.85', date: '2026/08/19', summary: '退出確認画面を石壁・黒鉄・真鍮の意匠へリメイク' },
     { version: 'v2.0.84', date: '2026/08/19', summary: '中断データの再開ボタンをスマホ操作へ対応' },
     { version: 'v2.0.83', date: '2026/08/19', summary: 'ステージクリアとボス撃破の実績を追加' },
@@ -1143,12 +1126,8 @@
     snow: 'assets/stage-snow.mp3',
     volcanic: 'assets/stage-volcanic.mp3',
     arena: 'assets/stage-boss-arena.mp3',
-    coolKai: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'
+    coolKai: 'assets/six-eternel-dopagaki-remix.mp3'
   };
-  // クールカイ戦の専用曲はタイトル表示前からブラウザへ先読みさせる。
-  // 実際の再生時は stageBgm を使うため、音量・AudioContext経路は既存仕様のまま。
-  stageBgm.src = STAGE_BGM_SOURCES.coolKai;
-  stageBgm.load();
   stageBgm.volume = STAGE_BGM_BASE_VOLUME;
   stageBgm.loop = true;
   let firstBattleMediaPrimed = false;
@@ -1174,11 +1153,26 @@
   function primeFirstBattleMedia() {
     if (firstBattleMediaPrimed) return;
     firstBattleMediaPrimed = true;
-    warmMediaElement(stageBgm);
     if (typeof battleStartLogoVideo !== 'undefined') warmMediaElement(battleStartLogoVideo);
   }
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
+  function resolveStageBgmKey(themeKey) {
+    if (units.some(u => u.character === 'coolKai')) return 'coolKai';
+    return currentPattern === 'tieredBasin' ? 'arena' : themeKey;
+  }
+  // 対戦開始の演出より先に、その対戦で鳴らす1曲だけを取得開始する。
+  // 全曲を起動時に落とさず、初回BATTLEのカットイン中にバッファを作るための準備。
+  function primeStageBgm(themeKey) {
+    const bgmKey = resolveStageBgmKey(themeKey);
+    const src = STAGE_BGM_SOURCES[bgmKey] || STAGE_BGM_SOURCES.grass;
+    if (stageBgmTheme === bgmKey && stageBgm.src.endsWith(src)) return bgmKey;
+    stageBgm.pause();
+    stageBgm.src = src;
+    stageBgmTheme = bgmKey;
+    stageBgm.load();
+    return bgmKey;
+  }
   // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
   const roomBgm = document.getElementById('roomBgm');
   roomBgm.volume = ROOM_BGM_BASE_VOLUME;
@@ -1200,10 +1194,10 @@
     { src: 'assets/bonus-bgm-2.mp3', volume: 0.56, label: 'Celtic Battle Mix' },
     { src: 'assets/bonus-bgm-3.mp3', volume: 0.45, label: 'SoulTech Alt Rock Mix' },
     { src: 'assets/bonus-bgm-4.mp3', volume: 0.54, label: 'おまけ4' },
-    { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' }
+    { src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―' },
+    { src: 'assets/six-eternel-dopagaki-remix.mp3', volume: 0.38, label: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）' }
   ];
-  // おまけのサウンドテストで選べる全BGM。起動時に同じ一覧を先読みして、
-  // おまけを開いた瞬間のsrc差し替え待ちをなくす。
+  // サウンドテストで選べる全BGM。通信量を守るため、選択するまでダウンロードしない。
   const SOUND_TEST_TRACKS = Object.freeze([
     { key: 'title', label: 'タイトルBGM', src: 'assets/title-bgm.mp3', volume: TITLE_BGM_BASE_VOLUME },
     { key: 'room', label: 'ONLINEロビー', src: 'assets/room-bgm.mp3', volume: ROOM_BGM_BASE_VOLUME },
@@ -1212,6 +1206,7 @@
     { key: 'snow', label: 'ステージ：雪原', src: STAGE_BGM_SOURCES.snow, volume: STAGE_BGM_BASE_VOLUME },
     { key: 'volcanic', label: 'ステージ：火山', src: STAGE_BGM_SOURCES.volcanic, volume: STAGE_BGM_BASE_VOLUME },
     { key: 'arena', label: 'ステージ：闘技場', src: STAGE_BGM_SOURCES.arena, volume: STAGE_BGM_BASE_VOLUME },
+    { key: 'coolKai', label: 'クール=カイ専用BGM', src: STAGE_BGM_SOURCES.coolKai, volume: STAGE_BGM_BASE_VOLUME },
     ...BONUS_BGM_TRACKS.slice(1).map((track, index) => ({
       key: `bonus${index + 1}`,
       label: track.label,
@@ -1219,24 +1214,8 @@
       volume: track.volume
     }))
   ]);
-  let startupBgmPreloadSettled = 0;
-  const startupBgmPreloads = SOUND_TEST_TRACKS.map(track => {
-    const audio = document.createElement('audio');
-    audio.preload = 'auto';
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      startupBgmPreloadSettled++;
-    };
-    audio.addEventListener('canplaythrough', settle, { once: true });
-    audio.addEventListener('error', settle, { once: true });
-    audio.src = track.src;
-    audio.load();
-    return audio;
-  });
-  const startupBgmPreloadCount = startupBgmPreloads.length;
-  let bonusBgmTrack = 0;        // 0=止まっている / 1〜5=その曲を選んでいる
+  const startupBgmPreloadCount = 0;
+  let bonusBgmTrack = 0;        // 0=止まっている / 1〜6=その曲を選んでいる
   let bonusBgmLoadedTrack = 0;  // いまaudio要素に読み込んである曲
   function bonusBgmBaseVolume() {
     const track = BONUS_BGM_TRACKS[bonusBgmTrack];
@@ -1247,15 +1226,9 @@
   applyAudioVolumes();
   function playStageBgm(themeKey, restart = false) {
     if (!bgmAudible() || gamePhase !== 'battle') return;
-    const bgmKey = units.some(u => u.character === 'coolKai')
-      ? 'coolKai'
-      : (currentPattern === 'tieredBasin' ? 'arena' : themeKey);
-    const src = STAGE_BGM_SOURCES[bgmKey] || STAGE_BGM_SOURCES.grass;
+    const bgmKey = resolveStageBgmKey(themeKey);
     if (stageBgmTheme !== bgmKey) {
-      stageBgm.pause();
-      stageBgm.src = src;
-      stageBgmTheme = bgmKey;
-      stageBgm.load();
+      primeStageBgm(themeKey);
       restart = true;
     }
     if (restart && stageBgmRestoreTimer !== null) {
@@ -1443,7 +1416,8 @@
     // ただし双方「このまま再戦」の自動進行中(online.autoStartNextRound)は数秒で次戦へ進むので、
     // ルーム曲を挟まずステージ曲を続ける。
     if (roomScreenOpen() && !(online && online.autoStartNextRound)) return 'room';
-    if (gamePhase === 'battle') return 'stage';
+    // 必殺技デモは選択画面の延長。ステージBGMを読み込まず、タイトル曲を続ける。
+    if (gamePhase === 'battle' && battleMode !== 'demo') return 'stage';
     // おまけ曲を選んでいる間はタイトル曲の代わりに鳴らす。
     if (bonusBgmTrack) return 'bonus';
     return 'title'; // title/select/フリー設定/ランキングなど、戦闘以外は全部タイトル曲
@@ -1461,7 +1435,7 @@
     title: 'タイトルBGM', room: 'ONLINEロビー',
     grass: '草原ステージ', desert: '砂漠ステージ', snow: '雪原ステージ',
     volcanic: '火山ステージ', arena: '闘技場ステージ',
-    coolKai: 'SIX ÉTERNEL ―愛はひとつじゃない―'
+    coolKai: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）'
   });
   function currentBgmDisplayName() {
     const kind = currentBgmKind();
@@ -3151,7 +3125,19 @@
       desc: '弩とサソリ尾を備えた狙撃戦車。刺した地面から毒針を走らせて追い詰める。',
       selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表から坂や壁を登る毒針の衝撃波', selectFlavor: '着弾後、相手に向かって地雷針が追尾する',
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
-      color: '#f14b46', special: 'スコーピオンレール', facesLeft: true
+      color: '#f14b46', special: 'スコーピオンレール', facesLeft: false,
+      // 余白の大きい新素材は、選択・戦闘とも車体ぎりぎりまで切り出して見やすくする。
+      imageCrop: { sx: 0.12, sy: 0.27, sw: 0.72, sh: 0.65 },
+      previewImageCrop: { sx: 0.12, sy: 0.27, sw: 0.72, sh: 0.65 }
+    },
+    hamulton: {
+      key: 'hamulton', name: 'ハムルトン', asset: 'hamulton', role: '妨害型', roleEn: 'CONTROL',
+      desc: '巨大グローブ砲で、相手の狙いをかく乱する戦略型戦車。雲から逃げる判断を迫る。',
+      selectStats: [3, 3, 4], specialDesc: '着弾地点に3敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。', selectFlavor: 'まさかの一発で、狙いを見失わせる雲を残す',
+      maxHp: 92, blastMul: 0.95, windMul: 0.9, fuelMul: 1.1, velScaleMul: 1.0, guideMul: 1.0, specialVelocityMul: 1.0, tBias: 1.0,
+      color: '#f0bd4f', special: 'まさかのホウヒ',
+      imageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 },
+      previewImageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 }
     },
     mocchario: {
       key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
@@ -3211,9 +3197,9 @@
       maxHp: 66, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
-      imageCrop: { sx: 0.03, sy: 0.30, sw: 0.90, sh: 0.55 },
+      imageCrop: { sx: 0.12, sy: 0.34, sw: 0.76, sh: 0.54 },
       // 演習選択では、接地調整前の上下余白を含めず見えている車体を大きく表示する。
-      previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 },
+      previewImageCrop: { sx: 0.14, sy: 0.35, sw: 0.72, sh: 0.51 },
       // 素材の下側に残る透明余白ぶんだけ、地面アンカーへ見た目を寄せる。
       groundOffsetY: 31
     }
@@ -3276,7 +3262,7 @@
     burumutan: [0.62, 0.60, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
     mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
     jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34],
-    shinigami: [0.50, 0.38, 0.42], coolKai: [0.73, 0.53, 0.28]
+    shinigami: [0.50, 0.38, 0.42], coolKai: [0.73, 0.53, 0.28], hamulton: [0.42, 0.45, 0.32]
   };
   const DEFAULT_FACE = [0.5, 0.3, 0.42];
 
@@ -3289,14 +3275,14 @@
     burumutan: [0.50, 0.55, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.18, 0.80, 0.30],
     mocchario: [0.62, 0.34, 0.34], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
     jinba: [0.52, 0.20, 0.26], kishi: [0.43, 0.28, 0.28], neko: [0.55, 0.33, 0.32],
-    shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26]
+    shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26], hamulton: [0.42, 0.45, 0.32]
   };
 
   for (const [id, character] of Object.entries(GENERATED_CHARACTERS)) {
     CHARACTER_FACES[id] = Array.isArray(character.face) ? character.face : DEFAULT_FACE;
     MATCHUP_FACES[id] = Array.isArray(character.matchupFace) ? character.matchupFace : CHARACTER_FACES[id];
   }
-  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
+  const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'hamulton', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
   const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
   // ロード画面のキャラは起動ごとに1体だけ抽選する。Web Cryptoを使い、
   // 対戦の再現用Math.random()の列へ表示演出の乱数を混ぜない。
@@ -3340,8 +3326,8 @@
 
   // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
   const charImages = {};
-  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げる。これにより
-  // Service Workerの新キャッシュが全アセットを安全に更新する。
+  // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げ、sw.jsの
+  // ASSET_REFRESHへ対象パスを追加する。ほかの素材は端末内キャッシュを再利用する。
   let characterImagesReady = 0;
   let characterImagesFailed = 0;
   // 抽選した1体はループへ入る前に読み始める。最初の1体として優先されるため、
@@ -3384,19 +3370,17 @@
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
     const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
     const woodUiSettled = titleWoodUiReady + titleWoodUiFailed >= Object.keys(titleWoodUiImages).length;
-    const bgmSettled = startupBgmPreloadSettled >= startupBgmPreloadCount;
-    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled && bgmSettled;
+    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled;
   }
 
   function getCoreImageProgress() {
     return characterImagesReady + characterImagesFailed
       + titleWoodUiReady + titleWoodUiFailed
       + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
-      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0)
-      + startupBgmPreloadSettled;
+      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
   }
   function getCoreImageProgressRatio() {
-    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2 + startupBgmPreloadCount;
+    const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2;
     return Math.max(0, Math.min(1, getCoreImageProgress() / total));
   }
   // ロード画面用の背景透過エンブレム。タイトルロゴより軽いため先に読み込む。
@@ -4096,6 +4080,10 @@
 
   let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,prismBeam,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
   let barucopters = []; // [{owner,x,y,targetX,targetY,shotsFired,shotTimer,departTimer}]
+  // ハムルトンの雲はターン境界でだけ更新する。固定刻みの経過時間に依存させないため、
+  // 1vs1/2vs2とも「敵チームの行動回数3回」という同じ契約で残る。
+  let creamClouds = []; // [{x,y,radius,owner,enemyTurnsLeft}]
+  const CREAM_CLOUD_RADIUS = 76;
   let aimState = null;   // {owner, anchorX, anchorY, curX, curY}
 
   // v212の300pxから1.5倍。機銃の照準・弾道はこの出現位置から変えずに保つ。
@@ -4183,6 +4171,7 @@
       groundFlame: !!opts.groundFlame,
       drainHeal: !!opts.drainHeal,
       firework: !!opts.firework,
+      creamCloudMarker: !!opts.creamCloudMarker,
       jump: opts.jump != null ? !!opts.jump : !!(unitById(owner) && unitById(owner).jumpShot),
       fireworkShard: !!opts.fireworkShard,
       deathGateMarker: !!opts.deathGateMarker,
@@ -4747,6 +4736,9 @@
 
     if (activateSpecial && launchGeneratedSpecial(def, unit, owner, anchor, vx0, vy0)) {
       // 生成キャラクターの宣言的テンプレートは上で処理済み。
+    } else if (activateSpecial && def.key === 'hamulton') {
+      // 通常弾と同じ弾道で地点を指定し、着弾後だけ視界を遮る雲へ変える。直接ダメージは与えない。
+      fireProjectile(owner, anchor, vx0, vy0, { windMul: 1, gravityMul: 1, creamCloudMarker: true, noTerrain: true });
     } else if (activateSpecial && def.key === 'shinigami') {
       // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
       // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
@@ -5116,6 +5108,24 @@
   let lightningBeams = [];   // 着弾後に一瞬だけ残る電撃の残像
   let groundFlames = [];     // フェニーチェの着弾点から左右へ時間差で灯る炎
 
+  function spawnCreamCloud(p, x, y) {
+    if (!p || !p.creamCloudMarker) return;
+    // 同じハムルトンが再使用した時は、古い雲を残さず置き換える。
+    creamClouds = creamClouds.filter(cloud => cloud.owner !== p.owner);
+    creamClouds.push({ x, y, radius: CREAM_CLOUD_RADIUS, owner: p.owner, enemyTurnsLeft: 3 });
+  }
+  function unitIsInCreamCloud(unit) {
+    if (!unit || unitDefeated(unit)) return false;
+    const anchor = unitAnchor(unit);
+    return creamClouds.some(cloud => Math.hypot(anchor.x - cloud.x, anchor.y - cloud.y) <= cloud.radius + UNIT_RADIUS);
+  }
+  function advanceCreamCloudsForTurn(unit) {
+    if (!unit) return;
+    creamClouds = creamClouds
+      .map(cloud => teamOfOwner(cloud.owner) !== unit.team ? { ...cloud, enemyTurnsLeft: cloud.enemyTurnsLeft - 1 } : cloud)
+      .filter(cloud => cloud.enemyTurnsLeft > 0);
+  }
+
   const GROUND_FLAME_SIDE_COUNT = 3;
   const GROUND_FLAME_STRIDE = 42;
   const GROUND_FLAME_CARVE_RADIUS = 10;
@@ -5457,7 +5467,12 @@
 
   // ===== タイトル・キャラクター選択画面 =====
   let gamePhase = 'loading'; // 'loading' | 'press' | 'breaking' | 'title' | 'select' | 'freeSetup' | 'ranking' | 'battle'
-  let battleMode = 'normal'; // 'normal' | 'free' | 'tutorial'
+  let battleMode = 'normal'; // 'normal' | 'free' | 'tutorial' | 'demo'
+  // キャラ選択の「詳細」から開く、通信なし・操作なしの必殺技お試し戦場。
+  // 本戦のVS開始演出、BGM、戦績、中断保存とは完全に切り離す。
+  let specialDemo = null;
+  const specialDemoCloseBtn = { x: VW - 66, y: 38, w: 104, h: 36 };
+  const specialDemoReplayBtn = { x: VW / 2, y: VH - 48, w: 176, h: 38 };
   // 機能は依存モジュールがそろっている時だけ有効。公開後に不具合が見つかった場合も、
   // StageCoreを外したりゲーム本体を書き換えたりせず、読み込み前に
   // `globalThis.KATAMON_FEATURES = { customStages: false }` を置けば安全に停止できる。
@@ -5834,6 +5849,57 @@
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
     return true;
+  }
+
+  function selectSpecialDemoButton(card) {
+    return { x: card.x + card.w / 2 - 37, y: card.y - card.h / 2 + 70, w: 52, h: 19 };
+  }
+
+  function startSpecialDemo(key) {
+    const def = CHARACTERS[key];
+    if (!def || !isCharacterUnlocked(key)) return false;
+    // 選択画面からしか入らないが、戻す値を持っておくことで将来の入口追加にも安全にする。
+    specialDemo = {
+      key,
+      elapsed: 0,
+      launched: false,
+      restore: { battleMode, playerCharacter: player.character, cpuCharacter: cpu.character, winStreak, runStats: { ...runStats } }
+    };
+    battleMode = 'demo';
+    setMatchFormat('1v1');
+    player.character = key;
+    // 的は性能を見せるためだけの固定ダミー。CPU思考はデモ中に動かさない。
+    cpu.character = 'kyoryu';
+    gamePhase = 'battle';
+    winStreak = 0;
+    runStats = { damageDealt: 0, shots: 0 };
+    resetMatch(false);
+    // resetMatchが通常対戦向けに入れる開始カットインを、デモでは表示しない。
+    cutIn = null;
+    battleIntroPending = false;
+    player.specialCharge = SPECIAL_CHARGE_MAX;
+    player.x = STAGE_W * 0.29;
+    cpu.x = STAGE_W * 0.71;
+    initUnitOnGround(player);
+    initUnitOnGround(cpu);
+    faceAllUnitsTowardOpponents();
+    focusCameraOn((player.x + cpu.x) / 2, true, Math.min(player.y, cpu.y));
+    syncBgm();
+    return true;
+  }
+
+  function closeSpecialDemo() {
+    if (!specialDemo) return;
+    const restore = specialDemo.restore;
+    specialDemo = null;
+    battleMode = restore.battleMode;
+    player.character = restore.playerCharacter;
+    cpu.character = restore.cpuCharacter;
+    winStreak = restore.winStreak;
+    runStats = restore.runStats;
+    resetTransientBattleState();
+    gamePhase = 'select';
+    syncBgm();
   }
 
   // CPU BATTLEの連戦用。直前と同じ顔ぶれ・地形種別を続けず、毎試合の新鮮さを保つ。
@@ -6439,6 +6505,7 @@
       activeIndex, turnCount,
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
       nextWind: nextWind ? { ...nextWind } : { dir: wind.dir, strength: wind.strength, calmWind },
+      creamClouds: creamClouds.map(cloud => ({ x: cloud.x, y: cloud.y, radius: cloud.radius, owner: cloud.owner, enemyTurnsLeft: cloud.enemyTurnsLeft })),
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, y: cameraY, zoom: cameraZoom }
     };
@@ -6624,6 +6691,7 @@
   function resetTransientBattleState() {
     projectiles = [];
     barucopters = [];
+    creamClouds = [];
     aimState = null;
     moveDir = 0;
     inputMode = null;
@@ -6765,6 +6833,10 @@
     for (const u of units) faceUnitTowardOpponent(u);
 
     resetTransientBattleState();
+    creamClouds = Array.isArray(data.creamClouds)
+      ? data.creamClouds.filter(cloud => cloud && isFiniteIn(Number(cloud.x), -100, STAGE_W + 100) && isFiniteIn(Number(cloud.y), -100, STAGE_H + 100) && isFirebaseUnitId(cloud.owner) && Number.isInteger(cloud.enemyTurnsLeft) && cloud.enemyTurnsLeft > 0 && cloud.enemyTurnsLeft <= 3)
+        .map(cloud => ({ x: Number(cloud.x), y: Number(cloud.y), radius: CREAM_CLOUD_RADIUS, owner: cloud.owner, enemyTurnsLeft: cloud.enemyTurnsLeft }))
+      : [];
     turnOrder = Array.isArray(data.turnOrder) && data.turnOrder.length ? data.turnOrder.slice() : units.map(u => u.id);
     activeIndex = Math.max(0, Math.min(turnOrder.length - 1, Number(data.activeIndex) || 0));
     turnCount = data.turnCount;
@@ -11775,6 +11847,22 @@
     ctx.font = `900 ${def.special.length >= 7 ? 13 : 16}px ${UI_FONT_HEAVY}`;
     ctx.fillText(def.special, textX + contentW / 2, top + 100);
 
+    // 押すまで何も読み込まない、本物の必殺技お試し戦場への入口。
+    // 前面のカードだけを操作対象にして、ホイール送りと指がぶつからないようにする。
+    if (card.focused) {
+      const demoBtn = selectSpecialDemoButton(card);
+      selectRoundedRect(demoBtn.x - demoBtn.w / 2, demoBtn.y - demoBtn.h / 2, demoBtn.w, demoBtn.h, 5);
+      ctx.fillStyle = '#73501f';
+      ctx.fill();
+      ctx.strokeStyle = '#f0c775';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#fff0c7';
+      ctx.font = `900 9px ${UI_FONT_HEAVY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('詳細 ▶', demoBtn.x, demoBtn.y + 3);
+    }
+
     // 今後の正式説明を入れる紙札。木地と同色にせず、欄があることを一目で分ける。
     selectRoundedRect(textX, top + 119, contentW, 61, 6);
     const parchmentFill = ctx.createLinearGradient(textX, top + 119, contentRight, top + 180);
@@ -12436,6 +12524,7 @@
       activeIndex = (activeIndex + 1) % turnOrder.length;
       const next = activeUnit();
       if (next.hp <= 0) continue;
+      advanceCreamCloudsForTurn(next);
       if (next.actionSkipTurns > 0) {
         showActionSkipTurn(next, () => {
           next.actionSkipTurns--;
@@ -13945,7 +14034,7 @@
     // 悪魔の必殺を構えている間は弾が直進するので、ガイドも重力・風を切って直線にする。
     const straightGuide = specialArmed && isSpecialReady(me) && def.key === 'akuma';
     const gravity = straightGuide ? 0 : GRAVITY * shotProfile.gravityMul;
-    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul;
+    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul * (unitIsInCreamCloud(me) ? 0.5 : 1);
     const steps = 14;
     const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul;
 
@@ -15753,6 +15842,21 @@
     ctx.restore();
   }
 
+  function drawCreamClouds() {
+    for (const cloud of creamClouds) {
+      ctx.save();
+      const glow = ctx.createRadialGradient(cloud.x, cloud.y - 12, 8, cloud.x, cloud.y, cloud.radius);
+      glow.addColorStop(0, 'rgba(255,249,194,0.78)');
+      glow.addColorStop(0.55, 'rgba(255,222,91,0.48)');
+      glow.addColorStop(1, 'rgba(242,183,51,0.05)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.ellipse(cloud.x, cloud.y - 10, cloud.radius, cloud.radius * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,241,157,0.74)';
+      for (const offset of [-0.45, 0, 0.42]) { ctx.beginPath(); ctx.arc(cloud.x + cloud.radius * offset, cloud.y - 22 - Math.abs(offset) * 10, cloud.radius * 0.25, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+
   function drawGroundFlames() {
     for (const flame of groundFlames) {
       if (flame.delay > 0) continue;
@@ -16994,6 +17098,34 @@
     }
   }
 
+  function drawSpecialDemoOverlay() {
+    const def = CHARACTERS[specialDemo?.key];
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,8,12,0.72)';
+    ctx.fillRect(0, 0, VW, 70);
+    drawOutlinedText('必殺技デモ', 18, 27, {
+      align: 'left', font: `900 14px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+    });
+    drawOutlinedText(def?.special || '', 18, 49, {
+      align: 'left', font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+    });
+    drawIronPlate(specialDemoCloseBtn.x, specialDemoCloseBtn.y, specialDemoCloseBtn.w, specialDemoCloseBtn.h, {
+      cut: 8, lineWidth: 1.3, rivets: true, rivetInset: 8, rivetRadius: 2
+    });
+    drawOutlinedText('× 戻る', specialDemoCloseBtn.x, specialDemoCloseBtn.y + 4, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+    });
+    if (specialDemo?.launched) {
+      drawIronPlate(specialDemoReplayBtn.x, specialDemoReplayBtn.y, specialDemoReplayBtn.w, specialDemoReplayBtn.h, {
+        cut: 8, lineWidth: 1.3, rivets: true, rivetInset: 9, rivetRadius: 2
+      });
+      drawOutlinedText('もう一回 ▶', specialDemoReplayBtn.x, specialDemoReplayBtn.y + 4, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3
+      });
+    }
+    ctx.restore();
+  }
+
   function render() {
     // 地形名・テーマ表示は対戦中だけ見せ、タイトルやキャラ選択では内部情報を隠す。
     debugPanel.style.display = 'none';
@@ -17081,12 +17213,21 @@
     drawParticles();
     for (const u of units) drawUnit(u);
     drawScorpionRailImpactSpikes();
+    drawCreamClouds();
     drawGroundFlames();
     drawFloatTexts();
     ctx.restore();
 
     // UIレイヤー(スクリーン固定)
     drawDeadLine();
+    if (specialDemo) {
+      drawSpecialDemoOverlay();
+      drawSpecialFlash();
+      drawSoundToggle();
+      drawSoundPanel();
+      ctx.restore();
+      return;
+    }
     drawOffscreenIndicator();
     drawBattleHudBackdrop();
     drawWindMeter();
@@ -17376,6 +17517,13 @@
         return;
       }
       const tappedCard = getSelectCardAtPoint(p0);
+      if (tappedCard && tappedCard.focused && hitRect(p0, selectSpecialDemoButton(tappedCard))) {
+        inputMode = 'specialDemoOpen';
+        inputPointerId = e.pointerId;
+        selectWheelTapKey = tappedCard.key;
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
       selectWheelDragging = true;
       selectWheelLastY = p0.y;
       selectWheelLastTime = e.timeStamp;
@@ -17385,6 +17533,14 @@
       inputMode = 'selectWheel';
       inputPointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (gamePhase === 'battle' && specialDemo) {
+      if (hitRect(p0, specialDemoCloseBtn) || hitRect(p0, specialDemoReplayBtn)) {
+        inputMode = 'specialDemoControl';
+        inputPointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+      }
       return;
     }
 
@@ -17629,6 +17785,35 @@
       }
       return;
     }
+    if (inputMode === 'specialDemoOpen' && e.pointerId === inputPointerId) {
+      const p = canvasPointFromEvent(e);
+      const key = selectWheelTapKey;
+      const focused = getRenderedSelectCards().find(card => card.focused && card.key === key);
+      inputMode = null;
+      inputPointerId = null;
+      selectWheelTapKey = null;
+      if (e.type === 'pointerup' && focused && hitRect(p, selectSpecialDemoButton(focused))) {
+        playUiSound();
+        startSpecialDemo(key);
+      }
+      return;
+    }
+    if (inputMode === 'specialDemoControl' && e.pointerId === inputPointerId) {
+      const p = canvasPointFromEvent(e);
+      inputMode = null;
+      inputPointerId = null;
+      if (e.type !== 'pointerup' || !specialDemo) return;
+      if (hitRect(p, specialDemoCloseBtn)) {
+        playUiSound();
+        closeSpecialDemo();
+      } else if (hitRect(p, specialDemoReplayBtn)) {
+        const key = specialDemo.key;
+        playUiSound();
+        closeSpecialDemo();
+        startSpecialDemo(key);
+      }
+      return;
+    }
     if (inputMode === 'start' && e.pointerId === inputPointerId) {
       inputMode = null;
       inputPointerId = null;
@@ -17761,7 +17946,9 @@
     // チュートリアルの地形は固定する。ランダムだと闘技場のように中央が奈落の地形を引き、
     // 的が足場の無い場所へ置かれて落ちてしまう(そのまま「当てた」と誤判定していた)。
     // なだらかな地形なら、誰がやっても同じ手触りで覚えられる。
-    const selectedTerrain = battleMode === 'tutorial'
+    const selectedTerrain = battleMode === 'demo'
+      ? 'rolling'
+      : battleMode === 'tutorial'
       ? 'rolling'
       : (isBossMatch
         ? 'tieredBasin'
@@ -17780,6 +17967,9 @@
     } else {
       newTerrain(selectedTerrain);
     }
+    // 地形・使用キャラが確定した直後に、この対戦の1曲だけを準備する。
+    // この後のVSカットイン中に読み込みが進むため、ゲーム開始を待たせない。
+    if (battleMode !== 'demo') primeStageBgm(currentThemeKey);
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
     if (isBossMatch) {
@@ -17841,7 +18031,7 @@
     startTurn();
     // Firebaseホストは、このあと開始スナップショットの保存・送信を待つ。その間も
     // ロビーの裏でgameLoopが進むので、closeOnlineLobby後に改めて表示する。
-    if (!(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();
+    if (battleMode !== 'demo' && !(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();
     // 戦闘開始・再戦・連戦(ボス連勝)のすべてがここを通る。gamePhaseがbattle以外なら
     // syncBgm内部のdesiredBgmが'stage'を返さないので、実質的に何もしない
     // (例:suspendRunToTitleはresetMatch呼び出し前にgamePhaseをtitleへ戻して抑止している)。
@@ -18203,6 +18393,22 @@
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
+    if (specialDemo) {
+      specialDemo.elapsed += dt;
+      // 画面へ切り替わった直後に少しだけ間を置き、キャラと的を見てから必殺を出す。
+      if (!specialDemo.launched && specialDemo.elapsed >= 0.42) {
+        specialDemo.launched = true;
+        const dx = cpu.x - player.x;
+        launchShot(player, unitAnchor(player), Math.sign(dx || 1) * 640, -185, true, false, false);
+        awaitingResolve = true;
+      }
+      // 長い技も見せ切れる時間を確保し、放置しても選択画面へ安全に戻す。
+      if (specialDemo.elapsed >= 8.5) {
+        closeSpecialDemo();
+        return;
+      }
+    }
+
     // 物理を何刻み進めるかを先に確定する。実際の弾と落下の計算は、
     // カットイン判定の後で同じ回数だけ回す(カットイン中は従来どおり進めない)。
     const physicsSteps = takePhysicsSteps(dt);
@@ -18491,6 +18697,8 @@
               resolveCoolKaiOnigiriUnitImpact(p, u, p.x, p.y);
             } else if (p.deathGateMarker) {
               spawnDeathGate(p, p.x, p.y);
+            } else if (p.creamCloudMarker) {
+              spawnCreamCloud(p, p.x, p.y);
             } else if (p.emp) {
               emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
             } else if (p.firework) {
@@ -18534,6 +18742,8 @@
           resolveCoolKaiOnigiriSurfaceImpact(p, obstacleHit.x, obstacleHit.y);
         } else if (p.deathGateMarker) {
           spawnDeathGate(p, obstacleHit.x, obstacleHit.y);
+        } else if (p.creamCloudMarker) {
+          spawnCreamCloud(p, obstacleHit.x, obstacleHit.y);
         } else if (p.emp) {
           emitEmp(obstacleHit.x, obstacleHit.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         } else if (p.firework) {
@@ -18574,6 +18784,7 @@
         else if (p.barucopterBullet) resolveBarucopterBulletSurfaceImpact(p, p.x, p.y);
         else if (p.coolKaiOnigiri) resolveCoolKaiOnigiriSurfaceImpact(p, p.x, p.y);
         else if (p.deathGateMarker) spawnDeathGate(p, p.x, p.y);
+        else if (p.creamCloudMarker) spawnCreamCloud(p, p.x, p.y);
         else if (p.emp) emitEmp(p.x, p.y, p.empRadius, p.owner, p.empTurns, p.actionSkip ? 'turnSkip' : 'moveLock');
         else if (p.firework) {
           explodeProjectileAt(p, p.x, p.y);
@@ -18595,6 +18806,8 @@
   // 入力・CPU思考・ターン進行。端末ごとに差が出ても実害がない処理なので、
   // 描画フレーム基準のままでよい(移動結果は move/fire パケットで座標を送る)。
   function updateAfterPhysics(dt) {
+    // デモは1発だけを見せる。CPUの反撃・手番交代・通信・戦績へ進ませない。
+    if (specialDemo) return;
     // 移動(この端末の手番のみ・燃料制・長押しボタン)
     const me = localUnit();
     if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {

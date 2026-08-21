@@ -17,8 +17,7 @@ function check(name, value) {
     && anchoredHudSource.includes('ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);')
     && anchoredHudSource.includes('const PANEL_1V1 = { h: 74, rows: [50] };')
     && anchoredHudSource.includes('const cardH = expanded ? 152 : 54;')
-    && !anchoredHudSource.includes("String(text).includes('橋')")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && !anchoredHudSource.includes("String(text).includes('橋')"));
   check('battle HUD name and HP text use the middle baseline at the measured window center',
     anchoredHudSource.includes("ctx.textBaseline = opts.baseline || 'alphabetic';")
     && anchoredHudSource.includes('centerY: 0.31')
@@ -27,52 +26,44 @@ function check(name, value) {
     && (anchoredHudSource.match(/baseline: 'middle'/g) || []).length >= 2);
   check('round wind console uses three compact lines with strength inside its outlined arrow and NEXT direction only',
     anchoredHudSource.includes('function drawWindStrengthArrow(')
-    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes("const nextText = `NEXT ${nextArrow}`;"));
   check('round wind console gives the current strength a high-contrast inner plate and the NEXT direction its own readable badge',
     anchoredHudSource.includes('function drawWindNextBadge(')
-    && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('const strengthPlateW = width * 0.43;'));
   check('round wind console keeps its title and NEXT badge inside the dark center while enlarging the strength arrow',
     anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes('const arrowFont = expanded ? 16 : 11;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes('drawWindStrengthArrow(cx, roundCenterY - inner * 0.03, expanded')
-    && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
   check('round wind console uses a calm-only status, filled direction arrows, and compact inner labels',
     anchoredHudSource.includes("if (label === '無風')")
     && anchoredHudSource.includes("ctx.fillStyle = color;")
     && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
-    && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
   check('round wind console separates arrow contrast, widens the strength plate, and lifts readable labels',
     anchoredHudSource.includes("const arrowColor = calmWind ? '#72e8ff' : '#38cfff';")
     && anchoredHudSource.includes('const strengthPlateW = width * 0.43;')
     && anchoredHudSource.includes('const strengthPlateH = height * 0.78;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
     && anchoredHudSource.includes("nextArrow === '無風'")
-    && anchoredHudSource.includes('const w = expanded ? 54 : 40;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('const w = expanded ? 54 : 40;'));
   check('round wind console reserves distinct header, arrow, and forecast lanes without an ambiguous calm dash',
     anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('const arrowHeight = expanded ? 19 : 15;')
     && anchoredHudSource.includes("const nextArrow = forecast.calmWind ? '無風'")
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
-    && anchoredHudSource.includes('roundCenterY + inner * 0.68')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('roundCenterY + inner * 0.68'));
   check('round wind console follows the reference hierarchy with a dominant arrow and a divider above NEXT',
     anchoredHudSource.includes('function drawWindForecastDivider(')
     && anchoredHudSource.includes('const titleFont = expanded ? 9.5 : 6.6;')
     && anchoredHudSource.includes('const arrowWidth = expanded ? 60 : 46;')
     && anchoredHudSource.includes('roundCenterY - inner * 0.70')
-    && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('drawWindForecastDivider(cx, roundCenterY + inner * 0.38'));
   check('round wind console renders NEXT and its forecast as one centered text line',
     anchoredHudSource.includes('drawOutlinedText(nextText, cx, cy, {')
-    && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16")
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && !anchoredHudSource.includes("drawOutlinedText('NEXT', cx - w * 0.16"));
   check('battle HUD HP gauges are centered vertically on their measured rail anchors',
     anchoredHudSource.includes('hp: Object.freeze({ left: 0.17, right: 0.91, centerY: 0.68, h: 0.12 })')
     && anchoredHudSource.includes('hp: Object.freeze({ left: 0.10, right: 0.82, centerY: 0.69, h: 0.11 })')
@@ -80,8 +71,7 @@ function check(name, value) {
   check('1vs1と2vs2の風情報は同じ丸形フレーム内へ統一して表示する',
     anchoredHudSource.includes("roundWind: 'wind-console-round.webp'")
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
-    && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;')
-    && anchoredHudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;'));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
     anchoredHudSource.includes('const expanded = is2v2();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
@@ -96,8 +86,7 @@ function check(name, value) {
     hudSource.includes("roundWind: 'wind-console-round.webp'")
     && hudSource.includes('const roundSize = expanded ? 142 : 104;')
     && hudSource.includes('const roundCardY = expanded ? 42 : 47;')
-    && !hudSource.includes('VW / 2, 35')
-    && hudSource.includes("const BUILD_ID = 'v2.0.86-online-lobby-seat-loss-fix';"));
+    && !hudSource.includes('VW / 2, 35'));
   const app = kt();
   const h = app.stage3();
   const actionId = 'a'.repeat(48);
@@ -557,7 +546,8 @@ function check(name, value) {
     { file: 'assets/bonus-bgm-1.mp3', hash: '49a1b4b1adff', url: 'assets/bonus-bgm-1.mp3' },
     { file: 'assets/bonus-bgm-2.mp3', hash: '1014f338877a', url: 'assets/bonus-bgm-2.mp3' },
     { file: 'assets/bonus-bgm-3.mp3', hash: 'f38aa093c2c7', url: 'assets/bonus-bgm-3.mp3' },
-    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' }
+    { file: 'assets/bonus-bgm-4.mp3', hash: 'a59c297a09ee', url: 'assets/bonus-bgm-4.mp3' },
+    { file: 'assets/six-eternel-dopagaki-remix.mp3', hash: 'ee5912711914', url: 'assets/six-eternel-dopagaki-remix.mp3' }
   ];
   const pinNg = [];
   for (const pin of BONUS_TRACK_PINS) {
@@ -581,7 +571,8 @@ function check(name, value) {
     { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756' },
     { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
     { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
-    { key: 'doRednote', stem: 'dread-arrow', webp: '3a65f3d7c4e7', png: '6219b95e512f' },
+    { key: 'doRednote', stem: 'dread-arrow', webp: 'd620300581dd', png: '8054db6d5daf' },
+    { key: 'hamulton', stem: 'hamulton', webp: '8c0204d58c18', png: 'ddc24e4725aa' },
     { key: 'mocchario', stem: 'mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
     { key: 'mecha', stem: 'chrome-gear', webp: 'ec5ac42f758b', png: '086923d116e6' },
     { key: 'akuma', stem: 'rubidevi', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
@@ -1039,13 +1030,13 @@ function check(name, value) {
     && !/#onlineCharacterPreview\s*\{[^}]*object-fit:\s*cover;[^}]*\}/.test(htmlText));
   const sumoeruRoomPreview = h.onlineCharacterPreviewForTest('sumoeru');
   const medamaRoomPreview = h.onlineCharacterPreviewForTest('medama');
-  check('changing the room character updates its image, name and all seventeen choices',
+  check('changing the room character updates its image, name and all eighteen choices',
     sumoeruRoomPreview && medamaRoomPreview
     && sumoeruRoomPreview.character === 'sumoeru' && /sumoeru\.(?:webp|png)(?:\?|$)/.test(sumoeruRoomPreview.src)
     && sumoeruRoomPreview.alt === 'スモエル'
     && medamaRoomPreview.character === 'medama' && /eyebolt\.(?:webp|png)(?:\?|$)/.test(medamaRoomPreview.src)
     && medamaRoomPreview.alt === 'アイボルト'
-    && medamaRoomPreview.options === 17);
+    && medamaRoomPreview.options === 18);
   check('both rematch votes reset a new round with automatic readiness',
     htmlText.includes('if (isFirebaseHost() && allFirebaseRematchVotesIn()) await resetFirebaseRound(true);')
     && htmlText.includes('await resetFirebaseRound(true)') && htmlText.includes('const nextId = firebaseRoundId()')

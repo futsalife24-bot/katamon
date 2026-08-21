@@ -77,11 +77,14 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
     && indexHtml.includes('const emblemSize = 58')
     && indexHtml.includes('const progressBarY = VH / 2 + 170'),
   'progress character loader missing');
-check('初回BATTLE用のBGMとロゴ動画を先読み・ウォームアップする',
+check('対戦開始前に必要な1曲だけとロゴ動画を準備する',
   indexHtml.includes('rel="preload" as="video"')
     && indexHtml.includes('battleStartLogoVideo.load()')
     && indexHtml.includes('function primeFirstBattleMedia()')
-    && indexHtml.includes('primeFirstBattleMedia();'),
+    && indexHtml.includes('primeFirstBattleMedia();')
+    && indexHtml.includes('function primeStageBgm(themeKey)')
+    && indexHtml.includes('primeStageBgm(currentThemeKey);')
+    && !indexHtml.includes("stageBgm.src = STAGE_BGM_SOURCES.coolKai;"),
   'first battle media preparation missing');
 check('BATTLE画面に全ユニットのデバフ名と残りターンを表示する',
   indexHtml.includes('function debuffStatusEntries(u)')
@@ -518,6 +521,7 @@ check('デスゲートはDEAD LINEの下から固定射程',
   deathGate.range === 260 && deathGate.speed === 310 && deathGate.bottomRadius === 26 && deathGate.topRadius === 8 && deathGate.curvePower === 3 && deathGate.stride === 14 && deathGate.startDepth === 34,
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
+const dreadArrow = kt.character('doRednote');
 // facesLeft は「元画像がどちら向きか」であって「敵を向くか」ではない。敵の方を向くことは
 // 後段の向き検査(全キャラ・左右両配置)で確認している。ここは画像を差し替えた時に
 // 設定の追随漏れへ気づくための固定。2026-08-03に右向きの絵へ差し替えたため false。
@@ -671,6 +675,23 @@ const shinigami = kt.character('shinigami');
 check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
+check('ドレッドアローの新画像は右向きなので反転しない',
+  !dreadArrow.facesLeft,
+  JSON.stringify(dreadArrow));
+check('ドレッドアローとクール=カイは透明余白を除いて大きく表示する',
+  dreadArrow.imageCrop?.sw <= 0.72 && dreadArrow.imageCrop?.sh <= 0.65
+    && kt.character('coolKai').imageCrop?.sx >= 0.12
+    && kt.character('coolKai').previewImageCrop?.sw <= 0.72,
+  JSON.stringify({ dreadArrow: dreadArrow.imageCrop, coolKai: kt.character('coolKai').imageCrop }));
+check('キャラ選択の必殺技詳細はVSカットインなしの通信不要デモを開く',
+  indexHtml.includes("function startSpecialDemo(key)")
+    && indexHtml.includes("battleMode = 'demo';")
+    && indexHtml.includes("if (battleMode !== 'demo' && !(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();")
+    && indexHtml.includes("if (battleMode !== 'demo') primeStageBgm(currentThemeKey);")
+    && indexHtml.includes("if (specialDemo) return;")
+    && indexHtml.includes("ctx.fillText('詳細 ▶'")
+    && indexHtml.includes("drawOutlinedText('必殺技デモ'"),
+  '必殺技デモの独立した開始・演出省略・入力停止がありません');
 kt.startBattle('shinigami');
 const vs1v1 = kt.matchupCutIn();
 check('1vs1の開始時は両陣営1体ずつのVSカットイン',
@@ -1241,7 +1262,7 @@ check('左向き素材のキャラが検査対象に含まれている', facesLe
 // 相手に背を向ける。絵と設定が合っているかは自動では判定できない(人の目でしか分からない)
 // ので、せめて設定が意図せず変わったことに気づけるようにする。
 // 画像を差し替えた時は、実機で向きを確認したうえでこの一覧も更新すること。
-const EXPECTED_LEFT_FACING = ['sumoeru', 'doRednote', 'akuma', 'kishi', 'neko'];
+const EXPECTED_LEFT_FACING = ['sumoeru', 'akuma', 'kishi', 'neko'];
 const actualLeftFacing = kt.chars().filter(k => kt.character(k).facesLeft);
 check('左向き素材として登録されているキャラの一覧が変わっていない',
   actualLeftFacing.join(',') === EXPECTED_LEFT_FACING.join(','),
@@ -1608,7 +1629,7 @@ check('クール=カイの握り飯47発は見た目の回転だけ個別にラ�
   JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
   indexHtml.includes('function characterPreviewImageRect(key, img)')
-    && indexHtml.includes('previewImageCrop: { sx: 0.13, sy: 0.36, sw: 0.78, sh: 0.48 }')
+    && indexHtml.includes('previewImageCrop: { sx: 0.14, sy: 0.35, sw: 0.72, sh: 0.51 }')
     && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
@@ -1898,15 +1919,16 @@ const bonusBtn = kt.bonusBtn();
 function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
 
 const bonusTrackCount = kt.bonusTrackCount();
-check('おまけ曲が5曲登録されている', bonusTrackCount === 5, String(bonusTrackCount));
+check('おまけ曲が6曲登録されている', bonusTrackCount === 6, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
 tapBonus();
 check('おまけを押すと全BGMのサウンドテストを開く',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'none'
     && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
-    && indexHtml.includes('const startupBgmPreloadCount = startupBgmPreloads.length'),
+    && indexHtml.includes('const startupBgmPreloadCount = 0')
+    && !indexHtml.includes('const startupBgmPreloads ='),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
-check('サウンドテストはタイトル・ロビー・全ステージ・おまけ5曲を登録する',
+check('サウンドテストはタイトル・ロビー・全ステージ・おまけ6曲を登録する',
   indexHtml.includes("key: 'title'")
     && indexHtml.includes("key: 'room'")
     && indexHtml.includes("STAGE_BGM_SOURCES.coolKai")
@@ -1932,7 +1954,7 @@ kt.startBattle('coolKai');
 check('クールカイを選んだ対戦は専用BGMを固定で流す',
   kt.bgm().desired === 'stage'
     && kt.bgm().stageTheme === 'coolKai'
-    && kt.bgm().stageSrc.includes('SIX ÉTERNEL ―愛はひとつじゃない―.mp3'),
+    && kt.bgm().stageSrc.includes('six-eternel-dopagaki-remix.mp3'),
   JSON.stringify(kt.bgm()));
 check('クール=カイの連戦は専用BGMを先頭へ戻さず継続する',
   indexHtml.includes('const continueCoolKaiBgm = desired === \'stage\'')
@@ -1941,9 +1963,9 @@ check('クール=カイの連戦は専用BGMを先頭へ戻さず継続する',
   'continuous dedicated BGM guard missing');
 kt.setPhase('title');
 kt.syncBgm();
-check('おまけ5とBATTLEロゴは専用曲名を表示する',
-  indexHtml.includes("src: 'assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3'")
-    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―'")
+check('おまけ6とBATTLEロゴはドパガキリミックス名を表示する',
+  indexHtml.includes("src: 'assets/six-eternel-dopagaki-remix.mp3'")
+    && indexHtml.includes("label: 'SIX ÉTERNEL ―愛はひとつじゃない―（ドパガキリミックス）'")
     && indexHtml.includes('drawBgmNowPlayingLabel(748, UI.gold)'),
   'BGM display label missing');
 check('タイトルへ戻ってもおまけ曲は鳴り出さない',
