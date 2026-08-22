@@ -1369,6 +1369,24 @@ function check(name, value) {
     && /function sendFirebaseSeatHeartbeat\(\)[\s\S]{0,1100}seatHeartbeatFailures[\s\S]{0,500}FIREBASE_SEAT_HEARTBEAT_MAX_FAILURES/.test(htmlText)
     && htmlText.includes("window.addEventListener('online', handleFirebaseNetworkOnline);")
     && htmlText.includes("window.addEventListener('offline', handleFirebaseNetworkOffline);"));
+  const lobbyStateStart = htmlText.indexOf('function applyFirebaseLobbyState(msg)');
+  const lobbyStateEnd = htmlText.indexOf('function resetLocalFirebaseRoundState(', lobbyStateStart);
+  const lobbyStateSrc = lobbyStateStart >= 0 && lobbyStateEnd > lobbyStateStart
+    ? htmlText.slice(lobbyStateStart, lobbyStateEnd) : '';
+  check('an old lobby roster cannot evict a newly seated guest without checking Firebase slots',
+    lobbyStateSrc.includes('const reportedMine = msg.slots[online.seat];')
+    && lobbyStateSrc.includes("if (!reportedMine || reportedMine.uid !== online.auth.uid) {")
+    && lobbyStateSrc.includes('void checkOwnFirebaseSeatLost();')
+    && !/online\.slots = msg\.slots;[\s\S]{0,180}noticeOwnFirebaseSeatLost/.test(lobbyStateSrc));
+  const seatLossStart = htmlText.indexOf('async function checkOwnFirebaseSeatLost()');
+  const seatLossEnd = htmlText.indexOf('// 相手が座ったら', seatLossStart);
+  const seatLossSrc = seatLossStart >= 0 && seatLossEnd > seatLossStart
+    ? htmlText.slice(seatLossStart, seatLossEnd) : '';
+  check('simultaneous stale lobby rosters share one Firebase seat-loss check',
+    seatLossSrc.includes('online.seatLossChecking')
+    && seatLossSrc.includes('checking.seatLossChecking = true;')
+    && seatLossSrc.includes('checking.seatLossChecking = false;')
+    && htmlText.includes('seatReleaseChecking: false, seatLossChecking: false'));
   check('the client uses the same strict 90-second seenAt boundary as the rules',
     !h.firebaseSeatHeartbeatAllowsRelease(200000, 200000 - h.seatStaleReleaseMs())
     && h.firebaseSeatHeartbeatAllowsRelease(200001, 200000 - h.seatStaleReleaseMs()));

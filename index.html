@@ -649,10 +649,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.96-special-demo';
+  const BUILD_ID = 'v2.0.97-online-lobby-seat-loss-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.97', date: '2026/08/21', summary: 'オンライン入室直後の誤った退出を防止' },
     { version: 'v2.0.96', date: '2026/08/20', summary: '必殺技の詳細から試し打ちデモを再生' },
     { version: 'v2.0.95', date: '2026/08/20', summary: 'ドレッドアロー・クール=カイの絵を大きく表示' },
     { version: 'v2.0.94', date: '2026/08/20', summary: 'ドレッドアローの新画像の向きを正しく修正' },
@@ -9292,15 +9293,18 @@
   // 自席が他人のものになっている/消えている＝ホストに空けられた。
   // 名簿は lobbyState でも降ってくるので、そちらからも呼ぶ。
   async function checkOwnFirebaseSeatLost() {
-    if (!online || online.kind !== 'firebase' || !online.seat || online.seatLostHandled) return;
+    if (!online || online.kind !== 'firebase' || !online.seat || online.seatLostHandled || online.seatLossChecking) return;
     const checking = online;
+    checking.seatLossChecking = true;
     try {
       const slots = await firebaseRequest(`rooms/${checking.room}/slots`, checking.auth);
       if (online !== checking || !slots) return;
-      online.slots = slots;
+      checking.slots = slots;
     } catch (_) {
       // 部屋ごと読めないのは席の問題ではない(期限切れ・通信不良)。ここでは何もしない。
       return;
+    } finally {
+      if (online === checking) checking.seatLossChecking = false;
     }
     noticeOwnFirebaseSeatLost();
   }
@@ -9515,7 +9519,7 @@
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
       lobbyLiveness: { clockMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
-      seatSeen: {}, seatStale: {}, seatReleaseReady: {}, seatReleaseNextCheckMs: 0, seatReleaseChecking: false,
+      seatSeen: {}, seatStale: {}, seatReleaseReady: {}, seatReleaseNextCheckMs: 0, seatReleaseChecking: false, seatLossChecking: false,
       // 試合中の席ごとの無音時間(段D)。ロビーの seatSeen とは別物なので混ぜない。
       matchSeatSilentMs: {}, matchSeatCheckedAt: firebaseMonotonicNow(), matchSeatVerifyWaitMs: 0, matchSeatChecking: false,
       matchSeatTakeoverFails: {},
@@ -9880,6 +9884,14 @@
     if (msg.seat !== 'p1') return;
     rememberFirebaseName(msg);
     if (msg.slots && typeof msg.slots === 'object') {
+      const reportedMine = msg.slots[online.seat];
+      // lobbyStateはSSEの過去履歴や並行した名簿取得で古いことがある。この通知だけで
+      // 自席喪失を確定すると、入室直後の正しい席まで誤って捨ててしまう。Firebase正本の
+      // slotsを確認してからだけ退出し、確認中は古い名簿でほかの状態も巻き戻さない。
+      if (!reportedMine || reportedMine.uid !== online.auth.uid) {
+        void checkOwnFirebaseSeatLost();
+        return;
+      }
       const before = online.slots || {};
       // 段D。試合中に席が消えたら、ホストがCPUへ引き継いだということ。
       // 名簿を入れ替える前に、どの席が消えたかを控えておく。
@@ -9887,9 +9899,6 @@
         ? FIREBASE_SEATS.filter(s => s !== online.seat && before[s] && before[s].uid && !(msg.slots[s] && msg.slots[s].uid))
         : [];
       online.slots = msg.slots;
-      // ホストが席を空けた直後にこの名簿が届く。自席が消えていたら、その場で気づく。
-      noticeOwnFirebaseSeatLost();
-      if (!online) return;
       for (const seat of takenOver) applyFirebaseSeatTakeover(seat);
       if (!online) return;
     }
