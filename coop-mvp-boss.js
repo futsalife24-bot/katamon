@@ -196,6 +196,21 @@
     return next;
   }
 
+  function carveTerrain(stage, impactX, radius) {
+    const next = clone(stage);
+    const center = finite(impactX, -9999);
+    const craterRadius = Math.max(0, finite(radius, 0));
+    if (!Array.isArray(next.segments) || craterRadius <= 0) return next;
+    next.segments.forEach((segments, column) => {
+      const x = column * next.columnWidth;
+      const distance = Math.abs(x - center);
+      if (distance > craterRadius || x < next.rescuePlatform.width || !segments?.[0]) return;
+      const depth = Math.sqrt(Math.max(0, craterRadius * craterRadius - distance * distance)) * 0.72;
+      segments[0][0] = clamp(segments[0][0] + depth, segments[0][0], next.terrainBottom);
+    });
+    return next;
+  }
+
   function preloadBossAssets(browserRoot) {
     if (!browserRoot?.Image) return Promise.resolve({ phase1: null, phase2: null });
     const load = (src) => new Promise((resolve) => {
@@ -258,6 +273,7 @@
     resolveImpactTarget,
     applyBossDamage,
     activatePhase2,
+    carveTerrain,
     preloadBossAssets,
     drawBoss,
     terrainTopAt,

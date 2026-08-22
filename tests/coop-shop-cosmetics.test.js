@@ -56,6 +56,8 @@ assert.match(source, /max-width:480px.*grid-template-columns:repeat\(2,minmax\(0
   'スマホでは説明と価格を読める2列へ広げる');
 assert.match(source, /max-width:480px.*\.mvp-card\{min-height:250px.*\.mvp-card p\{font-size:10px;min-height:72px/s,
   'スマホの長い説明文と価格を重ねない高さを確保する');
+assert.match(source, /\.mvp-foot\{height:58px.*<footer class="mvp-foot"><button class="mvp-close"/s,
+  '閉じるボタンを商品カードへ重ねず、独立した黒鉄フッターへ置く');
 assert.doesNotMatch(source, /refund|返品する|返金/u, '返品機能を作らない');
 assert.match(source, /価格:<\/b>.*現在残高:/s, '購入前に価格と現在残高を同じ確認画面へ出す');
 assert.match(source, /購入完了.*装備する/s, '購入後に装備する／あとでを表示する');
@@ -70,5 +72,8 @@ assert.match(source, /rgba\(18,46,48,.42\).*url\('assets\/wall.jpg'\)/s,
 const gameSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert.match(gameSource, /soundTestShopBtn/, '既存おまけ画面へ小さいショップ入口を置く');
 assert.match(gameSource, /soundTestAchievementsBtn/, '既存おまけ画面へ小さい実績入口を置く');
+assert.match(gameSource, /activeCosmetics\.icon === 'icon-brass'/, '真鍮アイコンを既存HPカードへ適用する');
+assert.match(gameSource, /activeCosmetics\.projectile === 'shell-amber'/, '琥珀砲弾を既存の通常弾描画へ適用する');
+assert.match(gameSource, /activeCosmetics\.impact === 'impact-cyan'/, '蒼光着弾を既存の爆発粒子へ適用する');
 
 console.log('9商品ショップ・簡易DEMO・3コスメ・18実績一覧（57/57 passed）');

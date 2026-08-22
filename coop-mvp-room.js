@@ -74,8 +74,8 @@
 
   function canHostStart(slots, settings) {
     const occupied = SEATS.map((seat) => slots?.[seat]).filter((slot) => slot?.uid);
-    if (!occupied.length || occupied.some((slot) => slot.ready !== true)) return false;
-    return settings?.aiFill === true || occupied.length >= 2;
+    if (occupied.length < 2 || occupied.some((slot) => slot.ready !== true)) return false;
+    return true;
   }
 
   function sourceNamespaces() { return 'coopOpen/coopRooms'; }
@@ -102,6 +102,7 @@
     const characterIds = characters.map((entry) => entry.id);
     let session = null;
     let busy = false;
+    let battleActive = false;
     let pollTimer = 0;
     let heartbeatTimer = 0;
 
@@ -261,8 +262,8 @@
       const mySlot = session?.room?.slots?.[session.seat];
       element('coopReady').textContent = mySlot?.ready ? '準備を取り消す' : '準備完了';
       const startable = session?.role === 'host' && canHostStart(session.room.slots, session.room.settings);
-      const start = element('coopStart'); start.disabled = true;
-      start.textContent = startable ? '出撃可能（戦闘接続は次工程）' : '全員の準備を待っています';
+      const start = element('coopStart'); start.disabled = !startable || busy;
+      start.textContent = startable ? '超大型要塞へ出撃' : '全員の準備を待っています';
     }
 
     function renderRoom() {
@@ -280,6 +281,27 @@
       setStatus('参加者と装備を同期しています。');
     }
 
+    function launchBattle() {
+      if (!session || battleActive) return false;
+      const battle = browserRoot.KatamonCoopBattle;
+      if (!battle?.startBrowser) { setStatus('協力戦を読み込めませんでした。'); return false; }
+      stopTimers(); battleActive = true; overlay.classList.remove('open');
+      const started = battle.startBrowser({
+        session,
+        bridge,
+        characters,
+        onReturnLobby(nextRoom) {
+          if (!session) return;
+          battleActive = false; session.room = nextRoom;
+          overlay.classList.add('open'); renderRoom();
+          schedulePoll(0); scheduleHeartbeat(18000); bridge.syncBgm();
+          setStatus('作戦準備室へ戻りました。空いた席はここで補充できます。');
+        },
+      });
+      if (!started) { battleActive = false; overlay.classList.add('open'); setStatus('協力戦を開始できませんでした。'); }
+      return started;
+    }
+
     async function refreshRoom() {
       if (!session) return;
       const active = session;
@@ -290,7 +312,9 @@
         if (!room || room.protocol !== ROOM_PROTOCOL || !room.slots?.[active.seat] || room.slots[active.seat].uid !== active.auth.uid) {
           await leaveRoom(false); setStatus('この協力部屋は終了しました。'); return;
         }
-        session.room = room; renderRoom();
+        session.room = room;
+        if (room.phase !== 'lobby') { launchBattle(); return; }
+        renderRoom();
         if (session.role === 'host') await publishListing().catch(() => {});
       } catch (_error) { setStatus('同期を再試行しています。通信を確認してください。'); }
     }
@@ -396,6 +420,39 @@
       finally { setBusy(false); }
     }
 
+    async function startBattle() {
+      if (!session || session.role !== 'host' || busy || !canHostStart(session.room.slots, session.room.settings)) return;
+      const battle = browserRoot.KatamonCoopBattle;
+      if (!battle?.makeRoundId) { setStatus('協力戦を読み込めませんでした。'); return; }
+      setBusy(true); setStatus('要塞戦の同期を開始しています…'); renderSeats();
+      try {
+        const now = bridge.serverNow(session.auth);
+        const revision = Math.max(1, Number(session.room.settings?.revision || 1) + 1);
+        const settings = { ...session.room.settings, revision };
+        await bridge.request(`coopRooms/${session.code}/settings`, session.auth, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
+        });
+        const roundId = battle.makeRoundId(revision);
+        const round = {
+          id: roundId,
+          status: 'input',
+          deadlineAt: now + browserRoot.KatamonCoopEngine.INPUT_TIME_MS,
+          wind: battle.windForRound(roundId, 'current'),
+          nextWind: battle.windForRound(roundId, 'next'),
+        };
+        await bridge.request(`coopOpen/${session.code}`, session.auth, { method: 'DELETE' }).catch(() => {});
+        await bridge.request(`coopRooms/${session.code}/round`, session.auth, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(round),
+        });
+        await bridge.request(`coopRooms/${session.code}/phase`, session.auth, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify('playing'),
+        });
+        session.room.settings = settings; session.room.round = round; session.room.phase = 'playing';
+        launchBattle();
+      } catch (error) { setStatus(error.message || '協力戦を開始できませんでした。'); }
+      finally { setBusy(false); if (!battleActive) renderSeats(); }
+    }
+
     async function leaveRoom(showEntry = true) {
       const leaving = session; session = null; stopTimers();
       if (leaving) {
@@ -425,6 +482,7 @@
     element('coopJoin').addEventListener('click', () => joinRoom(element('coopJoinCode').value));
     element('coopRefresh').addEventListener('click', refreshListings);
     element('coopLeave').addEventListener('click', () => leaveRoom(true));
+    element('coopStart').addEventListener('click', startBattle);
     element('coopReady').addEventListener('click', () => {
       if (!session) return; const current = normalizeSlot(session.room.slots[session.seat], { characterIds, inventory: progress.inventory });
       updateOwnSlot({ ...current, ready: !current.ready });

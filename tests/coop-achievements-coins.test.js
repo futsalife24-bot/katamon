@@ -109,7 +109,19 @@ assert.match(gameSource, /type: 'pvp-result'/,
   '既存ONLINEの確定済みresultからPvP報酬を記録する');
 assert.match(gameSource, /firebaseOpponentHumanSeats\(\)\.length > 0/,
   '全CPUのONLINE部屋をPvP勝利報酬として扱わない');
-assert.match(gameSource, /clutchWin: teamHpRatio\('player'\) <= 0\.1/,
+assert.match(gameSource, /clutchWin: winner === 'player' && teamHpRatio\('player'\) <= 0\.1/,
   '既存CPU戦のHP10%以下勝利を安定した決着時点で判定する');
+assert.match(gameSource, /flightDistance >= MVP_LONG_RANGE_DISTANCE/,
+  '超遠距離命中を実際の発射点から着弾点までの距離で判定する');
+assert.match(gameSource, /techniqueProjectile\.subweaponId && enemyDowns > 0/,
+  'サブウェポンでHPを0にした一撃だけを撃破実績にする');
+assert.match(gameSource, /teamHasDeadLineEdgeSurvivor\(team\)/,
+  '勝利側の生存キャラがDEAD LINE直前にいる場合だけ崖際勝利にする');
+assert.match(gameSource, /owner === localUnitId && target\?\.id === localUnitId/,
+  '自弾による自分自身への実ダメージを隠し実績へ接続する');
+assert.match(gameSource, /Math\.max\(mvpTechniqueStats\.simultaneousDowns, enemyDowns\)/,
+  '同じ爆発で同時に倒した人数を隠し実績へ接続する');
+assert.match(gameSource, /id: `pvp-technique:\$\{online\.currentRoundId\}`/,
+  'ONLINEはroundId単位で技術実績を重複なく保存する');
 
-console.log('18実績・カタコイン・ボス報酬・難易度解放（82/82 passed）');
+console.log('18実績・カタコイン・ボス報酬・難易度解放（88/88 passed）');

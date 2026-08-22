@@ -29,7 +29,7 @@ const guest = { uid: 'guest', ready: true };
 assert.equal(room.canHostStart({ p1: host, e1: guest }, { aiFill: false }), true);
 assert.equal(room.canHostStart({ p1: host, e1: { ...guest, ready: false } }, { aiFill: false }), false);
 assert.equal(room.canHostStart({ p1: host }, { aiFill: false }), false, 'AI補充OFFは人間2人以上が必要');
-assert.equal(room.canHostStart({ p1: host }, { aiFill: true }), true, 'AI補充ONは空席をAIで補える');
+assert.equal(room.canHostStart({ p1: host }, { aiFill: true }), false, 'AI補充ONでも参加人数は人間2人以上が必要');
 assert.equal(room.canHostStart({ p1: host, e1: { ...guest, ready: false } }, { aiFill: true }), false,
   'AI補充ONでも参加中の人間のREADYを飛ばさない');
 
@@ -47,8 +47,15 @@ assert.match(rules.coopRooms.$room.slots.$seat.name['.validate'], /length <= 12/
 
 assert.match(indexHtml, /KatamonCoopBridge/);
 assert.match(indexHtml, /<script src="coop-mvp-room\.js"><\/script>/);
-assert.match(indexHtml, /drawTitleWoodButtonText\(titleCoopBtn, 'CO-OP BOSS'/,
-  '協力入口はタイトルの既存羊皮紙ボタンとして描画する');
+assert.doesNotMatch(indexHtml, /titleCoopBtn|drawTitleWoodButtonText\([^\n]*'CO-OP BOSS'/,
+  '凍結仕様どおりタイトルへ協力ボスの大ボタンを追加しない');
+assert.match(indexHtml, /id="onlineKindActions"/);
+assert.match(indexHtml, /id="onlineVersusKind"[^>]*>対戦/);
+assert.match(indexHtml, /id="onlineCoopKind"[^>]*>協力ボス/);
+assert.match(indexHtml, /onlineLobbyEl\.classList\.add\('coop-choice'\)/,
+  '機能ON時だけONLINE BATTLE内で対戦か協力ボスを選ぶ');
+assert.match(indexHtml, /通常対戦の部屋と協力ボスの部屋は別々に管理されます/,
+  '対戦種別を選ぶ前に旧対戦専用案内を残さない');
 assert.match(indexHtml, /KatamonCoopRoom\?\.openLobby\(\)/);
 assert.doesNotMatch(roomSource, /coopBossLauncher/,
   'Canvas外へ世界観の異なる浮遊ボタンを重ねない');

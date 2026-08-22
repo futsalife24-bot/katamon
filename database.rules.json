@@ -48,7 +48,7 @@
           ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 7200000"
         },
         "phase": {
-          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now",
+          ".write": "auth != null && data.parent().child('expiresAt').val() > now && (data.parent().child('hostUid').val() === auth.uid || (data.val() === 'playing' && newData.val() === 'lobby' && data.parent().child('slots').child('p1').child('seenAt').isNumber() && data.parent().child('slots').child('p1').child('seenAt').val() < now - 90000 && (data.parent().child('slots').child('e1').child('uid').val() === auth.uid || data.parent().child('slots').child('s1').child('uid').val() === auth.uid || data.parent().child('slots').child('s2').child('uid').val() === auth.uid)))",
           ".validate": "newData.val() === 'lobby' || newData.val() === 'launching' || newData.val() === 'playing' || newData.val() === 'results'"
         },
         "settings": {
@@ -62,7 +62,7 @@
         "slots": {
           "$seat": {
             ".read": "auth != null && root.child('coopRooms').child($room).child('expiresAt').val() > now",
-            ".write": "auth != null && root.child('coopRooms').child($room).child('expiresAt').val() > now && (($seat.matches(/^(e1|s1|s2)$/) && root.child('coopRooms').child($room).child('phase').val() === 'lobby' && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && root.child('coopRooms').child($room).child('slots').child('p1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('e1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s2').child('uid').val() !== auth.uid) || (data.exists() && newData.exists() && data.child('uid').val() === auth.uid && newData.child('uid').val() === data.child('uid').val() && newData.child('claimedAt').val() === data.child('claimedAt').val()) || (root.child('coopRooms').child($room).child('phase').val() === 'lobby' && data.exists() && !newData.exists() && data.child('uid').val() === auth.uid) || ((root.child('coopRooms').child($room).child('phase').val() === 'lobby' || root.child('coopRooms').child($room).child('phase').val() === 'playing') && data.exists() && !newData.exists() && root.child('coopRooms').child($room).child('hostUid').val() === auth.uid && data.child('seenAt').isNumber() && data.child('seenAt').val() < now - 90000))",
+            ".write": "auth != null && root.child('coopRooms').child($room).child('expiresAt').val() > now && (($seat.matches(/^(e1|s1|s2)$/) && root.child('coopRooms').child($room).child('phase').val() === 'lobby' && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && root.child('coopRooms').child($room).child('slots').child('p1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('e1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s2').child('uid').val() !== auth.uid) || (data.exists() && newData.exists() && data.child('uid').val() === auth.uid && newData.child('uid').val() === data.child('uid').val() && newData.child('claimedAt').val() === data.child('claimedAt').val()) || (root.child('coopRooms').child($room).child('phase').val() === 'lobby' && data.exists() && !newData.exists() && data.child('uid').val() === auth.uid) || ((root.child('coopRooms').child($room).child('phase').val() === 'lobby' || root.child('coopRooms').child($room).child('phase').val() === 'playing') && data.exists() && !newData.exists() && root.child('coopRooms').child($room).child('hostUid').val() === auth.uid && data.child('seenAt').isNumber() && data.child('seenAt').val() < now - 90000) || (root.child('coopRooms').child($room).child('phase').val() === 'results' && $seat.matches(/^(e1|s1|s2)$/) && data.exists() && !newData.exists() && root.child('coopRooms').child($room).child('hostUid').val() === auth.uid && data.child('ready').val() !== true && root.child('coopRooms').child($room).child('round').child('deadlineAt').val() <= now))",
             ".validate": "!newData.exists() || (newData.hasChildren(['uid','name','character','coopItem','ready','claimedAt','seenAt']) && newData.child('uid').isString() && newData.child('claimedAt').isNumber() && newData.child('seenAt').isNumber())",
             "uid": { ".validate": "newData.isString() && newData.val() === auth.uid" },
             "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12" },
@@ -110,6 +110,18 @@
                 "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
                 "fuelSpent": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
                 "final": { ".validate": "newData.isBoolean()" },
+                "aim": {
+                  ".validate": "newData.hasChildren(['x','y'])",
+                  "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
+                  "y": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 1960" },
+                  "$other": { ".validate": false }
+                },
+                "weapon": {
+                  ".validate": "newData.hasChildren(['kind','id'])",
+                  "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
+                  "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
+                  "$other": { ".validate": false }
+                },
                 "action": {
                   ".validate": "newData.hasChildren(['x','fuelSpent','aim','weapon','committedAt','auto'])",
                   "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
@@ -123,7 +135,7 @@
                   "weapon": {
                     ".validate": "newData.hasChildren(['kind','id'])",
                     "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
-                    "id": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+                    "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
                     "$other": { ".validate": false }
                   },
                   "committedAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
@@ -145,7 +157,7 @@
                     "weapon": {
                       ".validate": "newData.hasChildren(['kind','id'])",
                       "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
-                      "id": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+                      "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
                       "$other": { ".validate": false }
                     },
                     "scheduledAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
@@ -258,6 +270,7 @@
                 "vy0": { ".validate": "newData.isNumber() && newData.val() >= -5000 && newData.val() <= 5000" },
                 "useSpecial": { ".validate": "newData.isBoolean()" },
                 "useJump": { ".validate": "newData.isBoolean()" },
+                "subweaponId": { ".validate": "newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill'" },
                 "fuel": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
                 "actionId": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/) && (newData.parent().child('t').val() === 'fire' || newData.parent().child('t').val() === 'state' || newData.parent().child('t').val() === 'result')" },
                 "winner": { ".validate": "newData.val() === 'player' || newData.val() === 'cpu' || newData.val() === 'draw'" },

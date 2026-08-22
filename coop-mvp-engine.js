@@ -180,7 +180,13 @@
     if (!previous || !current) return true;
     const elapsed = finiteNumber(now, 0) - finiteNumber(previous.sentAt, 0);
     const distance = Math.abs(finiteNumber(current.x, 0) - finiteNumber(previous.x, 0));
-    return elapsed >= MOVE_SYNC_INTERVAL_MS && distance >= MOVE_SYNC_MIN_DISTANCE;
+    const aimDistance = Math.hypot(
+      finiteNumber(current.aim?.x, 0) - finiteNumber(previous.aim?.x, 0),
+      finiteNumber(current.aim?.y, 0) - finiteNumber(previous.aim?.y, 0),
+    );
+    const weaponChanged = current.weaponKey !== previous.weaponKey;
+    return elapsed >= MOVE_SYNC_INTERVAL_MS
+      && (distance >= MOVE_SYNC_MIN_DISTANCE || aimDistance >= MOVE_SYNC_MIN_DISTANCE || weaponChanged);
   }
 
   function friendlyFireEffect({ damage, knockback, terrainRadius }) {
