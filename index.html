@@ -263,6 +263,15 @@
     display: block; color: #ffd56a; font: 900 10px/1.2 var(--katamon-font-ui); letter-spacing: .08em; text-align: left;
   }
   #onlineCharacter { display: block; margin-top: 4px; padding: 8px 7px; font-size: 16px; }
+  #onlineKindActions { display: none; grid-template-columns: repeat(2, 1fr); gap: 9px; margin: 10px 0 4px; }
+  #onlineLobby.coop-choice:not(.in-room) #onlineKindActions { display: grid; }
+  #onlineLobby.coop-choice:not(.in-room) #onlineEntryPanel { display: none; }
+  #onlineKindActions button {
+    min-height: 58px; padding: 8px 6px; color: #ffe2a1; font: 900 15px var(--katamon-font-ui);
+    letter-spacing: .06em; border: 2px solid #d39b4b; border-radius: 4px;
+    background: linear-gradient(180deg,#37464d,#091116); box-shadow: inset 0 0 0 1px rgba(255,226,161,.14), 0 3px 10px rgba(0,0,0,.42);
+  }
+  #onlineKindActions button small { display: block; margin-top: 4px; color: #b9c3c8; font: 400 10px/1.3 var(--katamon-font-ui); letter-spacing: 0; }
   #onlineEntryPanel { display: none; margin: 4px 0; }
   #onlineLobby:not(.in-room) #onlineEntryPanel { display: block; }
   #onlineEntryActions, #onlineRoomFilters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
@@ -534,6 +543,10 @@
       <div id="onlineRoomHint">見間違いを防ぐため <b>I・O・1・0</b> は使いません</div>
       <button id="onlineCreate" type="button">部屋を作る</button>
       <button id="onlineJoin" type="button">部屋に入る</button>
+      <div id="onlineKindActions" aria-label="オンラインモード選択">
+        <button id="onlineVersusKind" type="button">対戦<small>1 vs 1 / 2 vs 2</small></button>
+        <button id="onlineCoopKind" type="button">協力ボス<small>2〜4人で巨大要塞へ</small></button>
+      </div>
       <div id="onlineEntryPanel">
         <div id="onlineEntryActions"><button id="onlineCreateMode" type="button">部屋を作る</button><button id="onlineBrowseMode" type="button">部屋を探す</button></div>
         <div id="onlineCreateOptions">
@@ -650,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.109-coop-playable';
+  const BUILD_ID = 'v2.0.110-coop-quality';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.110', date: '2026/08/22', summary: '協力ボスMVPの操作・実績・サブウェポン・演出品質を総点検' },
     { version: 'v2.0.109', date: '2026/08/22', summary: '協力ボス戦をロビーから実戦・結果まで接続' },
     { version: 'v2.0.108', date: '2026/08/22', summary: '協力戦の結果・再戦・切断復帰契約を追加' },
     { version: 'v2.0.107', date: '2026/08/22', summary: '9商品ショップ・実績一覧・コスメを追加' },
@@ -1402,18 +1416,20 @@
         font: `700 11px ${UI_FONT_HEAVY}`, color: selected ? UI.gold : UI.parchment, lineWidth: 3
       });
     });
-    drawIronPlate(soundTestShopBtn.x, soundTestShopBtn.y, soundTestShopBtn.w, soundTestShopBtn.h, {
-      cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
-    });
-    drawOutlinedText('ショップ', soundTestShopBtn.x, soundTestShopBtn.y + 4, {
-      font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
-    });
-    drawIronPlate(soundTestAchievementsBtn.x, soundTestAchievementsBtn.y, soundTestAchievementsBtn.w, soundTestAchievementsBtn.h, {
-      cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
-    });
-    drawOutlinedText('実績', soundTestAchievementsBtn.x, soundTestAchievementsBtn.y + 4, {
-      font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
-    });
+    if (COOP_MVP_FEATURE_ENABLED) {
+      drawIronPlate(soundTestShopBtn.x, soundTestShopBtn.y, soundTestShopBtn.w, soundTestShopBtn.h, {
+        cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
+      });
+      drawOutlinedText('ショップ', soundTestShopBtn.x, soundTestShopBtn.y + 4, {
+        font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+      });
+      drawIronPlate(soundTestAchievementsBtn.x, soundTestAchievementsBtn.y, soundTestAchievementsBtn.w, soundTestAchievementsBtn.h, {
+        cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
+      });
+      drawOutlinedText('実績', soundTestAchievementsBtn.x, soundTestAchievementsBtn.y + 4, {
+        font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+      });
+    }
     drawIronPlate(soundTestCloseBtn.x, soundTestCloseBtn.y, soundTestCloseBtn.w, soundTestCloseBtn.h, {
       cut: 9, lineWidth: 1.5, rivets: true, rivetInset: 10, rivetRadius: 2
     });
@@ -3825,6 +3841,7 @@
   // 1vs1では席名とユニット名が一致するので、これまでと同じ動きになる。
   function setOnlineSeat(seat) {
     setSeat(firebaseSeatUnitId(seat), 'remote');
+    equipSelectedSubweaponForLocalUnit();
     // 2vs2で誰も座っていない席はCPUが埋める(決定3)。動かすのはホストの端末だけで、
     // ほかの端末はその結果を受け取る側なので remote のまま置く。CPUの照準には乱数が
     // 混ざるため、各端末で同じ結果を再現させる道は取らない(Issue #26)。
@@ -3924,6 +3941,11 @@
 
   // 与ダメ効率に積むのは「プレイヤー陣営が敵陣営へ与えた分」だけ。自爆や味方誤爆は数えない。
   function creditDamage(owner, target, amount) {
+    // 隠し実績は、表示用のダメージ値ではなく実際にHPへ通った自弾だけを数える。
+    // オンラインでは相手側でも同じ爆発を再生するため、この端末の席が撃った時だけ記録する。
+    if (amount > 0 && owner === localUnitId && target?.id === localUnitId) {
+      mvpTechniqueStats.selfHit = true;
+    }
     if (teamOfOwner(owner) === 'player' && target.team !== 'player') runStats.damageDealt += amount;
   }
 
@@ -3939,6 +3961,28 @@
     u.moveLockTurns = 0;
     u.actionSkipTurns = 0;
     u.facingLeft = null;
+    u.subweapon = null;
+    u.subweaponUsesLeft = 0;
+    u.subweaponBarrierActive = false;
+  }
+
+  function equipSelectedSubweaponForLocalUnit() {
+    const unit = localUnit();
+    const valid = COOP_MVP_FEATURE_ENABLED && battleMode === 'normal'
+      && globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(selectedSubweapon);
+    if (!unit) return;
+    unit.subweapon = valid ? selectedSubweapon : null;
+    unit.subweaponUsesLeft = valid ? 1 : 0;
+    unit.subweaponBarrierActive = false;
+  }
+
+  function mitigateDamageWithSubweaponBarrier(unit, damage) {
+    const requested = Math.max(0, Number(damage) || 0);
+    if (!unit?.subweaponBarrierActive || requested <= 0) return requested;
+    unit.subweaponBarrierActive = false;
+    const reduced = Math.max(1, Math.round(requested * (globalThis.KatamonSubweapons?.BARRIER_DAMAGE_RATIO || 0.5)));
+    pushFloatText(unit.x, unit.y - UNIT_RADIUS - 38, `BARRIER -${requested - reduced}`, '#f29a38', 15);
+    return reduced;
   }
 
   function unitAnchor(u) {
@@ -4166,6 +4210,7 @@
       coolKaiDelay: opts.coolKaiDelay != null ? opts.coolKaiDelay : 0,
       // 花火の接近信管も固定刻みの物理内で判定し、両端末で一致させる。
       damageMul: opts.damageMul != null ? opts.damageMul : 1,
+      subweaponId: opts.subweaponId || null,
       normalImpactSound: !!opts.normalImpactSound,
       pierce: !!opts.pierce,
       prismBeam: !!opts.prismBeam,
@@ -4393,7 +4438,7 @@
       const raw = computeDamage(simDistance(a.x, a.y, x, y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
-      const dmg = Math.min(budget, Math.max(1, Math.round(raw * takenMul)));
+      const dmg = mitigateDamageWithSubweaponBarrier(u, Math.min(budget, Math.max(1, Math.round(raw * takenMul))));
       if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
       u.hp = Math.max(0, u.hp - dmg);
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
@@ -4660,7 +4705,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const actualDamage = Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul));
+    const actualDamage = mitigateDamageWithSubweaponBarrier(target, Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul)));
     target.hp = Math.max(0, target.hp - actualDamage);
     const anchor = unitAnchor(target);
     if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
@@ -4735,14 +4780,42 @@
     return true;
   }
 
+  function launchSubweaponShot(unit, anchor, vx0, vy0, subweaponId) {
+    const known = globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(subweaponId);
+    const firstRemoteUse = unit?.control === 'remote' && unit.subweapon == null && unit.subweaponUsesLeft === 0;
+    const available = known && (firstRemoteUse || (unit.subweapon === subweaponId && unit.subweaponUsesLeft > 0));
+    if (!available) return false;
+    unit.subweapon = subweaponId;
+    unit.subweaponUsesLeft = 0;
+    if (subweaponId === 'barrier') {
+      unit.subweaponBarrierActive = true;
+      pushFloatText(unit.x, unit.y - UNIT_RADIUS - 28, 'BARRIER', '#f29a38', 17);
+      playUiSound();
+      return true;
+    }
+    const impact = subweaponId === 'impact';
+    fireProjectile(unit.id, anchor, vx0, vy0, impact ? {
+      blastMul: 1, terrainBlastMul: 1, damageMul: 25 / 45, noTerrain: true,
+      knockbackSpeed: 160, subweaponId,
+    } : {
+      blastMul: 1.7, terrainBlastMul: 2, damageMul: 15 / 45,
+      knockbackSpeed: 0, subweaponId,
+    });
+    return true;
+  }
+
   // 共通の通常弾と、キャラ固有の必殺技・跳躍を撃ち分ける発射口。
   // 必殺はカットインを見せ切ってから撃ちたいので、一度保留してから deferred=true で撃ち直す。
-  function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump) {
+  function launchShot(unit, anchor, vx0, vy0, useSpecial, deferred, useJump, subweaponId = null) {
     const def = CHARACTERS[unit.character];
     const owner = unit.id;
     // 発射直前に両者の現在位置を基準に向きを確定する。
     faceAllUnitsTowardOpponents();
     // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
+    if (!deferred && subweaponId) {
+      launchSubweaponShot(unit, anchor, vx0, vy0, subweaponId);
+      return;
+    }
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
     const activateJump = deferred ? !!useJump : (!!useJump && unit.jumpAvailable !== false && unit.moveLockTurns <= 0);
     const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
@@ -5076,8 +5149,10 @@
 
   // ===== 必殺ショット(4段階リチャージ・右移動ボタンの上に配置) =====
   const specialBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 66, r: 46 };
+  const subweaponBtn = { x: VW - 92, y: CONTROL_PANEL_Y + 145, r: 30 };
   const jumpBtn = { x: 92, y: CONTROL_PANEL_Y + 100, r: 34 };
   let specialArmed = false;
+  let subweaponArmed = false;
   let jumpArmed = false;
 
   // ===== メニュー(一時停止・タイトルに戻る) =====
@@ -5114,6 +5189,37 @@
 
   // ===== スコア(連勝を主、与ダメ効率を従とした複合値)=====
   let runStats = { damageDealt: 0, shots: 0 };
+  // 1試合の珍プレー系実績。結果保存と同じく端末内だけで扱い、次戦へ持ち越さない。
+  let mvpTechniqueStats = {
+    longRangeHit: false,
+    subweaponFinisher: false,
+    selfHit: false,
+    simultaneousDowns: 0
+  };
+  const MVP_LONG_RANGE_DISTANCE = 800;
+  const MVP_DEAD_LINE_EDGE_DISTANCE = 48;
+  function resetMvpTechniqueStats() {
+    mvpTechniqueStats = {
+      longRangeHit: false,
+      subweaponFinisher: false,
+      selfHit: false,
+      simultaneousDowns: 0
+    };
+  }
+  function teamHasDeadLineEdgeSurvivor(team) {
+    return units.some((u) => u.team === team && !unitDefeated(u)
+      && u.y + UNIT_RADIUS >= DEAD_LINE_Y - MVP_DEAD_LINE_EDGE_DISTANCE
+      && u.y + UNIT_RADIUS < DEAD_LINE_Y);
+  }
+  function currentMvpTechniqueEvent(team, won) {
+    return {
+      longRangeHit: mvpTechniqueStats.longRangeHit,
+      deadLineWin: won === true && teamHasDeadLineEdgeSurvivor(team),
+      subweaponFinisher: mvpTechniqueStats.subweaponFinisher,
+      selfHit: mvpTechniqueStats.selfHit,
+      simultaneousDowns: mvpTechniqueStats.simultaneousDowns
+    };
+  }
   function currentEfficiency() {
     return runStats.shots > 0 ? Math.round(runStats.damageDealt / runStats.shots) : 0;
   }
@@ -5193,7 +5299,10 @@
       particles.push({
         x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 40,
         life: 0.35 + Math.random() * 0.35, maxLife: 0.7,
-        color: Math.random() < 0.5 ? '#ffb84a' : '#ff6b3a', size: 2 + Math.random() * 3
+        color: activeCosmetics.impact === 'impact-cyan'
+          ? (Math.random() < 0.5 ? '#8ff7ff' : '#3dbbd8')
+          : (Math.random() < 0.5 ? '#ffb84a' : '#ff6b3a'),
+        size: 2 + Math.random() * 3
       });
     }
   }
@@ -5262,7 +5371,7 @@
       const a = unitAnchor(u);
       if (simDistance(a.x, a.y, flame.x, flame.y) > GROUND_FLAME_HIT_RADIUS) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
-      const actualDamage = Math.max(1, Math.round(GROUND_FLAME_TICK_DAMAGE * takenMul));
+      const actualDamage = mitigateDamageWithSubweaponBarrier(u, Math.max(1, Math.round(GROUND_FLAME_TICK_DAMAGE * takenMul)));
       u.hp = Math.max(0, u.hp - actualDamage);
       if (!flame.remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
       creditDamage(flame.owner, u, actualDamage);
@@ -5354,7 +5463,7 @@
     if (!unitDefeated(target)) {
       const directDamage = computeDamage(0, 1, p.damageMul);
       const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-      const actualDamage = Math.max(1, Math.round(directDamage * takenMul));
+      const actualDamage = mitigateDamageWithSubweaponBarrier(target, Math.max(1, Math.round(directDamage * takenMul)));
       target.hp = Math.max(0, target.hp - actualDamage);
       const a = unitAnchor(target);
       if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
@@ -5375,7 +5484,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const actualDamage = Math.max(1, Math.round(computeDamage(0, p.blastMul, p.damageMul) * takenMul));
+    const actualDamage = mitigateDamageWithSubweaponBarrier(target, Math.max(1, Math.round(computeDamage(0, p.blastMul, p.damageMul) * takenMul)));
     target.hp = Math.max(0, target.hp - actualDamage);
     const anchor = unitAnchor(target);
     if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
@@ -5420,7 +5529,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const actualDamage = Math.max(1, Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul));
+    const actualDamage = mitigateDamageWithSubweaponBarrier(target, Math.max(1, Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)));
     target.hp = Math.max(0, target.hp - actualDamage);
     const anchor = unitAnchor(target);
     if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
@@ -5445,7 +5554,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const actualDamage = Math.max(1, Math.round(BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul));
+    const actualDamage = mitigateDamageWithSubweaponBarrier(target, Math.max(1, Math.round(BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul)));
     target.hp = Math.max(0, target.hp - actualDamage);
     const anchor = unitAnchor(target);
     if (!remoteShot) spawnDamageText(anchor.x, anchor.y - UNIT_RADIUS - 10, actualDamage);
@@ -5513,15 +5622,7 @@
   // メロニキが組んだ見本どおり、木板の上を「羊皮紙2段 → 羊皮紙2列 →
   // 吊り看板と盾」の順にする。当たり判定は影やロープを除いた本体側へ置く。
   const TITLE_WOOD_BOARD_RECT = { x: 42, y: 456, w: 456, h: 438 };
-  const TITLE_WOOD_IMAGE_RECTS = COOP_MVP_FEATURE_ENABLED ? {
-    cpu: { asset: 'parchment', x: 270, y: 520, w: 301, h: 72 },
-    online: { asset: 'parchment', x: 270, y: 589, w: 301, h: 72 },
-    coop: { asset: 'parchment', x: 270, y: 658, w: 301, h: 72 },
-    tutorial: { asset: 'parchment', x: 169, y: 725, w: 189, h: 48 },
-    free: { asset: 'parchment', x: 374, y: 725, w: 189, h: 48 },
-    ranking: { asset: 'hangingSign', x: 165, y: 824, w: 189, h: 119 },
-    bonus: { asset: 'shield', x: 378, y: 838, w: 125, h: 112 }
-  } : {
+  const TITLE_WOOD_IMAGE_RECTS = {
     cpu: { asset: 'parchment', x: 270, y: 538, w: 301, h: 82 },
     online: { asset: 'parchment', x: 270, y: 619, w: 301, h: 82 },
     tutorial: { asset: 'parchment', x: 169, y: 700, w: 189, h: 52 },
@@ -5529,13 +5630,12 @@
     ranking: { asset: 'hangingSign', x: 165, y: 787, w: 189, h: 119 },
     bonus: { asset: 'shield', x: 378, y: 801, w: 125, h: 112 }
   };
-  const titleVsCpuBtn = COOP_MVP_FEATURE_ENABLED ? { x: 270, y: 520, w: 283, h: 55 } : { x: 270, y: 538, w: 283, h: 63 };
-  const titleOnlineBtn = COOP_MVP_FEATURE_ENABLED ? { x: 270, y: 589, w: 283, h: 55 } : { x: 270, y: 619, w: 283, h: 63 };
-  const titleCoopBtn = { x: 270, y: 658, w: 283, h: 55 };
-  const titleTutorialBtn = COOP_MVP_FEATURE_ENABLED ? { x: 169, y: 725, w: 175, h: 39 } : { x: 169, y: 700, w: 175, h: 43 };
-  const titleFreeBtn = COOP_MVP_FEATURE_ENABLED ? { x: 374, y: 725, w: 175, h: 39 } : { x: 374, y: 700, w: 175, h: 43 };
-  const titleRankingBtn = COOP_MVP_FEATURE_ENABLED ? { x: 165, y: 857, w: 173, h: 47 } : { x: 165, y: 820, w: 173, h: 47 };
-  const titleBonusBtn = COOP_MVP_FEATURE_ENABLED ? { x: 378, y: 836, w: 99, h: 81 } : { x: 378, y: 799, w: 99, h: 81 };
+  const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
+  const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
+  const titleTutorialBtn = { x: 169, y: 700, w: 175, h: 43 };
+  const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
+  const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
+  const titleBonusBtn = { x: 378, y: 799, w: 99, h: 81 };
   const soundTestModal = { x: VW / 2, y: VH / 2, w: 500, h: 700 };
   const soundTestCloseBtn = { x: VW / 2, y: VH / 2 + 310, w: 190, h: 44 };
   const soundTestShopBtn = { x: VW / 2 - 115, y: VH / 2 + 254, w: 190, h: 42 };
@@ -5867,13 +5967,28 @@
   // 見出しの下・右端へ置き、右上の音量ボタンとキャラ名のどちらにも重ねない。
   const selectSubweaponBtn = { x: VW - 100, y: 104, w: 140, h: 44 };
   let selectedSubweapon = null;
+  let activeCosmetics = { icon: null, projectile: null, impact: null };
 
   function syncSelectedSubweapon() {
     const foundation = globalThis.KatamonCoopMvp;
-    if (!foundation) { selectedSubweapon = null; return selectedSubweapon; }
+    if (!COOP_MVP_FEATURE_ENABLED || !foundation) { selectedSubweapon = null; return selectedSubweapon; }
     const progress = foundation.loadState();
     selectedSubweapon = progress.equipment.subweapon || null;
     return selectedSubweapon;
+  }
+
+  function syncActiveCosmetics() {
+    if (!COOP_MVP_FEATURE_ENABLED || !globalThis.KatamonCoopMvp) {
+      activeCosmetics = { icon: null, projectile: null, impact: null };
+      return activeCosmetics;
+    }
+    const equipped = globalThis.KatamonCoopMvp.loadState().equipment.cosmetics || {};
+    activeCosmetics = {
+      icon: equipped.icon === 'icon-brass' ? equipped.icon : null,
+      projectile: equipped.projectile === 'shell-amber' ? equipped.projectile : null,
+      impact: equipped.impact === 'impact-cyan' ? equipped.impact : null,
+    };
+    return activeCosmetics;
   }
 
   function ownedSubweapons() {
@@ -6554,6 +6669,9 @@
       x: u.x, y: u.y, specialCharge: u.specialCharge, moveLockTurns: u.moveLockTurns,
       actionSkipTurns: u.actionSkipTurns || 0,
       jumpAvailable: u.jumpAvailable !== false,
+      subweapon: u.subweapon || null,
+      subweaponUsesLeft: Math.max(0, Math.min(1, Number(u.subweaponUsesLeft) || 0)),
+      subweaponBarrierActive: u.subweaponBarrierActive === true,
       facingLeft: u.facingLeft == null ? null : !!u.facingLeft
     };
   }
@@ -6775,6 +6893,7 @@
     activeTouchPoints.clear();
     pinchState = null;
     specialArmed = false;
+    subweaponArmed = false;
     jumpArmed = false;
     matchOver = false;
     matchEndPause = 0;
@@ -6896,6 +7015,9 @@
         ? Math.max(0, Math.min(SPECIAL_CHARGE_MAX, saved.specialCharge))
         : (saved.specialUsed ? 0 : SPECIAL_CHARGE_MAX);
       u.jumpAvailable = saved.jumpAvailable !== false;
+      u.subweapon = globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(saved.subweapon) ? saved.subweapon : null;
+      u.subweaponUsesLeft = u.subweapon ? Math.max(0, Math.min(1, Number(saved.subweaponUsesLeft) || 0)) : 0;
+      u.subweaponBarrierActive = u.subweapon === 'barrier' && saved.subweaponBarrierActive === true;
       u.facingLeft = typeof saved.facingLeft === 'boolean' ? saved.facingLeft : null;
       const savedY = Number.isFinite(saved.y) ? saved.y : groundYAt(u.x) - UNIT_RADIUS;
       const nearbyGround = walkableGroundYAt(u.x, savedY + UNIT_RADIUS);
@@ -7391,6 +7513,9 @@
       && isFiniteIn(unit.specialCharge, 0, SPECIAL_CHARGE_MAX) && isFiniteIn(unit.moveLockTurns, 0, 6)
       && (unit.actionSkipTurns == null || isFiniteIn(unit.actionSkipTurns, 0, 1))
       && (unit.jumpAvailable == null || typeof unit.jumpAvailable === 'boolean')
+      && (unit.subweapon == null || globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(unit.subweapon))
+      && (unit.subweaponUsesLeft == null || isFiniteIn(unit.subweaponUsesLeft, 0, 1))
+      && (unit.subweaponBarrierActive == null || typeof unit.subweaponBarrierActive === 'boolean')
       && (unit.facingLeft == null || typeof unit.facingLeft === 'boolean');
   }
   function customStageSnapshotValidationReason(snap) {
@@ -7571,7 +7696,7 @@
       const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
-    if (msg.t === 'fire') return isFirebaseUnitId(msg.unitId) && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' ? { ok: true } : { ok: false, reason: 'fire.payload' };
+    if (msg.t === 'fire') return isFirebaseUnitId(msg.unitId) && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' && (msg.subweaponId == null || globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(msg.subweaponId)) ? { ok: true } : { ok: false, reason: 'fire.payload' };
     if (msg.t === 'move') return isFirebaseUnitId(msg.unitId) && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.fuel), 0, 10000) ? { ok: true } : { ok: false, reason: 'move.payload' };
     if (msg.t === 'boom') return isFirebaseUnitId(msg.unitId) ? { ok: true } : { ok: false, reason: 'boom.unitId' };
     if (msg.t === 'result') {
@@ -8377,7 +8502,7 @@
             enqueueNetMessage(buffered);
           }
         }
-        launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial, false, msg.useJump);
+        launchShot(u, msg.anchor, msg.vx0, msg.vy0, msg.useSpecial, false, msg.useJump, msg.subweaponId || null);
         awaitingResolve = true;
         break;
       }
@@ -8513,7 +8638,7 @@
 
   // 発射の配信。人が撃った時も、2vs2で空席のCPUをホストが撃たせた時も必ずここを通す。
   // 相手には「誰がどこからどう撃ったか」だけを送り、演出は受け取った側で再生させる。
-  function netSendFire(unit, anchor, vx0, vy0, useSpecial, useJump) {
+  function netSendFire(unit, anchor, vx0, vy0, useSpecial, useJump, subweaponId = null) {
     if (!isOnline() || !netControlsUnit(unit)) return;
     let actionId = null;
     if (online.kind === 'firebase') {
@@ -8527,6 +8652,7 @@
       t: 'fire', unitId: unit.id, x: unit.x, y: unit.y,
       anchor: { x: anchor.x, y: anchor.y },
       vx0, vy0, useSpecial: !!useSpecial, useJump: !!useJump,
+      ...(subweaponId ? { subweaponId } : {}),
       ...(actionId ? { actionId } : {})
     });
   }
@@ -8597,6 +8723,8 @@
   const onlineBattleRecordEl = document.getElementById('onlineBattleRecord');
   const onlineCreateModeButton = document.getElementById('onlineCreateMode');
   const onlineBrowseModeButton = document.getElementById('onlineBrowseMode');
+  const onlineVersusKindButton = document.getElementById('onlineVersusKind');
+  const onlineCoopKindButton = document.getElementById('onlineCoopKind');
   const onlineCreatePublicButton = document.getElementById('onlineCreatePublic');
   const onlineRoomNameInput = document.getElementById('onlineRoomNameInput');
   const onlineCreateFormatEl = document.getElementById('onlineCreateFormat');
@@ -8650,11 +8778,18 @@
     onlineLobbyEl.classList.add('open');
     if (onlineRoomInput) { onlineRoomInput.value = ''; onlineRoomInput.readOnly = false; }
     if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = '';
-    onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry', 'create-mode', 'browse-mode');
+    onlineLobbyEl.classList.remove('in-room', 'host', 'results', 'quickplay', 'code-entry', 'create-mode', 'browse-mode', 'coop-choice');
     cancelLeaveFirebaseLobbyConfirm();
     const codeToggle = document.getElementById('onlineCodeToggle');
     if (codeToggle) codeToggle.textContent = '部屋IDを使う';
-    onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。部屋IDが必要な時だけ設定を開いてください。');
+    if (COOP_MVP_FEATURE_ENABLED) {
+      onlineLobbyEl.classList.add('coop-choice');
+      document.getElementById('onlineLobbyNote').textContent = '遊び方を選んでください。通常対戦の部屋と協力ボスの部屋は別々に管理されます。';
+      onlineLobbyStatus('対戦か協力ボスを選んでください。');
+    } else {
+      document.getElementById('onlineLobbyNote').textContent = 'そのまま対戦相手を待てます。部屋IDを使いたい時だけ設定を開いてください';
+      onlineLobbyStatus('「すぐ対戦する」で相手を待ちます。部屋IDが必要な時だけ設定を開いてください。');
+    }
     syncBgm();
   }
   function setOnlineLobbyBusy(busy) {
@@ -8799,6 +8934,7 @@
   }
   let mvpLocalRewardEventSeq = 0;
   function applyMvpRewardUpdate(update) {
+    if (!COOP_MVP_FEATURE_ENABLED) return null;
     const foundation = globalThis.KatamonCoopMvp;
     const rewards = globalThis.KatamonCoopRewards;
     if (!foundation || !rewards || typeof update !== 'function') return null;
@@ -9102,6 +9238,11 @@
         type: 'pvp-result',
         outcome,
         hpRatio: teamHpRatio(localUnit().team)
+      });
+      recordMvpRewardEvent({
+        id: `pvp-technique:${online.currentRoundId}`,
+        type: 'normal-technique',
+        ...currentMvpTechniqueEvent(localUnit().team, outcome === 'win')
       });
     }
     return recorded;
@@ -10803,7 +10944,6 @@
     if (woodUiReady) {
       drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'parchmentLarge', hasSuspendedSave);
       drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE', 'オンライン対戦・観戦', 'parchmentLarge');
-      if (COOP_MVP_FEATURE_ENABLED) drawTitleWoodButtonText(titleCoopBtn, 'CO-OP BOSS', '2〜4人で巨大要塞へ', 'parchmentLarge');
       drawTitleWoodButtonText(titleTutorialBtn, 'チュートリアル',
         tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'parchmentSmall',
         tutorialIsRecommended());
@@ -10831,7 +10971,6 @@
 
       drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
       drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
-      if (COOP_MVP_FEATURE_ENABLED) drawTitleModeButton(titleCoopBtn, 'CO-OP BOSS', '2〜4人で巨大要塞へ', 'online');
       drawTitleModeButton(titleTutorialBtn, 'チュートリアル',
         tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
         tutorialIsRecommended());
@@ -12195,19 +12334,21 @@
 
     // 専用装備画面は増やさず、黒鉄の小札1枚で永久所持済みSUBだけを切り替える。
     // 未所持時も欄自体は残し、ショップとの関係が分かるようにする。
-    const equippedSubweapon = globalThis.KatamonCoopMvp?.SUBWEAPONS
-      ?.find((entry) => entry.id === selectedSubweapon);
-    drawIronPlate(selectSubweaponBtn.x, selectSubweaponBtn.y, selectSubweaponBtn.w, selectSubweaponBtn.h, {
-      cut: 8, lineWidth: 2, edge: equippedSubweapon ? UI.brassLight : UI.brassDark,
-      rivets: true, rivetInset: 8, rivetRadius: 2
-    });
-    ctx.textAlign = 'center';
-    ctx.fillStyle = UI.gold;
-    ctx.font = `900 8px ${UI_FONT_HEAVY}`;
-    ctx.fillText('SUB', selectSubweaponBtn.x, selectSubweaponBtn.y - 7);
-    ctx.fillStyle = equippedSubweapon ? UI.parchment : 'rgba(226,232,240,0.62)';
-    ctx.font = `900 11px ${UI_FONT_HEAVY}`;
-    ctx.fillText(equippedSubweapon?.label || '未装備', selectSubweaponBtn.x, selectSubweaponBtn.y + 10);
+    if (COOP_MVP_FEATURE_ENABLED) {
+      const equippedSubweapon = globalThis.KatamonCoopMvp?.SUBWEAPONS
+        ?.find((entry) => entry.id === selectedSubweapon);
+      drawIronPlate(selectSubweaponBtn.x, selectSubweaponBtn.y, selectSubweaponBtn.w, selectSubweaponBtn.h, {
+        cut: 8, lineWidth: 2, edge: equippedSubweapon ? UI.brassLight : UI.brassDark,
+        rivets: true, rivetInset: 8, rivetRadius: 2
+      });
+      ctx.textAlign = 'center';
+      ctx.fillStyle = UI.gold;
+      ctx.font = `900 8px ${UI_FONT_HEAVY}`;
+      ctx.fillText('SUB', selectSubweaponBtn.x, selectSubweaponBtn.y - 7);
+      ctx.fillStyle = equippedSubweapon ? UI.parchment : 'rgba(226,232,240,0.62)';
+      ctx.font = `900 11px ${UI_FONT_HEAVY}`;
+      ctx.fillText(equippedSubweapon?.label || '未装備', selectSubweaponBtn.x, selectSubweaponBtn.y + 10);
+    }
 
     angularPlatePath(selectBackBtn.x, selectBackBtn.y, selectBackBtn.w, selectBackBtn.h, 8);
     ctx.fillStyle = 'rgba(18,24,29,0.96)';
@@ -12348,7 +12489,7 @@
       const dist = simDistance(u.x, u.y, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
-      const damage = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
+      const damage = mitigateDamageWithSubweaponBarrier(u, Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1))));
       u.hp = Math.max(0, u.hp - damage);
       if (effect === 'turnSkip') u.actionSkipTurns = Math.max(u.actionSkipTurns || 0, 1);
       else u.moveLockTurns = Math.max(u.moveLockTurns || 0, turns);
@@ -12406,12 +12547,14 @@
     u.fallStartY = u.y;
   }
 
-  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0, noTerrain = false) {
+  function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0, noTerrain = false, techniqueProjectile = null) {
     blastMul = blastMul || 1;
     terrainBlastMul = terrainBlastMul || blastMul;
-    const remoteShot = !!(isOnline() && owner && owner.control === 'remote');
+    const remoteShot = !!(isOnline() && unitById(owner)?.control === 'remote');
     const ownerTeam = teamOfOwner(owner);
     let drainedDamage = 0;
+    let enemyDamage = 0;
+    let enemyDowns = 0;
     if (remoteShot) noteRemoteDamageBaseline();
     if (!noTerrain) carveCrater(x, y, 44 * terrainBlastMul);
     spawnExplosion(x, y, blastMul);
@@ -12425,14 +12568,30 @@
       const dmg = computeDamage(dist, blastMul, damageMul);
       if (dmg > 0) {
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
-        const actualDamage = Math.max(1, Math.round(dmg * takenMul));
+        const actualDamage = mitigateDamageWithSubweaponBarrier(u, Math.max(1, Math.round(dmg * takenMul)));
         const hpBefore = u.hp;
         u.hp = Math.max(0, u.hp - actualDamage);
-        if (drainHeal && ownerTeam !== null && u.team !== ownerTeam) drainedDamage += hpBefore - u.hp;
+        const damageApplied = hpBefore - u.hp;
+        if (ownerTeam !== null && u.team !== ownerTeam) {
+          enemyDamage += damageApplied;
+          if (hpBefore > 0 && u.hp <= 0) enemyDowns++;
+        }
+        if (drainHeal && ownerTeam !== null && u.team !== ownerTeam) drainedDamage += damageApplied;
         if (!remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
         creditDamage(owner, u, actualDamage);
         applyExplosionKnockback(u, x, knockbackSpeed, owner);
       }
+    }
+    // 勝敗確定(checkMatchEnd)より先に集計する。ここが後だと、とどめの一発が
+    // リザルト保存へ間に合わず、実績だけ解除されない。
+    if (owner === localUnitId && techniqueProjectile && enemyDamage > 0) {
+      const flightDistance = Math.hypot(
+        x - Number(techniqueProjectile.originX || 0),
+        y - Number(techniqueProjectile.originY || 0)
+      );
+      if (flightDistance >= MVP_LONG_RANGE_DISTANCE) mvpTechniqueStats.longRangeHit = true;
+      if (techniqueProjectile.subweaponId && enemyDowns > 0) mvpTechniqueStats.subweaponFinisher = true;
+      mvpTechniqueStats.simultaneousDowns = Math.max(mvpTechniqueStats.simultaneousDowns, enemyDowns);
     }
     if (drainHeal && drainedDamage > 0) {
       const ownerUnit = unitById(owner);
@@ -12446,7 +12605,7 @@
   }
 
   function explodeProjectileAt(p, x, y) {
-    explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal, p.terrainBlastMul, p.knockbackSpeed);
+    explodeAt(x, y, p.blastMul, p.owner, p.damageMul, p.normalImpactSound, p.drainHeal, p.terrainBlastMul, p.knockbackSpeed, !!p.noTerrain, p);
   }
 
   function estimateFlightTime(vx0, vy0, gravity = GRAVITY) {
@@ -12554,6 +12713,12 @@
     if (is2v2()) return;
     // 対人戦は連勝にもランキングにも含めない(勝ちの譲り合いの温床になるため)。
     if (isOnline()) return;
+    recordMvpRewardEvent({
+      id: `cpu-technique:${Date.now()}:${mvpLocalRewardEventSeq++}`,
+      type: 'normal-technique',
+      clutchWin: winner === 'player' && teamHpRatio('player') <= 0.1,
+      ...currentMvpTechniqueEvent('player', winner === 'player')
+    });
     if (isDraw()) return;
     if (winner === 'player') {
       winStreak++;
@@ -12568,11 +12733,6 @@
       if (characterUnlockProgress.bestStreak >= 3) grantUnlockAchievement('streak-3');
       if (characterUnlockProgress.totalWins >= 10) grantUnlockAchievement('ten-wins');
       saveCharacterUnlockProgress();
-      recordMvpRewardEvent({
-        id: `cpu-technique:${Date.now()}:${mvpLocalRewardEventSeq++}`,
-        type: 'normal-technique',
-        clutchWin: teamHpRatio('player') <= 0.1
-      });
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
@@ -14114,6 +14274,14 @@
   function drawUnitPanels() {
     for (const slot of unitPanelLayout()) {
       drawUnitPanel(slot.unit, slot.edgeX, slot.align, slot.cardY, slot.h);
+      if (activeCosmetics.icon === 'icon-brass' && slot.unit.id === localUnitId) {
+        const x = slot.align === 'left' ? slot.edgeX + 18 : slot.edgeX - 18;
+        ctx.save(); ctx.shadowColor = '#f2bd4c'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#382a15'; ctx.strokeStyle = '#e5b755'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, slot.cardY, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff1bd'; ctx.font = `900 10px ${UI_FONT_HEAVY}`; ctx.textAlign = 'center';
+        ctx.fillText('K', x, slot.cardY + 4); ctx.restore();
+      }
     }
   }
 
@@ -14123,8 +14291,12 @@
     const { origin, curX, curY } = aimState;
     const cancelled = isInCancelZone(curX, curY);
     ctx.save();
-    ctx.strokeStyle = cancelled ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 3;
+    const guideColor = subweaponArmed ? '#f29a38' : specialArmed ? '#ff5d4f' : '#ffffff';
+    ctx.strokeStyle = cancelled ? 'rgba(255,90,90,0.85)' : guideColor;
+    ctx.shadowColor = cancelled ? '#ff5a5a' : guideColor;
+    ctx.shadowBlur = 7;
+    ctx.globalAlpha = cancelled ? 0.85 : 0.78;
+    ctx.lineWidth = 3.5;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(origin.x, origin.y);
@@ -14133,7 +14305,7 @@
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.arc(curX, curY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = cancelled ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.8)';
+    ctx.fillStyle = cancelled ? 'rgba(255,90,90,0.85)' : guideColor;
     ctx.fill();
     ctx.restore();
   }
@@ -14167,13 +14339,17 @@
     const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const guideColor = subweaponArmed ? '#f29a38' : activateSpecial ? '#ff5d4f' : '#ffffff';
+    ctx.fillStyle = guideColor;
+    ctx.shadowColor = guideColor;
+    ctx.shadowBlur = 7;
+    ctx.globalAlpha = 0.9;
     for (let i = 1; i <= steps; i++) {
       const t = (previewT * i) / steps;
       const px = anchor.x + vx0 * t + 0.5 * windAccel * t * t;
       const py = anchor.y + vy0 * t + 0.5 * gravity * t * t;
       ctx.beginPath();
-      ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+      ctx.arc(px, py, i === steps ? 4 : 2.7, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -14449,7 +14625,20 @@
       ctx.rotate(Math.atan2(p.vy, p.vx));
       if (p.coolKaiOnigiri) ctx.rotate(p.coolKaiRotation || 0);
 
-      if (p.barucopterMarker) {
+      if (p.subweaponId) {
+        ctx.shadowColor = '#f29a38';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = '#ffb45b';
+        ctx.strokeStyle = '#fff0c5';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (p.subweaponId === 'drill') {
+          ctx.moveTo(15, 0); ctx.lineTo(-8, -8); ctx.lineTo(-3, 0); ctx.lineTo(-8, 8);
+        } else {
+          ctx.arc(0, 0, 7, 0, Math.PI * 2);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else if (p.barucopterMarker) {
         ctx.shadowColor = '#ffd24a';
         ctx.shadowBlur = 14;
         ctx.strokeStyle = '#fff1a8';
@@ -14617,6 +14806,7 @@
       } else {
         // 通常弾は金属製の砲弾。飛翔方向に合わせた尾・胴・帯・先端で立体感を出す。
         const hot = p.blastMul > 1.45;
+        const amber = activeCosmetics.projectile === 'shell-amber';
         const trail = ctx.createLinearGradient(-30, 0, -4, 0);
         trail.addColorStop(0, 'rgba(255,120,36,0)');
         trail.addColorStop(0.55, hot ? 'rgba(255,80,20,0.45)' : 'rgba(255,192,74,0.30)');
@@ -14629,12 +14819,12 @@
         ctx.lineTo(-4, 0);
         ctx.stroke();
 
-        ctx.shadowColor = hot ? '#ff5b22' : '#ffd45c';
+        ctx.shadowColor = hot ? '#ff5b22' : amber ? '#ffb72f' : '#ffd45c';
         ctx.shadowBlur = hot ? 16 : 9;
         const shell = ctx.createLinearGradient(0, -6, 0, 6);
-        shell.addColorStop(0, '#fff2b0');
-        shell.addColorStop(0.28, hot ? '#d85a24' : '#9a7541');
-        shell.addColorStop(0.72, hot ? '#71301f' : '#40372e');
+        shell.addColorStop(0, amber ? '#fff8d8' : '#fff2b0');
+        shell.addColorStop(0.28, hot ? '#d85a24' : amber ? '#e7a12d' : '#9a7541');
+        shell.addColorStop(0.72, hot ? '#71301f' : amber ? '#7e3f16' : '#40372e');
         shell.addColorStop(1, '#17191d');
         ctx.fillStyle = shell;
         ctx.beginPath();
@@ -15922,6 +16112,31 @@
     ctx.restore();
   }
 
+  function drawSubweaponButton() {
+    if (!COOP_MVP_FEATURE_ENABLED || battleMode !== 'normal') return;
+    const me = localUnit();
+    const entry = globalThis.KatamonCoopMvp?.SUBWEAPONS?.find(item => item.id === me?.subweapon);
+    const available = !!entry && me.subweaponUsesLeft > 0;
+    const active = available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
+    const color = subweaponArmed ? '#ffd49a' : available ? '#f29a38' : 'rgba(126,116,99,0.5)';
+    ctx.save();
+    const body = ctx.createRadialGradient(subweaponBtn.x - 10, subweaponBtn.y - 10, 2, subweaponBtn.x, subweaponBtn.y, subweaponBtn.r);
+    if (subweaponArmed) { body.addColorStop(0, '#ffbd69'); body.addColorStop(0.55, '#a54e20'); body.addColorStop(1, '#3c180d'); }
+    else { body.addColorStop(0, '#35434a'); body.addColorStop(0.62, '#182127'); body.addColorStop(1, '#080d10'); }
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(subweaponBtn.x, subweaponBtn.y, subweaponBtn.r, 0, Math.PI * 2); ctx.fill();
+    if (active || subweaponArmed) { ctx.shadowColor = '#f29a38'; ctx.shadowBlur = 12; }
+    ctx.strokeStyle = color; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(subweaponBtn.x, subweaponBtn.y, subweaponBtn.r - 1.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    drawOutlinedText('SUB', subweaponBtn.x, subweaponBtn.y - 5, {
+      font: `900 10px ${UI_FONT_HEAVY}`, color: available ? '#ffe4b5' : 'rgba(226,232,240,0.42)', lineWidth: 3
+    });
+    drawOutlinedText(entry ? (me.subweaponUsesLeft > 0 ? '1回' : me.subweaponBarrierActive ? '展開中' : '済') : 'なし', subweaponBtn.x, subweaponBtn.y + 10, {
+      font: `900 8px ${UI_FONT_HEAVY}`, color: available || me?.subweaponBarrierActive ? '#f29a38' : 'rgba(226,232,240,0.38)', lineWidth: 2.5
+    });
+  }
+
   function drawJumpButton() {
     const me = localUnit();
     const available = me.jumpAvailable !== false && me.moveLockTurns <= 0;
@@ -16414,6 +16629,17 @@
   const onlineCancelButton = document.getElementById('onlineCancel');
   const onlineLeaveConfirmYesButton = document.getElementById('onlineLeaveConfirmYes');
   const onlineLeaveConfirmNoButton = document.getElementById('onlineLeaveConfirmNo');
+  if (onlineVersusKindButton) onlineVersusKindButton.addEventListener('click', () => {
+    if (onlineLobbyBusy || online || !onlineLobbyEl) return;
+    onlineLobbyEl.classList.remove('coop-choice');
+    document.getElementById('onlineLobbyNote').textContent = '部屋を作るか、公開中の部屋を探してください。部屋IDで友だちを招待することもできます。';
+    onlineLobbyStatus('部屋を作るか、公開中の部屋を探してください。');
+  });
+  if (onlineCoopKindButton) onlineCoopKindButton.addEventListener('click', () => {
+    if (onlineLobbyBusy || online || !onlineLobbyEl || !COOP_MVP_FEATURE_ENABLED) return;
+    closeOnlineLobby();
+    globalThis.KatamonCoopRoom?.openLobby();
+  });
   if (onlineCreateModeButton) onlineCreateModeButton.addEventListener('click', () => {
     if (onlineLobbyBusy || online || !onlineLobbyEl) return;
     onlineLobbyEl.classList.remove('browse-mode'); onlineLobbyEl.classList.add('create-mode');
@@ -17374,6 +17600,7 @@
     drawPullLine();
     drawCancelZone();
     drawSpecialButton();
+    drawSubweaponButton();
     drawSoundToggle();
     drawMenuButton();
     drawMatchEndReason();
@@ -17454,11 +17681,11 @@
       if (hitRect(p0, soundTestCloseBtn)) {
         closeSoundTest();
         playUiSound();
-      } else if (hitRect(p0, soundTestShopBtn)) {
+      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, soundTestShopBtn)) {
         closeSoundTest();
         globalThis.KatamonMvpShop?.openShop();
         playUiSound();
-      } else if (hitRect(p0, soundTestAchievementsBtn)) {
+      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, soundTestAchievementsBtn)) {
         closeSoundTest();
         globalThis.KatamonMvpShop?.openAchievements();
         playUiSound();
@@ -17555,8 +17782,6 @@
       } else if (hitRect(p0, titleOnlineBtn)) {
         playUiSound();
         openOnlineLobby();
-      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, titleCoopBtn)) {
-        globalThis.KatamonCoopRoom?.openLobby();
       } else if (hitRect(p0, titleBonusBtn)) {
         playUiSound();
         // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
@@ -17649,7 +17874,7 @@
         leaveSelectToTitle();
         return;
       }
-      if (hitRect(p0, selectSubweaponBtn)) {
+      if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, selectSubweaponBtn)) {
         playUiSound();
         cycleSelectedSubweapon();
         return;
@@ -17811,11 +18036,19 @@
       }
       if (me.jumpAvailable !== false && me.moveLockTurns <= 0 && Math.hypot(p0.x - jumpBtn.x, p0.y - jumpBtn.y) <= jumpBtn.r + 10) {
         jumpArmed = !jumpArmed;
+        if (jumpArmed) subweaponArmed = false;
         if (jumpArmed) pushFloatText(me.x, me.y - UNIT_RADIUS - 28, '着地後 移動不能 1ターン', '#8ee7ff', 16);
         return;
       }
       if (isSpecialReady(me) && Math.hypot(p0.x - specialBtn.x, p0.y - specialBtn.y) <= specialBtn.r + 10) {
         specialArmed = !specialArmed;
+        if (specialArmed) { subweaponArmed = false; jumpArmed = false; }
+        return;
+      }
+      if (COOP_MVP_FEATURE_ENABLED && battleMode === 'normal' && me.subweaponUsesLeft > 0
+          && Math.hypot(p0.x - subweaponBtn.x, p0.y - subweaponBtn.y) <= subweaponBtn.r + 10) {
+        subweaponArmed = !subweaponArmed;
+        if (subweaponArmed) { specialArmed = false; jumpArmed = false; }
         return;
       }
       if (me.grounded && Math.hypot(p0.x - FIRE_BTN.x, p0.y - FIRE_BTN.y) <= FIRE_BTN.r + 10) {
@@ -18018,13 +18251,15 @@
           dy = Math.sin(ang) * dist;
           const me = localUnit();
           const def = CHARACTERS[me.character];
-          const activateSpecial = specialArmed && isSpecialReady(me);
-          const activateJump = jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
+          const activateSubweapon = subweaponArmed && me.subweaponUsesLeft > 0 ? me.subweapon : null;
+          const activateSpecial = !activateSubweapon && specialArmed && isSpecialReady(me);
+          const activateJump = !activateSubweapon && jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def, activateSpecial, activateJump);
-          netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump);
-          launchShot(me, aimState.anchor, vx0, vy0, activateSpecial, false, activateJump);
-          runStats.shots++;
+          netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon);
+          launchShot(me, aimState.anchor, vx0, vy0, activateSpecial, false, activateJump, activateSubweapon);
+          if (activateSubweapon !== 'barrier') runStats.shots++;
           specialArmed = false;
+          subweaponArmed = false;
           jumpArmed = false;
           awaitingResolve = true;
         }
@@ -18068,6 +18303,7 @@
     // 必殺チャージの持ち越しは人数ぶん保持する(1vs1でも2vs2でも同じ扱い)。
     const carriedCharge = {};
     for (const u of units) carriedCharge[u.id] = carrySpecialCharge ? u.specialCharge : 0;
+    resetMvpTechniqueStats();
     // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
     isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
     // 結果画面からの連戦だけ、相手と通常ステージ種別を次戦用に引き直す。
@@ -18158,6 +18394,8 @@
       u.specialCharge = Math.max(0, Math.min(SPECIAL_CHARGE_MAX, carriedCharge[u.id] || 0));
       if (isBossMatch && u.team === 'cpu') u.specialCharge = SPECIAL_CHARGE_MAX;
     }
+    equipSelectedSubweaponForLocalUnit();
+    syncActiveCosmetics();
     submitState = 'idle';
     submitRank = 0;
     submitRevealTimer = 0;

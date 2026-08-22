@@ -32,6 +32,26 @@
     hard: Object.freeze({ grandCannon: 76, twinBarrage: 36, terrainBreaker: 42, missileBombardment: 48 }),
     extreme: Object.freeze({ grandCannon: 88, twinBarrage: 42, terrainBreaker: 50, missileBombardment: 56 }),
   });
+  const SPECIAL_BOSS_PROFILES = Object.freeze({
+    kyoryu: Object.freeze({ damage: 45, terrainRadius: 72 }),
+    medama: Object.freeze({ damage: 20, coreGain: 15, terrainRadius: 0 }),
+    iwa: Object.freeze({ damage: 45, coreGain: 20, terrainRadius: 82 }),
+    tori: Object.freeze({ damage: 63, terrainRadius: 48 }),
+    barugerukan: Object.freeze({ damage: 30, terrainRadius: 34 }),
+    nisenmono: Object.freeze({ damage: 45, terrainRadius: 38 }),
+    burumutan: Object.freeze({ damage: 45, drainHeal: true, terrainRadius: 46 }),
+    sumoeru: Object.freeze({ damage: 67, terrainRadius: 68 }),
+    doRednote: Object.freeze({ damage: 24, terrainRadius: 44 }),
+    hamulton: Object.freeze({ damage: 0, persistentCore: true, terrainRadius: 0 }),
+    mocchario: Object.freeze({ damage: 45, terrainRadius: 76 }),
+    mecha: Object.freeze({ damage: 135, terrainRadius: 52 }),
+    akuma: Object.freeze({ damage: 45, terrainRadius: 0 }),
+    jinba: Object.freeze({ damage: 135, terrainRadius: 88 }),
+    kishi: Object.freeze({ damage: 45, selfCost: 15, terrainRadius: 70 }),
+    neko: Object.freeze({ damage: 20, coreGain: 20, terrainRadius: 0 }),
+    shinigami: Object.freeze({ damage: 0, terrainRadius: 110 }),
+    coolKai: Object.freeze({ damage: 282, terrainRadius: 64 }),
+  });
   let browserController = null;
 
   function clone(value) { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
@@ -144,6 +164,7 @@
       }),
       party,
       support: deps.items.createSupportState(),
+      effects: { persistentCore: null },
       subweapons: deps.subweapons.createMatchState(subEquipment),
       round: 1,
       outcome: null,
@@ -189,9 +210,32 @@
     const result = deps.survival.applyPlayerDamage(state.party, seat, { damage: barrier.damage, knockback });
     state.party = result.party;
     if (result.downedNow) state.stats.anyDown = true;
-    const player = state.party.players[seat];
-    if (player) player.specialGauge = clamp(safeNumber(player.specialGauge) + (result.hpDamage > 0 ? 30 : 0), 0, 100);
     return { hpDamage: result.hpDamage, blocked: barrier.blocked, downedNow: result.downedNow };
+  }
+
+  function addCoreCharge(state, amount) {
+    if (state.encounter.core.exposed || amount <= 0) return;
+    state.encounter.core.charge = clamp(state.encounter.core.charge + amount, 0, 100);
+    if (state.encounter.core.charge >= 100) state.encounter = deps.ai.exposeCore(state.encounter, 'forced', state.round);
+  }
+
+  function tickPersistentCore(state) {
+    const effect = state.effects?.persistentCore;
+    if (!effect || effect.ticksRemaining <= 0) return;
+    addCoreCharge(state, 5);
+    effect.ticksRemaining -= 1;
+    if (effect.ticksRemaining <= 0) state.effects.persistentCore = null;
+  }
+
+  function validatedWeapon(state, seat, requested) {
+    const player = state.party.players[seat];
+    const equipped = state.roster[seat];
+    const kind = requested?.kind;
+    const id = requested?.id;
+    if (kind === 'special' && id === 'special' && safeNumber(player?.specialGauge) >= 100) return { kind, id };
+    if (kind === 'subweapon' && equipped?.subweapon === id && deps.subweapons.SUBWEAPON_IDS.includes(id)) return { kind, id };
+    if (kind === 'coopItem' && equipped?.coopItem === id && ['rescue-kit', 'healing-kit', 'debuff-grenade'].includes(id)) return { kind, id };
+    return { kind: 'normal', id: 'normal' };
   }
 
   function applyPlayerAction(state, seat, action) {
@@ -200,11 +244,16 @@
     if (!player || !deps.survival.canAct(player, next.round)) return { state: next, event: { seat, kind: 'skip', label: 'DOWN' } };
     player.x = clamp(action?.x, 130, 790);
     player.fuel = clamp(player.fuel - clamp(action?.fuelSpent, 0, player.fuel), 0, 100);
-    const weapon = action?.weapon || { kind: 'normal', id: 'normal' };
+    const weapon = validatedWeapon(next, seat, action?.weapon);
     const aim = { x: clamp(action?.aim?.x, 0, 1440), y: clamp(action?.aim?.y, 0, 660) };
-    let rawDamage = weapon.kind === 'special' ? 78 : 45;
+    const specialProfile = SPECIAL_BOSS_PROFILES[next.roster[seat]?.character] || { damage: 45, terrainRadius: 58 };
+    let rawDamage = weapon.kind === 'special' ? specialProfile.damage : 45;
     let label = weapon.kind === 'special' ? '必殺技' : '通常弾';
-    let target = deps.boss.resolveImpactTarget(next.encounter.boss, next.stage.boss, aim, weapon.kind === 'special' ? 58 : 42);
+    let blastRadius = weapon.kind === 'special' ? specialProfile.terrainRadius : 42;
+    let terrainRadius = blastRadius;
+    let target = deps.boss.resolveImpactTarget(next.encounter.boss, next.stage.boss, aim, blastRadius);
+    if (weapon.kind === 'special') player.specialGauge = 0;
+    else player.specialGauge = clamp(safeNumber(player.specialGauge) + 25, 0, 100);
 
     if (weapon.kind === 'subweapon' && weapon.id === 'barrier') {
       const result = deps.subweapons.activateBarrier(next.subweapons, seat); next.subweapons = result.state;
@@ -214,6 +263,9 @@
       const result = deps.subweapons.fireProjectile(next.subweapons, seat, weapon.id); next.subweapons = result.state;
       if (!result.consumed) return { state: next, event: { seat, kind: 'skip', label: 'SUB使用不可', aim } };
       rawDamage = result.projectile.damage; label = weapon.id === 'impact' ? '衝撃弾' : '掘削弾';
+      terrainRadius = Number.isFinite(result.projectile.terrainRadius) ? result.projectile.terrainRadius : 0;
+      blastRadius = Math.max(32, terrainRadius);
+      target = deps.boss.resolveImpactTarget(next.encounter.boss, next.stage.boss, aim, blastRadius);
     }
     if (weapon.kind === 'coopItem') {
       if (weapon.id === 'rescue-kit') {
@@ -231,6 +283,8 @@
       return { state: next, event: { seat, kind: 'debuff', label: result.applied ? 'WEAKENED' : '弱体化弾', aim } };
     }
 
+    if (terrainRadius > 0) next.stage = deps.boss.carveTerrain(next.stage, aim.x, terrainRadius);
+
     const friendly = closestFriendly(next, seat, aim, weapon.kind === 'special' ? 64 : 48);
     if (friendly) {
       const effect = deps.engine.friendlyFireEffect({ damage: rawDamage, knockback: 32, terrainRadius: 44 });
@@ -244,13 +298,19 @@
       next.encounter = result.encounter; bodyDamage = result.bodyDamage;
       const afterDestroyed = deps.boss.PART_ORDER.filter((id) => next.encounter.boss.parts[id].destroyed).length;
       next.stats.partsDestroyed += Math.max(0, afterDestroyed - beforeDestroyed);
-      player.specialGauge = clamp(safeNumber(player.specialGauge) + 26, 0, 100);
       if (weapon.kind === 'special') {
-        player.specialGauge = 0;
-        if (!next.encounter.core.exposed) {
-          next.encounter.core.charge = clamp(next.encounter.core.charge + 10, 0, 100);
-          if (next.encounter.core.charge >= 100) next.encounter = deps.ai.exposeCore(next.encounter, 'forced', next.round);
+        addCoreCharge(next, specialProfile.coreGain || 0);
+        if (specialProfile.persistentCore) {
+          if (!next.effects.persistentCore) {
+            addCoreCharge(next, 5);
+            next.effects.persistentCore = { ticksRemaining: 2, source: seat };
+          } else {
+            next.effects.persistentCore.ticksRemaining = 3;
+            next.effects.persistentCore.source = seat;
+          }
         }
+        if (specialProfile.drainHeal) player.hp = clamp(player.hp + result.bodyDamage + result.partDamage, 0, player.maxHp);
+        if (specialProfile.selfCost) player.hp = Math.max(1, player.hp - specialProfile.selfCost);
       }
     }
     return { state: next, event: { seat, kind: weapon.kind, label, aim, target, bodyDamage } };
@@ -280,6 +340,7 @@
       targets.forEach((seat) => {
         const direction = next.party.players[seat].x < 700 ? -1 : 1;
         applyDamageToPlayer(next, seat, damage, { x: direction * (attack.targetMode === 'terrain' ? 55 : 24), y: -18 });
+        if (attack.targetMode === 'terrain') next.stage = deps.boss.carveTerrain(next.stage, next.party.players[seat].x, 96);
       });
       events.push({ kind: 'boss', label: attack.label, attackId: attack.id, targets });
     }
@@ -292,6 +353,7 @@
 
   function resolveVolley(currentState, volley) {
     let state = clone(currentState);
+    tickPersistentCore(state);
     const events = [];
     const actions = SEATS.map((seat) => volley?.actions?.[seat] ? { seat, ...volley.actions[seat] } : null).filter(Boolean);
     for (const action of actions) {
@@ -366,6 +428,12 @@
     const overlay = browserRoot.document.getElementById('coopBattle');
     const canvas = browserRoot.document.getElementById('coopBattleCanvas');
     const context = canvas.getContext('2d');
+    const rootStyle = browserRoot.getComputedStyle(browserRoot.document.documentElement);
+    const canvasUiFont = rootStyle.getPropertyValue('--katamon-font-ui').trim() || 'sans-serif';
+    const canvasDisplayFont = rootStyle.getPropertyValue('--katamon-font-display').trim() || canvasUiFont;
+    const setCanvasFont = (weight, size, display = false) => {
+      context.font = `${weight} ${size}px ${display ? canvasDisplayFont : canvasUiFont}`;
+    };
     const controlsEl = browserRoot.document.getElementById('coopBattleControls');
     const statusEl = browserRoot.document.getElementById('coopBattleStatus');
     const weaponEl = browserRoot.document.getElementById('coopWeapon');
@@ -383,6 +451,8 @@
     let localCommitted = false;
     let localDraft = null;
     let lastMoveSync = null;
+    let aiDecisionRoundId = '';
+    let aiDecisions = {};
     let advancingRoundId = '';
     let resultEntered = false;
     let resultOpenedAt = 0;
@@ -444,6 +514,7 @@
       if (localRoundId === roundId) return;
       localRoundId = roundId; localCommitted = false;
       lastMoveSync = null;
+      aiDecisionRoundId = ''; aiDecisions = {};
       const player = ownPlayer();
       localDraft = { x: player?.x || 180, fuelSpent: 0, aim: bossAim(state), weapon: { kind: 'normal', id: 'normal' } };
       populateWeapons(); setStatus(player?.status === 'down' ? 'DOWN — 仲間の救助を待っています' : '照準を決めて指を離すとREADY');
@@ -461,10 +532,15 @@
       const finalAfterLock = final === true && active && room.phase === 'playing' && currentRound()?.status === 'input';
       if (!ownCanInput() && !finalAfterLock) return;
       const syncNow = performance.now();
-      const current = { x: localDraft.x };
+      const [kind, id] = String(weaponEl.value || 'normal:normal').split(':');
+      localDraft.weapon = { kind, id };
+      const current = { x: localDraft.x, aim: clone(localDraft.aim), weaponKey: `${kind}:${id}` };
       if (!deps.engine.shouldSyncMove(lastMoveSync, current, syncNow, final === true)) return;
-      lastMoveSync = { x: localDraft.x, sentAt: syncNow };
-      await sendMessage({ t: 'move', x: localDraft.x, fuelSpent: localDraft.fuelSpent, final: final === true }).catch(() => setStatus('移動同期を再試行します'));
+      lastMoveSync = { ...current, sentAt: syncNow };
+      await sendMessage({
+        t: 'move', x: localDraft.x, fuelSpent: localDraft.fuelSpent,
+        aim: clone(localDraft.aim), weapon: clone(localDraft.weapon), final: final === true,
+      }).catch(() => setStatus('入力同期を再試行します'));
     }
 
     async function commitLocal(aim) {
@@ -512,6 +588,18 @@
       return moves;
     }
 
+    function prepareAiDecisions(roundId, actions, now, humansAreReady) {
+      if (!humansAreReady && safeNumber(currentRound()?.deadlineAt) - now > deps.engine.AI_FINALIZE_WINDOW_MS) return {};
+      if (aiDecisionRoundId === roundId) return clone(aiDecisions);
+      const claimed = new Set(Object.values(actions).filter((action) => action?.weapon?.kind === 'coopItem')
+        .map((action) => action.weapon.id === 'rescue-kit' ? 'rescue' : action.weapon.id === 'healing-kit' ? 'healing' : action.weapon.id === 'debuff-grenade' ? 'debuff' : '')
+        .filter(Boolean));
+      aiDecisionRoundId = roundId; aiDecisions = {};
+      SEATS.filter((seat) => state.roster[seat]?.ai && deps.survival.canAct(state.party.players[seat], state.round))
+        .forEach((seat) => { aiDecisions[seat] = buildAiAction(state, seat, roundId, claimed); });
+      return clone(aiDecisions);
+    }
+
     async function hostFinalizeIfReady() {
       if (!isHost() || room.phase !== 'playing' || currentRound()?.status !== 'input') return;
       const roundId = currentRound().id;
@@ -519,16 +607,18 @@
       const humanSeats = Object.keys(state.roster).filter((seat) => !state.roster[seat].ai && deps.survival.canAct(state.party.players[seat], state.round));
       const connected = humanSeats.filter((seat) => now - safeNumber(room.slots?.[seat]?.seenAt, 0) <= DISCONNECT_DETECT_MS);
       const ready = connected.every((seat) => actions[seat]);
+      const decidedAi = prepareAiDecisions(roundId, actions, now, ready);
       if (!ready && now < currentRound().deadlineAt) return;
       const claimed = new Set();
       SEATS.filter((seat) => state.roster[seat]).forEach((seat) => {
         if (actions[seat]) return;
         const player = state.party.players[seat];
         if (!deps.survival.canAct(player, state.round)) return;
-        if (state.roster[seat].ai || !connected.includes(seat)) actions[seat] = buildAiAction(state, seat, roundId, claimed);
+        if (state.roster[seat].ai) actions[seat] = decidedAi[seat] || buildAiAction(state, seat, roundId, claimed);
+        else if (!connected.includes(seat)) actions[seat] = buildAiAction(state, seat, roundId, claimed);
         else actions[seat] = {
           x: moves[seat]?.x ?? player.x, fuelSpent: moves[seat]?.fuelSpent || 0,
-          aim: bossAim(state), weapon: { kind: 'normal', id: 'normal' }, committedAt: now, auto: true,
+          aim: moves[seat]?.aim || bossAim(state), weapon: moves[seat]?.weapon || { kind: 'normal', id: 'normal' }, committedAt: now, auto: true,
         };
       });
       const scheduled = {};
@@ -682,7 +772,7 @@
         else { context.fillStyle = roster.color; context.beginPath(); context.arc(player.x, player.y - 18, 30, 0, Math.PI * 2); context.fill(); }
         context.lineWidth = 4; context.strokeStyle = player.status === 'down' ? '#e34f42' : roster.color; context.strokeRect(player.x - 40, player.y - 78, 80, 8);
         context.fillStyle = player.status === 'down' ? '#9d342f' : '#69cf72'; context.fillRect(player.x - 38, player.y - 76, 76 * player.hp / player.maxHp, 4);
-        context.fillStyle = '#fff0c6'; context.font = 'bold 20px sans-serif'; context.textAlign = 'center'; context.fillText(player.status === 'down' ? 'DOWN' : roster.name, player.x, player.y - 86);
+        context.fillStyle = '#fff0c6'; setCanvasFont(700, 20); context.textAlign = 'center'; context.fillText(player.status === 'down' ? 'DOWN' : roster.name, player.x, player.y - 86);
         context.restore();
       });
     }
@@ -709,7 +799,7 @@
 
     function drawHud(now) {
       context.save(); context.fillStyle = '#081115e8'; context.fillRect(0, 0, 720, 50); context.strokeStyle = '#b77c34'; context.strokeRect(7, 7, 706, 38);
-      context.fillStyle = '#ffe0a0'; context.font = '900 18px sans-serif'; context.textAlign = 'left'; context.fillText(`${deps.boss.BOSS_NAME}　${state.difficulty.toUpperCase()}`, 18, 32);
+      context.fillStyle = '#ffe0a0'; setCanvasFont(900, 18, true); context.textAlign = 'left'; context.fillText(`${deps.boss.BOSS_NAME}　${state.difficulty.toUpperCase()}`, 18, 32);
       const ratio = state.encounter.boss.body.hp / state.encounter.boss.body.maxHp; context.fillStyle = '#281316'; context.fillRect(390, 17, 300, 16); context.fillStyle = '#c44335'; context.fillRect(392, 19, 296 * ratio, 12);
       deps.ai.drawCoreGauge(context, state.encounter, { x: 390, y: 37, width: 300, height: 8 });
       context.fillStyle = '#071014e8'; context.fillRect(0, 520, 720, 220); context.strokeStyle = '#9a6a35'; context.strokeRect(7, 528, 706, 202);
@@ -717,25 +807,25 @@
       cards.forEach((player, index) => {
         const x = 18 + (index % 2) * 347; const y = 542 + Math.floor(index / 2) * 86; const roster = state.roster[player.seat];
         context.fillStyle = '#122127'; context.fillRect(x, y, 332, 74); context.strokeStyle = roster.color; context.strokeRect(x, y, 332, 74);
-        context.fillStyle = '#f9e6bc'; context.font = '900 16px sans-serif'; context.fillText(`P${SEATS.indexOf(player.seat) + 1} ${roster.name}${roster.ai ? ' [AI]' : ''}`, x + 10, y + 22);
-        context.font = 'bold 13px sans-serif'; context.fillText(`${Math.ceil(player.hp)}/${player.maxHp} HP　燃料 ${Math.ceil(player.fuel)}　必殺 ${Math.ceil(player.specialGauge)}%`, x + 10, y + 47);
+        context.fillStyle = '#f9e6bc'; setCanvasFont(900, 16); context.fillText(`P${SEATS.indexOf(player.seat) + 1} ${roster.name}${roster.ai ? ' [AI]' : ''}`, x + 10, y + 22);
+        setCanvasFont(700, 13); context.fillText(`${Math.ceil(player.hp)}/${player.maxHp} HP　燃料 ${Math.ceil(player.fuel)}　必殺 ${Math.ceil(player.specialGauge)}%`, x + 10, y + 47);
         context.fillStyle = player.status === 'down' ? '#ef6558' : '#88d996'; context.fillText(player.status === 'down' ? 'DOWN' : (localRoundId && committedActions(localRoundId)[player.seat] ? 'READY' : 'INPUT'), x + 255, y + 47);
       });
-      if (notice && now < noticeUntil) { context.textAlign = 'center'; context.font = '900 34px sans-serif'; context.fillStyle = '#ffd66f'; context.strokeStyle = '#17100a'; context.lineWidth = 7; context.strokeText(notice, 360, 500); context.fillText(notice, 360, 500); }
+      if (notice && now < noticeUntil) { context.textAlign = 'center'; setCanvasFont(900, 34, true); context.fillStyle = '#ffd66f'; context.strokeStyle = '#17100a'; context.lineWidth = 7; context.strokeText(notice, 360, 500); context.fillText(notice, 360, 500); }
       context.restore();
     }
 
     function drawResult() {
       if (!resultEntered || !resultSummary) return;
       context.save(); context.fillStyle = '#020507d9'; context.fillRect(25, 80, 670, 640); context.strokeStyle = '#c58b3d'; context.lineWidth = 4; context.strokeRect(25, 80, 670, 640);
-      context.textAlign = 'center'; context.font = '900 54px sans-serif'; context.fillStyle = resultSummary.outcome === 'victory' ? '#ffd56a' : '#e96a55'; context.fillText(resultSummary.title, 360, 160);
-      context.font = '900 22px sans-serif'; context.fillStyle = '#f4e3bf'; context.fillText(`${resultSummary.difficulty.toUpperCase()}　獲得 ${resultSummary.coins} 🪙`, 360, 210);
-      context.font = 'bold 19px sans-serif'; context.fillText(`部位破壊 ${resultSummary.partsDestroyed}/${resultSummary.totalParts}　救助 ${resultSummary.rescues}回`, 360, 260);
+      context.textAlign = 'center'; setCanvasFont(900, 54, true); context.fillStyle = resultSummary.outcome === 'victory' ? '#ffd56a' : '#e96a55'; context.fillText(resultSummary.title, 360, 160);
+      setCanvasFont(900, 22); context.fillStyle = '#f4e3bf'; context.fillText(`${resultSummary.difficulty.toUpperCase()}　獲得 ${resultSummary.coins} 🪙`, 360, 210);
+      setCanvasFont(700, 19); context.fillText(`部位破壊 ${resultSummary.partsDestroyed}/${resultSummary.totalParts}　救助 ${resultSummary.rescues}回`, 360, 260);
       if (resultSummary.firstClear) { context.fillStyle = '#ffca52'; context.fillText('FIRST CLEAR BONUS', 360, 306); }
       const names = resultSummary.achievements.map((id) => deps.rewards.ACHIEVEMENTS.find((entry) => entry.id === id)?.name).filter(Boolean);
-      context.fillStyle = '#b9d9d1'; context.font = 'bold 16px sans-serif'; context.fillText(names.length ? `実績達成: ${names.join(' / ')}` : '実績達成なし', 360, 350);
-      const remaining = Math.max(0, Math.ceil((safeNumber(currentRound()?.deadlineAt) - serverNow()) / 1000)); context.fillStyle = '#ffe09a'; context.font = '900 26px sans-serif'; context.fillText(`再戦受付 ${remaining}秒`, 360, 420);
-      context.font = 'bold 16px sans-serif'; context.fillStyle = '#d1c09d'; context.fillText('2人以上＋ホスト希望で同じ要塞・難易度・ステージへ', 360, 458); context.restore();
+      context.fillStyle = '#b9d9d1'; setCanvasFont(700, 16); context.fillText(names.length ? `実績達成: ${names.join(' / ')}` : '実績達成なし', 360, 350);
+      const remaining = Math.max(0, Math.ceil((safeNumber(currentRound()?.deadlineAt) - serverNow()) / 1000)); context.fillStyle = '#ffe09a'; setCanvasFont(900, 26, true); context.fillText(`再戦受付 ${remaining}秒`, 360, 420);
+      setCanvasFont(700, 16); context.fillStyle = '#d1c09d'; context.fillText('2人以上＋ホスト希望で同じ要塞・難易度・ステージへ', 360, 458); context.restore();
     }
 
     function draw() {
@@ -748,8 +838,14 @@
 
     browserRoot.document.getElementById('coopMoveLeft').onclick = () => moveOwn(-1);
     browserRoot.document.getElementById('coopMoveRight').onclick = () => moveOwn(1);
-    weaponEl.onchange = () => { if (!ownCanInput()) populateWeapons(); };
-    canvas.onpointermove = (event) => { if (ownCanInput() && event.buttons) localDraft.aim = pointerWorld(event); };
+    weaponEl.onchange = () => {
+      if (!ownCanInput()) { populateWeapons(); return; }
+      const [kind, id] = String(weaponEl.value || 'normal:normal').split(':');
+      localDraft.weapon = { kind, id }; sendMove(false);
+    };
+    canvas.onpointermove = (event) => {
+      if (ownCanInput() && event.buttons) { localDraft.aim = pointerWorld(event); sendMove(false); }
+    };
     canvas.onpointerup = (event) => { if (ownCanInput()) commitLocal(pointerWorld(event)); };
     browserRoot.document.getElementById('coopVoteRematch').onclick = () => updateOwnReady(true).then(() => {
       browserRoot.document.getElementById('coopVoteRematch').disabled = true; setStatus('再戦希望を送信しました');
@@ -780,6 +876,7 @@
     BASE_BODY_HP,
     BASE_PART_HP,
     BOSS_DAMAGE,
+    SPECIAL_BOSS_PROFILES,
     playerCountRatio,
     revisionPrefix,
     makeRoundId,

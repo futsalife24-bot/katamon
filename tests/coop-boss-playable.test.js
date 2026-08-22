@@ -51,11 +51,30 @@ let result = battle.applyPlayerAction(state, 'p1', { x: 180, fuelSpent: 12, aim:
 check('通常弾で本体HPを削る', result.state.encounter.boss.body.hp < state.encounter.boss.body.hp);
 check('移動燃料は不可逆に消費', result.state.party.players.p1.fuel === 88);
 check('命中で必殺ゲージを蓄積', result.state.party.players.p1.specialGauge > 0);
+check('通常対戦と同じ4行動で必殺ゲージMAX', result.state.party.players.p1.specialGauge === 25);
+check('通常弾は鋼鉄足場を残して地形を削る',
+  result.state.stage.segments[0][0][0] === state.stage.segments[0][0][0]
+    && result.state.stage.segments[Math.floor(bossPoint.x / state.stage.columnWidth)][0][0] > state.stage.segments[Math.floor(bossPoint.x / state.stage.columnWidth)][0][0]);
 check('元の戦闘状態を破壊しない', state.party.players.p1.fuel === 100);
 
 result = battle.applyPlayerAction(state, 'p1', { x: 180, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'subweapon', id: 'barrier' } });
 check('バリアは砲撃せず次の被弾軽減を起動', result.state.subweapons.players.p1.barrierActive && result.event.kind === 'barrier');
 check('バリアは1試合1回を消費', result.state.subweapons.players.p1.usesLeft === 0);
+
+const impactState = battle.createBattleState({ matchId: A, difficulty: 'normal', slots, aiFill: false, characters });
+const impactColumn = Math.floor(bossPoint.x / impactState.stage.columnWidth);
+result = battle.applyPlayerAction(impactState, 'e1', { x: 330, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'subweapon', id: 'impact' } });
+check('衝撃弾はボスへ命中しても地形を削らない',
+  result.state.encounter.boss.body.hp < impactState.encounter.boss.body.hp
+    && result.state.stage.segments[impactColumn][0][0] === impactState.stage.segments[impactColumn][0][0]);
+
+const forgedState = battle.createBattleState({ matchId: A, difficulty: 'normal', slots, aiFill: false, characters });
+result = battle.applyPlayerAction(forgedState, 'p1', { x: 180, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'special', id: 'special' } });
+check('ゲージ不足の必殺要求は通常弾へ戻す', result.event.kind === 'normal' && result.state.party.players.p1.specialGauge === 25);
+result = battle.applyPlayerAction(forgedState, 'p1', { x: 180, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'subweapon', id: 'impact' } });
+check('未装備サブウェポン要求は通常弾へ戻す', result.event.kind === 'normal' && result.state.subweapons.players.p1.usesLeft === 1);
+result = battle.applyPlayerAction(forgedState, 'p1', { x: 180, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'coopItem', id: 'debuff-grenade' } });
+check('未装備CO-OP ITEM要求は通常弾へ戻す', result.event.kind === 'normal' && !result.state.support.bossVulnerability.active);
 
 state.party.players.e1.hp = 0; state.party.players.e1.status = 'down';
 result = battle.applyPlayerAction(state, 'p1', { x: 180, fuelSpent: 0, aim: { x: state.party.players.e1.x, y: state.party.players.e1.y }, weapon: { kind: 'coopItem', id: 'rescue-kit' } });
@@ -80,6 +99,20 @@ aiState.party.players.p1.hp = 0; aiState.party.players.p1.status = 'down';
 const aiAction = battle.buildAiAction(aiState, 's1', A, new Set());
 check('AIはダウン味方の救助を最優先', aiAction.weapon.kind === 'coopItem' && aiAction.weapon.id === 'rescue-kit');
 check('AIはサブウェポンを勝手に使わない', aiAction.weapon.kind !== 'subweapon');
+
+const nuisanceCharacters = [
+  { id: 'medama', name: 'アイボルト', maxHp: 90 },
+  { id: 'hamulton', name: 'ハムルトン', maxHp: 92 },
+];
+let nuisanceState = battle.createBattleState({ matchId: A, difficulty: 'normal', slots, aiFill: false, characters: nuisanceCharacters });
+nuisanceState.party.players.e1.specialGauge = 100;
+result = battle.applyPlayerAction(nuisanceState, 'e1', { x: 330, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'special', id: 'special' } });
+check('単発妨害必殺は元ダメージに加えてCORE変換', result.state.encounter.core.charge === 15 && result.state.party.players.e1.specialGauge === 0);
+const hamultonSlots = clone(slots); hamultonSlots.p1.character = 'hamulton';
+nuisanceState = battle.createBattleState({ matchId: A, difficulty: 'normal', slots: hamultonSlots, aiFill: false, characters: nuisanceCharacters });
+nuisanceState.party.players.p1.specialGauge = 100;
+result = battle.applyPlayerAction(nuisanceState, 'p1', { x: 180, fuelSpent: 0, aim: bossPoint, weapon: { kind: 'special', id: 'special' } });
+check('持続妨害必殺は初回CORE+5かつ最大3回の効果を予約', result.state.encounter.core.charge === 5 && result.state.effects.persistentCore.ticksRemaining === 2);
 
 state = battle.createBattleState({ matchId: A, difficulty: 'hard', slots, aiFill: false, characters });
 const volley = { roundId: A, actions: {
@@ -107,6 +140,7 @@ const mobileQa = fs.readFileSync(path.join(root, 'docs', 'coop-boss-mvp-mobile-q
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8'));
 check('縦持ち720×960の協力戦Canvas', /width="720" height="960"/.test(source));
 check('黒鉄・真鍮の操作盤と火山背景を使用', source.includes('#243238f2') && source.includes('#9f7137') && /stage-volcanic-bg\.jpg/.test(source));
+check('戦場HUDも既存カタモンのUI・見出し書体を使用', source.includes("getPropertyValue('--katamon-font-ui')") && source.includes("getPropertyValue('--katamon-font-display')") && /setCanvasFont\(900, 54, true\)/.test(source));
 check('既存キャラruntime素材をBridgeから受け取る', /assetPath: character\.assetBase/.test(index));
 check('指を離した瞬間にREADY送信', /canvas\.onpointerup.*commitLocal/s.test(source));
 check('ダウン中の人間を入力待ちに含めずAI救助を止めない', /!state\.roster\[seat\]\.ai && deps\.survival\.canAct\(state\.party\.players\[seat\], state\.round\)/.test(source));

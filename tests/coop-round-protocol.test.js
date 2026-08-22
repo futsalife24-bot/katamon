@@ -71,6 +71,12 @@ assert.equal(timeoutRound.commits.p1.auto, true, '入力が無くても期限時
 
 assert.equal(protocol.shouldSyncMove({ x: 100, sentAt: 1000 }, { x: 109 }, 1249, false), false);
 assert.equal(protocol.shouldSyncMove({ x: 100, sentAt: 1000 }, { x: 109 }, 1250, false), true);
+assert.equal(protocol.shouldSyncMove({ x: 100, aim: { x: 10, y: 10 }, weaponKey: 'normal:normal', sentAt: 1000 },
+  { x: 100, aim: { x: 20, y: 10 }, weaponKey: 'normal:normal' }, 1250, false), true,
+  '移動なしでも照準は低頻度同期する');
+assert.equal(protocol.shouldSyncMove({ x: 100, aim: { x: 10, y: 10 }, weaponKey: 'normal:normal', sentAt: 1000 },
+  { x: 100, aim: { x: 10, y: 10 }, weaponKey: 'subweapon:drill' }, 1250, false), true,
+  '武器変更は低頻度同期する');
 assert.equal(protocol.shouldSyncMove({ x: 100, sentAt: 1249 }, { x: 101 }, 1250, true), true, 'READY時は最終位置を必ず同期');
 assert.deepEqual(protocol.friendlyFireEffect({ damage: 45, knockback: 10, terrainRadius: 44 }),
   { damage: 22.5, knockback: 10, terrainRadius: 44 });
@@ -90,5 +96,12 @@ assert.match(message['.write'], /hostUid/);
 assert.match(message['.write'], /!data\.exists\(\)/, 'ラウンド通信は追記専用');
 assert.match(message.sentAt['.validate'], /120000/);
 assert.equal(message.$other['.validate'], false, '未知フィールドを受け入れない');
+assert.ok(message.aim && message.weapon, 'タイムアウト確定用に照準と武器のdraftを検証する');
+assert.match(message.weapon.id['.validate'], /parent\(\)\.child\('kind'\)/,
+  '武器kindとidの組合せをFirebase側でも許可リストへ限定する');
+assert.match(message.action.weapon.id['.validate'], /'rescue-kit'.*'healing-kit'.*'debuff-grenade'/,
+  'READY actionは既知のCO-OP ITEMだけを受理する');
+assert.match(message.actions.$seat.weapon.id['.validate'], /'barrier'.*'impact'.*'drill'/,
+  '確定volleyは既知のサブウェポンだけを受理する');
 
 console.log('協力ラウンド: 30秒入力・確定ロック・固定順砲撃・移動同期（38/38 passed）');

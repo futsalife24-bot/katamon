@@ -74,8 +74,8 @@
 
   function canHostStart(slots, settings) {
     const occupied = SEATS.map((seat) => slots?.[seat]).filter((slot) => slot?.uid);
-    if (!occupied.length || occupied.some((slot) => slot.ready !== true)) return false;
-    return settings?.aiFill === true || occupied.length >= 2;
+    if (occupied.length < 2 || occupied.some((slot) => slot.ready !== true)) return false;
+    return true;
   }
 
   function sourceNamespaces() { return 'coopOpen/coopRooms'; }

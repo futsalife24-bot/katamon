@@ -110,6 +110,18 @@
                 "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
                 "fuelSpent": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
                 "final": { ".validate": "newData.isBoolean()" },
+                "aim": {
+                  ".validate": "newData.hasChildren(['x','y'])",
+                  "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
+                  "y": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 1960" },
+                  "$other": { ".validate": false }
+                },
+                "weapon": {
+                  ".validate": "newData.hasChildren(['kind','id'])",
+                  "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
+                  "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
+                  "$other": { ".validate": false }
+                },
                 "action": {
                   ".validate": "newData.hasChildren(['x','fuelSpent','aim','weapon','committedAt','auto'])",
                   "x": { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 2440" },
@@ -123,7 +135,7 @@
                   "weapon": {
                     ".validate": "newData.hasChildren(['kind','id'])",
                     "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
-                    "id": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+                    "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
                     "$other": { ".validate": false }
                   },
                   "committedAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
@@ -145,7 +157,7 @@
                     "weapon": {
                       ".validate": "newData.hasChildren(['kind','id'])",
                       "kind": { ".validate": "newData.val() === 'normal' || newData.val() === 'special' || newData.val() === 'subweapon' || newData.val() === 'coopItem'" },
-                      "id": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+                      "id": { ".validate": "newData.isString() && ((newData.parent().child('kind').val() === 'normal' && newData.val() === 'normal') || (newData.parent().child('kind').val() === 'special' && newData.val() === 'special') || (newData.parent().child('kind').val() === 'subweapon' && (newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill')) || (newData.parent().child('kind').val() === 'coopItem' && (newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade')))" },
                       "$other": { ".validate": false }
                     },
                     "scheduledAt": { ".validate": "newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000" },
@@ -258,6 +270,7 @@
                 "vy0": { ".validate": "newData.isNumber() && newData.val() >= -5000 && newData.val() <= 5000" },
                 "useSpecial": { ".validate": "newData.isBoolean()" },
                 "useJump": { ".validate": "newData.isBoolean()" },
+                "subweaponId": { ".validate": "newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill'" },
                 "fuel": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
                 "actionId": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/) && (newData.parent().child('t').val() === 'fire' || newData.parent().child('t').val() === 'state' || newData.parent().child('t').val() === 'result')" },
                 "winner": { ".validate": "newData.val() === 'player' || newData.val() === 'cpu' || newData.val() === 'draw'" },

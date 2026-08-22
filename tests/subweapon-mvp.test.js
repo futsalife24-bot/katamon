@@ -80,7 +80,21 @@ assert.match(gameSource, /function cycleSelectedSubweapon\(\)/,
   '専用装備画面を増やさず、所持済みSUBを切り替えられる');
 assert.match(gameSource, /progress\.equipment\.subweapon = selectedSubweapon/,
   '装備は端末内の正規進捗へ保存する');
-assert.match(gameSource, /if \(hitRect\(p0, selectSubweaponBtn\)\)/,
+assert.match(gameSource, /COOP_MVP_FEATURE_ENABLED && hitRect\(p0, selectSubweaponBtn\)/,
   'SUB欄が実際のタップ操作へ接続されている');
+assert.match(gameSource, /function launchSubweaponShot\(/,
+  '通常CPU戦・ONLINE戦も共通発射口からSUBを使用する');
+assert.match(gameSource, /const impact = subweaponId === 'impact';[\s\S]*?noTerrain: true,[\s\S]*?knockbackSpeed: 160/,
+  '衝撃弾はノックバックだけを与え地形を削らない');
+assert.match(gameSource, /explodeAt\([^\n]+!!p\.noTerrain, p\)/,
+  '実弾の地形非破壊指定を着弾処理まで維持する');
+assert.match(gameSource, /subweaponId: opts\.subweaponId \|\| null/,
+  '衝撃弾と掘削弾の種別を弾へ保持する');
+assert.match(gameSource, /subweaponBarrierActive: u\.subweaponBarrierActive === true/,
+  'バリア状態はターン境界snapshotへ保持する');
+assert.match(gameSource, /mitigateDamageWithSubweaponBarrier/,
+  '通常対戦の次の被弾をバリアで半減する');
+assert.match(gameSource, /COOP_MVP_FEATURE_ENABLED && battleMode === 'normal'/,
+  'feature flag OFFやチュートリアルでは通常対戦SUBを出さない');
 
-console.log('サブウェポン3種の役割・装備・1試合1回（42/42 passed）');
+console.log('サブウェポン3種の役割・装備・1試合1回（44/44 passed）');
