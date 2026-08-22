@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.101-coop-fortress-boss';
+const CACHE_VERSION = 'katamon-pwa-v2.0.102-coop-boss-core-ai';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
@@ -15,6 +15,7 @@ const APP_SHELL = [
   './manifest.webmanifest',
   './coop-mvp-foundation.js',
   './coop-mvp-boss.js',
+  './coop-mvp-boss-ai.js',
   './coop-mvp-engine.js',
   './coop-mvp-room.js',
   './assets/bosses/runtime/fortress-tank.webp',
