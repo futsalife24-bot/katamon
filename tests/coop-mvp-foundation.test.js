@@ -19,7 +19,11 @@ const {
 assert.equal(STORAGE_KEY, 'katamon_coop_mvp_v1');
 assert.equal(SCHEMA_VERSION, 1);
 assert.equal(COIN_CAP, 9999);
-assert.deepEqual(DIFFICULTIES.map((entry) => entry.id), ['normal', 'hard', 'extreme']);
+assert.deepEqual(DIFFICULTIES.map(({ id, coreExposeRounds }) => ({ id, coreExposeRounds })), [
+  { id: 'normal', coreExposeRounds: 2 },
+  { id: 'hard', coreExposeRounds: 2 },
+  { id: 'extreme', coreExposeRounds: 1 },
+]);
 assert.deepEqual(COOP_ITEMS.map(({ id, usesPerMatch }) => ({ id, usesPerMatch })), [
   { id: 'rescue-kit', usesPerMatch: 1 },
   { id: 'healing-kit', usesPerMatch: 2 },
