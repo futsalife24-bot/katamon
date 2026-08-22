@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.107-shop-cosmetics';
+const CACHE_VERSION = 'katamon-pwa-v2.0.108-coop-session';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
@@ -22,6 +22,7 @@ const APP_SHELL = [
   './subweapon-mvp.js',
   './coop-mvp-rewards.js',
   './coop-mvp-shop.js',
+  './coop-mvp-session.js',
   './coop-mvp-room.js',
   './assets/bosses/runtime/fortress-tank.webp',
   './assets/bosses/runtime/fortress-tank-phase2.webp',
