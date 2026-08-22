@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.104-coop-support-items';
+  const BUILD_ID = 'v2.0.105-subweapons';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.105', date: '2026/08/22', summary: 'サブウェポン3種の役割を追加' },
     { version: 'v2.0.104', date: '2026/08/22', summary: '協力戦の回復弾と弱体化弾を追加' },
     { version: 'v2.0.103', date: '2026/08/22', summary: '協力戦のダウン・落下救済・救助弾を追加' },
     { version: 'v2.0.102', date: '2026/08/22', summary: '協力ボスのCORE・変形・4技AIを固定' },
@@ -5843,6 +5844,40 @@
   const newMatchStartBtn = { x: VW / 2, y: 492, w: 380, h: 46 };
   const newMatchCancelBtn = { x: VW / 2, y: 550, w: 380, h: 42 };
   const selectBackBtn = { x: 62, y: 32, w: 104, h: 34 };
+  // 見出しの下・右端へ置き、右上の音量ボタンとキャラ名のどちらにも重ねない。
+  const selectSubweaponBtn = { x: VW - 100, y: 104, w: 140, h: 44 };
+  let selectedSubweapon = null;
+
+  function syncSelectedSubweapon() {
+    const foundation = globalThis.KatamonCoopMvp;
+    if (!foundation) { selectedSubweapon = null; return selectedSubweapon; }
+    const progress = foundation.loadState();
+    selectedSubweapon = progress.equipment.subweapon || null;
+    return selectedSubweapon;
+  }
+
+  function ownedSubweapons() {
+    const foundation = globalThis.KatamonCoopMvp;
+    if (!foundation) return [];
+    const progress = foundation.loadState();
+    return foundation.SUBWEAPONS.filter((entry) => progress.inventory[entry.id]);
+  }
+
+  function cycleSelectedSubweapon() {
+    const foundation = globalThis.KatamonCoopMvp;
+    const owned = ownedSubweapons();
+    if (!foundation || !owned.length) {
+      selectedSubweapon = null;
+      showTitleNotice('サブウェポンはショップで購入できます');
+      return null;
+    }
+    const currentIndex = owned.findIndex((entry) => entry.id === selectedSubweapon);
+    selectedSubweapon = owned[(currentIndex + 1 + owned.length) % owned.length].id;
+    const progress = foundation.loadState();
+    progress.equipment.subweapon = selectedSubweapon;
+    foundation.saveState(progress);
+    return selectedSubweapon;
+  }
 
   // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
   function leaveSelectToTitle() {
@@ -5862,6 +5897,7 @@
     battleMode = 'normal';
     setMatchFormat('1v1'); // 通常のCPU戦は従来どおり1vs1
     player.character = key;
+    syncSelectedSubweapon();
     cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
     // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
     gamePhase = 'battle';
@@ -12108,6 +12144,22 @@
     ctx.font = '700 9px ' + UI_FONT;
     ctx.fillText(characterUnlockProgressSummary(), VW / 2, 118);
 
+    // 専用装備画面は増やさず、黒鉄の小札1枚で永久所持済みSUBだけを切り替える。
+    // 未所持時も欄自体は残し、ショップとの関係が分かるようにする。
+    const equippedSubweapon = globalThis.KatamonCoopMvp?.SUBWEAPONS
+      ?.find((entry) => entry.id === selectedSubweapon);
+    drawIronPlate(selectSubweaponBtn.x, selectSubweaponBtn.y, selectSubweaponBtn.w, selectSubweaponBtn.h, {
+      cut: 8, lineWidth: 2, edge: equippedSubweapon ? UI.brassLight : UI.brassDark,
+      rivets: true, rivetInset: 8, rivetRadius: 2
+    });
+    ctx.textAlign = 'center';
+    ctx.fillStyle = UI.gold;
+    ctx.font = `900 8px ${UI_FONT_HEAVY}`;
+    ctx.fillText('SUB', selectSubweaponBtn.x, selectSubweaponBtn.y - 7);
+    ctx.fillStyle = equippedSubweapon ? UI.parchment : 'rgba(226,232,240,0.62)';
+    ctx.font = `900 11px ${UI_FONT_HEAVY}`;
+    ctx.fillText(equippedSubweapon?.label || '未装備', selectSubweaponBtn.x, selectSubweaponBtn.y + 10);
+
     angularPlatePath(selectBackBtn.x, selectBackBtn.y, selectBackBtn.w, selectBackBtn.h, 8);
     ctx.fillStyle = 'rgba(18,24,29,0.96)';
     ctx.fill();
@@ -17436,6 +17488,7 @@
         selectWheelPosition = 0;
         selectWheelVelocity = 0;
         selectWheelDragging = false;
+        syncSelectedSubweapon();
         gamePhase = 'select';
       } else if (hitRect(p0, titleOnlineBtn)) {
         playUiSound();
@@ -17532,6 +17585,11 @@
       if (hitRect(p0, selectBackBtn)) {
         playUiSound();
         leaveSelectToTitle();
+        return;
+      }
+      if (hitRect(p0, selectSubweaponBtn)) {
+        playUiSound();
+        cycleSelectedSubweapon();
         return;
       }
       if (hasSuspendedSave && hitSelectResumeGear(p0)) {
@@ -19117,6 +19175,7 @@
 <script src="coop-mvp-engine.js"></script>
 <script src="coop-mvp-survival.js"></script>
 <script src="coop-mvp-items.js"></script>
+<script src="subweapon-mvp.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>
