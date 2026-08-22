@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.106-achievements-coins';
+  const BUILD_ID = 'v2.0.107-shop-cosmetics';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.107', date: '2026/08/22', summary: '9商品ショップ・実績一覧・コスメを追加' },
     { version: 'v2.0.106', date: '2026/08/22', summary: '18実績・カタコイン・難易度解放を追加' },
     { version: 'v2.0.105', date: '2026/08/22', summary: 'サブウェポン3種の役割を追加' },
     { version: 'v2.0.104', date: '2026/08/22', summary: '協力戦の回復弾と弱体化弾を追加' },
@@ -1398,6 +1399,18 @@
       drawOutlinedText(`♪ ${track.label}`, row.x, row.y + 4, {
         font: `700 11px ${UI_FONT_HEAVY}`, color: selected ? UI.gold : UI.parchment, lineWidth: 3
       });
+    });
+    drawIronPlate(soundTestShopBtn.x, soundTestShopBtn.y, soundTestShopBtn.w, soundTestShopBtn.h, {
+      cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
+    });
+    drawOutlinedText('ショップ', soundTestShopBtn.x, soundTestShopBtn.y + 4, {
+      font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
+    });
+    drawIronPlate(soundTestAchievementsBtn.x, soundTestAchievementsBtn.y, soundTestAchievementsBtn.w, soundTestAchievementsBtn.h, {
+      cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
+    });
+    drawOutlinedText('実績', soundTestAchievementsBtn.x, soundTestAchievementsBtn.y + 4, {
+      font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
     });
     drawIronPlate(soundTestCloseBtn.x, soundTestCloseBtn.y, soundTestCloseBtn.w, soundTestCloseBtn.h, {
       cut: 9, lineWidth: 1.5, rivets: true, rivetInset: 10, rivetRadius: 2
@@ -5521,6 +5534,8 @@
   const titleBonusBtn = COOP_MVP_FEATURE_ENABLED ? { x: 378, y: 836, w: 99, h: 81 } : { x: 378, y: 799, w: 99, h: 81 };
   const soundTestModal = { x: VW / 2, y: VH / 2, w: 500, h: 700 };
   const soundTestCloseBtn = { x: VW / 2, y: VH / 2 + 310, w: 190, h: 44 };
+  const soundTestShopBtn = { x: VW / 2 - 115, y: VH / 2 + 254, w: 190, h: 42 };
+  const soundTestAchievementsBtn = { x: VW / 2 + 115, y: VH / 2 + 254, w: 190, h: 42 };
   let soundTestOpen = false;
   // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
   const TITLE_WOOD_SELECTION_OUTLINE = false;
@@ -8785,6 +8800,7 @@
     if (!foundation || !rewards || typeof update !== 'function') return null;
     const result = update(rewards, foundation.loadState());
     if (result?.state) foundation.saveState(result.state);
+    if (result?.newlyCompleted?.length) globalThis.KatamonMvpShop?.notifyAchievements(result.newlyCompleted);
     return result;
   }
   function syncMvpRewardsFromLegacy() {
@@ -17434,6 +17450,14 @@
       if (hitRect(p0, soundTestCloseBtn)) {
         closeSoundTest();
         playUiSound();
+      } else if (hitRect(p0, soundTestShopBtn)) {
+        closeSoundTest();
+        globalThis.KatamonMvpShop?.openShop();
+        playUiSound();
+      } else if (hitRect(p0, soundTestAchievementsBtn)) {
+        closeSoundTest();
+        globalThis.KatamonMvpShop?.openAchievements();
+        playUiSound();
       } else {
         for (let i = 0; i < SOUND_TEST_TRACKS.length; i++) {
           if (hitRect(p0, soundTestTrackRect(i))) {
@@ -19213,6 +19237,7 @@
 <script src="coop-mvp-items.js"></script>
 <script src="subweapon-mvp.js"></script>
 <script src="coop-mvp-rewards.js"></script>
+<script src="coop-mvp-shop.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>

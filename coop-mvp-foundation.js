@@ -80,7 +80,10 @@
       schemaVersion: SCHEMA_VERSION,
       wallet: { coins: 0 },
       inventory: { 'rescue-kit': true },
-      equipment: { coopItem: 'rescue-kit', subweapon: null, cosmetic: null },
+      equipment: {
+        coopItem: 'rescue-kit', subweapon: null, cosmetic: null,
+        cosmetics: { icon: null, projectile: null, impact: null },
+      },
       boss: { unlockedDifficulties: ['normal'], firstClears: {} },
       achievements: { progress: {}, completed: {}, claimed: {} },
       rewardLedger: {},
@@ -115,6 +118,17 @@
     state.equipment.cosmetic = COSMETIC_IDS.has(requestedCosmetic) && state.inventory[requestedCosmetic]
       ? requestedCosmetic
       : null;
+    const requestedCosmetics = source.equipment?.cosmetics;
+    for (const kind of ['icon', 'projectile', 'impact']) {
+      const requested = requestedCosmetics?.[kind];
+      const item = COSMETICS.find((entry) => entry.id === requested && entry.kind === kind);
+      if (item && state.inventory[item.id]) state.equipment.cosmetics[kind] = item.id;
+    }
+    // v1初期版の単一cosmetic欄を、種類別装備へ後方互換で移行する。
+    const legacyCosmetic = COSMETICS.find((entry) => entry.id === state.equipment.cosmetic);
+    if (legacyCosmetic && !state.equipment.cosmetics[legacyCosmetic.kind]) {
+      state.equipment.cosmetics[legacyCosmetic.kind] = legacyCosmetic.id;
+    }
 
     const requestedDifficulties = Array.isArray(source.boss?.unlockedDifficulties)
       ? source.boss.unlockedDifficulties
