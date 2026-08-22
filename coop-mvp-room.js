@@ -118,6 +118,9 @@
       .coop-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.coop-grid .wide{grid-column:1/-1}.coop-card input,.coop-card select{width:100%;min-width:0;min-height:42px;box-sizing:border-box;padding:8px;color:#fff5dc;background:#081014;border:1px solid #c78335;border-radius:4px;font:400 14px var(--katamon-font-ui)}
       .coop-primary{min-height:56px!important;border-color:#ffe9a8!important;color:#2a1706!important;background:linear-gradient(180deg,#ffdf95,#f0a92e 52%,#c2701a)!important;font-size:17px!important}.coop-primary:disabled{opacity:.35!important;box-shadow:none}
       .coop-entry[hidden],.coop-room[hidden]{display:none}.coop-code{color:#ffd24a;font:400 22px var(--katamon-font-display);letter-spacing:.14em}.coop-note,.coop-status{font-size:12px;line-height:1.55;color:#aebbc5}.coop-status{min-height:2.8em;color:#dce8ee}
+      .coop-boss-card{position:relative;min-height:154px;margin:0 0 12px;overflow:hidden;border:1px solid #c78335;border-radius:5px;background:radial-gradient(circle at 78% 48%,#71331588,transparent 45%),linear-gradient(135deg,#101a1f,#050708);box-shadow:inset 0 0 24px #000,0 5px 16px #0007}
+      .coop-boss-card::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#071014 0 31%,#071014dd 43%,transparent 76%);pointer-events:none}.coop-boss-card img{position:absolute;right:-7%;bottom:-9%;width:86%;height:116%;object-fit:contain;object-position:right bottom;filter:drop-shadow(0 4px 5px #000)}
+      .coop-boss-copy{position:relative;z-index:1;display:flex;min-height:154px;width:53%;box-sizing:border-box;padding:18px 0 16px 15px;flex-direction:column;justify-content:center}.coop-boss-copy span{color:#d8963b;font:400 10px var(--katamon-font-display);letter-spacing:.16em}.coop-boss-copy strong{margin:7px 0 5px;color:#ffe6a6;font:400 18px/1.35 var(--katamon-font-display);text-shadow:0 2px #000}.coop-boss-copy small{color:#bdc9cf;font-size:11px;line-height:1.45}
       .coop-list{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto}.coop-list-row{display:grid;grid-template-columns:1fr auto;gap:3px 8px;padding:9px;border:1px solid #c7833566;border-radius:4px;background:#0004}.coop-list-row strong{color:#ffe2a1}.coop-list-row small{color:#aebbc5}.coop-list-row button{grid-row:span 2;padding:5px 12px;border:1px solid #ffd24a;background:#ffd24a;color:#16110a;border-radius:3px;font-weight:900}
       .coop-seats{display:flex;flex-direction:column;gap:5px}.coop-seat{display:grid;grid-template-columns:28px 1fr auto;gap:4px 8px;align-items:center;padding:8px;border:1px solid #51636d;border-radius:4px;background:#0a151acc}.coop-seat.occupied{border-color:#b8873c}.coop-seat.ready{box-shadow:inset 4px 0 #f4bf4f}.coop-seat b{color:#ffd24a}.coop-seat small{grid-column:2/-1;color:#9fb0bd}.coop-ready-mark{color:#9fb0bd;font-size:11px}.coop-seat.ready .coop-ready-mark{color:#ffe2a1}
       .coop-footer{display:flex;flex-direction:column;gap:8px;padding:10px 16px max(14px,env(safe-area-inset-bottom));border-top:1px solid #c7833555;background:#091116e8}.coop-footer .coop-button{width:100%}
@@ -133,6 +136,7 @@
       <main class="coop-body">
         <section id="coopEntry" class="coop-entry">
           <p class="coop-kicker">巨大要塞 共同討伐作戦</p>
+          <div class="coop-boss-card"><img src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span>FIRST TARGET</span><strong>超大型要塞戦車</strong><small>右側固定型・4人共同討伐</small></div></div>
           <div class="coop-card"><div class="coop-grid">
             <input id="coopRoomName" class="wide" maxlength="24" autocomplete="off" value="巨大要塞へ挑戦" aria-label="部屋名">
             <select id="coopDifficulty" aria-label="難易度"></select>
@@ -361,7 +365,7 @@
         rows.forEach(([code, value]) => {
           const row = document.createElement('div'); row.className = 'coop-list-row';
           const title = document.createElement('strong'); title.textContent = cleanText(value.roomName, 24, '巨大要塞へ挑戦');
-          const detail = document.createElement('small'); detail.textContent = `${cleanText(value.hostName, 12, 'ななし')} ／ ${String(value.difficulty).toUpperCase()} ／ ${value.playerCount}/4人 ／ AI ${value.aiFill ? 'ON' : 'OFF'}`;
+          const detail = document.createElement('small'); detail.textContent = `超大型要塞戦車 ／ ${cleanText(value.hostName, 12, 'ななし')} ／ ${String(value.difficulty).toUpperCase()} ／ ${value.playerCount}/4人 ／ AI ${value.aiFill ? 'ON' : 'OFF'}`;
           const join = document.createElement('button'); join.type = 'button'; join.textContent = '入る'; join.addEventListener('click', () => joinRoom(code));
           row.append(title, detail, join); roomListEl.appendChild(row);
         });
