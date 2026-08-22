@@ -71,8 +71,11 @@ assert.equal(auto.round, 2);
 assert.equal(auto.core.exposed, true);
 assert.equal(auto.core.charge, 63, '大技後の自動露出はゲージ維持');
 assert.equal(auto.core.availableFromRound, 2, '大技後は次ラウンドから露出');
+assert.equal(auto.core.roundsRemaining, 2, 'NORMALのCORE露出は2ラウンド');
 auto = ai.finishRound(auto, []);
 assert.equal(auto.core.roundsRemaining, 1);
+auto = ai.finishRound(auto, []);
+assert.equal(auto.core.exposed, false, 'NORMALは2ラウンド終了時にCOREが閉じる');
 
 let phase = ai.createEncounter({ difficulty: 'normal', bodyHp: 5000, partUnitHp: 500 });
 phase = ai.applyEncounterDamage(phase, { kind: 'body' }, 3250).encounter;
@@ -123,4 +126,4 @@ assert.equal(ai.isRoundLimitDefeat({ ...intact, round: 19 }), true);
 assert.equal(ai.isRoundLimitDefeat({ ...noRepeat, round: 16 }), true);
 assert.equal(ai.isRoundLimitDefeat({ ...extreme, round: 13 }), true);
 
-console.log('協力ボスCORE・Phase2・4技AI（55/55 passed）');
+console.log('協力ボスCORE・Phase2・4技AI（57/57 passed）');
