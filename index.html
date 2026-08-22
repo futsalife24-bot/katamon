@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.108-coop-session';
+  const BUILD_ID = 'v2.0.109-coop-playable';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.109', date: '2026/08/22', summary: '協力ボス戦をロビーから実戦・結果まで接続' },
     { version: 'v2.0.108', date: '2026/08/22', summary: '協力戦の結果・再戦・切断復帰契約を追加' },
     { version: 'v2.0.107', date: '2026/08/22', summary: '9商品ショップ・実績一覧・コスメを追加' },
     { version: 'v2.0.106', date: '2026/08/22', summary: '18実績・カタコイン・難易度解放を追加' },
@@ -1431,6 +1432,7 @@
   function roomScreenOpen() {
     return !!(onlineLobbyEl && onlineLobbyEl.classList.contains('open'));
   }
+  let coopMvpBattleAudioActive = false;
   function desiredBgm() {
     if (soundTestOpen) return 'none';
     if (document.hidden) return 'none';
@@ -1440,6 +1442,7 @@
     // ただし双方「このまま再戦」の自動進行中(online.autoStartNextRound)は数秒で次戦へ進むので、
     // ルーム曲を挟まずステージ曲を続ける。
     if (roomScreenOpen() && !(online && online.autoStartNextRound)) return 'room';
+    if (coopMvpBattleAudioActive) return 'stage';
     // 必殺技デモは選択画面の延長。ステージBGMを読み込まず、タイトル曲を続ける。
     if (gamePhase === 'battle' && battleMode !== 'demo') return 'stage';
     // おまけ曲を選んでいる間はタイトル曲の代わりに鳴らす。
@@ -19218,15 +19221,28 @@
     },
     getPlayerName: localPlayerName,
     getCharacters() {
-      return CHARACTER_LIST.filter(key => isCharacterUnlocked(key)).map(key => ({ id: key, name: CHARACTERS[key].name }));
+      return CHARACTER_LIST.filter(key => isCharacterUnlocked(key)).map(key => {
+        const character = CHARACTERS[key];
+        const assetStem = character.asset || key;
+        return {
+          id: key, name: character.name, maxHp: character.maxHp, color: character.color,
+          assetPath: character.assetBase ? `${character.assetBase}.webp` : `assets/characters/runtime/${assetStem}.webp`,
+        };
+      });
     },
     ensureAuth: ensureFirebaseAuth,
     request: firebaseRequest,
     claimEmptySlot: firebaseClaimEmptySlot,
     serverNow: firebaseServerNow,
     generateRoomCode,
+    pushId: firebasePushId,
     playUiSound,
     syncBgm,
+    setBattleAudio(active) {
+      coopMvpBattleAudioActive = active === true;
+      if (coopMvpBattleAudioActive) currentThemeKey = 'volcanic';
+      syncBgm({ restartStage: coopMvpBattleAudioActive });
+    },
   });
 
 })();
@@ -19240,6 +19256,7 @@
 <script src="coop-mvp-rewards.js"></script>
 <script src="coop-mvp-shop.js"></script>
 <script src="coop-mvp-session.js"></script>
+<script src="coop-mvp-battle.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>

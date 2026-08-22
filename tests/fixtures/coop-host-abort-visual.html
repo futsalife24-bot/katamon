@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <base href="../../">
+  <title>CO-OP BOSS Host Abort QA</title>
+  <style>:root{--katamon-font-ui:system-ui,sans-serif}body{margin:0;background:#071014;color:#ffe0a0;font-family:system-ui,sans-serif}#abortResult{padding:32px;font-weight:900}</style>
+</head>
+<body>
+  <div id="abortResult">ホスト切断の安全中断を確認中…</div>
+  <script src="coop-mvp-foundation.js"></script>
+  <script src="coop-mvp-boss.js"></script>
+  <script src="coop-mvp-boss-ai.js"></script>
+  <script src="coop-mvp-engine.js"></script>
+  <script src="coop-mvp-survival.js"></script>
+  <script src="coop-mvp-items.js"></script>
+  <script src="subweapon-mvp.js"></script>
+  <script src="coop-mvp-rewards.js"></script>
+  <script src="coop-mvp-session.js"></script>
+  <script src="coop-mvp-battle.js"></script>
+  <script>
+    const now = Date.now();
+    const roundId = KatamonCoopBattle.makeRoundId(4, Uint8Array.from({length:20},(_,i)=>i+30));
+    const slots = {
+      p1:{uid:'lost-host',name:'鋼鉄ネコ',character:'kyoryu',subweapon:'barrier',coopItem:'rescue-kit',ready:true,claimedAt:now-200000,seenAt:now-100000},
+      e1:{uid:'qa-guest',name:'琥珀砲手',character:'medama',subweapon:'impact',coopItem:'healing-kit',ready:true,claimedAt:now,seenAt:now},
+    };
+    const room = {protocol:1,hostUid:'lost-host',phase:'playing',expiresAt:now+600000,settings:{difficulty:'normal',aiFill:true,revision:4},slots,round:{id:roundId,status:'input',deadlineAt:now+30000,wind:{direction:1,strength:4},nextWind:{direction:-1,strength:5}},rounds:{}};
+    const bridge = {
+      serverNow:()=>Date.now(),pushId:()=>`qa-${Date.now()}`,setBattleAudio:()=>{},
+      request:async(path,_auth,options={})=>{
+        if(!options.method) return room;
+        const body=options.body?JSON.parse(options.body):null;
+        if(path.endsWith('/phase')){room.phase=body;return body}
+        if(path.endsWith('/slots/e1')){room.slots.e1={...room.slots.e1,...body,seenAt:Date.now()};return room.slots.e1}
+        return body;
+      },
+    };
+    const characters = [
+      {id:'kyoryu',name:'ディラノ',maxHp:100,color:'#76d64b',assetPath:'assets/characters/runtime/dirano.webp'},
+      {id:'medama',name:'アイボルト',maxHp:90,color:'#ffd24a',assetPath:'assets/characters/runtime/eyebolt.webp'},
+      {id:'iwa',name:'ゴーロッカ',maxHp:130,color:'#9a9086',assetPath:'assets/characters/runtime/gorocca.webp'},
+      {id:'tori',name:'フェニーチェ',maxHp:75,color:'#ff8c3a',assetPath:'assets/characters/runtime/fenice.webp'},
+    ];
+    KatamonCoopBattle.startBrowser({
+      session:{role:'guest',seat:'e1',code:'QA456789',auth:{uid:'qa-guest',serverTimeOffset:0},room},bridge,characters,
+      onReturnLobby(nextRoom){document.getElementById('abortResult').textContent=nextRoom.phase==='lobby'?'安全中断成功：無報酬でロビーへ復帰':'安全中断失敗'}
+    });
+  </script>
+</body>
+</html>
