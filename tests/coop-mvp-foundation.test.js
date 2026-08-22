@@ -20,7 +20,11 @@ assert.equal(STORAGE_KEY, 'katamon_coop_mvp_v1');
 assert.equal(SCHEMA_VERSION, 1);
 assert.equal(COIN_CAP, 9999);
 assert.deepEqual(DIFFICULTIES.map((entry) => entry.id), ['normal', 'hard', 'extreme']);
-assert.deepEqual(COOP_ITEMS.map((entry) => entry.id), ['rescue-kit', 'healing-kit', 'debuff-grenade']);
+assert.deepEqual(COOP_ITEMS.map(({ id, usesPerMatch }) => ({ id, usesPerMatch })), [
+  { id: 'rescue-kit', usesPerMatch: 1 },
+  { id: 'healing-kit', usesPerMatch: 2 },
+  { id: 'debuff-grenade', usesPerMatch: 1 },
+]);
 assert.deepEqual(SUBWEAPONS.map((entry) => entry.id), ['barrier', 'impact', 'drill']);
 assert.equal(COSMETICS.length, 3);
 

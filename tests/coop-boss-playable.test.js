@@ -45,6 +45,7 @@ check('4席の協力パーティを生成', Object.keys(state.party.players).len
 check('キャラ固有最大HPを保持', state.party.players.p1.maxHp === 100 && state.party.players.e1.maxHp === 90);
 check('2人+AI2のボスHPは90%補正', state.encounter.boss.body.maxHp === Math.round(battle.BASE_BODY_HP.normal * 0.9));
 check('全員の燃料と必殺ゲージを初期化', Object.values(state.party.players).every((player) => player.fuel === 100 && player.specialGauge === 0));
+check('救助弾は試合開始時に1回', state.party.players.p1.itemUses.rescue === 1);
 
 const bossPoint = { x: 1250, y: 500 };
 let result = battle.applyPlayerAction(state, 'p1', { x: 180, fuelSpent: 12, aim: bossPoint, weapon: { kind: 'normal', id: 'normal' } });
@@ -80,6 +81,12 @@ state.party.players.e1.hp = 0; state.party.players.e1.status = 'down';
 result = battle.applyPlayerAction(state, 'p1', { x: 180, fuelSpent: 0, aim: { x: state.party.players.e1.x, y: state.party.players.e1.y }, weapon: { kind: 'coopItem', id: 'rescue-kit' } });
 check('救助弾でダウン味方を30%復帰', result.state.party.players.e1.status === 'alive' && result.state.party.players.e1.hp === result.state.party.players.e1.maxHp * 0.3);
 check('救助回数を射手ごとに記録', result.state.stats.rescues.p1 === 1);
+check('救助弾は1回で残弾0', result.state.party.players.p1.itemUses.rescue === 0);
+result.state.party.players.s1.hp = 0; result.state.party.players.s1.status = 'down';
+result = battle.applyPlayerAction(result.state, 'p1', { x: 180, fuelSpent: 0, aim: { x: result.state.party.players.s1.x, y: result.state.party.players.s1.y }, weapon: { kind: 'coopItem', id: 'rescue-kit' } });
+check('同じ試合の2回目は救助できない', result.state.party.players.s1.status === 'down' && result.state.stats.rescues.p1 === 1);
+const rematchState = battle.createBattleState({ matchId: B, difficulty: 'normal', slots, aiFill: true, characters });
+check('再戦用の新規状態では救助弾が1回へ戻る', rematchState.party.players.p1.itemUses.rescue === 1);
 
 let healState = battle.createBattleState({ matchId: A, difficulty: 'normal', slots, aiFill: false, characters });
 healState.party.players.e1.hp = 20;
@@ -99,6 +106,9 @@ aiState.party.players.p1.hp = 0; aiState.party.players.p1.status = 'down';
 const aiAction = battle.buildAiAction(aiState, 's1', A, new Set());
 check('AIはダウン味方の救助を最優先', aiAction.weapon.kind === 'coopItem' && aiAction.weapon.id === 'rescue-kit');
 check('AIはサブウェポンを勝手に使わない', aiAction.weapon.kind !== 'subweapon');
+aiState.party.players.s1.itemUses.rescue = 0;
+const exhaustedAiAction = battle.buildAiAction(aiState, 's1', B, new Set());
+check('AIも救助弾を使い切った後は再使用しない', exhaustedAiAction.weapon.id !== 'rescue-kit');
 
 const nuisanceCharacters = [
   { id: 'medama', name: 'アイボルト', maxHp: 90 },
