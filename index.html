@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.98-coop-mvp-foundation';
+  const BUILD_ID = 'v2.0.99-coop-room-lobby';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.99', date: '2026/08/22', summary: '協力機能を通常対戦から安全に分離' },
     { version: 'v2.0.98', date: '2026/08/22', summary: '将来機能を公開から隔離する安全基盤を追加' },
     { version: 'v2.0.97', date: '2026/08/21', summary: 'オンライン入室直後の誤った退出を防止' },
     { version: 'v2.0.96', date: '2026/08/20', summary: '必殺技の詳細から試し打ちデモを再生' },
@@ -5475,6 +5476,9 @@
   let specialDemo = null;
   const specialDemoCloseBtn = { x: VW - 66, y: 38, w: 104, h: 36 };
   const specialDemoReplayBtn = { x: VW / 2, y: VH - 48, w: 176, h: 38 };
+  const COOP_MVP_FEATURE_ENABLED = globalThis.KatamonCoopMvp?.isFeatureEnabled(
+    globalThis.location, globalThis.KATAMON_FEATURES
+  ) === true;
   // 機能は依存モジュールがそろっている時だけ有効。公開後に不具合が見つかった場合も、
   // StageCoreを外したりゲーム本体を書き換えたりせず、読み込み前に
   // `globalThis.KATAMON_FEATURES = { customStages: false }` を置けば安全に停止できる。
@@ -5485,7 +5489,15 @@
   // メロニキが組んだ見本どおり、木板の上を「羊皮紙2段 → 羊皮紙2列 →
   // 吊り看板と盾」の順にする。当たり判定は影やロープを除いた本体側へ置く。
   const TITLE_WOOD_BOARD_RECT = { x: 42, y: 456, w: 456, h: 438 };
-  const TITLE_WOOD_IMAGE_RECTS = {
+  const TITLE_WOOD_IMAGE_RECTS = COOP_MVP_FEATURE_ENABLED ? {
+    cpu: { asset: 'parchment', x: 270, y: 520, w: 301, h: 72 },
+    online: { asset: 'parchment', x: 270, y: 589, w: 301, h: 72 },
+    coop: { asset: 'parchment', x: 270, y: 658, w: 301, h: 72 },
+    tutorial: { asset: 'parchment', x: 169, y: 725, w: 189, h: 48 },
+    free: { asset: 'parchment', x: 374, y: 725, w: 189, h: 48 },
+    ranking: { asset: 'hangingSign', x: 165, y: 824, w: 189, h: 119 },
+    bonus: { asset: 'shield', x: 378, y: 838, w: 125, h: 112 }
+  } : {
     cpu: { asset: 'parchment', x: 270, y: 538, w: 301, h: 82 },
     online: { asset: 'parchment', x: 270, y: 619, w: 301, h: 82 },
     tutorial: { asset: 'parchment', x: 169, y: 700, w: 189, h: 52 },
@@ -5493,12 +5505,13 @@
     ranking: { asset: 'hangingSign', x: 165, y: 787, w: 189, h: 119 },
     bonus: { asset: 'shield', x: 378, y: 801, w: 125, h: 112 }
   };
-  const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
-  const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
-  const titleTutorialBtn = { x: 169, y: 700, w: 175, h: 43 };
-  const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
-  const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
-  const titleBonusBtn = { x: 378, y: 799, w: 99, h: 81 };
+  const titleVsCpuBtn = COOP_MVP_FEATURE_ENABLED ? { x: 270, y: 520, w: 283, h: 55 } : { x: 270, y: 538, w: 283, h: 63 };
+  const titleOnlineBtn = COOP_MVP_FEATURE_ENABLED ? { x: 270, y: 589, w: 283, h: 55 } : { x: 270, y: 619, w: 283, h: 63 };
+  const titleCoopBtn = { x: 270, y: 658, w: 283, h: 55 };
+  const titleTutorialBtn = COOP_MVP_FEATURE_ENABLED ? { x: 169, y: 725, w: 175, h: 39 } : { x: 169, y: 700, w: 175, h: 43 };
+  const titleFreeBtn = COOP_MVP_FEATURE_ENABLED ? { x: 374, y: 725, w: 175, h: 39 } : { x: 374, y: 700, w: 175, h: 43 };
+  const titleRankingBtn = COOP_MVP_FEATURE_ENABLED ? { x: 165, y: 857, w: 173, h: 47 } : { x: 165, y: 820, w: 173, h: 47 };
+  const titleBonusBtn = COOP_MVP_FEATURE_ENABLED ? { x: 378, y: 836, w: 99, h: 81 } : { x: 378, y: 799, w: 99, h: 81 };
   const soundTestModal = { x: VW / 2, y: VH / 2, w: 500, h: 700 };
   const soundTestCloseBtn = { x: VW / 2, y: VH / 2 + 310, w: 190, h: 44 };
   let soundTestOpen = false;
@@ -10700,6 +10713,7 @@
     if (woodUiReady) {
       drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'parchmentLarge', hasSuspendedSave);
       drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE', 'オンライン対戦・観戦', 'parchmentLarge');
+      if (COOP_MVP_FEATURE_ENABLED) drawTitleWoodButtonText(titleCoopBtn, 'CO-OP BOSS', '2〜4人で巨大要塞へ', 'parchmentLarge');
       drawTitleWoodButtonText(titleTutorialBtn, 'チュートリアル',
         tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'parchmentSmall',
         tutorialIsRecommended());
@@ -10727,6 +10741,7 @@
 
       drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
       drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
+      if (COOP_MVP_FEATURE_ENABLED) drawTitleModeButton(titleCoopBtn, 'CO-OP BOSS', '2〜4人で巨大要塞へ', 'online');
       drawTitleModeButton(titleTutorialBtn, 'チュートリアル',
         tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
         tutorialIsRecommended());
@@ -17420,6 +17435,8 @@
       } else if (hitRect(p0, titleOnlineBtn)) {
         playUiSound();
         openOnlineLobby();
+      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, titleCoopBtn)) {
+        globalThis.KatamonCoopRoom?.openLobby();
       } else if (hitRect(p0, titleBonusBtn)) {
         playUiSound();
         // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
@@ -19066,8 +19083,31 @@
     }
   });
 
+  // 協力MVPは通常ONLINEの部屋・状態を直接触らず、認証済みの最小通信境界だけを借りる。
+  // UIと協力用名前空間は外部モジュール側へ隔離し、feature flag OFFでは初期化もしない。
+  globalThis.KatamonCoopBridge = Object.freeze({
+    getState() {
+      return {
+        gamePhase,
+        onlineActive: isOnline() || roomScreenOpen(),
+      };
+    },
+    getPlayerName: localPlayerName,
+    getCharacters() {
+      return CHARACTER_LIST.filter(key => isCharacterUnlocked(key)).map(key => ({ id: key, name: CHARACTERS[key].name }));
+    },
+    ensureAuth: ensureFirebaseAuth,
+    request: firebaseRequest,
+    claimEmptySlot: firebaseClaimEmptySlot,
+    serverNow: firebaseServerNow,
+    generateRoomCode,
+    playUiSound,
+    syncBgm,
+  });
+
 })();
 </script>
+<script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>
 </html>

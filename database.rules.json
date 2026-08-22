@@ -18,6 +18,66 @@
         "$other": { ".validate": false }
       }
     },
+    "coopOpen": {
+      ".read": "auth != null",
+      ".indexOn": ["createdAt"],
+      "$room": {
+        ".write": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && ((newData.exists() && newData.child('hostUid').val() === auth.uid && root.child('coopRooms').child($room).child('hostUid').val() === auth.uid && root.child('coopRooms').child($room).child('slots').child('p1').child('uid').val() === auth.uid && root.child('coopRooms').child($room).child('expiresAt').val() > now) || (data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['hostUid','hostName','roomName','playerCount','difficulty','aiFill','createdAt','expiresAt']) && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 3600000)",
+        "hostUid": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+        "hostName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12" },
+        "roomName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24" },
+        "playerCount": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
+        "difficulty": { ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'" },
+        "aiFill": { ".validate": "newData.isBoolean()" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "expiresAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+    "coopRooms": {
+      "$room": {
+        ".read": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && data.child('expiresAt').isNumber() && data.child('expiresAt').val() > now && (data.child('slots').child('p1').child('uid').val() === auth.uid || data.child('slots').child('e1').child('uid').val() === auth.uid || data.child('slots').child('s1').child('uid').val() === auth.uid || data.child('slots').child('s2').child('uid').val() === auth.uid)",
+        ".write": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && (((!data.exists() || data.child('expiresAt').val() <= now) && newData.exists() && newData.child('protocol').val() === 1 && newData.child('hostUid').val() === auth.uid && newData.child('slots').child('p1').child('uid').val() === auth.uid && !newData.child('slots').child('e1').exists() && !newData.child('slots').child('s1').exists() && !newData.child('slots').child('s2').exists() && newData.child('phase').val() === 'lobby' && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 7200000) || (data.exists() && !newData.exists() && (data.child('hostUid').val() === auth.uid || data.child('expiresAt').val() <= now)))",
+        ".validate": "!newData.exists() || (newData.child('protocol').val() === 1 && newData.child('hostUid').isString() && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 7200000 && newData.hasChildren(['protocol','hostUid','createdAt','expiresAt','phase','settings','slots']))",
+        "protocol": { ".validate": "newData.val() === 1" },
+        "hostUid": { ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val() || data.parent().child('expiresAt').val() <= now)" },
+        "createdAt": { ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val() || data.parent().child('expiresAt').val() <= now)" },
+        "expiresAt": {
+          ".write": "auth != null && data.exists() && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now && newData.isNumber() && newData.val() > data.val()",
+          ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 7200000"
+        },
+        "phase": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now",
+          ".validate": "newData.val() === 'lobby' || newData.val() === 'launching' || newData.val() === 'playing' || newData.val() === 'results'"
+        },
+        "settings": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('phase').val() === 'lobby'",
+          ".validate": "newData.hasChildren(['difficulty','aiFill','revision'])",
+          "difficulty": { ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'" },
+          "aiFill": { ".validate": "newData.isBoolean()" },
+          "revision": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100000" },
+          "$other": { ".validate": false }
+        },
+        "slots": {
+          "$seat": {
+            ".read": "auth != null && root.child('coopRooms').child($room).child('expiresAt').val() > now",
+            ".write": "auth != null && root.child('coopRooms').child($room).child('expiresAt').val() > now && (($seat.matches(/^(e1|s1|s2)$/) && root.child('coopRooms').child($room).child('phase').val() === 'lobby' && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && root.child('coopRooms').child($room).child('slots').child('p1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('e1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s1').child('uid').val() !== auth.uid && root.child('coopRooms').child($room).child('slots').child('s2').child('uid').val() !== auth.uid) || (data.exists() && newData.exists() && data.child('uid').val() === auth.uid && newData.child('uid').val() === data.child('uid').val() && newData.child('claimedAt').val() === data.child('claimedAt').val()) || (root.child('coopRooms').child($room).child('phase').val() === 'lobby' && data.exists() && !newData.exists() && data.child('uid').val() === auth.uid) || ((root.child('coopRooms').child($room).child('phase').val() === 'lobby' || root.child('coopRooms').child($room).child('phase').val() === 'playing') && data.exists() && !newData.exists() && root.child('coopRooms').child($room).child('hostUid').val() === auth.uid && data.child('seenAt').isNumber() && data.child('seenAt').val() < now - 90000))",
+            ".validate": "!newData.exists() || (newData.hasChildren(['uid','name','character','coopItem','ready','claimedAt','seenAt']) && newData.child('uid').isString() && newData.child('claimedAt').isNumber() && newData.child('seenAt').isNumber())",
+            "uid": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12" },
+            "character": { ".validate": "newData.val() === 'kyoryu' || newData.val() === 'medama' || newData.val() === 'iwa' || newData.val() === 'tori' || newData.val() === 'barugerukan' || newData.val() === 'nisenmono' || newData.val() === 'burumutan' || newData.val() === 'sumoeru' || newData.val() === 'doRednote' || newData.val() === 'hamulton' || newData.val() === 'mocchario' || newData.val() === 'mecha' || newData.val() === 'akuma' || newData.val() === 'jinba' || newData.val() === 'kishi' || newData.val() === 'neko' || newData.val() === 'shinigami' || newData.val() === 'coolKai'" },
+            "subweapon": { ".validate": "!newData.exists() || newData.val() === 'barrier' || newData.val() === 'impact' || newData.val() === 'drill'" },
+            "coopItem": { ".validate": "newData.val() === 'rescue-kit' || newData.val() === 'healing-kit' || newData.val() === 'debuff-grenade'" },
+            "ready": { ".validate": "newData.isBoolean()" },
+            "claimedAt": { ".validate": "newData.isNumber()" },
+            "seenAt": { ".validate": "newData.isNumber() && newData.val() <= now + 120000" },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    },
     "rooms": {
       "$room": {
         ".read": "auth != null && $room.matches(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/) && data.child('expiresAt').isNumber() && data.child('expiresAt').val() > now && (data.child('slots').child('p1').child('uid').val() === auth.uid || data.child('slots').child('e1').child('uid').val() === auth.uid || data.child('slots').child('s1').child('uid').val() === auth.uid || data.child('slots').child('s2').child('uid').val() === auth.uid)",

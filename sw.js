@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.98-coop-mvp-foundation';
+const CACHE_VERSION = 'katamon-pwa-v2.0.99-coop-room-lobby';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
@@ -14,6 +14,7 @@ const APP_SHELL = [
   './generated/content-studio-manifest.json',
   './manifest.webmanifest',
   './coop-mvp-foundation.js',
+  './coop-mvp-room.js',
   './game-custom-stages.css',
   './game-custom-stages.js',
   './shared/stage-core.js',
