@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const boss = require('../coop-mvp-boss.js');
 const survival = require('../coop-mvp-survival.js');
 
-assert.equal(survival.RESCUE_USES, 2);
+assert.equal(survival.RESCUE_USES, 1);
 assert.equal(survival.REVIVE_RATIO, 0.3);
 assert.deepEqual(survival.SUPPORT_PROJECTILE_PROFILE, {
   gravity: 650,
@@ -20,7 +20,7 @@ let party = survival.createParty({
   s1: { maxHp: 300, x: 480, y: 520 },
 }, 1);
 assert.deepEqual(Object.keys(party.players), ['p1', 'e1', 's1']);
-assert.equal(party.players.p1.itemUses.rescue, 2);
+assert.equal(party.players.p1.itemUses.rescue, 1);
 assert.equal(survival.canAct(party.players.p1, 1), true);
 
 let hit = survival.applyPlayerDamage(party, 'e1', { damage: 500, knockback: { x: -30, y: -12 } });
@@ -64,7 +64,7 @@ let shot = survival.fireRescueShot(party, 'p1', { x: 332, y: 459 }, 2, 48);
 party = shot.party;
 assert.equal(shot.consumed, true);
 assert.equal(shot.rescuedSeat, 'e1');
-assert.equal(party.players.p1.itemUses.rescue, 1);
+assert.equal(party.players.p1.itemUses.rescue, 0);
 assert.equal(party.players.e1.status, 'alive');
 assert.equal(party.players.e1.hp, 108, '最大HPの30%で復活');
 assert.equal(survival.canAct(party.players.e1, 2), false, '復活ラウンドは攻撃しない');
@@ -72,14 +72,36 @@ assert.equal(survival.canAct(party.players.e1, 3), true, '次ラウンドから�
 
 shot = survival.fireRescueShot(party, 'p1', { x: 332, y: 459 }, 2, 48);
 party = shot.party;
-assert.equal(shot.consumed, true, '重なった後続救助弾も回数を消費');
-assert.equal(shot.rescuedSeat, null, '最初の有効弾だけが復活させる');
+assert.equal(shot.consumed, false, '1回使用後は同じ試合で再発射できない');
+assert.equal(shot.rescuedSeat, null);
+assert.equal(shot.reason, 'no-uses');
 assert.equal(party.players.p1.itemUses.rescue, 0);
 assert.equal(party.players.e1.hp, 108);
 
-shot = survival.fireRescueShot(party, 'p1', { x: 480, y: 520 }, 3, 48);
-assert.equal(shot.consumed, false, '使用回数0なら発射不可');
-assert.equal(shot.reason, 'no-uses');
+let duplicateParty = survival.createParty({
+  p1: { maxHp: 400, x: 180, y: 500 },
+  e1: { maxHp: 360, x: 330, y: 460 },
+  s1: { maxHp: 300, x: 480, y: 520 },
+}, 1);
+duplicateParty = survival.applyPlayerDamage(duplicateParty, 'e1', { damage: 500 }).party;
+const firstDuplicateShot = survival.fireRescueShot(duplicateParty, 'p1', { x: 330, y: 460 }, 2, 48);
+const laterDuplicateShot = survival.fireRescueShot(firstDuplicateShot.party, 's1', { x: 330, y: 460 }, 2, 48);
+assert.equal(firstDuplicateShot.rescuedSeat, 'e1', '複数人の最初の有効弾で復活');
+assert.equal(laterDuplicateShot.consumed, true, '別の射手が確定済みの後続弾も自分の1回を消費');
+assert.equal(laterDuplicateShot.rescuedSeat, null, '後続弾は復活効果なし');
+assert.equal(laterDuplicateShot.party.players.s1.itemUses.rescue, 0);
+assert.equal(laterDuplicateShot.party.players.e1.hp, 108);
+
+let rematchParty = survival.createParty({
+  p1: { maxHp: 400, x: 180, y: 500 },
+  e1: { maxHp: 360, x: 330, y: 460 },
+}, 1);
+assert.equal(rematchParty.players.p1.itemUses.rescue, 1, '次の試合では救助弾を1回へリセット');
+rematchParty = survival.applyPlayerDamage(rematchParty, 'e1', { damage: 500 }).party;
+const rematchShot = survival.fireRescueShot(rematchParty, 'p1', { x: 330, y: 460 }, 2, 48);
+assert.equal(rematchShot.consumed, true);
+assert.equal(rematchShot.rescuedSeat, 'e1');
+assert.equal(rematchShot.party.players.p1.itemUses.rescue, 0);
 
 let defeatParty = survival.createParty({
   p1: { maxHp: 100, x: 100, y: 500 },
@@ -94,4 +116,4 @@ assert.equal(survival.isAllDownDefeat(defeatParty), true, '全員同時ダウン
 const harmless = survival.supportImpactEffect();
 assert.deepEqual(harmless, { bossDamage: 0, enemyDamage: 0, terrainDamage: 0 });
 
-console.log('協力戦ダウン・DEAD LINE救済・救助弾（46/46 passed）');
+console.log('協力戦ダウン・DEAD LINE救済・救助弾（48/48 passed）');

@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createCoopSurvival() {
   'use strict';
 
-  const RESCUE_USES = 2;
+  const RESCUE_USES = 1;
   const REVIVE_RATIO = 0.3;
   const UNIT_RADIUS = 18;
   const SUPPORT_PROJECTILE_PROFILE = Object.freeze({

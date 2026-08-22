@@ -8,6 +8,7 @@ const shop = require('../coop-mvp-shop.js');
 assert.equal(foundation.SHOP_ITEMS.length, 9);
 assert.deepEqual(foundation.SHOP_ITEMS.map((item) => item.price), [100, 200, 200, 0, 100, 200, 100, 150, 200]);
 assert.equal(Object.keys(shop.DESCRIPTIONS).length, 9);
+assert.match(shop.DESCRIPTIONS['rescue-kit'], /1試合1回/, '救助弾の説明へ使用回数を明記');
 
 let state = foundation.createDefaultState();
 state.wallet.coins = 450;
@@ -76,4 +77,4 @@ assert.match(gameSource, /activeCosmetics\.icon === 'icon-brass'/, '真鍮アイ
 assert.match(gameSource, /activeCosmetics\.projectile === 'shell-amber'/, '琥珀砲弾を既存の通常弾描画へ適用する');
 assert.match(gameSource, /activeCosmetics\.impact === 'impact-cyan'/, '蒼光着弾を既存の爆発粒子へ適用する');
 
-console.log('9商品ショップ・簡易DEMO・3コスメ・18実績一覧（57/57 passed）');
+console.log('9商品ショップ・簡易DEMO・3コスメ・18実績一覧（58/58 passed）');
