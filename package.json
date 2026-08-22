@@ -25,9 +25,10 @@
     "test:coop-survival": "node tests/coop-down-rescue.test.js",
     "test:coop-items": "node tests/coop-support-items.test.js",
     "test:subweapons": "node tests/subweapon-mvp.test.js",
+    "test:coop-rewards": "node tests/coop-achievements-coins.test.js",
     "test:existing": "npm run test:seat && npm run test:regression && npm run test:result && npm run test:loopback && npm run test:stage3 && npm run test:lobby && npm run test:back && npm run test:ranking && npm run test:undef && npm run test:app-shell && npm run test:cache-version",
     "test:stage": "node --test tests/stage-*.test.js",
-    "test": "npm run test:docs && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:subweapons && npm run test:existing && npm run test:stage",
+    "test": "npm run test:docs && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:subweapons && npm run test:coop-rewards && npm run test:existing && npm run test:stage",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "e2e:install": "playwright install chromium webkit"

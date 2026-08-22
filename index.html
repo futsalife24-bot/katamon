@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.105-subweapons';
+  const BUILD_ID = 'v2.0.106-achievements-coins';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.106', date: '2026/08/22', summary: '18実績・カタコイン・難易度解放を追加' },
     { version: 'v2.0.105', date: '2026/08/22', summary: 'サブウェポン3種の役割を追加' },
     { version: 'v2.0.104', date: '2026/08/22', summary: '協力戦の回復弾と弱体化弾を追加' },
     { version: 'v2.0.103', date: '2026/08/22', summary: '協力戦のダウン・落下救済・救助弾を追加' },
@@ -8777,6 +8778,21 @@
   function saveCharacterUnlockProgress() {
     try { localStorage.setItem(CHARACTER_UNLOCK_KEY, JSON.stringify(characterUnlockProgress)); } catch (_) { /* 保存不可でも対戦は止めない */ }
   }
+  let mvpLocalRewardEventSeq = 0;
+  function applyMvpRewardUpdate(update) {
+    const foundation = globalThis.KatamonCoopMvp;
+    const rewards = globalThis.KatamonCoopRewards;
+    if (!foundation || !rewards || typeof update !== 'function') return null;
+    const result = update(rewards, foundation.loadState());
+    if (result?.state) foundation.saveState(result.state);
+    return result;
+  }
+  function syncMvpRewardsFromLegacy() {
+    return applyMvpRewardUpdate((rewards, state) => rewards.syncLegacyProgress(state, characterUnlockProgress));
+  }
+  function recordMvpRewardEvent(event) {
+    return applyMvpRewardUpdate((rewards, state) => rewards.recordEvent(state, event));
+  }
   function loadCharacterUnlockProgress() {
     try {
       const raw = localStorage.getItem(CHARACTER_UNLOCK_KEY);
@@ -8789,6 +8805,7 @@
     const current = Number.isSafeInteger(characterUnlockProgress.achievements[id]) ? characterUnlockProgress.achievements[id] : 0;
     characterUnlockProgress.achievements[id] = Math.min(999999, current + Math.max(1, Math.floor(amount)));
     saveCharacterUnlockProgress();
+    syncMvpRewardsFromLegacy();
   }
   function unlockConditionLabel(unlock) {
     if (!unlock.enabled || unlock.type === 'always') return 'いつでも使用可能';
@@ -9048,14 +9065,26 @@
   function recordFirebaseMatchResultOnce() {
     if (!online || online.kind !== 'firebase' || online.participantRole !== 'player') return false;
     const rivals = Array.isArray(online.roundRivals) ? online.roundRivals : firebaseRivalsForSeats(firebaseOpponentHumanSeats());
-    return recordMatchResultOnce({
+    const outcome = firebaseOutcomeForSeat(winner, online.seat);
+    const detail = {
       matchId: online.currentRoundId,
-      outcome: firebaseOutcomeForSeat(winner, online.seat),
+      outcome,
       character: firebaseBattleRecordCharacterKey(),
       rivals,
       reason: matchEndReason,
       playedAt: Date.now()
-    });
+    };
+    const recorded = recordMatchResultOnce(detail);
+    // 対人戦績は相手の匿名IDが未取得なら記録しないが、試合報酬はroundIdで安全に一度だけ処理する。
+    if (firebaseOpponentHumanSeats().length > 0 && (outcome === 'win' || outcome === 'loss' || outcome === 'draw')) {
+      recordMvpRewardEvent({
+        id: `pvp:${online.currentRoundId}`,
+        type: 'pvp-result',
+        outcome,
+        hpRatio: teamHpRatio(localUnit().team)
+      });
+    }
+    return recorded;
   }
   function battleRecordCountText(counts, includeMatches = true) {
     const safe = normalizeBattleCounts(counts);
@@ -12519,6 +12548,11 @@
       if (characterUnlockProgress.bestStreak >= 3) grantUnlockAchievement('streak-3');
       if (characterUnlockProgress.totalWins >= 10) grantUnlockAchievement('ten-wins');
       saveCharacterUnlockProgress();
+      recordMvpRewardEvent({
+        id: `cpu-technique:${Date.now()}:${mvpLocalRewardEventSeq++}`,
+        type: 'normal-technique',
+        clutchWin: teamHpRatio('player') <= 0.1
+      });
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
@@ -19020,6 +19054,8 @@
   loadBattleRecord();
   loadCharacterUnlockProgress();
   recordUnlockLogin();
+  // 報酬拡張はこのインライン本体より後で読み込まれるため、全scriptの準備後に既存進捗を一度移行する。
+  window.addEventListener('load', syncMvpRewardsFromLegacy, { once: true });
   // 部屋へ入る前に匿名IDを作り始める。送信時にも待ち直すので、未完了でも生IDへ戻すことはない。
   localRivalId().catch(() => '');
   // 前回オフラインで送れなかった記録があれば、起動時に送り直す
@@ -19176,6 +19212,7 @@
 <script src="coop-mvp-survival.js"></script>
 <script src="coop-mvp-items.js"></script>
 <script src="subweapon-mvp.js"></script>
+<script src="coop-mvp-rewards.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>
