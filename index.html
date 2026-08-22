@@ -650,10 +650,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.102-coop-boss-core-ai';
+  const BUILD_ID = 'v2.0.103-coop-down-rescue';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.103', date: '2026/08/22', summary: '協力戦のダウン・落下救済・救助弾を追加' },
     { version: 'v2.0.102', date: '2026/08/22', summary: '協力ボスのCORE・変形・4技AIを固定' },
     { version: 'v2.0.101', date: '2026/08/22', summary: '初代協力ボスと専用固定ステージを追加' },
     { version: 'v2.0.100', date: '2026/08/22', summary: '協力戦の30秒同時入力ルールを固定' },
@@ -19113,6 +19114,7 @@
 <script src="coop-mvp-boss.js"></script>
 <script src="coop-mvp-boss-ai.js"></script>
 <script src="coop-mvp-engine.js"></script>
+<script src="coop-mvp-survival.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
 </body>
