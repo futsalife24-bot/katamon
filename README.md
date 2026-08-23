@@ -165,5 +165,7 @@ MVPは端末内保存、ファイル共有、同一端末または事前配布�
 - [利用ガイド](docs/stage-studio-user-guide.md)
 - [モバイルQA](docs/mobile-stage-studio-qa.md)
 - [既存ゲームテスト](tests/README.md)
+- [将来機能アイデア置き場](IDEAS_将来機能.md)
+- [必殺技アイデア置き場](IDEAS_必殺技.md)
 
 `.env.example`は作成していない。MVPに外部サービス用の環境変数や秘密情報が不要なためである。
