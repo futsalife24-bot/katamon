@@ -1172,9 +1172,6 @@ const HOOK = `
     freeStageGroup: () => (typeof freeStageGroup === 'function'
       ? JSON.parse(JSON.stringify(freeStageGroup()))
       : null),
-    freePreviewShouldMirror: (kind, imageKey) => (typeof freePreviewShouldMirror === 'function'
-      ? freePreviewShouldMirror(kind, imageKey)
-      : null),
     freeTrainingMenuRows: () => (typeof freeTrainingMenuRows === 'function'
       ? JSON.parse(JSON.stringify(freeTrainingMenuRows()))
       : null),

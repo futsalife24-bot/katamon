@@ -946,15 +946,18 @@ const customStageLauncherJs = require('fs').readFileSync(require('path').join(__
 check('カスタムステージはSTAGEの下段へ収まる色付きの選択ボタンである',
   /#customStageLauncher\s*\{[^}]*border:\s*1px solid rgba\(102, 190, 184, \.82\)[^}]*background:\s*linear-gradient\(180deg, rgba\(37, 83, 88, \.96\), rgba\(12, 38, 43, \.98\)\)/s.test(customStageLauncherCss),
   customStageLauncherCss.match(/#customStageLauncher\s*\{[^}]*\}/s)?.[0]);
-const freePreviewDirections = kt.chars().map(key => ({
-  key,
-  playerMirrored: kt.freePreviewShouldMirror('player', key),
-  enemyMirrored: kt.freePreviewShouldMirror('cpu', key)
-}));
-check('演習設定のキャラ画像は右向き原画から味方を右・相手を左へ揃える',
-  freePreviewDirections.every(item => item.playerMirrored === false
-    && item.enemyMirrored === true),
-  JSON.stringify(freePreviewDirections));
+const freeRowStart = indexHtml.indexOf('function drawFreeRow(');
+const freeRowEnd = indexHtml.indexOf('function drawFreeStageGroup(', freeRowStart);
+const freeRowSource = freeRowStart >= 0 && freeRowEnd > freeRowStart
+  ? indexHtml.slice(freeRowStart, freeRowEnd)
+  : '';
+check('演習設定のキャラ画像は敵欄も右向き原画をそのまま使い、個別反転しない',
+  !indexHtml.includes('function freePreviewShouldMirror(')
+    && !/scale\s*\(\s*-1\s*,\s*1\s*\)/.test(freeRowSource),
+  JSON.stringify({
+    hasLegacyMirrorHelper: indexHtml.includes('function freePreviewShouldMirror('),
+    hasFreeRowFlip: /scale\s*\(\s*-1\s*,\s*1\s*\)/.test(freeRowSource)
+  }));
 check('サウンド設定を開いている間はカスタムステージのボタンを前面へ出さない',
   /soundPanelOpen,/.test(indexHtml)
     && /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs),
