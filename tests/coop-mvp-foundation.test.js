@@ -64,10 +64,12 @@ assert.equal(sanitized.equipment.cosmetic, null);
 assert.deepEqual(sanitized.boss.unlockedDifficulties, ['normal', 'extreme']);
 assert.deepEqual(sanitized.rewardLedger, { alpha: true });
 
-assert.equal(isFeatureEnabled({ hostname: 'futsalife24-bot.github.io', search: '?coopMvp=1' }, {}), false,
-  '公開ホストではURLだけで未完成機能を出さない');
-assert.equal(isFeatureEnabled({ hostname: '127.0.0.1', search: '' }, {}), false,
-  '開発ホストでも明示指定なしならOFF');
+assert.equal(isFeatureEnabled({ hostname: 'futsalife24-bot.github.io', search: '' }, {}), true,
+  '公開ホストでは協力ボスを標準で有効にする');
+assert.equal(isFeatureEnabled({ hostname: 'futsalife24-bot.github.io', search: '?coopMvp=1' }, { coopBossMvp: false }), false,
+  '公開後も明示フラグで緊急停止できる');
+assert.equal(isFeatureEnabled({ hostname: '127.0.0.1', search: '' }, {}), true,
+  '公開ON後は開発ホストでも標準で有効にする');
 assert.equal(isFeatureEnabled({ hostname: '127.0.0.1', search: '?coopMvp=1' }, {}), true);
 assert.equal(isFeatureEnabled({ hostname: '192.168.1.10', search: '' }, { coopBossMvp: true }), true);
 

@@ -8,9 +8,9 @@
   const STORAGE_KEY = 'katamon_coop_mvp_v1';
   const SCHEMA_VERSION = 1;
   const COIN_CAP = 9999;
-  // 公開ホストでは、URLを書き換えても開発途中の入口を出さない。
-  // 公開時は専用PRで true へ切り替え、全実機QAを再実施する。
-  const PRODUCTION_ENABLED = false;
+  // 公開版では協力ボスを標準で有効にする。緊急停止は
+  // `globalThis.KATAMON_FEATURES = { coopBossMvp: false }` で行う。
+  const PRODUCTION_ENABLED = true;
 
   const deepFreeze = (value) => {
     if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
