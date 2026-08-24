@@ -663,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.137-hamulton-cream-cloud';
+  const BUILD_ID = 'v2.0.138-hamulton-cloud-debuff';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.138', date: '2026/08/24', summary: 'ハムルトン雲の妨害表示と大きさを修正' },
     { version: 'v2.0.137', date: '2026/08/24', summary: 'ハムルトンのクリーム雲を3コマアニメへ更新' },
     { version: 'v2.0.136', date: '2026/08/24', summary: '協力ボスNORMALの戦闘テンポを短縮' },
     { version: 'v2.0.135', date: '2026/08/24', summary: '要塞を大型化し待機モーションと高所足場を追加' },
@@ -4473,6 +4474,8 @@
   const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets/effects/hamulton-cream-cloud-frames.png';
   const CREAM_CLOUD_FRAME_COUNT = 3;
   const CREAM_CLOUD_FRAME_MS = 220;
+  // 素材の透明余白を含む横幅。実際に見える雲が半径76pxの判定からはみ出さない大きさにする。
+  const CREAM_CLOUD_VISUAL_SCALE = 2.12;
   let hamultonCreamCloudImage = null;
   function getHamulkaCreamCloudImage() {
     if (hamultonCreamCloudImage) return hamultonCreamCloudImage;
@@ -5767,10 +5770,17 @@
     creamClouds = creamClouds.filter(cloud => cloud.owner !== p.owner);
     creamClouds.push({ x, y, radius: CREAM_CLOUD_RADIUS, owner: p.owner, enemyTurnsLeft: 3 });
   }
-  function unitIsInCreamCloud(unit) {
-    if (!unit || unitDefeated(unit)) return false;
+  function creamCloudDebuffTurnsFor(unit) {
+    if (!unit || unitDefeated(unit)) return 0;
     const anchor = unitAnchor(unit);
-    return creamClouds.some(cloud => Math.hypot(anchor.x - cloud.x, anchor.y - cloud.y) <= cloud.radius + UNIT_RADIUS);
+    return creamClouds.reduce((remaining, cloud) => (
+      Math.hypot(anchor.x - cloud.x, anchor.y - cloud.y) <= cloud.radius + UNIT_RADIUS
+        ? Math.max(remaining, cloud.enemyTurnsLeft)
+        : remaining
+    ), 0);
+  }
+  function unitIsInCreamCloud(unit) {
+    return creamCloudDebuffTurnsFor(unit) > 0;
   }
   function advanceCreamCloudsForTurn(unit) {
     if (!unit) return;
@@ -16071,7 +16081,8 @@
     // 悪魔の必殺を構えている間は弾が直進するので、ガイドも重力・風を切って直線にする。
     const straightGuide = specialArmed && isSpecialReady(me) && def.key === 'akuma';
     const gravity = straightGuide ? 0 : GRAVITY * shotProfile.gravityMul;
-    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul * (unitIsInCreamCloud(me) ? 0.5 : 1);
+    const creamClouded = unitIsInCreamCloud(me);
+    const previewT = trajectoryPreviewDuration(vx0, vy0, gravity) * shotProfile.guideMul * (creamClouded ? 0.5 : 1);
     const steps = 14;
     const windAccel = straightGuide ? 0 : wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul;
 
@@ -17237,6 +17248,8 @@
     const entries = [];
     if (u.actionSkipTurns > 0) entries.push(`行動不能 ${u.actionSkipTurns}手`);
     if (u.moveLockTurns > 0) entries.push(`移動封印 ${u.moveLockTurns}手`);
+    const creamCloudTurns = creamCloudDebuffTurnsFor(u);
+    if (creamCloudTurns > 0) entries.push(`照準妨害 ${creamCloudTurns}手`);
     return entries;
   }
 
@@ -18142,9 +18155,9 @@
     for (const cloud of creamClouds) {
       ctx.save();
       const glow = ctx.createRadialGradient(cloud.x, cloud.y - 12, 8, cloud.x, cloud.y, cloud.radius);
-      glow.addColorStop(0, 'rgba(255,249,194,0.78)');
-      glow.addColorStop(0.55, 'rgba(255,222,91,0.48)');
-      glow.addColorStop(1, 'rgba(242,183,51,0.05)');
+      glow.addColorStop(0, 'rgba(255,249,194,0.35)');
+      glow.addColorStop(0.55, 'rgba(255,222,91,0.22)');
+      glow.addColorStop(1, 'rgba(242,183,51,0.03)');
       ctx.fillStyle = glow;
       ctx.beginPath(); ctx.ellipse(cloud.x, cloud.y - 10, cloud.radius, cloud.radius * 0.48, 0, 0, Math.PI * 2); ctx.fill();
       const image = getHamulkaCreamCloudImage();
@@ -18154,9 +18167,10 @@
         const sourceW = image.naturalWidth / CREAM_CLOUD_FRAME_COUNT;
         const sourceH = image.naturalHeight;
         const frameIndex = Math.floor(simTimeMs / CREAM_CLOUD_FRAME_MS) % CREAM_CLOUD_FRAME_COUNT;
-        const drawW = cloud.radius * 3.12;
+        const drawW = cloud.radius * CREAM_CLOUD_VISUAL_SCALE;
         const drawH = drawW * (sourceH / sourceW);
-        ctx.globalAlpha = 0.96;
+        // キャラを隠し切らず、妨害範囲の内側でも状況を読める半透明にする。
+        ctx.globalAlpha = 0.5;
         ctx.drawImage(image, frameIndex * sourceW, 0, sourceW, sourceH,
           cloud.x - drawW * 0.5, cloud.y - drawH * 0.62, drawW, drawH);
       } else {
@@ -19224,7 +19238,9 @@
 
   function drawFireButton() {
     if (gamePhase !== 'battle') return;
-    const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && localUnit().grounded;
+    const me = localUnit();
+    const creamClouded = unitIsInCreamCloud(me);
+    const active = isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked() && me.grounded;
     const cx = FIRE_BTN.x, cy = FIRE_BTN.y, r = FIRE_BTN.r;
 
     // 引っ張り量から「パワー%」と「仰角」を算出して数値で見せる。
@@ -19290,7 +19306,7 @@
     }
 
     // パワーゲージ(真上から時計回りに溜まる)
-    if (aiming && !cancelling) {
+    if (aiming && !cancelling && !creamClouded) {
       const gr = r - 15;
       ctx.lineCap = 'round';
       ctx.lineWidth = 6;
@@ -19316,6 +19332,10 @@
       // 中心付近はキャンセル圏のリングと指の位置が重なるため、文字はリングの外へ逃がす
       drawOutlinedText('キャンセル', cx, cy + 56, { font: `900 21px ${UI_FONT_HEAVY}`, color: '#ff9c9c' });
       drawOutlinedText('離すと中止', cx, cy + 76, { font: `900 11px ${UI_FONT_HEAVY}`, color: 'rgba(255,180,180,0.85)', lineWidth: 3 });
+    } else if (aiming && creamClouded) {
+      // 数値のPOWER・仰角は出さない。弾道もdrawTrajectoryPreview側で半分までに制限する。
+      drawOutlinedText('視界不良', cx, cy - 12, { font: `900 21px ${UI_FONT_HEAVY}`, color: '#ffe889', lineWidth: 4 });
+      drawOutlinedText('CREAM CLOUD', cx, cy + 14, { font: `900 10px ${UI_FONT_HEAVY}`, color: 'rgba(255,235,156,0.85)', lineWidth: 3 });
     } else if (aiming) {
       drawOutlinedText('POWER', cx, cy - 36, { font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3 });
       drawOutlinedText(String(power), cx, cy + 6, { font: `900 46px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5 });
