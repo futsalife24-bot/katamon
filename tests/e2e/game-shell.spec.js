@@ -143,20 +143,14 @@ test.describe('カタモン本体の基本導線', () => {
     await page.goto('about:blank');
   });
 
-  test('協力MVPの入口・ショップ・実績がスマホ内へ収まり、公開OFF画面へ直ボタンを増やさない', async ({ page }) => {
+  test('公開ONの協力MVP入口・ショップ・実績がスマホ内へ収まり、タイトルへ直ボタンを増やさない', async ({ page }) => {
     test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
     await openTitle(page);
-    await expect(page.locator('#coopBossLobby')).toHaveCount(0);
-    await expect(page.locator('#mvpCollection')).toHaveCount(0);
-    await tapVirtualCanvas(page, 270, 619);
-    await expect(page.locator('#onlineLobby')).not.toHaveClass(/coop-choice/);
-    await expect(page.locator('#onlineKindActions')).toBeHidden();
-    await page.locator('#onlineCancel').click();
-
-    await openTitle(page, `${GAME_URL}?coopMvp=1`);
+    await expect(page.locator('#coopBossLobby')).toHaveCount(1);
+    await expect(page.locator('#mvpCollection')).toHaveCount(1);
     await expect(page.locator('#titleCoopBtn')).toHaveCount(0);
     await tapVirtualCanvas(page, 270, 619); // ONLINE BATTLE
     await expect(page.locator('#onlineLobby')).toHaveClass(/open.*coop-choice|coop-choice.*open/);
