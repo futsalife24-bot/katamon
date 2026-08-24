@@ -2464,6 +2464,14 @@ function check(name, value) {
     && htmlText.includes('applySnapshot(msg.snap, { preserveTerrain: true });'));
   check('30fps idle battle frames preserve a full 1/30-second fixed-step budget',
     gameLoopSource.includes('const dt = Math.min(0.034, (ts - lastTime) / 1000);'));
+  const coopBossIdleSource = htmlText.match(/function drawCoopBossIdleMotion\(u, rect, foreground\)[\s\S]*?\n  \}/)?.[0] || '';
+  check('the enlarged co-op fortress keeps physics fixed while exhaust and hydraulics animate',
+    htmlText.includes('const COOP_BOSS_WIDTH = 560;')
+    && htmlText.includes('const COOP_BOSS_HEIGHT = 372;')
+    && coopBossIdleSource.includes('後部排気筒')
+    && coopBossIdleSource.includes('主砲基部')
+    && coopBossIdleSource.includes('rect.x > visibleRight + 100')
+    && !/u\.(x|y)\s*=/.test(coopBossIdleSource));
   app.setFlatTerrainForTest(548);
   const coopBossJumpLanding = app.coopBossJumpLandingForTest();
   check('a co-op jump that hits the fortress lands outside its body on solid ground',

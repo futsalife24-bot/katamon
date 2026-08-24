@@ -88,6 +88,8 @@
 
 ## 回帰の固定値
 
+- ライブ要塞は560×372で地面へ固定し、待機演出は物理座標を動かさない。足場は鋼鉄3台座＋破壊可能4枚（うち高所2枚）とする。
+
 - loopback中継数 `38 / 64 / 83 / 61 / 48` を、理由なく変更しない。
 - feature flag OFFでは通常ONLINE、CPU戦、演習、Stage/Content Studioへ差分を出さない。
 - `CURRENT_WORK_STATE.md`は30KB上限付近のため、詳細記録はこの文書と`docs/CHANGELOG.md`へ置く。

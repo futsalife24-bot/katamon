@@ -663,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.134-legacy-cache-migration';
+  const BUILD_ID = 'v2.0.135-colossal-fortress-idle';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.135', date: '2026/08/24', summary: '要塞を大型化し待機モーションと高所足場を追加' },
     { version: 'v2.0.134', date: '2026/08/24', summary: '保存済み大型素材を通信せず新キャッシュへ移行' },
     { version: 'v2.0.133', date: '2026/08/24', summary: '更新時の大型素材ダウンロードを変更分だけに削減' },
     { version: 'v2.0.132', date: '2026/08/24', summary: '協力ボス準備画面のBGMをルーム曲へ修正' },
@@ -3750,17 +3751,19 @@
   // 動かすと足元へ撃った時の距離が変わり、ダメージが全キャラぶん変わってしまう。
   const UNIT_HIT_RISE = 23;
   const COOP_BOSS_UNIT_ID = 'boss1';
-  const COOP_BOSS_WIDTH = 430;
-  const COOP_BOSS_HEIGHT = 286;
+  const COOP_BOSS_WIDTH = 560;
+  const COOP_BOSS_HEIGHT = 372;
   function coopBossGroundY() { return STAGE_H === 960 ? 848 : 548; }
   // 大型2160×960の縦空間を使う空中足場。初期配置の3台座は落下事故防止の鋼鉄、
-  // それより右の移動用2足場は通常地形として壊れる。最後の足場は要塞前へ射線を残す。
+  // それ以外の移動用4足場は通常地形として壊れ、うち2枚を高所攻略用に配置する。
   const COOP_PLATFORM_LAYOUT = Object.freeze([
     Object.freeze({ start: 0.08, end: 0.18, top: 0.66, thickness: 0.036, phase: 0.4, spawnSteel: true }),
     Object.freeze({ start: 0.23, end: 0.35, top: 0.48, thickness: 0.038, phase: 1.2, spawnSteel: true }),
     Object.freeze({ start: 0.39, end: 0.52, top: 0.67, thickness: 0.038, phase: 2.1, spawnSteel: true }),
     Object.freeze({ start: 0.54, end: 0.64, top: 0.38, thickness: 0.040, phase: 3.0, spawnSteel: false }),
     Object.freeze({ start: 0.67, end: 0.72, top: 0.59, thickness: 0.036, phase: 3.8, spawnSteel: false }),
+    Object.freeze({ start: 0.31, end: 0.40, top: 0.26, thickness: 0.034, phase: 4.6, spawnSteel: false }),
+    Object.freeze({ start: 0.50, end: 0.59, top: 0.19, thickness: 0.032, phase: 5.4, spawnSteel: false }),
   ]);
   // 透過画像の外接四角をそのまま判定にすると、砲身の上や車体の前方の空中まで命中する。
   // 画像alphaは端末の読込状態で変わり得るため使わず、正規化した固定形状の和で全端末を一致させる。
@@ -4054,7 +4057,7 @@
     coopReviveGuard: false, coopRevivedBossRound: 0
   };
   const coopBossUnit = {
-    x: STAGE_W * 0.88, y: coopBossGroundY() - UNIT_RADIUS, vy: 0, knockbackVx: 0,
+    x: STAGE_W * 0.865, y: coopBossGroundY() - UNIT_RADIUS, vy: 0, knockbackVx: 0,
     grounded: true, fallStartY: 0,
     hp: 2200, maxHp: 2200, fuel: 0, fuelMax: 0,
     color: '#ff6254', label: '超大型要塞戦車',
@@ -14990,9 +14993,92 @@
     ctx.restore();
   }
 
+  // 車体座標と当たり判定は固定したまま、排煙・油圧・粉塵・圧力光だけを動かす。
+  // 全身画像を揺らすと見えている部位と命中判定がずれるため、待機演出は外装効果に限定する。
+  function drawCoopBossIdleMotion(u, rect, foreground) {
+    if (!u || unitDefeated(u)) return;
+    const visibleRight = cameraX + visibleWorldWidth();
+    if (rect.x + rect.width < cameraX - 100 || rect.x > visibleRight + 100) return;
+    const phase = simTimeMs / 1000;
+    const phase2 = u.phase >= 2;
+    const heat = phase2 ? '#ff4e32' : '#ff9b42';
+    const intensity = phase2 ? 1.22 : 1;
+    ctx.save();
+    if (!foreground) {
+      // 履帯の下から周期的に噴く粉塵。車体は動かさず、重量感だけを出す。
+      for (let i = 0; i < 7; i++) {
+        const travel = (phase * (0.48 + i * 0.018) + i * 0.137) % 1;
+        const alpha = Math.sin(travel * Math.PI) * 0.22 * intensity;
+        const x = rect.x + rect.width * (0.18 + i * 0.105) + Math.sin(phase * 2.1 + i) * 7;
+        const y = rect.y + rect.height - 3 - travel * 20;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = i % 2 ? '#9d7652' : '#5d4a3c';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 19 + travel * 25, 6 + travel * 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 後部排気筒から吹き上がる黒煙。位相を固定し、乱数による端末差を作らない。
+      for (let i = 0; i < 6; i++) {
+        const travel = (phase * (0.31 + i * 0.012) + i * 0.19) % 1;
+        const drift = Math.sin(phase * 1.7 + i * 1.4) * (9 + travel * 14);
+        const x = rect.x + rect.width * 0.89 + drift;
+        const y = rect.y + rect.height * 0.30 - travel * rect.height * 0.28;
+        ctx.globalAlpha = Math.sin(travel * Math.PI) * 0.32 * intensity;
+        ctx.fillStyle = phase2 ? '#3c1b17' : '#263139';
+        ctx.beginPath();
+        ctx.arc(x, y, 10 + travel * 25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // 炉の鼓動と警告灯。COREの狙点とは別の後部機関室だけを光らせる。
+      const pulse = 0.5 + 0.5 * Math.sin(phase * (phase2 ? 8.4 : 5.8));
+      const ventX = rect.x + rect.width * 0.82;
+      const ventY = rect.y + rect.height * 0.57;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = (0.18 + pulse * 0.32) * intensity;
+      ctx.shadowColor = heat;
+      ctx.shadowBlur = 14 + pulse * 12;
+      ctx.fillStyle = heat;
+      ctx.beginPath();
+      ctx.ellipse(ventX, ventY, 18 + pulse * 8, 10 + pulse * 4, -0.18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 主砲基部へ溜まる圧力リング。砲身自体と物理判定は一切動かさない。
+      const cannonX = rect.x + rect.width * 0.48;
+      const cannonY = rect.y + rect.height * 0.18;
+      ctx.globalAlpha = 0.18 + pulse * 0.36;
+      ctx.strokeStyle = phase2 ? '#ff6b4b' : '#ffc36c';
+      ctx.lineWidth = 2.4;
+      ctx.setLineDash([9, 7]);
+      ctx.lineDashOffset = -phase * 22;
+      ctx.beginPath();
+      ctx.arc(cannonX, cannonY, 28 + pulse * 10, -Math.PI * 0.82, Math.PI * 0.82);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 油圧が車体を軋ませる短い震動線。外側だけに描き、部位の輪郭を隠さない。
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.32 + pulse * 0.24;
+      ctx.strokeStyle = '#ffd18a';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 5; i++) {
+        const side = i % 2 ? 1 : -1;
+        const x = side < 0 ? rect.x - 8 : rect.x + rect.width + 8;
+        const y = rect.y + rect.height * (0.38 + i * 0.105);
+        const reach = 10 + ((i * 7 + Math.floor(phase * 5)) % 13);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + side * reach, y - 5);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   function drawCoopBossUnit(u) {
     const rect = coopBossRect(u);
     const image = u.phase >= 2 ? coopBossImages.phase2 : coopBossImages.phase1;
+    drawCoopBossIdleMotion(u, rect, false);
     ctx.save();
     ctx.globalAlpha = unitDefeated(u) ? 0.38 : 1;
     if (image.complete && image.naturalWidth > 0) {
@@ -15009,6 +15095,7 @@
       ctx.strokeRect(rect.x, rect.y + rect.height * 0.28, rect.width, rect.height * 0.72);
     }
     ctx.restore();
+    drawCoopBossIdleMotion(u, rect, true);
 
     const live = ensureCoopBossLiveState(u);
     const bossApi = coopBossLiveApi();
