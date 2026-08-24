@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.133-persistent-asset-cache';
+const CACHE_VERSION = 'katamon-pwa-v2.0.134-legacy-cache-migration';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -91,6 +91,11 @@ self.addEventListener('install', event => {
         }));
         await Promise.all(CORE_ASSETS.map(async asset => {
           if (await cache.match(asset)) return;
+          const legacyCached = await caches.match(asset);
+          if (legacyCached) {
+            await cache.put(asset, legacyCached.clone());
+            return;
+          }
           await cache.add(new Request(asset, { cache: 'reload' }));
         }));
       })
