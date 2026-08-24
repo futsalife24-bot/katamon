@@ -30,6 +30,8 @@ function assertCacheVersionContract(html, worker) {
     '初回のオフライン起動用素材はCORE_ASSETSへ定義してください。');
   assert.match(worker, /if \(await cache\.match\(asset\)\) return;/,
     '保存済みCORE_ASSETSは再ダウンロードしないでください。');
+  assert.match(worker, /const legacyCached = await caches\.match\(asset\);[\s\S]*cache\.put\(asset, legacyCached\.clone\(\)\)/,
+    '旧版キャッシュの大型素材は通信せず永続キャッシュへ移してください。');
   assert.match(worker, /cachedRevision\.text\(\) === revision\) return;/,
     '同じ改訂の差し替え素材を更新のたびに再取得してはいけません。');
   assert.match(worker, /cache\.put\(marker, new Response\(revision\)\)/,
