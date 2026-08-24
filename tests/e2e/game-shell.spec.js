@@ -70,7 +70,7 @@ test.describe('カタモン本体の基本導線', () => {
       stageH: 960,
       terrainPattern: 'coopSteel',
       craterCount: 0,
-      turnLimit: 100,
+      turnLimit: 60,
       salvo: { phase: 'collecting', ready: 0, total: 4 },
       turnOrder: ['p1', 'e1', 'p2', 'e2', 'boss1'],
     });
@@ -110,7 +110,7 @@ test.describe('カタモン本体の基本導線', () => {
       phase: 'playing',
       activeUnitId: 'p1',
       turnCount: 5,
-      turnLimit: 100,
+      turnLimit: 60,
       salvo: { phase: 'collecting', ready: 0, total: 4 },
     });
     expect(pageErrors, `協力4vs1 fixtureでpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);

@@ -30,7 +30,9 @@
   const STEEL_BOTTOM_Y = 936;
   const NORMAL_MESSAGE_PAGE_SIZE = 65;
   const NORMAL_RECENT_KEY_LIMIT = 256;
-  const BASE_BODY_HP = Object.freeze({ normal: 2200, hard: 2400, extreme: 2600 });
+  // NORMALは部位→CORE→第二形態を8巡前後で見せ切れる耐久へ。難易度ごとの
+  // 基礎値を分けているため、HARD／EXTREMEの耐久には影響しない。
+  const BASE_BODY_HP = Object.freeze({ normal: 1650, hard: 2400, extreme: 2600 });
   const BASE_PART_HP = Object.freeze({ normal: 240, hard: 270, extreme: 300 });
   const BOSS_DAMAGE = Object.freeze({
     normal: Object.freeze({ grandCannon: 64, twinBarrage: 30, terrainBreaker: 34, missileBombardment: 40 }),

@@ -8,7 +8,7 @@
   'use strict';
 
   const DIFFICULTY_RULES = Object.freeze({
-    normal: Object.freeze({ coreRounds: 2, coreMultiplier: 2, roundLimit: 20, bigTelegraphRounds: 1, blockBigAfterBig: true, phase2DoubleActionChance: 0 }),
+    normal: Object.freeze({ coreRounds: 2, coreMultiplier: 2, roundLimit: 12, bigTelegraphRounds: 1, blockBigAfterBig: true, phase2DoubleActionChance: 0 }),
     hard: Object.freeze({ coreRounds: 2, coreMultiplier: 1.75, roundLimit: 15, bigTelegraphRounds: 0, blockBigAfterBig: true, phase2DoubleActionChance: 0 }),
     extreme: Object.freeze({ coreRounds: 1, coreMultiplier: 1.5, roundLimit: 12, bigTelegraphRounds: 0, blockBigAfterBig: false, phase2DoubleActionChance: 0.25 }),
   });
