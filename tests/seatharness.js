@@ -85,7 +85,11 @@ const HOOK = `
       scale: TITLE_ART_SCALE,
       width: titleArtCanvas.width,
       height: titleArtCanvas.height,
-      signature: titleArtSignature()
+      signature: titleArtSignature(),
+      menuBuilds: typeof titleMenuArtBuilds === 'undefined' ? null : titleMenuArtBuilds,
+      menuCanvases: typeof titleMenuArtCanvases === 'undefined' ? [] : titleMenuArtCanvases.map(canvas => ({
+        width: canvas.width, height: canvas.height
+      }))
     }),
     // タイトル木板UI(v168)。未実装版でもハーネスを止めず、検査結果として失敗させる。
     titleWoodUiInfo: () => typeof titleWoodUiImages === 'undefined' ? null : ({
@@ -97,8 +101,14 @@ const HOOK = `
       buttons: {
         cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn },
         tutorial: { ...titleTutorialBtn }, free: { ...titleFreeBtn },
-        bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
-      }
+        ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn },
+        achievements: { ...titleAchievementsBtn }, soundTest: { ...titleSoundTestBtn },
+        update: { ...titleUpdateBtn }
+      },
+      pages: typeof TITLE_MENU_PAGES === 'undefined' ? [] : TITLE_MENU_PAGES.map(page => ({
+        key: page.key,
+        items: page.items.map(item => ({ id: item.id, image: item.image, kind: item.kind, button: { ...item.button } }))
+      }))
     }),
     setTitleWoodUiReadyForTest: () => {
       if (typeof titleWoodUiImages === 'undefined') return false;
@@ -1129,13 +1139,38 @@ const HOOK = `
     // 画面の揺れ。対戦中以外でも必ず止まることを見るため(v110の起動演出で震え続けた)。
     shakeTimer: () => shakeTimer,
     triggerShakeForTest: (mag, sec) => triggerShake(mag, sec),
-    // おまけ曲(タイトルの「おまけ」ボタン)
-    bonusBtn: () => ({ ...titleBonusBtn }),
+    // タイトルGARAGEのサウンドテスト
+    soundTestBtn: () => ({ ...titleSoundTestBtn }),
     titleBtnRects: () => ({
       cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn }, free: { ...titleFreeBtn },
       tutorial: { ...titleTutorialBtn },
-      bonus: { ...titleBonusBtn }, ranking: { ...titleRankingBtn }, update: { ...titleUpdateBtn }
+      ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn }, achievements: { ...titleAchievementsBtn },
+      soundTest: { ...titleSoundTestBtn }, update: { ...titleUpdateBtn },
+      left: { ...titleMenuLeftBtn }, right: { ...titleMenuRightBtn },
+      battleTab: { ...titleBattleTabBtn }, garageTab: { ...titleGarageTabBtn },
+      battleTabHit: { ...titleBattleTabHit }, garageTabHit: { ...titleGarageTabHit }
     }),
+    titleMenuInfo: () => ({
+      page: typeof titleMenuPage === 'undefined' ? 0 : titleMenuPage,
+      animation: typeof titleMenuAnimation === 'undefined' || !titleMenuAnimation ? null : { ...titleMenuAnimation },
+      gesture: typeof titleMenuGesture === 'undefined' || !titleMenuGesture ? null : { ...titleMenuGesture },
+      slideMs: typeof TITLE_MENU_SLIDE_MS === 'undefined' ? 0 : TITLE_MENU_SLIDE_MS,
+      swipeThreshold: typeof TITLE_MENU_SWIPE_THRESHOLD === 'undefined' ? 0 : TITLE_MENU_SWIPE_THRESHOLD,
+      pages: typeof TITLE_MENU_PAGES === 'undefined' ? [] : TITLE_MENU_PAGES.map(page => ({
+        key: page.key, items: page.items.map(item => item.id)
+      })),
+      soundTestOpen: typeof soundTestOpen === 'undefined' ? false : soundTestOpen
+    }),
+    setTitleMenuPageForTest: (page) => {
+      if (typeof titleMenuPage === 'undefined') return false;
+      titleMenuPage = Math.max(TITLE_MENU_BATTLE, Math.min(TITLE_MENU_GARAGE, Number(page) || 0));
+      titleMenuAnimation = null;
+      titleMenuGesture = null;
+      inputMode = null;
+      inputPointerId = null;
+      return true;
+    },
+    cancelTitleMenuGestureForTest: (animate = false) => cancelTitleMenuGesture(animate),
     titleUpdateHistoryInfo: () => ({
       build: typeof BUILD_ID === 'undefined' ? '' : BUILD_ID,
       history: typeof LATEST_UPDATE_HISTORY === 'undefined' ? null : { ...LATEST_UPDATE_HISTORY },

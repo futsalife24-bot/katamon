@@ -77,8 +77,10 @@ assert.match(source, /toast\.textContent = '';\s*toast\.hidden = true;/s,
   '実績通知の退場後は内容を空にして再び非表示へ戻す');
 
 const gameSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-assert.match(gameSource, /soundTestShopBtn/, '既存おまけ画面へ小さいショップ入口を置く');
-assert.match(gameSource, /soundTestAchievementsBtn/, '既存おまけ画面へ小さい実績入口を置く');
+assert.match(gameSource, /const titleShopBtn = /, 'タイトルGARAGEへ独立したショップ入口を置く');
+assert.match(gameSource, /const titleAchievementsBtn = /, 'タイトルGARAGEへ独立した実績入口を置く');
+assert.doesNotMatch(gameSource, /soundTestShopBtn|soundTestAchievementsBtn/,
+  'サウンドテスト内へショップ・実績を同居させない');
 assert.match(gameSource, /activeCosmetics\.icon === 'icon-brass'/, '真鍮アイコンを既存HPカードへ適用する');
 assert.match(gameSource, /activeCosmetics\.projectile === 'shell-amber'/, '琥珀砲弾を既存の通常弾描画へ適用する');
 assert.match(gameSource, /activeCosmetics\.impact === 'impact-cyan'/, '蒼光着弾を既存の爆発粒子へ適用する');

@@ -1948,31 +1948,119 @@ check('更新履歴は閉じるボタンでタイトルへ戻る',
     && kt.titleUpdateHistoryInfo().open === false
     && kt.phase() === 'title',
   JSON.stringify(kt.titleUpdateHistoryInfo()));
-const otherTitleBtns = [btns.cpu, btns.online, btns.free, btns.ranking, btns.update];
-check('おまけボタンが他のタイトルボタンと重ならない',
-  otherTitleBtns.every(b => !rectsOverlap(btns.bonus, b)),
-  JSON.stringify(btns.bonus));
-check('おまけボタンが画面内に収まっている',
-  btns.bonus.y - btns.bonus.h / 2 > 0 && btns.bonus.y + btns.bonus.h / 2 < kt.viewH(),
-  JSON.stringify(btns.bonus));
-check('おまけの盾と押せる範囲を従来より上へ寄せる',
-  btns.bonus.y <= 800,
-  JSON.stringify(btns.bonus));
+const titleMenuInfo = kt.titleMenuInfo();
+check('タイトルはBATTLEとGARAGEの意味別2ページへ分かれる',
+  titleMenuInfo.pages.length === 2
+    && JSON.stringify(titleMenuInfo.pages[0]) === JSON.stringify({
+      key: 'battle', items: ['cpu', 'online', 'tutorial', 'free', 'ranking']
+    })
+    && JSON.stringify(titleMenuInfo.pages[1]) === JSON.stringify({
+      key: 'garage', items: ['shop', 'achievements', 'soundTest']
+    }),
+  JSON.stringify(titleMenuInfo.pages));
+check('タイトルスライドは250〜400msで、短いスワイプを戻す閾値を持つ',
+  titleMenuInfo.slideMs >= 250 && titleMenuInfo.slideMs <= 400
+    && titleMenuInfo.swipeThreshold >= 50 && titleMenuInfo.swipeThreshold <= 80,
+  JSON.stringify(titleMenuInfo));
+const battleTitleBtns = [btns.cpu, btns.online, btns.tutorial, btns.free, btns.ranking];
+const garageTitleBtns = [btns.shop, btns.achievements, btns.soundTest];
+check('各ページ内のボタンと左右矢印は重ならない',
+  [battleTitleBtns, garageTitleBtns].every(pageButtons => pageButtons.every((button, index) => (
+    pageButtons.slice(index + 1).every(other => !rectsOverlap(button, other))
+      && !rectsOverlap(button, btns.left) && !rectsOverlap(button, btns.right)
+  ))), JSON.stringify(btns));
+check('BATTLE/GARAGEタブは見た目を太らせずAndroidで押しやすい当たり判定を持つ',
+  btns.battleTab.h === 32 && btns.garageTab.h === 32
+    && btns.battleTabHit.h >= 56 && btns.garageTabHit.h >= 56,
+  JSON.stringify({ battle: btns.battleTab, battleHit: btns.battleTabHit, garage: btns.garageTab, garageHit: btns.garageTabHit }));
 
 kt.setPhase('title');
-const bonusBtn = kt.bonusBtn();
-function tapBonus() { const id = down(bonusBtn.x, bonusBtn.y); up(id, bonusBtn.x, bonusBtn.y); }
+kt.setTitleMenuPageForTest(0);
+const noFireSwipe = down(btns.cpu.x, btns.cpu.y);
+move(noFireSwipe, btns.cpu.x - 100, btns.cpu.y);
+up(noFireSwipe, btns.cpu.x - 100, btns.cpu.y);
+check('ボタン上からの長い左スワイプはボタンを誤発火せずGARAGEへ移る',
+  kt.phase() === 'title' && kt.titleMenuInfo().page === 1,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const shortSwipe = down(btns.cpu.x, btns.cpu.y);
+move(shortSwipe, btns.cpu.x - 30, btns.cpu.y);
+up(shortSwipe, btns.cpu.x - 30, btns.cpu.y);
+check('短い横スワイプは元のBATTLEへ戻りCPUを発火しない',
+  kt.phase() === 'title' && kt.titleMenuInfo().page === 0,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const verticalMove = down(btns.cpu.x, btns.cpu.y);
+move(verticalMove, btns.cpu.x, btns.cpu.y + 24);
+up(verticalMove, btns.cpu.x, btns.cpu.y + 24);
+check('ボタン上の縦移動もタップ扱いにせずCPUを発火しない', kt.phase() === 'title', kt.phase());
+kt.setTitleMenuPageForTest(0);
+const returnedMove = down(btns.cpu.x, btns.cpu.y);
+move(returnedMove, btns.cpu.x, btns.cpu.y + 24);
+move(returnedMove, btns.cpu.x, btns.cpu.y);
+up(returnedMove, btns.cpu.x, btns.cpu.y);
+check('指がslopを越えて元位置へ戻ってもCPUタップへ復帰しない',
+  kt.phase() === 'title' && kt.titleMenuInfo().gesture === null,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const backInterruptedTap = down(btns.cpu.x, btns.cpu.y);
+kt.cancelTitleMenuGestureForTest(false);
+up(backInterruptedTap, btns.cpu.x, btns.cpu.y);
+check('端末戻るで使うキャンセル処理はCPU押下途中の背面タップを破棄する',
+  kt.phase() === 'title' && kt.titleMenuInfo().gesture === null,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const arrowTap = down(btns.right.x, btns.right.y);
+check('右矢印はpointerdownだけではページを決定しない', kt.titleMenuInfo().page === 0, JSON.stringify(kt.titleMenuInfo()));
+up(arrowTap, btns.right.x, btns.right.y);
+check('右矢印をpointerupまで押すとGARAGEへ移る', kt.titleMenuInfo().page === 1, JSON.stringify(kt.titleMenuInfo()));
+kt.setTitleMenuPageForTest(0);
+const windowSwipe = touchDown(btns.cpu.x, btns.cpu.y);
+touchMoveWindow(windowSwipe, btns.cpu.x - 100, btns.cpu.y);
+touchUp(windowSwipe, btns.cpu.x - 100, btns.cpu.y);
+check('AndroidタッチがCanvas外へ出ても左右スワイプを完了できる',
+  kt.phase() === 'title' && kt.titleMenuInfo().page === 1,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const primarySwipe = touchDown(btns.cpu.x, btns.cpu.y);
+const secondTouch = pid++;
+canvas.__fire('pointerdown', {
+  pointerId: secondTouch, clientX: btns.cpu.x + 16, clientY: btns.cpu.y,
+  pointerType: 'touch', isPrimary: false, timeStamp: Date.now(), button: 0
+});
+touchMoveWindow(primarySwipe, btns.cpu.x - 100, btns.cpu.y);
+touchUp(primarySwipe, btns.cpu.x - 100, btns.cpu.y);
+check('2本目の指は進行中のタイトルスワイプを上書きせず入力を固着させない',
+  kt.phase() === 'title' && kt.titleMenuInfo().page === 1 && kt.titleMenuInfo().gesture === null,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+kt.setTitleMenuPageForTest(0);
+const cancelledSwipe = down(btns.cpu.x, btns.cpu.y);
+move(cancelledSwipe, btns.cpu.x - 100, btns.cpu.y);
+win.__fire('pointercancel', {
+  pointerId: cancelledSwipe, clientX: btns.cpu.x - 100, clientY: btns.cpu.y,
+  pointerType: 'mouse', timeStamp: Date.now()
+});
+check('pointercancelはボタンを発火せず元のBATTLEへ戻す',
+  kt.phase() === 'title' && kt.titleMenuInfo().page === 0 && kt.titleMenuInfo().gesture === null,
+  JSON.stringify({ phase: kt.phase(), menu: kt.titleMenuInfo() }));
+
+kt.setTitleMenuPageForTest(1);
+const soundTestBtn = kt.soundTestBtn();
+function tapSoundTest() { const id = down(soundTestBtn.x, soundTestBtn.y); up(id, soundTestBtn.x, soundTestBtn.y); }
 
 const bonusTrackCount = kt.bonusTrackCount();
 check('おまけ曲が6曲登録されている', bonusTrackCount === 6, String(bonusTrackCount));
 check('最初はおまけ曲を選んでいない', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
-tapBonus();
-check('おまけを押すと全BGMのサウンドテストを開く',
+tapSoundTest();
+check('GARAGEのサウンドテストを押すと全BGM一覧を開く',
   kt.bgm().bonusTrack === 0 && kt.bgm().desired === 'none'
     && indexHtml.includes('const SOUND_TEST_TRACKS = Object.freeze([')
     && indexHtml.includes('const startupBgmPreloadCount = 0')
     && !indexHtml.includes('const startupBgmPreloads ='),
   `track=${kt.bgm().bonusTrack} desired=${kt.bgm().desired}`);
+check('サウンドテスト画面からショップと実績の小ボタンを撤去する',
+  !indexHtml.includes('soundTestShopBtn') && !indexHtml.includes('soundTestAchievementsBtn'),
+  'legacy sound-test collection buttons remain');
 check('サウンドテストはタイトル・ロビー・全ステージ・おまけ6曲を登録する',
   indexHtml.includes("key: 'title'")
     && indexHtml.includes("key: 'room'")
@@ -1989,7 +2077,7 @@ check('おまけ曲はタイトル曲より大きい音量に設定されてい�
   `おまけ=${JSON.stringify(trackVolumes)} タイトル=${kt.titleBgmBaseVolume()}`);
 
 // サウンドテストを閉じてから対戦へ移る。
-tapBonus();
+tapSoundTest();
 kt.setPhase('battle');
 kt.syncBgm();
 check('対戦へ移るとおまけ曲の選択が解除される', kt.bgm().bonusTrack === 0, String(kt.bgm().bonusTrack));
@@ -2758,7 +2846,7 @@ kt.setLocalSeat('p1');
 // タイトルの「チュートリアル」は、ほかのボタンと重ならないこと。
 {
   const b = kt.titleBtnRects();
-  const others = [b.cpu, b.online, b.free, b.bonus, b.ranking, b.update];
+  const others = [b.cpu, b.online, b.free, b.ranking, b.update];
   check('「チュートリアル」ボタンが他のタイトルボタンと重ならない',
     others.every(o => !rectsOverlap(b.tutorial, o)), JSON.stringify(b.tutorial));
   check('「チュートリアル」ボタンが画面内に収まっている',
@@ -2767,6 +2855,7 @@ kt.setLocalSeat('p1');
   // 高さ54の小ボタンへ高さ64の大ボタンと同じ文字位置を使うと、23pxの見出しが上枠へ食い込む。
   // 実際に描画された座標を見て、左右どちらも小ボタン専用の位置になっていることを固定する。
   kt.setPhase('title');
+  kt.setTitleMenuPageForTest(0);
   kt.setTitleWoodUiReadyForTest();
   kt.resetDrawnText();
   kt.render();
@@ -2793,13 +2882,20 @@ kt.setLocalSeat('p1');
       && tutorialLabel.fillStyle === '#123f3d'
       && freeLabel.fillStyle === '#123f3d',
     JSON.stringify({ tutorialLabel, freeLabel }));
-  const bonusLabel = titleText.find(entry => entry.text === 'おまけ');
-  const bonusSub = titleText.find(entry => entry.text === 'BGMを聴く');
-  check('おまけの見出しと説明は盾の上側へ揃う',
-    bonusLabel && bonusSub
-      && bonusLabel.y <= b.bonus.y - 15
-      && bonusSub.y <= b.bonus.y + 8,
-    JSON.stringify({ bonusLabel, bonusSub, bonus: b.bonus }));
+  kt.setTitleMenuPageForTest(1);
+  kt.resetDrawnText();
+  kt.render();
+  const garageText = kt.drawnTextDetails();
+  const soundLabel = garageText.find(entry => entry.text === 'サウンドテスト');
+  const soundSub = garageText.find(entry => entry.text === '全BGMを試聴');
+  check('GARAGEのサウンドテストは既存の緑盾内へ収まる文字サイズを使う',
+    soundLabel && soundSub && /16px/.test(soundLabel.font)
+      && soundLabel.y <= b.soundTest.y - 15 && soundSub.y <= b.soundTest.y + 10,
+    JSON.stringify({ soundLabel, soundSub, button: b.soundTest }));
+  check('GARAGEにはショップ・実績・サウンドテストだけを表示する',
+    ['ショップ', '実績', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
+    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
+  kt.setTitleMenuPageForTest(0);
 
   // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
   // 画像名だけ置いて実際の配置が旧UIのまま、という実装を通さない。
@@ -2820,41 +2916,42 @@ kt.setLocalSeat('p1');
     const expectedKinds = {
       cpu: 'parchment', online: 'parchment',
       tutorial: 'parchment', free: 'parchment',
-      ranking: 'hangingSign', bonus: 'shield'
+      ranking: 'hangingSign', shop: 'parchment', achievements: 'parchment', soundTest: 'shield'
     };
-    check('指定どおりCPU／ONLINE／チュートリアル／演習は羊皮紙、RANKINGは吊り看板、おまけは盾を使う',
+    check('BATTLEとGARAGEが既存の羊皮紙・吊り看板・緑盾を役割別に再利用する',
       Object.entries(expectedKinds).every(([role, asset]) => (
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),
       JSON.stringify(woodUi.imageRects));
-    check('おまけの盾素材も少し上へ寄せる',
-      woodUi.imageRects.bonus.y <= 805,
-      JSON.stringify(woodUi.imageRects.bonus));
+    check('GARAGEのサウンドテストは緑盾を中央へ置く',
+      woodUi.imageRects.soundTest.x === kt.viewW() / 2 && woodUi.imageRects.soundTest.y <= 805,
+      JSON.stringify(woodUi.imageRects.soundTest));
     check('木枠と中のボタン素材を同じ割合で一回り大きくする',
       woodUi.board.w >= 450 && woodUi.board.h >= 430
         && woodUi.imageRects.cpu.w >= 295 && woodUi.imageRects.cpu.h >= 80
         && woodUi.imageRects.tutorial.w >= 185 && woodUi.imageRects.tutorial.h >= 50
-        && woodUi.imageRects.bonus.w >= 120 && woodUi.imageRects.bonus.h >= 110,
+        && woodUi.imageRects.soundTest.w >= 120 && woodUi.imageRects.soundTest.h >= 110,
       JSON.stringify({ board: woodUi.board, imageRects: woodUi.imageRects }));
     check('中断データがあっても黄色い選択囲いを出さない',
       woodUi.selectionOutline === false, String(woodUi.selectionOutline));
-    check('RANKINGは左上へ寄せ、矢尻だけがチュートリアル付近へ届く',
-      woodUi.imageRects.ranking.x < woodUi.imageRects.tutorial.x
+    check('RANKINGの吊り看板はBATTLE下段の中央へ収まる',
+      woodUi.imageRects.ranking.x === kt.viewW() / 2
         && woodUi.imageRects.ranking.y - woodUi.imageRects.ranking.h / 2
           <= woodUi.imageRects.tutorial.y + woodUi.imageRects.tutorial.h / 2 + 12,
       JSON.stringify({ ranking: woodUi.imageRects.ranking, tutorial: woodUi.imageRects.tutorial }));
-    check('木板内はCPU→ONLINE、中央はチュートリアル→演習、下段はRANKING→おまけの順で、更新ボタンは木枠の外にある',
+    check('BATTLEは対戦5項目、GARAGEは管理3項目の順で、更新ボタンは木枠外へ固定する',
       woodUi.buttons.cpu.y < woodUi.buttons.online.y
         && woodUi.buttons.online.y < woodUi.buttons.tutorial.y
         && woodUi.buttons.tutorial.y === woodUi.buttons.free.y
         && woodUi.buttons.tutorial.x < woodUi.buttons.free.x
         && woodUi.buttons.tutorial.w < woodUi.buttons.cpu.w
         && woodUi.buttons.ranking.y > woodUi.buttons.tutorial.y
-        && woodUi.buttons.bonus.y > woodUi.buttons.free.y
-        && woodUi.buttons.ranking.x < woodUi.buttons.bonus.x
+        && woodUi.buttons.shop.y < woodUi.buttons.achievements.y
+        && woodUi.buttons.achievements.y < woodUi.buttons.soundTest.y
         && woodUi.buttons.update.y - woodUi.buttons.update.h / 2 > woodUi.board.y + woodUi.board.h,
       JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
-    check('木板と全ボタンがタイトル画面内に収まり、押せる場所が重ならない',
+    const pageButtonGroups = woodUi.pages.map(page => page.items.map(item => woodUi.buttons[item.id]));
+    check('木板と両ページのボタンが画面内に収まり、同じページ内で重ならない',
       woodUi.board.x >= 0 && woodUi.board.y >= 0
         && woodUi.board.x + woodUi.board.w <= kt.viewW()
         && woodUi.board.y + woodUi.board.h <= kt.viewH()
@@ -2862,9 +2959,9 @@ kt.setLocalSeat('p1');
           button.x - button.w / 2 >= 0 && button.x + button.w / 2 <= kt.viewW()
             && button.y - button.h / 2 >= 0 && button.y + button.h / 2 <= kt.viewH()
         ))
-        && Object.values(woodUi.buttons).every((button, index, all) => (
-          all.slice(index + 1).every(other => !rectsOverlap(button, other))
-        )),
+        && pageButtonGroups.every(group => group.every((button, index) => (
+          group.slice(index + 1).every(other => !rectsOverlap(button, other))
+        ))),
       JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
   }
 }
@@ -2987,6 +3084,15 @@ if (titleArtStart) {
   check('タイトルを毎コマ焼き直していない(30コマ描いても回数が増えない)',
     titleAfterThirtyFrames.builds === titleAfterFirstDraw.builds,
     `${titleAfterFirstDraw.builds}→${titleAfterThirtyFrames.builds}`);
+  check('BATTLEとGARAGEは全画面より小さい2枚の木板キャッシュへ分離する',
+    titleAfterThirtyFrames.menuCanvases.length === 2
+      && titleAfterThirtyFrames.menuCanvases.every(canvas => (
+        canvas.width < titleAfterThirtyFrames.width && canvas.height < titleAfterThirtyFrames.height
+      )),
+    JSON.stringify(titleAfterThirtyFrames.menuCanvases));
+  check('タイトル木板も30コマで焼き直さず、完成済み画像だけをスライドする',
+    titleAfterThirtyFrames.menuBuilds === titleAfterFirstDraw.menuBuilds,
+    `${titleAfterFirstDraw.menuBuilds}→${titleAfterThirtyFrames.menuBuilds}`);
 
   const fallbackSignature = titleAfterThirtyFrames.signature;
   kt.setTitleArtReadyForTest();
