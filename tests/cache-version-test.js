@@ -20,8 +20,20 @@ function assertCacheVersionContract(html, worker) {
     '大型素材用の永続キャッシュを定義してください。');
   assert.match(worker, /url\.pathname\.includes\('\/assets\/'\)/,
     'assets配下は永続キャッシュから配信してください。');
-  assert.match(worker, /ASSET_REFRESH\.map\(asset => cache\.delete\(asset\)\)/,
-    '差し替えた素材だけを永続キャッシュから更新できるようにしてください。');
+  assert.match(worker, /ASSET_REFRESH\.map\(async \(\{ path, revision \}\)/,
+    '差し替えた素材だけを改訂番号つきで更新できるようにしてください。');
+  const appShell = /const APP_SHELL = \[([\s\S]*?)\];/.exec(worker)?.[1] || '';
+  const coreAssets = /const CORE_ASSETS = \[([\s\S]*?)\];/.exec(worker)?.[1] || '';
+  assert.doesNotMatch(appShell, /['"]\.\/assets\//,
+    '大型素材を版ごとのAPP_SHELLへ入れてはいけません。');
+  assert.match(coreAssets, /['"]\.\/assets\//,
+    '初回のオフライン起動用素材はCORE_ASSETSへ定義してください。');
+  assert.match(worker, /if \(await cache\.match\(asset\)\) return;/,
+    '保存済みCORE_ASSETSは再ダウンロードしないでください。');
+  assert.match(worker, /cachedRevision\.text\(\) === revision\) return;/,
+    '同じ改訂の差し替え素材を更新のたびに再取得してはいけません。');
+  assert.match(worker, /cache\.put\(marker, new Response\(revision\)\)/,
+    '取得済みの素材改訂番号を端末へ保存してください。');
 }
 
 assertCacheVersionContract(indexHtml, serviceWorker);
@@ -34,4 +46,4 @@ assert.throws(
   '旧式の版不一致を検出できること',
 );
 
-console.log('キャッシュ版管理契約: BUILD_ID/CACHE_VERSION一致・素材の永続キャッシュ（2/2 passed）');
+console.log('キャッシュ版管理契約: BUILD_ID/CACHE_VERSION一致・素材の差分更新（2/2 passed）');

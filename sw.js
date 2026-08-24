@@ -1,12 +1,12 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.131-coop-production-enable';
+const CACHE_VERSION = 'katamon-pwa-v2.0.133-persistent-asset-cache';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
-// 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
+// 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
 const ASSET_REFRESH = [
-  './assets/characters/master/dread-arrow.png',
-  './assets/characters/runtime/dread-arrow.webp',
-  './assets/characters/master/hamulton.png',
-  './assets/characters/runtime/hamulton.webp',
+  { path: './assets/characters/master/dread-arrow.png', revision: 'v2.0.130' },
+  { path: './assets/characters/runtime/dread-arrow.webp', revision: 'v2.0.130' },
+  { path: './assets/characters/master/hamulton.png', revision: 'v2.0.130' },
+  { path: './assets/characters/runtime/hamulton.webp', revision: 'v2.0.130' },
 ];
 const APP_SHELL = [
   './index.html',
@@ -25,14 +25,17 @@ const APP_SHELL = [
   './coop-mvp-session.js',
   './coop-mvp-battle.js',
   './coop-mvp-room.js',
-  './assets/bosses/runtime/fortress-tank.webp',
-  './assets/bosses/runtime/fortress-tank-phase2.webp',
   './game-custom-stages.css',
   './game-custom-stages.js',
   './shared/stage-core.js',
   './shared/stage-storage.js',
   './shared/stage-repository.js',
-  './shared/stage-zip.js',
+  './shared/stage-zip.js'
+];
+// 初回はオフライン起動に必要な素材を保存し、以後は同じURLの端末内コピーを再利用する。
+const CORE_ASSETS = [
+  './assets/bosses/runtime/fortress-tank.webp',
+  './assets/bosses/runtime/fortress-tank-phase2.webp',
   './assets/favicon-32.png',
   './assets/apple-touch-icon.png',
   './assets/icon-192.png',
@@ -76,7 +79,21 @@ self.addEventListener('install', event => {
     caches.open(CACHE_VERSION)
       .then(cache => cache.addAll(APP_SHELL.map(asset => new Request(asset, { cache: 'reload' }))))
       .then(() => caches.open(ASSET_CACHE))
-      .then(cache => Promise.all(ASSET_REFRESH.map(asset => cache.delete(asset))))
+      .then(async cache => {
+        await Promise.all(ASSET_REFRESH.map(async ({ path, revision }) => {
+          const marker = `./__katamon_asset_revision__/${encodeURIComponent(path)}`;
+          const cachedRevision = await cache.match(marker);
+          if (cachedRevision && await cachedRevision.text() === revision) return;
+          const response = await fetch(new Request(path, { cache: 'reload' }));
+          if (!response.ok) throw new Error(`asset refresh failed: ${path}`);
+          await cache.put(path, response.clone());
+          await cache.put(marker, new Response(revision));
+        }));
+        await Promise.all(CORE_ASSETS.map(async asset => {
+          if (await cache.match(asset)) return;
+          await cache.add(new Request(asset, { cache: 'reload' }));
+        }));
+      })
       .then(() => self.skipWaiting())
   );
 });

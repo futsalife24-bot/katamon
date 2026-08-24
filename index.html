@@ -663,10 +663,12 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.131-coop-production-enable';
+  const BUILD_ID = 'v2.0.133-persistent-asset-cache';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.133', date: '2026/08/24', summary: '更新時の大型素材ダウンロードを変更分だけに削減' },
+    { version: 'v2.0.132', date: '2026/08/24', summary: '協力ボス準備画面のBGMをルーム曲へ修正' },
     { version: 'v2.0.131', date: '2026/08/24', summary: '協力ボスMVPを公開ホストで標準ON' },
     { version: 'v2.0.130', date: '2026/08/24', summary: '協力ボスの味方AI3体をモンスター選択可能に改善' },
     { version: 'v2.0.129', date: '2026/08/24', summary: '一斉必殺の同時オーラと跳躍・救助弾を追加' },
@@ -1476,11 +1478,12 @@
   // 遷移箇所は個別のplay/stopを呼ばず、必ずここ(syncBgm)を通す。
   // 同時に2曲が鳴る状態を構造的に不可能にするための一本化。
   // 画面の現在フェーズと可視性から「いま鳴るべきBGM」を判定する。
-  // ルーム画面(入口画面・ルーム画面・エラー時をまとめて含む)が開いているか。
-  // #onlineLobbyは全画面DOMのままCSSクラスで状態を表す構造(DESIGN_2026-07-27_ROOM_SCENE.md §0)
-  // なので、判定は'open'クラスの有無だけで足りる。
+  // 通常ONLINEまたは協力ボスのルーム画面が開いているか。
+  // どちらも全画面DOMのままCSSのopenクラスで表示を切り替える。
   function roomScreenOpen() {
-    return !!(onlineLobbyEl && onlineLobbyEl.classList.contains('open'));
+    const coopLobbyEl = document.getElementById('coopBossLobby');
+    return !!((onlineLobbyEl && onlineLobbyEl.classList.contains('open'))
+      || (coopLobbyEl && coopLobbyEl.classList.contains('open')));
   }
   let coopMvpBattleAudioActive = false;
   function desiredBgm() {
