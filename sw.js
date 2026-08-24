@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.112-coop-normal-core-two';
+const CACHE_VERSION = 'katamon-pwa-v2.0.130-coop-ai-character-select';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
@@ -62,7 +62,7 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v4-wind-console.png',
   './assets/ui/battle-hud/wind-console-round.webp',
   './assets/normal-impact-explosion.mp3',
-  './assets/special-cutin-edm-zap.mp3',
+  './assets/special-cutin-finisher.mp3',
   './assets/cool-kai-special-voice.mp3',
   './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
   './assets/six-eternel-dopagaki-remix.mp3',

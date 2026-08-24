@@ -7,6 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 if (!globalThis.crypto) globalThis.crypto = require('crypto').webcrypto;
+// 本番ではindex.html直後に読み込まれる協力要塞API。ハーネスはinline scriptだけを
+// 実行するため、実弾のCORE・部位判定を検証する時だけ同じAPIを先に接続する。
+globalThis.KatamonCoopBoss = require('../coop-mvp-boss.js');
 
 const SEAT = process.argv[2] === 'e1' ? 'e1' : 'p1';
 const HTML = path.join(__dirname, '..', 'index.html');
@@ -196,6 +199,215 @@ const HOOK = `
       const segments = Array.from({ length: TERRAIN_COLS }, () => [[y, TERRAIN_BOTTOM_Y]]);
       loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
     },
+    coopSteelStageForTest: () => {
+      setStageDimensions(2160, 960);
+      loadCoopBossTerrain();
+      const platformCenters = COOP_PLATFORM_LAYOUT.map(platform => {
+        const x = STAGE_W * ((platform.start + platform.end) / 2);
+        return { x, y: groundYAt(x), spawnSteel: platform.spawnSteel };
+      });
+      const segmentIsSteel = (columnIndex, segment) => (currentTerrainMaterialSegments[columnIndex] || []).some(material => (
+        material[2] === 'steel' && material[0] <= segment[0] && material[1] >= segment[1]
+      ));
+      const steelEveryGround = currentSegments.every((column, columnIndex) => (
+        column.some(segment => segment[0] === coopBossGroundY() && segment[1] === TERRAIN_BOTTOM_Y
+          && segmentIsSteel(columnIndex, segment))
+      ));
+      const platformSteel = platformCenters.map(platform => {
+        const columnIndex = Math.max(0, Math.min(TERRAIN_COLS - 1, Math.floor(platform.x / COL_W)));
+        const segment = currentSegments[columnIndex].find(entry => entry[0] < coopBossGroundY());
+        return !!segment && segmentIsSteel(columnIndex, segment);
+      });
+      const spawnSampleY = platformCenters[0].y + 6;
+      const destructibleSampleY = platformCenters[4].y + 6;
+      const spawnSolidBefore = isSolidAt(platformCenters[0].x, spawnSampleY);
+      const destructibleSolidBefore = isSolidAt(platformCenters[4].x, destructibleSampleY);
+      carveCraterInternal(platformCenters[0].x, platformCenters[0].y, 44, true);
+      carveCraterInternal(platformCenters[4].x, platformCenters[4].y, 44, true);
+      return {
+        stageW: STAGE_W,
+        stageH: STAGE_H,
+        terrainCols: TERRAIN_COLS,
+        groundY: groundYAt(STAGE_W * 0.9),
+        platformCenters,
+        platformColumnCount: currentSegments.filter(column => column.length > 1).length,
+        steelEveryGround,
+        platformSteel,
+        spawnPlatformIntact: spawnSolidBefore && isSolidAt(platformCenters[0].x, spawnSampleY),
+        destructiblePlatformOpened: destructibleSolidBefore && !isSolidAt(platformCenters[4].x, destructibleSampleY),
+      };
+    },
+    coopBossJumpLandingForTest: (ownerX = 760, bossX = 1180, bossY = 532, impactX = 1030, impactY = 430, terrainHit = false, directBossHit = true) => {
+      const owner = { id: 'jump-owner', x: ownerX, y: 532, hp: 100, team: 'player' };
+      const boss = { id: COOP_BOSS_UNIT_ID, x: bossX, y: bossY, hp: 1870, team: 'cpu' };
+      const projectile = { vy: terrainHit ? 80 : 0, prevY: terrainHit ? impactY - 4 : impactY };
+      const landing = coopBossJumpLandingForImpact(
+        owner, boss, impactX, impactY, projectile, terrainHit, directBossHit
+      );
+      return landing ? {
+        ...landing,
+        bossRect: coopBossRect(boss),
+        distance: distanceToCoopBossBody(boss, landing.x, landing.y),
+        clearance: COOP_BOSS_JUMP_CLEARANCE
+      } : null;
+    },
+    coopBossTerrainTeleportForTest: () => {
+      setStageDimensions(1440, 660);
+      const segments = Array.from({ length: TERRAIN_COLS }, () => [[548, TERRAIN_BOTTOM_Y]]);
+      loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
+      setMatchFormat('coop4v1');
+      localUnitId = 'p1';
+      player.x = 760; player.y = 532; player.hp = player.maxHp; player.grounded = true; player.moveLockTurns = 0;
+      coopBossUnit.x = 1180; coopBossUnit.y = 532; coopBossUnit.hp = coopBossUnit.maxHp;
+      const projectile = { owner: player.id, jump: true, prevX: 1176, prevY: 544, vy: 80 };
+      teleportOwnerToImpact(projectile, coopBossUnit.x, 548, true, null);
+      return {
+        x: player.x,
+        y: player.y,
+        grounded: player.grounded,
+        jumpConsumed: projectile.jump === false,
+        bossRect: coopBossRect(coopBossUnit),
+        distance: distanceToCoopBossBody(coopBossUnit, player.x, player.y),
+        clearance: COOP_BOSS_JUMP_CLEARANCE
+      };
+    },
+    coopCoreNormalProjectileForTest: () => {
+      setStageDimensions(1440, 660);
+      const segments = Array.from({ length: TERRAIN_COLS }, () => [[548, TERRAIN_BOTTOM_Y]]);
+      loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
+      setMatchFormat('coop4v1');
+      matchOver = false;
+      winner = null;
+      projectiles.length = 0;
+      wind.dir = 0;
+      wind.strength = 0;
+
+      const owner = unitById('p1');
+      const boss = unitById(COOP_BOSS_UNIT_ID);
+      owner.x = 100;
+      owner.y = 548 - UNIT_RADIUS;
+      owner.hp = owner.maxHp;
+      boss.x = 760;
+      boss.y = 548 - UNIT_RADIUS;
+      boss.maxHp = 2200;
+      boss.hp = boss.maxHp;
+      boss.phase = 1;
+      const api = coopBossLiveApi();
+      boss.bossState = api.exposeLiveCore(
+        api.createLiveState({ bodyMaxHp: boss.maxHp, difficulty: 'normal' }),
+        'parts'
+      );
+      const rect = coopBossRect(boss);
+      const core = api.LIVE_CORE_SHAPE;
+      const coreX = rect.x + rect.width * core.x;
+      const coreY = rect.y + rect.height * core.y;
+      fireProjectile(owner.id, { x: rect.x - 60, y: coreY }, 480, 0, {
+        radius: 5,
+        blastMul: 1,
+        terrainBlastMul: 0,
+        damageMul: 1,
+        gravityMul: 0,
+        windMul: 0,
+        noTerrain: true,
+      });
+      const shot = projectiles[0];
+      const nonPiercing = shot?.pierce === false;
+      const beforeHp = boss.hp;
+      for (let step = 0; step < 240 && projectiles.length; step++) stepWorldPhysics(PHYSICS_DT);
+      const coreDamage = beforeHp - boss.hp;
+
+      // COREを外した通常弾まで要塞を素通りしないことも、同じ実弾経路で固定する。
+      projectiles.length = 0;
+      boss.hp = boss.maxHp;
+      fireProjectile(owner.id, { x: rect.x - 60, y: rect.y + rect.height * 0.9 }, 480, 0, {
+        radius: 5,
+        blastMul: 1,
+        terrainBlastMul: 0,
+        damageMul: 1,
+        gravityMul: 0,
+        windMul: 0,
+        noTerrain: true,
+      });
+      const offTargetBeforeHp = boss.hp;
+      for (let step = 0; step < 240 && projectiles.length; step++) stepWorldPhysics(PHYSICS_DT);
+      return {
+        nonPiercing,
+        coreX,
+        coreY,
+        projectileConsumed: projectiles.length === 0,
+        bodyDamage: coreDamage,
+        expectedCoreDamage: 90,
+        offTargetDamage: offTargetBeforeHp - boss.hp,
+        expectedHullDamage: 30,
+        coreStillExposed: boss.bossState?.core?.exposed === true,
+      };
+    },
+    coopItemTargetAllowedForTest: (itemId, hp, team = 'player', id = 'ally') => {
+      const owner = localUnit();
+      return coopItemCanImpactTarget(
+        { owner: owner.id, coopItemId: itemId },
+        { id, team, hp, maxHp: 100 }
+      );
+    },
+    coopRescueFlightThroughBossForTest: () => {
+      setStageDimensions(1440, 660);
+      const segments = Array.from({ length: TERRAIN_COLS }, () => [[548, TERRAIN_BOTTOM_Y]]);
+      loadTerrainFromSave(segments, [], 'rolling', false, THEME_KEYS[0], 1, null, null);
+      setMatchFormat('coop4v1');
+      matchOver = false;
+      projectiles.length = 0;
+      wind.dir = 0;
+      wind.strength = 0;
+
+      const owner = unitById('p1');
+      const livingAlly = unitById('e1');
+      const downedAlly = unitById('p2');
+      const spareAlly = unitById('e2');
+      const boss = unitById(COOP_BOSS_UNIT_ID);
+      const place = (unit, x, hp) => {
+        unit.x = x;
+        unit.y = 548 - UNIT_RADIUS;
+        unit.hp = hp;
+        unit.grounded = true;
+        unit.vy = 0;
+      };
+      place(owner, 100, owner.maxHp);
+      place(livingAlly, 360, livingAlly.maxHp);
+      place(spareAlly, 470, spareAlly.maxHp);
+      place(boss, 760, boss.maxHp);
+      place(downedAlly, 1100, 0);
+      owner.coopItem = 'rescue-kit';
+      owner.coopItemUsesLeft = 1;
+
+      const launched = launchCoopItemShot(owner, { x: owner.x, y: owner.y - UNIT_HIT_RISE }, 720, 0, 'rescue-kit');
+      const projectile = projectiles[0];
+      if (projectile) {
+        // 対象選別だけを決定的に検証するため、実弾を水平・無風に固定する。
+        // 移動・当たり判定・着弾解決は本番と同じ stepWorldPhysics を通す。
+        projectile.gravityMul = 0;
+        projectile.windMul = 0;
+      }
+      let passedLivingAllies = false;
+      let passedBoss = false;
+      for (let step = 0; step < 260 && projectiles.length; step++) {
+        stepWorldPhysics(PHYSICS_DT);
+        const active = projectiles[0];
+        if (!active) break;
+        if (active.x > spareAlly.x + UNIT_HIT_RADIUS + active.radius) passedLivingAllies = true;
+        const bossRect = coopBossRect(boss);
+        if (active.x > bossRect.x + bossRect.width + active.radius) passedBoss = true;
+      }
+      return {
+        launched,
+        passedLivingAllies,
+        passedBoss,
+        projectileConsumed: projectiles.length === 0,
+        downedAllyHp: downedAlly.hp,
+        livingAllyHp: livingAlly.hp,
+        spareAllyHp: spareAlly.hp,
+        bossHp: boss.hp,
+      };
+    },
     cpuStepIsSafe: (u, toX) => cpuStepIsSafe(u, toX),
     placeOnGround: (id, x) => { const u = unitById(id); if (Number.isFinite(x)) u.x = x; initUnitOnGround(u); return { x: u.x, y: u.y }; },
     setUnitPositionForTest: (id, x, y) => {
@@ -246,10 +458,13 @@ const HOOK = `
       sliderValue: cameraSliderValue()
     }),
     setCameraZoomForTest: (zoom) => { cameraZoom = Number(zoom); cameraDistanceSetting = null; },
-    setCameraSliderValueForTest: (value) => setCameraZoomFromSlider({
-      x: CAMERA_SLIDER.x + CAMERA_SLIDER.w * Number(value),
-      y: CAMERA_SLIDER.y
-    }),
+    setCameraSliderValueForTest: (value) => {
+      const slider = cameraSliderRect();
+      setCameraZoomFromSlider({
+        x: slider.x + slider.w * Number(value),
+        y: slider.y
+      });
+    },
     deadLineY: () => DEAD_LINE_Y,
     groundYAt: (x, refY) => walkableGroundYAt(x, refY),
     chars: () => CHARACTER_LIST.slice(),
@@ -677,6 +892,23 @@ const HOOK = `
       if (typeof refreshPracticeJumpForTest === 'function') return refreshPracticeJumpForTest(id);
       return null;
     },
+    jumpTurnRefreshForTest: (id, moveLockTurns = 0) => {
+      const unit = unitById(id);
+      const next = turnOrder.indexOf(id);
+      if (!unit || next < 0) return null;
+      const before = activeIndex;
+      activeIndex = next;
+      unit.jumpAvailable = false;
+      unit.moveLockTurns = Math.max(0, Number(moveLockTurns) || 0);
+      startTurn();
+      const result = {
+        refreshed: unit.jumpAvailable === true,
+        canUse: unit.jumpAvailable === true && unit.moveLockTurns <= 0,
+        moveLockTurns: unit.moveLockTurns,
+      };
+      activeIndex = before;
+      return result;
+    },
     startFree: () => { startFreeMatch(); },
     resultTitleBtn: () => ({ ...resultTitleBtn, shift: resultButtonShift() }),
     continueBtn: () => ({ ...continueBtn, shift: resultButtonShift() }),
@@ -746,7 +978,7 @@ const HOOK = `
       saveCharacterUnlockProgress();
     },
     proto: () => PROTO_VERSION,
-    stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, snapshotValidationReason, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, stateSnapshotMismatchReason, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, advanceFirebaseLobbyLiveness, firebaseSeatStale, onlineErrorTitle, canLeaveFirebaseLobby, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken,
+    stage3: () => ({ normalizeRoomCode, isRoomCode, generateRoomCode, parseFirebaseSse, createSseDeduper, commitPayload, fairFirstPlayer, hasSafeSnapshot, snapshotValidationReason, normalizeFirebaseSnapshot, validateFirebaseMessage, validateFirebaseMessageDetail, acceptPeerCommit, acceptPeerReveal, firebaseActionMatches, bufferFirebaseTerminal, firebaseFlowAllows, stateSnapshotMatchesBaseline, stateSnapshotMismatchReason, coopPhase2BossHpEligible, coopPhase2ExpectedWind, firebasePushId, stableFirebaseJson, normalizeFirebaseMessageForCompare, createSerialSendQueue, advanceFirebasePendingVisibleTime, advanceFirebasePeerLiveness, resetFirebasePeerLiveness, advanceFirebaseLobbyLiveness, firebaseSeatStale, onlineErrorTitle, canLeaveFirebaseLobby, estimateFirebaseServerNow, firebaseServerTimeOffsetFromToken,
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,
       firebaseProto: () => FIREBASE_PROTO_VERSION, firebaseSeats: () => FIREBASE_SEATS.slice(), firebasePlayerSeats: () => FIREBASE_PLAYER_SEATS.slice(), firebaseRoundId, normalizeLobbySettings, firebasePacketSeatAllowed,
       receiveFirebaseForTest: msg => netReceiveInner(msg),
@@ -975,6 +1207,93 @@ const HOOK = `
     },
     specialFlashForTest: () => specialFlash && specialFlash.timer > 0 ? { ...specialFlash } : null,
     clearSpecialFlashForTest: () => { specialFlash = { timer: 0, key: null, text: '', color: '', sub: '' }; },
+    armCoopSpecialSalvoForTest: (unitIds, characterKeys) => {
+      const ids = Array.isArray(unitIds) ? unitIds.slice(0, 4) : [];
+      const keys = Array.isArray(characterKeys) ? characterKeys : [];
+      coopSalvoSpecialAura = null;
+      coopSalvoSpecialFlash = null;
+      coopSalvoState = {
+        phase: 'launching', participants: ids.slice(), expected: ids.slice(),
+        ready: new Set(ids), nextLaunchIndex: 0, physicsTick: 0,
+        launchTicks: [], deferredMatchEndReason: '',
+        actions: ids.map((unitId, index) => {
+          const unit = unitById(unitId);
+          if (!unit) throw new Error('missing salvo test unit: ' + unitId);
+          if (keys[index] && CHARACTERS[keys[index]]) unit.character = keys[index];
+          unit.specialCharge = SPECIAL_CHARGE_MAX;
+          const anchor = unitAnchor(unit);
+          return {
+            unitId, anchor, vx0: unit.team === 'player' ? 7 : -7, vy0: -5,
+            useSpecial: true, useJump: false, subweaponId: null, coopItemId: null,
+          };
+        }),
+      };
+      const armed = armQueuedCoopSalvo();
+      return {
+        armed,
+        phase: coopSalvoState?.phase || null,
+        duration: coopSalvoSpecialAura?.duration || 0,
+        charges: ids.map(unitId => unitById(unitId)?.specialCharge),
+        entries: (coopSalvoSpecialAura?.entries || []).map(entry => ({ ...entry })),
+        auraVisible: !!coopSalvoSpecialAura,
+        flashVisible: !!coopSalvoSpecialFlash,
+        projectileCount: projectiles.length,
+      };
+    },
+    advanceCoopSpecialAuraForTest: () => {
+      const duration = coopSalvoSpecialAura?.duration || COOP_SALVO_SPECIAL_AURA_DURATION;
+      update(duration + 0.01);
+      const advanced = coopSalvoState?.phase === 'special-cutin';
+      return {
+        advanced,
+        phase: coopSalvoState?.phase || null,
+        duration: coopSalvoSpecialFlash?.duration || 0,
+        entries: (coopSalvoSpecialFlash?.entries || []).map(entry => ({ ...entry })),
+        projectileCount: projectiles.length,
+      };
+    },
+    drawCoopSpecialSalvoForTest: (elapsedSeconds) => {
+      if (coopSalvoSpecialFlash) {
+        const duration = coopSalvoSpecialFlash.duration || COOP_SALVO_SPECIAL_FLASH_DURATION;
+        coopSalvoSpecialFlash.timer = Number.isFinite(elapsedSeconds)
+          ? Math.max(0.001, duration - Math.max(0, elapsedSeconds))
+          : duration * 0.45;
+      }
+      globalThis.__ktTextLog.length = 0;
+      globalThis.__ktTextDrawLog.length = 0;
+      drawCoopSalvoSpecialFlash();
+      return {
+        text: globalThis.__ktTextLog.slice(),
+        details: globalThis.__ktTextDrawLog.map(entry => ({ ...entry })),
+      };
+    },
+    launchCoopSupportSalvoForTest: () => {
+      projectiles = [];
+      const jumper = unitById('p1');
+      const rescuer = unitById('p2');
+      if (!jumper || !rescuer) throw new Error('support salvo test requires 2v2 units');
+      jumper.jumpAvailable = true;
+      jumper.moveLockTurns = 0;
+      rescuer.coopItem = 'rescue-kit';
+      rescuer.coopItemUsesLeft = 1;
+      coopSalvoState = {
+        phase: 'resolving', participants: ['p1', 'p2'], expected: ['p1', 'p2'], ready: new Set(['p1', 'p2']),
+        actions: [
+          { unitId: 'p1', anchor: unitAnchor(jumper), vx0: 7, vy0: -5, useSpecial: false, useJump: true, subweaponId: null, coopItemId: null },
+          { unitId: 'p2', anchor: unitAnchor(rescuer), vx0: 7, vy0: -5, useSpecial: false, useJump: false, subweaponId: null, coopItemId: 'rescue-kit' },
+        ],
+        nextLaunchIndex: 0, physicsTick: 0, launchTicks: [], deferredMatchEndReason: '',
+      };
+      stepCoopSalvoLaunchQueue();
+      coopSalvoState.physicsTick = COOP_SALVO_LAUNCH_INTERVAL_TICKS;
+      stepCoopSalvoLaunchQueue();
+      return {
+        projectiles: projectiles.map(projectile => ({ owner: projectile.owner, jump: projectile.jump, coopItemId: projectile.coopItemId })),
+        jumpAvailable: jumper.jumpAvailable,
+        rescueUsesLeft: rescuer.coopItemUsesLeft,
+        launchTicks: coopSalvoState.launchTicks.slice(),
+      };
+    },
     moveLockVisualForTest: (id) => typeof moveLockStatus === 'function' ? moveLockStatus(unitById(id)) : null,
     actionSkipVisualForTest: (id) => typeof actionSkipStatus === 'function' ? actionSkipStatus(unitById(id)) : null,
     actionSkipStunConfigForTest: () => ({

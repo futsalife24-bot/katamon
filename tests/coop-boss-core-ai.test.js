@@ -4,7 +4,7 @@ const boss = require('../coop-mvp-boss.js');
 const ai = require('../coop-mvp-boss-ai.js');
 
 assert.deepEqual(ai.DIFFICULTY_RULES.normal, {
-  coreRounds: 2, coreMultiplier: 2, roundLimit: 18, bigTelegraphRounds: 1,
+  coreRounds: 2, coreMultiplier: 2, roundLimit: 20, bigTelegraphRounds: 1,
   blockBigAfterBig: true, phase2DoubleActionChance: 0,
 });
 assert.deepEqual(ai.DIFFICULTY_RULES.hard, {
@@ -121,8 +121,8 @@ assert.equal(extremePlan.actions.length, 2, 'EXTREME Phase2は25%で2回行動')
 assert.notEqual(extremePlan.actions[0].id, extremePlan.actions[1].id, '同じ技の連続使用禁止');
 assert.equal(extremePlan.actions[1].secondAction, true);
 
-assert.equal(ai.isRoundLimitDefeat({ ...intact, round: 18 }), false);
-assert.equal(ai.isRoundLimitDefeat({ ...intact, round: 19 }), true);
+assert.equal(ai.isRoundLimitDefeat({ ...intact, round: 20 }), false);
+assert.equal(ai.isRoundLimitDefeat({ ...intact, round: 21 }), true);
 assert.equal(ai.isRoundLimitDefeat({ ...noRepeat, round: 16 }), true);
 assert.equal(ai.isRoundLimitDefeat({ ...extreme, round: 13 }), true);
 

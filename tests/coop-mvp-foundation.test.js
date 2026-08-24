@@ -24,6 +24,11 @@ assert.deepEqual(DIFFICULTIES.map(({ id, coreExposeRounds }) => ({ id, coreExpos
   { id: 'hard', coreExposeRounds: 2 },
   { id: 'extreme', coreExposeRounds: 1 },
 ]);
+assert.deepEqual(DIFFICULTIES.map(({ id, roundLimit }) => ({ id, roundLimit })), [
+  { id: 'normal', roundLimit: 20 },
+  { id: 'hard', roundLimit: 15 },
+  { id: 'extreme', roundLimit: 12 },
+]);
 assert.deepEqual(COOP_ITEMS.map(({ id, usesPerMatch }) => ({ id, usesPerMatch })), [
   { id: 'rescue-kit', usesPerMatch: 1 },
   { id: 'healing-kit', usesPerMatch: 2 },

@@ -27,6 +27,96 @@ async function openTitle(page, url = GAME_URL) {
 }
 
 test.describe('カタモン本体の基本導線', () => {
+  test('協力ボスの味方AI3席を縦画面で選び、席別設定へ保存する', async ({ page }) => {
+    test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await page.goto('/tests/fixtures/coop-ai-roster-visual.html?coopMvp=1');
+    await expect(page.locator('body')).toHaveAttribute('data-qa-ready', 'true');
+    await page.locator('#coopCreate').click();
+    await expect(page.locator('#coopRoom')).toBeVisible();
+    await expect(page.locator('#coopAiRoster')).toBeVisible();
+    await expect(page.locator('#coopAiRoster select')).toHaveCount(3);
+    await page.locator('#coopAiCharacterE1').selectOption('tori');
+    await page.locator('#coopAiCharacterS1').selectOption('iwa');
+    await page.locator('#coopAiCharacterS2').selectOption('medama');
+    await expect.poll(() => page.evaluate(() => globalThis.qaRoom()?.settings?.aiCharacters)).toEqual({
+      e1: 'tori', s1: 'iwa', s2: 'medama',
+    });
+    const layout = await page.locator('#coopAiRoster').evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, viewportWidth: innerWidth };
+    });
+    expect(layout.left).toBeGreaterThanOrEqual(0);
+    expect(layout.right).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(pageErrors, `AI編成画面でpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
+  });
+
+  test('協力4vs1 fixtureが通常対戦エンジン上で5体・大型立体鋼鉄として起動する', async ({ page }) => {
+    test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await page.goto('/tests/fixtures/coop-battle-visual.html');
+    await expect(page.locator('body')).toHaveAttribute('data-qa-started', 'true', { timeout: 20_000 });
+    await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => (
+      frame.contentWindow.KatamonCoopBridge?.getNormalBattleState?.() || null
+    )), { timeout: 20_000 }).toMatchObject({
+      active: true,
+      phase: 'playing',
+      activeUnitId: 'p1',
+      stageW: 2160,
+      stageH: 960,
+      terrainPattern: 'coopSteel',
+      craterCount: 0,
+      turnLimit: 100,
+      salvo: { phase: 'collecting', ready: 0, total: 4 },
+      turnOrder: ['p1', 'e1', 'p2', 'e2', 'boss1'],
+    });
+    const state = await page.locator('#gameFrame').evaluate((frame) => frame.contentWindow.KatamonCoopBridge.getNormalBattleState());
+    expect(state.units).toHaveLength(5);
+    expect(state.elevatedTerrainColumns).toBeGreaterThan(200);
+    expect(state.units.filter((unit) => unit.team === 'player')).toHaveLength(4);
+    expect(state.units.find((unit) => unit.id === 'boss1')).toMatchObject({ team: 'cpu', phase: 1 });
+    const coopCanvas = page.frameLocator('#gameFrame').getByTestId('battle-canvas');
+    await expect(coopCanvas).toBeVisible();
+    await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => (
+      frame.contentWindow.KatamonCoopBridge.getNormalBattleState().inputReady
+    )), { timeout: 20_000 }).toBe(true);
+    const box = await coopCanvas.boundingBox();
+    expect(box).not.toBeNull();
+    const virtual = (x, y) => ({ x: box.x + box.width * x / VIRTUAL_WIDTH, y: box.y + box.height * y / VIRTUAL_HEIGHT });
+    const origin = virtual(270, 810);
+    const pull = virtual(135, 850);
+    await page.mouse.move(origin.x, origin.y);
+    await page.mouse.down();
+    await page.mouse.move(pull.x, pull.y, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => {
+      const salvo = frame.contentWindow.KatamonCoopBridge.getNormalBattleState().salvo;
+      return salvo?.phase === 'collecting' && salvo?.ownGuideVisible === true;
+    }), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => (
+      frame.contentWindow.KatamonCoopBridge.getNormalBattleState()
+    )), { timeout: 30_000 }).toMatchObject({
+      activeUnitId: 'boss1',
+      turnCount: 4,
+      salvo: { phase: 'complete', ready: 4, total: 4, ownGuideVisible: false, launchTicks: [0, 18, 36, 54] },
+    });
+    await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => (
+      frame.contentWindow.KatamonCoopBridge.getNormalBattleState()
+    )), { timeout: 30_000 }).toMatchObject({
+      phase: 'playing',
+      activeUnitId: 'p1',
+      turnCount: 5,
+      turnLimit: 100,
+      salvo: { phase: 'collecting', ready: 0, total: 4 },
+    });
+    expect(pageErrors, `協力4vs1 fixtureでpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
+    await page.goto('about:blank');
+  });
+
   test('タイトル、CPU開始、演習、チュートリアルでページエラーを出さない', async ({ page }) => {
     // この環境のMobile WebKitは、巨大な本体canvasを初回読込する前にプロセスごと
     // 落ちる。ゲームscriptのpageerrorではなくブラウザクラッシュなので、本体導線は

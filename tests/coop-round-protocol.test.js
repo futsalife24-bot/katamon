@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const protocol = require('../coop-mvp-engine.js');
+const battle = require('../coop-mvp-battle.js');
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8')).rules.coopRooms.$room;
 
 assert.equal(protocol.INPUT_TIME_MS, 30000);
@@ -85,23 +86,53 @@ assert.deepEqual(protocol.advanceWind(volley, { direction: 1, strength: 8 }), {
   wind: { direction: -1, strength: 4 }, nextWind: { direction: 1, strength: 8 },
 });
 
+const firebaseVolleyActions = battle.scheduleVolleyActions({
+  p1: {
+    x: 120, fuelSpent: 8, aim: { x: 300, y: 120 }, weapon: { kind: 'normal', id: 'normal' },
+    committedAt: startedAt + 1500, auto: false,
+  },
+  e1: {
+    x: 160, fuelSpent: 4, aim: { x: 330, y: 140 }, weapon: { kind: 'special', id: 'special' },
+    committedAt: startedAt + 1800, auto: false,
+  },
+}, startedAt + 2100);
+assert.deepEqual(Object.keys(firebaseVolleyActions), ['p1', 'e1']);
+assert.deepEqual(firebaseVolleyActions.p1, {
+  x: 120, fuelSpent: 8, aim: { x: 300, y: 120 }, weapon: { kind: 'normal', id: 'normal' },
+  scheduledAt: startedAt + 2100, auto: false,
+}, 'Firebaseへ送るvolleyからcommit専用のcommittedAtを除く');
+assert.equal('committedAt' in firebaseVolleyActions.e1, false,
+  '全席のvolleyがSecurity Rulesの許可フィールドだけを送る');
+
 assert.ok(rules.round, '協力部屋に現在ラウンド境界が必要');
 assert.ok(rules.rounds, '協力部屋に追記専用ラウンド通信が必要');
 const message = rules.rounds.$roundId.messages.$message;
 assert.match(message.t['.validate'], /'move'/);
 assert.match(message.t['.validate'], /'commit'/);
 assert.match(message.t['.validate'], /'volley'/);
+assert.match(message.t['.validate'], /'net'/,
+  'ライブ協力戦は通常対戦エンジンのnetパケットを通す');
 assert.match(message['.write'], /slots/);
 assert.match(message['.write'], /hostUid/);
+assert.match(message['.write'], /newData\.child\('t'\)\.val\(\) === 'net'/,
+  'netパケットは送信席本人だけが追記できる');
 assert.match(message['.write'], /!data\.exists\(\)/, 'ラウンド通信は追記専用');
 assert.match(message.sentAt['.validate'], /120000/);
+assert.match(message.payload['.validate'], /length <= 220000/,
+  '通常エンジンの同期本文にはサイズ上限がある');
 assert.equal(message.$other['.validate'], false, '未知フィールドを受け入れない');
 assert.ok(message.aim && message.weapon, 'タイムアウト確定用に照準と武器のdraftを検証する');
 assert.match(message.weapon.id['.validate'], /parent\(\)\.child\('kind'\)/,
   '武器kindとidの組合せをFirebase側でも許可リストへ限定する');
 assert.match(message.action.weapon.id['.validate'], /'rescue-kit'.*'healing-kit'.*'debuff-grenade'/,
   'READY actionは既知のCO-OP ITEMだけを受理する');
+assert.equal(message.actions['.validate'], 'newData.hasChildren()',
+  'Security Rulesで未対応のnumChildrenを使わず、1件以上の確定行動を要求する');
+assert.doesNotMatch(message.actions['.validate'], /numChildren/,
+  'Realtime Database Security Rulesに存在しないSDK用メソッドを混ぜない');
+assert.match(message.actions.$seat['.validate'], /\^\(p1\|e1\|s1\|s2\)\$/,
+  '確定行動は4席の許可リストで最大4件に制限する');
 assert.match(message.actions.$seat.weapon.id['.validate'], /'barrier'.*'impact'.*'drill'/,
   '確定volleyは既知のサブウェポンだけを受理する');
 
-console.log('協力ラウンド: 30秒入力・確定ロック・固定順砲撃・移動同期（38/38 passed）');
+console.log('協力ラウンド: 旧一斉入力互換＋通常ターン制net通信（44/44 passed）');

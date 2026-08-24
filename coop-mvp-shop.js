@@ -76,6 +76,7 @@
   let mounted = false;
   let selectedItemId = null;
   let toastTimer = 0;
+  let toastCleanupTimer = 0;
 
   function styleText() {
     return `
@@ -87,7 +88,7 @@
       .mvp-preview{height:68px;margin:0 0 7px;overflow:hidden;border:1px solid #4e5f64;background:radial-gradient(circle at 50% 70%,#304347,#091013 72%);position:relative}.mvp-preview::before{content:'';position:absolute;left:0;right:0;bottom:10px;height:11px;background:linear-gradient(#9a7450,#4e3828)}.mvp-orb{position:absolute;left:12%;top:48%;width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3b8,#d98327 38%,#563110 72%);box-shadow:0 0 10px #ef9f39;animation:mvp-shot 1.8s ease-in-out infinite}.mvp-preview.trajectory .mvp-orb{animation-name:mvp-arc}.mvp-preview.impact .mvp-orb{left:47%;top:51%;background:#c9ffff;box-shadow:0 0 6px #68e8ff,0 0 18px #26a9d8;animation:mvp-pulse 1.25s ease-out infinite}.mvp-preview.icon .mvp-orb{left:calc(50% - 18px);top:12px;width:36px;height:36px;border:4px double #d5a33d;background:radial-gradient(#a44427,#282016);animation:none}.mvp-preview.barrier .mvp-orb{left:calc(50% - 22px);top:10px;width:44px;height:44px;background:transparent;border:4px solid #78d8e0;box-shadow:0 0 16px #4fc4d4,inset 0 0 14px #2a7b83;animation:mvp-pulse 1.6s infinite}.mvp-preview.support .mvp-orb{background:radial-gradient(#efffe9,#5bd487 45%,#1a7143);box-shadow:0 0 13px #55e892}
       @keyframes mvp-shot{50%{transform:translateX(230px)}}@keyframes mvp-arc{50%{transform:translate(230px,-42px)}}@keyframes mvp-pulse{0%{transform:scale(.4);opacity:1}100%{transform:scale(1.8);opacity:0}}
       .mvp-dialog{position:absolute;z-index:4;inset:0;display:none;align-items:center;justify-content:center;padding:22px;background:#020507dc}.mvp-dialog.open{display:flex}.mvp-dialog-card{width:min(430px,100%);padding:20px;border:2px solid #c8953e;background:linear-gradient(#26353a,#0b1215);box-shadow:0 14px 40px #000;text-align:center}.mvp-dialog-card h3{margin:0 0 10px;color:#ffd66f}.mvp-dialog-card p{font-size:12px;line-height:1.5}.mvp-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.mvp-dialog-actions button{min-height:44px;border:1px solid #b8873c;background:#17262c;color:#fbe7bd;font-weight:900}.mvp-dialog-actions .primary{background:#bd7b25;color:#fff8df;border-color:#ffd66f}
-      .mvp-achievements{display:grid;gap:7px}.mvp-achievement{display:grid;grid-template-columns:1fr auto;gap:3px 10px;padding:10px;border:1px solid #4e6065;background:#0b1418}.mvp-achievement.done{border-color:#bd9145;background:linear-gradient(90deg,#272016,#0b1418 48%)}.mvp-achievement strong{color:#f6e4bb;font-size:13px}.mvp-achievement em{color:#d5a650;font-size:10px;font-style:normal}.mvp-achievement p{grid-column:1/-1;margin:2px 0;color:#b7c2bd;font-size:10px}.mvp-achievement span{font-size:10px}.mvp-toast{position:fixed;z-index:170;left:50%;top:18px;transform:translate(-50%,-120%);min-width:230px;max-width:calc(100% - 24px);padding:10px 14px;border:1px solid #e1ae50;background:#101a1ef2;color:#ffe5a5;text-align:center;font-weight:900;transition:transform .22s}.mvp-toast.show{transform:translate(-50%,0)}
+      .mvp-achievements{display:grid;gap:7px}.mvp-achievement{display:grid;grid-template-columns:1fr auto;gap:3px 10px;padding:10px;border:1px solid #4e6065;background:#0b1418}.mvp-achievement.done{border-color:#bd9145;background:linear-gradient(90deg,#272016,#0b1418 48%)}.mvp-achievement strong{color:#f6e4bb;font-size:13px}.mvp-achievement em{color:#d5a650;font-size:10px;font-style:normal}.mvp-achievement p{grid-column:1/-1;margin:2px 0;color:#b7c2bd;font-size:10px}.mvp-achievement span{font-size:10px}.mvp-toast{position:fixed;z-index:170;left:50%;top:18px;visibility:hidden;opacity:0;pointer-events:none;transform:translate(-50%,calc(-100% - 32px));min-width:230px;max-width:calc(100% - 24px);padding:10px 14px;border:1px solid #e1ae50;background:#101a1ef2;color:#ffe5a5;text-align:center;font-weight:900;transition:transform .22s,opacity .22s,visibility 0s linear .22s}.mvp-toast.show{visibility:visible;opacity:1;transform:translate(-50%,0);transition:transform .22s,opacity .22s}.mvp-toast[hidden],.mvp-toast:empty{display:none}
       @media(max-width:480px){.mvp-panel{height:98vh}.mvp-head h2{font-size:17px}.mvp-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.mvp-card{min-height:250px;padding:7px 6px}.mvp-card h3{font-size:12px}.mvp-card p{font-size:10px;min-height:72px}.mvp-card button{left:6px;right:6px;font-size:10px}.mvp-preview{height:64px}@keyframes mvp-shot{50%{transform:translateX(100px)}}@keyframes mvp-arc{50%{transform:translate(100px,-30px)}}}
     `;
   }
@@ -98,7 +99,7 @@
         <header class="mvp-head"><h2 id="mvpCollectionTitle">KATAMON WORKSHOP</h2><p id="mvpCollectionSubtitle">永久所持・返品不可</p><div class="mvp-wallet" id="mvpWallet">0 🪙</div></header>
         <main class="mvp-scroll" id="mvpCollectionBody"></main><footer class="mvp-foot"><button class="mvp-close" id="mvpCollectionClose" type="button">閉じる</button></footer>
         <div class="mvp-dialog" id="mvpPurchaseDialog"><div class="mvp-dialog-card" id="mvpPurchaseCard"></div></div>
-      </section></div><div class="mvp-toast" id="mvpAchievementToast" role="status"></div>`;
+      </section></div><div class="mvp-toast" id="mvpAchievementToast" role="status" hidden></div>`;
   }
 
   function previewMarkup(item) {
@@ -193,8 +194,29 @@
   function showToast(message) {
     const toast = root?.document?.getElementById('mvpAchievementToast');
     if (!toast) return;
-    clearTimeout(toastTimer); toast.textContent = message; toast.classList.add('show');
-    toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+    clearTimeout(toastTimer);
+    clearTimeout(toastCleanupTimer);
+    const text = String(message || '').trim();
+    toast.classList.remove('show');
+    if (!text) {
+      toast.textContent = '';
+      toast.hidden = true;
+      return;
+    }
+    toast.textContent = text;
+    toast.hidden = false;
+    // hidden解除と同じ描画フレームでshowを付けると、端末によって登場アニメが省略される。
+    // 一度レイアウトを確定させ、表示中だけ画面内へ降ろす。
+    toast.getBoundingClientRect();
+    toast.classList.add('show');
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+      toastCleanupTimer = setTimeout(() => {
+        if (toast.classList.contains('show')) return;
+        toast.textContent = '';
+        toast.hidden = true;
+      }, 240);
+    }, 2600);
   }
 
   function notifyAchievements(ids) {

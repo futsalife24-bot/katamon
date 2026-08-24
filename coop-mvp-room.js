@@ -72,10 +72,26 @@
     return next;
   }
 
+  function normalizeAiCharacters(value, characterIds, slots = {}) {
+    const ids = Array.isArray(characterIds) && characterIds.length
+      ? characterIds : [CHARACTER_FALLBACK];
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const used = new Set(SEATS.map((seat) => slots?.[seat]?.character).filter((character) => ids.includes(character)));
+    const result = {};
+    GUEST_SEATS.forEach((seat, index) => {
+      const requested = ids.includes(source[seat]) ? source[seat] : null;
+      const character = requested || ids.find((id) => !used.has(id)) || ids[index % ids.length];
+      result[seat] = character;
+      used.add(character);
+    });
+    return result;
+  }
+
   function canHostStart(slots, settings) {
     const occupied = SEATS.map((seat) => slots?.[seat]).filter((slot) => slot?.uid);
-    if (occupied.length < 2 || occupied.some((slot) => slot.ready !== true)) return false;
-    return true;
+    if (occupied.some((slot) => slot.ready !== true)) return false;
+    // 出先の実機確認はホスト1人＋AI3体で成立。AI補充OFFでは4席が埋まって初めて4vs1になる。
+    return settings?.aiFill === true ? occupied.length >= 1 : occupied.length === SEATS.length;
   }
 
   function sourceNamespaces() { return 'coopOpen/coopRooms'; }
@@ -99,6 +115,7 @@
     const document = browserRoot.document;
     const progress = foundation.loadState();
     const characters = bridge.getCharacters();
+    const battleCharacters = bridge.getBattleCharacters?.() || characters;
     const characterIds = characters.map((entry) => entry.id);
     let session = null;
     let busy = false;
@@ -124,6 +141,7 @@
       .coop-boss-copy{position:relative;z-index:1;display:flex;min-height:154px;width:53%;box-sizing:border-box;padding:18px 0 16px 15px;flex-direction:column;justify-content:center}.coop-boss-copy span{color:#d8963b;font:400 10px var(--katamon-font-display);letter-spacing:.16em}.coop-boss-copy strong{margin:7px 0 5px;color:#ffe6a6;font:400 18px/1.35 var(--katamon-font-display);text-shadow:0 2px #000}.coop-boss-copy small{color:#bdc9cf;font-size:11px;line-height:1.45}
       .coop-list{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto}.coop-list-row{display:grid;grid-template-columns:1fr auto;gap:3px 8px;padding:9px;border:1px solid #c7833566;border-radius:4px;background:#0004}.coop-list-row strong{color:#ffe2a1}.coop-list-row small{color:#aebbc5}.coop-list-row button{grid-row:span 2;padding:5px 12px;border:1px solid #ffd24a;background:#ffd24a;color:#16110a;border-radius:3px;font-weight:900}
       .coop-seats{display:flex;flex-direction:column;gap:5px}.coop-seat{display:grid;grid-template-columns:28px 1fr auto;gap:4px 8px;align-items:center;padding:8px;border:1px solid #51636d;border-radius:4px;background:#0a151acc}.coop-seat.occupied{border-color:#b8873c}.coop-seat.ready{box-shadow:inset 4px 0 #f4bf4f}.coop-seat b{color:#ffd24a}.coop-seat small{grid-column:2/-1;color:#9fb0bd}.coop-ready-mark{color:#9fb0bd;font-size:11px}.coop-seat.ready .coop-ready-mark{color:#ffe2a1}
+      .coop-ai-roster{display:grid;grid-template-columns:1fr;gap:8px}.coop-ai-roster>strong{color:#ffe2a1;font:400 13px var(--katamon-font-display);letter-spacing:.06em}.coop-ai-roster label{display:grid;grid-template-columns:64px 1fr;gap:8px;align-items:center}.coop-ai-roster label span{color:#f4bf4f;font:400 12px var(--katamon-font-display)}.coop-ai-roster small{color:#9fb0bd;font-size:11px;line-height:1.45}
       .coop-footer{display:flex;flex-direction:column;gap:8px;padding:10px 16px max(14px,env(safe-area-inset-bottom));border-top:1px solid #c7833555;background:#091116e8}.coop-footer .coop-button{width:100%}
       .coop-footer[hidden]{display:none}
       @media(max-height:680px){.coop-body{padding:10px}.coop-card{padding:9px;margin-bottom:8px}.coop-head{padding-top:9px;padding-bottom:8px}.coop-head h2{font-size:17px}}
@@ -153,6 +171,7 @@
         <section id="coopRoom" class="coop-room" hidden>
           <p class="coop-kicker">作戦準備室　<span id="coopCode" class="coop-code"></span></p>
           <div id="coopHostSettings" class="coop-card coop-grid"><select id="coopRoomDifficulty" aria-label="難易度"></select><select id="coopRoomAiFill" aria-label="AI補充"><option value="on">AI補充 ON</option><option value="off">AI補充 OFF</option></select></div>
+          <div id="coopAiRoster" class="coop-card coop-ai-roster" hidden><strong>味方AIのモンスター</strong><label><span>AI P2</span><select id="coopAiCharacterE1" aria-label="AI P2のモンスター"></select></label><label><span>AI P3</span><select id="coopAiCharacterS1" aria-label="AI P3のモンスター"></select></label><label><span>AI P4</span><select id="coopAiCharacterS2" aria-label="AI P4のモンスター"></select></label><small>参加者が入った席は、その人が選んだモンスターを優先します。</small></div>
           <div class="coop-card"><div id="coopSeats" class="coop-seats"></div></div>
           <div class="coop-card coop-grid"><select id="coopCharacter" class="wide" aria-label="モンスター"></select><select id="coopSubweapon" aria-label="サブウェポン"></select><select id="coopItem" aria-label="CO-OP ITEM"></select></div>
           <p class="coop-note">装備を変えるとREADYは解除されます。公開版の通常ONLINEとは別の部屋です。</p>
@@ -169,6 +188,10 @@
     const difficultyEl = element('coopDifficulty'); const roomDifficultyEl = element('coopRoomDifficulty');
     const aiFillEl = element('coopAiFill'); const roomAiFillEl = element('coopRoomAiFill');
     const characterEl = element('coopCharacter'); const subweaponEl = element('coopSubweapon'); const itemEl = element('coopItem');
+    const aiRosterEl = element('coopAiRoster');
+    const aiCharacterEls = {
+      e1: element('coopAiCharacterE1'), s1: element('coopAiCharacterS1'), s2: element('coopAiCharacterS2'),
+    };
 
     const setStatus = (message) => { statusEl.textContent = message; };
     const setBusy = (value) => { busy = value; overlay.classList.toggle('busy', value); };
@@ -178,7 +201,10 @@
         option(difficultyEl, value.id, value.label); option(roomDifficultyEl, value.id, value.label);
       }
     });
-    characters.forEach((value) => option(characterEl, value.id, value.name));
+    characters.forEach((value) => {
+      option(characterEl, value.id, value.name);
+      GUEST_SEATS.forEach((seat) => option(aiCharacterEls[seat], value.id, value.name));
+    });
     option(subweaponEl, '', 'サブウェポン: なし');
     foundation.SUBWEAPONS.filter((value) => progress.inventory[value.id]).forEach((value) => option(subweaponEl, value.id, `SUB: ${value.label}`));
     foundation.COOP_ITEMS.filter((value) => progress.inventory[value.id]).forEach((value) => option(itemEl, value.id, `ITEM: ${value.label}`));
@@ -188,6 +214,12 @@
 
     function selectedEquipment() {
       return { character: characterEl.value, subweapon: subweaponEl.value || null, coopItem: itemEl.value || 'rescue-kit' };
+    }
+
+    function selectedAiCharacters() {
+      return normalizeAiCharacters(Object.fromEntries(GUEST_SEATS.map((seat) => [seat, aiCharacterEls[seat].value])), characterIds, session?.room?.slots || {
+        p1: { character: characterEl.value },
+      });
     }
 
     function makeSlot(auth, prior = null) {
@@ -205,7 +237,12 @@
     }
 
     function settingsFromEntry() {
-      return { difficulty: difficultyEl.value || 'normal', aiFill: aiFillEl.value !== 'off', revision: 1 };
+      return {
+        difficulty: difficultyEl.value || 'normal',
+        aiFill: aiFillEl.value !== 'off',
+        aiCharacters: normalizeAiCharacters(null, characterIds, { p1: { character: characterEl.value } }),
+        revision: 1,
+      };
     }
 
     function stopTimers() {
@@ -273,6 +310,12 @@
       roomDifficultyEl.value = session.room.settings?.difficulty || 'normal';
       roomAiFillEl.value = session.room.settings?.aiFill === false ? 'off' : 'on';
       element('coopHostSettings').hidden = session.role !== 'host';
+      const aiCharacters = normalizeAiCharacters(session.room.settings?.aiCharacters, characterIds, session.room.slots);
+      GUEST_SEATS.forEach((seat) => {
+        aiCharacterEls[seat].value = aiCharacters[seat];
+        aiCharacterEls[seat].disabled = !!session.room.slots?.[seat]?.uid;
+      });
+      aiRosterEl.hidden = session.role !== 'host' || session.room.settings?.aiFill === false;
       renderSeats();
     }
 
@@ -289,13 +332,31 @@
       const started = battle.startBrowser({
         session,
         bridge,
-        characters,
+        characters: battleCharacters,
         onReturnLobby(nextRoom) {
+          battleActive = false;
+          overlay.classList.add('open');
+          if (!nextRoom) {
+            session = null;
+            roomEl.hidden = true; footerEl.hidden = true; entryEl.hidden = false;
+            bridge.syncBgm();
+            setStatus('協力部屋を退出しました。');
+            return;
+          }
           if (!session) return;
-          battleActive = false; session.room = nextRoom;
-          overlay.classList.add('open'); renderRoom();
+          session.room = nextRoom;
+          renderRoom();
           schedulePoll(0); scheduleHeartbeat(18000); bridge.syncBgm();
           setStatus('作戦準備室へ戻りました。空いた席はここで補充できます。');
+        },
+        onExitTitle() {
+          battleActive = false;
+          session = null;
+          roomEl.hidden = true;
+          footerEl.hidden = true;
+          entryEl.hidden = false;
+          overlay.classList.remove('open');
+          bridge.syncBgm();
         },
       });
       if (!started) { battleActive = false; overlay.classList.add('open'); setStatus('協力戦を開始できませんでした。'); }
@@ -411,7 +472,12 @@
 
     async function updateHostSettings() {
       if (!session || session.role !== 'host' || busy) return;
-      const next = { difficulty: roomDifficultyEl.value || 'normal', aiFill: roomAiFillEl.value !== 'off', revision: Math.max(1, Number(session.room.settings?.revision || 1) + 1) };
+      const next = {
+        difficulty: roomDifficultyEl.value || 'normal',
+        aiFill: roomAiFillEl.value !== 'off',
+        aiCharacters: selectedAiCharacters(),
+        revision: Math.max(1, Number(session.room.settings?.revision || 1) + 1),
+      };
       setBusy(true);
       try {
         await bridge.request(`coopRooms/${session.code}/settings`, session.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
@@ -492,6 +558,7 @@
       updateOwnSlot(applyEquipmentChange(current, selectedEquipment()));
     }));
     roomDifficultyEl.addEventListener('change', updateHostSettings); roomAiFillEl.addEventListener('change', updateHostSettings);
+    GUEST_SEATS.forEach((seat) => aiCharacterEls[seat].addEventListener('change', updateHostSettings));
     element('coopJoinCode').addEventListener('input', (event) => { event.target.value = normalizeRoomCode(event.target.value); });
 
     return true;
@@ -507,6 +574,7 @@
     isRoomCode,
     normalizeSlot,
     applyEquipmentChange,
+    normalizeAiCharacters,
     canHostStart,
     sourceNamespaces,
     usableListing,

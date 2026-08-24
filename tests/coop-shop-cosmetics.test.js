@@ -69,6 +69,12 @@ assert.match(source, /ゴーストタップ.*pointerEvents = 'none'/s,
   'Canvasから開いた同じ指で商品を誤購入しない');
 assert.match(source, /rgba\(18,46,48,.42\).*url\('assets\/wall.jpg'\)/s,
   '石壁・黒鉄・真鍮を使うカタモン世界観の背景');
+assert.match(source, /id="mvpAchievementToast" role="status" hidden/,
+  '実績通知は初期状態でDOMごと非表示にし、空の金枠を画面上端へ残さない');
+assert.match(source, /\.mvp-toast\[hidden\],\.mvp-toast:empty\{display:none\}/,
+  '空文字またはhiddenの実績通知をCSSでも確実に消す');
+assert.match(source, /toast\.textContent = '';\s*toast\.hidden = true;/s,
+  '実績通知の退場後は内容を空にして再び非表示へ戻す');
 
 const gameSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert.match(gameSource, /soundTestShopBtn/, '既存おまけ画面へ小さいショップ入口を置く');

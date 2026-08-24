@@ -26,12 +26,27 @@ assert.equal(changed.ready, false, '装備変更時はREADYを解除する');
 
 const host = { uid: 'host', ready: true };
 const guest = { uid: 'guest', ready: true };
-assert.equal(room.canHostStart({ p1: host, e1: guest }, { aiFill: false }), true);
+const guest2 = { uid: 'guest2', ready: true };
+const guest3 = { uid: 'guest3', ready: true };
+assert.equal(room.canHostStart({ p1: host, e1: guest }, { aiFill: false }), false,
+  'AI補充OFFは4人そろうまで出撃できない');
+assert.equal(room.canHostStart({ p1: host, e1: guest, s1: guest2, s2: guest3 }, { aiFill: false }), true,
+  'AI補充OFFは4人全員READYで出撃できる');
 assert.equal(room.canHostStart({ p1: host, e1: { ...guest, ready: false } }, { aiFill: false }), false);
-assert.equal(room.canHostStart({ p1: host }, { aiFill: false }), false, 'AI補充OFFは人間2人以上が必要');
-assert.equal(room.canHostStart({ p1: host }, { aiFill: true }), false, 'AI補充ONでも参加人数は人間2人以上が必要');
+assert.equal(room.canHostStart({ p1: host }, { aiFill: false }), false, 'AI補充OFFは人間4人が必要');
+assert.equal(room.canHostStart({ p1: host }, { aiFill: true }), true, 'AI補充ONはホスト1人＋AI3体で出撃できる');
 assert.equal(room.canHostStart({ p1: host, e1: { ...guest, ready: false } }, { aiFill: true }), false,
   'AI補充ONでも参加中の人間のREADYを飛ばさない');
+
+const aiCharacters = room.normalizeAiCharacters({ e1: 'medama', s1: 'iwa', s2: 'tori' },
+  ['kyoryu', 'medama', 'iwa', 'tori'], { p1: { character: 'kyoryu' } });
+assert.deepEqual(aiCharacters, { e1: 'medama', s1: 'iwa', s2: 'tori' },
+  'ホストが選んだAI3席のモンスターを席ごとに保持する');
+const safeAiCharacters = room.normalizeAiCharacters({ e1: 'unknown' },
+  ['kyoryu', 'medama', 'iwa', 'tori'], { p1: { character: 'kyoryu' } });
+assert.deepEqual(Object.keys(safeAiCharacters), ['e1', 's1', 's2']);
+assert.ok(Object.values(safeAiCharacters).every((character) => ['kyoryu', 'medama', 'iwa', 'tori'].includes(character)),
+  '不正なAIモンスターは利用可能キャラへ正規化する');
 
 assert.ok(rules.coopOpen, '通常openと分離したcoopOpenが必要');
 assert.ok(rules.coopRooms, '通常roomsと分離したcoopRoomsが必要');
@@ -42,8 +57,21 @@ assert.match(rules.coopRooms.$room.settings['.write'], /hostUid/);
 assert.match(rules.coopRooms.$room.settings.difficulty['.validate'], /normal/);
 assert.match(rules.coopRooms.$room.settings.difficulty['.validate'], /extreme/);
 assert.match(rules.coopRooms.$room.settings.aiFill['.validate'], /isBoolean/);
+assert.match(rules.coopRooms.$room.settings.aiCharacters.e1['.validate'], /medama/,
+  'P2のAIモンスターは既存キャラ許可リストで検証する');
+assert.match(rules.coopRooms.$room.settings.aiCharacters.s1['.validate'], /iwa/,
+  'P3のAIモンスターも席別に検証する');
+assert.match(rules.coopRooms.$room.settings.aiCharacters.s2['.validate'], /tori/,
+  'P4のAIモンスターも席別に検証する');
 assert.match(rules.coopRooms.$room.slots.$seat.ready['.validate'], /isBoolean/);
 assert.match(rules.coopRooms.$room.slots.$seat.name['.validate'], /length <= 12/);
+const netMessage = rules.coopRooms.$room.rounds.$roundId.messages.$message;
+assert.match(netMessage.t['.validate'], /'net'/, '通常戦エンジンの協力通信パケットを許可する');
+assert.match(netMessage.payload['.validate'], /length <= 220000/, '同期スナップショットの上限をRulesでも固定する');
+assert.match(rules.coopRooms.$room.slots.$seat['.write'], /phase'\)\.val\(\) === 'playing'/,
+  '対戦中でも本人の席だけ退出できる');
+assert.match(rules.coopRooms.$room.slots.$seat['.write'], /phase'\)\.val\(\) === 'results'/,
+  '結果画面でも本人の席だけ退出できる');
 
 assert.match(indexHtml, /KatamonCoopBridge/);
 assert.match(indexHtml, /<script src="coop-mvp-room\.js"><\/script>/);
@@ -65,5 +93,9 @@ assert.doesNotMatch(room.sourceNamespaces(), /(^|\/)open($|\/)|(^|\/)rooms($|\/)
 assert.match(roomSource, /coopRooms\/\$\{session\.code\}\/expiresAt/,
   'ホストは部屋TTLより短い間隔で協力部屋を延命する');
 assert.match(roomSource, /lastLeaseAt[\s\S]{0,180}60000/);
+assert.match(roomSource, /id="coopAiRoster"/,
+  'ホスト準備室にAI3体のモンスター選択欄を置く');
+assert.match(roomSource, /AI P2[\s\S]*AI P3[\s\S]*AI P4/,
+  'AI選択欄は3席を明示して取り違えを防ぐ');
 
-console.log('協力専用部屋・4席ロビー・Rules分離（32/32 passed）');
+console.log('協力専用部屋・4席ロビー・Rules分離（47/47 passed）');

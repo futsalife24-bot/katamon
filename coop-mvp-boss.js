@@ -23,6 +23,27 @@
   });
   const PART_ORDER = Object.freeze(['twinCannon', 'mainCannon', 'frontArmor', 'missilePod']);
   const BODY_HITBOX = Object.freeze({ x: 0.03, y: 0.24, width: 0.94, height: 0.73 });
+  // 通常2vs2エンジンへ載せるライブ4vs1用の狙点。画像alphaではなく固定座標を
+  // 正本にし、画像の読込成否や端末差で命中部位が変わらないようにする。
+  const LIVE_HIT_SHAPES = Object.freeze([
+    Object.freeze({ type: 'rect', x: 0.12, y: 0.43, width: 0.85, height: 0.54, partId: null }),
+    ...PART_ORDER.map((partId) => Object.freeze({
+      type: 'circle',
+      x: PART_DEFS[partId].x,
+      y: PART_DEFS[partId].y,
+      radius: PART_DEFS[partId].radius,
+      partId,
+    })),
+  ]);
+  const LIVE_CORE_SHAPE = Object.freeze({ x: 0.64, y: 0.67, radius: 0.095 });
+  const LIVE_HULL_DAMAGE_MULTIPLIER = 2 / 3;
+  const LIVE_PART_BODY_SPILL = 0.4;
+  const LIVE_PART_HP_RATIO = 0.06;
+  const LIVE_DIFFICULTY_RULES = Object.freeze({
+    normal: Object.freeze({ coreRounds: 2, coreMultiplier: 2 }),
+    hard: Object.freeze({ coreRounds: 2, coreMultiplier: 1.75 }),
+    extreme: Object.freeze({ coreRounds: 1, coreMultiplier: 1.5 }),
+  });
   const STAGE_WIDTH = 1440;
   const STAGE_HEIGHT = 660;
   const TERRAIN_BOTTOM = 636;
@@ -189,6 +210,231 @@
     return { state: next, bodyDamage, partDamage, notification };
   }
 
+  function liveRules(difficulty) {
+    return LIVE_DIFFICULTY_RULES[difficulty] || LIVE_DIFFICULTY_RULES.normal;
+  }
+
+  function livePartMaxHp(bodyMaxHp, partId) {
+    return Math.max(1, Math.round(Math.max(1, finite(bodyMaxHp, 1)) * LIVE_PART_HP_RATIO * PART_DURABILITY[partId]));
+  }
+
+  function createLiveState(options = {}) {
+    const difficulty = LIVE_DIFFICULTY_RULES[options.difficulty] ? options.difficulty : 'normal';
+    const bodyMaxHp = Math.max(1, finite(options.bodyMaxHp, 2200));
+    const parts = {};
+    for (const partId of PART_ORDER) {
+      const maxHp = livePartMaxHp(bodyMaxHp, partId);
+      parts[partId] = {
+        hp: maxHp,
+        maxHp,
+        active: PART_DEFS[partId].phase === 1,
+        destroyed: false,
+      };
+    }
+    return {
+      phase: 1,
+      difficulty,
+      round: 1,
+      parts,
+      core: { charge: 0, exposed: false, roundsRemaining: 0, trigger: null },
+    };
+  }
+
+  function exposeLiveCore(state, trigger) {
+    const next = clone(state);
+    next.core = {
+      charge: 0,
+      exposed: true,
+      roundsRemaining: liveRules(next.difficulty).coreRounds,
+      trigger: trigger || 'parts',
+    };
+    return next;
+  }
+
+  function normalizedDistanceToShape(point, shape) {
+    if (shape.type === 'circle') {
+      return Math.max(0, Math.hypot(point.x - shape.x, point.y - shape.y) - shape.radius);
+    }
+    const dx = Math.max(shape.x - point.x, 0, point.x - (shape.x + shape.width));
+    const dy = Math.max(shape.y - point.y, 0, point.y - (shape.y + shape.height));
+    return Math.hypot(dx, dy);
+  }
+
+  function resolveLiveTarget(state, point, projectileRadius = 0) {
+    if (!state || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return { kind: 'none' };
+    const radius = Math.max(0, finite(projectileRadius, 0));
+    if (state.core?.exposed
+        && Math.hypot(point.x - LIVE_CORE_SHAPE.x, point.y - LIVE_CORE_SHAPE.y) <= LIVE_CORE_SHAPE.radius + radius) {
+      return { kind: 'core' };
+    }
+    const candidates = LIVE_HIT_SHAPES.filter((shape) => {
+      if (!shape.partId) return false;
+      const part = state.parts?.[shape.partId];
+      return part?.active && !part.destroyed && normalizedDistanceToShape(point, shape) <= radius;
+    }).map((shape) => ({
+      partId: shape.partId,
+      distance: Math.hypot(point.x - shape.x, point.y - shape.y),
+    })).sort((left, right) => left.distance - right.distance
+      || PART_ORDER.indexOf(left.partId) - PART_ORDER.indexOf(right.partId));
+    if (candidates.length) return { kind: 'part', partId: candidates[0].partId };
+    return LIVE_HIT_SHAPES.some((shape) => normalizedDistanceToShape(point, shape) <= radius)
+      ? { kind: 'hull' }
+      : { kind: 'none' };
+  }
+
+  function applyLiveDamage(state, target, rawDamage) {
+    let next = clone(state);
+    const damage = Math.max(0, finite(rawDamage, 0));
+    let bodyDamage = 0;
+    let partDamage = 0;
+    let notification = null;
+    let coreOpened = false;
+    let resolvedTarget = target?.kind || 'hull';
+    if (target?.kind === 'part' && next.parts?.[target.partId]?.active && !next.parts[target.partId].destroyed) {
+      const part = next.parts[target.partId];
+      const beforeHp = part.hp;
+      part.hp = clamp(part.hp - damage, 0, part.maxHp);
+      partDamage = beforeHp - part.hp;
+      bodyDamage = Math.round(damage * LIVE_PART_BODY_SPILL);
+      if (part.hp === 0) {
+        part.destroyed = true;
+        notification = PART_DEFS[target.partId].notification;
+      }
+      if (!next.core.exposed && part.maxHp > 0) {
+        const progress = partDamage / part.maxHp * 15;
+        const destruction = beforeHp > 0 && part.hp === 0 ? 25 : 0;
+        next.core.charge = Math.min(100, next.core.charge + progress + destruction);
+        if (next.core.charge >= 100) {
+          next = exposeLiveCore(next, 'parts');
+          coreOpened = true;
+        }
+      }
+    } else if (target?.kind === 'core' && next.core?.exposed) {
+      bodyDamage = Math.round(damage * liveRules(next.difficulty).coreMultiplier);
+    } else {
+      resolvedTarget = 'hull';
+      bodyDamage = Math.round(damage * LIVE_HULL_DAMAGE_MULTIPLIER);
+    }
+    return {
+      state: next,
+      target: resolvedTarget,
+      partId: target?.kind === 'part' ? target.partId : null,
+      bodyDamage,
+      partDamage,
+      notification,
+      coreOpened,
+      coreMultiplier: target?.kind === 'core' && state.core?.exposed ? liveRules(state.difficulty).coreMultiplier : 1,
+    };
+  }
+
+  function activateLivePhase2(state) {
+    let next = clone(state);
+    next.phase = 2;
+    next.round = Math.max(1, Math.round(finite(next.round, 1))) + 1;
+    if (next.parts?.missilePod) next.parts.missilePod.active = true;
+    // 変形直後は見た目だけで終わらせず、狙えるCOREを必ず開いて攻防を変える。
+    next = exposeLiveCore(next, 'phase2');
+    return next;
+  }
+
+  function advanceLiveBossRound(state) {
+    const next = clone(state);
+    next.round = Math.max(1, Math.round(finite(next.round, 1))) + 1;
+    if (next.core?.exposed) {
+      next.core.roundsRemaining = Math.max(0, Math.round(finite(next.core.roundsRemaining, 0)) - 1);
+      if (next.core.roundsRemaining === 0) {
+        next.core.exposed = false;
+        next.core.trigger = null;
+      }
+    }
+    return next;
+  }
+
+  function liveAttackProfile(state) {
+    const phase2Missile = state?.phase === 2 && state.parts?.missilePod?.active
+      && !state.parts.missilePod.destroyed;
+    if (phase2Missile) {
+      return {
+        weapon: 'missile', anchorX: PART_DEFS.missilePod.x, anchorY: PART_DEFS.missilePod.y,
+        radius: 12, blastMultiplier: 1.85, damageMultiplier: 1.12, accuracyMultiplier: 0.82,
+        warningLabel: 'ミサイル斉射', warningRadius: 64,
+      };
+    }
+    const intactCannons = ['twinCannon', 'mainCannon']
+      .filter((partId) => state?.parts?.[partId]?.active && !state.parts[partId].destroyed).length;
+    const damageMultiplier = intactCannons >= 2 ? 1 : intactCannons === 1 ? 0.86 : 0.72;
+    const anchor = state?.parts?.twinCannon?.active && !state.parts.twinCannon.destroyed
+      ? PART_DEFS.twinCannon
+      : state?.parts?.mainCannon?.active && !state.parts.mainCannon.destroyed
+        ? PART_DEFS.mainCannon
+        : { x: 0.48, y: 0.42 };
+    return {
+      weapon: 'cannon', anchorX: anchor.x, anchorY: anchor.y,
+      radius: intactCannons ? 10 : 8,
+      blastMultiplier: intactCannons ? 1.6 : 1.25,
+      damageMultiplier,
+      accuracyMultiplier: intactCannons >= 2 ? 1 : 1.18,
+      warningLabel: intactCannons ? '要塞砲撃' : '応急砲撃', warningRadius: intactCannons ? 52 : 44,
+    };
+  }
+
+  function liveStateLooksSafe(value, options = {}) {
+    const expectedDifficulty = LIVE_DIFFICULTY_RULES[options.difficulty] ? options.difficulty : 'normal';
+    const bodyMaxHp = Math.max(1, finite(options.bodyMaxHp, 2200));
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || (value.phase !== 1 && value.phase !== 2) || value.difficulty !== expectedDifficulty
+        || !Number.isInteger(value.round) || value.round < 1 || value.round > 100
+        || !value.parts || typeof value.parts !== 'object' || Array.isArray(value.parts)) return false;
+    for (const partId of PART_ORDER) {
+      const part = value.parts[partId];
+      const expectedMax = livePartMaxHp(bodyMaxHp, partId);
+      const expectedActive = PART_DEFS[partId].phase <= value.phase;
+      if (!part || typeof part !== 'object' || Array.isArray(part)
+          || part.maxHp !== expectedMax || !Number.isFinite(part.hp) || part.hp < 0 || part.hp > part.maxHp
+          || part.active !== expectedActive || part.destroyed !== (part.hp === 0)
+          || (!part.active && (part.hp !== part.maxHp || part.destroyed))) return false;
+    }
+    const core = value.core;
+    const coreLimit = liveRules(expectedDifficulty).coreRounds;
+    if (!core || typeof core !== 'object' || Array.isArray(core)
+        || !Number.isFinite(core.charge) || core.charge < 0 || core.charge > 100
+        || typeof core.exposed !== 'boolean' || !Number.isInteger(core.roundsRemaining)
+        || core.roundsRemaining < 0 || core.roundsRemaining > coreLimit
+        || (core.exposed ? core.roundsRemaining < 1 : core.roundsRemaining !== 0)
+        || ![null, 'parts', 'phase2', 'attack'].includes(core.trigger)
+        || (core.exposed ? core.trigger == null : core.trigger != null)) return false;
+    return true;
+  }
+
+  // Phase 2への変形そのものは、既存装甲のHPを回復・追加破壊しない。
+  // 受信側がプレイヤー弾を再現し終えたphase1 stateをbeforeに渡し、変形で合法的に
+  // 変わるphase/round/ミサイル/COREだけを限定して検証する。
+  function livePhase2TransitionLooksSafe(before, after, options = {}) {
+    if (!liveStateLooksSafe(before, options) || !liveStateLooksSafe(after, options)
+        || before.phase !== 1 || after.phase !== 2 || after.difficulty !== before.difficulty
+        || after.round !== before.round + 1) return false;
+    for (const partId of PART_ORDER) {
+      const previous = before.parts[partId];
+      const next = after.parts[partId];
+      if (next.maxHp !== previous.maxHp || next.hp !== previous.hp || next.destroyed !== previous.destroyed) return false;
+      if (partId === 'missilePod') {
+        if (previous.active || !next.active) return false;
+      } else if (!previous.active || !next.active) return false;
+    }
+    const rules = liveRules(after.difficulty);
+    return after.core.exposed === true
+      && after.core.trigger === 'phase2'
+      && after.core.charge === 0
+      && after.core.roundsRemaining === rules.coreRounds;
+  }
+
+  function liveStateIsInitial(value, options = {}) {
+    if (!liveStateLooksSafe(value, options) || value.phase !== 1 || value.round !== 1
+        || value.core.exposed || value.core.charge !== 0 || value.core.roundsRemaining !== 0) return false;
+    return PART_ORDER.every((partId) => value.parts[partId].hp === value.parts[partId].maxHp
+      && value.parts[partId].destroyed === false);
+  }
+
   function activatePhase2(state) {
     const next = clone(state);
     next.phase = 2;
@@ -267,12 +513,27 @@
     PART_DEFS,
     PART_ORDER,
     BODY_HITBOX,
+    LIVE_HIT_SHAPES,
+    LIVE_CORE_SHAPE,
+    LIVE_HULL_DAMAGE_MULTIPLIER,
+    LIVE_PART_BODY_SPILL,
+    LIVE_DIFFICULTY_RULES,
     createFortressStage,
     createBossState,
     partCenter,
     resolveImpactTarget,
     applyBossDamage,
     activatePhase2,
+    createLiveState,
+    resolveLiveTarget,
+    applyLiveDamage,
+    exposeLiveCore,
+    activateLivePhase2,
+    advanceLiveBossRound,
+    liveAttackProfile,
+    liveStateLooksSafe,
+    liveStateIsInitial,
+    livePhase2TransitionLooksSafe,
     carveTerrain,
     preloadBossAssets,
     drawBoss,

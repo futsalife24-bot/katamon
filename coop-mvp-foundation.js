@@ -20,7 +20,7 @@
   };
 
   const DIFFICULTIES = deepFreeze([
-    { id: 'normal', label: 'NORMAL', roundLimit: 18, coreExposeRounds: 2, coreDamageMultiplier: 2 },
+    { id: 'normal', label: 'NORMAL', roundLimit: 20, coreExposeRounds: 2, coreDamageMultiplier: 2 },
     { id: 'hard', label: 'HARD', roundLimit: 15, coreExposeRounds: 2, coreDamageMultiplier: 1.75 },
     { id: 'extreme', label: 'EXTREME', roundLimit: 12, coreExposeRounds: 1, coreDamageMultiplier: 1.5 },
   ]);
