@@ -65,13 +65,34 @@ function check(label, fn) {
 
 // 抜き出した処理が参照するゲーム状態だけをFunction内へ置く。
 function env(options) {
-  const declaration = '  let gamePhase = initialPhase;\n  let confirmDialog = null;\n  let soundPanelOpen = false;\n  let menuOpen = false;\n';
+  const declaration = [
+    '  let gamePhase = initialPhase;',
+    '  let confirmDialog = null;',
+    '  let soundPanelOpen = false;',
+    '  let menuOpen = false;',
+    '  let soundTestOpen = false;',
+    '  let updateHistoryOpen = false;',
+    '  let titleMenuPage = initialTitlePage;',
+    '  let titleMenuGesture = initialTitleGesture ? { page: titleMenuPage } : null;',
+    '  let inputMode = null;',
+    '  let inputPointerId = null;',
+    '  let titleMenuCancelCount = 0;',
+    '  const TITLE_MENU_BATTLE = 0;',
+    '  const TITLE_MENU_GARAGE = 1;',
+    '  function closeSoundTest() { soundTestOpen = false; }',
+    '  function cancelTitleMenuGesture() { titleMenuCancelCount++; titleMenuGesture = null; inputMode = null; inputPointerId = null; return true; }',
+    '  function titleMenuVisualPosition() { return titleMenuPage; }',
+    '  function startTitleMenuTransition(page) { titleMenuPage = page; return true; }',
+    ''
+  ].join('\n');
   return makeEnvironmentWithCode(options, declaration + deviceBackCode);
 }
 
 function makeEnvironmentWithCode(options, code) {
   const closeWatcher = options?.closeWatcher !== false;
   const phase = options?.phase || 'press';
+  const initialTitlePage = options?.titleMenuPage ?? 0;
+  const initialTitleGesture = !!options?.titleMenuGesture;
   const roomOpen = !!options?.roomOpen;
   const windowStub = new EventHost();
   const timers = [];
@@ -140,19 +161,19 @@ function makeEnvironmentWithCode(options, code) {
   };
   const buildApi = new Function(
     'window', 'document', 'history', 'navigation', 'location', 'HTMLElement', 'requestAnimationFrame', 'setTimeout',
-    'playUiSound', 'saveAudioSettings', 'roomScreenOpen', 'canOpenMenu', 'initialPhase',
+    'playUiSound', 'saveAudioSettings', 'roomScreenOpen', 'canOpenMenu', 'initialPhase', 'initialTitlePage', 'initialTitleGesture',
     `${code}\nreturn {
       syncBackTrap,
       confirmDeviceExit,
       deviceBackConfirmOpen,
-      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog })
+      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog, titleMenuPage, titleMenuGesture, titleMenuCancelCount })
     };`
   );
   const api = buildApi(
     windowStub, documentStub, historyStub, navigationStub, locationStub, HTMLElementStub,
     callback => callback(),
     callback => { timers.push(callback); return timers.length; },
-    () => {}, () => {}, () => roomOpen, () => true, phase
+    () => {}, () => {}, () => roomOpen, () => true, phase, initialTitlePage, initialTitleGesture
   );
   return {
     api, window: windowStub, history: historyStub, historyLog, elements, CloseWatcher: CloseWatcherStub,
@@ -297,6 +318,26 @@ check('バトル中の戻る要求は終了確認ではなく既存メニュー�
   h.CloseWatcher.instances[0].requestBack(true);
   assert.equal(h.api.state().menuOpen, true);
   assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
+});
+
+check('タイトルのGARAGEでは1回目の戻るでBATTLEへ戻り、2回目で終了確認を開く', () => {
+  const h = env({ phase: 'title', titleMenuPage: 1 });
+  h.api.syncBackTrap();
+  const watcher = h.CloseWatcher.instances[0];
+  watcher.requestBack(true);
+  assert.equal(h.api.state().titleMenuPage, 0);
+  assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
+  watcher.requestBack(true);
+  assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), true);
+});
+
+check('タイトル押下中の戻る要求は背面のCanvas入力を破棄して終了確認を開く', () => {
+  const h = env({ phase: 'title', titleMenuPage: 0, titleMenuGesture: true });
+  h.api.syncBackTrap();
+  h.CloseWatcher.instances[0].requestBack(true);
+  assert.equal(h.api.state().titleMenuCancelCount, 1);
+  assert.equal(h.api.state().titleMenuGesture, null);
+  assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), true);
 });
 
 check('cancelを止められない場合も履歴へ流さず、確認を保ってWatcherを張り直す', () => {

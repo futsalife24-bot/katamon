@@ -19,6 +19,35 @@ async function tapVirtualCanvas(page, x, y) {
   );
 }
 
+async function swipeVirtualCanvas(page, fromX, fromY, toX, toY) {
+  const canvas = page.getByTestId('battle-canvas');
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box, 'ゲームcanvasの表示領域が必要').not.toBeNull();
+  const point = (x, y) => ({
+    x: box.x + box.width * x / VIRTUAL_WIDTH,
+    y: box.y + box.height * y / VIRTUAL_HEIGHT,
+  });
+  const from = point(fromX, fromY);
+  const to = point(toX, toY);
+  const session = await page.context().newCDPSession(page);
+  try {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+    for (let step = 1; step <= 8; step++) {
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{
+          x: from.x + (to.x - from.x) * step / 8,
+          y: from.y + (to.y - from.y) * step / 8,
+        }],
+      });
+    }
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } finally {
+    await session.detach();
+  }
+}
+
 async function openTitle(page, url = GAME_URL) {
   await page.goto(url);
   await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'press' });
@@ -143,7 +172,7 @@ test.describe('カタモン本体の基本導線', () => {
     await page.goto('about:blank');
   });
 
-  test('公開ONの協力MVP入口・ショップ・実績がスマホ内へ収まり、タイトルへ直ボタンを増やさない', async ({ page }) => {
+  test('公開ONの協力MVP入口とGARAGEのショップ・実績がスマホ内へ収まる', async ({ page }) => {
     test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -165,8 +194,9 @@ test.describe('カタモン本体の基本導線', () => {
     }))).toEqual({ titlePaused: true, roomPaused: false });
     await page.locator('#coopClose').click();
 
-    await tapVirtualCanvas(page, 378, 799); // おまけ
-    await tapVirtualCanvas(page, 155, 734); // ショップ
+    await tapVirtualCanvas(page, 508, 690); // GARAGEへ送る右矢印
+    await page.waitForTimeout(380); // 320msの木板スライド完了を待つ
+    await tapVirtualCanvas(page, 270, 548); // ショップ
     await expect(page.locator('#mvpCollection')).toHaveClass(/open/);
     const layout = await page.evaluate(() => {
       const scroll = document.querySelector('.mvp-scroll').getBoundingClientRect();
@@ -178,12 +208,33 @@ test.describe('カタモン本体の基本導線', () => {
     await page.locator('#mvpCollectionClose').click();
     await page.waitForTimeout(500); // DOMオーバーレイを閉じた同じ指のゴーストタップ防止が明けるまで待つ
 
-    await tapVirtualCanvas(page, 378, 799); // ショップを閉じるとタイトルへ戻るため、おまけを開き直す
-    await tapVirtualCanvas(page, 385, 734); // 実績
+    await tapVirtualCanvas(page, 270, 643); // GARAGEの実績
     await expect(page.locator('#mvpCollection')).toHaveClass(/open/);
     await expect(page.locator('.mvp-achievement')).toHaveCount(18);
     await expect(page.getByText('？？？')).toHaveCount(2);
     expect(pageErrors, `協力MVP画面でpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
+    await page.goto('about:blank');
+  });
+
+  test('Android縦画面で長いスワイプだけがGARAGEへ進み、短いスワイプはBATTLEへ戻る', async ({ page }) => {
+    test.skip(!test.info().project.name.startsWith('android-chromium'), 'Android Chromiumの実タッチ経路だけを検査する。');
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await openTitle(page);
+    await swipeVirtualCanvas(page, 270, 538, 170, 538); // CPUボタン上から長く左へ
+    await page.waitForTimeout(380);
+    await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'title' });
+    await tapVirtualCanvas(page, 270, 548); // GARAGEへ到達していればショップが開く
+    await expect(page.locator('#mvpCollection')).toHaveClass(/open/);
+
+    await openTitle(page);
+    await swipeVirtualCanvas(page, 270, 538, 240, 538); // 閾値未満はBATTLEへ戻す
+    await page.waitForTimeout(380);
+    await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'title' });
+    await tapVirtualCanvas(page, 270, 538);
+    await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'select' });
+    expect(pageErrors, `タイトルスワイプでpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
     await page.goto('about:blank');
   });
 });

@@ -663,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.141-practice-preview-grounding';
+  const BUILD_ID = 'v2.0.142-title-menu-pages';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.142', date: '2026/08/24', summary: 'タイトルをBATTLE／GARAGEの2ページへ整理' },
     { version: 'v2.0.141', date: '2026/08/24', summary: '演習プレビューの大きさと接地を全キャラで統一' },
     { version: 'v2.0.140', date: '2026/08/24', summary: '演習などの静的キャラ表示を右向き原画へ統一' },
     { version: 'v2.0.139', date: '2026/08/24', summary: '全キャラの接地と原画の向きを統一' },
@@ -1460,20 +1461,6 @@
         font: `700 11px ${UI_FONT_HEAVY}`, color: selected ? UI.gold : UI.parchment, lineWidth: 3
       });
     });
-    if (COOP_MVP_FEATURE_ENABLED) {
-      drawIronPlate(soundTestShopBtn.x, soundTestShopBtn.y, soundTestShopBtn.w, soundTestShopBtn.h, {
-        cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
-      });
-      drawOutlinedText('ショップ', soundTestShopBtn.x, soundTestShopBtn.y + 4, {
-        font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
-      });
-      drawIronPlate(soundTestAchievementsBtn.x, soundTestAchievementsBtn.y, soundTestAchievementsBtn.w, soundTestAchievementsBtn.h, {
-        cut: 8, lineWidth: 1.5, rivets: true, rivetInset: 9, rivetRadius: 2, edge: UI.brass
-      });
-      drawOutlinedText('実績', soundTestAchievementsBtn.x, soundTestAchievementsBtn.y + 4, {
-        font: `800 12px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 3
-      });
-    }
     drawIronPlate(soundTestCloseBtn.x, soundTestCloseBtn.y, soundTestCloseBtn.w, soundTestCloseBtn.h, {
       cut: 9, lineWidth: 1.5, rivets: true, rivetInset: 10, rivetRadius: 2
     });
@@ -6218,27 +6205,69 @@
     && !!globalThis.StageCore;
   let selectedCustomStage = null;
   let selectedCustomAdapter = null;
-  // メロニキが組んだ見本どおり、木板の上を「羊皮紙2段 → 羊皮紙2列 →
-  // 吊り看板と盾」の順にする。当たり判定は影やロープを除いた本体側へ置く。
+  // タイトルの背景・ロゴ・更新欄は固定し、この木板領域だけを横へ切り替える。
+  // 各ページは同じ既存素材を使う。将来のギア項目はgarage.itemsへ足せる構造にする。
   const TITLE_WOOD_BOARD_RECT = { x: 42, y: 456, w: 456, h: 438 };
   const TITLE_WOOD_IMAGE_RECTS = {
     cpu: { asset: 'parchment', x: 270, y: 538, w: 301, h: 82 },
     online: { asset: 'parchment', x: 270, y: 619, w: 301, h: 82 },
     tutorial: { asset: 'parchment', x: 169, y: 700, w: 189, h: 52 },
     free: { asset: 'parchment', x: 374, y: 700, w: 189, h: 52 },
-    ranking: { asset: 'hangingSign', x: 165, y: 787, w: 189, h: 119 },
-    bonus: { asset: 'shield', x: 378, y: 801, w: 125, h: 112 }
+    ranking: { asset: 'hangingSign', x: 270, y: 787, w: 220, h: 139 },
+    shop: { asset: 'parchment', x: 270, y: 548, w: 301, h: 82 },
+    achievements: { asset: 'parchment', x: 270, y: 643, w: 301, h: 82 },
+    soundTest: { asset: 'shield', x: 270, y: 784, w: 146, h: 131 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
   const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
   const titleTutorialBtn = { x: 169, y: 700, w: 175, h: 43 };
   const titleFreeBtn = { x: 374, y: 700, w: 175, h: 43 };
-  const titleRankingBtn = { x: 165, y: 820, w: 173, h: 47 };
-  const titleBonusBtn = { x: 378, y: 799, w: 99, h: 81 };
+  const titleRankingBtn = { x: 270, y: 829, w: 204, h: 47 };
+  const titleShopBtn = { x: 270, y: 548, w: 283, h: 63 };
+  const titleAchievementsBtn = { x: 270, y: 643, w: 283, h: 63 };
+  const titleSoundTestBtn = { x: 270, y: 786, w: 116, h: 92 };
+  const titleMenuLeftBtn = { x: 32, y: 690, w: 56, h: 66 };
+  const titleMenuRightBtn = { x: 508, y: 690, w: 56, h: 66 };
+  const titleBattleTabBtn = { x: 218, y: 476, w: 96, h: 32 };
+  const titleGarageTabBtn = { x: 322, y: 476, w: 96, h: 32 };
+  // 見た目は細い鉄板のまま、Androidでは約43px高を押せる透明な当たり判定を持たせる。
+  const titleBattleTabHit = { x: 218, y: 476, w: 96, h: 56 };
+  const titleGarageTabHit = { x: 322, y: 476, w: 96, h: 56 };
+  const TITLE_MENU_BATTLE = 0;
+  const TITLE_MENU_GARAGE = 1;
+  const TITLE_MENU_PAGE_COUNT = 2;
+  const TITLE_MENU_SLIDE_MS = 320;
+  const TITLE_MENU_SWIPE_THRESHOLD = 60;
+  const TITLE_MENU_DRAG_ACTIVATION = 12;
+  const TITLE_MENU_PAGE_DISTANCE = VW + 24;
+  const TITLE_MENU_VIEWPORT = { x: 18, y: 448, w: 504, h: 450 };
+  const TITLE_MENU_TOUCH_RECT = { x: VW / 2, y: 673, w: 504, h: 450 };
+  let titleMenuPage = TITLE_MENU_BATTLE;
+  let titleMenuAnimation = null;
+  let titleMenuGesture = null;
+  const TITLE_MENU_PAGES = Object.freeze([
+    Object.freeze({
+      key: 'battle', label: 'BATTLE', sub: '今すぐ遊ぶ・戦う',
+      items: Object.freeze([
+        Object.freeze({ id: 'cpu', image: 'cpu', button: titleVsCpuBtn, label: 'CPU BATTLE', kind: 'parchmentLarge' }),
+        Object.freeze({ id: 'online', image: 'online', button: titleOnlineBtn, label: 'ONLINE BATTLE', kind: 'parchmentLarge' }),
+        Object.freeze({ id: 'tutorial', image: 'tutorial', button: titleTutorialBtn, label: 'チュートリアル', kind: 'parchmentSmall' }),
+        Object.freeze({ id: 'free', image: 'free', button: titleFreeBtn, label: '演習', kind: 'parchmentSmall' }),
+        Object.freeze({ id: 'ranking', image: 'ranking', button: titleRankingBtn, label: 'RANKING', kind: 'hanging' })
+      ])
+    }),
+    Object.freeze({
+      key: 'garage', label: 'GARAGE', sub: '育成・管理・コレクション',
+      // ギア装備・倉庫・プリセット・ガイドは、実装時にこのitemsへ追加する。
+      items: Object.freeze([
+        Object.freeze({ id: 'shop', image: 'shop', button: titleShopBtn, label: 'ショップ', kind: 'parchmentLarge' }),
+        Object.freeze({ id: 'achievements', image: 'achievements', button: titleAchievementsBtn, label: '実績', kind: 'parchmentLarge' }),
+        Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'サウンドテスト', kind: 'shield' })
+      ])
+    })
+  ]);
   const soundTestModal = { x: VW / 2, y: VH / 2, w: 500, h: 700 };
   const soundTestCloseBtn = { x: VW / 2, y: VH / 2 + 310, w: 190, h: 44 };
-  const soundTestShopBtn = { x: VW / 2 - 115, y: VH / 2 + 254, w: 190, h: 42 };
-  const soundTestAchievementsBtn = { x: VW / 2 + 115, y: VH / 2 + 254, w: 190, h: 42 };
   let soundTestOpen = false;
   // 中断データや初回案内は文字だけで伝える。黄色い囲いは「選択中」に見えるため出さない。
   const TITLE_WOOD_SELECTION_OUTLINE = false;
@@ -11591,7 +11620,9 @@
     ctx.fillStyle = UI.parchment;
     ctx.strokeStyle = '#090b0d';
     ctx.lineWidth = 5;
-    ctx.font = '400 23px ' + UI_FONT_DISPLAY;
+    // 既存画像が未読込でも、細い盾枠の長いラベルを枠外へ出さない。
+    const labelSize = button.w < 160 && Array.from(label).length >= 6 ? 16 : 23;
+    ctx.font = `400 ${labelSize}px ${UI_FONT_DISPLAY}`;
     // 「あそび方」「演習」は横並びの低い看板。対戦ボタンと同じ -7px では、
     // 23pxの見出しの上端が枠へ食い込むため、この2つだけ中央へ置く。
     const labelY = (kind === 'tutorial' || kind === 'free') ? button.y : button.y - 7;
@@ -11630,7 +11661,9 @@
     if (kind === 'shield') {
       ctx.strokeStyle = '#123f3d';
       ctx.fillStyle = '#fff3ce';
-      ctx.font = '400 21px ' + UI_FONT_DISPLAY;
+      // 「サウンドテスト」も盾の内側へ収める。短い旧ラベルの大きさは維持する。
+      const shieldLabelSize = Array.from(label).length >= 6 ? 16 : 21;
+      ctx.font = `400 ${shieldLabelSize}px ${UI_FONT_DISPLAY}`;
       ctx.lineWidth = 5;
       ctx.strokeText(label, button.x, button.y - 18);
       ctx.fillText(label, button.x, button.y - 18);
@@ -11685,6 +11718,15 @@
   const titleArtCtx = titleArtCanvas.getContext('2d');
   let titleArtKey = '';
   let titleArtBuilds = 0; // 焼き直した回数。毎フレーム増えていないことを検査で見る
+  const titleMenuArtCanvases = Array.from({ length: TITLE_MENU_PAGE_COUNT }, () => {
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = TITLE_MENU_VIEWPORT.w * TITLE_ART_SCALE;
+    pageCanvas.height = TITLE_MENU_VIEWPORT.h * TITLE_ART_SCALE;
+    return pageCanvas;
+  });
+  const titleMenuArtContexts = titleMenuArtCanvases.map(pageCanvas => pageCanvas.getContext('2d'));
+  let titleMenuArtKey = '';
+  let titleMenuArtBuilds = 0;
 
   function titleArtSignature() {
     // 背景とロゴは非同期で届く。届く前の代替表示を焼いたあと画像が届いても、
@@ -11740,19 +11782,21 @@
     }
     g.restore();
 
-    // 動かない木板と各ボタン素材も、背景・ロゴと同じ2倍解像度の1枚絵へ焼く。
-    // 毎コマ4種類を何枚も貼ると、タイトル軽量化(v132)を逆戻りさせてしまう。
-    if (areTitleWoodUiImagesReady()) {
-      g.save();
-      g.shadowColor = 'rgba(0,0,0,0.76)';
-      g.shadowBlur = 10;
-      g.shadowOffsetY = 6;
-      const board = TITLE_WOOD_BOARD_RECT;
-      g.drawImage(titleWoodUiImages.board, board.x, board.y, board.w, board.h);
-      for (const rect of Object.values(TITLE_WOOD_IMAGE_RECTS)) {
-        drawTitleWoodFrame(g, titleWoodUiImages[rect.asset], rect);
-      }
-      g.restore();
+    g.restore();
+  }
+
+  function drawTitleMenuStaticArt(g, pageIndex) {
+    if (!areTitleWoodUiImagesReady()) return;
+    g.save();
+    g.translate(-TITLE_MENU_VIEWPORT.x, -TITLE_MENU_VIEWPORT.y);
+    g.shadowColor = 'rgba(0,0,0,0.76)';
+    g.shadowBlur = 10;
+    g.shadowOffsetY = 6;
+    const board = TITLE_WOOD_BOARD_RECT;
+    g.drawImage(titleWoodUiImages.board, board.x, board.y, board.w, board.h);
+    for (const item of TITLE_MENU_PAGES[pageIndex].items) {
+      const rect = TITLE_WOOD_IMAGE_RECTS[item.image];
+      drawTitleWoodFrame(g, titleWoodUiImages[rect.asset], rect);
     }
     g.restore();
   }
@@ -11767,73 +11811,158 @@
     drawTitleStaticArt(titleArtCtx);
   }
 
+  function rebuildTitleMenuArt() {
+    const key = titleArtSignature();
+    if (key === titleMenuArtKey) return;
+    titleMenuArtKey = key;
+    titleMenuArtBuilds++;
+    titleMenuArtContexts.forEach((pageCtx, pageIndex) => {
+      pageCtx.setTransform(TITLE_ART_SCALE, 0, 0, TITLE_ART_SCALE, 0, 0);
+      pageCtx.clearRect(0, 0, TITLE_MENU_VIEWPORT.w, TITLE_MENU_VIEWPORT.h);
+      drawTitleMenuStaticArt(pageCtx, pageIndex);
+    });
+  }
+
+  function titleMenuClock() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now() : Date.now();
+  }
+
+  function titleMenuVisualPosition(now = titleMenuClock()) {
+    if (inputMode === 'titleMenu' && titleMenuGesture) {
+      let position = titleMenuGesture.page - titleMenuGesture.dx / TITLE_MENU_PAGE_DISTANCE;
+      if (position < 0) position *= 0.18;
+      if (position > TITLE_MENU_PAGE_COUNT - 1) {
+        position = TITLE_MENU_PAGE_COUNT - 1 + (position - (TITLE_MENU_PAGE_COUNT - 1)) * 0.18;
+      }
+      return position;
+    }
+    if (!titleMenuAnimation) return titleMenuPage;
+    const elapsed = Math.max(0, now - titleMenuAnimation.startedAt);
+    const t = Math.min(1, elapsed / TITLE_MENU_SLIDE_MS);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const position = titleMenuAnimation.from + (titleMenuAnimation.to - titleMenuAnimation.from) * eased;
+    if (t >= 1) titleMenuAnimation = null;
+    return position;
+  }
+
+  function startTitleMenuTransition(targetPage, fromPosition = titleMenuVisualPosition()) {
+    const target = Math.max(TITLE_MENU_BATTLE, Math.min(TITLE_MENU_GARAGE, targetPage));
+    titleMenuPage = target;
+    if (Math.abs(fromPosition - target) < 0.001) {
+      titleMenuAnimation = null;
+      return false;
+    }
+    titleMenuAnimation = { from: fromPosition, to: target, startedAt: titleMenuClock() };
+    return true;
+  }
+
+  function titleMenuItemSub(item) {
+    if (item.id === 'cpu') return titleCpuButtonSub();
+    if (item.id === 'online') return 'オンライン対戦・観戦';
+    if (item.id === 'tutorial') return tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい';
+    if (item.id === 'free') return '条件を組んで開始';
+    if (item.id === 'ranking') return '連勝記録';
+    if (item.id === 'shop') return 'カタコインで交換';
+    if (item.id === 'achievements') return '達成記録と報酬';
+    if (item.id === 'soundTest') return '全BGMを試聴';
+    return '';
+  }
+
+  function titleMenuItemHighlighted(item) {
+    return (item.id === 'cpu' && hasSuspendedSave)
+      || (item.id === 'tutorial' && tutorialIsRecommended());
+  }
+
+  function drawTitleMenuHeader(pageIndex) {
+    drawIronPlate(270, 476, 300, 38, {
+      cut: 9, lineWidth: 1.8, rivets: true, rivetInset: 12, rivetRadius: 2.2,
+      fill: 'rgba(21,31,33,0.97)', edge: UI.brass
+    });
+    ctx.save();
+    ctx.strokeStyle = 'rgba(193,137,69,0.65)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(270, 461);
+    ctx.lineTo(270, 491);
+    ctx.stroke();
+    ctx.restore();
+    drawOutlinedText('BATTLE', titleBattleTabBtn.x, titleBattleTabBtn.y + 4, {
+      font: `900 13px ${UI_FONT_HEAVY}`,
+      color: pageIndex === TITLE_MENU_BATTLE ? UI.gold : 'rgba(202,184,142,0.58)', lineWidth: 3
+    });
+    drawOutlinedText('GARAGE', titleGarageTabBtn.x, titleGarageTabBtn.y + 4, {
+      font: `900 13px ${UI_FONT_HEAVY}`,
+      color: pageIndex === TITLE_MENU_GARAGE ? UI.gold : 'rgba(202,184,142,0.58)', lineWidth: 3
+    });
+  }
+
+  function drawTitleMenuPageText(pageIndex, woodUiReady) {
+    drawTitleMenuHeader(pageIndex);
+    for (const item of TITLE_MENU_PAGES[pageIndex].items) {
+      const sub = titleMenuItemSub(item);
+      const highlighted = titleMenuItemHighlighted(item);
+      if (woodUiReady) {
+        drawTitleWoodButtonText(item.button, item.label, sub, item.kind, highlighted);
+      } else {
+        const fallbackKind = item.id === 'tutorial' ? 'tutorial'
+          : item.id === 'free' ? 'free'
+            : item.id === 'online' ? 'online' : 'normal';
+        drawTitleModeButton(item.button, item.label, sub, fallbackKind, highlighted);
+      }
+    }
+    if (pageIndex === TITLE_MENU_BATTLE) drawSuspendedSaveBubble();
+  }
+
+  function drawTitleMenuNavigation() {
+    const drawArrow = (button, glyph, enabled) => {
+      ctx.save();
+      ctx.globalAlpha = enabled ? 1 : 0.32;
+      drawIronPlate(button.x, button.y, button.w, button.h, {
+        cut: 10, lineWidth: 1.8, rivets: false, edge: UI.brass,
+        fill: 'rgba(19,31,34,0.96)'
+      });
+      drawOutlinedText(glyph, button.x, button.y + 7, {
+        font: `900 34px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 4
+      });
+      ctx.restore();
+    };
+    drawArrow(titleMenuLeftBtn, '‹', titleMenuPage > TITLE_MENU_BATTLE);
+    drawArrow(titleMenuRightBtn, '›', titleMenuPage < TITLE_MENU_GARAGE);
+  }
+
   function drawTitleScreen() {
     ctx.save();
     rebuildTitleArt();
+    rebuildTitleMenuArt();
     ctx.drawImage(titleArtCanvas, 0, 0, VW, VH);
 
     const woodUiReady = areTitleWoodUiImagesReady();
-    if (woodUiReady) {
-      drawTitleWoodButtonText(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'parchmentLarge', hasSuspendedSave);
-      drawTitleWoodButtonText(titleOnlineBtn, 'ONLINE BATTLE', 'オンライン対戦・観戦', 'parchmentLarge');
-      drawTitleWoodButtonText(titleTutorialBtn, 'チュートリアル',
-        tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'parchmentSmall',
-        tutorialIsRecommended());
-      drawTitleWoodButtonText(titleFreeBtn, '演習', '条件を組んで開始', 'parchmentSmall');
-      drawTitleWoodButtonText(titleRankingBtn, 'RANKING', '連勝記録', 'hanging');
-        drawTitleWoodButtonText(titleBonusBtn, 'おまけ',
-        bonusBgmTrack ? `おまけ${bonusBgmTrack}` : 'BGMを聴く', 'shield');
-    } else {
-      // 画像を読めない古い環境では、操作不能にせず従来の描画へ戻す。
-      ctx.textAlign = 'center';
-      ctx.font = '400 10px ' + UI_FONT;
-      const modeLabelText = 'SELECT A BATTLE MODE';
-      const modeLabelHalfW = ctx.measureText(modeLabelText).width / 2;
-      const modeLabelY = TITLE_MODE_LABEL_Y;
-      ctx.strokeStyle = 'rgba(255,210,74,0.55)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(VW / 2 - modeLabelHalfW - 84, modeLabelY);
-      ctx.lineTo(VW / 2 - modeLabelHalfW - 14, modeLabelY);
-      ctx.moveTo(VW / 2 + modeLabelHalfW + 14, modeLabelY);
-      ctx.lineTo(VW / 2 + modeLabelHalfW + 84, modeLabelY);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,225,169,0.62)';
-      ctx.fillText(modeLabelText, VW / 2, modeLabelY);
-
-      drawTitleModeButton(titleVsCpuBtn, 'CPU BATTLE', titleCpuButtonSub(), 'normal', hasSuspendedSave);
-      drawTitleModeButton(titleOnlineBtn, 'ONLINE BATTLE', '友だちとオンライン対戦・観戦もOK', 'online');
-      drawTitleModeButton(titleTutorialBtn, 'チュートリアル',
-        tutorialIsRecommended() ? 'はじめての方へ' : 'もう一度おさらい', 'tutorial',
-        tutorialIsRecommended());
-      drawTitleModeButton(titleFreeBtn, '演習', '条件を組んで開始', 'free');
+    const visualPosition = titleMenuVisualPosition();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(TITLE_MENU_VIEWPORT.x, TITLE_MENU_VIEWPORT.y, TITLE_MENU_VIEWPORT.w, TITLE_MENU_VIEWPORT.h);
+    ctx.clip();
+    for (let pageIndex = 0; pageIndex < TITLE_MENU_PAGE_COUNT; pageIndex++) {
+      const offsetX = (pageIndex - visualPosition) * TITLE_MENU_PAGE_DISTANCE;
+      if (Math.abs(offsetX) >= TITLE_MENU_PAGE_DISTANCE) continue;
+      ctx.save();
+      ctx.translate(offsetX, 0);
+      if (woodUiReady) {
+        ctx.drawImage(
+          titleMenuArtCanvases[pageIndex],
+          TITLE_MENU_VIEWPORT.x, TITLE_MENU_VIEWPORT.y,
+          TITLE_MENU_VIEWPORT.w, TITLE_MENU_VIEWPORT.h
+        );
+      }
+      drawTitleMenuPageText(pageIndex, woodUiReady);
+      ctx.restore();
     }
-    // 吹き出しはボタンより後に描く。尻尾がボタン枠へ重なるので、順序が逆だと下に潜る。
-    drawSuspendedSaveBubble();
+    ctx.restore();
+    drawTitleMenuNavigation();
+    // 画面共通の通知は木板と一緒に流さず、ロゴ・更新欄と同じ固定層へ残す。
     drawTitleNotice();
     ctx.restore();
-
-    if (!woodUiReady) {
-      drawIronPlate(titleBonusBtn.x, titleBonusBtn.y, titleBonusBtn.w, titleBonusBtn.h, {
-        cut: 9, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 2.6
-      });
-      drawOutlinedText('おまけ', titleBonusBtn.x - 40, titleBonusBtn.y + 5, {
-        font: `900 15px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.parchment, lineWidth: 4
-      });
-      drawOutlinedText(bonusBgmTrack ? `おまけ${bonusBgmTrack}` : 'BGMを聴く', titleBonusBtn.x + 56, titleBonusBtn.y + 5, {
-        font: `900 11px ${UI_FONT_HEAVY}`, color: bonusBgmTrack ? UI.gold : UI.brassLabel, lineWidth: 3
-      });
-
-      drawIronPlate(titleRankingBtn.x, titleRankingBtn.y, titleRankingBtn.w, titleRankingBtn.h, {
-        cut: 10, lineWidth: 2, rivets: true, rivetInset: 12, rivetRadius: 3
-      });
-      drawOutlinedText('RANKING', titleRankingBtn.x - 34, titleRankingBtn.y + 5, {
-        font: `900 16px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
-      });
-      drawOutlinedText('連勝記録', titleRankingBtn.x + 58, titleRankingBtn.y + 5, {
-        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
-      });
-    }
 
     drawIronPlate(titleUpdateBtn.x, titleUpdateBtn.y, titleUpdateBtn.w, titleUpdateBtn.h, {
       cut: 8, lineWidth: updateAvailableBuild ? 2.5 : 1.5, rivets: false,
@@ -19961,6 +20090,137 @@
     return Math.hypot(p.x - btn.x, p.y - btn.y) <= BTN_R + 12;
   }
 
+  function titleMenuControlAt(p, pageIndex = titleMenuPage) {
+    if (hitRect(p, titleMenuLeftBtn) && pageIndex > TITLE_MENU_BATTLE) return 'page:battle';
+    if (hitRect(p, titleMenuRightBtn) && pageIndex < TITLE_MENU_GARAGE) return 'page:garage';
+    if (hitRect(p, titleBattleTabHit)) return 'page:battle';
+    if (hitRect(p, titleGarageTabHit)) return 'page:garage';
+    const item = TITLE_MENU_PAGES[pageIndex]?.items.find(entry => hitRect(p, entry.button));
+    return item ? `item:${item.id}` : '';
+  }
+
+  function activateTitleMenuItem(itemId) {
+    if (itemId === 'cpu') {
+      battleMode = 'normal';
+      selectWheelPosition = 0;
+      selectWheelVelocity = 0;
+      selectWheelDragging = false;
+      syncSelectedSubweapon();
+      gamePhase = 'select';
+      return true;
+    }
+    if (itemId === 'online') {
+      openOnlineLobby();
+      return true;
+    }
+    if (itemId === 'tutorial') {
+      startTutorial();
+      return true;
+    }
+    if (itemId === 'free') {
+      gamePhase = 'freeSetup';
+      return true;
+    }
+    if (itemId === 'ranking') {
+      gamePhase = 'ranking';
+      fetchRankingBoard();
+      return true;
+    }
+    if (itemId === 'shop' && COOP_MVP_FEATURE_ENABLED) {
+      return globalThis.KatamonMvpShop?.openShop?.() === true;
+    }
+    if (itemId === 'achievements' && COOP_MVP_FEATURE_ENABLED) {
+      return globalThis.KatamonMvpShop?.openAchievements?.() === true;
+    }
+    if (itemId === 'soundTest') {
+      // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
+      ensureBgmGraph();
+      openSoundTest();
+      return true;
+    }
+    return false;
+  }
+
+  function beginTitleMenuGesture(p, e) {
+    // 2本目の指で進行中のgestureを上書きすると、最初の指を離しても入力が固着する。
+    if (inputMode === 'titleMenu' || titleMenuGesture) return false;
+    // 完了時刻を過ぎたアニメはここで確定し、実行中だけ連打を抑止する。
+    titleMenuVisualPosition();
+    if (titleMenuAnimation) return false;
+    const control = titleMenuControlAt(p, titleMenuPage);
+    if (!control && !hitRect(p, TITLE_MENU_TOUCH_RECT)) return false;
+    titleMenuGesture = {
+      page: titleMenuPage,
+      startX: p.x,
+      startY: p.y,
+      dx: 0,
+      dy: 0,
+      moved: false,
+      dragging: false,
+      control
+    };
+    inputMode = 'titleMenu';
+    inputPointerId = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* pointer capture is optional */ }
+    return true;
+  }
+
+  function cancelTitleMenuGesture(animate = true) {
+    if (!titleMenuGesture && inputMode !== 'titleMenu') return false;
+    const returnPage = titleMenuGesture?.page ?? titleMenuPage;
+    const fromPosition = titleMenuVisualPosition();
+    const pointerId = inputPointerId;
+    titleMenuGesture = null;
+    inputMode = null;
+    inputPointerId = null;
+    if (pointerId != null) {
+      try { canvas.releasePointerCapture(pointerId); } catch (_) { /* captureされていない場合は何もしない */ }
+    }
+    if (animate) startTitleMenuTransition(returnPage, fromPosition);
+    else {
+      titleMenuPage = returnPage;
+      titleMenuAnimation = null;
+    }
+    return true;
+  }
+
+  function finishTitleMenuGesture(p, e) {
+    const gesture = titleMenuGesture;
+    if (!gesture) return;
+    const fromPosition = titleMenuVisualPosition();
+    const cancelled = e.type !== 'pointerup';
+    titleMenuGesture = null;
+    inputMode = null;
+    inputPointerId = null;
+    if (cancelled) {
+      startTitleMenuTransition(gesture.page, fromPosition);
+      return;
+    }
+    if (gesture.dragging) {
+      const target = Math.abs(gesture.dx) >= TITLE_MENU_SWIPE_THRESHOLD
+        ? gesture.page + (gesture.dx < 0 ? 1 : -1)
+        : gesture.page;
+      const clampedTarget = Math.max(TITLE_MENU_BATTLE, Math.min(TITLE_MENU_GARAGE, target));
+      if (startTitleMenuTransition(clampedTarget, fromPosition) && clampedTarget !== gesture.page) playUiSound();
+      return;
+    }
+    if (gesture.moved) {
+      startTitleMenuTransition(gesture.page, fromPosition);
+      return;
+    }
+    const releasedControl = titleMenuControlAt(p, gesture.page);
+    if (!gesture.control || releasedControl !== gesture.control) return;
+    if (gesture.control === 'page:battle') {
+      if (startTitleMenuTransition(TITLE_MENU_BATTLE, fromPosition)) playUiSound();
+      return;
+    }
+    if (gesture.control === 'page:garage') {
+      if (startTitleMenuTransition(TITLE_MENU_GARAGE, fromPosition)) playUiSound();
+      return;
+    }
+    if (gesture.control.startsWith('item:') && activateTitleMenuItem(gesture.control.slice(5))) playUiSound();
+  }
+
   function onPointerDown(e) {
     e.preventDefault();
     const p0 = canvasPointFromEvent(e);
@@ -19989,14 +20249,6 @@
     if (soundTestOpen) {
       if (hitRect(p0, soundTestCloseBtn)) {
         closeSoundTest();
-        playUiSound();
-      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, soundTestShopBtn)) {
-        closeSoundTest();
-        globalThis.KatamonMvpShop?.openShop();
-        playUiSound();
-      } else if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, soundTestAchievementsBtn)) {
-        closeSoundTest();
-        globalThis.KatamonMvpShop?.openAchievements();
         playUiSound();
       } else {
         for (let i = 0; i < SOUND_TEST_TRACKS.length; i++) {
@@ -20080,33 +20332,9 @@
     }
 
     if (gamePhase === 'title') {
-      if (hitRect(p0, titleVsCpuBtn)) {
-        playUiSound();
-        battleMode = 'normal';
-        selectWheelPosition = 0;
-        selectWheelVelocity = 0;
-        selectWheelDragging = false;
-        syncSelectedSubweapon();
-        gamePhase = 'select';
-      } else if (hitRect(p0, titleOnlineBtn)) {
-        playUiSound();
-        openOnlineLobby();
-      } else if (hitRect(p0, titleBonusBtn)) {
-        playUiSound();
-        // iOS対策のWebAudio経路は、確実なユーザー操作の中で用意する必要がある。
-        ensureBgmGraph();
-        openSoundTest();
-      } else if (hitRect(p0, titleRankingBtn)) {
-        playUiSound();
-        gamePhase = 'ranking';
-        fetchRankingBoard();
-      } else if (hitRect(p0, titleTutorialBtn)) {
-        playUiSound();
-        startTutorial();
-      } else if (hitRect(p0, titleFreeBtn)) {
-        playUiSound();
-        gamePhase = 'freeSetup';
-      } else if (hitRect(p0, titleUpdateBtn)) {
+      // 更新欄は固定層。中央木板だけをpointerup確定のタップ／スワイプとして扱う。
+      if (e.pointerType === 'touch' && e.isPrimary === false) return;
+      if (hitRect(p0, titleUpdateBtn)) {
         playUiSound();
         forceGameUpdate();
       } else if (hitRect(p0, titleUpdateHistoryPanel)) {
@@ -20114,6 +20342,8 @@
         updateHistoryScrollY = 0;
         updateHistoryScrollBy(0);
         playUiSound();
+      } else {
+        beginTitleMenuGesture(p0, e);
       }
       return;
     }
@@ -20423,6 +20653,17 @@
       return;
     }
     if (e.pointerId !== inputPointerId) return;
+    if (inputMode === 'titleMenu' && titleMenuGesture) {
+      titleMenuGesture.dx = p.x - titleMenuGesture.startX;
+      titleMenuGesture.dy = p.y - titleMenuGesture.startY;
+      // 一度でもslopを越えた指は、元位置へ戻ってもタップへ復帰させない。
+      titleMenuGesture.moved ||= Math.hypot(titleMenuGesture.dx, titleMenuGesture.dy) >= TITLE_MENU_DRAG_ACTIVATION;
+      if (titleMenuGesture.moved
+          && Math.abs(titleMenuGesture.dx) > Math.abs(titleMenuGesture.dy) * 1.05) {
+        titleMenuGesture.dragging = true;
+      }
+      return;
+    }
     if (inputMode === 'volumeSlider') {
       if (volumeDragKey) setVolumeFromPoint(volumeDragKey, p);
       return;
@@ -20465,6 +20706,10 @@
       return;
     }
     if (e.pointerType === 'touch') activeTouchPoints.delete(e.pointerId);
+    if (inputMode === 'titleMenu' && e.pointerId === inputPointerId) {
+      finishTitleMenuGesture(canvasPointFromEvent(e), e);
+      return;
+    }
     if (inputMode === 'updateHistoryScroll' && e.pointerId === inputPointerId) {
       inputMode = null;
       inputPointerId = null;
@@ -20623,10 +20868,10 @@
   }
 
   // モバイルブラウザによっては、指がCanvasの外へ出た瞬間にCanvasのpointermoveが止まる。
-  // 更新履歴のタッチスクロールだけはwindow側でも拾い、他のゲーム操作へ二重適用しない。
+  // 更新履歴スクロールとタイトル木板スワイプはwindow側でも拾い、他の操作へ二重適用しない。
   function onWindowPointerMove(e) {
     if (e.target === canvas) return;
-    if (e.pointerType === 'touch' && inputMode === 'updateHistoryScroll') onPointerMove(e);
+    if (e.pointerType === 'touch' && (inputMode === 'updateHistoryScroll' || inputMode === 'titleMenu')) onPointerMove(e);
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
@@ -21143,6 +21388,39 @@
       closeDeviceBackConfirm();
       playUiSound();
       return;
+    }
+    if (gamePhase === 'title') {
+      // 戻る操作でDOM確認を出す前に、背面のCanvasタップ候補を必ず破棄する。
+      cancelTitleMenuGesture(false);
+      if (soundTestOpen) {
+        closeSoundTest();
+        playUiSound();
+        return;
+      }
+      const collectionOverlay = document.getElementById('mvpCollection');
+      if (collectionOverlay?.classList.contains('open')) {
+        globalThis.KatamonMvpShop?.close?.();
+        playUiSound();
+        return;
+      }
+      if (updateHistoryOpen) {
+        updateHistoryOpen = false;
+        playUiSound();
+        return;
+      }
+      if (soundPanelOpen) {
+        soundPanelOpen = false;
+        saveAudioSettings();
+        playUiSound();
+        return;
+      }
+      // GARAGEからの最初の戻るはBATTLEへ。BATTLEで次に戻った時だけ従来の終了確認へ進む。
+      if (titleMenuPage === TITLE_MENU_GARAGE) {
+        const fromPosition = titleMenuVisualPosition();
+        startTitleMenuTransition(TITLE_MENU_BATTLE, fromPosition);
+        playUiSound();
+        return;
+      }
     }
     // ロビーや結果表示は内部状態がbattleのままでも、ユーザー視点ではバトル外画面。
     if (gamePhase !== 'battle' || roomScreenOpen()) {
