@@ -278,8 +278,18 @@ check('ハムルトンのクリーム雲は生成素材の3コマをその場で
   fs.existsSync(path.join(root, 'assets', 'effects', 'hamulton-cream-cloud-frames.png'))
     && /const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets\/effects\/hamulton-cream-cloud-frames\.png';/.test(index)
     && /const CREAM_CLOUD_FRAME_COUNT = 3;/.test(index)
+    && /const CREAM_CLOUD_VISUAL_SCALE = 2\.12;/.test(index)
     && /const frameIndex = Math\.floor\(simTimeMs \/ CREAM_CLOUD_FRAME_MS\) % CREAM_CLOUD_FRAME_COUNT;/.test(index)
+    && /ctx\.globalAlpha = 0\.5;/.test(index)
     && /ctx\.drawImage\(image, frameIndex \* sourceW, 0, sourceW, sourceH,/.test(index));
+check('ハムルトン雲の範囲内では照準数値を隠し、弾道を半分にする',
+  /function creamCloudDebuffTurnsFor\(unit\)/.test(index)
+    && /entries\.push\(`照準妨害 \$\{creamCloudTurns\}手`\)/.test(index)
+    && /const creamClouded = unitIsInCreamCloud\(me\);/.test(index)
+    && /previewT = trajectoryPreviewDuration\(vx0, vy0, gravity\) \* shotProfile\.guideMul \* \(creamClouded \? 0\.5 : 1\)/.test(index)
+    && /if \(aiming && !cancelling && !creamClouded\)/.test(index)
+    && /else if \(aiming && creamClouded\)/.test(index)
+    && /drawOutlinedText\('視界不良'/.test(index));
 check('自分がREADY確定した弾道ガイドだけを一斉発射開始まで保持',
   /function drawOwnQueuedCoopSalvoGuide\(\)/.test(index)
     && /\['collecting', 'launching', 'special-aura', 'special-cutin'\]\.includes\(coopSalvoState\.phase\)/.test(index)
