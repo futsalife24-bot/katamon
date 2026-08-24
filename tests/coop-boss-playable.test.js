@@ -274,6 +274,12 @@ check('一斉攻撃は跳躍と救助弾を許可し、SUBと救助以外のCO-O
     && /if \(useSpecial && \(def\?\.specialEnabled === false \|\| !isSpecialReady\(unit\)\)\) return false/.test(index)
     && /showCutIn\(`\$\{label\} READY`[^\n]+advanceCoopSalvoCollector/.test(index)
     && /coopSalvoState\?\.phase === 'resolving'/.test(index));
+check('ハムルトンのクリーム雲は生成素材の3コマをその場でモクモク表示',
+  fs.existsSync(path.join(root, 'assets', 'effects', 'hamulton-cream-cloud-frames.png'))
+    && /const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets\/effects\/hamulton-cream-cloud-frames\.png';/.test(index)
+    && /const CREAM_CLOUD_FRAME_COUNT = 3;/.test(index)
+    && /const frameIndex = Math\.floor\(simTimeMs \/ CREAM_CLOUD_FRAME_MS\) % CREAM_CLOUD_FRAME_COUNT;/.test(index)
+    && /ctx\.drawImage\(image, frameIndex \* sourceW, 0, sourceW, sourceH,/.test(index));
 check('自分がREADY確定した弾道ガイドだけを一斉発射開始まで保持',
   /function drawOwnQueuedCoopSalvoGuide\(\)/.test(index)
     && /\['collecting', 'launching', 'special-aura', 'special-cutin'\]\.includes\(coopSalvoState\.phase\)/.test(index)
