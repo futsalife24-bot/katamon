@@ -663,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.139-character-grounding-orientation';
+  const BUILD_ID = 'v2.0.140-static-preview-orientation';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.140', date: '2026/08/24', summary: '演習などの静的キャラ表示を右向き原画へ統一' },
     { version: 'v2.0.139', date: '2026/08/24', summary: '全キャラの接地と原画の向きを統一' },
     { version: 'v2.0.138', date: '2026/08/24', summary: 'ハムルトン雲の妨害表示と大きさを修正' },
     { version: 'v2.0.137', date: '2026/08/24', summary: 'ハムルトンのクリーム雲を3コマアニメへ更新' },
@@ -6375,10 +6376,6 @@
       custom: { x: 340, y: rows.customStage.y, w: 352, h: FREE_SETTING_ROW_H }
     };
   }
-  // 演習準備の見本は、味方を右向き・相手を左向きへ陣営ごとに固定する。
-  function freePreviewShouldMirror(kind) {
-    return kind === 'cpu' || kind === 'foe2';
-  }
   function freeStartBtn() {
     return { x: VW / 2, y: freeRows().format.y + 76, w: 350, h: 58 };
   }
@@ -12031,13 +12028,13 @@
     if (hasCharacterArt) {
       const img = charImages[imageKey];
       if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-        // 正方形へ押し込まず、元画像の縦横比のまま置く。カードだけの縮尺を変えない。
+        // 演習などの静的UIは、全員右向きへ統一した原画をそのまま見せる。
+        // 対戦中に相手を向くための反転とは混ぜない。
         const imageRect = characterPreviewImageRect(imageKey, img);
         const imageH = row.h - 26;
         const imageW = imageH * (imageRect.sw / imageRect.sh);
         ctx.save();
         ctx.translate(126, row.y + 8);
-        if (freePreviewShouldMirror(kind, imageKey)) ctx.scale(-1, 1);
         ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -imageW / 2, -imageH / 2, imageW, imageH);
         ctx.restore();
       }
