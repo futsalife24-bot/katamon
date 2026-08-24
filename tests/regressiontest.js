@@ -71,7 +71,8 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
     && indexHtml.includes('const loadingCharacterKey = pickLoadingCharacter()')
     && indexHtml.includes('const loadingCharacterImage = loadCharacterArt')
     && indexHtml.includes('const fallbackLoadingKey = primaryLoadingImgReady')
-    && indexHtml.includes('if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1)')
+    && indexHtml.includes('統一済みの右向き原画をそのまま使う')
+    && !indexHtml.includes('CHARACTERS[loadingKey]?.facesLeft')
     && indexHtml.includes('ctx.rotate(markerAngle)')
     && indexHtml.includes('const spinnerY = VH / 2 - 155')
     && indexHtml.includes('const emblemSize = 58')
@@ -523,9 +524,6 @@ check('デスゲートはDEAD LINEの下から固定射程',
   JSON.stringify(deathGate));
 const shinigami = kt.character('shinigami');
 const dreadArrow = kt.character('doRednote');
-// facesLeft は「元画像がどちら向きか」であって「敵を向くか」ではない。敵の方を向くことは
-// 後段の向き検査(全キャラ・左右両配置)で確認している。ここは画像を差し替えた時に
-// 設定の追随漏れへ気づくための固定。2026-08-03に右向きの絵へ差し替えたため false。
 // spriteScale は「みんなを揃えたうえで、この子だけ大きい」という設計の意図だけを持つ。
 // 絵が縦長か横長かの差は unitSpriteScale が別に打ち消す(v117)。1.35→1.21 はその分離で、
 // 画面に出る大きさは変えていない。
@@ -567,6 +565,21 @@ const dreadArrow = kt.character('doRednote');
   check('発射基点と爆風の基準は動かしていない',
     html.includes('function unitAnchor(u) {')
     && /function unitAnchor\(u\) \{[\s\S]{0,200}return \{ x: u\.x, y: u\.y \};/.test(html));
+  check('透明余白の接地補正は描画専用で、物理足元を動かしていない',
+    html.includes('function characterGroundOffsetY(key)')
+      && kt.character('medama').groundOffsetY === 2
+      && kt.character('iwa').groundOffsetY === 2
+      && kt.character('doRednote').groundOffsetY === 25
+      && kt.character('hamulton').groundOffsetY === 9
+      && kt.character('coolKai').groundOffsetY === 37
+      && /function drawJumpProjectile\(p\) \{[\s\S]{0,1300}const groundOffsetY = characterGroundOffsetY\(u\.character\);[\s\S]{0,900}UNIT_RADIUS - h \+ groundOffsetY/.test(html),
+    JSON.stringify({
+      medama: kt.character('medama').groundOffsetY,
+      iwa: kt.character('iwa').groundOffsetY,
+      dread: kt.character('doRednote').groundOffsetY,
+      hamulton: kt.character('hamulton').groundOffsetY,
+      coolKai: kt.character('coolKai').groundOffsetY
+    }));
 }
 // ===== v123: 対戦開始カットインを砲弾ネームプレートにした =====
 // 素材はユーザー提供の1枚のシートから切り出した5点。左右から砲弾が飛んできて
@@ -673,10 +686,10 @@ const dreadArrow = kt.character('doRednote');
 
 
 
-check('死神は右向きの元画像で、戦闘中だけ2割大きく表示する',
+check('死神は右向き原画で、戦闘中だけ2割大きく表示する',
   !shinigami.facesLeft && shinigami.spriteScale === 1.21,
   JSON.stringify(shinigami));
-check('ドレッドアローの新画像は右向きなので反転しない',
+check('ドレッドアローの原画は右向きで個別反転を持たない',
   !dreadArrow.facesLeft,
   JSON.stringify(dreadArrow));
 check('ドレッドアローとクール=カイは透明余白を除いて大きく表示する',
@@ -936,12 +949,11 @@ check('カスタムステージはSTAGEの下段へ収まる色付きの選択�
 const freePreviewDirections = kt.chars().map(key => ({
   key,
   playerMirrored: kt.freePreviewShouldMirror('player', key),
-  enemyMirrored: kt.freePreviewShouldMirror('cpu', key),
-    facesLeft: !!kt.character(key).facesLeft
+  enemyMirrored: kt.freePreviewShouldMirror('cpu', key)
 }));
-check('演習設定のキャラ画像は味方を右向き・相手を左向きへ素材ごとに揃える',
-  freePreviewDirections.every(item => item.playerMirrored === item.facesLeft
-    && item.enemyMirrored !== item.facesLeft),
+check('演習設定のキャラ画像は右向き原画から味方を右・相手を左へ揃える',
+  freePreviewDirections.every(item => item.playerMirrored === false
+    && item.enemyMirrored === true),
   JSON.stringify(freePreviewDirections));
 check('サウンド設定を開いている間はカスタムステージのボタンを前面へ出さない',
   /soundPanelOpen,/.test(indexHtml)
@@ -1257,9 +1269,8 @@ check('掘った直後の地表はクレーターぶん下がっている',
   Number.isFinite(carvedBottomTop) && carvedBottomTop > deepestTop,
   `掘削後の最下層=${carvedBottomTop} 元=${deepestTop}`);
 
-// ===== Issue #13: 元画像が左向きのキャラが相手に背を向けない =====
-// facingLeft は「画像を左右反転するか」であって「世界で左を向いているか」ではない。
-// v91で向きの再判定を足した際にこの変換が抜け、facesLeftの7体が背を向けて撃っていた。
+// ===== 右向き原画統一: 全キャラが左右どちらでも相手を向く =====
+// 原画はすべて右向き。facingLeft はワールドで左を向くかだけを示す。
 // 全キャラを左右どちらに置いても相手を向くことを、実際に向きを更新させて確かめる。
 // 直前のテストで倒れた状態が残っていると、決着後は向きの再判定が走らない。
 // 必ず新しい試合から始める。
@@ -1268,9 +1279,7 @@ settle();
 kt.disableCpuForTest();
 kt.setTerrain('rolling');
 let facingNg = [];
-let facesLeftChecked = 0;
 for (const key of kt.chars()) {
-  if (kt.character(key).facesLeft) facesLeftChecked++;
   for (const [p1x, e1x] of [[300, 1100], [1100, 300]]) {
     kt.setCharactersForTest(key, key);
     kt.placeOnGround('p1', p1x);
@@ -1285,30 +1294,23 @@ for (const key of kt.chars()) {
     }
   }
 }
-check('左向き素材のキャラが検査対象に含まれている', facesLeftChecked > 0, `該当=${facesLeftChecked}体`);
-
-// 「どのキャラの元画像が左向きか」を固定しておく。ここが絵と食い違うとそのキャラだけ
-// 相手に背を向ける。絵と設定が合っているかは自動では判定できない(人の目でしか分からない)
-// ので、せめて設定が意図せず変わったことに気づけるようにする。
-// 画像を差し替えた時は、実機で向きを確認したうえでこの一覧も更新すること。
-const EXPECTED_LEFT_FACING = ['sumoeru', 'akuma', 'kishi', 'neko'];
-const actualLeftFacing = kt.chars().filter(k => kt.character(k).facesLeft);
-check('左向き素材として登録されているキャラの一覧が変わっていない',
-  actualLeftFacing.join(',') === EXPECTED_LEFT_FACING.join(','),
-  `実際=[${actualLeftFacing.join(',')}] 期待=[${EXPECTED_LEFT_FACING.join(',')}]`);
+const leftFacingMasterKeys = kt.chars().filter(k => kt.character(k).facesLeft);
+check('全キャラのマスター原画は右向きで個別補正を持たない',
+  leftFacingMasterKeys.length === 0,
+  '左向き登録=[' + leftFacingMasterKeys.join(',') + ']');
 check('全キャラが左右どちらに居ても相手の方を向く', facingNg.length === 0,
   `ズレ=${facingNg.slice(0, 8).join(', ')}${facingNg.length > 8 ? ` ほか${facingNg.length - 8}件` : ''}`);
 
-// 素材の向きが違う組み合わせでも、両方が正しく向くこと。
-const rightFacing = kt.chars().find(k => !kt.character(k).facesLeft);
-const leftFacing = kt.chars().find(k => kt.character(k).facesLeft);
-kt.setCharactersForTest(rightFacing, leftFacing);
+// 異なる右向き原画の組み合わせでも、両方が正しく向くこと。
+const firstRightFacing = kt.chars()[0];
+const secondRightFacing = kt.chars()[1];
+kt.setCharactersForTest(firstRightFacing, secondRightFacing);
 kt.placeOnGround('p1', 300);
 kt.placeOnGround('e1', 1100);
 kt.step(1 / 60);
-check('素材の向きが違う組み合わせでも両方が相手を向く',
+check('右向き原画だけの組み合わせでも両方が相手を向く',
   kt.facesLeftInWorld('p1') === false && kt.facesLeftInWorld('e1') === true,
-  `${rightFacing}(p1)=${kt.facesLeftInWorld('p1')} / ${leftFacing}(e1)=${kt.facesLeftInWorld('e1')}`);
+  `${firstRightFacing}(p1)=${kt.facesLeftInWorld('p1')} / ${secondRightFacing}(e1)=${kt.facesLeftInWorld('e1')}`);
 
 // ===== v183: 花火(スモエルの必殺)は接近信管でゆっくり開く =====
 const fireworkConfig = kt.fireworkConfigForTest();

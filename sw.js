@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.138-hamulton-cloud-debuff';
+const CACHE_VERSION = 'katamon-pwa-v2.0.139-character-grounding-orientation';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -7,6 +7,14 @@ const ASSET_REFRESH = [
   { path: './assets/characters/runtime/dread-arrow.webp', revision: 'v2.0.130' },
   { path: './assets/characters/master/hamulton.png', revision: 'v2.0.130' },
   { path: './assets/characters/runtime/hamulton.webp', revision: 'v2.0.130' },
+  { path: './assets/characters/master/sumoeru.png', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/runtime/sumoeru.webp', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/master/rubidevi.png', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/runtime/rubidevi.webp', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/master/paladier.png', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/runtime/paladier.webp', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/master/nyan-tank.png', revision: 'v2.0.139-right-facing' },
+  { path: './assets/characters/runtime/nyan-tank.webp', revision: 'v2.0.139-right-facing' },
 ];
 const APP_SHELL = [
   './index.html',

@@ -279,9 +279,12 @@ check('ハムルトンのクリーム雲は生成素材の3コマをその場で
     && /const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets\/effects\/hamulton-cream-cloud-frames\.png';/.test(index)
     && /const CREAM_CLOUD_FRAME_COUNT = 3;/.test(index)
     && /const CREAM_CLOUD_VISUAL_SCALE = 2\.12;/.test(index)
+    && /const CREAM_CLOUD_SPRITE_GROUND_RATIO = 0\.86;/.test(index)
     && /const frameIndex = Math\.floor\(simTimeMs \/ CREAM_CLOUD_FRAME_MS\) % CREAM_CLOUD_FRAME_COUNT;/.test(index)
     && /ctx\.globalAlpha = 0\.5;/.test(index)
-    && /ctx\.drawImage\(image, frameIndex \* sourceW, 0, sourceW, sourceH,/.test(index));
+    && /ctx\.drawImage\(image, frameIndex \* sourceW, 0, sourceW, sourceH,/.test(index)
+    && /cloud\.y - drawH \* CREAM_CLOUD_SPRITE_GROUND_RATIO/.test(index)
+    && /const shadowRadius = cloud\.radius \* 0\.72;/.test(index));
 check('ハムルトン雲の範囲内では照準数値を隠し、弾道を半分にする',
   /function creamCloudDebuffTurnsFor\(unit\)/.test(index)
     && /entries\.push\(`照準妨害 \$\{creamCloudTurns\}手`\)/.test(index)

@@ -663,10 +663,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.138-hamulton-cloud-debuff';
+  const BUILD_ID = 'v2.0.139-character-grounding-orientation';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.139', date: '2026/08/24', summary: '全キャラの接地と原画の向きを統一' },
     { version: 'v2.0.138', date: '2026/08/24', summary: 'ハムルトン雲の妨害表示と大きさを修正' },
     { version: 'v2.0.137', date: '2026/08/24', summary: 'ハムルトンのクリーム雲を3コマアニメへ更新' },
     { version: 'v2.0.136', date: '2026/08/24', summary: '協力ボスNORMALの戦闘テンポを短縮' },
@@ -3224,14 +3225,18 @@
       desc: '風に強い軽快な弾とバインドスピットで相手の移動を封じる。読み合いで翻弄する技巧派。',
       selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じるバインドスピット', selectFlavor: '命中相手を2手番、行動不能にする',
       maxHp: 90, blastMul: 0.9, windMul: 0.75, fuelMul: 1.1, velScaleMul: 1.05, empRadius: 90, specialVelocityMul: 1.0, tBias: 0.9,
-      color: '#ffd24a', special: 'バインドスピット'
+      color: '#ffd24a', special: 'バインドスピット',
+      // 可視下端の透明余白ぶんだけ描画を下げ、物理足元へ合わせる。
+      groundOffsetY: 2
     },
     iwa: {
       key: 'iwa', name: 'ゴーロッカ', asset: 'gorocca', role: '重戦車型', roleEn: 'HEAVY',
       desc: '高耐久と巨大な爆風が強み。風に流されにくく、地形を豪快に崩す。',
       selectStats: [5, 5, 2], specialDesc: '通常弾の1.5倍を破壊して相手を少し吹き飛ばす', selectFlavor: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
       maxHp: 130, blastMul: 1.35, windMul: 0.7, fuelMul: 0.85, velScaleMul: 0.82, specialVelocityMul: 1.0, tBias: 1.25,
-      color: '#9a9086', special: 'Bインパクト'
+      color: '#9a9086', special: 'Bインパクト',
+      // 可視下端の透明余白ぶんだけ描画を下げ、物理足元へ合わせる。
+      groundOffsetY: 2
     },
     tori: {
       key: 'tori', name: 'フェニーチェ', asset: 'fenice', role: 'スピード型', roleEn: 'SPEED',
@@ -3266,17 +3271,19 @@
       desc: '花火筒を背負うお祭り砲撃戦車。爆風で地形ごと一気に崩す。',
       selectStats: [3, 4, 2], specialDesc: '敵へ近づくと8方向へ中・小弾をゆっくり散らす花火', selectFlavor: '敵の近くで炸裂し、8方向へ中小弾を放つ',
       maxHp: 100, blastMul: 1.15, windMul: 1.1, fuelMul: 0.9, velScaleMul: 0.9, specialVelocityMul: 1.0, tBias: 1.1,
-      color: '#b277ff', special: '職人カエル玉', facesLeft: true
+      color: '#b277ff', special: '職人カエル玉'
     },
     doRednote: {
       key: 'doRednote', name: 'ドレッドアロー', asset: 'dread-arrow', role: '狙撃型', roleEn: 'SNIPER',
       desc: '弩とサソリ尾を備えた狙撃戦車。刺した地面から毒針を走らせて追い詰める。',
       selectStats: [3, 4, 3], specialDesc: '狙い線どおりに刺さり、地表から坂や壁を登る毒針の衝撃波', selectFlavor: '着弾後、相手に向かって地雷針が追尾する',
       maxHp: 95, blastMul: 1.05, windMul: 0.7, fuelMul: 0.9, velScaleMul: 1.3, specialVelocityMul: 1.0, tBias: 0.8,
-      color: '#f14b46', special: 'スコーピオンレール', facesLeft: false,
+      color: '#f14b46', special: 'スコーピオンレール',
       // 余白の大きい新素材は、選択・戦闘とも車体ぎりぎりまで切り出して見やすくする。
       imageCrop: { sx: 0.12, sy: 0.27, sw: 0.72, sh: 0.65 },
-      previewImageCrop: { sx: 0.12, sy: 0.27, sw: 0.72, sh: 0.65 }
+      previewImageCrop: { sx: 0.12, sy: 0.27, sw: 0.72, sh: 0.65 },
+      // 可視履帯が物理足元へ接するよう、透明余白ぶんだけ描画を下げる。
+      groundOffsetY: 25
     },
     hamulton: {
       key: 'hamulton', name: 'ハムルトン', asset: 'hamulton', role: '妨害型', roleEn: 'CONTROL',
@@ -3285,7 +3292,9 @@
       maxHp: 92, blastMul: 0.95, windMul: 0.9, fuelMul: 1.1, velScaleMul: 1.0, guideMul: 1.0, specialVelocityMul: 1.0, tBias: 1.0,
       color: '#f0bd4f', special: 'まさかのホウヒ',
       imageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 },
-      previewImageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 }
+      previewImageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 },
+      // 可視車輪が物理足元へ接するよう、透明余白ぶんだけ描画を下げる。
+      groundOffsetY: 9
     },
     mocchario: {
       key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
@@ -3306,7 +3315,7 @@
       desc: '雷を直線で叩き込む魔導バイク。軽く速いがHPは薄い。',
       selectStats: [2, 5, 4], specialDesc: '風・重力を無視して直進し、触れた相手へ直接ダメージ', selectFlavor: '風と重力を無視して直進し、直接ダメージ',
       maxHp: 84, blastMul: 1.1, windMul: 0.95, fuelMul: 1.15, velScaleMul: 1.12, specialVelocityMul: 2.0, tBias: 0.9,
-      color: '#ff3b5c', special: 'ライトニング', facesLeft: true
+      color: '#ff3b5c', special: 'ライトニング'
     },
     jinba: {
       key: 'jinba', name: 'アスタウロス', asset: 'astauros', role: '突撃型', roleEn: 'CHARGE',
@@ -3320,14 +3329,14 @@
       desc: '盾と大槍で固めた白銀の重装戦車。鈍いが硬く、一撃が重い。',
       selectStats: [5, 4, 2], specialDesc: '自分のHPを15払い超高威力の一撃', selectFlavor: 'HPを15払って、超高威力の一撃',
       maxHp: 132, blastMul: 1.15, windMul: 0.65, fuelMul: 0.8, velScaleMul: 0.88, specialVelocityMul: 1.0, tBias: 1.2,
-      color: '#f2c94c', special: '最終奥義', facesLeft: true
+      color: '#f2c94c', special: '最終奥義'
     },
     neko: {
       key: 'neko', name: 'にゃんタンク', asset: 'nyan-tank', role: '翻弄型', roleEn: 'TRICK',
       desc: '肉球砲を構えた身軽な猫戦車。逃げ回りながら相手の足を止める。',
       selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし次の手番をスキップ', selectFlavor: '大爆風で吹き飛ばし、次の手番をスキップ',
       maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
-      color: '#ffe14d', special: '猫だまし爆弾', facesLeft: true
+      color: '#ffe14d', special: '猫だまし爆弾'
     },
     shinigami: {
       key: 'shinigami', name: 'ヨミガマ', asset: 'yomigama', role: '地形工作型', roleEn: 'TERRAIN',
@@ -3349,7 +3358,7 @@
       // 演習選択では、接地調整前の上下余白を含めず見えている車体を大きく表示する。
       previewImageCrop: { sx: 0.14, sy: 0.35, sw: 0.72, sh: 0.51 },
       // 素材の下側に残る透明余白ぶんだけ、地面アンカーへ見た目を寄せる。
-      groundOffsetY: 31
+      groundOffsetY: 37
     }
   };
   // Content Studioの生成カタログは既存定義へ後付けする。既存17体は手書きのまま保持し、
@@ -3407,9 +3416,9 @@
   const CHARACTER_FACES = {
     kyoryu: [0.64, 0.20, 0.36], medama: [0.58, 0.36, 0.38], iwa: [0.68, 0.40, 0.40],
     tori: [0.54, 0.48, 0.36], barugerukan: [0.45, 0.42, 0.40], nisenmono: [0.42, 0.40, 0.44],
-    burumutan: [0.62, 0.60, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
-    mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
-    jinba: [0.50, 0.16, 0.26], kishi: [0.47, 0.30, 0.34], neko: [0.55, 0.33, 0.34],
+    burumutan: [0.62, 0.60, 0.34], sumoeru: [0.64, 0.38, 0.32], doRednote: [0.55, 0.50, 0.42],
+    mocchario: [0.42, 0.44, 0.40], mecha: [0.63, 0.21, 0.30], akuma: [0.71, 0.20, 0.30],
+    jinba: [0.50, 0.16, 0.26], kishi: [0.53, 0.30, 0.34], neko: [0.45, 0.33, 0.34],
     shinigami: [0.50, 0.38, 0.42], coolKai: [0.73, 0.53, 0.28], hamulton: [0.42, 0.45, 0.32]
   };
   const DEFAULT_FACE = [0.5, 0.3, 0.42];
@@ -3420,9 +3429,9 @@
   const MATCHUP_FACES = {
     kyoryu: [0.67, 0.23, 0.34], medama: [0.58, 0.36, 0.36], iwa: [0.53, 0.48, 0.36],
     tori: [0.79, 0.44, 0.28], barugerukan: [0.43, 0.32, 0.34], nisenmono: [0.52, 0.33, 0.55],
-    burumutan: [0.50, 0.55, 0.34], sumoeru: [0.36, 0.38, 0.32], doRednote: [0.18, 0.80, 0.30],
-    mocchario: [0.62, 0.34, 0.34], mecha: [0.63, 0.21, 0.30], akuma: [0.29, 0.20, 0.30],
-    jinba: [0.52, 0.20, 0.26], kishi: [0.43, 0.28, 0.28], neko: [0.55, 0.33, 0.32],
+    burumutan: [0.50, 0.55, 0.34], sumoeru: [0.64, 0.38, 0.32], doRednote: [0.18, 0.80, 0.30],
+    mocchario: [0.62, 0.34, 0.34], mecha: [0.63, 0.21, 0.30], akuma: [0.71, 0.20, 0.30],
+    jinba: [0.52, 0.20, 0.26], kishi: [0.57, 0.28, 0.28], neko: [0.45, 0.33, 0.32],
     shinigami: [0.59, 0.31, 0.30], coolKai: [0.73, 0.53, 0.26], hamulton: [0.42, 0.45, 0.32]
   };
 
@@ -3432,6 +3441,11 @@
   }
   const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'hamulton', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
   const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
+  // 地形・当たり判定は全員共通の足元座標を使う。素材ごとの透明余白だけ描画で補正する。
+  function characterGroundOffsetY(key) {
+    const offset = Number(CHARACTERS[key]?.groundOffsetY);
+    return Number.isFinite(offset) ? offset : 0;
+  }
   // ロード画面のキャラは起動ごとに1体だけ抽選する。Web Cryptoを使い、
   // 対戦の再現用Math.random()の列へ表示演出の乱数を混ぜない。
   function pickLoadingCharacter() {
@@ -3472,7 +3486,7 @@
     return img;
   }
 
-  // キャラ画像を事前読み込み。元画像が左向きのキャラはfacesLeftで表示時に補正する。
+  // キャラ画像は全員「右向き原画」で統一し、戦闘中だけワールドの向きに合わせて反転する。
   const charImages = {};
   // キャラ画像を差し替える版ではBUILD_ID/CACHE_VERSIONを上げ、sw.jsの
   // ASSET_REFRESHへ対象パスを追加する。ほかの素材は端末内キャッシュを再利用する。
@@ -4220,18 +4234,15 @@
     return best;
   }
 
-  // u.facingLeft は「画像を左右反転するか」を表すフラグであって、「世界で左を向いているか」
-  // ではない。元画像が左向きのキャラ(facesLeft)は反転すると右を向くため、この2つは意味が
-  // 逆になる。v91で向きの再判定を足した際にこの変換が抜け、facesLeftの7体が相手に背を
-  // 向けたまま撃つ状態になっていた(2026-08-02に実機で発覚)。
-  // 変換は必ずこの2つの関数を通すこと。式を各所へ直接書くと同じ食い違いが再発する。
-  function spriteFlipForFacing(u, faceLeftInWorld) {
-    return faceLeftInWorld !== !!CHARACTERS[u.character]?.facesLeft;
+  // 原画は全員右向き。u.facingLeft はそのまま「世界で左を向くか」を表す。
+  // 対戦中の反転だけをこの2関数へ集約して、個別の原画補正を復活させない。
+  function spriteFlipForFacing(_u, faceLeftInWorld) {
+    return !!faceLeftInWorld;
   }
   function unitFacesLeftInWorld(u) {
     // 未設定なら初期配置どおり(プレイヤーは右、CPUは左を向く)として扱う。
     if (u.facingLeft == null) return u.team === 'cpu';
-    return u.facingLeft !== !!CHARACTERS[u.character]?.facesLeft;
+    return !!u.facingLeft;
   }
   function faceUnitTowardOpponent(u) {
     const foe = nearestEnemy(u);
@@ -4476,6 +4487,8 @@
   const CREAM_CLOUD_FRAME_MS = 220;
   // 素材の透明余白を含む横幅。実際に見える雲が半径76pxの判定からはみ出さない大きさにする。
   const CREAM_CLOUD_VISUAL_SCALE = 2.12;
+  // 3コマとも可視下端が着弾地面へ触れる、スプライト全高に対する描画アンカー。
+  const CREAM_CLOUD_SPRITE_GROUND_RATIO = 0.86;
   let hamultonCreamCloudImage = null;
   function getHamulkaCreamCloudImage() {
     if (hamultonCreamCloudImage) return hamultonCreamCloudImage;
@@ -6362,12 +6375,9 @@
       custom: { x: 340, y: rows.customStage.y, w: 352, h: FREE_SETTING_ROW_H }
     };
   }
-  // 演習準備の見本は、素材ごとの向きではなく陣営ごとに向きを固定する。
-  // 味方は右向き、相手は左向きになるよう、元画像が左向きなら反転する。
-  function freePreviewShouldMirror(kind, imageKey) {
-    const sourceFacesLeft = !!CHARACTERS[imageKey]?.facesLeft;
-    const targetFacesLeft = kind === 'cpu' || kind === 'foe2';
-    return sourceFacesLeft !== targetFacesLeft;
+  // 演習準備の見本は、味方を右向き・相手を左向きへ陣営ごとに固定する。
+  function freePreviewShouldMirror(kind) {
+    return kind === 'cpu' || kind === 'foe2';
   }
   function freeStartBtn() {
     return { x: VW / 2, y: freeRows().format.y + 76, w: 350, h: 58 };
@@ -12693,8 +12703,7 @@
       ctx.rotate(markerAngle);
       ctx.shadowColor = 'rgba(255,210,74,.72)';
       ctx.shadowBlur = 8;
-      // ローダー上のキャラは、素材が左向きでも常に右向きへ揃える。
-      if (CHARACTERS[loadingKey]?.facesLeft) ctx.scale(-1, 1);
+      // ローダー上も、統一済みの右向き原画をそのまま使う。
       ctx.drawImage(loadingImg, crop.sx, crop.sy, crop.sw, crop.sh, -markerW / 2, -markerH, markerW, markerH);
       ctx.restore();
     } else {
@@ -12851,15 +12860,7 @@
       const imageScale = Math.min(104 / imageRect.sw, 154 / imageRect.sh);
       const iw = imageRect.sw * imageScale;
       const ih = imageRect.sh * imageScale;
-      if (def.facesLeft) {
-        ctx.save();
-        ctx.translate(imageCx, imageCy);
-        ctx.scale(-1, 1);
-        ctx.drawImage(cImg, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -iw / 2, -ih / 2, iw, ih);
-        ctx.restore();
-      } else {
-        ctx.drawImage(cImg, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
-      }
+      ctx.drawImage(cImg, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, imageCx - iw / 2, imageCy - ih / 2, iw, ih);
     } else {
       ctx.beginPath();
       ctx.arc(imageCx, imageCy, 31, 0, Math.PI * 2);
@@ -14855,7 +14856,7 @@
     for (let side = -1; side <= 1; side += 2) {
       const flicker = Math.sin(phase * 5 + side) * 3;
       const x = a.x + side * (UNIT_RADIUS + 8);
-      const y = a.y - 12 + flicker;
+      const y = a.y - 12 + characterGroundOffsetY(u.character) + flicker;
       ctx.beginPath();
       ctx.moveTo(x, y - 16);
       ctx.lineTo(x - side * 7, y - 6);
@@ -15219,7 +15220,7 @@
     const markerWorldTop = isCoopBossUnit(u)
       ? coopBossRect(u).y - 34
       : unitPosition.y + UNIT_RADIUS - unitSpriteScale(u.character) * SPRITE_SIZE
-        + (CHARACTERS[u.character]?.groundOffsetY || 0) - 24;
+        + characterGroundOffsetY(u.character) - 24;
     const markerX = worldToScreenX(markerWorldX);
     if (markerX < -24 || markerX > VW + 24) return;
     // ワールド描画のあとにHUDを重ねるため、大型ボスの頭上はHUDの裏へ入りやすい。
@@ -15249,7 +15250,7 @@
     const danger = activeUnit() === boss;
     const targetName = target.id === localUnitId ? 'あなた' : target.label.replace(/\s*\[AI\]$/, '');
     const spriteTop = anchor.y + UNIT_RADIUS - unitSpriteScale(target.character) * SPRITE_SIZE
-      + (CHARACTERS[target.character]?.groundOffsetY || 0);
+      + characterGroundOffsetY(target.character);
 
     ctx.save();
     ctx.globalAlpha = danger ? 1 : 0.82;
@@ -15309,7 +15310,7 @@
     const imageRect = imgReady ? characterImageRect(u.character, img) : null;
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imageRect ? h * (imageRect.sw / imageRect.sh) : h;
-    const groundOffsetY = CHARACTERS[u.character]?.groundOffsetY || 0;
+    const groundOffsetY = characterGroundOffsetY(u.character);
     const imgTopAbs = a.y + UNIT_RADIUS - h + groundOffsetY;
     const shakeX = actionSkipShakeOffset(u);
 
@@ -16211,6 +16212,7 @@
     const imageRect = imgReady ? characterImageRect(u.character, img) : null;
     const h = SPRITE_SIZE * unitSpriteScale(u.character);
     const w = imageRect ? h * (imageRect.sw / imageRect.sh) : h;
+    const groundOffsetY = characterGroundOffsetY(u.character);
     const angle = Math.atan2(p.vy, p.vx);
     ctx.save();
     // 本体は立ち姿のまま、弾道方向へ光の尾だけを伸ばす。
@@ -16233,9 +16235,9 @@
     if (imgReady) {
       if (facingLeft) ctx.scale(-1, 1);
       if (imageRect) {
-        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h, w, h);
+        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
       } else {
-        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h, w, h);
+        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
       }
     } else {
       ctx.fillStyle = '#8ee7ff';
@@ -17709,7 +17711,7 @@
         const sx = Math.max(0, Math.min(img.naturalWidth - sw, img.naturalWidth * fx - sw / 2));
         const sy = Math.max(0, Math.min(Math.max(0, img.naturalHeight - sh), img.naturalHeight * fy - sh / 2));
         const d = (rect.h - band) * 1.16;
-        const flip = mirror ? !def.facesLeft : !!def.facesLeft;
+        const flip = !!mirror;
         ctx.save();
         ctx.translate(cx, cy);
         if (flip) ctx.scale(-1, 1);
@@ -18154,12 +18156,15 @@
   function drawCreamClouds() {
     for (const cloud of creamClouds) {
       ctx.save();
-      const glow = ctx.createRadialGradient(cloud.x, cloud.y - 12, 8, cloud.x, cloud.y, cloud.radius);
-      glow.addColorStop(0, 'rgba(255,249,194,0.35)');
-      glow.addColorStop(0.55, 'rgba(255,222,91,0.22)');
-      glow.addColorStop(1, 'rgba(242,183,51,0.03)');
+      // 地面の光は雲本体ではなく接地影。大きな楕円を地中へ沈めない。
+      const shadowY = cloud.y - 3;
+      const shadowRadius = cloud.radius * 0.72;
+      const glow = ctx.createRadialGradient(cloud.x, shadowY, 2, cloud.x, shadowY, shadowRadius);
+      glow.addColorStop(0, 'rgba(255,249,194,0.24)');
+      glow.addColorStop(0.56, 'rgba(255,222,91,0.13)');
+      glow.addColorStop(1, 'rgba(242,183,51,0)');
       ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.ellipse(cloud.x, cloud.y - 10, cloud.radius, cloud.radius * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cloud.x, shadowY, shadowRadius, 7, 0, 0, Math.PI * 2); ctx.fill();
       const image = getHamulkaCreamCloudImage();
       const ready = image.complete && image.naturalWidth >= CREAM_CLOUD_FRAME_COUNT && image.naturalHeight > 0;
       if (ready) {
@@ -18172,7 +18177,7 @@
         // キャラを隠し切らず、妨害範囲の内側でも状況を読める半透明にする。
         ctx.globalAlpha = 0.5;
         ctx.drawImage(image, frameIndex * sourceW, 0, sourceW, sourceH,
-          cloud.x - drawW * 0.5, cloud.y - drawH * 0.62, drawW, drawH);
+          cloud.x - drawW * 0.5, cloud.y - drawH * CREAM_CLOUD_SPRITE_GROUND_RATIO, drawW, drawH);
       } else {
         // 読み込み完了までの一瞬だけ、従来の簡易形状を表示して効果を見失わせない。
         ctx.fillStyle = 'rgba(255,241,157,0.74)';
@@ -18333,14 +18338,7 @@
     ctx.fillStyle = back;
     ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     const d = r * 2 * zoom;
-    if (def.facesLeft) {
-      // 元画像が左向きのキャラは、ゲーム中の表示と同じ向きに揃える
-      ctx.translate(cx, cy);
-      ctx.scale(-1, 1);
-      ctx.drawImage(img, sx, sy, sw, sh, -d / 2, -d / 2, d, d);
-    } else {
-      ctx.drawImage(img, sx, sy, sw, sh, cx - d / 2, cy - d / 2, d, d);
-    }
+    ctx.drawImage(img, sx, sy, sw, sh, cx - d / 2, cy - d / 2, d, d);
     ctx.restore();
 
     ctx.save();
@@ -20732,7 +20730,7 @@
         u.knockbackVx = 0;
         u.grounded = true;
         u.fallStartY = u.y;
-        u.facingLeft = spriteFlipForFacing(u, customSpawn.direction === 'left');
+        u.facingLeft = customSpawn.direction === 'left';
       } else {
         initUnitOnGround(u);
       }
@@ -22135,9 +22133,9 @@
     const scale = Number.isFinite(Number(options.scale)) ? Number(options.scale) : 1;
     const height = SPRITE_SIZE * unitSpriteScale(character) * scale;
     const width = height * imageRect.sw / imageRect.sh;
-    const groundOffsetY = (CHARACTERS[character]?.groundOffsetY || 0) * scale;
+    const groundOffsetY = characterGroundOffsetY(character) * scale;
     const faceLeft = options.faceLeft === true;
-    const flip = faceLeft !== !!CHARACTERS[character]?.facesLeft;
+    const flip = faceLeft;
     target.save();
     target.translate(Number(options.x) || 0, Number(options.groundY) || 0);
     if (flip) target.scale(-1, 1);
