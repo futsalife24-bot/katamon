@@ -958,6 +958,17 @@ check('演習設定のキャラ画像は敵欄も右向き原画をそのまま�
     hasLegacyMirrorHelper: indexHtml.includes('function freePreviewShouldMirror('),
     hasFreeRowFlip: /scale\s*\(\s*-1\s*,\s*1\s*\)/.test(freeRowSource)
   }));
+check('演習設定のキャラ画像は戦闘と同じ面積補正を使い、カードの足元へ接地する',
+  /const imageH = \(row\.h - 26\) \* unitSpriteScale\(imageKey\);/.test(freeRowSource)
+    && /const previewGroundY = row\.y \+ row\.h \/ 2 - 6;/.test(freeRowSource)
+    && /ctx\.translate\(126, previewGroundY\);/.test(freeRowSource)
+    && /-imageW \/ 2, -imageH, imageW, imageH/.test(freeRowSource),
+  freeRowSource);
+check('演習設定の余白が大きい3キャラは可視車体だけをプレビューへ収める',
+  /doRednote:[\s\S]{0,1300}previewImageCrop: \{ sx: 0\.14, sy: 0\.235, sw: 0\.72, sh: 0\.53 \}/.test(indexHtml)
+    && /hamulton:[\s\S]{0,1000}previewImageCrop: \{ sx: 0\.155, sy: 0\.265, sw: 0\.723, sh: 0\.435 \}/.test(indexHtml)
+    && /coolKai:[\s\S]{0,1500}previewImageCrop: \{ sx: 0\.14, sy: 0\.315, sw: 0\.72, sh: 0\.37 \}/.test(indexHtml),
+  'ドレッドアロー／ハムルトン／クール=カイの演習プレビュー切り出しが不足しています');
 check('サウンド設定を開いている間はカスタムステージのボタンを前面へ出さない',
   /soundPanelOpen,/.test(indexHtml)
     && /\|\| state\.soundPanelOpen\s*\|\|/.test(customStageLauncherJs),
@@ -1663,8 +1674,8 @@ check('クール=カイの握り飯47発は見た目の回転だけ個別にラ�
   JSON.stringify({ unique: new Set(coolKaiRotations.map(rotation => rotation.toFixed(6))).size, rotations: coolKaiRotations }));
 check('演習のクールカイ表示も透明余白を切り出す',
   indexHtml.includes('function characterPreviewImageRect(key, img)')
-    && indexHtml.includes('previewImageCrop: { sx: 0.14, sy: 0.35, sw: 0.72, sh: 0.51 }')
-    && /function drawFreeRow\([\s\S]{0,1800}characterPreviewImageRect\(imageKey, img\)[\s\S]{0,800}ctx\.drawImage\(img, imageRect\.sx/.test(indexHtml),
+    && indexHtml.includes('previewImageCrop: { sx: 0.14, sy: 0.315, sw: 0.72, sh: 0.37 }')
+    && /characterPreviewImageRect\(imageKey, img\)[\s\S]*ctx\.drawImage\(img, imageRect\.sx/.test(freeRowSource),
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
 
