@@ -772,6 +772,13 @@ function check(name, value) {
   check("desiredBgm evaluates the room screen before the battle phase, and skips room BGM during autoStartNextRound",
     roomReturnIdx >= 0 && battleReturnIdx >= 0 && roomReturnIdx < battleReturnIdx
     && desiredBgmSrc.includes('online.autoStartNextRound'));
+  const roomScreenStart = htmlText.indexOf('function roomScreenOpen()');
+  const roomScreenEnd = htmlText.indexOf('let coopMvpBattleAudioActive', roomScreenStart);
+  const roomScreenSrc = roomScreenStart >= 0 && roomScreenEnd > roomScreenStart
+    ? htmlText.slice(roomScreenStart, roomScreenEnd) : '';
+  check('the co-op lobby keeps the ONLINE room BGM instead of returning to the title song',
+    roomScreenSrc.includes("document.getElementById('coopBossLobby')")
+    && roomScreenSrc.includes("coopLobbyEl.classList.contains('open')"));
   const staleRoundOnline = {
     kind: 'firebase', clientId: 'self', currentRoundId: roundId, phase: 'lobby', participantRole: 'player',
     transport: { setRoundId: () => true, reconnect: () => true, close: () => {} }, rematchVotes: {}

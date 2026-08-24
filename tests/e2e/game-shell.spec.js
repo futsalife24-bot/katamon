@@ -159,6 +159,10 @@ test.describe('カタモン本体の基本導線', () => {
     await page.locator('#onlineCoopKind').click();
     await expect(page.locator('#coopBossLobby')).toHaveClass(/open/);
     await expect(page.getByText('超大型要塞戦車')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({
+      titlePaused: document.querySelector('#titleBgm').paused,
+      roomPaused: document.querySelector('#roomBgm').paused,
+    }))).toEqual({ titlePaused: true, roomPaused: false });
     await page.locator('#coopClose').click();
 
     await tapVirtualCanvas(page, 378, 799); // おまけ
