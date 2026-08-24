@@ -121,9 +121,9 @@ check('旧・全面鋼鉄の空中足場snapshotを新ルールでは拒否',
     ...transportSnapshot,
     terrainMaterialSegments: transportSegments.map(column => column.map(segment => [segment[0], segment[1], 'steel'])),
   }, soloRoster, transportConfig, true));
-check('NORMALの100手目は受理し101手目を拒否',
-  battle.normalSnapshotLooksSafe({ ...transportSnapshot, turnCount: 100 }, soloRoster, transportConfig, true)
-    && !battle.normalSnapshotLooksSafe({ ...transportSnapshot, turnCount: 101 }, soloRoster, transportConfig, true));
+check('NORMALの60手目は受理し61手目を拒否',
+  battle.normalSnapshotLooksSafe({ ...transportSnapshot, turnCount: 60 }, soloRoster, transportConfig, true)
+    && !battle.normalSnapshotLooksSafe({ ...transportSnapshot, turnCount: 61 }, soloRoster, transportConfig, true));
 
 let state = battle.createBattleState({ matchId: A, difficulty: 'normal', slots, aiFill: true, characters });
 check('4席の協力パーティを生成', Object.keys(state.party.players).length === 4);
@@ -298,7 +298,7 @@ check('ソロCPUもゲージMAXなら一斉攻撃へ必殺をREADYする',
   /const useSpecial = isSpecialReady\(self\)[\s\S]{0,100}coopSoloSalvoEnabled\(\)/.test(index));
 check('複数人戦は専用同期導入まで一斉攻撃へ誤って入れない',
   /return isCoop4v1\(\) && coopHumanUids\(\)\.length === 1;/.test(index));
-check('NORMALは20巡100ターン、HARDとEXTREMEは既存難度別上限を使う',
+check('NORMALは12巡60ターン、HARDとEXTREMEは既存難度別上限を使う',
   /function coopDifficultyRoundLimit\(\)/.test(index)
     && /return coopRounds \* Math\.max\(1, turnOrder\.length\)/.test(index)
     && battle.WORLD_WIDTH === 2160 && battle.WORLD_HEIGHT === 960 && battle.TERRAIN_COLUMNS === 720);

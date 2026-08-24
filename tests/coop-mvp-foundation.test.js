@@ -25,7 +25,7 @@ assert.deepEqual(DIFFICULTIES.map(({ id, coreExposeRounds }) => ({ id, coreExpos
   { id: 'extreme', coreExposeRounds: 1 },
 ]);
 assert.deepEqual(DIFFICULTIES.map(({ id, roundLimit }) => ({ id, roundLimit })), [
-  { id: 'normal', roundLimit: 20 },
+  { id: 'normal', roundLimit: 12 },
   { id: 'hard', roundLimit: 15 },
   { id: 'extreme', roundLimit: 12 },
 ]);
