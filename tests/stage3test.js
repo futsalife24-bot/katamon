@@ -580,15 +580,15 @@ function check(name, value) {
     { key: 'barugerukan', stem: 'barugerukan', webp: '78e854946860', png: 'bb3c27616491' },
     { key: 'nisenmono', stem: 'obelisk', webp: '19933146097d', png: 'ff4991ae8756' },
     { key: 'burumutan', stem: 'bloom-tan', webp: 'd920cdeaa45f', png: '5e739accbd3a' },
-    { key: 'sumoeru', stem: 'sumoeru', webp: '9a9104e4bb3a', png: 'ce3bb11b1a64' },
+    { key: 'sumoeru', stem: 'sumoeru', webp: '2888e8387624', png: 'd95d497671e7' },
     { key: 'doRednote', stem: 'dread-arrow', webp: 'd620300581dd', png: '8054db6d5daf' },
     { key: 'hamulton', stem: 'hamulton', webp: '8c0204d58c18', png: 'ddc24e4725aa' },
     { key: 'mocchario', stem: 'mocchario', webp: 'edbf47277933', png: '228b1ea240b7' },
     { key: 'mecha', stem: 'chrome-gear', webp: 'ec5ac42f758b', png: '086923d116e6' },
-    { key: 'akuma', stem: 'rubidevi', webp: 'b3b20e4be92c', png: 'a70b4d0c56fd' },
+    { key: 'akuma', stem: 'rubidevi', webp: 'ba979f9e181a', png: '81993f9a28f1' },
     { key: 'jinba', stem: 'astauros', webp: 'b28ee987cb43', png: 'ccefcac9ced5' },
-    { key: 'kishi', stem: 'paladier', webp: '52e362107fa5', png: '54142e9e8e56' },
-    { key: 'neko', stem: 'nyan-tank', webp: '41c53fa06a1d', png: '1de7bdc6727e' },
+    { key: 'kishi', stem: 'paladier', webp: '5c35b7a539bb', png: '72c1fe2ae41f' },
+    { key: 'neko', stem: 'nyan-tank', webp: 'c4721b13b5fb', png: '16660b568629' },
     { key: 'shinigami', stem: 'yomigama', webp: 'ea291207269c', png: '806d572ce13d' }
   ];
   const repoRoot = path.join(__dirname, '..');

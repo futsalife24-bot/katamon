@@ -11,10 +11,11 @@ describe('character database foundation', () => {
     expect(stableCharacterId('cool-kai')).toBe(records.find((record) => record.slug === 'cool-kai')?.characterId);
   });
 
-  it('keeps legacy keys as compatibility data while making the slug searchable', () => {
+  it('keeps legacy keys as compatibility data while making the right-facing master searchable', () => {
     const records = createInitialCharacterRecords();
     expect(searchCharacterRecords(records, 'クール=カイ')[0]?.slug).toBe('cool-kai');
     expect(searchCharacterRecords(records, 'coolKai')[0]?.legacyId).toBe('coolKai');
-    expect(searchCharacterRecords(records, 'faces-left').length).toBeGreaterThan(0);
+    expect(searchCharacterRecords(records, 'faces-left')).toHaveLength(0);
+    expect(records.every((record) => !record.controlledTags.includes('faces-left'))).toBe(true);
   });
 });
