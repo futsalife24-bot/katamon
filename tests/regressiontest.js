@@ -1033,13 +1033,13 @@ check('大型闘技場の出撃位置は広げた上段足場に乗る',
   largeArenaLeftSpawn.y > 480 && largeArenaRightSpawn.y > 480,
   JSON.stringify({ largeArenaLeftSpawn, largeArenaRightSpawn }));
 const coopSteelStage = kt.coopSteelStageForTest();
-check('協力ボス専用ステージは初期台座だけ鋼鉄で、移動用足場は壊れる',
+check('協力ボス専用ステージは初期台座だけ鋼鉄で、高所を含む移動用足場は壊れる',
   coopSteelStage.stageW === 2160
     && coopSteelStage.stageH === 960
     && coopSteelStage.terrainCols === 720
     && coopSteelStage.groundY === 848
-    && coopSteelStage.platformCenters.length === 5
-    && new Set(coopSteelStage.platformCenters.map(platform => Math.round(platform.y / 20))).size >= 4
+    && coopSteelStage.platformCenters.length === 7
+    && new Set(coopSteelStage.platformCenters.map(platform => Math.round(platform.y / 20))).size >= 6
     && coopSteelStage.platformColumnCount > 200
     && coopSteelStage.steelEveryGround === true
     && coopSteelStage.platformSteel.slice(0, 3).every(Boolean)

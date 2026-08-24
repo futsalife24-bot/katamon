@@ -442,17 +442,26 @@ check('要塞へ当てた跳躍は着弾点へ埋めず、進入側の車体外�
     && /const underBossSpan = terrainHit/.test(index)
     && /distanceToCoopBossBody\(boss, candidateX, candidateY\)/.test(index)
     && /teleportOwnerToImpact\(p, p\.x, p\.y, false, u\)/.test(index));
-check('専用地形は大型鋼鉄地面と初期台座3つを守り、移動用2足場だけ破壊可能',
+check('専用地形は大型鋼鉄地面と初期台座3つを守り、高所を含む移動用4足場だけ破壊可能',
   /const COOP_PLATFORM_LAYOUT = Object\.freeze\(\[/.test(index)
-    && (index.match(/Object\.freeze\(\{ start: 0\./g) || []).length === 5
+    && (index.match(/Object\.freeze\(\{ start: 0\./g) || []).length === 7
     && /setStageDimensions\(2160, 960\)/.test(coopResetBlock)
     && /for \(const platform of COOP_PLATFORM_LAYOUT\)/.test(index)
     && /addFloatingIsland\([\s\S]{0,300}'mesa'/.test(index)
     && (index.match(/spawnSteel: true/g) || []).length === 3
-    && (index.match(/spawnSteel: false/g) || []).length === 2
+    && (index.match(/spawnSteel: false/g) || []).length === 4
+    && /top: 0\.26/.test(index)
+    && /top: 0\.19/.test(index)
     && /if \(!platform\.spawnSteel\) continue/.test(index)
     && /currentTerrainMaterial = 'terrain'/.test(index)
     && /function loadCoopBossTerrain\(\)[\s\S]{0,2400}craterHistory = \[\]/.test(index));
+check('ライブ要塞は大型化し、固定判定を動かさない外装待機モーションを持つ',
+  /const COOP_BOSS_WIDTH = 560;/.test(index)
+    && /const COOP_BOSS_HEIGHT = 372;/.test(index)
+    && /function drawCoopBossIdleMotion\(u, rect, foreground\)/.test(index)
+    && /drawCoopBossIdleMotion\(u, rect, false\);/.test(index)
+    && /drawCoopBossIdleMotion\(u, rect, true\);/.test(index)
+    && !/function drawCoopBossIdleMotion[\s\S]{0,5000}u\.(x|y)\s*=/.test(index));
 check('ホスト1人でもAI3体を生成してライブ戦闘へ渡す',
   /activeRoster\(room\.slots, room\.settings\?\.aiFill/.test(liveStartBlock)
     && /SEATS\.some\(seat => !roster\[seat\]\)/.test(liveStartBlock)
