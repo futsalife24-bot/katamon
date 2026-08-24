@@ -585,7 +585,9 @@ test.describe('Stage Studio モバイル作成フロー', () => {
   test('プリセット生成、タッチ編集、共有物理、検証、JSON、ゲーム開始', async ({ page }, testInfo) => {
     // WebKit のモバイルエミュレーションでは高度な編集操作が Chromium より遅い。
     // この一連の実利用フローだけ余裕を持たせ、通常テストのタイムアウトは維持する。
-    test.setTimeout(150_000);
+    // フルスイート直後のMobile WebKitは初回Canvas処理が単独実行より約1分遅れることがある。
+    // 操作待ちを緩めず、実利用フロー全体の上限だけ3.5分へ広げる。
+    test.setTimeout(210_000);
     await createValidatedStage(page, { advancedEditing: true });
     const jsonPath = await exportStage(page, 'json', testInfo);
     const stage = JSON.parse(await fs.readFile(jsonPath, 'utf8'));

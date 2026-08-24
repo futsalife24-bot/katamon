@@ -73,7 +73,7 @@ function check(name, value) {
     && anchoredHudSource.includes('function drawUnifiedRoundWindConsole(')
     && anchoredHudSource.includes('const roundSize = expanded ? 142 : 104;'));
   check('2vs2も1vs1と同じ丸形コンソールへ現在・方向・予報を集約する',
-    anchoredHudSource.includes('const expanded = is2v2();')
+    anchoredHudSource.includes('const expanded = usesFourCardHud();')
     && anchoredHudSource.includes('const roundCardY = expanded ? 42 : 47;')
     && anchoredHudSource.includes('drawUnifiedRoundWindConsole(cx, roundCardY, expanded, windStrengthScale, windTitle, forecast, fixedForecast, forecastText);'));
   check('丸形コンソールは現在風・強さ入り矢印・NEXT方向の3行で表示する',
@@ -256,6 +256,16 @@ function check(name, value) {
   changedFutureWind.nextWind = { dir: safeSnap.nextWind.dir * -1, strength: 0.314159, calmWind: false };
   check('the acting side may publish the newly rolled future wind at a turn boundary',
     h.stateSnapshotMismatchReason(changedFutureWind, safeSnap) === '');
+  check('Phase 2 accepts a receiver just above 50% when the authority is already at or below 50%',
+    h.coopPhase2BossHpEligible({ hp: 1101, maxHp: 2200 }, { hp: 1099, maxHp: 2200 })
+    && !h.coopPhase2BossHpEligible({ hp: 1099, maxHp: 2200 }, { hp: 1101, maxHp: 2200 }));
+  const phase2WindBaseline = {
+    wind: { dir: 1, strength: 0.25, calmWind: false },
+    nextWind: { dir: -1, strength: 0.75, calmWind: false },
+  };
+  check('Phase 2 consumes the forecast exactly at the ten-turn wind boundary',
+    h.coopPhase2ExpectedWind({ turnCount: 10, turnOrder: ['p1', 'e1', 'p2', 'e2', 'boss1'] }, phase2WindBaseline).strength === 0.75
+    && h.coopPhase2ExpectedWind({ turnCount: 9, turnOrder: ['p1', 'e1', 'p2', 'e2', 'boss1'] }, phase2WindBaseline).strength === 0.25);
   // 実機:相手が撃つ前に移動すると必ず fuel.0 で切断された。移動そのものは通信しておらず、
   // fire は移動後の座標しか運ばないため、受信側は相手の燃料を減らしようがない。
   // 満タンから使い切りまでのどの差でも受理できること。
@@ -433,7 +443,7 @@ function check(name, value) {
     'dynamic HUD text, HP/fuel hierarchy, or three-column wind layout is incomplete');
   check('battle HUD keeps 2vs2 cards reusable and hides minimap in normal 1vs1',
     /const w = HUD_CARD_W;/.test(readRepoFile('index.html'))
-      && /function showTacticalStrip\(\) \{[\s\S]{0,100}is2v2\(\) \|\| STAGE_W === 2160/.test(readRepoFile('index.html'))
+      && /function showTacticalStrip\(\) \{[\s\S]{0,100}usesFourCardHud\(\) \|\| STAGE_W === 2160/.test(readRepoFile('index.html'))
       && /function drawMinimap\(\) \{\s*if \(!showTacticalStrip\(\)\) return;/.test(readRepoFile('index.html')),
     '2vs2 card reuse or contextual minimap visibility is missing');
   check('battle HUD preserves asset proportions and leaves the wind forecast visible',
@@ -529,13 +539,13 @@ function check(name, value) {
       && thirdPartyAudio.includes('https://pixabay.com/sound-effects/film-special-effects-cartoon-explosion-567193/')
       && thirdPartyAudio.includes('https://pixabay.com/service/license-summary/')
       && thirdPartyAudio.includes('2026-08-09'));
-  check('the EDM Zap special cut-in sound is pinned, cached and licensed',
-    fileHash('assets/special-cutin-edm-zap.mp3') === 'dc50a111cbea'
-      && htmlForAudio.includes("assets/special-cutin-edm-zap.mp3")
-      && swText.includes("'./assets/special-cutin-edm-zap.mp3'")
-      && thirdPartyAudio.includes('EDM Zap')
-      && thirdPartyAudio.includes('https://pixabay.com/sound-effects/edm-zap-246568/')
-      && thirdPartyAudio.includes('2026-08-10'));
+  check('the supplied special cut-in sound is pinned and cached',
+    fileHash('assets/special-cutin-finisher.mp3') === '606f2475ed5b'
+      && htmlForAudio.includes("assets/special-cutin-finisher.mp3")
+      && swText.includes("'./assets/special-cutin-finisher.mp3'")
+      && thirdPartyAudio.includes('必殺技SE')
+      && thirdPartyAudio.includes('1Zb_dYtRI9VJl0cq5Ea9W_aDQols-dwka')
+      && thirdPartyAudio.includes('2026-08-24'));
   check('the Cool Kai special voice is pinned, preloaded and cached',
     fileHash('assets/cool-kai-special-voice.mp3') === '06459291b238'
       && htmlForAudio.includes("assets/cool-kai-special-voice.mp3")
@@ -1888,9 +1898,12 @@ function check(name, value) {
   // 発射の配信は1か所に集約する。人とCPUで別々に組み立てると、片方だけ
   // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
   check('the human shot and the CPU shot are announced through the same one place',
-    (htmlText.match(/netSendFire\(/g) || []).length === 3
-    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump);')
+    (htmlText.match(/netSendFire\(/g) || []).length === 6
+    && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon, false, activateCoopItem);')
     && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
+    && htmlText.includes('netSendFire(self, anchor, vx, vy, false, false, null, true);')
+    && htmlText.includes('netSendFire(self, supportAnchor, supportVelocity.vx0, supportVelocity.vy0, false, false, null, false, self.coopItem);')
+    && htmlText.includes('authorityUnit, authorityAction.anchor, authorityAction.vx0, authorityAction.vy0,')
     && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
   check('the turn-end authority and the result declaration follow the same rule',
     htmlText.includes('if (!netControlsUnit(actedUnit)) return;')
@@ -2444,6 +2457,47 @@ function check(name, value) {
     && htmlText.includes('applySnapshot(msg.snap, { preserveTerrain: true });'));
   check('30fps idle battle frames preserve a full 1/30-second fixed-step budget',
     gameLoopSource.includes('const dt = Math.min(0.034, (ts - lastTime) / 1000);'));
+  app.setFlatTerrainForTest(548);
+  const coopBossJumpLanding = app.coopBossJumpLandingForTest();
+  check('a co-op jump that hits the fortress lands outside its body on solid ground',
+    !!coopBossJumpLanding
+    && coopBossJumpLanding.x < coopBossJumpLanding.bossRect.x
+    && coopBossJumpLanding.y === 548 - 16
+    && coopBossJumpLanding.distance >= coopBossJumpLanding.clearance);
+  const coopBossFloorJumpLanding = app.coopBossJumpLandingForTest(760, 1180, 532, 1180, 548, true, false);
+  check('a low co-op jump that hits the steel floor under the fortress also lands outside it',
+    !!coopBossFloorJumpLanding
+    && coopBossFloorJumpLanding.x < coopBossFloorJumpLanding.bossRect.x
+    && coopBossFloorJumpLanding.y === 548 - 16
+    && coopBossFloorJumpLanding.distance >= coopBossFloorJumpLanding.clearance);
+  const coopBossTerrainTeleport = app.coopBossTerrainTeleportForTest();
+  check('the real terrain-impact teleport path cannot place a co-op unit inside the fortress',
+    coopBossTerrainTeleport.jumpConsumed
+    && coopBossTerrainTeleport.grounded
+    && coopBossTerrainTeleport.x < coopBossTerrainTeleport.bossRect.x
+    && coopBossTerrainTeleport.y === 548 - 16
+    && coopBossTerrainTeleport.distance >= coopBossTerrainTeleport.clearance);
+  const coopCoreNormalProjectile = app.coopCoreNormalProjectileForTest();
+  check('an exposed CORE is reachable by a correctly aimed normal non-piercing projectile',
+    coopCoreNormalProjectile.nonPiercing
+    && coopCoreNormalProjectile.projectileConsumed
+    && coopCoreNormalProjectile.bodyDamage === coopCoreNormalProjectile.expectedCoreDamage
+    && coopCoreNormalProjectile.offTargetDamage === coopCoreNormalProjectile.expectedHullDamage
+    && coopCoreNormalProjectile.coreStillExposed);
+  check('a rescue shell passes invalid bodies and only resolves on a downed ally',
+    app.coopItemTargetAllowedForTest('rescue-kit', 0) === true
+    && app.coopItemTargetAllowedForTest('rescue-kit', 60) === false
+    && app.coopItemTargetAllowedForTest('rescue-kit', 1870, 'cpu', 'boss1') === false);
+  const coopRescueFlight = app.coopRescueFlightThroughBossForTest();
+  check('a real rescue projectile crosses living allies and the fortress before reviving the downed ally behind them',
+    coopRescueFlight.launched
+    && coopRescueFlight.passedLivingAllies
+    && coopRescueFlight.passedBoss
+    && coopRescueFlight.projectileConsumed
+    && coopRescueFlight.downedAllyHp > 0
+    && coopRescueFlight.livingAllyHp > 0
+    && coopRescueFlight.spareAllyHp > 0
+    && coopRescueFlight.bossHp > 0);
   check('the battle wind console puts its 0-to-10 number directly inside the current-wind arrow',
     htmlText.includes('const windStrengthScale = Math.round(wind.strength * 10);')
     && htmlText.includes("const windTitle = calmWind ? '無風' : '現在の風';")

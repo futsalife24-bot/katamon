@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.97-online-lobby-seat-loss-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.130-coop-ai-character-select';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替える版だけ、ここへ対象パスを追加する。ほかの素材は再取得しない。
@@ -13,6 +13,20 @@ const APP_SHELL = [
   './generated/content-studio-catalog.js',
   './generated/content-studio-manifest.json',
   './manifest.webmanifest',
+  './coop-mvp-foundation.js',
+  './coop-mvp-boss.js',
+  './coop-mvp-boss-ai.js',
+  './coop-mvp-engine.js',
+  './coop-mvp-survival.js',
+  './coop-mvp-items.js',
+  './subweapon-mvp.js',
+  './coop-mvp-rewards.js',
+  './coop-mvp-shop.js',
+  './coop-mvp-session.js',
+  './coop-mvp-battle.js',
+  './coop-mvp-room.js',
+  './assets/bosses/runtime/fortress-tank.webp',
+  './assets/bosses/runtime/fortress-tank-phase2.webp',
   './game-custom-stages.css',
   './game-custom-stages.js',
   './shared/stage-core.js',
@@ -48,7 +62,7 @@ const APP_SHELL = [
   './assets/ui/battle-hud/v4-wind-console.png',
   './assets/ui/battle-hud/wind-console-round.webp',
   './assets/normal-impact-explosion.mp3',
-  './assets/special-cutin-edm-zap.mp3',
+  './assets/special-cutin-finisher.mp3',
   './assets/cool-kai-special-voice.mp3',
   './assets/SIX ÉTERNEL ―愛はひとつじゃない―.mp3',
   './assets/six-eternel-dopagaki-remix.mp3',

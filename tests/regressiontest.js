@@ -395,14 +395,15 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
   const specialCutInSoundAsset = typeof kt.specialCutInSoundAsset === 'function'
     ? kt.specialCutInSoundAsset()
     : null;
-  check('必殺カットイン音はEDM Zapの短く鋭い音源を効果音設定の経路で鳴らす',
+  check('必殺カットイン音は提供された新SEを効果音設定の経路で鳴らす',
     !!specialCutInSound
       && specialCutInSound.duckMs >= 350
       && specialCutInSound.duckMs <= 600
       && specialCutInSound.sampleGain === 0.28
       && specialCutInSoundAsset
-      && specialCutInSoundAsset.url === 'assets/special-cutin-edm-zap.mp3'
-      && /function playSpecialSound\(def\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml),
+      && specialCutInSoundAsset.url === 'assets/special-cutin-finisher.mp3'
+      && /function playSpecialCutinSample\(\) \{[\s\S]{0,1000}specialCutinBuffer/.test(indexHtml)
+      && /function playSpecialSound\(def\) \{[\s\S]{0,300}playSpecialCutinSample\(\)/.test(indexHtml),
     JSON.stringify({ specialCutInSound, specialCutInSoundAsset }));
   const coolKaiSpecialVoiceAsset = typeof kt.coolKaiSpecialVoiceAsset === 'function'
     ? kt.coolKaiSpecialVoiceAsset()
@@ -851,7 +852,7 @@ let practicePlayerOnlySpecial = false;
 let practiceWindPowerScale = null;
 if (freeTrainingOptions) {
   kt.setFreeTrainingForTest({
-    special: 'always', jump: 'eachTurn', cpuAi: 'off', windDirection: 'right', windStrength: '10'
+    special: 'always', jump: 'standard', cpuAi: 'off', windDirection: 'right', windStrength: '10'
   });
   kt.startFreeMatch();
   kt.unitById('p1').specialCharge = 0;
@@ -869,24 +870,37 @@ if (freeTrainingOptions) {
   practicePlayerOnlySpecial = kt.specialReady()
     && !kt.specialReadyForTest(SEAT === 'p1' ? 'e1' : 'p1');
   kt.setFreeTrainingForTest({
-    special: 'normal', jump: 'once', cpuAi: 'mid', windDirection: 'random', windStrength: '6'
+    special: 'normal', jump: 'standard', cpuAi: 'mid', windDirection: 'random', windStrength: '6'
   });
   kt.startFreeMatch();
   kt.setFreeTrainingForTest({ windDirection: 'right', windStrength: '7' });
   kt.startFreeMatch();
   practiceWindPowerScale = kt.wind();
 }
-check('演習だけで必殺・跳躍・CPU・風向きと強さを独立して切り替えられる',
+check('演習で必殺・CPU・風を切替でき、跳躍は全モード共通の毎手番ルールを表示する',
   !!freeTrainingOptions
     && Object.keys(freeTrainingOptions).join(',') === 'special,jump,cpuAi,windDirection,windStrength'
     && trainingRules?.specialAlwaysFull === true
     && trainingRules?.jumpEachTurn === true
+    && freeTrainingOptions.jump?.length === 1
+    && freeTrainingOptions.jump[0]?.key === 'standard'
     && trainingRules?.cpuEnabled === false
     && practiceWind?.dir === 1 && practiceWind?.strength === 1
     && practiceSpecialReady === true && practiceJumpReady === true
     && normalSpecialUnaffected === true
     && practicePlayerOnlySpecial === true,
   JSON.stringify({ freeTrainingOptions, trainingRules, practiceWind, practiceSpecialReady, practiceJumpReady, normalSpecialUnaffected, practicePlayerOnlySpecial }));
+kt.setBattleModeForTest('normal');
+const jumpReadyWithoutLock = kt.jumpTurnRefreshForTest('p1', 0);
+const jumpBlockedByMoveLock = kt.jumpTurnRefreshForTest('p1', 1);
+check('跳躍は通常戦でも各手番に戻るが、着地後の移動不能中だけ使用できない',
+  jumpReadyWithoutLock?.refreshed === true
+    && jumpReadyWithoutLock?.canUse === true
+    && jumpBlockedByMoveLock?.refreshed === true
+    && jumpBlockedByMoveLock?.canUse === false
+    && jumpBlockedByMoveLock?.moveLockTurns === 1,
+  JSON.stringify({ jumpReadyWithoutLock, jumpBlockedByMoveLock }));
+kt.setBattleModeForTest('free');
 check('practice WIND POWER uses the same 0-to-10 scale as the battle wind arrow',
   Array.isArray(freeTrainingOptions?.windStrength)
     && freeTrainingOptions.windStrength.map(option => option.key).join(',') === '0,1,2,3,4,5,6,7,8,9,10'
@@ -1018,6 +1032,21 @@ const largeArenaRightSpawn = kt.placeOnGround('e1', kt.stageW() * 0.82);
 check('大型闘技場の出撃位置は広げた上段足場に乗る',
   largeArenaLeftSpawn.y > 480 && largeArenaRightSpawn.y > 480,
   JSON.stringify({ largeArenaLeftSpawn, largeArenaRightSpawn }));
+const coopSteelStage = kt.coopSteelStageForTest();
+check('協力ボス専用ステージは初期台座だけ鋼鉄で、移動用足場は壊れる',
+  coopSteelStage.stageW === 2160
+    && coopSteelStage.stageH === 960
+    && coopSteelStage.terrainCols === 720
+    && coopSteelStage.groundY === 848
+    && coopSteelStage.platformCenters.length === 5
+    && new Set(coopSteelStage.platformCenters.map(platform => Math.round(platform.y / 20))).size >= 4
+    && coopSteelStage.platformColumnCount > 200
+    && coopSteelStage.steelEveryGround === true
+    && coopSteelStage.platformSteel.slice(0, 3).every(Boolean)
+    && coopSteelStage.platformSteel.slice(3).every(value => value === false)
+    && coopSteelStage.spawnPlatformIntact === true
+    && coopSteelStage.destructiblePlatformOpened === true,
+  JSON.stringify(coopSteelStage));
 // v157/v158は大型の遠い保存値を自動で660/960（表示69%）へ補正していた。
 // 新しい距離設定がまだ無い端末でこの値を生倍率として読むと、修正版でも大型だけ
 // 途中の距離から始まるため、旧版が作った69%は「最遠」として一度だけ移行する。
@@ -3055,6 +3084,75 @@ check('鋼鉄ステージの素材情報が開始スナップショットへ保�
     && Array.isArray(steelStageSnapshot.terrainMaterialSegments)
     && steelStageSnapshot.terrainMaterialSegments.some(column => column.length > 0),
   JSON.stringify({ pattern: steelStageSnapshot.pattern, material: steelStageSnapshot.terrainMaterial }));
+
+// ===== 協力戦: 複数必殺を同時オーラ→同時カットインで見せる =====
+// 本番へデバッグ口を残さず、Nodeハーネスだけで実際のarm→予兆→描画経路を通す。
+kt.setFreeFormat('2v2');
+kt.startFreeMatch();
+const coopSpecialKeys = ['kyoryu', 'medama', 'iwa', 'tori'];
+const coopSpecialIds = ['p1', 'p2', 'e1', 'e2'];
+const armedCoopSpecials = kt.armCoopSpecialSalvoForTest(coopSpecialIds, coopSpecialKeys);
+check('4体の必殺を同じ一斉砲撃へ積むと、全員同時オーラの予兆から始まる',
+  armedCoopSpecials.armed === true
+    && armedCoopSpecials.phase === 'special-aura'
+    && armedCoopSpecials.duration === 0.9
+    && armedCoopSpecials.entries.length === 4
+    && armedCoopSpecials.charges.every(charge => charge === 0)
+    && armedCoopSpecials.auraVisible && !armedCoopSpecials.flashVisible
+    && armedCoopSpecials.projectileCount === 0,
+  JSON.stringify(armedCoopSpecials));
+check('同時オーラは4体のキャラ・技名・固有色を欠かさず同じ時間状態で保持する',
+  armedCoopSpecials.entries.map(entry => entry.key).join(',') === coopSpecialKeys.join(',')
+    && armedCoopSpecials.entries.every((entry, index) => (
+      entry.label === kt.character(coopSpecialKeys[index]).name
+        && entry.text === kt.character(coopSpecialKeys[index]).special
+        && /^#[0-9a-f]{6}$/i.test(entry.color)
+    )),
+  JSON.stringify(armedCoopSpecials.entries));
+const coopSpecialCutin = kt.advanceCoopSpecialAuraForTest();
+check('同時オーラ終了後にだけ2.37秒のカットインへ進み、まだ発射しない',
+  coopSpecialCutin.advanced === true
+    && coopSpecialCutin.phase === 'special-cutin'
+    && coopSpecialCutin.duration === 2.37
+    && coopSpecialCutin.entries.length === 4
+    && coopSpecialCutin.projectileCount === 0,
+  JSON.stringify(coopSpecialCutin));
+const firstCoopSpecialPanel = kt.drawCoopSpecialSalvoForTest(0.08);
+const secondCoopSpecialPanel = kt.drawCoopSpecialSalvoForTest(0.24);
+const thirdCoopSpecialPanel = kt.drawCoopSpecialSalvoForTest(0.40);
+check('複数必殺パネルは全員同時出現ではなく約0.16秒差で1体ずつ飛び込む',
+  firstCoopSpecialPanel.text.includes(kt.character('kyoryu').special)
+    && !firstCoopSpecialPanel.text.includes(kt.character('medama').special)
+    && secondCoopSpecialPanel.text.includes(kt.character('medama').special)
+    && !secondCoopSpecialPanel.text.includes(kt.character('iwa').special)
+    && thirdCoopSpecialPanel.text.includes(kt.character('iwa').special)
+    && !thirdCoopSpecialPanel.text.includes(kt.character('tori').special),
+  JSON.stringify({
+    first: firstCoopSpecialPanel.text,
+    second: secondCoopSpecialPanel.text,
+    third: thirdCoopSpecialPanel.text,
+  }));
+const drawnCoopSpecials = kt.drawCoopSpecialSalvoForTest();
+const expectedCoopSpecialNames = coopSpecialKeys.map(key => kt.character(key).special);
+check('4体同時カットインをCanvasへ描くと「同時必殺」と全員の技名が同じフレームに出る',
+  drawnCoopSpecials.text.includes('同時必殺')
+    && drawnCoopSpecials.text.includes('4 UNIT SPECIAL SALVO')
+    && expectedCoopSpecialNames.every(name => drawnCoopSpecials.text.includes(name))
+    && drawnCoopSpecials.details.some(entry => entry.text === '同時必殺' && /48px/.test(entry.font)),
+  JSON.stringify(drawnCoopSpecials.text));
+check('同時カットインはカタモン固有の黒鉄・真鍮パネルとして実装し、他作品の画像を持ち込まない',
+  indexHtml.includes('カタモンの黒鉄板・真鍮継ぎ目・リベットで画面を割る')
+    && !/persona|ペルソナ|atlus/i.test(indexHtml),
+  'original presentation guard missing');
+const supportSalvo = kt.launchCoopSupportSalvoForTest();
+check('一斉行動の跳躍と救助弾は通常物理へ順番に投入し、各使用権を1回だけ消費する',
+  supportSalvo.projectiles.length === 2
+    && supportSalvo.projectiles[0].owner === 'p1' && supportSalvo.projectiles[0].jump === true
+    && supportSalvo.projectiles[1].owner === 'p2' && supportSalvo.projectiles[1].coopItemId === 'rescue-kit'
+    && supportSalvo.jumpAvailable === false
+    && supportSalvo.rescueUsesLeft === 0
+    && supportSalvo.launchTicks.join(',') === '0,18',
+  JSON.stringify(supportSalvo));
 
 console.log(`\n=== regression seat=${SEAT} ===`);
 console.log(log.join('\n'));
