@@ -38,7 +38,13 @@ const APP_SHELL = [
   './shared/stage-core.js',
   './shared/stage-storage.js',
   './shared/stage-repository.js',
-  './shared/stage-zip.js'
+  './shared/stage-zip.js',
+  './shared/gear-domain.js',
+  './shared/gear-storage.js',
+  './shared/gear-rewards.js',
+  './shared/gear-transactions.js',
+  './shared/gear-cpu-rewards.js',
+  './shared/gear-cpu-run-storage.js'
 ];
 // 初回はオフライン起動に必要な素材を保存し、以後は同じURLの端末内コピーを再利用する。
 const CORE_ASSETS = [

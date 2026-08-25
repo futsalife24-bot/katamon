@@ -590,14 +590,14 @@ test('純粋バランス境界レポートは戦闘式なしで5ケースを出�
     assert.ok(report.theoreticalGrowthBp);
   });
 });
-test('モジュールはゲーム本体から未接続でMath.randomも使用しない', () => {
+test('CPU報酬bridgeから接続してもドメインは乱数・時刻に依存しない', () => {
   const source = fs.readFileSync(require.resolve('../shared/gear-domain.js'), 'utf8');
   const game = fs.readFileSync(require.resolve('../index.html'), 'utf8');
   assert.equal(source.includes('Math.random'), false);
   assert.equal(source.includes('Date.now'), false);
   assert.equal(source.includes('performance.now'), false);
   assert.equal(source.includes('crypto.getRandomValues'), false);
-  assert.equal(game.includes('gear-domain.js'), false);
+  assert.equal(game.includes('shared/gear-domain.js'), true);
 });
 test('CommonJSなしのブラウザ相当でも同じ公開APIを提供する', () => {
   const source = fs.readFileSync(require.resolve('../shared/gear-domain.js'), 'utf8');
