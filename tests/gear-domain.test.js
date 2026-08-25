@@ -20,17 +20,9 @@ function expectCode(code, fn) {
   assert.throws(fn, (error) => error && error.code === code, `expected ${code}`);
 }
 
-// 本番の固定3部位値は未確定。これはテスト専用で、production定数へ混ぜない。
-const TEST_ONLY_FIXED_MAIN_TUNING = Object.freeze({
-  version: 1,
-  mainStartRatio: { numerator: 1, denominator: 4 },
-  variableMainFinalBpByStar: { 1: 800, 2: 1200, 3: 1600, 4: 2000, 5: 2400, 6: 2800 },
-  fixedMainFinalBySlot: {
-    barrel: { 1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60 },
-    armor: { 1: 11, 2: 22, 3: 33, 4: 44, 5: 55, 6: 66 },
-    core: { 1: 12, 2: 24, 3: 36, 4: 48, 5: 60, 6: 72 },
-  },
-});
+// 未登録versionの境界検査だけに使う。値は本番v1と同一で、通常の
+// 生成・強化・GS・保存テストはすべて本番BALANCE_TUNINGを通す。
+const VERSION_2_TEST_TUNING = Object.freeze({ ...gear.BALANCE_TUNING, version: 2 });
 
 function fixedProfile(id, star, rarityId) {
   return {
@@ -44,7 +36,7 @@ function fixedSetProfile(id, setId = 'assault') {
 }
 function makeGear({
   gearId = 'gear-a', slotId = 'engine', star = 6, rarityId = 'mythic', setId = 'assault',
-  generationSeed = 'generation-seed-a', enhancementSeed = 'enhancement-seed-a', balanceTuning = TEST_ONLY_FIXED_MAIN_TUNING,
+  generationSeed = 'generation-seed-a', enhancementSeed = 'enhancement-seed-a', balanceTuning = gear.BALANCE_TUNING,
   qualityProfile = fixedProfile(`profile-${star}-${rarityId}-${setId}`, star, rarityId), setProfile = fixedSetProfile(`set-profile-${setId}`, setId), requestedSetId,
 } = {}) {
   return gear.createGear({
@@ -83,11 +75,10 @@ test('スキーマ・生成・強化・調整の各版は独立したルール�
   assert.equal(gear.resolveGenerationRules(1).prngAlgorithmVersion, 1);
   assert.deepEqual(gear.resolveEnhancementRules(1).milestones, [3, 6, 9, 12]);
   expectCode('UNSUPPORTED_GENERATION_VERSION', () => gear.resolveGenerationRules(2));
-  const tuningV2 = { ...TEST_ONLY_FIXED_MAIN_TUNING, version: 2 };
-  const v2Gear = makeGear({ gearId: 'tuning-v2', balanceTuning: tuningV2 });
+  const v2Gear = makeGear({ gearId: 'tuning-v2', balanceTuning: VERSION_2_TEST_TUNING });
   expectCode('UNSUPPORTED_BALANCE_VERSION', () => gear.validateGear(v2Gear));
-  assert.equal(gear.validateGear(v2Gear, { balanceTuning: tuningV2 }).balanceTuningVersion, 2);
-  expectCode('BALANCE_TUNING_VERSION_MISMATCH', () => gear.validateGear(v2Gear, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  assert.equal(gear.validateGear(v2Gear, { balanceTuning: VERSION_2_TEST_TUNING }).balanceTuningVersion, 2);
+  expectCode('BALANCE_TUNING_VERSION_MISMATCH', () => gear.validateGear(v2Gear, { balanceTuning: gear.BALANCE_TUNING }));
 });
 test('6部位・5レア度・13サブ・8セットが仕様どおり', () => {
   assert.deepEqual(gear.SLOT_IDS, ['barrel', 'armor', 'core', 'engine', 'sight', 'auxiliary']);
@@ -140,7 +131,7 @@ test('協力難易度品質と要塞セット偏りを別軸で扱う', () => {
 test('生成は品質とセット分布の明示指定を要求し、混在プロファイルを拒否する', () => {
   const required = {
     gearId: 'missing-profile', generationSeed: 'missing-profile', enhancementSeed: 'missing-profile',
-    sourceId: 'coop_boss', sourceDetail: {}, acquiredAt: '2026-08-25T00:00:00Z', slotId: 'engine', balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING,
+    sourceId: 'coop_boss', sourceDetail: {}, acquiredAt: '2026-08-25T00:00:00Z', slotId: 'engine', balanceTuning: gear.BALANCE_TUNING,
   };
   expectCode('MISSING_QUALITY_PROFILE', () => gear.createGear({ ...required, setProfile: gear.GEAR_SET_PROFILES.uniform }));
   expectCode('MISSING_SET_PROFILE', () => gear.createGear({ ...required, qualityProfile: gear.COOP_BOSS_QUALITY_PROFILES.normal }));
@@ -203,17 +194,17 @@ test('不正重み、未知ID、NaN、Infinityをfail closedする', () => {
   expectCode('INVALID_WEIGHT', () => gear.validateWeightedTable([{ id: 'a', weight: Number.NaN }], new Set(['a'])));
   expectCode('INVALID_WEIGHT', () => gear.validateWeightedTable([{ id: 'a', weight: Number.POSITIVE_INFINITY }], new Set(['a'])));
 });
-test('本番固定メイン値は未確定のまま明示エラーになる', () => {
-  expectCode('FIXED_MAIN_TUNING_REQUIRED', () => makeGear({ slotId: 'barrel', gearId: 'fixed-unresolved', generationSeed: 'x', enhancementSeed: 'y', balanceTuning: gear.BALANCE_TUNING }));
-  const fixed = makeGear({ slotId: 'barrel', gearId: 'fixed-known' });
-  expectCode('FIXED_MAIN_TUNING_REQUIRED', () => gear.calculateGearScore(fixed));
-});
-test('テスト専用固定値を注入すれば固定3部位を生成・GS計算できる', () => {
+test('本番固定メインは全固定部位で承認済みの★完成値を使い、注入なしで生成・GS計算できる', () => {
+  const expectedFinalByStar = [4, 5, 7, 9, 10, 12];
   ['barrel', 'armor', 'core'].forEach((slotId) => {
-    const item = makeGear({ slotId, gearId: `fixed-${slotId}` });
-    assert.equal(item.mainOp.unit, 'flat');
-    assert.ok(item.mainOp.value > 0);
-    assert.ok(gear.calculateGearScore(item, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }).currentGs >= 0);
+    assert.deepEqual(gear.BALANCE_TUNING.fixedMainFinalBySlot[slotId], { 1: 4, 2: 5, 3: 7, 4: 9, 5: 10, 6: 12 });
+    gear.STARS.forEach((star, index) => {
+      const item = makeGear({ slotId, star, gearId: `production-${slotId}-${star}` });
+      assert.equal(item.mainOp.unit, 'flat');
+      assert.equal(item.mainOp.value, [1, 1, 1, 2, 2, 3][index]);
+      assert.equal(item.mainOp.finalValue, expectedFinalByStar[index]);
+      assert.ok(gear.calculateGearScore(item).currentGs >= 0);
+    });
   });
 });
 test('生成固定ベクターはgearIdとSeedを分離し完全再現する', () => {
@@ -233,8 +224,8 @@ test('gearIdは生成Seed・強化Seedの代わりとして使われない', () 
   const first = makeGear({ ...common, gearId: 'individual-a' });
   const second = makeGear({ ...common, gearId: 'individual-b' });
   assert.deepEqual({ ...first, gearId: 'same' }, { ...second, gearId: 'same' });
-  const enhancedFirst = gear.enhanceGear(first, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
-  const enhancedSecond = gear.enhanceGear(second, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const enhancedFirst = gear.enhanceGear(first, 12);
+  const enhancedSecond = gear.enhanceGear(second, 12);
   assert.deepEqual({ ...enhancedFirst, gearId: 'same' }, { ...enhancedSecond, gearId: 'same' });
 });
 test('全部位、全★、全レア度で生成できる', () => {
@@ -261,20 +252,20 @@ test('初期サブは架空の強化状態をfail closedし、正規強化後も
   forgedRoll.initialSubOps[0].enhancementCount = 1;
   forgedRoll.initialSubOps[0].enhancementValueBp = 500;
   forgedRoll.initialSubOps[0].valueBp += 500;
-  expectCode('INVALID_INITIAL_SUB_STATE', () => gear.validateGear(forgedRoll, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  expectCode('INVALID_INITIAL_SUB_STATE', () => gear.validateGear(forgedRoll));
 
   const forgedValueOnly = JSON.parse(JSON.stringify(base));
   forgedValueOnly.initialSubOps[0].enhancementValueBp = 500;
   forgedValueOnly.initialSubOps[0].valueBp += 500;
-  assert.throws(() => gear.validateGear(forgedValueOnly, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  assert.throws(() => gear.validateGear(forgedValueOnly));
 
   const forgedCountOnly = JSON.parse(JSON.stringify(base));
   forgedCountOnly.initialSubOps[0].enhancementCount = 1;
-  assert.throws(() => gear.validateGear(forgedCountOnly, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  assert.throws(() => gear.validateGear(forgedCountOnly));
 
-  const enhanced = gear.enhanceGear(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const enhanced = gear.enhanceGear(base, 12);
   const restored = JSON.parse(JSON.stringify(enhanced));
-  assert.deepEqual(gear.validateGear(restored, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }), enhanced);
+  assert.deepEqual(gear.validateGear(restored), enhanced);
   enhanced.initialSubOps.forEach((sub) => {
     assert.equal(sub.enhancementCount, 0);
     assert.equal(sub.enhancementValueBp, 0);
@@ -352,21 +343,21 @@ test('validateGearは全ての境界ID・範囲・サブ構造を黙って補正
   assert.throws(() => gear.validateGear(rareMismatch));
   const fixed = makeGear({ gearId: 'fixed-invalid-main', slotId: 'barrel' });
   fixed.mainOp.opId = 'attack_pct';
-  assert.throws(() => gear.validateGear(fixed, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  assert.throws(() => gear.validateGear(fixed));
 });
 test('強化値・メイン値・節目サブの改竄は決定論的照合でfail closedする', () => {
   const base = makeGear({ gearId: 'materialization-guard', rarityId: 'mythic' });
   const levelOnly = JSON.parse(JSON.stringify(base));
   levelOnly.enhancementLevel = 12;
-  expectCode('GEAR_MATERIALIZATION_MISMATCH', () => gear.validateGear(levelOnly, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  expectCode('GEAR_MATERIALIZATION_MISMATCH', () => gear.validateGear(levelOnly));
   const forgedMain = JSON.parse(JSON.stringify(base));
   forgedMain.mainOp.value += 1;
-  expectCode('GEAR_MATERIALIZATION_MISMATCH', () => gear.validateGear(forgedMain, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
-  const enhanced = gear.enhanceGear(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  expectCode('GEAR_MATERIALIZATION_MISMATCH', () => gear.validateGear(forgedMain));
+  const enhanced = gear.enhanceGear(base, 12);
   const forgedSub = JSON.parse(JSON.stringify(enhanced));
   forgedSub.subOps[0].enhancementValueBp += 1;
   forgedSub.subOps[0].valueBp += 1;
-  expectCode('GEAR_ENHANCEMENT_MISMATCH', () => gear.validateGear(forgedSub, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  expectCode('GEAR_ENHANCEMENT_MISMATCH', () => gear.validateGear(forgedSub));
 });
 test('部位・セット指定と★最低保証だけが抽選制約になる', () => {
   const item = gear.createGear({
@@ -384,16 +375,24 @@ test('部位・セット指定と★最低保証だけが抽選制約になる',
   assert.ok(item.star >= 5);
   assert.ok(['normal', 'mythic'].includes(item.rarityId));
 });
-test('+0〜+12のメイン成長は非減少で+0/完成値に一致する', () => {
-  const values = Array.from({ length: 13 }, (_, level) => gear.mainValueAtLevel('engine', 'attack_pct', 6, level));
-  assert.equal(values[0], 700);
-  assert.equal(values[12], 2800);
-  values.slice(1).forEach((value, index) => assert.ok(value >= values[index]));
-  assert.equal(gear.mainValueAtLevel('barrel', 'flat_attack', 6, 12, TEST_ONLY_FIXED_MAIN_TUNING), 60);
+test('+0〜+12のメイン成長は全6部位・全★で単調、単位・端点・整数式に一致する', () => {
+  gear.SLOTS.forEach((slot) => {
+    const mainOpId = slot.mainOpIds[0];
+    gear.STARS.forEach((star) => {
+      const finalValue = gear.mainFinalValue(slot.id, mainOpId, star);
+      const startValue = Math.floor(finalValue / 4);
+      const values = Array.from({ length: 13 }, (_unused, level) => gear.mainValueAtLevel(slot.id, mainOpId, star, level));
+      assert.equal(makeGear({ slotId: slot.id, star, gearId: `growth-unit-${slot.id}-${star}` }).mainOp.unit, slot.mainKind === 'fixed' ? 'flat' : 'bp');
+      assert.equal(values[0], startValue, `${slot.id} ★${star} +0`);
+      assert.equal(values[12], finalValue, `${slot.id} ★${star} +12`);
+      values.forEach((value, level) => assert.equal(value, Math.floor(startValue + ((finalValue - startValue) * level) / 12), `${slot.id} ★${star} +${level}`));
+      values.slice(1).forEach((value, level) => assert.ok(value >= values[level], `${slot.id} ★${star} +${level + 1}`));
+    });
+  });
 });
 test('+3/+6/+9/+12の未来結果は固定ベクターどおり', () => {
   const base = makeGear({ gearId: 'gear-vector-01', slotId: 'engine', generationSeed: 'gen-vector-01', enhancementSeed: 'enh-vector-01' });
-  const preview = gear.previewEnhancement(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const preview = gear.previewEnhancement(base, 12);
   assert.deepEqual(preview.milestones, [
     { level: 3, kind: 'upgrade', opId: 'heal_power', valueBp: 542, subIndex: 3 },
     { level: 6, kind: 'upgrade', opId: 'heal_power', valueBp: 643, subIndex: 3 },
@@ -404,12 +403,12 @@ test('+3/+6/+9/+12の未来結果は固定ベクターどおり', () => {
 });
 test('サブ4個未満では未所持を追加し、4個後は4択からのみ選ぶ', () => {
   const normal = makeGear({ rarityId: 'normal', gearId: 'normal-milestone', generationSeed: 'normal-milestone', enhancementSeed: 'normal-milestone' });
-  const plan = gear.previewEnhancement(normal, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const plan = gear.previewEnhancement(normal, 12);
   assert.deepEqual(plan.milestones.map((entry) => entry.kind), ['add', 'add', 'add', 'add']);
   assert.equal(plan.gear.subOps.length, 4);
   assert.equal(new Set(plan.gear.subOps.map((sub) => sub.opId)).size, 4);
   const mythic = makeGear({ rarityId: 'mythic', gearId: 'mythic-milestone', generationSeed: 'mythic-milestone', enhancementSeed: 'mythic-milestone' });
-  assert.ok(gear.previewEnhancement(mythic, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }).milestones.every((entry) => entry.kind === 'upgrade'));
+  assert.ok(gear.previewEnhancement(mythic, 12).milestones.every((entry) => entry.kind === 'upgrade'));
 });
 test('4サブ後の25%選択は固定境界で全indexを取り得る', () => {
   const seen = new Set();
@@ -421,46 +420,60 @@ test('4サブ後の25%選択は固定境界で全indexを取り得る', () => {
 });
 test('直接+12、段階強化、JSON復元、プレビュー後適用が一致する', () => {
   const base = makeGear({ gearId: 'route-equality', generationSeed: 'route-generation', enhancementSeed: 'route-enhancement', rarityId: 'rare' });
-  const direct = gear.enhanceGear(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
-  const staged = [3, 6, 9, 12].reduce((item, level) => gear.enhanceGear(item, level, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }), base);
-  const restored = gear.enhanceGear(JSON.parse(JSON.stringify(gear.enhanceGear(base, 6, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }))), 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const direct = gear.enhanceGear(base, 12);
+  const staged = [3, 6, 9, 12].reduce((item, level) => gear.enhanceGear(item, level), base);
+  const restored = gear.enhanceGear(JSON.parse(JSON.stringify(gear.enhanceGear(base, 6))), 12);
   assert.deepEqual(staged, direct);
   assert.deepEqual(restored, direct);
-  assert.deepEqual(gear.previewEnhancement(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }).gear, direct);
+  assert.deepEqual(gear.previewEnhancement(base, 12).gear, direct);
+});
+test('固定3部位は本番tuningで直接・段階・JSON復元の+12結果が一致する', () => {
+  ['barrel', 'armor', 'core'].forEach((slotId) => {
+    const base = makeGear({
+      gearId: `fixed-route-${slotId}`, slotId, rarityId: 'rare',
+      generationSeed: `fixed-route-generation-${slotId}`, enhancementSeed: `fixed-route-enhancement-${slotId}`,
+    });
+    const direct = gear.enhanceGear(base, 12);
+    const staged = [3, 6, 9, 12].reduce((item, level) => gear.enhanceGear(item, level), base);
+    const restored = gear.enhanceGear(JSON.parse(JSON.stringify(gear.enhanceGear(base, 6))), 12);
+    assert.deepEqual(staged, direct, `${slotId} staged`);
+    assert.deepEqual(restored, direct, `${slotId} JSON restore`);
+    assert.deepEqual(gear.previewEnhancement(base, 12).gear, direct, `${slotId} preview`);
+  });
 });
 test('生成・強化は入力オブジェクトを破壊しない', () => {
   const source = makeGear({ gearId: 'immutable', rarityId: 'rare' });
   const before = JSON.parse(JSON.stringify(source));
-  gear.previewEnhancement(source, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
-  gear.enhanceGear(source, 6, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  gear.previewEnhancement(source, 12);
+  gear.enhanceGear(source, 6);
   assert.deepEqual(source, before);
 });
 test('2セット・4セット・6セットは一度ずつだけ集計する', () => {
-  const six = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'assault', 'assault', 'assault', 'assault']), { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const six = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'assault', 'assault', 'assault', 'assault']));
   assert.equal(six.setCounts.assault, 6);
   assert.deepEqual(six.activeSetEffects.filter((effect) => effect.setId === 'assault').map((effect) => effect.threshold), [2, 4]);
   assert.equal(six.stats.attackPctBp >= 800, true);
   assert.equal(six.conditionalEffects.filter((effect) => effect.effectId === 'direct_hit_outgoing_damage').length, 1);
 });
 test('4+2と2+2+2と空スロットを正しく集計する', () => {
-  const fourTwo = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'assault', 'assault', 'life', 'life']), { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const fourTwo = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'assault', 'assault', 'life', 'life']));
   assert.deepEqual(fourTwo.activeSetEffects.map((entry) => `${entry.setId}:${entry.threshold}`), ['assault:2', 'assault:4', 'life:2']);
-  const tripleTwo = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'life', 'life', 'critical', 'critical']), { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const tripleTwo = gear.aggregateLoadout(makeLoadout(['assault', 'assault', 'life', 'life', 'critical', 'critical']));
   assert.deepEqual(tripleTwo.activeSetEffects.map((entry) => `${entry.setId}:${entry.threshold}`), ['assault:2', 'life:2', 'critical:2']);
-  const empty = gear.aggregateLoadout([null, undefined], { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const empty = gear.aggregateLoadout([null, undefined]);
   assert.equal(empty.equippedSlotCount, 0);
   assert.equal(empty.activeSetEffects.length, 0);
 });
 test('出撃ロードアウトの重複部位・重複gearIdはfail closedする', () => {
   const first = makeGear({ slotId: 'engine', gearId: 'duplicate-one' });
   const second = makeGear({ slotId: 'engine', gearId: 'duplicate-two' });
-  expectCode('DUPLICATE_SLOT', () => gear.aggregateLoadout([first, second], { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  expectCode('DUPLICATE_SLOT', () => gear.aggregateLoadout([first, second]));
   const duplicateIdOne = makeGear({ slotId: 'engine', gearId: 'same-physical-gear' });
   const duplicateIdTwo = makeGear({ slotId: 'sight', gearId: 'same-physical-gear' });
-  expectCode('DUPLICATE_GEAR_ID', () => gear.aggregateLoadout([duplicateIdOne, duplicateIdTwo], { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+  expectCode('DUPLICATE_GEAR_ID', () => gear.aggregateLoadout([duplicateIdOne, duplicateIdTwo]));
 });
 test('セットの静的bucketと条件付きeffect descriptorを分離する', () => {
-  const loadout = gear.aggregateLoadout(makeLoadout(['critical', 'critical', 'rescue', 'rescue', 'rescue', 'rescue']), { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const loadout = gear.aggregateLoadout(makeLoadout(['critical', 'critical', 'rescue', 'rescue', 'rescue', 'rescue']));
   assert.equal(loadout.stats.critRateBp >= 800, true);
   assert.ok(loadout.conditionalEffects.some((effect) => effect.effectId === 'ally_recovery_next_attack' && effect.valueBp === 1000));
   assert.ok(loadout.conditionalEffects.every((effect) => typeof effect.effectId === 'string'));
@@ -476,7 +489,7 @@ test('ソフトキャップは等倍域と超過50%を整数で返す', () => {
 });
 test('現在GS・最大到達GS・表示帯・自動ロック判定を返す', () => {
   const base = makeGear({ gearId: 'gs-base', rarityId: 'normal', star: 1 });
-  const result = gear.calculateGearScore(base, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const result = gear.calculateGearScore(base);
   assert.equal(result.currentGs, 1);
   assert.equal(result.maxReachGs, 12);
   assert.equal(result.currentBand.id, 'normal');
@@ -484,24 +497,43 @@ test('現在GS・最大到達GS・表示帯・自動ロック判定を返す', (
   assert.ok(result.maxReachGs >= result.currentGs);
 });
 test('GSは各内訳を先に丸めず、合算してから一度だけ四捨五入する', () => {
-  const atEight = gear.enhanceGear(makeGear({ gearId: 'gs-rounding', generationSeed: '0', enhancementSeed: '0', star: 1, rarityId: 'normal' }), 8, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
-  const score = gear.calculateGearScore(atEight, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const atEight = gear.enhanceGear(makeGear({ gearId: 'gs-rounding', generationSeed: '0', enhancementSeed: '0', star: 1, rarityId: 'normal' }), 8);
+  const score = gear.calculateGearScore(atEight);
   assert.equal(score.currentGs, 7);
   assert.equal(score.currentBreakdown.rank + score.currentBreakdown.rarity + score.currentBreakdown.main + score.currentBreakdown.sub, score.currentGs);
   assert.equal(score.currentBreakdown.rawTotal.numerator.length > 0, true);
+});
+test('固定メインのGSは生分数を保持し、★6 +12のメイン点は中間丸めなしで20になる', () => {
+  ['barrel', 'armor', 'core'].forEach((slotId) => {
+    const base = makeGear({ gearId: `fixed-gs-${slotId}`, slotId, star: 6, rarityId: 'normal' });
+    const scoreAtZero = gear.calculateGearScore(base);
+    assert.deepEqual(scoreAtZero.currentBreakdown.rawFractions.main, { numerator: '60', denominator: '12' }, `${slotId} +0 raw main`);
+    const completed = gear.enhanceGear(base, 12);
+    const scoreAtTwelve = gear.calculateGearScore(completed);
+    assert.deepEqual(scoreAtTwelve.currentBreakdown.rawFractions.main, { numerator: '240', denominator: '12' }, `${slotId} +12 raw main`);
+    assert.equal(scoreAtTwelve.currentBreakdown.main, 20, `${slotId} +12 main points`);
+  });
 });
 test('最大到達GSはenhancementSeedの未来を覗かない', () => {
   const common = { gearId: 'same-state', generationSeed: 'same-generation', enhancementSeed: 'first-enhancement', rarityId: 'epic', star: 6 };
   const first = makeGear(common);
   const second = makeGear({ ...common, enhancementSeed: 'second-enhancement' });
-  assert.equal(gear.calculateGearScore(first, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }).maxReachGs, gear.calculateGearScore(second, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }).maxReachGs);
+  assert.equal(gear.calculateGearScore(first).maxReachGs, gear.calculateGearScore(second).maxReachGs);
+});
+test('固定メインの最大到達GSもenhancementSeedに依存しない', () => {
+  ['barrel', 'armor', 'core'].forEach((slotId) => {
+    const shared = { slotId, gearId: `fixed-max-reach-${slotId}`, generationSeed: `fixed-max-generation-${slotId}`, rarityId: 'epic', star: 6 };
+    const first = makeGear({ ...shared, enhancementSeed: `fixed-max-first-${slotId}` });
+    const second = makeGear({ ...shared, enhancementSeed: `fixed-max-second-${slotId}` });
+    assert.equal(gear.calculateGearScore(first).maxReachGs, gear.calculateGearScore(second).maxReachGs, slotId);
+  });
 });
 test('★6ミシックの仕様上の理論最大は未来Seedを見ずGS100になる', () => {
   const item = makeGear({ gearId: 'theoretical-max', star: 6, rarityId: 'mythic' });
   const maximum = JSON.parse(JSON.stringify(item));
   maximum.initialSubOps = maximum.initialSubOps.map((sub) => ({ ...sub, initialValueBp: 700, enhancementValueBp: 0, enhancementCount: 0, valueBp: 700 }));
   maximum.subOps = maximum.initialSubOps.map((sub) => ({ ...sub }));
-  const score = gear.calculateGearScore(maximum, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const score = gear.calculateGearScore(maximum);
   assert.equal(score.maxReachGs, 100);
   assert.equal(score.maxReachBand.id, 'divine');
   assert.equal(score.shouldAutoLock, false);
@@ -513,7 +545,7 @@ test('強化費用は+0→+12で345/345、範囲外と逆戻りを拒否する',
   expectCode('INVALID_ENHANCEMENT_TARGET', () => gear.calculateEnhancementCost(6, 3));
 });
 test('分解粉末40%は2/5、設計片は四捨五入で計算する', () => {
-  const legend = gear.enhanceGear(makeGear({ gearId: 'dismantle-legend', star: 6, rarityId: 'legend' }), 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const legend = gear.enhanceGear(makeGear({ gearId: 'dismantle-legend', star: 6, rarityId: 'legend' }), 12);
   assert.deepEqual(gear.calculateDismantleYield(legend), { basePowder: 50, investedPowder: 345, recoveredPowder: 138, powder: 188, blueprintShards: 36, coinsReturned: 0 });
   assert.equal(gear.calculateDismantleYield(makeGear({ gearId: 'dismantle-rare3', star: 3, rarityId: 'rare' })).blueprintShards, 5);
 });
@@ -532,7 +564,7 @@ test('指定箱は費用と生成制約だけを返し、所持品を変更し�
 test('公開ビューはSeed・PRNG状態・未来結果を含まない', () => {
   const internal = makeGear({ gearId: 'public-view' });
   internal.acquisition.detail = { nested: { generationSeed: 'nested-generation', enhancementSeed: 'nested-enhancement' } };
-  const publicView = gear.toPublicGearView({ ...internal, generationSeed: 'must-not-leak' }, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const publicView = gear.toPublicGearView({ ...internal, generationSeed: 'must-not-leak' });
   const text = JSON.stringify(publicView);
   assert.equal(Object.hasOwn(publicView, 'enhancementSeed'), false);
   assert.equal(Object.hasOwn(publicView, 'generationSeed'), false);
@@ -545,13 +577,13 @@ test('公開ビューはSeed・PRNG状態・未来結果を含まない', () => 
 test('純粋バランス境界レポートは戦闘式なしで5ケースを出せる', () => {
   const cases = [
     [],
-    [gear.enhanceGear(makeGear({ gearId: 'case-4r6', star: 4, rarityId: 'rare' }), 6, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING })],
-    [gear.enhanceGear(makeGear({ gearId: 'case-5e9', star: 5, rarityId: 'epic' }), 9, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING })],
-    [gear.enhanceGear(makeGear({ gearId: 'case-6l12', star: 6, rarityId: 'legend' }), 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING })],
-    makeLoadout(['assault', 'assault', 'assault', 'assault', 'critical', 'critical']).map((item) => gear.enhanceGear(item, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING })),
+    [gear.enhanceGear(makeGear({ gearId: 'case-4r6', star: 4, rarityId: 'rare' }), 6)],
+    [gear.enhanceGear(makeGear({ gearId: 'case-5e9', star: 5, rarityId: 'epic' }), 9)],
+    [gear.enhanceGear(makeGear({ gearId: 'case-6l12', star: 6, rarityId: 'legend' }), 12)],
+    makeLoadout(['assault', 'assault', 'assault', 'assault', 'critical', 'critical']).map((item) => gear.enhanceGear(item, 12)),
   ];
   cases.forEach((loadout) => {
-    const report = gear.buildBalanceBoundaryReport(loadout, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+    const report = gear.buildBalanceBoundaryReport(loadout);
     assert.ok(report.staticStats);
     assert.ok(report.softCaps);
     assert.ok(Array.isArray(report.activeSetEffects));

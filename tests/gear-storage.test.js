@@ -106,6 +106,19 @@ test('valid state encode/decode and storage round trips preserve canonical state
   const reveal = { schemaVersion: 1, viewedThroughLevelByGearId: { 'old-gear': 3, 'new-gear': 12 } };
   assert.deepEqual(storageApi.loadRevealHistory((storageApi.saveRevealHistory(reveal, storage), storage)), reveal);
 });
+test('storage schema v2 round-trips production-calibrated fixed slots without injected tuning', () => {
+  const state = storageApi.createDefaultGearStorageState();
+  ['barrel', 'armor', 'core'].forEach((slotId, index) => {
+    state.inventory.push({ gear: makeGear(`storage-fixed-${slotId}`, { slotId, star: index + 4, rarityId: 'rare' }), locked: false, favorite: false });
+  });
+  const restored = storageApi.decodeGearStorageState(storageApi.encodeGearStorageState(state));
+  assert.equal(restored.storageSchemaVersion, 2);
+  assert.deepEqual(restored.inventory.map((entry) => entry.gear.mainOp), [
+    { opId: 'flat_attack', unit: 'flat', value: 2, finalValue: 9 },
+    { opId: 'flat_hp', unit: 'flat', value: 2, finalValue: 10 },
+    { opId: 'flat_defense', unit: 'flat', value: 3, finalValue: 12 },
+  ]);
+});
 test('migration strictly validates v1 before converting it to v2 and accepts canonical v2', () => {
   const state = validState();
   assert.equal(storageApi.migrateGearStorageState(state).storageSchemaVersion, 2);
