@@ -244,13 +244,20 @@
   });
   const GS_CONSTANTS = deepFreeze({ rankMax: 20, rarityMax: 15, mainMax: 20, subMax: 45, star6MaxSubTotalBp: 5600, autoLockThreshold: 90 });
 
-  // The three fixed main values are intentionally unresolved for production.
-  // Tests inject their own named tuning object instead of giving production a guess.
+  // Fixed mains are a gear-number calibration only. They deliberately do not
+  // define a battle Attack/Defense formula; Phase 3 owns that integration.
+  // The same ★ table applies to barrel, armor and core. Keeping it in the
+  // versioned production tuning makes a stored v1 gear replayable without a
+  // caller having to inject test-only balance data.
   const BALANCE_TUNING = deepFreeze({
     version: BALANCE_TUNING_VERSION,
     mainStartRatio: { numerator: 1, denominator: 4 },
     variableMainFinalBpByStar: { 1: 800, 2: 1200, 3: 1600, 4: 2000, 5: 2400, 6: 2800 },
-    fixedMainFinalBySlot: { barrel: null, armor: null, core: null },
+    fixedMainFinalBySlot: {
+      barrel: { 1: 4, 2: 5, 3: 7, 4: 9, 5: 10, 6: 12 },
+      armor: { 1: 4, 2: 5, 3: 7, 4: 9, 5: 10, 6: 12 },
+      core: { 1: 4, 2: 5, 3: 7, 4: 9, 5: 10, 6: 12 },
+    },
   });
   // New balance versions are added here instead of silently reinterpreting an
   // old gear item with whatever happens to be the latest tuning.
@@ -431,8 +438,7 @@
     if (!isRecord(tuning.fixedMainFinalBySlot)) fail('INVALID_BALANCE_TUNING', 'fixedMainFinalBySlot is required');
     ['barrel', 'armor', 'core'].forEach((slotId) => {
       const table = tuning.fixedMainFinalBySlot[slotId];
-      if (table === null || table === undefined) return;
-      if (!isRecord(table)) fail('INVALID_BALANCE_TUNING', `fixed tuning for ${slotId} must be an object or unresolved`);
+      if (!isRecord(table)) fail('INVALID_BALANCE_TUNING', `fixed tuning for ${slotId} must be an object`);
       STARS.forEach((star) => assertInteger(table[star], 1, Number.MAX_SAFE_INTEGER, `fixed ${slotId} star ${star}`));
     });
     return tuning;
@@ -457,7 +463,6 @@
   function fixedMainFinalValue(slotId, star, tuning) {
     const checked = validateBalanceTuning(tuning);
     const table = checked.fixedMainFinalBySlot[slotId];
-    if (!isRecord(table)) fail('FIXED_MAIN_TUNING_REQUIRED', `Fixed main tuning is unresolved for ${slotId}`);
     return assertInteger(table[star], 1, Number.MAX_SAFE_INTEGER, `fixed ${slotId} star ${star}`);
   }
   function mainFinalValue(slotId, mainOpId, star, tuning = BALANCE_TUNING) {
@@ -645,7 +650,7 @@
     const slot = getSlot(slotId);
     const mainOpId = slot.mainKind === 'fixed' ? slot.mainOpIds[0] : chooseArray(generationSeed, 'main', slot.mainOpIds, context, generationRules.prngAlgorithmVersion);
     const tuning = validateBalanceTuning(options.balanceTuning || BALANCE_TUNING);
-    // This must happen during fixed-slot creation; unresolved values never become a silent zero gear.
+    // Resolve during fixed-slot creation so malformed tuning never becomes a silent zero gear.
     mainFinalValue(slotId, mainOpId, star, tuning);
     const initialSubOps = initialSubOpsFor({ star, rarityId, generationSeed, context, algorithmVersion: generationRules.prngAlgorithmVersion });
     const mainOp = { opId: mainOpId, unit: mainUnit(slotId) };
