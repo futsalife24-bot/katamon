@@ -645,6 +645,8 @@ v1は現行3段階へ統一する。
 
 ImageBitmap cacheはLRU方式で最大64件、推定RGBA memoryは最大4 MiBとする。Gear icon関連のdecoded image memoryは原則8 MiB以内に抑える。不要なImageBitmapは利用終了後に解放し、cacheをlocalStorageへ保存しない。
 
+Gear iconおよびgear cardのrenderingは、画面表示専用の処理として実装しない。描画先のCanvasRenderingContext2Dを引数で受け取り、任意サイズのoffscreen canvasへ同一内容を描画できる再利用可能な関数として実装する。これは将来の画像書き出し・共有機能を想定した構造要件であり、v1では書き出し機能自体を実装しない。
+
 ## 12.2 ギア素材のロードタイミング
 
 Gearの新規assetを`<link rel="preload">`へ追加してはならない。起動直後はGear assetの取得を開始せず、タイトル画面が安定してからidle queueを開始する。
@@ -695,7 +697,15 @@ Gear audioは初回再生操作を契機にfetchまたはdecodeしてはなら�
 
 容量は12章冒頭のアセット予算正本に従う。cache無効時を基準として、初回critical load増分は目標250,000 bytes以下、絶対上限500,000 bytes以下、Gear v1専用アセット総量は1,000,000 bytes以下とする。
 
+### 初回クリティカルロードの計測範囲
+
+初回critical loadとは、ブラウザーキャッシュを無効にした状態で、navigation開始から、タイトル画面の初回描画、タイトル画面の入力受付開始、ゲーム開始に必須な初期処理の完了までに要求されるGear v1追加分を指す。
+
+タイトル画面の入力受付後にidle queueで取得するGear専用assetは初回critical loadへ含めず、Gear v1専用アセット総量1,000,000 bytes側へ含める。この境界を、目標250,000 bytesと絶対上限500,000 bytesの共通計測区間とする。
+
 既存共有assetはGear専用増分から除外する。ただしGear用に複製した既存assetは増分として含める。Gear専用の新fontは原則禁止する。
+
+容量上限を回避する目的で、Gear専用assetを別directory、別形式、別manifestへ分散し、budget検査対象から外してはならない。
 
 ## 12.7 強化演出素材
 
@@ -707,6 +717,8 @@ Gear audioは初回再生操作を契機にfetchまたはdecodeしてはなら�
 4. large still image
 
 同一演出をPNGとMP4、WebPとMP4、animated WebPとMP4のように複数形式で重複保持してはならない。posterは軽量fallbackだけに使う。容量は12章冒頭のアセット予算正本に従う。
+
+動画のposterまたはfallbackを持つ場合も、通常経路で動画本体と不要なfull-size fallbackを同一clientが両方取得しない。posterはアセット予算正本の上限内に収める。
 
 動画はpreloadせずidle時間に準備し、initial play時のnetwork fetch、audio decode、large image decode、heavy video initializationを禁止する。audioは埋め込まず、原則2秒以内・30fps以下とする。透明演出はCanvasまたはspriteを優先する。
 
@@ -741,7 +753,9 @@ idle準備済みなら、強化開始操作時にnetwork fetch、audio decode、
 
 12.6と12.7の上限は、仕様へ記載するだけでは実装完了としない。将来のアセット実装時に、既存の`tests/current-work-state-size.test.js`と同系統の方法で、推奨`tests/gear-asset-budget.test.js`を追加する。
 
-gear-specific asset directoryまたはmachine-readable manifestを正本とし、テスト内だけのmanual asset listは禁止する。CIでは最低限、次を必須検査する。
+gear-specific asset directoryまたはmachine-readable manifestを正本とし、テスト内だけのmanual asset listは禁止する。manifest方式では、Gear専用directory内に存在する対象asset集合とmanifest登録asset集合が双方向で一致することを検査する。専用directory自体を正本にする場合はdirectoryを列挙して全assetを自動集計し、手動allowlistによる検査漏れを作らない。
+
+CIでは最低限、次を必須検査する。
 
 - Gear v1 dedicated assets totalが1,000,000 bytes以下
 - Gear critical assetsが500,000 bytes以下
@@ -749,11 +763,25 @@ gear-specific asset directoryまたはmachine-readable manifestを正本とし�
 - single enhancement videoが350,000 bytes以下
 - posterが64,000 bytes以下
 - Gear preload countが0
-- manifest記載assetの欠落はfail
-- dedicated directory内の未追跡assetはfail
+- manifestに登録されている実ファイルの欠落はfail
+- Gear専用directoryに存在するがmanifestまたはbudget検査対象へ含まれていないassetはfail
 - 禁止された重複形式はfail
 
-超過時はCI failureとする。第12章の実装完了条件は、通常開発フローでこれらの制約を破れない状態まで作ることである。今回の仕様統合では、このCIテスト自体はまだ作成しない。
+`tests/gear-asset-budget.test.js`を実装した時は`npm test`へ必ず組み込み、通常CIで常に実行する。上限超過またはcoverage不整合時はexit non-zeroでCIを失敗させる。テストファイルを配置しただけで`npm test`またはCIから呼ばれていない状態は、第12章の実装完了としない。
+
+CIログには現在値と上限をbytes単位で出力する。目標250,000 bytesを超えても絶対上限内なら必須failureとはしないが、target超過をログから判別できるようにする。
+
+```text
+gear asset total: xxx / 1,000,000 bytes
+gear critical total: xxx / 500,000 bytes
+gear critical target: xxx / 250,000 bytes
+gear enhancement total: xxx / 500,000 bytes
+largest enhancement video: xxx / 350,000 bytes
+largest poster: xxx / 64,000 bytes
+gear preloads in index.html: 0
+```
+
+第12章の実装完了条件は、通常開発フローでこれらの制約を破れない状態まで作ることである。今回の仕様統合では、このCIテスト自体はまだ作成しない。
 
 ## 12.9 将来変更時のルール
 
