@@ -8,6 +8,7 @@
   const STORAGE_KEY = 'katamon_coop_mvp_v1';
   const SCHEMA_VERSION = 1;
   const COIN_CAP = 9999;
+  const GEAR_TRANSACTION_STORAGE_KEY = 'katamon_gear_txn_v1';
   // Gear transaction と foundation 全体の writer が共有する排他領域。
   // foundation は Web Locks 非対応環境でも既存ゲームを継続できるが、
   // 対応環境では必ずこの名前の exclusive lock を使う。
@@ -189,6 +190,28 @@
     throw new FoundationStateMutationError(code, message, cause);
   }
 
+  function assertNoPendingGearTransaction(storage) {
+    let target = storage;
+    // loadState/saveStateは`storage || localStorage`で解決するため、null等の
+    // falsy値も同じglobal storageへ寄せないとguardと実書込先がずれる。
+    if (!target) {
+      try { target = typeof localStorage !== 'undefined' ? localStorage : null; } catch (_error) { target = null; }
+    }
+    // 既存ゲームはstorage自体が使えない環境でも従来どおり継続する。
+    // getItem可能なstorageがある時だけ、残留WALをfail closedで遮断する。
+    if (!target) return;
+    if (typeof target.getItem !== 'function') {
+      mutationError('FOUNDATION_GEAR_TRANSACTION_GUARD_FAILED', 'pending gear transaction storage cannot be inspected');
+    }
+    let pending;
+    try { pending = target.getItem(GEAR_TRANSACTION_STORAGE_KEY); } catch (error) {
+      mutationError('FOUNDATION_GEAR_TRANSACTION_GUARD_FAILED', 'could not inspect the pending gear transaction', error);
+    }
+    if (pending !== null) {
+      mutationError('FOUNDATION_PENDING_GEAR_TRANSACTION', 'recover the pending gear transaction before mutating foundation state');
+    }
+  }
+
   function resolveStateMutationLockManager(options) {
     if (Object.prototype.hasOwnProperty.call(options, 'lockManager')) {
       const injected = options.lockManager;
@@ -263,6 +286,9 @@
     const normalizedOptions = options && typeof options === 'object' ? options : {};
     const storage = normalizedOptions.storage;
     return withStateMutationLock(async () => {
+      // WAL確認は必ずexclusive lock取得後、state読込・mutator実行より前に行う。
+      // transaction recoveryはこのfoundation helperを使わないため遮断されない。
+      assertNoPendingGearTransaction(storage);
       const currentState = loadState(storage);
       const mutationResult = await mutator(currentState);
       if (!mutationResult || typeof mutationResult !== 'object' || Array.isArray(mutationResult)
@@ -326,6 +352,7 @@
 
   return deepFreeze({
     STORAGE_KEY,
+    GEAR_TRANSACTION_STORAGE_KEY,
     SCHEMA_VERSION,
     COIN_CAP,
     STATE_MUTATION_LOCK_NAME,

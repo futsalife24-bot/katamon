@@ -194,6 +194,30 @@ test('persistence wrappers use one injected exclusive lock and save successful s
   assert.deepEqual(locks.requests.map((entry) => entry.name), [rewards.GEAR_MUTATION_LOCK_NAME, rewards.GEAR_MUTATION_LOCK_NAME, rewards.GEAR_MUTATION_LOCK_NAME]);
   assert.ok(locks.requests.every((entry) => entry.options.mode === 'exclusive'));
 });
+test('persistence checks the raw pending WAL after lock acquisition and performs no mutation', async () => {
+  const fake = new FakeStorage();
+  let operationLockEntered = false;
+  const injectingLockManager = {
+    request(name, options, callback) {
+      assert.equal(name, rewards.GEAR_MUTATION_LOCK_NAME);
+      assert.equal(options.mode, 'exclusive');
+      operationLockEntered = true;
+      fake.setItem(rewards.GEAR_TRANSACTION_STORAGE_KEY, '{malformed-wal');
+      return callback({ name });
+    },
+  };
+  await expectCodeAsync('PENDING_GEAR_TRANSACTION_EXISTS', () => rewards.persistQueueReward(
+    reward('blocked-after-lock', { count: 0 }), fake, { lockManager: injectingLockManager },
+  ));
+  assert.equal(operationLockEntered, true);
+  assert.equal(fake.getItem(storageApi.GEAR_STORAGE_KEY), null, 'pending中はGear Storageを書かない');
+  assert.equal(fake.getItem(rewards.GEAR_TRANSACTION_STORAGE_KEY), '{malformed-wal', 'guardはWALをparse・repair・deleteしない');
+  fake.values.delete(rewards.GEAR_TRANSACTION_STORAGE_KEY);
+  const resumed = await rewards.persistQueueReward(
+    reward('resumed-after-recovery', { count: 0 }), fake, { lockManager: new ExclusiveLockManager() },
+  );
+  assert.equal(resumed.queued, true, 'WAL解消後は通常writerを再開できる');
+});
 test('persistence refuses to run load-save without an explicit Node lock manager', async () => {
   const fake = new FakeStorage();
   await expectCodeAsync('STORAGE_LOCK_UNAVAILABLE', () => rewards.persistQueueReward(reward('no-lock', { count: 0 }), fake));

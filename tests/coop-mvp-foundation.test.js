@@ -6,6 +6,7 @@ const {
   STORAGE_KEY,
   SCHEMA_VERSION,
   COIN_CAP,
+  GEAR_TRANSACTION_STORAGE_KEY,
   STATE_MUTATION_LOCK_NAME,
   DIFFICULTIES,
   COOP_ITEMS,
@@ -22,6 +23,7 @@ const {
 assert.equal(STORAGE_KEY, 'katamon_coop_mvp_v1');
 assert.equal(SCHEMA_VERSION, 1);
 assert.equal(COIN_CAP, 9999);
+assert.equal(GEAR_TRANSACTION_STORAGE_KEY, 'katamon_gear_txn_v1');
 assert.equal(STATE_MUTATION_LOCK_NAME, 'katamon_gear_v1:mutation');
 assert.deepEqual(DIFFICULTIES.map(({ id, coreExposeRounds }) => ({ id, coreExposeRounds })), [
   { id: 'normal', coreExposeRounds: 2 },
@@ -188,6 +190,57 @@ async function runLockedMutationTests() {
     fallbackB: true,
   }, 'Web Locks非対応時も同一タブの未await writerをFIFO直列化して更新欠落を防ぐ');
 
+  const pendingFallbackStorage = new FakeStorage({ [GEAR_TRANSACTION_STORAGE_KEY]: '{malformed-wal' });
+  let pendingFallbackMutatorCalled = false;
+  await expectMutationError('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateStateLocked((state) => {
+    pendingFallbackMutatorCalled = true;
+    state.wallet.coins += 1;
+    return { state };
+  }, { storage: pendingFallbackStorage, lockManager: null }));
+  assert.equal(pendingFallbackMutatorCalled, false, 'fallbackでも残留WAL中はmutatorを開始しない');
+  assert.equal(pendingFallbackStorage.getItem(STORAGE_KEY), null, '残留WAL中はfoundation rawを書かない');
+  assert.equal(pendingFallbackStorage.getItem(GEAR_TRANSACTION_STORAGE_KEY), '{malformed-wal', '壊れたWALも勝手に削除しない');
+
+  const afterLockStorage = new FakeStorage();
+  let afterLockMutatorCalled = false;
+  const walInjectingLockManager = {
+    request(name, options, callback) {
+      afterLockStorage.setItem(GEAR_TRANSACTION_STORAGE_KEY, 'pending-after-lock');
+      return callback({ name, mode: options.mode });
+    },
+  };
+  await expectMutationError('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateStateLocked((state) => {
+    afterLockMutatorCalled = true;
+    state.wallet.coins += 1;
+    return { state };
+  }, { storage: afterLockStorage, lockManager: walInjectingLockManager }));
+  assert.equal(afterLockMutatorCalled, false, 'WAL guardはlock callback内でmutatorより前に実行する');
+  assert.equal(afterLockStorage.getItem(STORAGE_KEY), null);
+
+  const hadGlobalStorage = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage');
+  const previousGlobalStorage = globalThis.localStorage;
+  const globalStorage = new FakeStorage({ [GEAR_TRANSACTION_STORAGE_KEY]: 'pending-global-wal' });
+  globalThis.localStorage = globalStorage;
+  try {
+    let nullStorageMutatorCalled = false;
+    await expectMutationError('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateStateLocked((state) => {
+      nullStorageMutatorCalled = true;
+      state.wallet.coins += 7;
+      return { state };
+    }, { storage: null, lockManager: null }));
+    assert.equal(nullStorageMutatorCalled, false, 'storage:nullもload/saveと同じglobal storageのWALで遮断する');
+    assert.equal(globalStorage.getItem(STORAGE_KEY), null, 'storage:nullのguard迂回でfoundationを書かない');
+    globalStorage.values.delete(GEAR_TRANSACTION_STORAGE_KEY);
+    const resumedGlobal = await mutateStateLocked((state) => {
+      state.wallet.coins += 7;
+      return { state };
+    }, { storage: null, lockManager: null });
+    assert.equal(resumedGlobal.state.wallet.coins, 7, 'global WAL解消後はstorage:null writerも再開できる');
+  } finally {
+    if (hadGlobalStorage) globalThis.localStorage = previousGlobalStorage;
+    else delete globalThis.localStorage;
+  }
+
   let fallbackCalled = false;
   const fallbackValue = await withStateMutationLock(() => {
     fallbackCalled = true;
@@ -213,7 +266,7 @@ async function runLockedMutationTests() {
     { storage: new FakeStorage(), lockManager: null },
   ));
 
-  console.log('協力ボスMVP基盤: 機能フラグ・保存形式・カタログ・報酬台帳・共通ロック（44/44 passed）');
+  console.log('協力ボスMVP基盤: 機能フラグ・保存形式・カタログ・報酬台帳・共通ロック（46/46 passed）');
 }
 
 runLockedMutationTests().catch((error) => {

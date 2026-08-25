@@ -77,6 +77,19 @@ function assertJournalCommittedOnce(storage, journal) {
   assert.equal(transactions.loadStrictFoundationState(storage).state.wallet.coins, journal.coinAfter);
   assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null);
 }
+async function mutateFoundationCoins(storage, amount = 1) {
+  return foundation.mutateStateLocked((state) => {
+    state.wallet.coins += amount;
+    return { state, amount };
+  }, { storage, lockManager: storage.gearMutationLockManager });
+}
+function addExpiredTempGear(storage, gearId) {
+  const state = gearStorage.loadGearState(storage);
+  const temporaryGear = makeGear(gearId);
+  state.tempBox.push({ gear: temporaryGear, locked: false, favorite: false, enteredAtMs: 0 });
+  gearStorage.saveGearState(state, storage);
+  return temporaryGear;
+}
 function unclaimedGearStorage() {
   const state = gearStorage.createDefaultGearStorageState();
   state.resources.powder = 999;
@@ -126,6 +139,8 @@ test('strict bridge rejects unknown numeric values that JSON cannot round-trip a
 });
 test('exclusive lock is mandatory and concurrent public starts serialize without a second charge', async () => {
   assert.equal(transactions.GEAR_MUTATION_LOCK_NAME, 'katamon_gear_v1:mutation');
+  assert.equal(foundation.GEAR_TRANSACTION_STORAGE_KEY, transactions.GEAR_TRANSACTION_STORAGE_KEY);
+  assert.equal(rewards.GEAR_TRANSACTION_STORAGE_KEY, transactions.GEAR_TRANSACTION_STORAGE_KEY);
   const unavailable = seededStorage(); unavailable.gearMutationLockManager = null;
   const unavailableId = gearStorage.loadGearState(unavailable).inventory[0].gear.gearId;
   await expectCode('TRANSACTION_LOCK_UNAVAILABLE', () => transactions.enhanceStoredGearAtomic({ transactionId: 'no-lock', gearId: unavailableId, targetLevel: 3, createdAtMs: 1, storage: unavailable }));
@@ -198,6 +213,92 @@ test('journal only recovery is forward and crash points never double-charge', as
   assert.equal((await transactions.recoverPendingGearTransaction(storage)).recovered, false);
   assert.equal(gearStorage.loadGearState(storage).resources.powder, firstGear.resources.powder);
   assert.equal(transactions.loadStrictFoundationState(storage).state.wallet.coins, firstCoin);
+});
+test('WAL-only state blocks foundation writers until forward recovery completes', async () => {
+  const storage = seededStorage(); const journal = journalFor(storage);
+  await transactions.saveJournal(journal, storage);
+  const foundationBefore = storage.getItem(foundation.STORAGE_KEY);
+  const gearBefore = storage.getItem(gearStorage.GEAR_STORAGE_KEY);
+  const walBefore = storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY);
+  await expectCode('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateFoundationCoins(storage));
+  assert.equal(storage.getItem(foundation.STORAGE_KEY), foundationBefore);
+  assert.equal(storage.getItem(gearStorage.GEAR_STORAGE_KEY), gearBefore);
+  assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), walBefore);
+  await transactions.recoverPendingGearTransaction(storage);
+  assertJournalCommittedOnce(storage, journal);
+  const resumed = await mutateFoundationCoins(storage, 1);
+  assert.equal(resumed.amount, 1);
+  assert.equal(foundation.loadState(storage).wallet.coins, journal.coinAfter + 1);
+});
+test('gear-side pending WAL blocks maintenance, then permits exactly one expiry after recovery', async () => {
+  const storage = seededStorage(); const expiredGear = addExpiredTempGear(storage, 'pending-maintenance-expired');
+  const dismantle = gear.calculateDismantleYield(expiredGear); const journal = journalFor(storage);
+  await transactions.saveJournal(journal, storage);
+  const gearSide = gearStorage.loadGearState(storage);
+  gearSide.inventory[0].gear = clone(journal.gearAfter);
+  gearSide.resources.powder = journal.powderAfter;
+  gearStorage.saveGearState(gearSide, storage);
+  const blockedGearRaw = storage.getItem(gearStorage.GEAR_STORAGE_KEY);
+  const walRaw = storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY);
+  await expectCode('PENDING_GEAR_TRANSACTION_EXISTS', () => rewards.persistStorageMaintenance(gearStorage.TEMP_BOX_TTL_MS, storage));
+  assert.equal(storage.getItem(gearStorage.GEAR_STORAGE_KEY), blockedGearRaw, 'blocked maintenance does not change powder or TEMP');
+  assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), walRaw);
+  await transactions.recoverPendingGearTransaction(storage);
+  const maintained = await rewards.persistStorageMaintenance(gearStorage.TEMP_BOX_TTL_MS, storage);
+  assert.deepEqual(maintained.expiredGearIds, [expiredGear.gearId]);
+  const finalState = gearStorage.loadGearState(storage);
+  assert.equal(finalState.resources.powder, journal.powderAfter + dismantle.powder);
+  assert.equal(finalState.tempBox.length, 0);
+  assert.equal(transactions.loadStrictFoundationState(storage).state.wallet.coins, journal.coinAfter);
+});
+test('public read-back ambiguity blocks both writer families until recovery, then resumes once', async () => {
+  const storage = seededStorage(); const expiredGear = addExpiredTempGear(storage, 'ambiguous-expired');
+  const dismantle = gear.calculateDismantleYield(expiredGear);
+  const before = gearStorage.loadGearState(storage); const targetId = before.inventory[0].gear.gearId;
+  const cost = gear.calculateEnhancementCost(before.inventory[0].gear.enhancementLevel, 3);
+  storage.readBackAfterSet.set(gearStorage.GEAR_STORAGE_KEY, 'ambiguous-read-back');
+  await expectCode('STORAGE_READ_BACK_MISMATCH', () => transactions.enhanceStoredGearAtomic({
+    transactionId: 'ambiguous-public', gearId: targetId, targetLevel: 3, createdAtMs: 1, storage,
+  }));
+  assert.notEqual(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null, 'ambiguous write retains WAL');
+  await expectCode('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateFoundationCoins(storage));
+  await expectCode('PENDING_GEAR_TRANSACTION_EXISTS', () => rewards.persistStorageMaintenance(gearStorage.TEMP_BOX_TTL_MS, storage));
+  storage.readBack.delete(gearStorage.GEAR_STORAGE_KEY);
+  storage.readBackAfterSet.delete(gearStorage.GEAR_STORAGE_KEY);
+  await transactions.recoverPendingGearTransaction(storage);
+  const committed = gearStorage.loadGearState(storage);
+  assert.equal(committed.inventory[0].gear.enhancementLevel, 3);
+  assert.equal(committed.resources.powder, before.resources.powder - cost.powder);
+  assert.equal(transactions.loadStrictFoundationState(storage).state.wallet.coins, 999 - cost.coins);
+  await mutateFoundationCoins(storage, 1);
+  await rewards.persistStorageMaintenance(gearStorage.TEMP_BOX_TTL_MS, storage);
+  const finalState = gearStorage.loadGearState(storage);
+  assert.equal(finalState.resources.powder, before.resources.powder - cost.powder + dismantle.powder);
+  assert.equal(finalState.tempBox.length, 0);
+  assert.equal(foundation.loadState(storage).wallet.coins, 999 - cost.coins + 1);
+  assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null);
+});
+test('committed cleanup failure blocks other mutations until cleanup recovery succeeds', async () => {
+  const storage = seededStorage(); const id = gearStorage.loadGearState(storage).inventory[0].gear.gearId;
+  storage.throwRemove = new Error('cleanup unavailable');
+  await expectCode('TRANSACTION_COMMITTED_CLEANUP_FAILED', () => transactions.enhanceStoredGearAtomic({
+    transactionId: 'cleanup-block', gearId: id, targetLevel: 3, createdAtMs: 1, storage,
+  }));
+  assert.notEqual(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null);
+  await expectCode('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateFoundationCoins(storage));
+  await expectCode('PENDING_GEAR_TRANSACTION_EXISTS', () => rewards.persistQueueReward({
+    rewardId: 'cleanup-blocked-reward', sourceId: 'cpu_battle', sourceDetail: null,
+    createdAtMs: 2, gears: [], blueprintShards: 1,
+  }, storage));
+  storage.throwRemove = null;
+  await transactions.recoverPendingGearTransaction(storage);
+  await mutateFoundationCoins(storage, 1);
+  const queued = await rewards.persistQueueReward({
+    rewardId: 'cleanup-resumed-reward', sourceId: 'cpu_battle', sourceDetail: null,
+    createdAtMs: 3, gears: [], blueprintShards: 1,
+  }, storage);
+  assert.equal(queued.queued, true);
+  assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null);
 });
 test('gear side done, coin side done, and cleanup retry recover safely', async () => {
   const storage = seededStorage(); const journal = journalFor(storage);

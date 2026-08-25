@@ -6,6 +6,7 @@
   'use strict';
 
   const MAX_GEARS_PER_REWARD = 5;
+  const GEAR_TRANSACTION_STORAGE_KEY = 'katamon_gear_txn_v1';
   // Every persistence wrapper uses this one namespace.  Web Locks are shared
   // between tabs of the same origin, so a load -> pure operation -> save is
   // one critical section instead of a lost-update window.
@@ -253,6 +254,24 @@
     }
     return manager;
   }
+  function assertNoPendingGearTransaction(storage) {
+    let target = storage;
+    if (target === undefined) {
+      try { target = root && root.localStorage; } catch (error) {
+        fail('STORAGE_READ_FAILED', 'could not inspect the pending gear transaction', error);
+      }
+    }
+    if (!target || typeof target.getItem !== 'function') {
+      fail('STORAGE_UNAVAILABLE', 'storage.getItem is required for pending transaction guard');
+    }
+    let pending;
+    try { pending = target.getItem(GEAR_TRANSACTION_STORAGE_KEY); } catch (error) {
+      fail('STORAGE_READ_FAILED', 'could not inspect the pending gear transaction', error);
+    }
+    if (pending !== null) {
+      fail('PENDING_GEAR_TRANSACTION_EXISTS', 'recover the pending gear transaction before mutating gear storage');
+    }
+  }
   async function withGearStorageLock(storage, options, operation) {
     const manager = resolveLockManager(storage, options);
     let operationError = null;
@@ -263,7 +282,13 @@
         // A compatible test/injected manager may use null to signal a lock
         // refusal.  Never continue to a write without demonstrable ownership.
         if (lock == null) fail('STORAGE_LOCK_NOT_ACQUIRED', 'gear reward storage lock was not acquired');
-        try { return await operation(); } catch (error) { operationError = error; throw error; }
+        try {
+          // Raw WAL presence is checked after lock acquisition and before any
+          // load/mutation.  Malformed journals also block until recovery or an
+          // explicit repair flow handles them.
+          assertNoPendingGearTransaction(storage);
+          return await operation();
+        } catch (error) { operationError = error; throw error; }
       });
       if (!callbackInvoked) fail('STORAGE_LOCK_NOT_ACQUIRED', 'gear reward storage lock callback was not run');
       return result;
@@ -302,7 +327,7 @@
   }
 
   return Object.freeze({
-    GearRewardsError, MAX_GEARS_PER_REWARD, GEAR_MUTATION_LOCK_NAME,
+    GearRewardsError, MAX_GEARS_PER_REWARD, GEAR_TRANSACTION_STORAGE_KEY, GEAR_MUTATION_LOCK_NAME,
     queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate,
     persistQueueReward, persistClaimReward, persistStorageMaintenance,
   });
