@@ -3,6 +3,10 @@
 // 使い方: node regressiontest.js p1  /  node regressiontest.js e1
 const h = require('./seatharness.js');
 const kt = h.kt();
+// This file intentionally runs many unrelated CPU scenarios in one process.
+// Keep the production `startBattle` contract covered by Phase 2C integration;
+// here each legacy scenario starts with an explicit test-only fresh CPU run.
+kt.startBattle = (...args) => kt.startFreshBattleForLegacyRegression(...args);
 const canvas = h.canvas;
 const win = globalThis.window;
 const SEAT = h.SEAT;
@@ -153,14 +157,19 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
       && /inputMode === 'selectResume'[\s\S]*?resumeSuspendedMatch\(\)/.test(indexHtml),
     'resume actions must be committed from pointerup');
   kt.setPhase('battle');
+  // Normal CPU 1v1 now has an owner-fenced asynchronous Gear resume path.
+  // Keep this historic synchronous pointer regression on the non-Gear legacy
+  // suspend contract; Phase 2C covers the normal-CPU async path separately.
+  kt.setBattleModeForTest('free');
   kt.save();
   kt.setHasSave(true);
   kt.setPhase('select');
   const resumePointerId = down(info.resume.x, info.resume.y);
   up(resumePointerId, info.resume.x, info.resume.y);
-  check('再開ギアを押して離すと中断データからバトルへ戻る',
+  check('非Gear中断の再開ギアを押して離すと中断データからバトルへ戻る',
     kt.phase() === 'battle' && kt.load() === null,
     JSON.stringify({ phase: kt.phase(), hasSave: kt.load() !== null }));
+  kt.setBattleModeForTest('normal');
 }
 
 // v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。

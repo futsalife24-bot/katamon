@@ -36,7 +36,11 @@ const externalPrelude = preludeSources.map((source) => {
     throw new Error(`external script not found: ${relativePath}`);
   }
   if (!fs.existsSync(absolutePath)) throw new Error(`external script not found: ${relativePath}`);
-  return fs.readFileSync(absolutePath, 'utf8');
+  // 外部scriptは実ブラウザと同じく CommonJS の `module` / `require` を
+  // 持たない環境で評価する。Phase 2C からGearのUMD群もindex.html前段へ
+  // 接続されるため、Nodeのharness側requireを誤って選ぶと依存解決の基準が
+  // ブラウザ本番と食い違う。
+  return `(function browserScriptScope() { const module = undefined; const require = undefined;\n${fs.readFileSync(absolutePath, 'utf8')}\n})();`;
 }).join('\n;\n');
 let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 
@@ -167,7 +171,17 @@ const HOOK = `
       usesOfficialThemeObject: currentTheme === THEMES[currentThemeKey]
     }),
     step: (dt) => update(dt),
-    startBattle: (key) => { selectCharacterAndStart(key || CHARACTER_LIST[0]); },
+    // Real production path: Phase 2C tests use this to prove an active run
+    // blocks a second CPU start.
+    startBattle: (key) => selectCharacterAndStart(key || CHARACTER_LIST[0]),
+    // The historic regression file contains many independent CPU scenarios in
+    // one in-memory harness.  This test-only fixture resets only the tiny CPU
+    // Gear run key before each isolated scenario; it does not exist in the
+    // shipped game and never weakens the production active-run guard.
+    startFreshBattleForLegacyRegression: (key) => {
+      try { globalThis.KatamonGearCpuRunStorage.removeCpuGearRunState(localStorage); } catch (_) {}
+      return selectCharacterAndStart(key || CHARACTER_LIST[0]);
+    },
     newTerrainForTest: (pattern) => {
       newTerrain(pattern);
       return {
@@ -900,6 +914,7 @@ const HOOK = `
     craterHistory: () => craterHistory.map(crater => ({ ...crater })),
     streak: () => winStreak,
     stats: () => ({ ...runStats }),
+    pendingScoreForTest: () => pendingScore ? { ...pendingScore } : null,
     mode: () => battleMode,
     freeConfig: () => ({ ...freeModeConfig }),
     freeTrainingOptions: () => (typeof FREE_TRAINING_OPTIONS === 'object'
@@ -934,6 +949,77 @@ const HOOK = `
     startFree: () => { startFreeMatch(); },
     resultTitleBtn: () => ({ ...resultTitleBtn, shift: resultButtonShift() }),
     continueBtn: () => ({ ...continueBtn, shift: resultButtonShift() }),
+    cpuGearResultLayoutForTest: () => {
+      const layout = typeof cpuGearResultLayout === 'function' ? cpuGearResultLayout() : null;
+      if (!layout) return null;
+      return {
+        pending: layout.pending,
+        voluntary: layout.voluntary,
+        preview: JSON.parse(JSON.stringify(layout.preview)),
+        lossPreview: layout.lossPreview ? JSON.parse(JSON.stringify(layout.lossPreview)) : null,
+        continueButton: layout.continueButton ? { ...layout.continueButton, shift: resultButtonShift() } : null,
+        settlementButton: { ...layout.settlementButton, shift: resultButtonShift() },
+        titleButton: { ...layout.titleButton, shift: resultButtonShift() },
+      };
+    },
+    cpuGearPendingSettlementLayoutForTest: () => {
+      const layout = typeof cpuGearPendingSettlementLayout === 'function' ? cpuGearPendingSettlementLayout() : null;
+      if (!layout) return null;
+      return {
+        preview: JSON.parse(JSON.stringify(layout.preview)),
+        settlementButton: { ...layout.settlementButton },
+        backButton: { ...layout.backButton },
+      };
+    },
+    cpuGearTerminalSettlementRetryLayoutForTest: () => {
+      const layout = typeof cpuGearTerminalSettlementRetryLayout === 'function' ? cpuGearTerminalSettlementRetryLayout() : null;
+      if (!layout) return null;
+      return {
+        outcome: layout.outcome,
+        preview: JSON.parse(JSON.stringify(layout.preview)),
+        retryButton: { ...layout.retryButton, shift: resultButtonShift() },
+      };
+    },
+    cpuGearTerminalSettlementReadErrorLayoutForTest: () => {
+      const layout = typeof cpuGearTerminalSettlementReadErrorLayout === 'function' ? cpuGearTerminalSettlementReadErrorLayout() : null;
+      return layout ? { retryButton: { ...layout.retryButton, shift: resultButtonShift() } } : null;
+    },
+    openCpuGearPendingSettlementFromTitleForTest: () => openCpuGearPendingSettlementFromTitle(),
+    activateTitleCpuForTest: () => activateTitleMenuItem('cpu'),
+    retryCpuGearTerminalSettlementPreparationForTest: () => retryCpuGearTerminalSettlementPreparation(),
+    retryCpuGearTerminalSettlementReadForTest: () => retryCpuGearTerminalSettlementRead(),
+    cpuGearRunStateForTest: () => {
+      try { return typeof readCpuGearRunState === 'function' ? JSON.parse(JSON.stringify(readCpuGearRunState())) : null; }
+      catch (error) { return { error: error && error.code ? error.code : String(error) }; }
+    },
+    // Owner controls exist only in the Node harness so the concurrency suite
+    // can model two isolated browser runtimes against one localStorage.
+    cpuGearOwnerSessionForTest: () => cpuGearOwnerSessionId,
+    setCpuGearOwnerSessionForTest: (value) => { cpuGearOwnerSessionId = value || null; return cpuGearOwnerSessionId; },
+    saveCpuBattleAtTurnStartForTest: () => saveCpuBattleAtTurnStart(),
+    recordCpuGearPeakAfterWinForTest: () => recordCpuGearPeakAfterWin(),
+    suspendRunToTitleForTest: () => suspendRunToTitle(),
+    prepareCpuGearSettlementForTerminalOutcomeForTest: (outcome) => prepareCpuGearSettlementForTerminalOutcome(outcome),
+    settleCpuGearRunForTest: (outcome) => settleCpuGearRun(outcome),
+    takeOverCpuGearActiveRunOwnershipForTest: () => takeOverCpuGearActiveRunOwnership(),
+    clearCpuGearRunForTest: () => {
+      try { return globalThis.KatamonGearCpuRunStorage.removeCpuGearRunState(localStorage); }
+      catch (_) { return false; }
+    },
+    resumeCpuSuspendForTest: () => resumeSuspendedMatch(),
+    // These two hooks only model separate browser runtimes that both captured
+    // the same legacy bytes before entering the shared CPU lifecycle lock.
+    // Production callers always use resumeSuspendedMatch().
+    captureCpuGearSuspendForTest: () => {
+      const snapshot = readCpuGearLegacySuspendForClaim();
+      return snapshot ? { key: snapshot.key, raw: snapshot.raw } : null;
+    },
+    claimCpuGearSuspendForTest: (expectedSnapshot) => claimCpuGearLegacySuspendForResume(expectedSnapshot),
+    cpuGearPersistenceForTest: () => ({ state: cpuGearPersistenceState, status: cpuGearStatusText }),
+    cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
+    requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),
+    continueCpuGearRunAfterWinForTest: () => continueCpuGearRunAfterWin(),
+    cpuGearResultActionBusyForTest: () => cpuGearResultActionInFlight(),
     keepsRunOnExit: () => keepsRunOnExit(),
     endPause: () => matchEndPause,
     hasSave: () => hasSuspendedSave,
@@ -1148,6 +1234,9 @@ const HOOK = `
     setPhase: (p) => { gamePhase = p; },
     phase: () => gamePhase,
     setBattleModeForTest: (mode) => { battleMode = mode; },
+    setMatchFormatForTest: (format) => { setMatchFormat(format); return matchFormat; },
+    setOnlineForCpuGearEligibilityForTest: (value) => { online = value || null; return !!online; },
+    cpuGearEligibleForTest: () => isCpuGearEligibleRun(),
     // 画面の揺れ。対戦中以外でも必ず止まることを見るため(v110の起動演出で震え続けた)。
     shakeTimer: () => shakeTimer,
     triggerShakeForTest: (mag, sec) => triggerShake(mag, sec),
@@ -1492,7 +1581,14 @@ elements.set('onlineCharacterPicker', makeElement('div'));
 elements.set('onlineCharacter', makeElement('select'));
 elements.set('onlineCharacterPreview', makeElement('img'));
 
-const store = new Map();
+// A one-shot pre-evaluation seed makes startup-recovery tests exercise the
+// real bootstrap ordering.  It is deliberately not a production hook and is
+// consumed before index.html is evaluated.
+const initialStorage = globalThis.__KATAMON_TEST_INITIAL_STORAGE__;
+if (initialStorage !== undefined) delete globalThis.__KATAMON_TEST_INITIAL_STORAGE__;
+const store = new Map(initialStorage && typeof initialStorage === 'object' && !Array.isArray(initialStorage)
+  ? Object.entries(initialStorage).map(([key, value]) => [key, String(value)])
+  : []);
 globalThis.localStorage = {
   getItem: k => (store.has(k) ? store.get(k) : null),
   setItem: (k, v) => store.set(k, String(v)),
@@ -1556,7 +1652,19 @@ const win = Object.assign(makeElement('window'), {
 });
 globalThis.window = win;
 globalThis.AudioContext = AudioCtxStub;
-globalThis.navigator = { userAgent: 'node-harness', serviceWorker: undefined, vibrate: noop };
+// Browser Web Locks are required by the Gear cross-key transaction and the
+// Phase 2C CPU-run lifecycle.  The harness intentionally grants immediately
+// so legacy synchronous test hooks retain their existing contract; dedicated
+// concurrency tests inject a controllable manager afterwards.
+const immediateWebLocks = {
+  request: (name, options, callback) => callback({ name, options })
+};
+Object.defineProperty(globalThis, 'navigator', {
+  value: { userAgent: 'node-harness', vibrate: noop, locks: immediateWebLocks },
+  configurable: true,
+  writable: true
+});
+globalThis.localStorage.gearMutationLockManager = immediateWebLocks;
 globalThis.location = { search: `?seat=${SEAT}`, protocol: 'http:', hostname: 'localhost', href: `http://localhost/?seat=${SEAT}`, reload: noop };
 globalThis.history = { back: noop, pushState: noop, replaceState: noop };
 globalThis.matchMedia = win.matchMedia;

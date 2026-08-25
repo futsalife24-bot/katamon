@@ -621,6 +621,13 @@
 <script src="shared/stage-zip.js"></script>
 <script src="./generated/content-studio-catalog.js"></script>
 <script src="coop-mvp-foundation.js"></script>
+<!-- Gear persistence is loaded before the game shell, but it does not fetch or preload any visual asset. -->
+<script src="shared/gear-domain.js"></script>
+<script src="shared/gear-storage.js"></script>
+<script src="shared/gear-rewards.js"></script>
+<script src="shared/gear-transactions.js"></script>
+<script src="shared/gear-cpu-rewards.js"></script>
+<script src="shared/gear-cpu-run-storage.js"></script>
 <script>
 (() => {
   'use strict';
@@ -6615,7 +6622,12 @@
     pendingNewMatchKey = null;
     if (!key) return;
     if (action === 'resume') resumeSuspendedMatch();
-    else if (action === 'start') selectCharacterAndStart(key);
+    else if (action === 'start') {
+      // The player explicitly chose to discard the active legacy CPU run.
+      // Only an active (not settlement_pending) Gear run may be replaced.
+      cpuGearAllowActiveRunReplacement = true;
+      selectCharacterAndStart(key);
+    }
   }
   // 本文とボタンの縦位置。ボタンの上端が本文の下へ来るように保つこと。
   // 以前は1つ目のボタンの上端(397)と本文2行目(398)が1px差で重なり、
@@ -6700,19 +6712,55 @@
 
   function selectCharacterAndStart(key) {
     if (!isCharacterUnlocked(key)) return false;
-    pendingNewMatchKey = null;
-    clearSuspendedMatch();
-    hasSuspendedSave = false;
-    battleMode = 'normal';
-    setMatchFormat('1v1'); // 通常のCPU戦は従来どおり1vs1
-    player.character = key;
-    syncSelectedSubweapon();
-    cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
-    // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
-    gamePhase = 'battle';
-    winStreak = 0;
-    runStats = { damageDealt: 0, shots: 0 };
-    resetMatch(false);
+    // Native Web Locks make a new CPU run asynchronous.  A second tap while
+    // the first start is queued must share that in-flight attempt instead of
+    // enqueuing a losing duplicate whose `false` continuation would return
+    // the already-started battle to the title screen.
+    if (cpuGearStartPromise) return true;
+    // Do this before clearSuspendedMatch(): a blocked Gear storage/run state
+    // must never discard a recoverable legacy CPU snapshot just by tapping
+    // "start new".
+    const allowActiveRunReplacement = cpuGearAllowActiveRunReplacement;
+    cpuGearAllowActiveRunReplacement = false;
+    const start = beginCpuGearRunForNewMatch(allowActiveRunReplacement, () => {
+      pendingNewMatchKey = null;
+      clearSuspendedMatch();
+      hasSuspendedSave = false;
+      battleMode = 'normal';
+      setMatchFormat('1v1'); // 通常のCPU戦は従来どおり1vs1
+      cpuGearTerminalSettlementPrepared = false;
+      player.character = key;
+      syncSelectedSubweapon();
+      cpu.character = CHARACTER_LIST[Math.floor(Math.random() * CHARACTER_LIST.length)];
+      // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
+      gamePhase = 'battle';
+      winStreak = 0;
+      runStats = { damageDealt: 0, shots: 0 };
+      resetMatch(false);
+      // resetMatch -> startTurn performs the existing best-effort suspend.
+      // A missing/invalid snapshot is handled by the locked caller, which
+      // removes the newly-created run where that can be proven safe.
+      if (!loadSuspendedMatch()) {
+        leaveSelectToTitle();
+        return false;
+      }
+      return true;
+    });
+    if (!isThenable(start)) return !!start;
+    // Native Web Locks are async.  The state mutation and match start happen
+    // inside the lock callback; observe rejection explicitly instead of
+    // leaving a pointer-handler Promise unhandled.
+    const task = Promise.resolve(start);
+    cpuGearStartPromise = task;
+    task.then((started) => {
+      if (!started) leaveSelectToTitle();
+    }, (error) => {
+      setCpuGearStatus(error, 'CPU BATTLE開始');
+      showTitleNotice(cpuGearStatusText);
+      leaveSelectToTitle();
+    }).finally(() => {
+      if (cpuGearStartPromise === task) cpuGearStartPromise = null;
+    });
     return true;
   }
 
@@ -7391,6 +7439,15 @@
       winStreak, runStats, isBossMatch,
       camera: { x: cameraX, y: cameraY, zoom: cameraZoom }
     };
+    // This is a local CPU suspend fencing hint, not reward metadata.  It is
+    // intentionally absent from online snapshots and never reaches a Gear
+    // settlement intent, rewardId, source detail, or deterministic seed.
+    if (typeof options.cpuGearOwnerSessionId === 'string') {
+      snapshot.cpuGearOwnerSessionId = options.cpuGearOwnerSessionId;
+    }
+    if (typeof options.cpuGearSnapshotId === 'string') {
+      snapshot.cpuGearSnapshotId = options.cpuGearSnapshotId;
+    }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
     if (includeTerrain) {
@@ -7497,10 +7554,9 @@
     }
   }
 
-  function saveSuspendedMatch() {
+  function writeSuspendedMatchSnapshot(snapshot = buildSnapshot()) {
     // 対人戦は片方だけ中断しても再開できないので保存しない(復帰はStage 4の課題)。
     if (isOnline()) return false;
-    const snapshot = buildSnapshot();
     const key = snapshot.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY;
     try {
       localStorage.setItem(key, JSON.stringify(snapshot));
@@ -7510,23 +7566,130 @@
     }
   }
 
+  function saveSuspendedMatch() {
+    // Normal CPU 1v1 is the only mode with a durable Gear run.  Route every
+    // legacy-suspend writer for that mode through its owner fence so a stale
+    // tab cannot recreate a snapshot after another tab has claimed the run.
+    if (isCpuGearEligibleRun()) return saveCpuBattleAtTurnStart({ allowMatchOver: true });
+    return writeSuspendedMatchSnapshot();
+  }
+
   // 強制終了から戻すため、通常のCPU BATTLEだけは安全なターン開始状態を自動保存する。
   // 演習・チュートリアル・オンラインは、それぞれの終了/同期ルールを変えないため対象外にする。
-  function saveCpuBattleAtTurnStart() {
-    if (battleMode !== 'normal' || isOnline() || matchOver) return false;
-    return saveSuspendedMatch();
+  function saveCpuBattleAtTurnStart(options = {}) {
+    if (battleMode !== 'normal' || isOnline() || (matchOver && options.allowMatchOver !== true)) return false;
+    if (!isCpuGearEligibleRun()) return writeSuspendedMatchSnapshot();
+    if (cpuGearRunLockDepth > 0) return saveCpuBattleAtTurnStartLocked(options);
+    // Turn-start autosaves participate in the same lifecycle lock as resume
+    // ownership transfer.  A stale tab may not sneak a raw write between its
+    // owner check and another tab's takeover.
+    if (cpuGearAutosavePromise) return true;
+    const saved = cpuGearRunLifecycle('CPU BATTLE中断保存', () => saveCpuBattleAtTurnStartLocked(options));
+    if (!isThenable(saved)) return saved;
+    const task = Promise.resolve(saved);
+    cpuGearAutosavePromise = task;
+    task.finally(() => {
+      if (cpuGearAutosavePromise === task) cpuGearAutosavePromise = null;
+    }).catch(() => undefined);
+    // Existing battle frames are intentionally non-blocking.  The eventual
+    // failure remains visible in cpuGearStatusText and leaves the prior raw
+    // snapshot untouched; callers must not manufacture a second writer.
+    return true;
+  }
+
+  function saveCpuBattleAtTurnStartLocked(options = {}) {
+    if (battleMode !== 'normal' || isOnline() || (matchOver && options.allowMatchOver !== true)) return false;
+    let ownerSessionId;
+    let snapshotId;
+    try {
+      ownerSessionId = assertCpuGearRunOwnedByThisSession(readCpuGearRunState(), { claimUnowned: true }).ownerSessionId;
+      snapshotId = cpuGearModules().runStorage.createCryptoSnapshotId();
+    } catch (error) {
+      setCpuGearStatus(error, 'CPU BATTLE中断保存');
+      return false;
+    }
+    const snapshot = buildSnapshot({ cpuGearOwnerSessionId: ownerSessionId, cpuGearSnapshotId: snapshotId });
+    const key = snapshot.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY;
+    const raw = JSON.stringify(snapshot);
+    try {
+      localStorage.setItem(key, raw);
+    } catch (error) {
+      setCpuGearStatus(Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_WRITE_FAILED'), {
+        code: 'CPU_GEAR_LEGACY_SUSPEND_WRITE_FAILED', cause: error
+      }), 'CPU BATTLE中断保存');
+      return false;
+    }
+    try {
+      // A takeover can happen after this tab checked ownership but before the
+      // synchronous legacy write.  Erase only our exact raw bytes; never
+      // touch a newer snapshot written by the new owner.
+      assertCpuGearRunOwnedByThisSession(readCpuGearRunState());
+    } catch (error) {
+      try { removeCpuLegacySuspendIfExact(key, raw); } catch (_) { /* the raw value remains for explicit recovery */ }
+      setCpuGearStatus(error, 'CPU BATTLE中断保存');
+      return false;
+    }
+    hasSuspendedSave = true;
+    return true;
   }
 
   // 自動保存は途中復帰のためだけのもの。CPU BATTLEで負けた試合を再開できない従来仕様は守る。
   function clearCpuBattleSuspendOnLoss() {
-    if (battleMode !== 'normal' || isOnline() || localWon() || isDraw()) return;
+    if (battleMode !== 'normal' || isOnline() || localWon()) return false;
+    // Phase 2C makes a normal 1v1 draw a terminal CPU Gear outcome.  The
+    // entitlement is saved first; if that strict save fails, leave the legacy
+    // turn-start snapshot intact rather than silently losing the run.
+    if (isCpuGearEligibleRun()) {
+      const outcome = isDraw() ? 'draw' : 'defeat';
+      const terminalOwnerSessionId = currentCpuGearOwnerSessionId();
+      const finalize = (applyResultNow = false) => finalizeCpuGearTerminalResultIfOwned(applyResultNow, terminalOwnerSessionId);
+      // A terminal result can be observed more than once while a native Web
+      // Lock callback is pending (for example, a late physics/timer frame).
+      // Share the one durable-intent operation instead of starting a second
+      // preparation attempt.
+      if (cpuGearTerminalSettlementPreparationPromise) return false;
+      const prepared = prepareCpuGearSettlementForTerminalOutcome(outcome);
+      if (isThenable(prepared)) {
+        // The native Web Lock callback resolves later.  Hold the existing
+        // streak/ranking state until the intent is durable, then finalize it
+        // exactly once from this continuation.
+        cpuGearTerminalSettlementDeferred = true;
+        cpuGearTerminalSettlementOutcome = outcome;
+        const preparation = Promise.resolve(prepared);
+        cpuGearTerminalSettlementPreparationPromise = preparation;
+        preparation.then((ready) => {
+          if (!ready) return false;
+          return finalize(true);
+        }, (error) => setCpuGearStatus(error, 'CPU BATTLE報酬の確定'))
+          .catch((error) => setCpuGearStatus(error, 'CPU BATTLE報酬の確定'))
+          .finally(() => {
+            if (cpuGearTerminalSettlementPreparationPromise === preparation) {
+              cpuGearTerminalSettlementPreparationPromise = null;
+            }
+          });
+        return false;
+      }
+      if (!prepared) {
+        // The legacy turn snapshot remains intact.  Do not reset the streak,
+        // submit ranking, or let the result screen discard this run until its
+        // small settlement intent has been durably saved and can be retried.
+        cpuGearTerminalSettlementDeferred = true;
+        cpuGearTerminalSettlementOutcome = outcome;
+        return false;
+      }
+      return finalize(false);
+    }
+    if (isDraw()) return false;
     clearSuspendedMatch();
     hasSuspendedSave = false;
+    return true;
   }
 
-  function loadSuspendedMatchFromKey(key) {
+  // Decode an already-read raw snapshot separately from localStorage access.
+  // CPU Gear resume claims one exact raw value under its lifecycle lock; it
+  // must never decode snapshot A and later delete a newer snapshot B.
+  function decodeSuspendedMatchRaw(key, raw) {
     try {
-      const raw = localStorage.getItem(key);
       if (!raw) return null;
       const data = migrateSnapshot(JSON.parse(raw));
       // 旧960px地形は列数が違うため、横長化後に無理に復元せず新しい試合へ切り替える。
@@ -7548,9 +7711,36 @@
     } catch (err) { return null; }
   }
 
+  function loadSuspendedMatchFromKey(key) {
+    try { return decodeSuspendedMatchRaw(key, localStorage.getItem(key)); }
+    catch (err) { return null; }
+  }
+
   function loadSuspendedMatch() {
     return loadSuspendedMatchFromKey(CUSTOM_SUSPEND_KEY)
       || loadSuspendedMatchFromKey(SUSPEND_KEY);
+  }
+
+  // A Gear-eligible CPU resume must consume the very same legacy snapshot
+  // that it decoded.  Reading through loadSuspendedMatch() and then fetching
+  // the raw value again leaves a window for a turn-start autosave in another
+  // tab: it could replace snapshot A with B, after which deleting B and
+  // restoring A forks the run.  Keep the selected key, raw bytes and decoded
+  // value together until the CPU lifecycle lock can compare-and-delete them.
+  function readCpuGearLegacySuspendForClaim() {
+    for (const key of [CUSTOM_SUSPEND_KEY, SUSPEND_KEY]) {
+      let raw;
+      try {
+        raw = localStorage.getItem(key);
+      } catch (error) {
+        throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_READ_FAILED'), {
+          code: 'CPU_GEAR_LEGACY_SUSPEND_READ_FAILED', cause: error
+        });
+      }
+      const data = decodeSuspendedMatchRaw(key, raw);
+      if (data) return { key, raw, data };
+    }
+    return null;
   }
 
   function clearCustomSuspendedMatch() {
@@ -7608,6 +7798,9 @@
     cutIn = null;
     menuOpen = false;
     coopSalvoState = null;
+    cpuGearTerminalSettlementPrepared = false;
+    cpuGearTerminalSettlementDeferred = false;
+    cpuGearTerminalSettlementOutcome = null;
   }
 
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
@@ -7798,19 +7991,927 @@
   }
 
   function resumeSuspendedMatch() {
+    // A second pointer/tab callback must not re-apply a live in-progress
+    // battle.  A completed result snapshot remains resumable for the legacy
+    // test/recovery path until terminal settlement has taken ownership.
+    if (gamePhase === 'battle' && !matchOver) return false;
+    if (cpuGearResumePromise) return true;
     pendingNewMatchKey = null;
-    const data = loadSuspendedMatch();
-    if (!data) return;
-    applySnapshot(data);
-    gamePhase = 'battle';
-    syncBgm({ restartStage: true });
-
-    clearSuspendedMatch(data);
-    hasSuspendedSave = !!loadSuspendedMatch();
-    updateDebug();
+    // Preserve the existing non-Gear resume fallback.  This first read is
+    // advisory only for a normal CPU 1v1 snapshot; that eligible path always
+    // re-reads and claims the raw value inside the CPU lifecycle lock below.
+    let advisorySnapshot = null;
+    try { advisorySnapshot = readCpuGearLegacySuspendForClaim(); }
+    catch (error) {
+      setCpuGearStatus(error, 'CPU BATTLE再開');
+      showTitleNotice(cpuGearStatusText);
+      return false;
+    }
+    const advisoryData = advisorySnapshot ? advisorySnapshot.data : null;
+    if (!advisoryData) return false;
+    // A normal CPU snapshot is claimed under the CPU-run lock before it is
+    // restored.  Two tabs must never both read the same legacy turn snapshot,
+    // fork the same runId, and later write incompatible peaks or settlements.
+    const restore = (claimed) => {
+      if (!claimed || !claimed.data) return false;
+      const { data, cpuSnapshotClaimed } = claimed;
+      applySnapshot(data);
+      gamePhase = 'battle';
+      syncBgm({ restartStage: true });
+      // Keep the rebound CPU snapshot as the recovery point for the narrow
+      // interval before the next turn-start autosave.  Its owner fence blocks
+      // the old tab, and a later reload explicitly transfers it again.
+      if (!cpuSnapshotClaimed) clearSuspendedMatch(data);
+      hasSuspendedSave = !!loadSuspendedMatch();
+      updateDebug();
+      return true;
+    };
+    if (!isCpuGearLegacySnapshot(advisoryData)) {
+      return restore({ data: advisoryData, cpuSnapshotClaimed: false });
+    }
+    const claimed = claimCpuGearLegacySuspendForResume(advisorySnapshot);
+    if (!isThenable(claimed)) return claimed ? restore(claimed) : false;
+    const task = Promise.resolve(claimed).then((value) => {
+      if (value) return restore(value);
+      return false;
+    }, (error) => {
+      setCpuGearStatus(error, 'CPU BATTLE再開');
+      showTitleNotice(cpuGearStatusText);
+      return false;
+    });
+    cpuGearResumePromise = task;
+    task.finally(() => {
+      if (cpuGearResumePromise === task) cpuGearResumePromise = null;
+    }).catch(() => undefined);
+    return true;
   }
 
   let hasSuspendedSave = !!loadSuspendedMatch();
+
+  // ===== CPU BATTLE Gear run / settlement bridge (Phase 2C) =====
+  // The three Gear modules own rules, validation, and storage.  This shell
+  // deliberately owns only the existing CPU battle lifecycle and its minimal
+  // Canvas status text; it never constructs Gear data or reward tables.
+  let cpuGearPersistenceState = 'initializing'; // ready | recovering | blocked
+  let cpuGearPersistenceError = null;
+  let cpuGearRecoveryPromise = Promise.resolve({ recovered: false });
+  let cpuGearOwnerSessionId = null;
+  let cpuGearAutosavePromise = null;
+  let cpuGearRunLockDepth = 0;
+  let cpuGearResumePromise = null;
+  let cpuGearStartPromise = null;
+  let cpuGearSettlementPromise = null;
+  let cpuGearContinuePromise = null;
+  let cpuGearSuspendPromise = null;
+  // `resetMatch()` normally starts the next turn and therefore performs its
+  // best-effort autosave. The voluntary title path needs that write to be an
+  // awaited, checked operation inside its lifecycle lock instead.
+  let cpuGearSkipNextTurnStartSuspend = false;
+  let cpuGearStatusText = '';
+  let cpuGearTerminalSettlementPrepared = false;
+  let cpuGearTerminalSettlementDeferred = false;
+  let cpuGearTerminalSettlementOutcome = null;
+  let cpuGearTerminalSettlementPreparationPromise = null;
+  let cpuGearAllowActiveRunReplacement = false;
+  let cpuGearLastSettlementIntent = null;
+
+  function cpuGearModules() {
+    const domain = globalThis.KatamonGearDomain;
+    const storage = globalThis.KatamonGearStorage;
+    const rewards = globalThis.KatamonGearRewards;
+    const transactions = globalThis.KatamonGearTransactions;
+    const cpuRewards = globalThis.KatamonGearCpuRewards;
+    const runStorage = globalThis.KatamonGearCpuRunStorage;
+    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage) {
+      throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
+    }
+    return { domain, storage, rewards, transactions, cpuRewards, runStorage };
+  }
+
+  function cpuGearErrorCode(error) {
+    return typeof error?.code === 'string' ? error.code : 'CPU_GEAR_PERSISTENCE_FAILED';
+  }
+
+  function cpuGearUserMessage(error, action = '処理') {
+    const code = cpuGearErrorCode(error);
+    if (code === 'CPU_GEAR_SETTLEMENT_PENDING') return '未精算のCPU BATTLE報酬があります。先に精算してください。';
+    if (code === 'CPU_GEAR_RUN_OWNERSHIP_LOST' || code === 'CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH') {
+      return 'このCPU BATTLEは別の画面で再開されています。古い画面では続行・精算できません。';
+    }
+    if (code === 'CPU_GEAR_ORPHAN_ACTIVE_RUN') return '前回のCPU BATTLE開始を安全に保存できませんでした。もう一度出撃を押すと、未開始の連勝を破棄して新しく開始します。';
+    if (code === 'PENDING_GEAR_TRANSACTION_EXISTS' || code === 'FOUNDATION_PENDING_GEAR_TRANSACTION') {
+      return 'ギア取引の復旧を確認中です。少し待ってからもう一度お試しください。';
+    }
+    if (code === 'STORAGE_LOCK_UNAVAILABLE' || code === 'TRANSACTION_LOCK_UNAVAILABLE' || code === 'CPU_GEAR_RUN_LOCK_UNAVAILABLE') {
+      return 'この端末では安全なギア保存ロックを利用できません。';
+    }
+    if (code === 'UNCLAIMED_REWARD_CAPACITY_EXCEEDED') return '未受取報酬が満杯です。';
+    if (code === 'CPU_GEAR_RUN_STORAGE_READ_FAILED' || code === 'CPU_GEAR_RUN_STORAGE_WRITE_FAILED') {
+      return 'CPU BATTLE報酬データを安全に保存できません。';
+    }
+    return `${action}を安全に完了できませんでした。報酬データは保持されています。`;
+  }
+
+  function setCpuGearStatus(error, action) {
+    cpuGearPersistenceError = error || null;
+    cpuGearStatusText = error ? cpuGearUserMessage(error, action) : '';
+    return cpuGearStatusText;
+  }
+
+  function cpuGearPersistenceReady() {
+    if (cpuGearPersistenceState === 'ready') return true;
+    if (cpuGearPersistenceState === 'recovering') {
+      cpuGearStatusText = 'ギア取引を復旧中です。完了後にもう一度お試しください。';
+    } else if (cpuGearPersistenceState === 'blocked') {
+      cpuGearStatusText = cpuGearUserMessage(cpuGearPersistenceError, 'ギア取引の復旧');
+    }
+    return false;
+  }
+
+  // A pending WAL must be recovered before this shell is allowed to touch
+  // Gear persistence.  No-WAL startup stays synchronous so existing CPU
+  // start/resume paths retain their synchronous public contract.
+  function bootstrapCpuGearPersistence() {
+    let modules;
+    try { modules = cpuGearModules(); } catch (error) {
+      cpuGearPersistenceState = 'blocked';
+      cpuGearPersistenceError = error;
+      return cpuGearRecoveryPromise;
+    }
+    let rawJournal;
+    try { rawJournal = localStorage.getItem(modules.transactions.GEAR_TRANSACTION_STORAGE_KEY); } catch (error) {
+      cpuGearPersistenceState = 'blocked';
+      cpuGearPersistenceError = error;
+      return cpuGearRecoveryPromise;
+    }
+    if (rawJournal === null) {
+      cpuGearPersistenceState = 'ready';
+      cpuGearPersistenceError = null;
+      return cpuGearRecoveryPromise;
+    }
+    cpuGearPersistenceState = 'recovering';
+    try {
+      cpuGearRecoveryPromise = Promise.resolve(modules.transactions.recoverPendingGearTransaction(localStorage))
+        .then((result) => {
+          cpuGearPersistenceState = 'ready';
+          cpuGearPersistenceError = null;
+          return result;
+        }, (error) => {
+          cpuGearPersistenceState = 'blocked';
+          cpuGearPersistenceError = error;
+          throw error;
+        });
+      // The rejection is intentionally observed here.  Callers use the
+      // explicit ready state, while the raw WAL remains untouched for retry.
+      cpuGearRecoveryPromise.catch(() => undefined);
+    } catch (error) {
+      cpuGearPersistenceState = 'blocked';
+      cpuGearPersistenceError = error;
+    }
+    return cpuGearRecoveryPromise;
+  }
+
+  function isCpuGearEligibleRun() {
+    return battleMode === 'normal' && !isOnline() && !is2v2();
+  }
+
+  function isThenable(value) {
+    return !!value && typeof value.then === 'function';
+  }
+
+  function isCpuGearLegacySnapshot(data) {
+    return !!data && data.battleMode === 'normal' && data.matchFormat !== '2v2';
+  }
+
+  function readCpuGearRunState() {
+    return cpuGearModules().runStorage.loadCpuGearRunState(localStorage);
+  }
+
+  function readCpuGearGate() {
+    const modules = cpuGearModules();
+    return modules.rewards.getGearRewardGate(modules.storage.loadGearState(localStorage));
+  }
+
+  function cpuGearGateMessage(gate) {
+    if (gate?.reasons?.includes('unclaimed_full')) return '未受取報酬が満杯です。先に報酬を受け取ってください。';
+    if (gate?.reasons?.includes('physical_storage_full')) return '倉庫とTEMP BOXが満杯です。空きを作ってください。';
+    return 'ギア報酬を安全に保存できないため、CPU BATTLEを開始できません。';
+  }
+
+  function ensureCpuGearGate(action) {
+    if (!cpuGearPersistenceReady()) return false;
+    try {
+      // The startup barrier handles a journal found while booting.  A journal
+      // can also be created later by another tab, so every CPU run mutation
+      // rechecks the raw key *after* its own lifecycle lock was acquired.
+      const { transactions } = cpuGearModules();
+      if (localStorage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY) !== null) {
+        throw Object.assign(new Error('PENDING_GEAR_TRANSACTION_EXISTS'), { code: 'PENDING_GEAR_TRANSACTION_EXISTS' });
+      }
+      const gate = readCpuGearGate();
+      if (gate.allowed) return true;
+      cpuGearStatusText = cpuGearGateMessage(gate);
+      showTitleNotice(cpuGearStatusText);
+      return false;
+    } catch (error) {
+      setCpuGearStatus(error, action);
+      showTitleNotice(cpuGearStatusText);
+      return false;
+    }
+  }
+
+  function createCpuGearRun(initialPeakStreak, ownerSessionId = currentCpuGearOwnerSessionId()) {
+    const { runStorage } = cpuGearModules();
+    const state = runStorage.createActiveCpuGearRun(
+      runStorage.createCryptoRunId(),
+      initialPeakStreak,
+      ownerSessionId,
+    );
+    return runStorage.saveCpuGearRunState(state, localStorage);
+  }
+
+  function currentCpuGearOwnerSessionId() {
+    if (cpuGearOwnerSessionId) return cpuGearOwnerSessionId;
+    const { runStorage } = cpuGearModules();
+    cpuGearOwnerSessionId = runStorage.createCryptoOwnerSessionId();
+    return cpuGearOwnerSessionId;
+  }
+
+  function assertCpuGearRunOwnedByThisSession(rawState, options = {}) {
+    const { runStorage } = cpuGearModules();
+    let state = rawState || readCpuGearRunState();
+    if (!state) throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+    if (state.resumeClaim !== null && options.allowResumeClaim !== true) {
+      throw Object.assign(new Error('CPU_GEAR_RESUME_CLAIM_PENDING'), { code: 'CPU_GEAR_RESUME_CLAIM_PENDING' });
+    }
+    // An async settlement captures its owner at initiation.  Do not reread a
+    // mutable runtime token at Phase C, otherwise a test/runtime handoff could
+    // let the old operation act as the new owner after Phase B.
+    const ownerSessionId = options.ownerSessionId || currentCpuGearOwnerSessionId();
+    if (state.ownerSessionId === ownerSessionId) return state;
+    if (state.ownerSessionId === null && options.claimUnowned === true) {
+      state = runStorage.saveCpuGearRunState(runStorage.withOwnerSessionId(state, ownerSessionId), localStorage);
+      return state;
+    }
+    if (options.takeoverPending === true && state.state === runStorage.SETTLEMENT_PENDING) {
+      state = runStorage.saveCpuGearRunState(runStorage.withOwnerSessionId(state, ownerSessionId), localStorage);
+      return state;
+    }
+    throw Object.assign(new Error('CPU_GEAR_RUN_OWNERSHIP_LOST'), { code: 'CPU_GEAR_RUN_OWNERSHIP_LOST' });
+  }
+
+  function takeOverCpuGearActiveRunOwnership(rawState) {
+    const { runStorage } = cpuGearModules();
+    const state = rawState || readCpuGearRunState();
+    if (!state) throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+    if (state.state !== runStorage.ACTIVE || state.resumeClaim !== null) {
+      throw Object.assign(new Error('CPU_GEAR_RUN_NOT_ACTIVE'), { code: 'CPU_GEAR_RUN_NOT_ACTIVE' });
+    }
+    const ownerSessionId = currentCpuGearOwnerSessionId();
+    if (state.ownerSessionId === ownerSessionId) return state;
+    return runStorage.saveCpuGearRunState(runStorage.withOwnerSessionId(state, ownerSessionId), localStorage);
+  }
+
+  function cpuGearRunLifecycle(action, operation) {
+    if (!cpuGearPersistenceReady()) return false;
+    try {
+      const lockedOperation = () => {
+        cpuGearRunLockDepth += 1;
+        try {
+          const value = operation();
+          if (isThenable(value)) {
+            return Promise.resolve(value).finally(() => { cpuGearRunLockDepth -= 1; });
+          }
+          cpuGearRunLockDepth -= 1;
+          return value;
+        } catch (error) {
+          cpuGearRunLockDepth -= 1;
+          throw error;
+        }
+      };
+      const result = cpuGearModules().runStorage.withCpuGearRunLock(lockedOperation);
+      if (isThenable(result)) {
+        return result.catch((error) => {
+          setCpuGearStatus(error, action);
+          showTitleNotice(cpuGearStatusText);
+          return false;
+        });
+      }
+      return result;
+    } catch (error) {
+      setCpuGearStatus(error, action);
+      showTitleNotice(cpuGearStatusText);
+      return false;
+    }
+  }
+
+  function rawLegacyCpuSuspendIsAbsent() {
+    try { return localStorage.getItem(SUSPEND_KEY) === null; }
+    catch (error) { throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_READ_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_READ_FAILED', cause: error }); }
+  }
+
+  function cpuGearLegacySnapshotFencing(data) {
+    const ownerSessionId = data && typeof data.cpuGearOwnerSessionId === 'string'
+      ? data.cpuGearOwnerSessionId
+      : null;
+    const snapshotId = data && typeof data.cpuGearSnapshotId === 'string'
+      ? data.cpuGearSnapshotId
+      : null;
+    if ((data && Object.prototype.hasOwnProperty.call(data, 'cpuGearOwnerSessionId') && ownerSessionId === null)
+        || (data && Object.prototype.hasOwnProperty.call(data, 'cpuGearSnapshotId') && snapshotId === null)) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH'), { code: 'CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH' });
+    }
+    return { ownerSessionId, snapshotId };
+  }
+
+  function isCpuGearResumeClaimSourceSnapshot(claim, fencing) {
+    if (!claim) return false;
+    const isOwnerlessLegacy = claim.sourceOwnerSessionId === null
+      && fencing.ownerSessionId === null
+      && fencing.snapshotId === null;
+    if (isOwnerlessLegacy) return true;
+    return fencing.ownerSessionId === claim.sourceOwnerSessionId
+      && fencing.snapshotId === claim.snapshotId;
+  }
+
+  function isCpuGearResumeClaimTargetSnapshot(claim, fencing) {
+    return !!claim
+      && fencing.ownerSessionId === claim.targetOwnerSessionId
+      && fencing.snapshotId === claim.targetSnapshotId;
+  }
+
+  function assertCpuGearResumeClaimSourceSnapshot(claim, fencing) {
+    if (!isCpuGearResumeClaimSourceSnapshot(claim, fencing)) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CONFLICT'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CONFLICT' });
+    }
+  }
+
+  function beginCpuGearRunForNewMatch(allowActiveRunReplacement = false, startMatch = null) {
+    return cpuGearRunLifecycle('CPU BATTLE開始', () => {
+      if (!ensureCpuGearGate('CPU BATTLE開始')) return false;
+      const { runStorage } = cpuGearModules();
+      const existing = readCpuGearRunState();
+      if (existing && existing.ownerSessionId !== null
+          && existing.ownerSessionId !== currentCpuGearOwnerSessionId()) {
+        throw Object.assign(new Error('CPU_GEAR_RUN_OWNERSHIP_LOST'), { code: 'CPU_GEAR_RUN_OWNERSHIP_LOST' });
+      }
+      if (existing && existing.state === runStorage.SETTLEMENT_PENDING) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_PENDING'), { code: 'CPU_GEAR_SETTLEMENT_PENDING' });
+      }
+      if (existing && !allowActiveRunReplacement) {
+        if (rawLegacyCpuSuspendIsAbsent()) {
+          // The first failed launch deliberately leaves the newly-created
+          // identity untouched when its cleanup cannot be verified. There is
+          // no resumable battle snapshot in that case, so the next explicit
+          // user tap is the only safe acknowledgement that it may be replaced.
+          // Never replace it automatically.
+          cpuGearAllowActiveRunReplacement = true;
+          throw Object.assign(new Error('CPU_GEAR_ORPHAN_ACTIVE_RUN'), { code: 'CPU_GEAR_ORPHAN_ACTIVE_RUN' });
+        }
+        throw Object.assign(new Error('CPU_GEAR_ACTIVE_RUN_EXISTS'), { code: 'CPU_GEAR_ACTIVE_RUN_EXISTS' });
+      }
+      const created = createCpuGearRun(0);
+      try {
+        const started = typeof startMatch === 'function' ? startMatch() : true;
+        // A run identity without the legacy battle snapshot cannot be resumed.
+        // If turn-start persistence failed, remove only the just-created state;
+        // if removal itself is ambiguous, the next explicit start exposes the
+        // orphan recovery path above instead of silently discarding it.
+        if (started === false || !loadSuspendedMatch()) {
+          throw Object.assign(new Error('CPU_GEAR_INITIAL_SUSPEND_SAVE_FAILED'), { code: 'CPU_GEAR_INITIAL_SUSPEND_SAVE_FAILED' });
+        }
+        setCpuGearStatus(null);
+        return true;
+      } catch (error) {
+        try {
+          const current = readCpuGearRunState();
+          if (current && current.runId === created.runId && current.state === runStorage.ACTIVE) {
+            runStorage.removeCpuGearRunState(localStorage);
+          }
+        } catch (_) {
+          // Do not hide a read-back-ambiguous active state.  The next start
+          // uses the explicit orphan recovery notice rather than overwriting it.
+        }
+        throw error;
+      }
+    });
+  }
+
+  function claimCpuGearLegacySuspendForResume(expectedSnapshot = null) {
+    return cpuGearRunLifecycle('CPU BATTLE再開', () => {
+      // A same-runtime double tap may have passed the title-state advisory
+      // check before the first callback got the lock.  Once battle is live,
+      // that queued callback must be a no-op rather than re-applying a stale
+      // snapshot.
+      if (gamePhase === 'battle' && !matchOver) return null;
+      const snapshot = readCpuGearLegacySuspendForClaim();
+      if (!snapshot) return null;
+      const { key: suspendKey, raw: rawSnapshot, data } = snapshot;
+      // The outer resume read is advisory only, but its exact bytes are a CAS
+      // token.  If another runtime has rebound the same save in the meantime,
+      // this click must not take ownership of the new recovery snapshot.
+      if (expectedSnapshot
+          && (expectedSnapshot.key !== suspendKey || expectedSnapshot.raw !== rawSnapshot)) {
+        return null;
+      }
+      if (!isCpuGearLegacySnapshot(data)) return { data, cpuSnapshotClaimed: false };
+      if (!ensureCpuGearGate('CPU BATTLE再開')) return false;
+      const { runStorage } = cpuGearModules();
+      const currentStreak = Number.isSafeInteger(data.winStreak) && data.winStreak >= 0 ? data.winStreak : 0;
+      const snapshotFencing = cpuGearLegacySnapshotFencing(data);
+      const ownerSessionId = currentCpuGearOwnerSessionId();
+      let state = readCpuGearRunState();
+      if (!state) {
+        // A snapshot without an owner is the only supported pre-fencing
+        // legacy form.  An owned snapshot without its run state cannot prove
+        // that it is the latest branch, so never recreate that identity.
+        if (snapshotFencing.ownerSessionId !== null) {
+          throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH'), { code: 'CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH' });
+        }
+        // Keep the old ownerless state until a forward-recoverable resume
+        // marker is durable.  This protects a write failure between the small
+        // run state and the legacy snapshot keys.
+        state = createCpuGearRun(currentStreak, null);
+      } else if (state.state === runStorage.SETTLEMENT_PENDING) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_PENDING'), { code: 'CPU_GEAR_SETTLEMENT_PENDING' });
+      } else if (state.resumeClaim === null) {
+        // A resume is the explicit active-run takeover boundary.  Only the
+        // exact legacy snapshot owned by the current run may transfer it to
+        // this runtime; a stale tab's snapshot must never be restored.
+        if (state.ownerSessionId !== snapshotFencing.ownerSessionId) {
+          throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH'), { code: 'CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH' });
+        }
+        if (state.peakStreak < currentStreak) {
+          state = runStorage.saveCpuGearRunState(runStorage.withPeakStreak(state, currentStreak), localStorage);
+        }
+      }
+
+      let claim = state.resumeClaim;
+      if (claim === null) {
+        claim = {
+          sourceOwnerSessionId: state.ownerSessionId,
+          targetOwnerSessionId: ownerSessionId,
+          snapshotId: snapshotFencing.snapshotId || runStorage.createCryptoSnapshotId(),
+          targetSnapshotId: runStorage.createCryptoSnapshotId(),
+        };
+        state = runStorage.saveCpuGearRunState(runStorage.withResumeClaim(state, claim), localStorage);
+      } else if (claim.targetOwnerSessionId !== ownerSessionId) {
+        // A crash can leave the marker after the raw rebind has succeeded.
+        // Complete that exact forward recovery first; its new snapshot token
+        // deliberately invalidates this stale caller's advisory CAS.  A
+        // fresh explicit resume can then transfer the retained snapshot.
+        if (isCpuGearResumeClaimTargetSnapshot(claim, snapshotFencing)) {
+          state = runStorage.saveCpuGearRunState(
+            runStorage.completeResumeClaim(state, claim.targetOwnerSessionId),
+            localStorage,
+          );
+          return null;
+        }
+        // If only the small run-state marker was written, no legacy bytes
+        // have changed yet.  A new runtime may safely become the recovery
+        // target; generate a fresh target token before it writes anything.
+        assertCpuGearResumeClaimSourceSnapshot(claim, snapshotFencing);
+        claim = {
+          ...claim,
+          targetOwnerSessionId: ownerSessionId,
+          targetSnapshotId: runStorage.createCryptoSnapshotId(),
+        };
+        state = runStorage.saveCpuGearRunState(runStorage.withResumeClaim(state, claim), localStorage);
+      }
+      claim = state.resumeClaim;
+      if (isCpuGearResumeClaimTargetSnapshot(claim, snapshotFencing)) {
+        // The legacy rebind committed but completion-marker cleanup did not.
+        // Do not write it again: complete the tiny forward-recovery step.
+        state = runStorage.saveCpuGearRunState(runStorage.completeResumeClaim(state, ownerSessionId), localStorage);
+        setCpuGearStatus(null);
+        return { data, cpuSnapshotClaimed: true };
+      }
+      assertCpuGearResumeClaimSourceSnapshot(claim, snapshotFencing);
+
+      // Fence the old tab before changing the legacy raw.  The marker remains
+      // durable until both keys agree, so a rebind write/read-back failure can
+      // forward-recover on the next explicit resume instead of producing an
+      // owner mismatch dead end.
+      if (state.ownerSessionId !== ownerSessionId) {
+        state = runStorage.saveCpuGearRunState(runStorage.withResumeClaimOwner(state, ownerSessionId), localStorage);
+      }
+      let reboundSnapshot;
+      try {
+        reboundSnapshot = replaceCpuLegacySuspendOwnerStrict(
+          suspendKey,
+          rawSnapshot,
+          data,
+          ownerSessionId,
+          claim.targetSnapshotId,
+        );
+      } catch (error) {
+        // If this was only a same-owner refresh (not a cross-runtime
+        // takeover), a newer raw snapshot is already authoritative.  Clearing
+        // the marker re-enables its normal resume path without ever restoring
+        // or deleting the newer bytes.  A genuine ownership handoff keeps the
+        // marker for forward recovery.
+        if (state.ownerSessionId === ownerSessionId
+            && claim.sourceOwnerSessionId === ownerSessionId
+            && claim.targetOwnerSessionId === ownerSessionId
+            && snapshotFencing.ownerSessionId === ownerSessionId) {
+          runStorage.saveCpuGearRunState(runStorage.completeResumeClaim(state, ownerSessionId), localStorage);
+        }
+        throw error;
+      }
+      state = runStorage.saveCpuGearRunState(runStorage.completeResumeClaim(state, ownerSessionId), localStorage);
+      setCpuGearStatus(null);
+      return { data: reboundSnapshot.data, cpuSnapshotClaimed: true };
+    });
+  }
+
+  function recordCpuGearPeakAfterWin() {
+    if (!isCpuGearEligibleRun()) return true;
+    return cpuGearRunLifecycle('連勝記録', () => {
+      // A full reward destination blocks the *next* reward-bearing battle,
+      // but must never make us forget a win that already happened.
+      assertCpuGearJournalClear();
+      const { runStorage } = cpuGearModules();
+      let state = readCpuGearRunState();
+      if (!state || state.state !== runStorage.ACTIVE) {
+        throw Object.assign(new Error('CPU_GEAR_RUN_NOT_ACTIVE'), { code: 'CPU_GEAR_RUN_NOT_ACTIVE' });
+      }
+      state = assertCpuGearRunOwnedByThisSession(state, { claimUnowned: true });
+      runStorage.saveCpuGearRunState(runStorage.withPeakStreak(state, winStreak), localStorage);
+      setCpuGearStatus(null);
+      return true;
+    });
+  }
+
+  // Starting the next CPU round is a lifecycle mutation too: it writes the
+  // legacy turn-start suspend and it must not pass a stale reward gate while
+  // another tab has created a Gear WAL.  Keep the read/gate/reset/suspend
+  // sequence under the CPU run lock, without entering the Gear writer lock.
+  function cpuGearResultActionInFlight() {
+    return !!cpuGearSettlementPromise
+      || !!cpuGearContinuePromise
+      || !!cpuGearTerminalSettlementPreparationPromise
+      || !!cpuGearSuspendPromise;
+  }
+
+  function rejectCpuGearResultActionWhileBusy(action) {
+    const error = Object.assign(new Error('CPU_GEAR_RESULT_ACTION_IN_PROGRESS'), {
+      code: 'CPU_GEAR_RESULT_ACTION_IN_PROGRESS'
+    });
+    setCpuGearStatus(error, action);
+    return false;
+  }
+
+  function continueCpuGearRunAfterWin() {
+    if (cpuGearContinuePromise) return cpuGearContinuePromise;
+    if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
+      return rejectCpuGearResultActionWhileBusy('CPU BATTLE継続');
+    }
+    const continued = cpuGearRunLifecycle('CPU BATTLE継続', () => {
+      // This recheck is required after acquiring the CPU lock.  A settlement
+      // request can have started while this continue request was waiting.
+      if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
+        return rejectCpuGearResultActionWhileBusy('CPU BATTLE継続');
+      }
+      const { runStorage } = cpuGearModules();
+      let state = readCpuGearRunState();
+      if (!state || state.state !== runStorage.ACTIVE) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_PENDING'), { code: 'CPU_GEAR_SETTLEMENT_PENDING' });
+      }
+      state = assertCpuGearRunOwnedByThisSession(state, { claimUnowned: true });
+      if (!ensureCpuGearGate('CPU BATTLE継続')) return false;
+      resetMatch(true);
+      return true;
+    });
+    if (!isThenable(continued)) return continued;
+    const task = Promise.resolve(continued);
+    cpuGearContinuePromise = task;
+    task.finally(() => {
+      if (cpuGearContinuePromise === task) cpuGearContinuePromise = null;
+    }).catch(() => undefined);
+    return task;
+  }
+
+  function prepareCpuGearSettlementForTerminalOutcome(outcome) {
+    if (!isCpuGearEligibleRun()) return true;
+    return cpuGearRunLifecycle('CPU BATTLE報酬の確定', () => {
+      if (!cpuGearPersistenceReady()) return false;
+      // A settlement is allowed even when the physical reward gate is full:
+      // its small intent is the durable entitlement that must survive until
+      // the user frees capacity and retries queueing.
+      const { transactions } = cpuGearModules();
+      if (localStorage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY) !== null) {
+        throw Object.assign(new Error('PENDING_GEAR_TRANSACTION_EXISTS'), { code: 'PENDING_GEAR_TRANSACTION_EXISTS' });
+      }
+      const { cpuRewards, runStorage } = cpuGearModules();
+      let state = readCpuGearRunState();
+      if (!state) throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+      state = assertCpuGearRunOwnedByThisSession(state, { claimUnowned: true });
+      if (state.state === runStorage.SETTLEMENT_PENDING) {
+        if (state.settlementIntent.outcome !== outcome) {
+          throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_CONFLICT'), { code: 'CPU_GEAR_SETTLEMENT_CONFLICT' });
+        }
+        cpuGearTerminalSettlementPrepared = true;
+        return true;
+      }
+      state = runStorage.withPeakStreak(state, winStreak);
+      const intent = cpuRewards.createCpuSettlementIntent({
+        runId: state.runId,
+        peakStreak: state.peakStreak,
+        outcome,
+        settlementCreatedAtMs: Date.now(),
+      });
+      state = runStorage.withSettlementIntent(state, intent);
+      runStorage.saveCpuGearRunState(state, localStorage);
+      cpuGearTerminalSettlementPrepared = true;
+      setCpuGearStatus(null);
+      return true;
+    });
+  }
+
+  // Terminal ranking/streak finalization is a mutation too.  A different
+  // runtime may explicitly take over the pending settlement after Phase A;
+  // the former owner must then neither erase its newer snapshot nor submit a
+  // stale terminal result.
+  function finalizeCpuGearTerminalResultIfOwned(applyResultNow = false, ownerSessionId = currentCpuGearOwnerSessionId()) {
+    return cpuGearRunLifecycle('CPU BATTLE終了', () => {
+      const { runStorage } = cpuGearModules();
+      const state = readCpuGearRunState();
+      if (!state || state.state !== runStorage.SETTLEMENT_PENDING) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_CONFLICT'), { code: 'CPU_GEAR_SETTLEMENT_CONFLICT' });
+      }
+      assertCpuGearRunOwnedByThisSession(state, { ownerSessionId });
+      // The strict pending run state now blocks accidental resume even if
+      // this legacy best-effort cleanup is interrupted.  Later settlement
+      // retries its own strict cleanup before the run identity is removed.
+      clearSuspendedMatch();
+      hasSuspendedSave = !!loadSuspendedMatch();
+      cpuGearTerminalSettlementDeferred = false;
+      cpuGearTerminalSettlementOutcome = null;
+      if (applyResultNow) applyStreakResult();
+      return true;
+    });
+  }
+
+  function retryCpuGearTerminalSettlementPreparation() {
+    if (!isCpuGearEligibleRun() || !matchOver || !cpuGearTerminalSettlementDeferred) return false;
+    if (cpuGearTerminalSettlementPreparationPromise) return true;
+    const outcome = cpuGearTerminalSettlementOutcome || (isDraw() ? 'draw' : 'defeat');
+    const complete = () => finalizeCpuGearTerminalResultIfOwned(true);
+    const prepared = prepareCpuGearSettlementForTerminalOutcome(outcome);
+    if (!isThenable(prepared)) return prepared ? complete() : false;
+    const preparation = Promise.resolve(prepared);
+    cpuGearTerminalSettlementPreparationPromise = preparation;
+    preparation.then((ready) => { if (ready) complete(); }, (error) => setCpuGearStatus(error, 'CPU BATTLE報酬の確定'))
+      .finally(() => {
+        if (cpuGearTerminalSettlementPreparationPromise === preparation) {
+          cpuGearTerminalSettlementPreparationPromise = null;
+        }
+      });
+    return true;
+  }
+
+  function currentCpuGearSettlementPreview() {
+    try {
+      const { cpuRewards, runStorage } = cpuGearModules();
+      const state = readCpuGearRunState();
+      if (!state) return null;
+      const outcome = state.state === runStorage.SETTLEMENT_PENDING
+        ? state.settlementIntent.outcome
+        : 'voluntary';
+      // A just-won battle may be rendering while its peak write reports a
+      // recoverable storage error.  Settlement itself persists this maximum,
+      // so preview the same candidate rather than misleadingly showing the
+      // prior saved threshold for this one result screen.
+      const peakStreak = state.state === runStorage.ACTIVE && localWon()
+        ? Math.max(state.peakStreak, Number.isSafeInteger(winStreak) ? winStreak : 0)
+        : state.peakStreak;
+      return {
+        state,
+        preview: cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
+      };
+    } catch (error) {
+      setCpuGearStatus(error, 'CPU BATTLE報酬の確認');
+      return null;
+    }
+  }
+
+  function rewardAlreadyQueuedOrProcessed(intent) {
+    const state = cpuGearModules().storage.loadGearState(localStorage);
+    return state.unclaimedRewards.some((reward) => reward.rewardId === intent.rewardId)
+      || state.rewardLedger[intent.rewardId] === true;
+  }
+
+  function canQueueCpuSettlement(intent) {
+    if (rewardAlreadyQueuedOrProcessed(intent)) return true;
+    const gate = readCpuGearGate();
+    if (gate.allowed) return true;
+    cpuGearStatusText = cpuGearGateMessage(gate);
+    return false;
+  }
+
+  function sameCpuGearSettlementIntent(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function assertCpuGearJournalClear() {
+    const { transactions } = cpuGearModules();
+    if (localStorage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY) !== null) {
+      throw Object.assign(new Error('PENDING_GEAR_TRANSACTION_EXISTS'), { code: 'PENDING_GEAR_TRANSACTION_EXISTS' });
+    }
+  }
+
+  async function withCpuGearRunLockAsync(action, operation) {
+    if (!cpuGearPersistenceReady()) {
+      throw Object.assign(new Error('CPU_GEAR_PERSISTENCE_NOT_READY'), { code: 'CPU_GEAR_PERSISTENCE_NOT_READY' });
+    }
+    try {
+      return await Promise.resolve(cpuGearModules().runStorage.withCpuGearRunLock(operation));
+    } catch (error) {
+      setCpuGearStatus(error, action);
+      throw error;
+    }
+  }
+
+  function removeCpuLegacySuspendStrict(suspendKey = SUSPEND_KEY, expectedRaw = undefined) {
+    let existing;
+    try { existing = localStorage.getItem(suspendKey); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED', cause: error });
+    }
+    if (existing === null) return true;
+    if (expectedRaw !== undefined && existing !== expectedRaw) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CONFLICT'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CONFLICT' });
+    }
+    try { localStorage.removeItem(suspendKey); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED', cause: error });
+    }
+    let readBack;
+    try { readBack = localStorage.getItem(suspendKey); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED', cause: error });
+    }
+    if (readBack !== null) throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLEANUP_FAILED' });
+    hasSuspendedSave = !!loadSuspendedMatch();
+    return true;
+  }
+
+  // Compare-and-delete is deliberately non-throwing for owner-fence cleanup:
+  // another runtime may have replaced the legacy snapshot after a successful
+  // ownership transfer.  In that case its bytes are not ours to erase.
+  function removeCpuLegacySuspendIfExact(suspendKey, expectedRaw) {
+    try {
+      if (localStorage.getItem(suspendKey) !== expectedRaw) return false;
+      localStorage.removeItem(suspendKey);
+      const removed = localStorage.getItem(suspendKey) === null;
+      if (removed) hasSuspendedSave = !!loadSuspendedMatch();
+      return removed;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function replaceCpuLegacySuspendOwnerStrict(suspendKey, expectedRaw, snapshotData, ownerSessionId, snapshotId) {
+    let existing;
+    try { existing = localStorage.getItem(suspendKey); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED', cause: error });
+    }
+    if (existing !== expectedRaw) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CONFLICT'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CONFLICT' });
+    }
+    const reboundData = {
+      ...snapshotData,
+      cpuGearOwnerSessionId: ownerSessionId,
+      cpuGearSnapshotId: snapshotId,
+    };
+    const reboundRaw = JSON.stringify(reboundData);
+    try { localStorage.setItem(suspendKey, reboundRaw); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED', cause: error });
+    }
+    let readBack;
+    try { readBack = localStorage.getItem(suspendKey); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED', cause: error });
+    }
+    if (readBack !== reboundRaw) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_CLAIM_FAILED' });
+    }
+    return { data: reboundData, raw: reboundRaw };
+  }
+
+  async function settleCpuGearRun(outcome = 'voluntary') {
+    if (!cpuGearPersistenceReady()) throw Object.assign(new Error('CPU_GEAR_PERSISTENCE_NOT_READY'), { code: 'CPU_GEAR_PERSISTENCE_NOT_READY' });
+    if (cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+      throw Object.assign(new Error('CPU_GEAR_RESULT_ACTION_IN_PROGRESS'), { code: 'CPU_GEAR_RESULT_ACTION_IN_PROGRESS' });
+    }
+    const { cpuRewards, runStorage, rewards } = cpuGearModules();
+    const settlementOwnerSessionId = currentCpuGearOwnerSessionId();
+    // Phase A: CPU run lock only.  It commits one durable intent, then is
+    // released before Phase B enters the Gear reward lock.  Web Locks are
+    // non-reentrant, so nesting the two locks would deadlock.
+    const phaseA = await withCpuGearRunLockAsync('CPU BATTLE報酬の精算', () => {
+      assertCpuGearJournalClear();
+      let state = readCpuGearRunState();
+      if (!state) {
+        if (cpuGearLastSettlementIntent && rewardAlreadyQueuedOrProcessed(cpuGearLastSettlementIntent)) {
+          return { intent: cpuGearLastSettlementIntent, alreadyCleaned: true };
+        }
+        throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+      }
+      // A pending settlement is intentionally transferable only through this
+      // explicit user settlement action (for example after a reload).  An
+      // active run, by contrast, must already belong to this runtime before
+      // it may create a terminal entitlement.
+      state = assertCpuGearRunOwnedByThisSession(state, {
+        claimUnowned: true,
+        takeoverPending: state.state === runStorage.SETTLEMENT_PENDING,
+        ownerSessionId: settlementOwnerSessionId,
+      });
+      if (state.state === runStorage.ACTIVE) {
+        state = runStorage.withPeakStreak(state, winStreak);
+        const intent = cpuRewards.createCpuSettlementIntent({
+          runId: state.runId,
+          peakStreak: state.peakStreak,
+          outcome,
+          settlementCreatedAtMs: Date.now(),
+        });
+        state = runStorage.withSettlementIntent(state, intent);
+        state = runStorage.saveCpuGearRunState(state, localStorage);
+      }
+      const intent = state.settlementIntent;
+      if (!intent) throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_INTENT_MISSING'), { code: 'CPU_GEAR_SETTLEMENT_INTENT_MISSING' });
+      cpuGearLastSettlementIntent = intent;
+      return { intent, alreadyCleaned: false };
+    });
+    const intent = phaseA.intent;
+    const reward = cpuRewards.materializeCpuGearReward(intent);
+    let queueResult = { skippedEmptyReward: reward.gears.length === 0 && reward.blueprintShards === 0 };
+    // Phase B: the Phase 2B Gear writer owns its own common Gear lock.
+    if (!phaseA.alreadyCleaned && !queueResult.skippedEmptyReward) {
+      if (!canQueueCpuSettlement(intent)) {
+        throw Object.assign(new Error('CPU_GEAR_REWARD_GATE_BLOCKED'), { code: 'CPU_GEAR_REWARD_GATE_BLOCKED' });
+      }
+      // persistQueueReward is the Phase 2B idempotent, lock-protected writer.
+      // A read-back ambiguous error leaves this same intent intact for a safe
+      // retry with the same reward body.
+      queueResult = await rewards.persistQueueReward(reward, localStorage);
+    }
+    // Phase C: reacquire the CPU run lock and only clean up if exactly the
+    // same durable entitlement is still present.  No stale run snapshot is
+    // ever written back over another tab's newer state.
+    const cleanup = await withCpuGearRunLockAsync('CPU BATTLE報酬の精算', () => {
+      assertCpuGearJournalClear();
+      const current = readCpuGearRunState();
+      if (!current) {
+        if (!rewardAlreadyQueuedOrProcessed(intent)) {
+          throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_CLEANUP_CONFLICT'), { code: 'CPU_GEAR_SETTLEMENT_CLEANUP_CONFLICT' });
+        }
+        return { alreadyCleaned: true };
+      }
+      if (current.state !== runStorage.SETTLEMENT_PENDING
+          || !sameCpuGearSettlementIntent(current.settlementIntent, intent)) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_CONFLICT'), { code: 'CPU_GEAR_SETTLEMENT_CONFLICT' });
+      }
+      // Do not let the old owner clean up after another runtime explicitly
+      // took over the pending entitlement while Phase B was queueing it.
+      assertCpuGearRunOwnedByThisSession(current, { ownerSessionId: settlementOwnerSessionId });
+      if (!queueResult.skippedEmptyReward && !rewardAlreadyQueuedOrProcessed(intent)) {
+        throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_QUEUE_NOT_CONFIRMED'), { code: 'CPU_GEAR_SETTLEMENT_QUEUE_NOT_CONFIRMED' });
+      }
+      // Delete the old battle snapshot before removing the run identity.  If
+      // either strict cleanup fails, the pending intent remains for an exact
+      // duplicate-safe retry; never roll back an already queued reward.
+      removeCpuLegacySuspendStrict();
+      runStorage.removeCpuGearRunState(localStorage);
+      return { alreadyCleaned: false };
+    });
+    cpuGearLastSettlementIntent = null;
+    return { intent, reward, queueResult, cleanup };
+  }
+
+  function requestCpuGearSettlement(outcome = 'voluntary') {
+    if (cpuGearSettlementPromise) return cpuGearSettlementPromise;
+    if (cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+      return rejectCpuGearResultActionWhileBusy('CPU BATTLE報酬の精算');
+    }
+    let task;
+    try { task = Promise.resolve(settleCpuGearRun(outcome)); }
+    catch (error) { task = Promise.reject(error); }
+    cpuGearSettlementPromise = task;
+    task.then(() => {
+      cpuGearTerminalSettlementPrepared = false;
+      cpuGearStatusText = '';
+      winStreak = 0;
+      runStats = { damageDealt: 0, shots: 0 };
+      returnToTitleFromResult();
+    }, (error) => {
+      setCpuGearStatus(error, 'CPU BATTLE報酬の精算');
+    }).finally(() => {
+      cpuGearSettlementPromise = null;
+    });
+    return task;
+  }
+
+  // Run the barrier immediately after all persistence helpers exist.  The
+  // result is intentionally not fire-and-forget: state is retained and every
+  // CPU Gear entry checks it before starting a persistence mutation.
+  bootstrapCpuGearPersistence();
 
   // ===== オンライン対戦(Stage 3: Firebase REST/SSE、開発時はBroadcastChannel)=====
   //
@@ -11509,6 +12610,16 @@
   // タイトルの CPU BATTLE の説明文。告知は吹き出し(drawSuspendedSaveBubble)が担うので、
   // ここは常に通常の説明のまま。両方に出すと同じことを二度言うことになる。
   function titleCpuButtonSub() {
+    // A pending entitlement must be visible before the player tries to create
+    // a new CPU run.  This is intentionally text-only; Gear UI is Phase 4.
+    try {
+      if (typeof readCpuGearRunState === 'function') {
+        const run = readCpuGearRunState();
+        if (run?.state === 'settlement_pending') return '未精算のCPU BATTLE報酬があります';
+      }
+    } catch (_) {
+      if (typeof cpuGearStatusText === 'string' && cpuGearStatusText) return 'CPU BATTLE報酬データを確認してください';
+    }
     return 'モンスターを選んで連勝へ挑め';
   }
 
@@ -13767,13 +14878,31 @@
     if (is2v2()) return;
     // 対人戦は連勝にもランキングにも含めない(勝ちの譲り合いの温床になるため)。
     if (isOnline()) return;
+    // A terminal CPU Gear intent is the durable entitlement boundary.  If it
+    // could not be saved yet, keep the existing streak/ranking state intact
+    // and expose an explicit retry on the result screen rather than treating
+    // corrupt or quota-limited storage as an ordinary completed loss.
+    if (isCpuGearEligibleRun() && cpuGearTerminalSettlementDeferred) return;
+    // Legacy draws keep a normal CPU streak.  Phase 2C deliberately narrows
+    // the new terminal behavior to Gear-eligible normal 1v1 only, and only
+    // after its settlement intent was durably saved before this function.
+    // Handle this before MVP events: terminal draw must not mutate foundation
+    // reward/achievement data or submit an old loss-side ranking entry.
+    const terminalCpuGearDraw = isDraw() && isCpuGearEligibleRun() && cpuGearTerminalSettlementPrepared;
+    if (isDraw() && !terminalCpuGearDraw) return;
+    if (terminalCpuGearDraw) {
+      lastRunStreak = winStreak;
+      lastRunEfficiency = currentEfficiency();
+      winStreak = 0;
+      runStats = { damageDealt: 0, shots: 0 };
+      return;
+    }
     recordMvpRewardEvent({
       id: `cpu-technique:${Date.now()}:${mvpLocalRewardEventSeq++}`,
       type: 'normal-technique',
       clutchWin: winner === 'player' && teamHpRatio('player') <= 0.1,
       ...currentMvpTechniqueEvent('player', winner === 'player')
     });
-    if (isDraw()) return;
     if (winner === 'player') {
       winStreak++;
       characterUnlockProgress.totalWins = Math.min(999999, characterUnlockProgress.totalWins + 1);
@@ -13787,6 +14916,10 @@
       if (characterUnlockProgress.bestStreak >= 3) grantUnlockAchievement('streak-3');
       if (characterUnlockProgress.totalWins >= 10) grantUnlockAchievement('ten-wins');
       saveCharacterUnlockProgress();
+      // Gear peak is a separate durable run field, never inferred later from
+      // a mutable streak.  A write failure blocks the next persistence action
+      // but does not roll back this already-resolved match.
+      recordCpuGearPeakAfterWin();
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
@@ -13815,7 +14948,8 @@
     if (!isCoopBossUnit(acting)) acting.jumpAvailable = true;
     focusCameraOn(acting.x, false, acting.y);
     if (acting.control === 'cpu') beginCpuTurnPlan(acting);
-    saveCpuBattleAtTurnStart();
+    if (cpuGearSkipNextTurnStartSuspend) cpuGearSkipNextTurnStartSuspend = false;
+    else saveCpuBattleAtTurnStart();
   }
   // CPUの手番の入り口。startTurn だけでなく、開始カットインが明けた時(v121)と、
   // 試合中に落ちた席をCPUが引き継いだ時(段D)にも呼ぶ。どちらも startTurn を
@@ -16827,6 +17961,11 @@
 
   const continueBtn = { x: VW / 2, y: VH / 2 + 72, w: 210, h: 46 };
   const resultTitleBtn = { x: VW / 2, y: VH / 2 + 132, w: 210, h: 42 };
+  const cpuGearSettlementBtn = { x: VW / 2, y: VH / 2 + 142, w: 250, h: 44 };
+  // 結果画面を閉じた後でも、pending entitlement はタイトルのCPU入口から
+  // 同じ小さな精算パネルへ戻れる。倉庫UIやGearカードを先取りしない。
+  const cpuGearPendingSettlementBtn = { x: VW / 2, y: VH / 2 + 128, w: 260, h: 46 };
+  const cpuGearPendingSettlementBackBtn = { x: VW / 2, y: VH / 2 + 186, w: 210, h: 42 };
   // ランキング送信の行を出す時は、その分だけボタンを下げる(描画と当たり判定の両方で使う)
   const RESULT_BUTTON_SHIFT = 44;
   function submitResultVisible() {
@@ -16838,6 +17977,110 @@
   }
   function resultButtonShift() {
     return (submitResultVisible() ? RESULT_BUTTON_SHIFT : 0) + firebaseBattleRecordResultShift();
+  }
+
+  function cpuGearResultLayout() {
+    if (!isCpuGearEligibleRun()) return null;
+    const detail = currentCpuGearSettlementPreview();
+    if (!detail) return null;
+    const pending = detail.state.state === 'settlement_pending';
+    const voluntary = !pending && localWon();
+    if (!pending && !voluntary) return null;
+    // A continuing winner needs to see both choices without materializing
+    // any Gear: voluntary settlement quality now, and the deterministic
+    // defeat-side quality if the next battle is lost.  This is a pure table
+    // lookup only; no seed, Gear object, or future enhancement is previewed.
+    const lossPreview = voluntary
+      ? cpuGearModules().cpuRewards.previewCpuSettlement({ peakStreak: detail.preview.peakStreak, outcome: 'defeat' })
+      : null;
+    const continueButton = voluntary ? { ...continueBtn, y: VH / 2 + 102 } : null;
+    const settlementButton = {
+      ...cpuGearSettlementBtn,
+      y: voluntary ? VH / 2 + 160 : VH / 2 + 146,
+    };
+    const titleButton = {
+      ...resultTitleBtn,
+      y: voluntary ? VH / 2 + 218 : VH / 2 + 204,
+    };
+    return {
+      ...detail,
+      pending,
+      voluntary,
+      lossPreview,
+      continueButton,
+      settlementButton,
+      titleButton,
+      bandHeight: voluntary ? 450 : 430,
+    };
+  }
+
+  function cpuGearPendingSettlementLayout() {
+    const detail = currentCpuGearSettlementPreview();
+    if (!detail || detail.state.state !== 'settlement_pending') return null;
+    return {
+      ...detail,
+      settlementButton: { ...cpuGearPendingSettlementBtn },
+      backButton: { ...cpuGearPendingSettlementBackBtn },
+    };
+  }
+
+  function cpuGearTerminalSettlementRetryLayout() {
+    if (!isCpuGearEligibleRun() || !matchOver || !cpuGearTerminalSettlementDeferred) return null;
+    try {
+      const { cpuRewards, runStorage } = cpuGearModules();
+      const state = readCpuGearRunState();
+      if (!state || state.state !== runStorage.ACTIVE) return null;
+      const outcome = cpuGearTerminalSettlementOutcome || (isDraw() ? 'draw' : 'defeat');
+      // The prior peak write may be the operation that failed.  The just-ended
+      // match still has its in-memory streak, so preview the exact peak that
+      // the retry will atomically persist rather than showing a stale lower
+      // quality while the entitlement is waiting.
+      const peakStreak = Math.max(state.peakStreak, Number.isSafeInteger(winStreak) ? winStreak : 0);
+      return {
+        state,
+        outcome,
+        preview: cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
+        retryButton: { ...cpuGearSettlementBtn, y: VH / 2 + 142 },
+      };
+    } catch (error) {
+      setCpuGearStatus(error, 'CPU BATTLE報酬の再試行');
+      return null;
+    }
+  }
+
+  function cpuGearTerminalSettlementReadErrorLayout(options = {}) {
+    // Every terminal normal-CPU Gear result is fail-closed while its durable
+    // run record cannot be read or does not describe a legal result state.
+    // Otherwise a winning screen could fall through to the old reset button,
+    // and a losing screen could discard an entitlement whose status is still
+    // unknown.  The only offered action is a no-write reread retry.
+    if (!isCpuGearEligibleRun() || !matchOver || cpuGearTerminalSettlementDeferred) return null;
+    // The result input/draw paths already attempted this exact read through
+    // `cpuGearResultLayout()`. Do not make a second read in the same action:
+    // a one-shot storage failure must still block the legacy reset path.
+    if (options.resultLayoutWasRead === true) {
+      return { retryButton: { ...cpuGearSettlementBtn, y: VH / 2 + 142 } };
+    }
+    const detail = currentCpuGearSettlementPreview();
+    const readableResult = detail && (
+      detail.state.state === 'settlement_pending'
+      || (detail.state.state === 'active' && localWon())
+    );
+    if (readableResult) return null;
+    return { retryButton: { ...cpuGearSettlementBtn, y: VH / 2 + 142 } };
+  }
+
+  function retryCpuGearTerminalSettlementRead() {
+    const detail = currentCpuGearSettlementPreview();
+    if (!detail) return false;
+    setCpuGearStatus(null);
+    return true;
+  }
+
+  function openCpuGearPendingSettlementFromTitle() {
+    if (!cpuGearPendingSettlementLayout()) return false;
+    gamePhase = 'cpuGearSettlement';
+    return true;
   }
 
   function drawResultButton(rawButton, label, primary) {
@@ -17204,8 +18447,11 @@
     if (!matchOver || matchEndPause > 0) return;
     const won = localWon();
     const draw = isDraw();
+    const cpuGearLayout = cpuGearResultLayout();
+    const cpuGearRetryLayout = cpuGearTerminalSettlementRetryLayout();
+    const cpuGearReadErrorLayout = cpuGearLayout ? null : cpuGearTerminalSettlementReadErrorLayout({ resultLayoutWasRead: true });
     const bandY = VH / 2 - 130;
-    const bandH = (won || draw ? 280 : 330) + resultButtonShift();
+    const bandH = (cpuGearLayout ? cpuGearLayout.bandHeight : ((cpuGearRetryLayout || cpuGearReadErrorLayout) ? 385 : (won || draw ? 280 : 330))) + resultButtonShift();
     ctx.save();
     // 石版のような帯(上下を真鍮で締める)
     const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
@@ -17244,7 +18490,7 @@
       drawOutlinedText(draw ? '演習引き分け' : won ? '演習勝利!' : '演習敗北', VW / 2, VH / 2 - 22, {
         font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
-    } else if (draw) {
+    } else if (draw && !cpuGearTerminalSettlementPrepared) {
       drawOutlinedText('連勝維持', VW / 2, VH / 2 - 22, {
         font: `400 31px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
       });
@@ -17284,6 +18530,62 @@
 
     if (!won && !draw && battleMode !== 'free' && !isOnline()) drawSubmitResult(VH / 2 + 56);
 
+    if (cpuGearLayout) {
+      const preview = cpuGearLayout.preview;
+      const lossPreview = cpuGearLayout.lossPreview;
+      const previewStartY = (!won && !draw) ? VH / 2 + 92 : VH / 2 + 48;
+      const qualityText = preview.highestQualityLocked
+        ? `報酬: 最高品質ロック / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`
+        : `報酬: 品質${preview.qualityTier} / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`;
+      drawOutlinedText(`現在 ${Math.max(0, winStreak)}連勝 / 最高 ${preview.peakStreak}連勝`, VW / 2, previewStartY, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      });
+      drawOutlinedText(qualityText, VW / 2, previewStartY + 16, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: 'rgba(255,245,220,0.9)', lineWidth: 3
+      });
+      if (preview.nextMilestone) {
+        drawOutlinedText(`次の節目: ${preview.nextMilestone.peakStreak}連勝（あと${preview.nextMilestone.winsRemaining}勝）`, VW / 2, previewStartY + 31, {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+        });
+      }
+      const lossPreviewY = previewStartY + (preview.nextMilestone ? 47 : 31);
+      if (lossPreview) {
+        const lossText = lossPreview.highestQualityLocked
+          ? 'いま負けても: 最高品質ロック維持'
+          : `いま負けた場合: 品質${lossPreview.qualityTier}`;
+        drawOutlinedText(lossText, VW / 2, lossPreviewY, {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+        });
+      }
+      if (cpuGearStatusText) {
+        drawOutlinedText(cpuGearStatusText, VW / 2, lossPreviewY + (lossPreview ? 16 : 0), {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+        });
+      }
+    }
+    if (cpuGearRetryLayout) {
+      const preview = cpuGearRetryLayout.preview;
+      drawOutlinedText('報酬権利の保存を再試行してください', VW / 2, VH / 2 + 68, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+      });
+      drawOutlinedText(`最高 ${preview.peakStreak}連勝 / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 + 86, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      });
+      if (cpuGearStatusText) {
+        drawOutlinedText(cpuGearStatusText, VW / 2, VH / 2 + 103, {
+          font: `900 10px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+        });
+      }
+    }
+    if (cpuGearReadErrorLayout) {
+      drawOutlinedText('未精算報酬の保存状態を確認できません', VW / 2, VH / 2 + 70, {
+        font: `900 13px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+      });
+      drawOutlinedText(cpuGearStatusText || '保存状態を再確認してください。報酬権利は消去しません。', VW / 2, VH / 2 + 91, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      });
+    }
+
     // 決着直後に見たいのは勝敗であって、合言葉や部屋の設定ではない。
     // 対人戦の続行はこの結果画面で選ばせ、ロビーのポップアップは開かない。
     if (isCoop4v1() && online?.kind === 'coop') {
@@ -17301,6 +18603,23 @@
           font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
         });
       }
+    } else if (cpuGearReadErrorLayout) {
+      drawResultButton(cpuGearReadErrorLayout.retryButton, '保存状態を再確認', true);
+    } else if (cpuGearRetryLayout) {
+      drawResultButton(cpuGearRetryLayout.retryButton, '報酬精算を再試行', true);
+    } else if (cpuGearLayout) {
+      const cpuGearResultBusy = cpuGearResultActionInFlight();
+      if (cpuGearLayout.continueButton) drawResultButton(cpuGearLayout.continueButton, 'つぎのバトルへ', !cpuGearResultBusy);
+      drawResultButton(
+        cpuGearLayout.settlementButton,
+        cpuGearLayout.preview.hasReward ? '報酬を受け取って連勝終了' : '報酬なしで連勝終了',
+        !cpuGearResultBusy,
+      );
+      drawResultButton(
+        cpuGearLayout.titleButton,
+        cpuGearLayout.pending ? 'タイトルへ戻る' : '中断してタイトルへ',
+        false,
+      );
     } else {
       if (!isOnline()) {
         drawResultButton(
@@ -17323,10 +18642,136 @@
   // 勝った直後だけは「つぎのバトルへ」と同じ状態を作ってから中断セーブする。
   // 敗北時は連勝が既に0でランキング送信も済んでおり、守るものが無いので従来どおり。
   function keepsRunOnExit() {
+    if (isCpuGearEligibleRun() && cpuGearTerminalSettlementPrepared) return false;
     return matchOver && battleMode !== 'free' && !isOnline() && (localWon() || isDraw());
   }
 
+  function drawCpuGearPendingSettlementScreen() {
+    const layout = cpuGearPendingSettlementLayout();
+    if (!layout) {
+      // 壊れたrun stateを黙って新runへ置き換えない。タイトルへ戻し、既存の
+      // fail-closed statusを見せるだけにする。
+      drawOutlinedText(cpuGearStatusText || '未精算のCPU BATTLE報酬を確認できません。', VW / 2, VH / 2, {
+        font: `900 13px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+      });
+      return;
+    }
+    const { preview } = layout;
+    const qualityText = preview.highestQualityLocked
+      ? '最高品質ロック済み'
+      : `精算品質: ${preview.qualityTier}`;
+    const panel = { x: VW / 2, y: VH / 2 + 16, w: 462, h: 356 };
+    ctx.save();
+    ctx.fillStyle = 'rgba(3, 7, 11, 0.72)';
+    ctx.fillRect(0, 0, VW, VH);
+    drawIronPlate(panel.x, panel.y, panel.w, panel.h, {
+      cut: 18, lineWidth: 3, edge: UI.brassLight, glow: 'rgba(246, 194, 111, 0.28)',
+      rivets: true, rivetInset: 18, rivetRadius: 4,
+    });
+    drawOutlinedText('未精算のCPU BATTLE報酬', VW / 2, VH / 2 - 112, {
+      font: `400 27px ${UI_FONT_DISPLAY}`, color: UI.gold, lineWidth: 5
+    });
+    drawOutlinedText(`最高 ${preview.peakStreak}連勝`, VW / 2, VH / 2 - 67, {
+      font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+    });
+    drawOutlinedText(`${qualityText} / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 - 39, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
+    if (preview.nextMilestone) {
+      drawOutlinedText(`次の節目: ${preview.nextMilestone.peakStreak}連勝`, VW / 2, VH / 2 - 15, {
+        font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLabel, lineWidth: 3
+      });
+    }
+    if (cpuGearStatusText) {
+      drawOutlinedText(cpuGearStatusText, VW / 2, VH / 2 + 9, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+      });
+    }
+    const busy = cpuGearResultActionInFlight();
+    drawIronPlate(layout.settlementButton.x, layout.settlementButton.y, layout.settlementButton.w, layout.settlementButton.h, {
+      cut: 12, lineWidth: 2.5, edge: busy ? UI.brass : '#fff1cd', glow: busy ? null : 'rgba(255,205,110,0.52)',
+      rivets: true, rivetInset: 15, rivetRadius: 3.4,
+    });
+    drawOutlinedText(busy ? '精算処理中…' : (preview.hasReward ? '報酬を受け取る' : '報酬なしで連勝終了'),
+      layout.settlementButton.x, layout.settlementButton.y + 6, {
+        font: `900 16px ${UI_FONT_HEAVY}`, color: busy ? UI.brassLabel : UI.parchment, lineWidth: 3.5
+      });
+    drawIronPlate(layout.backButton.x, layout.backButton.y, layout.backButton.w, layout.backButton.h, {
+      cut: 12, lineWidth: 2.2, rivets: true, rivetInset: 15, rivetRadius: 3.4,
+    });
+    drawOutlinedText('タイトルへ戻る', layout.backButton.x, layout.backButton.y + 5, {
+      font: `900 14px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
+    ctx.restore();
+  }
+
   function suspendRunToTitle() {
+    // A voluntary settlement owns a durable pending intent while its Gear
+    // queue phase is in flight.  Suspending or starting another result action
+    // in that window could replace the legacy snapshot that cleanup must
+    // compare-and-delete, so leave the current result screen intact instead.
+    if (isCpuGearEligibleRun()) {
+      if (cpuGearSuspendPromise) return cpuGearSuspendPromise;
+      if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+        return rejectCpuGearResultActionWhileBusy('CPU BATTLE中断');
+      }
+      // A win may still have its peak update waiting for the native CPU lock.
+      // Queue this whole reset-and-suspend sequence behind it, then write the
+      // next-round snapshot while we still own that same lock.  A title
+      // transition is never allowed to outrun the durable peak/snapshot.
+      const suspended = cpuGearRunLifecycle('CPU BATTLE中断', () => {
+        if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+          return rejectCpuGearResultActionWhileBusy('CPU BATTLE中断');
+        }
+        const { runStorage } = cpuGearModules();
+        let state = readCpuGearRunState();
+        if (!state || state.state !== runStorage.ACTIVE) {
+          throw Object.assign(new Error('CPU_GEAR_RUN_NOT_ACTIVE'), { code: 'CPU_GEAR_RUN_NOT_ACTIVE' });
+        }
+        state = assertCpuGearRunOwnedByThisSession(state, { claimUnowned: true });
+        // Re-apply the in-memory win defensively. If the just-finished win's
+        // own write was queued first, this is an idempotent same-peak write;
+        // if it failed before queueing, the title action still cannot lose it.
+        state = runStorage.saveCpuGearRunState(runStorage.withPeakStreak(state, winStreak), localStorage);
+
+        // Keep resetMatch from launching an unobserved best-effort autosave.
+        // The checked write directly below becomes the single durable commit.
+        cpuGearSkipNextTurnStartSuspend = true;
+        gamePhase = 'title';
+        try {
+          resetMatch(true); // prepare the same next round the legacy suspend path used
+          const saved = saveCpuBattleAtTurnStartLocked();
+          if (!saved) {
+            throw Object.assign(new Error('CPU_GEAR_SUSPEND_SAVE_FAILED'), { code: 'CPU_GEAR_SUSPEND_SAVE_FAILED' });
+          }
+          hasSuspendedSave = true;
+          setCpuGearStatus(null);
+          return true;
+        } catch (error) {
+          // A failed checked write must not pretend the user safely left. The
+          // freshly prepared in-memory round remains playable, while the
+          // durable run (including its peak) stays intact for a later retry.
+          cpuGearSkipNextTurnStartSuspend = false;
+          gamePhase = 'battle';
+          syncBgm({ restartStage: true });
+          throw error;
+        } finally {
+          cpuGearSkipNextTurnStartSuspend = false;
+        }
+      });
+      const finish = (saved) => {
+        if (!saved) return false;
+        returnToTitleFromResult();
+        return true;
+      };
+      if (!isThenable(suspended)) return finish(suspended);
+      const task = Promise.resolve(suspended).then(finish);
+      cpuGearSuspendPromise = task;
+      task.finally(() => {
+        if (cpuGearSuspendPromise === task) cpuGearSuspendPromise = null;
+      }).catch(() => undefined);
+      return task;
+    }
     // resetMatch の末尾はステージBGMを鳴らし直すので、先にタイトルへ移してから呼ぶ。
     gamePhase = 'title';
     resetMatch(true);      // つぎの試合(ボス戦の判定・地形・キャラ・必殺チャージの持ち越し)を用意
@@ -20007,6 +21452,22 @@
       ctx.restore();
       return;
     }
+    if (gamePhase === 'cpuGearSettlement') {
+      // 結果画面を閉じた後のpending entitlement用。タイトル背景を再利用し、
+      // Gear倉庫・カード・追加assetはこのPhase 2Cで作らない。
+      drawSky();
+      drawParallax();
+      ctx.save();
+      applyWorldCamera();
+      drawTerrain();
+      ctx.restore();
+      drawTitleScreen();
+      drawCpuGearPendingSettlementScreen();
+      drawSoundToggle();
+      drawSoundPanel();
+      ctx.restore();
+      return;
+    }
     if (gamePhase === 'press') {
       drawLoadingScreen();
       ctx.restore();
@@ -20174,6 +21635,7 @@
 
   function activateTitleMenuItem(itemId) {
     if (itemId === 'cpu') {
+      if (openCpuGearPendingSettlementFromTitle()) return true;
       battleMode = 'normal';
       selectWheelPosition = 0;
       selectWheelVelocity = 0;
@@ -20420,6 +21882,24 @@
       }
       return;
     }
+    if (gamePhase === 'cpuGearSettlement') {
+      const layout = cpuGearPendingSettlementLayout();
+      if (!layout) {
+        gamePhase = 'title';
+        return;
+      }
+      if (hitRect(p0, layout.settlementButton) && !cpuGearSettlementPromise) {
+        // This handler owns its rejection path and preserves the stored intent.
+        requestCpuGearSettlement(layout.state.settlementIntent.outcome);
+        playUiSound();
+        return;
+      }
+      if (hitRect(p0, layout.backButton)) {
+        gamePhase = 'title';
+        playUiSound();
+      }
+      return;
+    }
     if (gamePhase === 'ranking') {
       if (hitRect(p0, rankingBackBtn)) {
         playUiSound();
@@ -20603,6 +22083,42 @@
         if (firebaseHasResultVote()) return; // 投票済み。相手の返事を待つ
         if (Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) { requestFirebaseRematch(); return; }
         if (hitRect({ x: p0.x, y: p0.y - shift }, resultTitleBtn)) { requestFirebaseReturnLobby(); }
+        return;
+      }
+      const cpuGearRetryLayout = cpuGearTerminalSettlementRetryLayout();
+      if (cpuGearRetryLayout) {
+        if (hitRect({ x: p0.x, y: p0.y - shift }, cpuGearRetryLayout.retryButton)) {
+          retryCpuGearTerminalSettlementPreparation();
+        }
+        return;
+      }
+      const cpuGearLayout = cpuGearResultLayout();
+      const cpuGearReadErrorLayout = cpuGearLayout ? null : cpuGearTerminalSettlementReadErrorLayout({ resultLayoutWasRead: true });
+      if (cpuGearReadErrorLayout) {
+        if (hitRect({ x: p0.x, y: p0.y - shift }, cpuGearReadErrorLayout.retryButton)) {
+          retryCpuGearTerminalSettlementRead();
+        }
+        return;
+      }
+      if (cpuGearLayout) {
+        const shiftedPoint = { x: p0.x, y: p0.y - shift };
+        const cpuGearResultBusy = cpuGearResultActionInFlight();
+        if (!cpuGearResultBusy && hitRect(shiftedPoint, cpuGearLayout.settlementButton)) {
+          // requestCpuGearSettlement installs explicit success/failure handlers
+          // and a shared in-flight promise; a double tap never creates a second
+          // intent, queue attempt, or cleanup.
+          requestCpuGearSettlement(cpuGearLayout.pending ? cpuGearLayout.state.settlementIntent.outcome : 'voluntary');
+          return;
+        }
+        if (!cpuGearResultBusy && cpuGearLayout.continueButton && hitRect(shiftedPoint, cpuGearLayout.continueButton)) {
+          continueCpuGearRunAfterWin();
+          return;
+        }
+        if (!cpuGearResultBusy && hitRect(shiftedPoint, cpuGearLayout.titleButton)) {
+          if (cpuGearLayout.pending) returnToTitleFromResult();
+          else suspendRunToTitle();
+          return;
+        }
         return;
       }
       if (!isOnline() && Math.abs(p0.x - b.x) <= b.w / 2 && Math.abs(p0.y - b.y - shift) <= b.h / 2) {
@@ -21378,7 +22894,19 @@
   }
 
   window.addEventListener('keydown', (e) => {
-    if ((e.key === 'r' || e.key === 'R') && gamePhase === 'battle' && !isOnline()) resetMatch(false);
+    if ((e.key === 'r' || e.key === 'R') && gamePhase === 'battle' && !isOnline()) {
+      // A durable CPU Gear run cannot use the old developer-style reset
+      // shortcut.  Resetting mid-run would evade a defeat, while doing it on
+      // the result screen would bypass the owner/gate/lock checks in the
+      // explicit 「次のバトルへ」 action.
+      if (isCpuGearEligibleRun()) {
+        setCpuGearStatus(Object.assign(new Error('CPU_GEAR_RESET_SHORTCUT_DISABLED'), {
+          code: 'CPU_GEAR_RESET_SHORTCUT_DISABLED'
+        }), 'CPU BATTLE連勝中');
+        return;
+      }
+      resetMatch(false);
+    }
   });
 
   window.addEventListener('resize', resize);
@@ -21460,6 +22988,12 @@
     if (!backTrapWanted()) return;
     if (deviceBackConfirmOpen()) {
       closeDeviceBackConfirm();
+      playUiSound();
+      return;
+    }
+    if (gamePhase === 'cpuGearSettlement') {
+      // 未精算intentは保存済みなので、戻るでは破棄せずタイトルへ戻すだけ。
+      gamePhase = 'title';
       playUiSound();
       return;
     }

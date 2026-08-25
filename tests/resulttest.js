@@ -19,7 +19,11 @@ function tap(x, y) {
   canvas.__fire('pointerdown', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now(), button: 0 });
   win.__fire('pointerup', { pointerId: id, clientX: x, clientY: y, pointerType: 'mouse', timeStamp: Date.now() });
 }
-function tapTitleButton() { const b = kt.resultTitleBtn(); tap(b.x, b.y + b.shift); }
+function tapTitleButton() {
+  const cpuLayout = kt.cpuGearResultLayoutForTest();
+  const b = cpuLayout?.titleButton || kt.resultTitleBtn();
+  tap(b.x, b.y + b.shift);
+}
 
 // 決着まで進めたあと、結果ボタンが押せるようになる余韻(matchEndPause)も明ける。
 function playToEnd(maxFrames = 60000) {
@@ -50,8 +54,12 @@ function playUntil(wantWin, tries = 40, afterStart) {
     // 引き分けは勝ちでも負けでもない。v91で引き分けが入って以降、
     // 「winner !== 'player' なら敗北」とみなすと引き分けを敗北として拾い、
     // 敗北時の検査(中断セーブを作らない等)が落ちることがあった。
-    if (winner === 'draw') continue;
+    if (winner === 'draw') { kt.clearCpuGearRunForTest(); continue; }
     if ((winner === 'player') === wantWin) return true;
+    // This helper retries randomly generated fixture battles.  A real loss
+    // keeps its pending CPU Gear entitlement; the test deliberately removes
+    // it only to construct the requested winner on the next fixture attempt.
+    kt.clearCpuGearRunForTest();
   }
   return false;
 }

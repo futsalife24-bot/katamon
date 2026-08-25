@@ -264,10 +264,10 @@ test('concurrent claim and maintenance serialize without rolling back either res
   assert.equal(finalState.rewardLedger['locked-claim'], true); assert.equal(finalState.unclaimedRewards.length, 0); assert.equal(finalState.tempBox.length, 0);
   assert.equal(finalState.resources.blueprintShards, 5 + gear.calculateDismantleYield(initial.tempBox[0].gear).blueprintShards);
 });
-test('reward module is pure: no Date.now, random, DOM, or game entrypoint coupling', () => {
+test('reward module is pure: no Date.now, random, or DOM coupling while Phase 2C connects its browser script', () => {
   const source = fs.readFileSync(require.resolve('../shared/gear-rewards.js'), 'utf8');
   assert.equal(source.includes('Date.now'), false); assert.equal(source.includes('Math.random'), false);
-  assert.equal(source.includes('document.'), false); assert.equal(fs.readFileSync(require.resolve('../index.html'), 'utf8').includes('gear-rewards.js'), false);
+  assert.equal(source.includes('document.'), false); assert.equal(fs.readFileSync(require.resolve('../index.html'), 'utf8').includes('shared/gear-rewards.js'), true);
 });
 
 Promise.all(pendingTests).then(() => {
