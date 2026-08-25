@@ -8366,7 +8366,7 @@
   function captureCpuGearActiveRunDiscardToken() {
     const { runStorage } = cpuGearModules();
     const state = readCpuGearRunState();
-    if (!state || state.state !== runStorage.ACTIVE || state.resumeClaim !== null) return null;
+    if (state && (state.state !== runStorage.ACTIVE || state.resumeClaim !== null)) return null;
     let raw;
     try { raw = localStorage.getItem(SUSPEND_KEY); } catch (error) {
       throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_READ_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_READ_FAILED', cause: error });
@@ -8374,13 +8374,16 @@
     const data = decodeSuspendedMatchRaw(SUSPEND_KEY, raw);
     if (!data || !isCpuGearLegacySnapshot(data)) return null;
     const fencing = cpuGearLegacySnapshotFencing(data);
-    if (fencing.ownerSessionId !== state.ownerSessionId || fencing.snapshotId === null) return null;
+    if (state && (fencing.ownerSessionId !== state.ownerSessionId || fencing.snapshotId === null)) return null;
     return Object.freeze({
-      runId: state.runId,
-      state: runStorage.ACTIVE,
-      runOwnerSessionId: state.ownerSessionId,
+      // A null runId is the explicit forward-recovery form: a prior discard
+      // deleted the small run authority but its official normal snapshot
+      // could not be removed. It still receives the same exact-raw CAS.
+      runId: state ? state.runId : null,
+      state: state ? runStorage.ACTIVE : null,
+      runOwnerSessionId: state ? state.ownerSessionId : null,
       resumeClaim: null,
-      peakStreak: state.peakStreak,
+      peakStreak: state ? state.peakStreak : null,
       legacySuspendRaw: raw,
       legacyOwnerSessionId: fencing.ownerSessionId,
       legacySnapshotId: fencing.snapshotId,
@@ -8389,12 +8392,16 @@
 
   function assertCpuGearActiveRunDiscardToken(token, state) {
     const { runStorage } = cpuGearModules();
-    if (!token || token.state !== runStorage.ACTIVE
-        || token.resumeClaim !== null
-        || token.runId !== state.runId
-        || token.runOwnerSessionId !== state.ownerSessionId
-        || token.peakStreak !== state.peakStreak
-        || state.resumeClaim !== null) {
+    const isSnapshotOnlyRecovery = state === null;
+    const stateMatches = isSnapshotOnlyRecovery
+      ? token && token.runId === null && token.state === null
+        && token.runOwnerSessionId === null && token.peakStreak === null
+      : token && token.state === runStorage.ACTIVE
+        && token.runId === state.runId
+        && token.runOwnerSessionId === state.ownerSessionId
+        && token.peakStreak === state.peakStreak
+        && state.resumeClaim === null;
+    if (!token || token.resumeClaim !== null || !stateMatches) {
       throw Object.assign(new Error('CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT'), { code: 'CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT' });
     }
     let raw;
@@ -8421,13 +8428,24 @@
         throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_PENDING'), { code: 'CPU_GEAR_SETTLEMENT_PENDING' });
       }
       let priorSuspendDiscarded = false;
-      if (existing && discardToken) {
+      if (discardToken && existing) {
         // A restart legitimately has a new volatile owner. That is safe only
         // if this lock can still prove the dialog observed this exact run and
         // suspend; a rebound snapshot turns into a fail-closed conflict.
         assertCpuGearActiveRunDiscardToken(discardToken, existing);
-        removeCpuLegacySuspendStrict(SUSPEND_KEY, discardToken.legacySuspendRaw);
+        // Remove the small run authority first. If this fails, the official
+        // snapshot remains intact and the same token can retry. If it has
+        // already disappeared but snapshot cleanup fails, the retained legacy
+        // snapshot gives the next explicit start a forward-recoverable path.
         runStorage.removeCpuGearRunState(localStorage);
+        removeCpuLegacySuspendStrict(SUSPEND_KEY, discardToken.legacySuspendRaw);
+        priorSuspendDiscarded = true;
+      } else if (discardToken && !existing) {
+        // Forward recovery after a prior run-state cleanup committed but the
+        // official-snapshot cleanup did not. Do not fall through to the old
+        // generic clearSuspendedMatch(), which also removes custom saves.
+        assertCpuGearActiveRunDiscardToken(discardToken, null);
+        removeCpuLegacySuspendStrict(SUSPEND_KEY, discardToken.legacySuspendRaw);
         priorSuspendDiscarded = true;
       } else if (existing && existing.ownerSessionId !== null
           && existing.ownerSessionId !== currentCpuGearOwnerSessionId()) {

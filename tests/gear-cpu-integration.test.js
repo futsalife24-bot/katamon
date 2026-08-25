@@ -329,6 +329,123 @@ function createUnclaimedFullGateState() {
     assert.equal(storage.getItem('katamon_suspend_v1'), rawBefore);
   });
 
+  await test('explicit discardのrun remove失敗はofficial suspendを残し、同じrunを確認してretryできる', () => {
+    resetFixture();
+    const ownerA = 'cpu-session:00000000-0000-4000-8000-000000000711';
+    const ownerB = 'cpu-session:00000000-0000-4000-8000-000000000712';
+    kt.setCpuGearOwnerSessionForTest(ownerA);
+    assert.equal(kt.startBattle(), true);
+    const oldRun = kt.cpuGearRunStateForTest();
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+    const rawOldSuspend = storage.getItem('katamon_suspend_v1');
+    const originalRemove = storage.removeItem;
+    storage.removeItem = (key) => {
+      if (key === runStorage.CPU_GEAR_RUN_STORAGE_KEY) throw new Error('run remove unavailable');
+      return originalRemove(key);
+    };
+    try {
+      kt.setCpuGearOwnerSessionForTest(ownerB);
+      kt.setHasSave(true);
+      assert.equal(kt.requestNewMatch('kyoryu'), false);
+      assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest());
+      kt.resolveNewMatchConfirm('start');
+    } finally {
+      storage.removeItem = originalRemove;
+    }
+    assert.deepEqual(kt.cpuGearRunStateForTest(), oldRun);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawOldSuspend);
+    assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.length, 0);
+    assert.deepEqual(gearStorage.loadGearState(storage).rewardLedger, {});
+
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    kt.resolveNewMatchConfirm('start');
+    assert.notEqual(kt.cpuGearRunStateForTest().runId, oldRun.runId);
+    assert.equal(kt.cpuGearRunStateForTest().ownerSessionId, ownerB);
+  });
+
+  await test('explicit discardのrun removal read-back ambiguityはsuspendを残し、次の明示開始でforward recoveryできる', () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    const oldRun = kt.cpuGearRunStateForTest();
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+    const rawOldSuspend = storage.getItem('katamon_suspend_v1');
+    const customRaw = '{"custom":"retain-after-run-readback"}';
+    storage.setItem('katamon_custom_suspend_v1', customRaw);
+    const originalGet = storage.getItem;
+    const originalRemove = storage.removeItem;
+    let runRemoved = false;
+    storage.removeItem = (key) => {
+      const result = originalRemove(key);
+      if (key === runStorage.CPU_GEAR_RUN_STORAGE_KEY) runRemoved = true;
+      return result;
+    };
+    storage.getItem = (key) => {
+      if (runRemoved && key === runStorage.CPU_GEAR_RUN_STORAGE_KEY) {
+        runRemoved = false;
+        throw new Error('run remove read-back unavailable');
+      }
+      return originalGet(key);
+    };
+    try {
+      kt.setHasSave(true);
+      assert.equal(kt.requestNewMatch('kyoryu'), false);
+      kt.resolveNewMatchConfirm('start');
+    } finally {
+      storage.getItem = originalGet;
+      storage.removeItem = originalRemove;
+    }
+    assert.equal(kt.cpuGearRunStateForTest(), null, 'the remove may have committed despite its unknown read-back');
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawOldSuspend);
+    assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.length, 0);
+    assert.deepEqual(gearStorage.loadGearState(storage).rewardLedger, {});
+
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest(), 'snapshot-only recovery captures the old official raw');
+    kt.resolveNewMatchConfirm('start');
+    assert.ok(kt.cpuGearRunStateForTest());
+    assert.notEqual(kt.cpuGearRunStateForTest().runId, oldRun.runId);
+    assert.notEqual(storage.getItem('katamon_suspend_v1'), rawOldSuspend);
+    assert.equal(storage.getItem('katamon_custom_suspend_v1'), customRaw);
+  });
+
+  await test('explicit discardのofficial suspend cleanup失敗はrun無し+suspend保持から次の明示開始でforward recoveryできる', () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    const oldRun = kt.cpuGearRunStateForTest();
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+    const rawOldSuspend = storage.getItem('katamon_suspend_v1');
+    const customRaw = '{"custom":"retain-after-suspend-cleanup"}';
+    storage.setItem('katamon_custom_suspend_v1', customRaw);
+    const originalRemove = storage.removeItem;
+    storage.removeItem = (key) => {
+      if (key === 'katamon_suspend_v1') throw new Error('official suspend remove unavailable');
+      return originalRemove(key);
+    };
+    try {
+      kt.setHasSave(true);
+      assert.equal(kt.requestNewMatch('kyoryu'), false);
+      assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest());
+      kt.resolveNewMatchConfirm('start');
+    } finally {
+      storage.removeItem = originalRemove;
+    }
+    assert.equal(kt.cpuGearRunStateForTest(), null);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawOldSuspend);
+    assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.length, 0);
+    assert.deepEqual(gearStorage.loadGearState(storage).rewardLedger, {});
+
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest(), 'snapshot-only recovery captures the old official raw');
+    kt.resolveNewMatchConfirm('start');
+    assert.ok(kt.cpuGearRunStateForTest());
+    assert.notEqual(kt.cpuGearRunStateForTest().runId, oldRun.runId);
+    assert.notEqual(storage.getItem('katamon_suspend_v1'), rawOldSuspend);
+    assert.equal(storage.getItem('katamon_custom_suspend_v1'), customRaw);
+  });
+
   await test('勝利はpeakを更新し、通常のsuspend/reloadで同じrunIdを維持する', () => {
     resetFixture();
     assert.equal(kt.startBattle(), true);
