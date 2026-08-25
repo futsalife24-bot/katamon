@@ -32,9 +32,10 @@
     "test:coop-session": "node tests/coop-results-rematch.test.js",
     "test:coop-playable": "node tests/coop-boss-playable.test.js",
     "test:gear": "node tests/gear-domain.test.js",
+    "test:gear-storage": "node tests/gear-storage.test.js",
     "test:existing": "npm run test:seat && npm run test:regression && npm run test:result && npm run test:loopback && npm run test:stage3 && npm run test:lobby && npm run test:back && npm run test:ranking && npm run test:undef && npm run test:app-shell && npm run test:cache-version",
     "test:stage": "node --test tests/stage-*.test.js",
-    "test": "npm run test:docs && npm run test:gear && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-live-boss && npm run test:coop-normal-tempo && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:subweapons && npm run test:coop-rewards && npm run test:coop-shop && npm run test:coop-session && npm run test:coop-playable && npm run test:existing && npm run test:stage",
+    "test": "npm run test:docs && npm run test:gear && npm run test:gear-storage && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-live-boss && npm run test:coop-normal-tempo && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:subweapons && npm run test:coop-rewards && npm run test:coop-shop && npm run test:coop-session && npm run test:coop-playable && npm run test:existing && npm run test:stage",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "e2e:install": "playwright install chromium webkit"
