@@ -3068,6 +3068,20 @@ kt.resizeForTest(540, 960, 1);
 // ===== タイトル画面を1枚に焼く(v132) =====
 // 背景の全画面グラデーションとロゴの影＋切り抜きは動かないのに、以前は毎コマ作っていた。
 // 空(v129)と同じく2倍で1枚に焼き、画像の準備状態が変わった時だけ作り直す。
+const titleIntro = kt.titleIntroInfo();
+check('タイトルは石壁タップから始点・動画・終点の3素材を順番に使う',
+  titleIntro.start.endsWith('assets/title-background-logo-start.jpg')
+    && titleIntro.video.endsWith('assets/title-background-logo-transition.mp4')
+    && titleIntro.end.endsWith('assets/title-background-logo-end.jpg')
+    && /startTitleIntroSequence\(\);[\s\S]{0,120}enterTitleFromTap\(\);/.test(indexHtml),
+  JSON.stringify(titleIntro));
+check('タイトル背景を端末時刻で朝昼夕夜へ切り替えない',
+  !indexHtml.includes('getTitleTimeTheme')
+    && !indexHtml.includes('titleTimeBackgroundPaths')
+    && !/assets\/title-(?:morning|day|evening|night)\.jpg/.test(indexHtml));
+kt.startTitleIntroForTest();
+check('新タイトル演出は起動後の開始操作で一度だけ開始状態になる',
+  kt.titleIntroInfo().started === true, JSON.stringify(kt.titleIntroInfo()));
 const titleArtStart = kt.titleArtInfo();
 check('タイトルの動かない絵を焼く仕組みがある', !!titleArtStart,
   titleArtStart ? JSON.stringify(titleArtStart) : '未実装');

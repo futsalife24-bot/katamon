@@ -121,13 +121,16 @@ const HOOK = `
     },
     setTitleArtReadyForTest: () => {
       if (typeof titleArtBuilds === 'undefined') return false;
-      titleTimeBackgroundReady = true;
-      titleTimeBackgroundFailed = false;
-      titleLogoReady = true;
-      titleLogoFailed = false;
-      titleLogoImage.complete = true;
-      titleLogoImage.naturalWidth = 1530;
-      titleLogoImage.naturalHeight = 1170;
+      titleIntroStartReady = true;
+      titleIntroStartFailed = false;
+      titleIntroEndReady = true;
+      titleIntroEndFailed = false;
+      titleIntroStartImage.complete = true;
+      titleIntroStartImage.naturalWidth = 1080;
+      titleIntroStartImage.naturalHeight = 1918;
+      titleIntroEndImage.complete = true;
+      titleIntroEndImage.naturalWidth = 1080;
+      titleIntroEndImage.naturalHeight = 1918;
       if (typeof titleWoodUiImages !== 'undefined') {
         for (const image of Object.values(titleWoodUiImages)) {
           image.complete = true;
@@ -137,6 +140,15 @@ const HOOK = `
       }
       return true;
     },
+    titleIntroInfo: () => ({
+      phase: typeof titleIntroPhase === 'undefined' ? '' : titleIntroPhase,
+      started: typeof titleIntroStarted !== 'undefined' && titleIntroStarted,
+      start: typeof titleIntroStartImage === 'undefined' ? '' : titleIntroStartImage.src,
+      video: typeof titleIntroVideo === 'undefined' ? '' : titleIntroVideo.src,
+      end: typeof titleIntroEndImage === 'undefined' ? '' : titleIntroEndImage.src,
+      videoFailed: typeof titleIntroVideoFailed !== 'undefined' && titleIntroVideoFailed
+    }),
+    startTitleIntroForTest: () => typeof startTitleIntroSequence === 'function' && startTitleIntroSequence(),
     terrainArtDirty: () => terrainArtDirty,
     rebuildTerrainRimForTest: () => rebuildTerrainRim(),
     rebuildBridgeForTest: () => rebuildBridgeDecoration(),

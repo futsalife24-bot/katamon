@@ -636,24 +636,27 @@ function check(name, value) {
       && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 294;/.test(htmlForAudio),
     '透過を直した専用ヘリ画像を遅延読込し、従来の3倍で表示すること');
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
-  check('the preload hints point at webp',
-    ['loading-emblem', 'title-logo'].every(n =>
-      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/${n}.webp" type="image/webp"`))
+  check('the preload hints use the compact startup assets',
+    htmlForAudio.includes('<link rel="preload" as="image" href="assets/loading-emblem.webp" type="image/webp"')
+    && ['start', 'end'].every(point =>
+      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/title-background-logo-${point}.jpg" type="image/jpeg"`))
+    && htmlForAudio.includes('<link rel="preload" as="video" href="assets/title-background-logo-transition.mp4" type="video/mp4">')
     && ['dirano', 'eyebolt', 'gorocca', 'fenice'].every(stem =>
       htmlForAudio.includes(`<link rel="preload" as="image" href="assets/characters/runtime/${stem}.webp" type="image/webp"`))
-    && !/rel="preload" as="image" href="assets\/(?:characters\/master\/)?(?:loading-emblem|title-logo|dirano|eyebolt|gorocca|fenice)\.png/.test(htmlForAudio));
+    && !/rel="preload" as="image" href="assets\/(?:characters\/master\/)?(?:loading-emblem|dirano|eyebolt|gorocca|fenice)\.png/.test(htmlForAudio));
   // ロビーのエンブレムはDOMの<img>。JSを通らないので picture で振り分ける。
   check('the lobby emblem falls back through <picture>',
     /<source srcset="assets\/loading-emblem\.webp" type="image\/webp">/.test(htmlForAudio)
     && /<img id="onlineLobbyEmblem" src="assets\/loading-emblem\.png"/.test(htmlForAudio)
     && htmlForAudio.includes('#onlineLobbyBody picture { display: block; }'));
-  // 起動時に読む絵の合計。ここが膨らむと読み込み画面が長くなる(v130で3.83MB→0.74MB)。
-  const startupArtFiles = ['assets/title-logo.webp', 'assets/loading-emblem.webp']
+  // 起動時に読む絵の合計。新タイトルは始点・終点を先に揃えるが、元PNG約6.2MBは
+  // 高品質JPEG約0.91MBへ縮小し、更新時に不要な通信を増やさない。
+  const startupArtFiles = ['assets/title-background-logo-start.jpg', 'assets/title-background-logo-end.jpg', 'assets/loading-emblem.webp']
     .concat(CHARACTER_ASSET_PINS.map(pin => `assets/characters/runtime/${pin.stem}.webp`));
   const startupArtBytes = startupArtFiles
     .reduce((sum, file) => sum + fs.statSync(path.join(repoRoot, file)).size, 0);
-  check('the images the loading screen waits for stay under 1MB',
-    startupArtBytes < 1024 * 1024, `${(startupArtBytes / 1024).toFixed(0)}KB`);
+  check('the images the loading screen waits for stay under 2MB',
+    startupArtBytes < 2 * 1024 * 1024, `${(startupArtBytes / 1024).toFixed(0)}KB`);
 
   check('Firebase accepts a normal fire packet', h.validateFirebaseMessage(validFire));
   check('Firebase v3 fire keeps the v2 payload checks behind the required round envelope',

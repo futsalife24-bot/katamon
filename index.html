@@ -18,7 +18,9 @@
 <link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
 <link rel="preload" as="image" href="assets/battle-start-logo.png" fetchpriority="high">
 <link rel="preload" as="video" href="assets/battle-start-logo.mp4" type="video/mp4">
-<link rel="preload" as="image" href="assets/title-logo.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-background-logo-start.jpg" type="image/jpeg" fetchpriority="high">
+<link rel="preload" as="image" href="assets/title-background-logo-end.jpg" type="image/jpeg" fetchpriority="high">
+<link rel="preload" as="video" href="assets/title-background-logo-transition.mp4" type="video/mp4">
 <link rel="preload" as="image" href="assets/title-mode-board.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-hanging-sign.webp" type="image/webp" fetchpriority="high">
@@ -663,10 +665,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.142-title-menu-pages';
+  const BUILD_ID = 'v2.0.143-title-logo-intro';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.143', date: '2026/08/25', summary: '石壁の奥で新タイトルロゴ演出を一度だけ再生' },
     { version: 'v2.0.142', date: '2026/08/24', summary: 'タイトルをBATTLE／GARAGEの2ページへ整理' },
     { version: 'v2.0.141', date: '2026/08/24', summary: '演習プレビューの大きさと接地を全キャラで統一' },
     { version: 'v2.0.140', date: '2026/08/24', summary: '演習などの静的キャラ表示を右向き原画へ統一' },
@@ -3518,18 +3521,18 @@
   }
 
   function areCoreImagesReady() {
-    const titleSettled = titleLogoReady || titleLogoFailed;
+    const titleStartSettled = titleIntroStartReady || titleIntroStartFailed;
+    const titleEndSettled = titleIntroEndReady || titleIntroEndFailed;
     const charactersSettled = characterImagesReady + characterImagesFailed >= CHARACTER_LIST.length;
-    const timeBackgroundSettled = titleTimeBackgroundReady || titleTimeBackgroundFailed;
     const woodUiSettled = titleWoodUiReady + titleWoodUiFailed >= Object.keys(titleWoodUiImages).length;
-    return titleSettled && charactersSettled && timeBackgroundSettled && woodUiSettled;
+    return titleStartSettled && titleEndSettled && charactersSettled && woodUiSettled;
   }
 
   function getCoreImageProgress() {
     return characterImagesReady + characterImagesFailed
       + titleWoodUiReady + titleWoodUiFailed
-      + ((titleLogoReady || titleLogoFailed) ? 1 : 0)
-      + ((titleTimeBackgroundReady || titleTimeBackgroundFailed) ? 1 : 0);
+      + ((titleIntroStartReady || titleIntroStartFailed) ? 1 : 0)
+      + ((titleIntroEndReady || titleIntroEndFailed) ? 1 : 0);
   }
   function getCoreImageProgressRatio() {
     const total = CHARACTER_LIST.length + Object.keys(titleWoodUiImages).length + 2;
@@ -3542,14 +3545,76 @@
     onReady: () => { loadingEmblemReady = true; }
   });
 
-  // 背景透過のタイトルロゴ。
-  let titleLogoReady = false;
-  let titleLogoFailed = false;
-  const titleLogoImage = loadArtImage('title-logo', {
-    highPriority: true,
-    onReady: () => { titleLogoReady = true; },
-    onFailed: () => { titleLogoFailed = true; }
+  // ロード完了後の石壁タップを起点に、提供された始点→動画→終点を一度だけ見せる。
+  // 背景とロゴは1枚へ合成済みなので、旧ロゴや端末時刻別背景を重ねない。
+  let titleIntroStartReady = false;
+  let titleIntroStartFailed = false;
+  let titleIntroEndReady = false;
+  let titleIntroEndFailed = false;
+  let titleIntroVideoFailed = false;
+  let titleIntroPhase = 'start';
+  let titleIntroStarted = false;
+  const titleIntroStartImage = new Image();
+  titleIntroStartImage.decoding = 'async';
+  titleIntroStartImage.fetchPriority = 'high';
+  titleIntroStartImage.onload = () => { titleIntroStartReady = true; };
+  titleIntroStartImage.onerror = () => { titleIntroStartFailed = true; };
+  titleIntroStartImage.src = 'assets/title-background-logo-start.jpg';
+  const titleIntroEndImage = new Image();
+  titleIntroEndImage.decoding = 'async';
+  titleIntroEndImage.fetchPriority = 'high';
+  titleIntroEndImage.onload = () => { titleIntroEndReady = true; };
+  titleIntroEndImage.onerror = () => { titleIntroEndFailed = true; };
+  titleIntroEndImage.src = 'assets/title-background-logo-end.jpg';
+  const titleIntroVideo = document.createElement('video');
+  titleIntroVideo.preload = 'auto';
+  titleIntroVideo.muted = true;
+  titleIntroVideo.playsInline = true;
+  titleIntroVideo.loop = false;
+  titleIntroVideo.poster = 'assets/title-background-logo-start.jpg';
+  titleIntroVideo.src = 'assets/title-background-logo-transition.mp4';
+  titleIntroVideo.addEventListener('playing', () => {
+    if (titleIntroStarted) titleIntroPhase = 'video';
   });
+  titleIntroVideo.addEventListener('ended', () => {
+    titleIntroPhase = 'end';
+    titleIntroVideo.pause();
+  });
+  titleIntroVideo.addEventListener('error', () => {
+    titleIntroVideoFailed = true;
+    if (titleIntroStarted) titleIntroPhase = 'end';
+  });
+  titleIntroVideo.load();
+
+  function titleIntroVideoReady() {
+    return !titleIntroVideoFailed && titleIntroVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      && titleIntroVideo.videoWidth > 0 && titleIntroVideo.videoHeight > 0;
+  }
+
+  function startTitleIntroSequence() {
+    titleIntroStarted = true;
+    titleIntroPhase = 'start';
+    titleIntroVideo.pause();
+    try { titleIntroVideo.currentTime = 0; } catch (_) { /* メタデータ待ちでも始点画像は表示できる */ }
+    if (titleIntroVideoFailed) {
+      titleIntroPhase = 'end';
+      return false;
+    }
+    try {
+      const playback = titleIntroVideo.play();
+      if (playback && typeof playback.catch === 'function') {
+        playback.catch(() => {
+          titleIntroVideoFailed = true;
+          titleIntroPhase = 'end';
+        });
+      }
+    } catch (_) {
+      titleIntroVideoFailed = true;
+      titleIntroPhase = 'end';
+      return false;
+    }
+    return true;
+  }
   // メロニキ提供の透過素材。元の4096x5150 PNGは余白が大きいため、見える範囲だけを
   // 同じ縦横比で切り出したWebPへ軽量化して使う。黒い余白を画像の一部として扱わないこと。
   let titleWoodUiReady = 0;
@@ -3579,28 +3644,6 @@
   function areTitleWoodUiImagesReady() {
     return Object.values(titleWoodUiImages).every(image => image.complete && image.naturalWidth > 0);
   }
-  // 起動した端末のローカル時刻で、タイトル背景を朝・昼・夕・夜に切り替える。
-  function getTitleTimeTheme(hour) {
-    if (hour >= 4 && hour < 10) return 'morning';
-    if (hour >= 10 && hour < 16) return 'day';
-    if (hour >= 16 && hour < 19) return 'evening';
-    return 'night';
-  }
-  const titleTimeTheme = getTitleTimeTheme(new Date().getHours());
-  const titleTimeBackgroundPaths = {
-    morning: 'assets/title-morning.jpg',
-    day: 'assets/title-day.jpg',
-    evening: 'assets/title-evening.jpg',
-    night: 'assets/title-night.jpg'
-  };
-  let titleTimeBackgroundReady = false;
-  let titleTimeBackgroundFailed = false;
-  const titleTimeBackgroundImage = new Image();
-  titleTimeBackgroundImage.decoding = 'async';
-  titleTimeBackgroundImage.fetchPriority = 'high';
-  titleTimeBackgroundImage.onload = () => { titleTimeBackgroundReady = true; };
-  titleTimeBackgroundImage.onerror = () => { titleTimeBackgroundFailed = true; };
-  titleTimeBackgroundImage.src = titleTimeBackgroundPaths[titleTimeTheme];
   // ===== 対戦開始カットインの砲弾ネームプレート(ユーザー提供素材) =====
   // 1枚のシートから切り出した5点。緑=自陣営／赤=相手陣営で、1vs1用(顔1つ)と
   // 2vs2用(顔2つ)を持つ。赤は左右反転して描くので、砲弾の先端が中央で向き合う。
@@ -11729,59 +11772,69 @@
   let titleMenuArtBuilds = 0;
 
   function titleArtSignature() {
-    // 背景とロゴは非同期で届く。届く前の代替表示を焼いたあと画像が届いても、
-    // 古い絵を貼り続けないよう、実際に描く条件と画像の大きさを署名へ含める。
-    const background = titleTimeBackgroundReady
-      ? `${titleTimeTheme}:${titleTimeBackgroundImage.naturalWidth || 0}x${titleTimeBackgroundImage.naturalHeight || 0}`
-      : 'fallback';
-    const logoReady = titleLogoImage.complete && titleLogoImage.naturalWidth > 0;
-    const logo = logoReady
-      ? `${titleLogoImage.naturalWidth}x${titleLogoImage.naturalHeight}`
-      : 'fallback';
-    const woodUi = Object.entries(titleWoodUiImages).map(([key, image]) => (
+    // 動画中は静止キャッシュを使わない。始点・終点のどちらを焼くかと、
+    // 画像の準備状態だけを署名へ含める。
+    const useEnd = titleIntroPhase === 'end';
+    const image = useEnd ? titleIntroEndImage : titleIntroStartImage;
+    const ready = image.complete && image.naturalWidth > 0;
+    return `${useEnd ? 'end' : 'start'}:${ready ? `${image.naturalWidth}x${image.naturalHeight}` : 'fallback'}`;
+  }
+
+  function titleMenuArtSignature() {
+    return Object.entries(titleWoodUiImages).map(([key, image]) => (
       image.complete && image.naturalWidth > 0
         ? `${key}:${image.naturalWidth}x${image.naturalHeight}`
         : `${key}:fallback`
     )).join(',');
-    return `${background}|${logo}|${woodUi}`;
+  }
+
+  function drawTitleCover(g, image) {
+    if (!image?.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return false;
+    const scale = Math.max(VW / image.naturalWidth, VH / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    g.drawImage(image, (VW - width) / 2, (VH - height) / 2, width, height);
+    return true;
+  }
+
+  function drawTitleVideoCover(g) {
+    if (!titleIntroVideoReady()) return false;
+    const scale = Math.max(VW / titleIntroVideo.videoWidth, VH / titleIntroVideo.videoHeight);
+    const width = titleIntroVideo.videoWidth * scale;
+    const height = titleIntroVideo.videoHeight * scale;
+    g.drawImage(titleIntroVideo, (VW - width) / 2, (VH - height) / 2, width, height);
+    return true;
+  }
+
+  function drawTitleBackdropShade(g) {
+    // 新素材のロゴは明るいまま保ち、木板と更新欄の背後だけを下へ向けて落とす。
+    const titleShade = g.createLinearGradient(0, VH * 0.28, 0, VH);
+    titleShade.addColorStop(0, 'rgba(4,8,20,0)');
+    titleShade.addColorStop(0.45, 'rgba(4,8,20,0.16)');
+    titleShade.addColorStop(1, 'rgba(4,8,20,0.68)');
+    g.fillStyle = titleShade;
+    g.fillRect(0, 0, VW, VH);
   }
 
   function drawTitleStaticArt(g) {
     g.save();
-    if (titleTimeBackgroundReady) {
-      g.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
-    }
-    const titleShade = g.createLinearGradient(0, 0, 0, VH);
-    titleShade.addColorStop(0, 'rgba(4,8,20,0.20)');
-    titleShade.addColorStop(0.45, 'rgba(4,8,20,0.34)');
-    titleShade.addColorStop(1, 'rgba(4,8,20,0.72)');
-    g.fillStyle = titleShade;
-    g.fillRect(0, 0, VW, VH);
-
-    // 透明余白を表示時にトリミングし、ロゴ本体を画面上部へ寄せる。
-    const logo = { x: 15, y: 55, w: VW - 30, h: 390 };
-    g.save();
-    g.shadowColor = 'rgba(0,0,0,0.75)';
-    g.shadowBlur = 24;
-    g.shadowOffsetY = 10;
-    g.beginPath();
-    if (g.roundRect) g.roundRect(logo.x, logo.y, logo.w, logo.h, 18);
-    else g.rect(logo.x, logo.y, logo.w, logo.h);
-    g.clip();
-    if (titleLogoImage.complete && titleLogoImage.naturalWidth > 0) {
-      const cropX = titleLogoImage.naturalWidth * 0.09;
-      const cropY = titleLogoImage.naturalHeight * 0.10;
-      const cropW = titleLogoImage.naturalWidth * 0.82;
-      const cropH = titleLogoImage.naturalHeight * 0.78;
-      g.drawImage(titleLogoImage, cropX, cropY, cropW, cropH, logo.x, logo.y, logo.w, logo.h);
-    } else {
+    const still = titleIntroPhase === 'end' ? titleIntroEndImage : titleIntroStartImage;
+    if (!drawTitleCover(g, still)) {
+      g.fillStyle = '#148fdd';
+      g.fillRect(0, 0, VW, VH);
       g.fillStyle = '#ffd24a';
       g.font = '400 35px ' + UI_FONT_DISPLAY;
       g.textAlign = 'center';
-      g.fillText('CATAMON PROJECT', VW / 2, logo.y + logo.h / 2);
+      g.fillText('CATAMON PROJECT', VW / 2, 260);
     }
+    drawTitleBackdropShade(g);
     g.restore();
+  }
 
+  function drawTitleLiveArt(g) {
+    g.save();
+    if (!drawTitleVideoCover(g)) drawTitleCover(g, titleIntroStartImage);
+    drawTitleBackdropShade(g);
     g.restore();
   }
 
@@ -11812,7 +11865,7 @@
   }
 
   function rebuildTitleMenuArt() {
-    const key = titleArtSignature();
+    const key = titleMenuArtSignature();
     if (key === titleMenuArtKey) return;
     titleMenuArtKey = key;
     titleMenuArtBuilds++;
@@ -11933,9 +11986,12 @@
 
   function drawTitleScreen() {
     ctx.save();
-    rebuildTitleArt();
+    if (titleIntroPhase === 'video') drawTitleLiveArt(ctx);
+    else {
+      rebuildTitleArt();
+      ctx.drawImage(titleArtCanvas, 0, 0, VW, VH);
+    }
     rebuildTitleMenuArt();
-    ctx.drawImage(titleArtCanvas, 0, 0, VW, VH);
 
     const woodUiReady = areTitleWoodUiImagesReady();
     const visualPosition = titleMenuVisualPosition();
@@ -12249,7 +12305,7 @@
 
   function drawFreeSetupScreen() {
     ctx.save();
-    if (titleTimeBackgroundReady) ctx.drawImage(titleTimeBackgroundImage, 0, 0, VW, VH);
+    if (!drawTitleCover(ctx, titleIntroEndImage)) drawTitleCover(ctx, titleIntroStartImage);
     const shade = ctx.createLinearGradient(0, 0, 0, VH);
     shade.addColorStop(0, 'rgba(4,8,14,0.56)');
     shade.addColorStop(0.35, 'rgba(4,8,14,0.82)');
@@ -20781,6 +20837,7 @@
       if (e.type === 'pointerup' && gamePhase === 'press') {
         // このユーザー操作の中で直接play()を呼ぶ。音源待ちが止まっても安全弁でタイトルへ進む。
         const aim = canvasPointFromEvent(e);
+        startTitleIntroSequence();
         enterTitleFromTap();
         playUiSound();
         // 砲弾を撃ち込むのは enterTitleFromTap の後。先に切り替えると

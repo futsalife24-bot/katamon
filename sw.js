@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.142-title-menu-pages';
+const CACHE_VERSION = 'katamon-pwa-v2.0.143-title-logo-intro';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -53,7 +53,9 @@ const CORE_ASSETS = [
   './assets/fonts/katamon-fonts.css',
   './assets/fonts/rocknroll-one-regular.ttf',
   './assets/fonts/reggae-one-display.woff2',
-  './assets/title-logo.webp',
+  './assets/title-background-logo-start.jpg',
+  './assets/title-background-logo-transition.mp4',
+  './assets/title-background-logo-end.jpg',
   './assets/title-mode-board.webp',
   './assets/title-shield-button.webp',
   './assets/title-hanging-sign.webp',
