@@ -1014,6 +1014,10 @@ const HOOK = `
       const snapshot = readCpuGearLegacySuspendForClaim();
       return snapshot ? { key: snapshot.key, raw: snapshot.raw } : null;
     },
+    captureCpuGearActiveRunDiscardTokenForTest: () => {
+      const token = captureCpuGearActiveRunDiscardToken();
+      return token ? JSON.parse(JSON.stringify(token)) : null;
+    },
     claimCpuGearSuspendForTest: (expectedSnapshot) => claimCpuGearLegacySuspendForResume(expectedSnapshot),
     cpuGearPersistenceForTest: () => ({ state: cpuGearPersistenceState, status: cpuGearStatusText }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,

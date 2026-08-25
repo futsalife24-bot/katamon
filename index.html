@@ -6611,7 +6611,13 @@
       showTitleNotice(`未解放です: ${unlockConditionLabel(characterUnlock(CHARACTERS[key]))}`);
       return false;
     }
-    if (hasSuspendedSave) { pendingNewMatchKey = key; return false; }
+    if (hasSuspendedSave) {
+      pendingNewMatchKey = key;
+      // This is only an advisory, volatile compare-and-swap token. The CPU
+      // lifecycle lock re-reads every field before it can discard anything.
+      cpuGearActiveRunDiscardToken = captureCpuGearActiveRunDiscardToken();
+      return false;
+    }
     selectCharacterAndStart(key);
     return true;
   }
@@ -6620,12 +6626,14 @@
   function resolveNewMatchConfirm(action) {
     const key = pendingNewMatchKey;
     pendingNewMatchKey = null;
+    const discardToken = cpuGearActiveRunDiscardToken;
+    cpuGearActiveRunDiscardToken = null;
     if (!key) return;
     if (action === 'resume') resumeSuspendedMatch();
     else if (action === 'start') {
-      // The player explicitly chose to discard the active legacy CPU run.
-      // Only an active (not settlement_pending) Gear run may be replaced.
-      cpuGearAllowActiveRunReplacement = true;
+      // The lifecycle lock validates this exact token before it can discard
+      // the active CPU run and its official normal-mode suspend.
+      cpuGearActiveRunDiscardToken = discardToken;
       selectCharacterAndStart(key);
     }
   }
@@ -6703,6 +6711,7 @@
   // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
   function leaveSelectToTitle() {
     pendingNewMatchKey = null;
+    cpuGearActiveRunDiscardToken = null;
     selectWheelDragging = false;
     selectWheelVelocity = 0;
     inputMode = null;
@@ -6721,10 +6730,12 @@
     // must never discard a recoverable legacy CPU snapshot just by tapping
     // "start new".
     const allowActiveRunReplacement = cpuGearAllowActiveRunReplacement;
+    const discardToken = cpuGearActiveRunDiscardToken;
     cpuGearAllowActiveRunReplacement = false;
-    const start = beginCpuGearRunForNewMatch(allowActiveRunReplacement, () => {
+    cpuGearActiveRunDiscardToken = null;
+    const start = beginCpuGearRunForNewMatch({ allowActiveRunReplacement, discardToken }, ({ priorSuspendDiscarded = false } = {}) => {
       pendingNewMatchKey = null;
-      clearSuspendedMatch();
+      if (!priorSuspendDiscarded) clearSuspendedMatch();
       hasSuspendedSave = false;
       battleMode = 'normal';
       setMatchFormat('1v1'); // 通常のCPU戦は従来どおり1vs1
@@ -8073,6 +8084,9 @@
   let cpuGearTerminalSettlementOutcome = null;
   let cpuGearTerminalSettlementPreparationPromise = null;
   let cpuGearAllowActiveRunReplacement = false;
+  // Volatile only: the exact active CPU run and official suspend that a
+  // "start new" confirmation displayed. It is never a blanket delete permit.
+  let cpuGearActiveRunDiscardToken = null;
   let cpuGearLastSettlementIntent = null;
 
   function cpuGearModules() {
@@ -8097,6 +8111,9 @@
     if (code === 'CPU_GEAR_SETTLEMENT_PENDING') return '未精算のCPU BATTLE報酬があります。先に精算してください。';
     if (code === 'CPU_GEAR_RUN_OWNERSHIP_LOST' || code === 'CPU_GEAR_LEGACY_SUSPEND_OWNER_MISMATCH') {
       return 'このCPU BATTLEは別の画面で再開されています。古い画面では続行・精算できません。';
+    }
+    if (code === 'CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT') {
+      return 'このCPU BATTLEは別の画面で更新されています。状態を確認してください。';
     }
     if (code === 'CPU_GEAR_ORPHAN_ACTIVE_RUN') return '前回のCPU BATTLE開始を安全に保存できませんでした。もう一度出撃を押すと、未開始の連勝を破棄して新しく開始します。';
     if (code === 'PENDING_GEAR_TRANSACTION_EXISTS' || code === 'FOUNDATION_PENDING_GEAR_TRANSACTION') {
@@ -8346,19 +8363,76 @@
     }
   }
 
-  function beginCpuGearRunForNewMatch(allowActiveRunReplacement = false, startMatch = null) {
+  function captureCpuGearActiveRunDiscardToken() {
+    const { runStorage } = cpuGearModules();
+    const state = readCpuGearRunState();
+    if (!state || state.state !== runStorage.ACTIVE || state.resumeClaim !== null) return null;
+    let raw;
+    try { raw = localStorage.getItem(SUSPEND_KEY); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_READ_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_READ_FAILED', cause: error });
+    }
+    const data = decodeSuspendedMatchRaw(SUSPEND_KEY, raw);
+    if (!data || !isCpuGearLegacySnapshot(data)) return null;
+    const fencing = cpuGearLegacySnapshotFencing(data);
+    if (fencing.ownerSessionId !== state.ownerSessionId || fencing.snapshotId === null) return null;
+    return Object.freeze({
+      runId: state.runId,
+      state: runStorage.ACTIVE,
+      runOwnerSessionId: state.ownerSessionId,
+      resumeClaim: null,
+      peakStreak: state.peakStreak,
+      legacySuspendRaw: raw,
+      legacyOwnerSessionId: fencing.ownerSessionId,
+      legacySnapshotId: fencing.snapshotId,
+    });
+  }
+
+  function assertCpuGearActiveRunDiscardToken(token, state) {
+    const { runStorage } = cpuGearModules();
+    if (!token || token.state !== runStorage.ACTIVE
+        || token.resumeClaim !== null
+        || token.runId !== state.runId
+        || token.runOwnerSessionId !== state.ownerSessionId
+        || token.peakStreak !== state.peakStreak
+        || state.resumeClaim !== null) {
+      throw Object.assign(new Error('CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT'), { code: 'CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT' });
+    }
+    let raw;
+    try { raw = localStorage.getItem(SUSPEND_KEY); } catch (error) {
+      throw Object.assign(new Error('CPU_GEAR_LEGACY_SUSPEND_READ_FAILED'), { code: 'CPU_GEAR_LEGACY_SUSPEND_READ_FAILED', cause: error });
+    }
+    const data = decodeSuspendedMatchRaw(SUSPEND_KEY, raw);
+    if (raw !== token.legacySuspendRaw || !data || !isCpuGearLegacySnapshot(data)) {
+      throw Object.assign(new Error('CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT'), { code: 'CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT' });
+    }
+    const fencing = cpuGearLegacySnapshotFencing(data);
+    if (fencing.ownerSessionId !== token.legacyOwnerSessionId
+        || fencing.snapshotId !== token.legacySnapshotId) {
+      throw Object.assign(new Error('CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT'), { code: 'CPU_GEAR_ACTIVE_RUN_DISCARD_CONFLICT' });
+    }
+  }
+
+  function beginCpuGearRunForNewMatch({ allowActiveRunReplacement = false, discardToken = null } = {}, startMatch = null) {
     return cpuGearRunLifecycle('CPU BATTLE開始', () => {
       if (!ensureCpuGearGate('CPU BATTLE開始')) return false;
       const { runStorage } = cpuGearModules();
       const existing = readCpuGearRunState();
-      if (existing && existing.ownerSessionId !== null
-          && existing.ownerSessionId !== currentCpuGearOwnerSessionId()) {
-        throw Object.assign(new Error('CPU_GEAR_RUN_OWNERSHIP_LOST'), { code: 'CPU_GEAR_RUN_OWNERSHIP_LOST' });
-      }
       if (existing && existing.state === runStorage.SETTLEMENT_PENDING) {
         throw Object.assign(new Error('CPU_GEAR_SETTLEMENT_PENDING'), { code: 'CPU_GEAR_SETTLEMENT_PENDING' });
       }
-      if (existing && !allowActiveRunReplacement) {
+      let priorSuspendDiscarded = false;
+      if (existing && discardToken) {
+        // A restart legitimately has a new volatile owner. That is safe only
+        // if this lock can still prove the dialog observed this exact run and
+        // suspend; a rebound snapshot turns into a fail-closed conflict.
+        assertCpuGearActiveRunDiscardToken(discardToken, existing);
+        removeCpuLegacySuspendStrict(SUSPEND_KEY, discardToken.legacySuspendRaw);
+        runStorage.removeCpuGearRunState(localStorage);
+        priorSuspendDiscarded = true;
+      } else if (existing && existing.ownerSessionId !== null
+          && existing.ownerSessionId !== currentCpuGearOwnerSessionId()) {
+        throw Object.assign(new Error('CPU_GEAR_RUN_OWNERSHIP_LOST'), { code: 'CPU_GEAR_RUN_OWNERSHIP_LOST' });
+      } else if (existing && !allowActiveRunReplacement) {
         if (rawLegacyCpuSuspendIsAbsent()) {
           // The first failed launch deliberately leaves the newly-created
           // identity untouched when its cleanup cannot be verified. There is
@@ -8372,7 +8446,7 @@
       }
       const created = createCpuGearRun(0);
       try {
-        const started = typeof startMatch === 'function' ? startMatch() : true;
+        const started = typeof startMatch === 'function' ? startMatch({ priorSuspendDiscarded }) : true;
         // A run identity without the legacy battle snapshot cannot be resumed.
         // If turn-start persistence failed, remove only the just-created state;
         // if removal itself is ambiguous, the next explicit start exposes the

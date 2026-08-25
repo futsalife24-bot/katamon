@@ -267,6 +267,68 @@ function createUnclaimedFullGateState() {
     assert.ok(kt.suspendedSavePresentForTest());
   });
 
+  await test('再起動後の明示「新しく始める」は確認時CASで旧active runだけを破棄し、新ownerのrunを作る', () => {
+    resetFixture();
+    const ownerA = 'cpu-session:00000000-0000-4000-8000-000000000701';
+    const ownerB = 'cpu-session:00000000-0000-4000-8000-000000000702';
+    kt.setCpuGearOwnerSessionForTest(ownerA);
+    assert.equal(kt.startBattle(), true);
+    const oldRun = kt.cpuGearRunStateForTest();
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+    assert.equal(kt.phase(), 'title');
+
+    // Simulate a fresh runtime: its volatile owner differs, while durable
+    // active run and official suspend still belong to the previous runtime.
+    kt.setCpuGearOwnerSessionForTest(ownerB);
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    const discardToken = kt.captureCpuGearActiveRunDiscardTokenForTest();
+    assert.ok(discardToken, 'the confirmation captures the exact old active run/suspend');
+    kt.resolveNewMatchConfirm('start');
+
+    const fresh = kt.cpuGearRunStateForTest();
+    assert.equal(fresh.state, 'active');
+    assert.notEqual(fresh.runId, oldRun.runId);
+    assert.equal(fresh.ownerSessionId, ownerB);
+    assert.equal(fresh.peakStreak, 0);
+    assert.equal(fresh.settlementIntent, null);
+    assert.equal(JSON.parse(storage.getItem('katamon_suspend_v1')).cpuGearOwnerSessionId, ownerB);
+    const gearState = gearStorage.loadGearState(storage);
+    assert.equal(gearState.unclaimedRewards.length, 0);
+    assert.deepEqual(gearState.rewardLedger, {});
+  });
+
+  await test('同一runtimeの明示「新しく始める」はactive runだけを置換し、custom suspendを消さない', () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    const oldRun = kt.cpuGearRunStateForTest();
+    storage.setItem('katamon_custom_suspend_v1', '{"custom":"preserve"}');
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest());
+    kt.resolveNewMatchConfirm('start');
+    assert.notEqual(kt.cpuGearRunStateForTest().runId, oldRun.runId);
+    assert.equal(storage.getItem('katamon_custom_suspend_v1'), '{"custom":"preserve"}');
+  });
+
+  await test('settlement_pendingは明示「新しく始める」でも破棄せず、intentとreward identityを保持する', () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    kt.setStreak(15);
+    assert.equal(finishByDefeat('p1'), 'cpu');
+    const pending = kt.cpuGearRunStateForTest();
+    assert.equal(pending.state, 'settlement_pending');
+    const rawBefore = storage.getItem('katamon_suspend_v1');
+    kt.setPhase('title');
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    assert.equal(kt.captureCpuGearActiveRunDiscardTokenForTest(), null);
+    kt.resolveNewMatchConfirm('start');
+    assert.deepEqual(kt.cpuGearRunStateForTest(), pending);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawBefore);
+  });
+
   await test('勝利はpeakを更新し、通常のsuspend/reloadで同じrunIdを維持する', () => {
     resetFixture();
     assert.equal(kt.startBattle(), true);

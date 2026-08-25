@@ -193,6 +193,103 @@ function installDeferredGearWriterLock() {
     assert.equal(storage.getItem('katamon_suspend_v1'), JSON.stringify(rebound));
   });
 
+  await test('古い「新しく始める」確認tokenは別tabのresume rebind後にcurrent runもsnapshotも破棄できない', async () => {
+    resetFixture();
+    const ownerA = ownerSessionId(94);
+    const ownerB = ownerSessionId(95);
+    const ownerC = ownerSessionId(96);
+    kt.setCpuGearOwnerSessionForTest(ownerA);
+    assert.equal(kt.startBattle(), true);
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+
+    // B opens the confirmation and captures A's exact run/snapshot bytes.
+    kt.setCpuGearOwnerSessionForTest(ownerB);
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    const token = kt.captureCpuGearActiveRunDiscardTokenForTest();
+    assert.ok(token);
+
+    // C resumes the same run first, rotating its owner and snapshot fence.
+    kt.setCpuGearOwnerSessionForTest(ownerC);
+    assert.equal(await Promise.resolve(kt.resumeCpuSuspendForTest()), true);
+    const runC = kt.cpuGearRunStateForTest();
+    const rawC = storage.getItem('katamon_suspend_v1');
+    assert.equal(runC.ownerSessionId, ownerC);
+
+    // B's old confirmation is now stale: it must not create a new run or
+    // delete C's rebound recovery snapshot.
+    kt.setCpuGearOwnerSessionForTest(ownerB);
+    kt.resolveNewMatchConfirm('start');
+    await Promise.resolve();
+    assert.deepEqual(kt.cpuGearRunStateForTest(), runC);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawC);
+  });
+
+  await test('resume claim markerだけが先に永続化されたcrash pointでも、古いdiscard tokenはrunを破棄できない', async () => {
+    resetFixture();
+    const ownerA = ownerSessionId(97);
+    const ownerB = ownerSessionId(98);
+    const ownerC = ownerSessionId(99);
+    kt.setCpuGearOwnerSessionForTest(ownerA);
+    assert.equal(kt.startBattle(), true);
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+
+    kt.setCpuGearOwnerSessionForTest(ownerB);
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    assert.ok(kt.captureCpuGearActiveRunDiscardTokenForTest());
+
+    // Model the durable point after the resume marker write but before the
+    // owner-handoff/rebind write. It remains a forward-recovery state, never
+    // a target for a stale confirmation to discard.
+    const beforeMarker = kt.cpuGearRunStateForTest();
+    const rawBefore = storage.getItem('katamon_suspend_v1');
+    const marker = {
+      sourceOwnerSessionId: ownerA,
+      targetOwnerSessionId: ownerC,
+      snapshotId: JSON.parse(rawBefore).cpuGearSnapshotId,
+      targetSnapshotId: 'cpu-snapshot:00000000-0000-4000-8000-000000000099',
+    };
+    const marked = runStorage.saveCpuGearRunState(runStorage.withResumeClaim(beforeMarker, marker), storage);
+    assert.ok(marked.resumeClaim);
+
+    kt.resolveNewMatchConfirm('start');
+    await Promise.resolve();
+    assert.deepEqual(kt.cpuGearRunStateForTest(), marked);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawBefore);
+  });
+
+  await test('別tabがsnapshot更新前にpeakだけ確定した場合も、古いdiscard tokenは報酬資格を破棄できない', async () => {
+    resetFixture();
+    const ownerA = ownerSessionId(110);
+    const ownerB = ownerSessionId(111);
+    kt.setCpuGearOwnerSessionForTest(ownerA);
+    assert.equal(kt.startBattle(), true);
+    assert.equal(kt.suspendRunToTitleForTest(), true);
+
+    kt.setCpuGearOwnerSessionForTest(ownerB);
+    kt.setHasSave(true);
+    assert.equal(kt.requestNewMatch('kyoryu'), false);
+    const token = kt.captureCpuGearActiveRunDiscardTokenForTest();
+    assert.equal(token.peakStreak, 0);
+
+    // A separate owner has durably recorded a win/peak before its next
+    // turn-start snapshot. The old legacy bytes still match, so the run-state
+    // peak itself must participate in the discard CAS.
+    const rawBefore = storage.getItem('katamon_suspend_v1');
+    const peakUpdated = runStorage.saveCpuGearRunState(
+      runStorage.withPeakStreak(kt.cpuGearRunStateForTest(), 1),
+      storage,
+    );
+    assert.equal(peakUpdated.peakStreak, 1);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawBefore);
+
+    kt.resolveNewMatchConfirm('start');
+    await Promise.resolve();
+    assert.deepEqual(kt.cpuGearRunStateForTest(), peakUpdated);
+    assert.equal(storage.getItem('katamon_suspend_v1'), rawBefore);
+  });
+
   await test('resume claim中に別tabのturn-start autosaveが新snapshotを書いた場合、古いsnapshotを復元も削除もしない', async () => {
     resetFixture();
     assert.equal(kt.startBattle(), true);
