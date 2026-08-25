@@ -248,7 +248,39 @@ test('初期サブは0〜4、完全等確率候補かつ重複なし', () => {
     assert.equal(item.subOps.length, expected);
     assert.equal(new Set(item.subOps.map((sub) => sub.opId)).size, item.subOps.length);
     item.subOps.forEach((sub) => assert.ok(gear.SUB_OP_IDS.includes(sub.opId)));
+    item.initialSubOps.forEach((sub) => {
+      assert.equal(sub.enhancementCount, 0);
+      assert.equal(sub.enhancementValueBp, 0);
+      assert.equal(sub.valueBp, sub.initialValueBp);
+    });
   });
+});
+test('初期サブは架空の強化状態をfail closedし、正規強化後も未強化のまま保持する', () => {
+  const base = makeGear({ gearId: 'initial-sub-invariant', rarityId: 'mythic', star: 6 });
+  const forgedRoll = JSON.parse(JSON.stringify(base));
+  forgedRoll.initialSubOps[0].enhancementCount = 1;
+  forgedRoll.initialSubOps[0].enhancementValueBp = 500;
+  forgedRoll.initialSubOps[0].valueBp += 500;
+  expectCode('INVALID_INITIAL_SUB_STATE', () => gear.validateGear(forgedRoll, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+
+  const forgedValueOnly = JSON.parse(JSON.stringify(base));
+  forgedValueOnly.initialSubOps[0].enhancementValueBp = 500;
+  forgedValueOnly.initialSubOps[0].valueBp += 500;
+  assert.throws(() => gear.validateGear(forgedValueOnly, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+
+  const forgedCountOnly = JSON.parse(JSON.stringify(base));
+  forgedCountOnly.initialSubOps[0].enhancementCount = 1;
+  assert.throws(() => gear.validateGear(forgedCountOnly, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }));
+
+  const enhanced = gear.enhanceGear(base, 12, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING });
+  const restored = JSON.parse(JSON.stringify(enhanced));
+  assert.deepEqual(gear.validateGear(restored, { balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING }), enhanced);
+  enhanced.initialSubOps.forEach((sub) => {
+    assert.equal(sub.enhancementCount, 0);
+    assert.equal(sub.enhancementValueBp, 0);
+    assert.equal(sub.valueBp, sub.initialValueBp);
+  });
+  assert.ok(enhanced.subOps.some((sub) => sub.enhancementCount > 0 && sub.enhancementValueBp > 0));
 });
 test('メインと同種のサブは許可される', () => {
   const item = makeGear({ gearId: 'same-main-sub', generationSeed: 's1', enhancementSeed: 'e1', slotId: 'engine' });

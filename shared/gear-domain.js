@@ -548,6 +548,17 @@
       return makeSubOp(opId, initialValueBp, enhancementValueBp, enhancementCount);
     });
   }
+  // initialSubOps is the immutable acquisition-time record. Unlike the
+  // materialized subOps, it must never carry an enhancement roll.
+  function validateInitialSubOps(subOps, star) {
+    const checked = validateSubOps(subOps, 'initialSubOps', star);
+    for (const sub of checked) {
+      if (sub.enhancementValueBp !== 0 || sub.enhancementCount !== 0 || sub.valueBp !== sub.initialValueBp) {
+        fail('INVALID_INITIAL_SUB_STATE', 'initial sub ops must not contain enhancement rolls');
+      }
+    }
+    return checked;
+  }
   // Structural validation deliberately does not trust materialized values.
   // validateGear() below regenerates them from the enhancement seed before it
   // accepts an item for any public calculation.
@@ -567,7 +578,7 @@
     const mainOpId = assertString(gear.mainOp.opId, 'mainOp.opId');
     if (!slot.mainOpIds.includes(mainOpId)) fail('INVALID_MAIN_OP', `${mainOpId} is not valid for ${slot.id}`);
     if (gear.mainOp.unit !== mainUnit(slot.id)) fail('INVALID_MAIN_UNIT', 'main op unit does not match slot');
-    const initialSubOps = validateSubOps(gear.initialSubOps, 'initialSubOps', star);
+    const initialSubOps = validateInitialSubOps(gear.initialSubOps, star);
     if (initialSubOps.length !== rarity.initialSubCount) fail('INVALID_INITIAL_SUB_COUNT', 'rarity initial sub count does not match');
     const subOps = validateSubOps(gear.subOps, 'subOps', star);
     assertSeed(gear.enhancementSeed, 'enhancementSeed');
@@ -993,7 +1004,7 @@
     ENHANCEMENT_COSTS, DISMANTLE_BASE_POWDER_BY_STAR, BLUEPRINT_SHARD_BASE_BY_STAR, BLUEPRINT_SHARD_RARITY_MULTIPLIER, TARGETED_BOX_COSTS,
     SOFT_CAPS_BP, GS_CONSTANTS, BALANCE_TUNING, BALANCE_TUNING_BY_VERSION, GEAR_SCHEMA_RULES_BY_VERSION, GENERATION_RULES_BY_VERSION, ENHANCEMENT_RULES_BY_VERSION,
     stableStringify, validateWeightedTable, chooseWeightedByRoll, deriveDeterministicUint32, selectUniformIndexFromUint32, createLabeledPrng,
-    validateBalanceTuning, resolveBalanceTuningForVersion, resolveSchemaRules, resolveGenerationRules, resolveEnhancementRules, validateQualityProfile, resolveQualityProfile, validateSetProfile, resolveSetProfile, mainFinalValue, mainValueAtLevel, subValueRange,
+    validateBalanceTuning, resolveBalanceTuningForVersion, resolveSchemaRules, resolveGenerationRules, resolveEnhancementRules, validateQualityProfile, resolveQualityProfile, validateSetProfile, resolveSetProfile, validateInitialSubOps, mainFinalValue, mainValueAtLevel, subValueRange,
     validateGear, createGear, calculateMilestonePlan, previewEnhancement, enhanceGear,
     applySoftCap, aggregateLoadout, calculateGearScore, calculateEnhancementCost, calculateDismantleYield, getTargetedBoxQuote,
     toPublicGearView, buildBalanceBoundaryReport,
