@@ -32,17 +32,20 @@ const TEST_ONLY_FIXED_MAIN_TUNING = Object.freeze({
   },
 });
 
-function fixedProfile(id, star, rarityId, setId = 'assault') {
+function fixedProfile(id, star, rarityId) {
   return {
     id,
     starWeights: [{ id: star, weight: 1 }],
     rarityWeights: [{ id: rarityId, weight: 1 }],
-    setWeights: [{ id: setId, weight: 1 }],
   };
+}
+function fixedSetProfile(id, setId = 'assault') {
+  return { id, setWeights: [{ id: setId, weight: 1 }] };
 }
 function makeGear({
   gearId = 'gear-a', slotId = 'engine', star = 6, rarityId = 'mythic', setId = 'assault',
   generationSeed = 'generation-seed-a', enhancementSeed = 'enhancement-seed-a', balanceTuning = TEST_ONLY_FIXED_MAIN_TUNING,
+  qualityProfile = fixedProfile(`profile-${star}-${rarityId}-${setId}`, star, rarityId), setProfile = fixedSetProfile(`set-profile-${setId}`, setId), requestedSetId,
 } = {}) {
   return gear.createGear({
     gearId,
@@ -51,8 +54,10 @@ function makeGear({
     sourceId: 'coop_boss',
     sourceDetail: { difficulty: 'normal' },
     acquiredAt: '2026-08-25T00:00:00Z',
-    qualityProfile: fixedProfile(`profile-${star}-${rarityId}-${setId}`, star, rarityId, setId),
+    qualityProfile,
+    setProfile,
     slotId,
+    ...(requestedSetId === undefined ? {} : { setId: requestedSetId }),
     balanceTuning,
   });
 }
@@ -94,9 +99,54 @@ test('6部位・5レア度・13サブ・8セットが仕様どおり', () => {
 });
 test('協力ボスとCPU連勝の品質テーブルを整数weightで持つ', () => {
   assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.normal.starWeights.map((entry) => entry.weight), [25, 35, 25, 15, 0, 0]);
+  assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.normal.rarityWeights.map((entry) => entry.weight), [40, 34, 20, 5, 1]);
+  assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.hard.starWeights.map((entry) => entry.weight), [0, 15, 30, 35, 20, 0]);
+  assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.hard.rarityWeights.map((entry) => entry.weight), [30, 30, 26, 11, 3]);
+  assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.extreme.starWeights.map((entry) => entry.weight), [0, 0, 0, 20, 50, 30]);
   assert.deepEqual(gear.COOP_BOSS_QUALITY_PROFILES.extreme.rarityWeights.map((entry) => entry.weight), [30, 30, 22, 13, 5]);
   assert.deepEqual(gear.CPU_BATTLE_QUALITY_PROFILES.streak15.starWeights.map((entry) => entry.weight), [0, 0, 0, 0, 60, 40]);
   assert.deepEqual(gear.CPU_BATTLE_QUALITY_PROFILES.streak10.rarityWeights.map((entry) => entry.weight), [25, 29, 28, 14, 4]);
+  assert.equal(Object.hasOwn(gear.COOP_BOSS_QUALITY_PROFILES, 'fortress'), false);
+  assert.equal(Object.hasOwn(gear.COOP_BOSS_QUALITY_PROFILES.normal, 'setWeights'), false);
+});
+test('協力難易度品質と要塞セット偏りを別軸で扱う', () => {
+  const fortressWeights = gear.GEAR_SET_PROFILES.fortress.setWeights;
+  const mainIds = new Set(['fortify', 'blast', 'impact']);
+  assert.equal(fortressWeights.filter((entry) => mainIds.has(entry.id)).reduce((total, entry) => total + entry.weight, 0), 240);
+  assert.equal(fortressWeights.filter((entry) => !mainIds.has(entry.id)).reduce((total, entry) => total + entry.weight, 0), 60);
+  assert.equal(fortressWeights.reduce((total, entry) => total + entry.weight, 0), 300);
+  assert.deepEqual(gear.GEAR_SET_PROFILES.uniform.setWeights.map((entry) => entry.weight), Array(8).fill(1));
+
+  for (const [difficulty, profile] of Object.entries(gear.COOP_BOSS_QUALITY_PROFILES)) {
+    const base = {
+      gearId: `fortress-${difficulty}`, slotId: 'engine',
+      generationSeed: `fortress-${difficulty}`, enhancementSeed: `fortress-${difficulty}`,
+      qualityProfile: profile,
+    };
+    const fortress = makeGear({ ...base, setProfile: gear.GEAR_SET_PROFILES.fortress });
+    const uniform = makeGear({ ...base, setProfile: gear.GEAR_SET_PROFILES.uniform });
+    const { setId: fortressSetId, ...fortressWithoutSet } = fortress;
+    const { setId: uniformSetId, ...uniformWithoutSet } = uniform;
+    assert.ok(gear.SET_IDS.includes(fortressSetId));
+    assert.ok(gear.SET_IDS.includes(uniformSetId));
+    assert.deepEqual(fortressWithoutSet, uniformWithoutSet, `${difficulty} quality must not be altered by fortress affinity`);
+  }
+  const cpuUniform = makeGear({
+    gearId: 'cpu-uniform', slotId: 'engine', generationSeed: 'cpu-uniform', enhancementSeed: 'cpu-uniform',
+    qualityProfile: gear.CPU_BATTLE_QUALITY_PROFILES.streak10, setProfile: gear.GEAR_SET_PROFILES.uniform,
+  });
+  assert.ok(gear.SET_IDS.includes(cpuUniform.setId));
+});
+test('生成は品質とセット分布の明示指定を要求し、混在プロファイルを拒否する', () => {
+  const required = {
+    gearId: 'missing-profile', generationSeed: 'missing-profile', enhancementSeed: 'missing-profile',
+    sourceId: 'coop_boss', sourceDetail: {}, acquiredAt: '2026-08-25T00:00:00Z', slotId: 'engine', balanceTuning: TEST_ONLY_FIXED_MAIN_TUNING,
+  };
+  expectCode('MISSING_QUALITY_PROFILE', () => gear.createGear({ ...required, setProfile: gear.GEAR_SET_PROFILES.uniform }));
+  expectCode('MISSING_SET_PROFILE', () => gear.createGear({ ...required, qualityProfile: gear.COOP_BOSS_QUALITY_PROFILES.normal }));
+  expectCode('MIXED_QUALITY_AND_SET_PROFILE', () => gear.validateQualityProfile({
+    id: 'mixed', starWeights: [{ id: 1, weight: 1 }], rarityWeights: [{ id: 'normal', weight: 1 }], setWeights: [{ id: 'assault', weight: 1 }],
+  }));
 });
 test('固定SeedベクターはPRNGアルゴリズムごと固定される', () => {
   assert.equal(gear.deriveDeterministicUint32({ seed: 'seed-v1', label: 'slot', context: { a: 1 } }), 3623307144);
@@ -215,7 +265,7 @@ test('可変メイン候補は各部位の全候補に到達できる', () => {
 });
 test('未知IDと範囲外の★・強化値を受け入れない', () => {
   expectCode('UNKNOWN_SLOT_ID', () => makeGear({ slotId: 'unknown-slot' }));
-  expectCode('UNKNOWN_WEIGHT_ID', () => gear.validateQualityProfile({ id: 'bad-star', starWeights: [{ id: 7, weight: 1 }], rarityWeights: [{ id: 'normal', weight: 1 }], setWeights: [{ id: 'assault', weight: 1 }] }));
+  expectCode('UNKNOWN_WEIGHT_ID', () => gear.validateQualityProfile({ id: 'bad-star', starWeights: [{ id: 7, weight: 1 }], rarityWeights: [{ id: 'normal', weight: 1 }] }));
   expectCode('INVALID_INTEGER', () => gear.mainValueAtLevel('engine', 'attack_pct', 7, 0));
   expectCode('INVALID_INTEGER', () => gear.mainValueAtLevel('engine', 'attack_pct', 6, 13));
 });
@@ -292,8 +342,9 @@ test('部位・セット指定と★最低保証だけが抽選制約になる',
     sourceId: 'coop_boss', sourceDetail: { difficulty: 'hard' }, acquiredAt: '2026-08-25T00:00:00Z',
     qualityProfile: {
       id: 'mixed-stars', starWeights: [{ id: 1, weight: 99 }, { id: 5, weight: 1 }, { id: 6, weight: 1 }],
-      rarityWeights: [{ id: 'normal', weight: 1 }, { id: 'mythic', weight: 1 }], setWeights: [{ id: 'assault', weight: 1 }, { id: 'life', weight: 1 }],
+      rarityWeights: [{ id: 'normal', weight: 1 }, { id: 'mythic', weight: 1 }],
     },
+    setProfile: { id: 'mixed-sets', setWeights: [{ id: 'assault', weight: 1 }, { id: 'life', weight: 1 }] },
     slotId: 'sight', setId: 'critical', minimumStar: 5,
   });
   assert.equal(item.slotId, 'sight');
@@ -435,12 +486,16 @@ test('分解粉末40%は2/5、設計片は四捨五入で計算する', () => {
   assert.equal(gear.calculateDismantleYield(makeGear({ gearId: 'dismantle-rare3', star: 3, rarityId: 'rare' })).blueprintShards, 5);
 });
 test('指定箱は費用と生成制約だけを返し、所持品を変更しない', () => {
+  assert.deepEqual(gear.getTargetedBoxQuote('slot', { slotId: 'engine', qualityProfileId: 'coop-normal' }), { kind: 'slot', blueprintShards: 100, constraints: { qualityProfileId: 'coop-normal', slotId: 'engine' } });
   assert.deepEqual(gear.getTargetedBoxQuote('slot', { slotId: 'engine', qualityProfileId: 'coop-extreme' }), { kind: 'slot', blueprintShards: 100, constraints: { qualityProfileId: 'coop-extreme', slotId: 'engine' } });
   assert.deepEqual(gear.getTargetedBoxQuote('set', { setId: 'assault', qualityProfileId: 'coop-hard' }), { kind: 'set', blueprintShards: 100, constraints: { qualityProfileId: 'coop-hard', setId: 'assault' } });
-  assert.deepEqual(gear.getTargetedBoxQuote('slot_set', { slotId: 'sight', setId: 'critical', qualityProfileId: 'cpu-streak-10' }), { kind: 'slot_set', blueprintShards: 300, constraints: { qualityProfileId: 'cpu-streak-10', slotId: 'sight', setId: 'critical' } });
+  for (const profileId of ['cpu-streak-3', 'cpu-streak-5', 'cpu-streak-8', 'cpu-streak-10', 'cpu-streak-15']) {
+    expectCode('TARGETED_BOX_QUALITY_PROFILE_NOT_ALLOWED', () => gear.getTargetedBoxQuote('slot_set', { slotId: 'sight', setId: 'critical', qualityProfileId: profileId }));
+  }
   expectCode('UNKNOWN_TARGETED_BOX_KIND', () => gear.getTargetedBoxQuote('bad', {}));
   expectCode('MISSING_TARGETED_BOX_QUALITY_PROFILE', () => gear.getTargetedBoxQuote('slot', { slotId: 'engine' }));
   expectCode('UNKNOWN_QUALITY_PROFILE', () => gear.getTargetedBoxQuote('slot', { slotId: 'engine', qualityProfileId: 'missing' }));
+  expectCode('UNKNOWN_QUALITY_PROFILE', () => gear.getTargetedBoxQuote('slot', { slotId: 'engine', qualityProfileId: 'fortress' }));
 });
 test('公開ビューはSeed・PRNG状態・未来結果を含まない', () => {
   const internal = makeGear({ gearId: 'public-view' });

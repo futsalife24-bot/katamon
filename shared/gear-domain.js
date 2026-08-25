@@ -193,8 +193,11 @@
   const SET_IDS = deepFreeze(SETS.map((entry) => entry.id));
   const SET_BY_ID = new Map(SETS.map((entry) => [entry.id, entry]));
 
-  const profile = (id, starWeights, rarityWeights, setWeights = null) => deepFreeze({
-    id, starWeights: deepFreeze(starWeights), rarityWeights: deepFreeze(rarityWeights), setWeights: deepFreeze(setWeights || makeUniformSetWeights()),
+  const qualityProfile = (id, starWeights, rarityWeights) => deepFreeze({
+    id, starWeights: deepFreeze(starWeights), rarityWeights: deepFreeze(rarityWeights),
+  });
+  const setProfile = (id, setWeights) => deepFreeze({
+    id, setWeights: deepFreeze(setWeights),
   });
   const starWeights = (values) => values.map((weight, index) => ({ id: index + 1, weight }));
   const rarityWeights = (values) => values.map((weight, index) => ({ id: RARITY_IDS[index], weight }));
@@ -203,20 +206,25 @@
     { id: 'assault', weight: 12 }, { id: 'life', weight: 12 }, { id: 'critical', weight: 12 }, { id: 'rescue', weight: 12 }, { id: 'last_stand', weight: 12 },
   ]);
   const COOP_BOSS_QUALITY_PROFILES = deepFreeze({
-    normal: profile('coop-normal', starWeights([25, 35, 25, 15, 0, 0]), rarityWeights([40, 34, 20, 5, 1])),
-    hard: profile('coop-hard', starWeights([0, 15, 30, 35, 20, 0]), rarityWeights([30, 30, 26, 11, 3])),
-    extreme: profile('coop-extreme', starWeights([0, 0, 0, 20, 50, 30]), rarityWeights([30, 30, 22, 13, 5])),
-    fortress: profile('coop-fortress', starWeights([25, 35, 25, 15, 0, 0]), rarityWeights([40, 34, 20, 5, 1]), FORTRESS_SET_WEIGHTS),
+    normal: qualityProfile('coop-normal', starWeights([25, 35, 25, 15, 0, 0]), rarityWeights([40, 34, 20, 5, 1])),
+    hard: qualityProfile('coop-hard', starWeights([0, 15, 30, 35, 20, 0]), rarityWeights([30, 30, 26, 11, 3])),
+    extreme: qualityProfile('coop-extreme', starWeights([0, 0, 0, 20, 50, 30]), rarityWeights([30, 30, 22, 13, 5])),
   });
   const CPU_BATTLE_QUALITY_PROFILES = deepFreeze({
-    streak3: profile('cpu-streak-3', starWeights([35, 35, 20, 10, 0, 0]), rarityWeights([40, 34, 20, 5, 1])),
-    streak5: profile('cpu-streak-5', starWeights([15, 30, 30, 20, 5, 0]), rarityWeights([35, 32, 23, 8, 2])),
-    streak8: profile('cpu-streak-8', starWeights([0, 10, 25, 35, 25, 5]), rarityWeights([30, 30, 26, 11, 3])),
-    streak10: profile('cpu-streak-10', starWeights([0, 0, 10, 30, 45, 15]), rarityWeights([25, 29, 28, 14, 4])),
-    streak15: profile('cpu-streak-15', starWeights([0, 0, 0, 0, 60, 40]), rarityWeights([25, 28, 25, 16, 6])),
+    streak3: qualityProfile('cpu-streak-3', starWeights([35, 35, 20, 10, 0, 0]), rarityWeights([40, 34, 20, 5, 1])),
+    streak5: qualityProfile('cpu-streak-5', starWeights([15, 30, 30, 20, 5, 0]), rarityWeights([35, 32, 23, 8, 2])),
+    streak8: qualityProfile('cpu-streak-8', starWeights([0, 10, 25, 35, 25, 5]), rarityWeights([30, 30, 26, 11, 3])),
+    streak10: qualityProfile('cpu-streak-10', starWeights([0, 0, 10, 30, 45, 15]), rarityWeights([25, 29, 28, 14, 4])),
+    streak15: qualityProfile('cpu-streak-15', starWeights([0, 0, 0, 0, 60, 40]), rarityWeights([25, 28, 25, 16, 6])),
+  });
+  const GEAR_SET_PROFILES = deepFreeze({
+    uniform: setProfile('uniform', makeUniformSetWeights()),
+    fortress: setProfile('fortress', FORTRESS_SET_WEIGHTS),
   });
   const QUALITY_PROFILES = deepFreeze({ ...COOP_BOSS_QUALITY_PROFILES, ...CPU_BATTLE_QUALITY_PROFILES });
   const QUALITY_PROFILE_BY_ID = new Map(Object.values(QUALITY_PROFILES).map((entry) => [entry.id, entry]));
+  const SET_PROFILE_BY_ID = new Map(Object.values(GEAR_SET_PROFILES).map((entry) => [entry.id, entry]));
+  const TARGETED_BOX_QUALITY_PROFILE_IDS = deepFreeze(Object.values(COOP_BOSS_QUALITY_PROFILES).map((entry) => entry.id));
 
   const ENHANCEMENT_COSTS = deepFreeze({
     1: { coins: 10, powder: 10 }, 2: { coins: 10, powder: 10 }, 3: { coins: 10, powder: 10 },
@@ -472,14 +480,27 @@
   function validateQualityProfile(input) {
     const profileValue = typeof input === 'string' ? QUALITY_PROFILE_BY_ID.get(input) : input;
     if (!profileValue || !isRecord(profileValue)) fail('UNKNOWN_QUALITY_PROFILE', 'quality profile is unknown');
+    if (hasOwn(profileValue, 'setWeights')) fail('MIXED_QUALITY_AND_SET_PROFILE', 'quality profiles must not define set weights');
     const id = assertString(profileValue.id, 'quality profile id');
     const stars = validateWeightedTable(profileValue.starWeights, new Set(STARS), `${id}.starWeights`);
     const rarities = validateWeightedTable(profileValue.rarityWeights, new Set(RARITY_IDS), `${id}.rarityWeights`);
-    const sets = validateWeightedTable(profileValue.setWeights, new Set(SET_IDS), `${id}.setWeights`);
-    return { id, starWeights: stars.entries, rarityWeights: rarities.entries, setWeights: sets.entries };
+    return { id, starWeights: stars.entries, rarityWeights: rarities.entries };
   }
   function resolveQualityProfile(input) {
-    return validateQualityProfile(input || COOP_BOSS_QUALITY_PROFILES.normal);
+    if (input === undefined || input === null) fail('MISSING_QUALITY_PROFILE', 'gear generation requires an explicit quality profile');
+    return validateQualityProfile(input);
+  }
+  function validateSetProfile(input) {
+    const profileValue = typeof input === 'string' ? SET_PROFILE_BY_ID.get(input) : input;
+    if (!profileValue || !isRecord(profileValue)) fail('UNKNOWN_SET_PROFILE', 'set profile is unknown');
+    if (hasOwn(profileValue, 'starWeights') || hasOwn(profileValue, 'rarityWeights')) fail('MIXED_QUALITY_AND_SET_PROFILE', 'set profiles must not define quality weights');
+    const id = assertString(profileValue.id, 'set profile id');
+    const sets = validateWeightedTable(profileValue.setWeights, new Set(SET_IDS), `${id}.setWeights`);
+    return { id, setWeights: sets.entries };
+  }
+  function resolveSetProfile(input) {
+    if (input === undefined || input === null) fail('MISSING_SET_PROFILE', 'gear generation requires an explicit set profile');
+    return validateSetProfile(input);
   }
   function filterMinimumStar(entries, minStar) {
     if (minStar === undefined || minStar === null) return entries;
@@ -591,6 +612,7 @@
     const enhancementSeed = assertSeed(options.enhancementSeed, 'enhancementSeed');
     const generationRules = resolveGenerationRules(GEAR_GENERATION_VERSION);
     const qualityProfile = resolveQualityProfile(options.qualityProfile);
+    const setProfile = resolveSetProfile(options.setProfile);
     // gearId and acquisition metadata identify the individual, but never take
     // part in random generation. Only generationSeed plus declared generation
     // constraints determines the initial rolls.
@@ -600,8 +622,12 @@
       requestedSetId: options.setId === undefined ? null : options.setId,
       minimumStar: options.minimumStar === undefined ? null : options.minimumStar,
     };
+    // Set affinity belongs only to the set roll. Keeping it out of the other
+    // labeled contexts means a boss affinity can never alter star, rarity,
+    // main-op, or sub-op results for an otherwise identical reward request.
+    const setContext = { ...context, setProfileId: setProfile.id };
     const slotId = options.slotId === undefined ? chooseArray(generationSeed, 'slot', SLOT_IDS, context, generationRules.prngAlgorithmVersion) : getSlot(options.slotId).id;
-    const setId = options.setId === undefined ? chooseWeighted(generationSeed, 'set', qualityProfile.setWeights, new Set(SET_IDS), context, 'setWeights', generationRules.prngAlgorithmVersion) : getSet(options.setId).id;
+    const setId = options.setId === undefined ? chooseWeighted(generationSeed, 'set', setProfile.setWeights, new Set(SET_IDS), setContext, 'setWeights', generationRules.prngAlgorithmVersion) : getSet(options.setId).id;
     const starEntries = filterMinimumStar(qualityProfile.starWeights, options.minimumStar);
     const star = chooseWeighted(generationSeed, 'star', starEntries, new Set(STARS), context, 'starWeights', generationRules.prngAlgorithmVersion);
     const rarityId = chooseWeighted(generationSeed, 'rarity', qualityProfile.rarityWeights, new Set(RARITY_IDS), context, 'rarityWeights', generationRules.prngAlgorithmVersion);
@@ -915,6 +941,9 @@
       fail('MISSING_TARGETED_BOX_QUALITY_PROFILE', 'targeted boxes require an explicit quality profile');
     }
     const qualityProfile = resolveQualityProfile(hasOwn(constraints, 'qualityProfileId') ? constraints.qualityProfileId : constraints.qualityProfile);
+    if (!TARGETED_BOX_QUALITY_PROFILE_IDS.includes(qualityProfile.id)) {
+      fail('TARGETED_BOX_QUALITY_PROFILE_NOT_ALLOWED', 'targeted boxes require a cooperative-boss difficulty quality profile');
+    }
     const result = { kind, blueprintShards: TARGETED_BOX_COSTS[kind], constraints: { qualityProfileId: qualityProfile.id } };
     if (kind === 'slot' || kind === 'slot_set') result.constraints.slotId = getSlot(constraints.slotId).id;
     if (kind === 'set' || kind === 'slot_set') result.constraints.setId = getSet(constraints.setId).id;
@@ -960,11 +989,11 @@
     GEAR_SCHEMA_VERSION, GEAR_GENERATION_VERSION, GEAR_ENHANCEMENT_VERSION, BALANCE_TUNING_VERSION, PRNG_ALGORITHM_VERSION,
     BP_PER_PERCENT, MAX_ENHANCEMENT_LEVEL, ENHANCEMENT_MILESTONES,
     SLOTS, SLOT_IDS, STARS, RARITIES, RARITY_IDS, SUB_OPS, SUB_OP_IDS, SETS, SET_IDS,
-    SUB_VALUE_RANGE_BP_BY_STAR, COOP_BOSS_QUALITY_PROFILES, CPU_BATTLE_QUALITY_PROFILES, QUALITY_PROFILES,
+    SUB_VALUE_RANGE_BP_BY_STAR, COOP_BOSS_QUALITY_PROFILES, CPU_BATTLE_QUALITY_PROFILES, QUALITY_PROFILES, GEAR_SET_PROFILES, TARGETED_BOX_QUALITY_PROFILE_IDS,
     ENHANCEMENT_COSTS, DISMANTLE_BASE_POWDER_BY_STAR, BLUEPRINT_SHARD_BASE_BY_STAR, BLUEPRINT_SHARD_RARITY_MULTIPLIER, TARGETED_BOX_COSTS,
     SOFT_CAPS_BP, GS_CONSTANTS, BALANCE_TUNING, BALANCE_TUNING_BY_VERSION, GEAR_SCHEMA_RULES_BY_VERSION, GENERATION_RULES_BY_VERSION, ENHANCEMENT_RULES_BY_VERSION,
     stableStringify, validateWeightedTable, chooseWeightedByRoll, deriveDeterministicUint32, selectUniformIndexFromUint32, createLabeledPrng,
-    validateBalanceTuning, resolveBalanceTuningForVersion, resolveSchemaRules, resolveGenerationRules, resolveEnhancementRules, validateQualityProfile, resolveQualityProfile, mainFinalValue, mainValueAtLevel, subValueRange,
+    validateBalanceTuning, resolveBalanceTuningForVersion, resolveSchemaRules, resolveGenerationRules, resolveEnhancementRules, validateQualityProfile, resolveQualityProfile, validateSetProfile, resolveSetProfile, mainFinalValue, mainValueAtLevel, subValueRange,
     validateGear, createGear, calculateMilestonePlan, previewEnhancement, enhanceGear,
     applySoftCap, aggregateLoadout, calculateGearScore, calculateEnhancementCost, calculateDismantleYield, getTargetedBoxQuote,
     toPublicGearView, buildBalanceBoundaryReport,
