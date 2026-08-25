@@ -75,6 +75,12 @@ assert.match(source, /\.mvp-toast\[hidden\],\.mvp-toast:empty\{display:none\}/,
   '空文字またはhiddenの実績通知をCSSでも確実に消す');
 assert.match(source, /toast\.textContent = '';\s*toast\.hidden = true;/s,
   '実績通知の退場後は内容を空にして再び非表示へ戻す');
+assert.match(source, /async function handleDialogAction\(action\)/,
+  '購入・装備のUI経路をasync化する');
+assert.match(source, /if \(dialogActionBusy\) return;.*dialogActionBusy = true;.*finally \{\s*dialogActionBusy = false;/s,
+  '二重タップはbusy guardで同じ操作を二重開始しない');
+assert.doesNotMatch(source, /function handleDialogAction[\s\S]*?foundation\.saveState\(/,
+  'ショップUIから古いfoundation stateを直接保存しない');
 
 const gameSource = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert.match(gameSource, /const titleShopBtn = /, 'タイトルGARAGEへ独立したショップ入口を置く');
@@ -85,4 +91,67 @@ assert.match(gameSource, /activeCosmetics\.icon === 'icon-brass'/, '真鍮アイ
 assert.match(gameSource, /activeCosmetics\.projectile === 'shell-amber'/, '琥珀砲弾を既存の通常弾描画へ適用する');
 assert.match(gameSource, /activeCosmetics\.impact === 'impact-cyan'/, '蒼光着弾を既存の爆発粒子へ適用する');
 
-console.log('9商品ショップ・簡易DEMO・3コスメ・18実績一覧（58/58 passed）');
+class FakeStorage {
+  constructor() { this.values = new Map(); }
+  getItem(key) { return this.values.has(key) ? this.values.get(key) : null; }
+  setItem(key, value) { this.values.set(key, String(value)); }
+}
+
+function createLockManager() {
+  let tail = Promise.resolve();
+  return {
+    request(name, options, callback) {
+      assert.equal(name, foundation.STATE_MUTATION_LOCK_NAME);
+      assert.deepEqual(options, { mode: 'exclusive' });
+      const current = tail.then(() => callback({ name, mode: 'exclusive' }));
+      tail = current.catch(() => {});
+      return current;
+    },
+  };
+}
+
+async function runLockedWriterTests() {
+  const storage = new FakeStorage();
+  const lockManager = createLockManager();
+  const initial = foundation.createDefaultState();
+  initial.wallet.coins = 500;
+  foundation.saveState(initial, storage);
+
+  const staleBeforePurchase = foundation.loadState(storage);
+  const newerBeforePurchase = foundation.loadState(storage);
+  newerBeforePurchase.wallet.coins = 600;
+  foundation.saveState(newerBeforePurchase, storage);
+  const purchaseResult = await shop.purchaseLocked('barrier', { storage, lockManager });
+  assert.equal(purchaseResult.purchased, true);
+  assert.equal(purchaseResult.state.wallet.coins, 500,
+    '購入はlock内で最新coinを読み、確認画面時点の古い残高を保存しない');
+  assert.equal(staleBeforePurchase.wallet.coins, 500, 'テスト用の確認画面snapshotは古いまま');
+
+  const concurrent = await Promise.all([
+    shop.purchaseLocked('impact', { storage, lockManager }),
+    shop.purchaseLocked('impact', { storage, lockManager }),
+  ]);
+  assert.equal(concurrent.filter((entry) => entry.purchased).length, 1,
+    '別タブ相当の同時購入でも購入済みitemを再購入しない');
+  assert.equal(foundation.loadState(storage).wallet.coins, 300,
+    '別タブ相当の同時購入でもcoinを二重減算しない');
+
+  const staleBeforeEquip = foundation.loadState(storage);
+  const newerBeforeEquip = foundation.loadState(storage);
+  newerBeforeEquip.wallet.coins = 375;
+  foundation.saveState(newerBeforeEquip, storage);
+  const equipResult = await shop.equipLocked('barrier', { storage, lockManager });
+  assert.equal(equipResult.equipped, true);
+  const equipped = foundation.loadState(storage);
+  assert.equal(equipped.equipment.subweapon, 'barrier');
+  assert.equal(equipped.wallet.coins, 375,
+    '装備変更もlock内で最新stateを再読込し、古いwalletで上書きしない');
+  assert.equal(staleBeforeEquip.wallet.coins, 300, '装備前snapshotが古い競合条件を確認');
+}
+
+runLockedWriterTests().then(() => {
+  console.log('9商品ショップ・簡易DEMO・3コスメ・18実績一覧・共通lock writer（68/68 passed）');
+}).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

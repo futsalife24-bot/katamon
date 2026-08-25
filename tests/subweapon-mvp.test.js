@@ -78,8 +78,16 @@ assert.match(gameSource, /const selectSubweaponBtn = \{/,
   'キャラ選択画面に小さいSUB欄を持つ');
 assert.match(gameSource, /function cycleSelectedSubweapon\(\)/,
   '専用装備画面を増やさず、所持済みSUBを切り替えられる');
-assert.match(gameSource, /progress\.equipment\.subweapon = selectedSubweapon/,
-  '装備は端末内の正規進捗へ保存する');
+assert.match(gameSource, /let subweaponCycleInFlight = false;[\s\S]*?async function cycleSelectedSubweapon\(\)[\s\S]*?if \(subweaponCycleInFlight\) return selectedSubweapon;[\s\S]*?foundation\.mutateStateLocked\(/,
+  'SUB切替は連打を1回に抑え、共通排他lock内で開始する');
+assert.match(gameSource, /foundation\.mutateStateLocked\(\(progress\) => \{[\s\S]*?const owned = foundation\.SUBWEAPONS\.filter\(\(entry\) => progress\.inventory\[entry\.id\]\);[\s\S]*?progress\.equipment\.subweapon = nextSubweapon/,
+  'SUBの所持判定・次の装備選択・保存対象は最新進捗を読むlock内で完結する');
+assert.match(gameSource, /void cycleSelectedSubweapon\(\)\.catch\(/,
+  'SUB切替の非同期失敗を入力処理で放置しない');
+assert.match(gameSource, /function applyMvpRewardUpdate\(update\)[\s\S]*?foundation\.mutateStateLocked\(\(state\) => update\(rewards, state\)\)[\s\S]*?notifyAchievements/,
+  '報酬更新も共通排他lock内で更新し、保存後だけ実績通知する');
+assert.doesNotMatch(gameSource, /function applyMvpRewardUpdate\(update\)[\s\S]*?foundation\.loadState\(\)/,
+  '報酬更新はlock外で古い進捗を読み込まない');
 assert.match(gameSource, /COOP_MVP_FEATURE_ENABLED && hitRect\(p0, selectSubweaponBtn\)/,
   'SUB欄が実際のタップ操作へ接続されている');
 assert.match(gameSource, /function launchSubweaponShot\(/,
@@ -97,4 +105,4 @@ assert.match(gameSource, /mitigateDamageWithSubweaponBarrier/,
 assert.match(gameSource, /COOP_MVP_FEATURE_ENABLED && battleMode === 'normal'/,
   'feature flag OFFやチュートリアルでは通常対戦SUBを出さない');
 
-console.log('サブウェポン3種の役割・装備・1試合1回（44/44 passed）');
+console.log('サブウェポン3種の役割・装備・1試合1回（48/48 passed）');

@@ -57,6 +57,14 @@
     return { state, equipped: true, reason: 'equipped', item };
   }
 
+  function purchaseLocked(itemId, options) {
+    return foundation.mutateStateLocked((currentState) => purchase(currentState, itemId), options);
+  }
+
+  function equipLocked(itemId, options) {
+    return foundation.mutateStateLocked((currentState) => equip(currentState, itemId), options);
+  }
+
   function isEquipped(state, item) {
     const category = categoryOf(item);
     if (category === 'subweapon') return state.equipment.subweapon === item.id;
@@ -75,6 +83,7 @@
 
   let mounted = false;
   let selectedItemId = null;
+  let dialogActionBusy = false;
   let toastTimer = 0;
   let toastCleanupTimer = 0;
 
@@ -146,29 +155,37 @@
     dialog.classList.add('open');
   }
 
-  function handleDialogAction(action) {
+  async function handleDialogAction(action) {
     const dialog = document.getElementById('mvpPurchaseDialog');
+    if (dialogActionBusy) return;
     if (action === 'cancel') { dialog.classList.remove('open'); return; }
-    let state = foundation.loadState();
-    if (action === 'buy') {
-      const result = purchase(state, selectedItemId);
-      if (!result.purchased) {
-        showToast(result.reason === 'insufficient-coins' ? 'カタコインが足りません' : '購入できません');
+    dialogActionBusy = true;
+    dialog.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+    try {
+      if (action === 'buy') {
+        const result = await purchaseLocked(selectedItemId);
+        if (!result.purchased) {
+          showToast(result.reason === 'insufficient-coins' ? 'カタコインが足りません' : '購入できません');
+          return;
+        }
+        const item = result.item;
+        const card = document.getElementById('mvpPurchaseCard');
+        card.innerHTML = `<h3>購入完了</h3>${previewMarkup(item)}<p>${item.label}を永久アンロックしました。</p><p>残高 ${result.state.wallet.coins} 🪙</p><div class="mvp-dialog-actions"><button type="button" data-action="cancel">あとで</button><button type="button" class="primary" data-action="equip">装備する</button></div>`;
+        card.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDialogAction(button.dataset.action)));
+        renderShop();
         return;
       }
-      state = foundation.saveState(result.state);
-      const item = result.item;
-      const card = document.getElementById('mvpPurchaseCard');
-      card.innerHTML = `<h3>購入完了</h3>${previewMarkup(item)}<p>${item.label}を永久アンロックしました。</p><p>残高 ${state.wallet.coins} 🪙</p><div class="mvp-dialog-actions"><button type="button" data-action="cancel">あとで</button><button type="button" class="primary" data-action="equip">装備する</button></div>`;
-      card.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDialogAction(button.dataset.action)));
-      renderShop();
-      return;
-    }
-    if (action === 'equip') {
-      const result = equip(state, selectedItemId);
-      if (result.equipped) { foundation.saveState(result.state); showToast(`${result.item.label}を装備しました`); }
-      dialog.classList.remove('open');
-      renderShop();
+      if (action === 'equip') {
+        const result = await equipLocked(selectedItemId);
+        if (result.equipped) showToast(`${result.item.label}を装備しました`);
+        dialog.classList.remove('open');
+        renderShop();
+      }
+    } catch (_error) {
+      showToast('保存できませんでした');
+    } finally {
+      dialogActionBusy = false;
+      dialog.querySelectorAll('button').forEach((button) => { button.disabled = false; });
     }
   }
 
@@ -244,6 +261,8 @@
     categoryOf,
     purchase,
     equip,
+    purchaseLocked,
+    equipLocked,
     isEquipped,
     previewKind,
     mount,
