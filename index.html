@@ -6630,6 +6630,7 @@
   // 見出しの下・右端へ置き、右上の音量ボタンとキャラ名のどちらにも重ねない。
   const selectSubweaponBtn = { x: VW - 100, y: 104, w: 140, h: 44 };
   let selectedSubweapon = null;
+  let subweaponCycleInFlight = false;
   let activeCosmetics = { icon: null, projectile: null, impact: null };
 
   function syncSelectedSubweapon() {
@@ -6661,20 +6662,30 @@
     return foundation.SUBWEAPONS.filter((entry) => progress.inventory[entry.id]);
   }
 
-  function cycleSelectedSubweapon() {
+  async function cycleSelectedSubweapon() {
+    if (subweaponCycleInFlight) return selectedSubweapon;
     const foundation = globalThis.KatamonCoopMvp;
-    const owned = ownedSubweapons();
-    if (!foundation || !owned.length) {
+    if (!foundation) {
       selectedSubweapon = null;
       showTitleNotice('サブウェポンはショップで購入できます');
       return null;
     }
-    const currentIndex = owned.findIndex((entry) => entry.id === selectedSubweapon);
-    selectedSubweapon = owned[(currentIndex + 1 + owned.length) % owned.length].id;
-    const progress = foundation.loadState();
-    progress.equipment.subweapon = selectedSubweapon;
-    foundation.saveState(progress);
-    return selectedSubweapon;
+    subweaponCycleInFlight = true;
+    try {
+      const result = await foundation.mutateStateLocked((progress) => {
+        const owned = foundation.SUBWEAPONS.filter((entry) => progress.inventory[entry.id]);
+        if (!owned.length) return { state: progress, selectedSubweapon: null, hasOwnedSubweapon: false };
+        const currentIndex = owned.findIndex((entry) => entry.id === progress.equipment.subweapon);
+        const nextSubweapon = owned[(currentIndex + 1 + owned.length) % owned.length].id;
+        progress.equipment.subweapon = nextSubweapon;
+        return { state: progress, selectedSubweapon: nextSubweapon, hasOwnedSubweapon: true };
+      });
+      selectedSubweapon = result.selectedSubweapon;
+      if (!result.hasOwnedSubweapon) showTitleNotice('サブウェポンはショップで購入できます');
+      return selectedSubweapon;
+    } finally {
+      subweaponCycleInFlight = false;
+    }
   }
 
   // キャラ選択からタイトルへ戻る。戻るボタンと端末の戻る操作で共用する。
@@ -9838,20 +9849,26 @@
   }
   let mvpLocalRewardEventSeq = 0;
   function applyMvpRewardUpdate(update) {
-    if (!COOP_MVP_FEATURE_ENABLED) return null;
+    if (!COOP_MVP_FEATURE_ENABLED) return Promise.resolve(null);
     const foundation = globalThis.KatamonCoopMvp;
     const rewards = globalThis.KatamonCoopRewards;
-    if (!foundation || !rewards || typeof update !== 'function') return null;
-    const result = update(rewards, foundation.loadState());
-    if (result?.state) foundation.saveState(result.state);
-    if (result?.newlyCompleted?.length) globalThis.KatamonMvpShop?.notifyAchievements(result.newlyCompleted);
-    return result;
+    if (!foundation || !rewards || typeof update !== 'function') return Promise.resolve(null);
+    return foundation.mutateStateLocked((state) => update(rewards, state)).then((result) => {
+      if (result?.newlyCompleted?.length) globalThis.KatamonMvpShop?.notifyAchievements(result.newlyCompleted);
+      return result;
+    });
   }
   function syncMvpRewardsFromLegacy() {
-    return applyMvpRewardUpdate((rewards, state) => rewards.syncLegacyProgress(state, characterUnlockProgress));
+    return applyMvpRewardUpdate((rewards, state) => rewards.syncLegacyProgress(state, characterUnlockProgress)).catch((error) => {
+      console.warn('協力報酬の同期に失敗しました', error);
+      return null;
+    });
   }
   function recordMvpRewardEvent(event) {
-    return applyMvpRewardUpdate((rewards, state) => rewards.recordEvent(state, event));
+    return applyMvpRewardUpdate((rewards, state) => rewards.recordEvent(state, event)).catch((error) => {
+      console.warn('協力報酬の記録に失敗しました', error);
+      return null;
+    });
   }
   function loadCharacterUnlockProgress() {
     try {
@@ -20471,7 +20488,7 @@
       }
       if (COOP_MVP_FEATURE_ENABLED && hitRect(p0, selectSubweaponBtn)) {
         playUiSound();
-        cycleSelectedSubweapon();
+        void cycleSelectedSubweapon().catch((error) => console.warn('サブウェポン切替に失敗しました', error));
         return;
       }
       if (hasSuspendedSave && hitSelectResumeGear(p0)) {

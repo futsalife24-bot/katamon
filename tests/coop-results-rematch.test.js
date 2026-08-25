@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const session = require('../coop-mvp-session.js');
+const battleModule = require('../coop-mvp-battle.js');
+const foundation = require('../coop-mvp-foundation.js');
 
 let passed = 0;
 function check(message, condition) { assert.ok(condition, message); passed += 1; }
@@ -101,4 +103,59 @@ check('15秒終了時に希望者1人以下ならロビーへ戻る', decision.r
 vote = session.castRematchVote(timeout, 'e1', true, 15101);
 check('受付終了後の投票を拒否', !vote.accepted && vote.reason === 'closed');
 
-console.log(`協力結果・15秒再戦・切断復帰（${passed}/${passed} passed）`);
+(async () => {
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+  };
+  let lockTail = Promise.resolve();
+  let lockCalls = 0;
+  let activeLocks = 0;
+  let maxActiveLocks = 0;
+  const lockManager = {
+    request(_name, options, callback) {
+      lockCalls += 1;
+      check('協力結果writerはexclusive lockを要求', options?.mode === 'exclusive');
+      const run = lockTail.then(async () => {
+        activeLocks += 1;
+        maxActiveLocks = Math.max(maxActiveLocks, activeLocks);
+        try {
+          await Promise.resolve();
+          return await callback({ name: _name });
+        } finally {
+          activeLocks -= 1;
+        }
+      });
+      lockTail = run.catch(() => {});
+      return run;
+    },
+  };
+  const resultState = battleModule.createBattleState({
+    matchId: A,
+    difficulty: 'hard',
+    slots: base.seats,
+    aiFill: true,
+    characters: {},
+  });
+  resultState.outcome = 'victory';
+  resultState.encounter.boss.body.hp = 0;
+
+  const [firstEntry, duplicateEntry] = await Promise.all([
+    battleModule.recordResultLocked(foundation, base, resultState, { storage, lockManager }),
+    battleModule.recordResultLocked(foundation, base, resultState, { storage, lockManager }),
+  ]);
+  const saved = foundation.loadState(storage);
+  check('同時結果処理は同じlockで直列化', lockCalls === 2 && maxActiveLocks === 1);
+  check('同じrewardIdの協力結果は1回だけcredit', firstEntry.resultSummary.coins > 0 && !firstEntry.duplicate
+    && duplicateEntry.resultSummary.coins === 0 && duplicateEntry.duplicate
+    && saved.wallet.coins === firstEntry.resultSummary.coins);
+  check('同じ協力結果のfirst clear・実績進捗を二重加算しない', saved.coopStats.clears === 1
+    && saved.achievements.progress.hardClears === 1);
+  check('同じ協力結果のreward ledgerを保持', saved.rewardLedger[`event:${A}:result`] === true);
+
+  console.log(`協力結果・15秒再戦・切断復帰（${passed}/${passed} passed）`);
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

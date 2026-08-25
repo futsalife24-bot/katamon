@@ -8,12 +8,17 @@
   // Phase 2A deliberately owns only the persistence envelope.  It does not
   // decide rewards, inventory routing, expiry, transactions, or battle rules.
   const GEAR_STORAGE_KEY = 'katamon_gear_v1';
-  const GEAR_STORAGE_SCHEMA_VERSION = 1;
+  // The storage key stays v1 for compatibility.  The envelope itself is
+  // independently versioned so Phase 2B can add a permanent reward tombstone
+  // without changing the browser key.
+  const GEAR_STORAGE_SCHEMA_VERSION = 2;
   const GEAR_REVEAL_STORAGE_KEY = 'katamon_gear_reveal_v1';
   const GEAR_REVEAL_SCHEMA_VERSION = 1;
   const MAIN_INVENTORY_CAPACITY = 500;
   const TEMP_BOX_CAPACITY = 50;
   const UNCLAIMED_REWARD_CAPACITY = 10;
+  const MAX_GEARS_PER_REWARD = 5;
+  const COOP_BOSS_MAX_GEARS_PER_REWARD = 3;
   const TEMP_BOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   const REVEAL_LEVELS = Object.freeze([3, 6, 9, 12]);
 
@@ -167,13 +172,22 @@
     return entry;
   }
 
-  function validateReward(rawReward, path) {
+  function rewardGearLimit(sourceId) {
+    return sourceId === 'coop_boss' ? COOP_BOSS_MAX_GEARS_PER_REWARD : MAX_GEARS_PER_REWARD;
+  }
+
+  function validateReward(rawReward, path, enforceCurrentGearCap = true) {
     assertExactKeys(rawReward, ['rewardId', 'sourceId', 'sourceDetail', 'createdAtMs', 'gears', 'blueprintShards'], path);
     if (!Array.isArray(rawReward.gears)) fail('INVALID_REWARD_GEARS', `${path}.gears must be an array`);
     assertDensePlainArray(rawReward.gears, `${path}.gears`);
+    const sourceId = assertNonEmptyString(rawReward.sourceId, `${path}.sourceId`);
+    const gearLimit = rewardGearLimit(sourceId);
+    if (enforceCurrentGearCap && rawReward.gears.length > gearLimit) {
+      fail('REWARD_GEAR_CAP_EXCEEDED', `${path}.gears exceeds the ${gearLimit} gear cap for ${sourceId}`);
+    }
     return {
       rewardId: assertNonEmptyString(rawReward.rewardId, `${path}.rewardId`),
-      sourceId: assertNonEmptyString(rawReward.sourceId, `${path}.sourceId`),
+      sourceId,
       sourceDetail: cloneJsonLike(rawReward.sourceDetail, `${path}.sourceDetail`),
       createdAtMs: assertNonNegativeSafeInteger(rawReward.createdAtMs, `${path}.createdAtMs`),
       gears: rawReward.gears.map((gear, index) => validateStoredGear(gear, `${path}.gears[${index}]`)),
@@ -195,11 +209,14 @@
       if (rewardIds.has(reward.rewardId)) fail('DUPLICATE_REWARD_ID', `unclaimedRewards[${index}] repeats rewardId ${reward.rewardId}`);
       rewardIds.add(reward.rewardId);
     });
+    Object.keys(state.rewardLedger || {}).forEach((rewardId) => {
+      if (rewardIds.has(rewardId)) fail('REWARD_LEDGER_PENDING_CONFLICT', `rewardLedger and unclaimedRewards both contain rewardId ${rewardId}`);
+    });
   }
 
   function validateV1GearStorageState(rawState) {
     assertExactKeys(rawState, ['storageSchemaVersion', 'inventory', 'tempBox', 'unclaimedRewards', 'resources'], 'gear storage state');
-    if (rawState.storageSchemaVersion !== GEAR_STORAGE_SCHEMA_VERSION) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage state is not v1');
+    if (rawState.storageSchemaVersion !== 1) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage state is not v1');
     if (!Array.isArray(rawState.inventory)) fail('INVALID_INVENTORY', 'inventory must be an array');
     if (!Array.isArray(rawState.tempBox)) fail('INVALID_TEMP_BOX', 'tempBox must be an array');
     if (!Array.isArray(rawState.unclaimedRewards)) fail('INVALID_UNCLAIMED_REWARDS', 'unclaimedRewards must be an array');
@@ -211,10 +228,13 @@
     if (rawState.unclaimedRewards.length > UNCLAIMED_REWARD_CAPACITY) fail('UNCLAIMED_REWARD_CAPACITY_EXCEEDED', 'unclaimed rewards exceed capacity');
     assertExactKeys(rawState.resources, ['powder', 'blueprintShards'], 'resources');
     const state = {
-      storageSchemaVersion: GEAR_STORAGE_SCHEMA_VERSION,
+      storageSchemaVersion: 1,
       inventory: rawState.inventory.map((entry, index) => validateEntry(entry, `inventory[${index}]`, false)),
       tempBox: rawState.tempBox.map((entry, index) => validateEntry(entry, `tempBox[${index}]`, true)),
-      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`)),
+      // Phase 2A v1 had no per-reward Gear cap. Validate that historical
+      // envelope exactly as it was defined, then apply the approved v2
+      // compatibility boundary explicitly in migrateV1ToV2().
+      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`, false)),
       resources: {
         powder: assertNonNegativeSafeInteger(rawState.resources.powder, 'resources.powder'),
         blueprintShards: assertNonNegativeSafeInteger(rawState.resources.blueprintShards, 'resources.blueprintShards'),
@@ -224,14 +244,76 @@
     return state;
   }
 
+  function validateRewardLedger(rawLedger) {
+    if (!isPlainRecord(rawLedger)) fail('INVALID_REWARD_LEDGER', 'rewardLedger must be a plain object');
+    assertOwnDataProperties(rawLedger, 'rewardLedger');
+    const rewardLedger = {};
+    Object.keys(rawLedger).sort().forEach((rewardId) => {
+      assertNonEmptyString(rewardId, 'rewardLedger key');
+      if (rawLedger[rewardId] !== true) fail('INVALID_REWARD_LEDGER_VALUE', `rewardLedger.${rewardId} must be true`);
+      defineData(rewardLedger, rewardId, true);
+    });
+    return rewardLedger;
+  }
+
+  function validateV2GearStorageState(rawState) {
+    assertExactKeys(rawState, ['storageSchemaVersion', 'inventory', 'tempBox', 'unclaimedRewards', 'rewardLedger', 'resources'], 'gear storage state');
+    if (rawState.storageSchemaVersion !== 2) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage state is not v2');
+    if (!Array.isArray(rawState.inventory)) fail('INVALID_INVENTORY', 'inventory must be an array');
+    if (!Array.isArray(rawState.tempBox)) fail('INVALID_TEMP_BOX', 'tempBox must be an array');
+    if (!Array.isArray(rawState.unclaimedRewards)) fail('INVALID_UNCLAIMED_REWARDS', 'unclaimedRewards must be an array');
+    assertDensePlainArray(rawState.inventory, 'inventory');
+    assertDensePlainArray(rawState.tempBox, 'tempBox');
+    assertDensePlainArray(rawState.unclaimedRewards, 'unclaimedRewards');
+    if (rawState.inventory.length > MAIN_INVENTORY_CAPACITY) fail('INVENTORY_CAPACITY_EXCEEDED', 'inventory exceeds capacity');
+    if (rawState.tempBox.length > TEMP_BOX_CAPACITY) fail('TEMP_BOX_CAPACITY_EXCEEDED', 'tempBox exceeds capacity');
+    if (rawState.unclaimedRewards.length > UNCLAIMED_REWARD_CAPACITY) fail('UNCLAIMED_REWARD_CAPACITY_EXCEEDED', 'unclaimed rewards exceed capacity');
+    assertExactKeys(rawState.resources, ['powder', 'blueprintShards'], 'resources');
+    const state = {
+      storageSchemaVersion: 2,
+      inventory: rawState.inventory.map((entry, index) => validateEntry(entry, `inventory[${index}]`, false)),
+      tempBox: rawState.tempBox.map((entry, index) => validateEntry(entry, `tempBox[${index}]`, true)),
+      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`)),
+      rewardLedger: validateRewardLedger(rawState.rewardLedger),
+      resources: {
+        powder: assertNonNegativeSafeInteger(rawState.resources.powder, 'resources.powder'),
+        blueprintShards: assertNonNegativeSafeInteger(rawState.resources.blueprintShards, 'resources.blueprintShards'),
+      },
+    };
+    validateGlobalIds(state);
+    return state;
+  }
+
+  function migrateV1ToV2(rawState) {
+    // Validate the complete old envelope before adding anything.  Migration is
+    // deliberately structural only: it neither repairs gear nor loses rewards.
+    const validatedV1 = validateV1GearStorageState(rawState);
+    validatedV1.unclaimedRewards.forEach((reward) => {
+      const limit = rewardGearLimit(reward.sourceId);
+      if (reward.gears.length > limit) {
+        fail('UNSUPPORTED_V1_REWARD_SHAPE', `v1 reward ${reward.rewardId} exceeds the v2 ${limit}-Gear limit for ${reward.sourceId}`);
+      }
+    });
+    return {
+      storageSchemaVersion: 2,
+      inventory: validatedV1.inventory,
+      tempBox: validatedV1.tempBox,
+      unclaimedRewards: validatedV1.unclaimedRewards,
+      rewardLedger: {},
+      resources: validatedV1.resources,
+    };
+  }
+
   function migrateGearStorageState(rawState) {
     if (!isPlainRecord(rawState)) fail('INVALID_STORAGE_STATE', 'gear storage state must be a plain object');
     assertOwnDataProperties(rawState, 'gear storage state');
     if (!hasOwn(rawState, 'storageSchemaVersion')) fail('MISSING_STORAGE_SCHEMA_VERSION', 'gear storage schema version is required');
     if (!Number.isSafeInteger(rawState.storageSchemaVersion)) fail('INVALID_STORAGE_SCHEMA_VERSION', 'gear storage schema version must be a safe integer');
     if (rawState.storageSchemaVersion > GEAR_STORAGE_SCHEMA_VERSION) fail('UNSUPPORTED_FUTURE_STORAGE_VERSION', 'gear storage is newer than this client');
-    if (rawState.storageSchemaVersion < GEAR_STORAGE_SCHEMA_VERSION) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage migration is not available for this version');
-    return validateV1GearStorageState(rawState);
+    if (rawState.storageSchemaVersion < 1) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage migration is not available for this version');
+    if (rawState.storageSchemaVersion === 1) return migrateV1ToV2(rawState);
+    if (rawState.storageSchemaVersion === 2) return validateV2GearStorageState(rawState);
+    fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage migration is not available for this version');
   }
 
   function createDefaultGearStorageState() {
@@ -240,6 +322,7 @@
       inventory: [],
       tempBox: [],
       unclaimedRewards: [],
+      rewardLedger: {},
       resources: { powder: 0, blueprintShards: 0 },
     };
   }
@@ -321,7 +404,7 @@
   return Object.freeze({
     GearStorageError,
     GEAR_STORAGE_KEY, GEAR_STORAGE_SCHEMA_VERSION, GEAR_REVEAL_STORAGE_KEY, GEAR_REVEAL_SCHEMA_VERSION,
-    MAIN_INVENTORY_CAPACITY, TEMP_BOX_CAPACITY, UNCLAIMED_REWARD_CAPACITY, TEMP_BOX_TTL_MS, REVEAL_LEVELS,
+    MAIN_INVENTORY_CAPACITY, TEMP_BOX_CAPACITY, UNCLAIMED_REWARD_CAPACITY, MAX_GEARS_PER_REWARD, COOP_BOSS_MAX_GEARS_PER_REWARD, TEMP_BOX_TTL_MS, REVEAL_LEVELS,
     createDefaultGearStorageState, createDefaultRevealHistoryState,
     migrateGearStorageState, migrateRevealHistoryState, validateGearStorageState: migrateGearStorageState, validateRevealHistoryState,
     encodeGearStorageState, decodeGearStorageState, encodeRevealHistoryState, decodeRevealHistoryState,

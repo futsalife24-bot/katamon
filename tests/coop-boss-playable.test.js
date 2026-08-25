@@ -235,6 +235,9 @@ const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 const mobileQa = fs.readFileSync(path.join(root, 'docs', 'coop-boss-mvp-mobile-qa.md'), 'utf8');
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8'));
 const liveStartBlock = source.slice(source.indexOf('function startBrowser'), source.indexOf('return Object.freeze', source.indexOf('function startBrowser')));
+const lockedResultBlock = source.slice(source.indexOf('async function recordResultLocked'), source.indexOf('function mountBrowser'));
+const enterResultBlock = source.slice(source.indexOf('async function enterResult'), source.indexOf('async function updateOwnReady'));
+const syncRoomBlock = source.slice(source.indexOf('async function syncRoom'), source.indexOf('async function heartbeat'));
 const coopResetBlock = index.slice(index.indexOf('function resetCoopNormalBattle'), index.indexOf('function coopHumanUids'));
 const bossShotBlock = index.slice(index.indexOf('function launchCoopBossShot'), index.indexOf('function perfectAimVelocity'));
 const itemShotBlock = index.slice(index.indexOf('function launchCoopItemShot'), index.indexOf('function resolveCoopItemImpact'));
@@ -248,6 +251,19 @@ check('旧協力Surfaceはライブ起動経路から完全に外れている',
   !/attachBattleSurface/.test(liveStartBlock)
     && !/coopBattleSurface\?\./.test(liveStartBlock)
     && !/mountBrowser\(/.test(liveStartBlock));
+check('協力結果のfoundation更新は最新loadから保存まで共通lock helper内で完結',
+  /foundation\.mutateStateLocked\(/.test(lockedResultBlock)
+    && lockedResultBlock.indexOf('resultSummary(runtime') < lockedResultBlock.indexOf('rewardEvent(preliminary)')
+    && lockedResultBlock.indexOf('rewardEvent(preliminary)') < lockedResultBlock.indexOf('recordEvent(progressBefore, event)')
+    && !/foundation\.(?:loadState|saveState)\(/.test(enterResultBlock));
+check('協力結果のasync再入は同じPromiseを共有し、保存完了後に結果画面を一度だけ開く',
+  /if \(resultEntered\) return resultEntryPromise;/.test(enterResultBlock)
+    && /await recordResultLocked\(foundation, runtime, state\)/.test(enterResultBlock)
+    && enterResultBlock.indexOf('await recordResultLocked') < enterResultBlock.indexOf("resultActionsEl.classList.add('open')")
+    && /await enterResult\(\)/.test(syncRoomBlock));
+check('別タブで先に保存済みの結果cacheをduplicate側がゼロ報酬で上書きしない',
+  /cachedAfterLock\?\.matchId \? cachedAfterLock : recorded\.resultSummary/.test(enterResultBlock)
+    && /!cachedAfterLock\?\.matchId && !recorded\.duplicate/.test(enterResultBlock));
 check('通常2vs2の描画パイプラインをそのまま使用', ['drawBattleHudBackdrop()', 'drawWindMeter()', 'drawUnitPanel(', 'drawControlPanel()', 'drawCameraSlider()', 'drawMoveButtons()', 'drawFireButton()', 'drawSpecialButton()', 'drawSubweaponButton()'].every((call) => index.includes(call)));
 check('味方4体と要塞1体を通常unitsへ登録',
   /units\.push\(player, cpu, ally2, foe2, coopBossUnit\)/.test(index)

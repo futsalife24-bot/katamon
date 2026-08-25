@@ -448,6 +448,27 @@
     };
   }
 
+  async function recordResultLocked(foundation, runtime, battleState, options) {
+    if (!foundation?.mutateStateLocked) throw new Error('foundation state lock is unavailable');
+    return foundation.mutateStateLocked((progressBefore) => {
+      const preliminary = deps.session.resultSummary(runtime, {
+        ...resultStats(battleState),
+        firstClear: !progressBefore.boss.firstClears[battleState.difficulty],
+      });
+      const event = deps.session.rewardEvent(preliminary);
+      const reward = event
+        ? deps.rewards.recordEvent(progressBefore, event)
+        : { state: progressBefore, duplicate: false, credited: 0, newlyCompleted: [] };
+      const resultSummary = deps.session.resultSummary(runtime, {
+        ...resultStats(battleState),
+        coins: reward.credited,
+        firstClear: preliminary.firstClear,
+        achievements: reward.newlyCompleted,
+      });
+      return { state: reward.state, resultSummary, newlyCompleted: reward.newlyCompleted, duplicate: reward.duplicate === true };
+    }, options);
+  }
+
   function mountBrowser(browserRoot) {
     if (!browserRoot?.document?.body || browserRoot.document.getElementById('coopBattle')) return;
     const style = browserRoot.document.createElement('style');
@@ -500,6 +521,7 @@
     let aiDecisions = {};
     let advancingRoundId = '';
     let resultEntered = false;
+    let resultEntryPromise = null;
     let resultOpenedAt = 0;
     let resultSummary = null;
     let rematchResolved = false;
@@ -732,27 +754,37 @@
     }
 
     function cachedResultKey() { return `katamon.coopResult.${generation}`; }
-    function enterResult() {
-      if (resultEntered) return;
+    async function enterResult() {
+      if (resultEntered) return resultEntryPromise;
       resultEntered = true; resultOpenedAt = safeNumber(currentRound()?.deadlineAt) - deps.session.REMATCH_WINDOW_MS;
-      let cached = null;
-      try { cached = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cached = null; }
-      if (cached?.matchId) resultSummary = cached;
-      else {
-        const progressBefore = foundation.loadState();
-        const runtime = deps.session.createRuntime({ id: generation + '0'.repeat(40), seats: room.slots, bossId: deps.boss.BOSS_ID, difficulty: state.difficulty, stageId: state.stage.stageId });
-        const preliminary = deps.session.resultSummary(runtime, { ...resultStats(state), firstClear: !progressBefore.boss.firstClears[state.difficulty] });
-        const event = deps.session.rewardEvent(preliminary);
-        const reward = event ? deps.rewards.recordEvent(progressBefore, event) : { state: progressBefore, credited: 0, newlyCompleted: [] };
-        foundation.saveState(reward.state);
-        resultSummary = deps.session.resultSummary(runtime, { ...resultStats(state), coins: reward.credited, firstClear: preliminary.firstClear, achievements: reward.newlyCompleted });
-        try { browserRoot.localStorage.setItem(cachedResultKey(), JSON.stringify(resultSummary)); } catch (_) { /* 保存不可でも試合は続ける */ }
-        if (reward.newlyCompleted?.length) browserRoot.KatamonMvpShop?.notifyAchievements(reward.newlyCompleted);
+      resultEntryPromise = (async () => {
+        let cached = null;
+        try { cached = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cached = null; }
+        if (cached?.matchId) resultSummary = cached;
+        else {
+          const runtime = deps.session.createRuntime({ id: generation + '0'.repeat(40), seats: room.slots, bossId: deps.boss.BOSS_ID, difficulty: state.difficulty, stageId: state.stage.stageId });
+          const recorded = await recordResultLocked(foundation, runtime, state);
+          let cachedAfterLock = null;
+          try { cachedAfterLock = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cachedAfterLock = null; }
+          resultSummary = cachedAfterLock?.matchId ? cachedAfterLock : recorded.resultSummary;
+          if (!cachedAfterLock?.matchId && !recorded.duplicate) {
+            try { browserRoot.localStorage.setItem(cachedResultKey(), JSON.stringify(resultSummary)); } catch (_) { /* 保存不可でも試合は続ける */ }
+          }
+          if (recorded.newlyCompleted?.length) browserRoot.KatamonMvpShop?.notifyAchievements(recorded.newlyCompleted);
+        }
+        resultActionsEl.classList.add('open');
+        controlsEl.classList.add('results');
+        updateOwnReady(false).catch(() => {});
+        setStatus('再戦受付 15秒');
+        return resultSummary;
+      })();
+      try {
+        return await resultEntryPromise;
+      } catch (error) {
+        resultEntered = false;
+        resultEntryPromise = null;
+        throw error;
       }
-      resultActionsEl.classList.add('open');
-      controlsEl.classList.add('results');
-      updateOwnReady(false).catch(() => {});
-      setStatus('再戦受付 15秒');
     }
 
     async function updateOwnReady(ready) {
@@ -790,13 +822,13 @@
       room = latest; roomSession.room = latest;
       const nextGeneration = revisionPrefix(room.settings?.revision || 1);
       if (nextGeneration !== generation && room.phase === 'playing') {
-        generation = nextGeneration; processed = new Set(); resultEntered = false; rematchResolved = false;
+        generation = nextGeneration; processed = new Set(); resultEntered = false; resultEntryPromise = null; resultSummary = null; rematchResolved = false;
         state = createBattleState({ matchId: generation + '0'.repeat(40), difficulty: room.settings?.difficulty, slots: room.slots, aiFill: room.settings?.aiFill, characters: config.characters, aiCharacters: room.settings?.aiCharacters });
       }
       if (await abortIfHostUnavailable()) return;
       replayVolleys();
       if (room.phase === 'lobby') { stop(room); return; }
-      if (room.phase === 'results') { enterResult(); await hostResolveRematch(); return; }
+      if (room.phase === 'results') { await enterResult(); await hostResolveRematch(); return; }
       if (currentRound()?.status === 'input') { resetDraft(currentRound().id); weaponEl.disabled = !ownCanInput(); await hostFinalizeIfReady(); }
       const seconds = Math.max(0, Math.ceil((safeNumber(currentRound()?.deadlineAt) - serverNow()) / 1000));
       if (!localCommitted && ownCanInput()) setStatus(`ROUND ${state.round}　入力残り ${seconds}秒`);
@@ -1612,6 +1644,7 @@
     resolveVolley,
     extractVolleys,
     resultStats,
+    recordResultLocked,
     normalSnapshotLooksSafe,
     mountBrowser,
     startBrowser,
