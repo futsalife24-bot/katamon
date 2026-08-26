@@ -4531,7 +4531,7 @@
     return { vx0, vy0 };
   }
 
-  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,prismBeam,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound}]
+  let projectiles = []; // [{x,y,vx,vy,owner,radius,blastMul,terrainBlastMul,knockbackSpeed,windMul,gravityMul,pierce,prismBeam,dSmash,scorpionRail,barucopterMarker,barucopterBullet,emp,firework,directHitOnly,normalImpactSound,gearDamageProfile}]
   let barucopters = []; // [{owner,x,y,targetX,targetY,shotsFired,shotTimer,departTimer}]
   // ハムルトンの雲はターン境界でだけ更新する。固定刻みの経過時間に依存させないため、
   // 1vs1/2vs2とも「敵チームの行動回数3回」という同じ契約で残る。
@@ -4596,6 +4596,10 @@
     opts = opts || {};
     const windMul = opts.windMul != null ? opts.windMul : 1;
     const gravityMul = opts.gravityMul != null ? opts.gravityMul : 1;
+    const gearDamageProfile = opts.gearDamageProfile || 'excluded';
+    if (gearDamageProfile !== 'excluded' && gearDamageProfile !== 'normal_cannonball') {
+      throw Object.assign(new Error('CPU_GEAR_DAMAGE_PROFILE_INVALID'), { code: 'CPU_GEAR_DAMAGE_PROFILE_INVALID' });
+    }
     projectiles.push({
       x: anchor.x, y: anchor.y, vx, vy, owner,
       radius: opts.radius != null ? opts.radius : 5,
@@ -4613,6 +4617,10 @@
       coopItemId: opts.coopItemId || null,
       bossShot: !!opts.bossShot,
       normalImpactSound: !!opts.normalImpactSound,
+      // This is gameplay classification, never an audio/UI marker.  Only the
+      // ordinary cannonball opts into the explosive normal-blast path here;
+      // direct-only projectile handlers classify their own direct component.
+      gearDamageProfile,
       pierce: !!opts.pierce,
       prismBeam: !!opts.prismBeam,
       prismBounces: 0,
@@ -5159,6 +5167,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
+    // Rail is a status/subweapon path, explicitly outside 3C-2A Gear damage.
     const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul)), {
       direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot
     });
@@ -5524,7 +5533,11 @@
         windMul: shotProfile.windMul,
         gravityMul: shotProfile.gravityMul,
         // 通常弾だけに新しい着弾音の印を付ける。跳躍と必殺技は従来音を保つ。
-        normalImpactSound: !activateSpecial && !activateJump
+        normalImpactSound: !activateSpecial && !activateJump,
+        // Gear damage classification is intentionally independent from the
+        // sound marker.  Only an ordinary, non-jump cannonball is covered by
+        // Phase 3C-2A; all special projectile profiles remain excluded.
+        gearDamageProfile: !activateSpecial && !activateJump ? 'normal_cannonball' : 'excluded'
       });
     }
 
@@ -6108,7 +6121,7 @@
     if (!unitDefeated(target)) {
       const directDamage = computeDamage(0, 1, p.damageMul);
       const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-      const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(directDamage * takenMul)), {
+      const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', directDamage * takenMul), {
         direct: true, x, y, projectileRadius: p.radius, remoteShot
       });
       const actualDamage = damageResult.actualDamage;
@@ -6131,7 +6144,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(computeDamage(0, p.blastMul, p.damageMul) * takenMul)), {
+    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', computeDamage(0, p.blastMul, p.damageMul) * takenMul), {
       direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot
     });
     const actualDamage = damageResult.actualDamage;
@@ -6178,7 +6191,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)), {
+    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', COOL_KAI_ONIGIRI_DAMAGE * takenMul), {
       direct: true, x, y, projectileRadius: p.radius, remoteShot
     });
     const actualDamage = damageResult.actualDamage;
@@ -6205,7 +6218,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul)), {
+    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul), {
       direct: true, x, y, projectileRadius: p.radius, remoteShot
     });
     const actualDamage = damageResult.actualDamage;
@@ -8142,10 +8155,11 @@
     const runStorage = globalThis.KatamonGearCpuRunStorage;
     const presets = globalThis.KatamonGearPresetStorage;
     const battleSnapshot = globalThis.KatamonGearBattleSnapshot;
-    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage || !presets || !battleSnapshot) {
+    const combat = globalThis.KatamonGearCombat;
+    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage || !presets || !battleSnapshot || !combat) {
       throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
     }
-    return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot };
+    return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot, combat };
   }
 
   function cpuGearErrorCode(error) {
@@ -8306,6 +8320,61 @@
     player.fuelMax = checked.derivedStats.maxFuel;
     player.fuel = checked.derivedStats.currentFuelAtBattleStart;
     cpuBattleGearSnapshot = checked;
+  }
+
+  // Phase 3C-2A keeps the battle-facing boundary deliberately narrow: only
+  // the human p1 in a local normal CPU match may read the already-validated,
+  // match-fixed Gear snapshot.  Do not infer ownership from team names; that
+  // would leak Gear into future 2v2/online/coop modes.
+  function cpuGearCombatForUnit(unit) {
+    if (!unit || unit.id !== 'p1' || !isCpuGearEligibleRun() || !cpuBattleGearSnapshot) return null;
+    return cpuBattleGearSnapshot.derivedStats;
+  }
+
+  // Damage eligibility is an explicit projectile contract, not a sound/UI
+  // flag.  Unknown profiles must fail closed rather than silently skipping a
+  // possibly Gear-eligible source.  Special projectiles are deliberately
+  // marked excluded until their dedicated integration phase.
+  function cpuGearNormalProjectileDamageType(projectile, target) {
+    if (!projectile || !target || projectile.gearDamageProfile === 'excluded') return null;
+    if (projectile.gearDamageProfile !== 'normal_cannonball') {
+      throw Object.assign(new Error('CPU_GEAR_DAMAGE_PROFILE_INVALID'), { code: 'CPU_GEAR_DAMAGE_PROFILE_INVALID' });
+    }
+    return projectile.directTargetId === target.id ? 'direct_projectile' : 'normal_blast';
+  }
+
+  function cpuGearDamageContext(ownerId, target, damageType) {
+    if (!damageType) return null;
+    const attacker = cpuGearCombatForUnit(unitById(ownerId));
+    const defender = cpuGearCombatForUnit(target);
+    if (!attacker && !defender) return null;
+    const combat = cpuGearModules().combat;
+    const outgoing = attacker ? combat.conditionalDamageModifiers({ combat: attacker, damageType }) : { outgoingDamageBp: 0 };
+    const incoming = defender ? combat.conditionalDamageModifiers({ combat: defender, damageType }) : { incomingDamageReductionBp: 0 };
+    return {
+      attackMultiplier: attacker ? attacker.attackMultiplier : 1,
+      modifierBp: outgoing.outgoingDamageBp,
+      defenseMultiplier: defender ? defender.defenseMultiplier : 1,
+      damageReductionBp: incoming.incomingDamageReductionBp,
+    };
+  }
+
+  // Keep the one Phase 3B pipeline boundary shared by the ordinary
+  // cannonball and the existing direct-projectile handlers.  The caller gives
+  // the historic damage value just before its old integer HP boundary.
+  function cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage) {
+    const gearContext = cpuGearDamageContext(ownerId, target, damageType);
+    if (!gearContext) return Math.max(1, Math.round(existingBaseDamage));
+    return Math.max(1, Math.round(cpuGearModules().combat.calculateDamagePipeline({
+      baseDamage: existingBaseDamage,
+      attackMultiplier: gearContext.attackMultiplier,
+      modifierBp: gearContext.modifierBp,
+      isCrit: false,
+      defenseMultiplier: gearContext.defenseMultiplier,
+      damageReductionBp: gearContext.damageReductionBp,
+      numericShield: 0,
+      hp: target.hp,
+    }).hpDamage));
   }
 
   function restoreCpuBattleGearSnapshot(data, options) {
@@ -14949,7 +15018,15 @@
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
         const hpBefore = u.hp;
         const direct = techniqueProjectile?.directTargetId === u.id;
-        const damageResult = applyResolvedUnitDamage(u, Math.max(1, Math.round(dmg * takenMul)), {
+        const gearDamageType = cpuGearNormalProjectileDamageType(techniqueProjectile, u);
+        // Existing Base Damage is the current normal-cannon damage after its
+        // distance/blast and character-specific taken multiplier, immediately
+        // before the historic integer HP boundary.  Gearless keeps that exact
+        // Math.round path; Gear uses the Phase 3B pipeline once, then meets
+        // the same existing boundary without an intermediate round.
+        const existingBaseDamage = dmg * takenMul;
+        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType, existingBaseDamage);
+        const damageResult = applyResolvedUnitDamage(u, requestedDamage, {
           direct,
           x,
           y,

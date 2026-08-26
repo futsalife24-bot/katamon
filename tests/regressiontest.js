@@ -1673,7 +1673,7 @@ check('クールカイのおにぎり47発は一定間隔の連射になって�
 check('クールカイのおにぎりは見た目だけ3倍で判定値を変えない',
   indexHtml.includes('ctx.moveTo(15, 0); ctx.lineTo(-12, -12); ctx.lineTo(-12, 12);')
     && indexHtml.includes('const COOL_KAI_ONIGIRI_DAMAGE = 6;')
-    && indexHtml.includes('Math.round(COOL_KAI_ONIGIRI_DAMAGE * takenMul)')
+    && indexHtml.includes("cpuGearRequestedDamage(p.owner, target, 'direct_projectile', COOL_KAI_ONIGIRI_DAMAGE * takenMul)")
     && coolKaiProjectiles.every(p => p.radius === 3),
   JSON.stringify({ radius: coolKaiProjectiles[0]?.radius }));
 check('クール=カイの握り飯47発は見た目の回転だけ個別にランダム化する',
