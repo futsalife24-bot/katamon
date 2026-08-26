@@ -5238,9 +5238,8 @@
     const knockback = Math.max(0, Math.min(500, Number(impact.knockback) || 0));
 
     if (skill.selfEffect && Number(skill.selfEffect.heal) > 0) {
-      const heal = Math.min(Math.round(Number(skill.selfEffect.heal)), unit.maxHp - unit.hp);
-      unit.hp += heal;
-      if (heal > 0) spawnHealText(unit.x, unit.y - 32, heal);
+      const healing = applyCpuGearHealing({ sourceUnitId: owner, target: unit, baseHealing: Number(skill.selfEffect.heal) });
+      if (healing.actualHealing > 0) spawnHealText(unit.x, unit.y - 32, healing.actualHealing);
     }
 
     // 確率効果は端末間でずれないよう、ターン・所有者・技IDから固定値を作る。
@@ -6018,6 +6017,32 @@
     // meet the same legacy HP integer boundary exactly once here.
     if (unit?.subweaponBarrierActive) return mitigateDamageWithSubweaponBarrier(unit, residual);
     return Math.max(0, Math.round(residual));
+  }
+
+  // Healing is a battle event, not every assignment to hp. This narrow
+  // adapter leaves start/reset/resume/respawn restoration outside Gear Healing
+  // and delegates the complete multiplier formula to the Phase 3B helper.
+  function applyCpuGearHealing({ sourceUnitId, target, baseHealing }) {
+    const source = unitById(sourceUnitId);
+    const base = Math.max(0, Number(baseHealing) || 0);
+    if (!target || !Number.isFinite(target.hp) || !Number.isFinite(target.maxHp)) {
+      return { requestedHealing: 0, actualHealing: 0 };
+    }
+    const sourceCombat = cpuGearCombatForUnit(source);
+    const targetCombat = cpuGearCombatForUnit(target);
+    const resolved = sourceCombat || targetCombat
+      ? cpuGearModules().combat.finalHealing(
+        base,
+        sourceCombat ? sourceCombat.healingMultiplier : 1,
+        targetCombat ? targetCombat.receivedHealingMultiplier : 1
+      )
+      : base;
+    // Keep the historic event-level integer boundary. Never round per stat or
+    // per multiplier, otherwise a self-heal would lose the combined precision.
+    const requestedHealing = Math.max(0, Math.round(resolved));
+    const before = target.hp;
+    target.hp = Math.min(target.maxHp, before + requestedHealing);
+    return { requestedHealing, actualHealing: target.hp - before };
   }
 
   // 通常キャラの既存ダメージ経路は一切変えず、協力要塞への「直接着弾」だけを
@@ -15380,9 +15405,10 @@
     if (drainHeal && drainedDamage > 0) {
       const ownerUnit = unitById(owner);
       if (ownerUnit) {
-        const heal = Math.min(drainedDamage, Math.max(0, ownerUnit.maxHp - ownerUnit.hp));
-        ownerUnit.hp += heal;
-        if (heal > 0) spawnHealText(ownerUnit.x, ownerUnit.y - 32, heal);
+        // drainedDamage aggregates only actual HP loss. Shield absorption and
+        // Barrier-only prevention never become a life-steal base.
+        const healing = applyCpuGearHealing({ sourceUnitId: owner, target: ownerUnit, baseHealing: drainedDamage });
+        if (healing.actualHealing > 0) spawnHealText(ownerUnit.x, ownerUnit.y - 32, healing.actualHealing);
       }
     }
     checkMatchEnd();
