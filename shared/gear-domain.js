@@ -8,6 +8,7 @@
   // Phase 1 is deliberately data-only. This module must stay independent from
   // DOM, localStorage, Firebase, battle state, system time and random devices.
   const GEAR_SCHEMA_VERSION = 1;
+  const GEAR_ID_MAX_LENGTH = 512;
   const GEAR_GENERATION_VERSION = 1;
   const GEAR_ENHANCEMENT_VERSION = 1;
   const BALANCE_TUNING_VERSION = 1;
@@ -45,6 +46,10 @@
   };
   const assertString = (value, name) => {
     if (typeof value !== 'string' || value.length === 0) fail('INVALID_STRING', `${name} must be a non-empty string`);
+    return value;
+  };
+  const assertGearId = (value) => {
+    if (typeof value !== 'string' || value.length === 0 || value.length > GEAR_ID_MAX_LENGTH) fail('INVALID_GEAR_ID', `gearId must be a non-empty string of at most ${GEAR_ID_MAX_LENGTH} characters`);
     return value;
   };
   const roundDiv = (numerator, denominator) => {
@@ -573,7 +578,7 @@
     resolveGenerationRules(gear.generationVersion);
     resolveEnhancementRules(gear.enhancementVersion);
     assertInteger(gear.balanceTuningVersion, 1, Number.MAX_SAFE_INTEGER, 'gear balance tuning version');
-    const gearId = assertString(gear.gearId, 'gearId');
+    const gearId = assertGearId(gear.gearId);
     const slot = getSlot(gear.slotId);
     const set = getSet(gear.setId);
     const star = assertStar(gear.star);
@@ -623,7 +628,7 @@
   }
   function createGear(options) {
     if (!isRecord(options)) fail('INVALID_GENERATION_INPUT', 'generation options must be an object');
-    const gearId = assertString(options.gearId, 'gearId');
+    const gearId = assertGearId(options.gearId);
     const generationSeed = assertSeed(options.generationSeed, 'generationSeed');
     const enhancementSeed = assertSeed(options.enhancementSeed, 'enhancementSeed');
     const generationRules = resolveGenerationRules(GEAR_GENERATION_VERSION);
@@ -1002,7 +1007,7 @@
 
   return deepFreeze({
     GearDomainError,
-    GEAR_SCHEMA_VERSION, GEAR_GENERATION_VERSION, GEAR_ENHANCEMENT_VERSION, BALANCE_TUNING_VERSION, PRNG_ALGORITHM_VERSION,
+    GEAR_SCHEMA_VERSION, GEAR_GENERATION_VERSION, GEAR_ENHANCEMENT_VERSION, BALANCE_TUNING_VERSION, PRNG_ALGORITHM_VERSION, GEAR_ID_MAX_LENGTH,
     BP_PER_PERCENT, MAX_ENHANCEMENT_LEVEL, ENHANCEMENT_MILESTONES,
     SLOTS, SLOT_IDS, STARS, RARITIES, RARITY_IDS, SUB_OPS, SUB_OP_IDS, SETS, SET_IDS,
     SUB_VALUE_RANGE_BP_BY_STAR, COOP_BOSS_QUALITY_PROFILES, CPU_BATTLE_QUALITY_PROFILES, QUALITY_PROFILES, GEAR_SET_PROFILES, TARGETED_BOX_QUALITY_PROFILE_IDS,
