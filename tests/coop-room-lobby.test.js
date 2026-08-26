@@ -57,6 +57,14 @@ assert.match(rules.coopRooms.$room.settings['.write'], /hostUid/);
 assert.match(rules.coopRooms.$room.settings.difficulty['.validate'], /normal/);
 assert.match(rules.coopRooms.$room.settings.difficulty['.validate'], /extreme/);
 assert.match(rules.coopRooms.$room.settings.aiFill['.validate'], /isBoolean/);
+assert.match(rules.coopRooms.$room.settings.matchId['.validate'], /\^\[0-9a-f\]\{48\}\$/);
+assert.match(rules.coopRooms.$room.settings.matchId['.validate'], /isString/);
+assert.match(rules.coopRooms.$room.settings['.write'], /hostUid/,
+  'matchIdを含むsettingsはhostだけが書き込める');
+assert.match(rules.coopRooms.$room.settings['.write'], /phase'\)\.val\(\) === 'lobby'/,
+  'matchIdはlobbyの正規開始時だけ更新でき、playing/results中は固定する');
+assert.match(roomSource, /navigator\?\.locks/, 'Web Locks非対応端末は協力報酬開始gateでfail closedする');
+assert.match(roomSource, /typeof browserRoot\.navigator\.locks\.request !== 'function'/, 'Web Locks request APIも開始前に確認する');
 assert.match(rules.coopRooms.$room.settings.aiCharacters.e1['.validate'], /medama/,
   'P2のAIモンスターは既存キャラ許可リストで検証する');
 assert.match(rules.coopRooms.$room.settings.aiCharacters.s1['.validate'], /iwa/,

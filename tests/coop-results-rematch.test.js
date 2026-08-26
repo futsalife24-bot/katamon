@@ -108,6 +108,7 @@ check('受付終了後の投票を拒否', !vote.accepted && vote.reason === 'cl
   const storage = {
     getItem(key) { return values.has(key) ? values.get(key) : null; },
     setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); },
   };
   let lockTail = Promise.resolve();
   let lockCalls = 0;
@@ -146,7 +147,7 @@ check('受付終了後の投票を拒否', !vote.accepted && vote.reason === 'cl
     battleModule.recordResultLocked(foundation, base, resultState, { storage, lockManager }),
   ]);
   const saved = foundation.loadState(storage);
-  check('同時結果処理は同じlockで直列化', lockCalls === 2 && maxActiveLocks === 1);
+  check('同時結果処理とGear queueは同じlockで直列化', lockCalls >= 2 && maxActiveLocks === 1);
   check('同じrewardIdの協力結果は1回だけcredit', firstEntry.resultSummary.coins > 0 && !firstEntry.duplicate
     && duplicateEntry.resultSummary.coins === 0 && duplicateEntry.duplicate
     && saved.wallet.coins === firstEntry.resultSummary.coins);

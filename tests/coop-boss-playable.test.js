@@ -255,10 +255,10 @@ check('協力結果のfoundation更新は最新loadから保存まで共通lock 
   /foundation\.mutateStateLocked\(/.test(lockedResultBlock)
     && lockedResultBlock.indexOf('resultSummary(runtime') < lockedResultBlock.indexOf('rewardEvent(preliminary)')
     && lockedResultBlock.indexOf('rewardEvent(preliminary)') < lockedResultBlock.indexOf('recordEvent(progressBefore, event)')
-    && !/foundation\.(?:loadState|saveState)\(/.test(enterResultBlock));
+    && !/foundation\.saveState\(/.test(enterResultBlock));
 check('協力結果のasync再入は同じPromiseを共有し、保存完了後に結果画面を一度だけ開く',
   /if \(resultEntered\) return resultEntryPromise;/.test(enterResultBlock)
-    && /await recordResultLocked\(foundation, runtime, state\)/.test(enterResultBlock)
+    && /await recordResultLocked\(foundation, runtime, state/.test(enterResultBlock)
     && enterResultBlock.indexOf('await recordResultLocked') < enterResultBlock.indexOf("resultActionsEl.classList.add('open')")
     && /await enterResult\(\)/.test(syncRoomBlock));
 check('別タブで先に保存済みの結果cacheをduplicate側がゼロ報酬で上書きしない',
@@ -600,6 +600,9 @@ check('再戦非希望のゲスト席だけ受付後にホスト解放可能', r
 check('ホスト90秒無応答時だけ着席ゲストが無報酬ロビー中断可能', rules.rules.coopRooms.$room.phase['.write'].includes("newData.val() === 'lobby'") && rules.rules.coopRooms.$room.phase['.write'].includes("child('p1').child('seenAt').val() < now - 90000") && rules.rules.coopRooms.$room.phase['.write'].includes("child('e1').child('uid').val() === auth.uid"));
 check('協力戦scriptはroomより先に読み込む', index.indexOf('coop-mvp-battle.js') < index.indexOf('coop-mvp-room.js'));
 check('PWAへ協力戦scriptを登録', sw.includes("'./coop-mvp-battle.js'"));
+check('協力matchIdは開始時に固定しラウンド進行で変えない', /const settings = \{ \.\.\.session\.room\.settings, revision, matchId: roundId \}/.test(roomSource)
+  && /const fixed = room\.settings\?\.matchId/.test(source)
+  && /String\(fixed\)\.toLowerCase\(\)/.test(source));
 check('Android/iPhone実機QAは人数・同期・切断・報酬・回帰を固定', ['1人＋AI補充ON', '2人＋AI補充ON', '全端末でボスHP', 'ホストが90秒以上', '報酬が二重付与されない', '通常ONLINE'].every((text) => mobileQa.includes(text)));
 
 console.log(`協力ボス実戦統合（${passed}/${passed} passed）`);

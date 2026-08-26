@@ -94,6 +94,23 @@
     return settings?.aiFill === true ? occupied.length >= 1 : occupied.length === SEATS.length;
   }
 
+  function localGearRewardableBattleReady(browserRoot) {
+    try {
+      if (!browserRoot.navigator?.locks || typeof browserRoot.navigator.locks.request !== 'function') return { allowed: false, message: 'この端末では安全なGear報酬保存を利用できません。' };
+      if (browserRoot.localStorage?.getItem('katamon_gear_txn_v1') !== null) return { allowed: false, message: 'Gear取引の復旧待ちです。完了してから協力戦を開始してください。' };
+      const settlement = browserRoot.KatamonGearCoopSettlementStorage;
+      const gearStorage = browserRoot.KatamonGearStorage;
+      const rewards = browserRoot.KatamonGearRewards;
+      if (!settlement?.load || !gearStorage?.loadGearState || !rewards?.getGearRewardGate) return { allowed: false, message: 'Gear報酬の保存機能を読み込めません。' };
+      const pending = settlement.load(browserRoot.localStorage);
+      if (pending) return { allowed: false, message: '先に未保存のGear報酬を再試行してください。' };
+      const storage = gearStorage.loadGearState(browserRoot.localStorage);
+      const gate = rewards.getGearRewardGate(storage);
+      if (!gate.allowed) return { allowed: false, message: 'Gear報酬の空きを作ってから協力戦を開始してください。' };
+      return { allowed: true };
+    } catch (_error) { return { allowed: false, message: 'Gear報酬の保存状態を確認できません。' }; }
+  }
+
   function sourceNamespaces() { return 'coopOpen/coopRooms'; }
 
   function usableListing(code, value, now) {
@@ -153,6 +170,7 @@
     overlay.innerHTML = `<div class="coop-shell" role="dialog" aria-modal="true" aria-labelledby="coopBossTitle">
       <header class="coop-head"><h2 id="coopBossTitle">CO-OP BOSS</h2><button id="coopClose" type="button">タイトルへ戻る</button></header>
       <main class="coop-body">
+        <section id="coopRecovery" class="coop-card" hidden><p id="coopRecoveryText">未処理の協力ボスGear報酬があります</p><button id="coopRecoveryRetry" class="coop-button coop-primary" type="button">報酬保存を再試行</button></section>
         <section id="coopEntry" class="coop-entry">
           <p class="coop-kicker">巨大要塞 共同討伐作戦</p>
           <div class="coop-boss-card"><img src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span>FIRST TARGET</span><strong>超大型要塞戦車</strong><small>右側固定型・4人共同討伐</small></div></div>
@@ -183,7 +201,7 @@
     document.body.appendChild(overlay);
 
     const element = (id) => document.getElementById(id);
-    const entryEl = element('coopEntry'); const roomEl = element('coopRoom'); const footerEl = element('coopFooter');
+    const entryEl = element('coopEntry'); const recoveryEl = element('coopRecovery'); const recoveryTextEl = element('coopRecoveryText'); const recoveryRetryEl = element('coopRecoveryRetry'); const roomEl = element('coopRoom'); const footerEl = element('coopFooter');
     const statusEl = element('coopStatus'); const roomListEl = element('coopRoomList'); const seatsEl = element('coopSeats');
     const difficultyEl = element('coopDifficulty'); const roomDifficultyEl = element('coopRoomDifficulty');
     const aiFillEl = element('coopAiFill'); const roomAiFillEl = element('coopRoomAiFill');
@@ -319,6 +337,19 @@
       renderSeats();
     }
 
+    function showRecovery() {
+      let pending;
+      try { pending = browserRoot.KatamonGearCoopSettlementStorage?.load(browserRoot.localStorage); } catch (_error) {
+        recoveryEl.hidden = false; entryEl.hidden = true;
+        recoveryTextEl.textContent = 'Gear報酬の保存状態を安全に確認できませんでした。';
+        return true;
+      }
+      if (!pending) { recoveryEl.hidden = true; entryEl.hidden = false; return false; }
+      recoveryEl.hidden = false; entryEl.hidden = true;
+      recoveryTextEl.textContent = `未処理の協力ボスGear報酬があります（${String(pending.difficulty).toUpperCase()} Gear ${pending.reward.gears.length}個）`;
+      return true;
+    }
+
     function enterSession(next) {
       session = next; renderRoom(); stopTimers(); schedulePoll(0); scheduleHeartbeat(18000);
       setStatus('参加者と装備を同期しています。');
@@ -398,6 +429,8 @@
 
     async function createRoom() {
       if (busy || session) return;
+      const gate = localGearRewardableBattleReady(browserRoot);
+      if (!gate.allowed) { setStatus(gate.message); showRecovery(); return; }
       setBusy(true); setStatus('協力部屋を建造しています…');
       try {
         const auth = await bridge.ensureAuth(); const now = bridge.serverNow(auth); const settings = settingsFromEntry();
@@ -417,6 +450,8 @@
 
     async function joinRoom(rawCode) {
       if (busy || session) return;
+      const gate = localGearRewardableBattleReady(browserRoot);
+      if (!gate.allowed) { setStatus(gate.message); showRecovery(); return; }
       const code = normalizeRoomCode(rawCode);
       if (!isRoomCode(code)) { setStatus('部屋IDは8文字で入力してください。'); return; }
       setBusy(true); setStatus('協力部屋へ参加しています…');
@@ -461,6 +496,10 @@
 
     async function updateOwnSlot(nextSlot) {
       if (!session || busy) return;
+      if (nextSlot?.ready === true) {
+        const gate = localGearRewardableBattleReady(browserRoot);
+        if (!gate.allowed) { setStatus(gate.message); return; }
+      }
       setBusy(true);
       try {
         const body = { ...nextSlot, uid: session.auth.uid, name: cleanText(bridge.getPlayerName(), 12, 'ななし'), claimedAt: session.room.slots[session.seat].claimedAt, seenAt: { '.sv': 'timestamp' } };
@@ -488,17 +527,21 @@
 
     async function startBattle() {
       if (!session || session.role !== 'host' || busy || !canHostStart(session.room.slots, session.room.settings)) return;
+      const gearGate = localGearRewardableBattleReady(browserRoot);
+      if (!gearGate.allowed) { setStatus(gearGate.message); return; }
       const battle = browserRoot.KatamonCoopBattle;
       if (!battle?.makeRoundId) { setStatus('協力戦を読み込めませんでした。'); return; }
       setBusy(true); setStatus('要塞戦の同期を開始しています…'); renderSeats();
       try {
         const now = bridge.serverNow(session.auth);
         const revision = Math.max(1, Number(session.room.settings?.revision || 1) + 1);
-        const settings = { ...session.room.settings, revision };
+        // A match identity is fixed when this battle starts.  Individual round
+        // ids change during play and must never become a reward identity.
+        const roundId = battle.makeRoundId(revision);
+        const settings = { ...session.room.settings, revision, matchId: roundId };
         await bridge.request(`coopRooms/${session.code}/settings`, session.auth, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
         });
-        const roundId = battle.makeRoundId(revision);
         const round = {
           id: roundId,
           status: 'input',
@@ -540,6 +583,7 @@
       const state = bridge.getState();
       if (state.gamePhase !== 'title' || state.onlineActive) return false;
       bridge.playUiSound(); overlay.classList.add('open');
+      if (showRecovery()) { setStatus('報酬保存を再試行してください。'); return true; }
       setStatus('協力部屋を作るか、公開部屋へ参加してください。'); bridge.syncBgm();
       return true;
     };
@@ -547,6 +591,15 @@
     element('coopCreate').addEventListener('click', createRoom);
     element('coopJoin').addEventListener('click', () => joinRoom(element('coopJoinCode').value));
     element('coopRefresh').addEventListener('click', refreshListings);
+    recoveryRetryEl.addEventListener('click', async () => {
+      recoveryRetryEl.disabled = true; recoveryTextEl.textContent = 'Gear報酬を保存しています…';
+      try {
+        const outcome = await browserRoot.KatamonGearCoopRecovery.recoverPendingCoopGearSettlement(browserRoot.localStorage);
+        if (outcome.status !== 'recovered' && outcome.status !== 'nothing_pending') throw new Error(outcome.status);
+        recoveryTextEl.textContent = 'Gear報酬を未受取へ保存しました'; showRecovery(); setStatus('Gear報酬を未受取へ保存しました。');
+      } catch (error) { recoveryTextEl.textContent = /capacity_blocked/.test(error?.message || '') ? '未受取報酬または倉庫が満杯です' : '報酬保存を安全に完了できませんでした'; }
+      finally { recoveryRetryEl.disabled = false; }
+    });
     element('coopLeave').addEventListener('click', () => leaveRoom(true));
     element('coopStart').addEventListener('click', startBattle);
     element('coopReady').addEventListener('click', () => {
