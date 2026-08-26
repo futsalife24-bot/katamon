@@ -1029,6 +1029,34 @@ const HOOK = `
       cpuGearShieldState = Object.freeze({ ...cpuGearShieldState, currentShield: value });
       return cpuGearShieldState.currentShield;
     },
+    applyCpuGearHealingForTest: (sourceUnitId, targetUnitId, baseHealing) => {
+      const target = unitById(targetUnitId);
+      return typeof applyCpuGearHealing === 'function'
+        ? applyCpuGearHealing({ sourceUnitId, target, baseHealing })
+        : null;
+    },
+    launchGeneratedSelfHealForTest: (ownerId, amount) => {
+      const unit = unitById(ownerId);
+      if (!unit || typeof launchGeneratedSpecial !== 'function') return null;
+      const before = unit.hp;
+      const launched = launchGeneratedSpecial({
+        blastMul: 1,
+        specialSkill: {
+          schemaVersion: 1,
+          id: 'healing-test',
+          projectile: { count: 1, speedMultiplier: 1, power: 1, gravityMultiplier: 1, penetrationCount: 0 },
+          impact: { radiusMultiplier: 1, knockback: 0 },
+          selfEffect: { heal: amount }
+        }
+      }, unit, ownerId, unitAnchor(unit), 0, 0);
+      return { launched, actualHealing: unit.hp - before, hp: unit.hp };
+    },
+    drainExplosionForTest: (ownerId, targetUnitId) => {
+      const target = unitById(targetUnitId);
+      if (!target) return false;
+      explodeAt(target.x, target.y, 1, ownerId, 1, false, true, 1, 0, false, { gearDamageProfile: 'excluded' });
+      return true;
+    },
     setSubweaponBarrierForTest: (id, active) => { const u = unitById(id); if (!u) return false; u.subweaponBarrierActive = !!active; return u.subweaponBarrierActive; },
     cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
