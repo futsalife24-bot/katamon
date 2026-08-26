@@ -1022,6 +1022,7 @@ const HOOK = `
     cpuGearPersistenceForTest: () => ({ state: cpuGearPersistenceState, status: cpuGearStatusText }),
     cpuBattleGearSnapshotForTest: () => cpuBattleGearSnapshot ? JSON.parse(JSON.stringify(cpuBattleGearSnapshot)) : null,
     cpuGearCritStateForTest: () => cpuGearCritState ? JSON.parse(JSON.stringify(cpuGearCritState)) : null,
+    cpuGearStatusStateForTest: () => cpuGearStatusState ? JSON.parse(JSON.stringify(cpuGearStatusState)) : null,
     cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
     requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),
@@ -1340,8 +1341,18 @@ const HOOK = `
     turnBarTop: () => TURN_BAR_BASE_Y + hudShift(),
     cpuPickTarget: (id) => { const t = cpuPickTarget(unitById(id)); return t ? t.id : null; },
     cpuFriendlyFireRadius: () => CPU_FRIENDLY_FIRE_RADIUS,
-    emitEmpForTest: (x, y, radius, ownerId, turns) => emitEmp(x, y, radius, ownerId, turns || 1),
-    emitNyanDisableForTest: (x, y, radius, ownerId) => emitEmp(x, y, radius, ownerId, 1, 'turnSkip'),
+    emitEmpForTest: (x, y, radius, ownerId, turns, actionOrdinal = null) => emitEmp(x, y, radius, ownerId, turns || 1, 'moveLock', actionOrdinal),
+    fireEmpForTest: (ownerId) => {
+      const owner = unitById(ownerId);
+      fireProjectile(ownerId, unitAnchor(owner), 0, 0, { emp: true, empRadius: 100, empTurns: 2, noTerrain: true });
+      return projectiles[projectiles.length - 1]?.gearStatusActionOrdinal ?? null;
+    },
+    launchGeneratedEmpForTest: (ownerId, count) => {
+      const owner = unitById(ownerId);
+      launchGeneratedSpecial({ blastMul: 1, windMul: 1, specialSkill: { schemaVersion: 1, id: 'status-test', projectile: { count, speedMultiplier: 1, power: 1, gravityMultiplier: 1, penetrationCount: 0 }, impact: { radiusMultiplier: 1, knockback: 0 }, targetEffect: { kind: 'movement-lock', chance: 1, durationTurns: 2 } } }, owner, ownerId, unitAnchor(owner), 1, -1);
+      return projectiles.filter((projectile) => projectile.emp).map((projectile) => projectile.gearStatusActionOrdinal);
+    },
+    emitNyanDisableForTest: (x, y, radius, ownerId, actionOrdinal = null) => emitEmp(x, y, radius, ownerId, 1, 'turnSkip', actionOrdinal),
     turnEffectForTest: (id) => {
       const u = unitById(id);
       return u ? { moveLockTurns: u.moveLockTurns || 0, actionSkipTurns: u.actionSkipTurns || 0 } : null;

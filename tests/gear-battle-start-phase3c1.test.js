@@ -134,7 +134,7 @@ test('the next CPU round captures current storage afresh while the prior match s
 });
 
 test('legacy Gearless suspend remains resumable, but a current malformed Gear field fails closed', () => {
-  reset(); assert.equal(kt.startBattle('kyoryu'), true); const legacy = JSON.parse(storage.getItem('katamon_suspend_v1')); legacy.v = 4; delete legacy.cpuBattleGearSnapshot; delete legacy.cpuBattleGearSnapshotVersion;
+  reset(); assert.equal(kt.startBattle('kyoryu'), true); const legacy = JSON.parse(storage.getItem('katamon_suspend_v1')); legacy.v = 4; delete legacy.cpuBattleGearSnapshot; delete legacy.cpuBattleGearSnapshotVersion; delete legacy.cpuGearCritState; delete legacy.cpuGearCritStateVersion; delete legacy.cpuGearStatusState; delete legacy.cpuGearStatusStateVersion;
   storage.setItem('katamon_suspend_v1', JSON.stringify(legacy)); kt.setPhase('title'); assert.equal(kt.resumeCpuSuspendForTest(), true); assert.equal(kt.cpuBattleGearSnapshotForTest(), null);
   reset(); assert.equal(kt.startBattle('kyoryu'), true); assert.equal(kt.saveCpuBattleAtTurnStartForTest(), true); const malformed = JSON.parse(storage.getItem('katamon_suspend_v1')); malformed.cpuBattleGearSnapshot.derivedStats.maxHp += 1;
   storage.setItem('katamon_suspend_v1', JSON.stringify(malformed)); kt.setPhase('title');
