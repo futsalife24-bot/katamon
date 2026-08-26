@@ -1,16 +1,17 @@
 (function initKatamonGearPresets(root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.KatamonGearPresets = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearPresets() {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearPresets(root) {
   'use strict';
   const SCHEMA_VERSION = 1;
   const PRESET_IDS = Object.freeze(['preset1', 'preset2', 'preset3']);
   const SLOT_IDS = Object.freeze(['barrel', 'armor', 'core', 'engine', 'sight', 'auxiliary']);
   const MODE_IDS = Object.freeze(['cpu', 'free', 'online', 'coop']);
-  const GEAR_ID_MAX_LENGTH = 512;
   class GearPresetError extends Error { constructor(code, message, cause) { super(message || code); this.name = 'GearPresetError'; this.code = code; if (cause !== undefined) this.cause = cause; } }
   const fail = (code, message, cause) => { throw new GearPresetError(code, message, cause); };
+  function gearDomain() { if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-domain.js'); if (root?.KatamonGearDomain) return root.KatamonGearDomain; fail('GEAR_DOMAIN_UNAVAILABLE', 'gear domain is unavailable'); }
+  const gearIdMaxLength = () => gearDomain().GEAR_ID_MAX_LENGTH;
   const plain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const freezeClone = (value) => deepFreeze(clone(value));
@@ -23,7 +24,7 @@
   function assertCharacter(characterId, ids) { if (typeof characterId !== 'string' || !ids.has(characterId)) fail('INVALID_CHARACTER_ID', 'characterId is not in the canonical roster'); return characterId; }
   function assertPresetId(presetId) { if (!PRESET_IDS.includes(presetId)) fail('INVALID_PRESET_ID', 'presetId is invalid'); return presetId; }
   function assertMode(mode) { if (!MODE_IDS.includes(mode)) fail('INVALID_MODE', 'mode is invalid'); return mode; }
-  function assertGearId(value, path) { if (value === null) return null; if (typeof value !== 'string' || value.length < 1 || value.length > GEAR_ID_MAX_LENGTH) fail('INVALID_GEAR_ID', `${path} must be null or a non-empty gearId`); return value; }
+  function assertGearId(value, path) { if (value === null) return null; if (typeof value !== 'string' || value.length < 1 || value.length > gearIdMaxLength()) fail('INVALID_GEAR_ID', `${path} must be null or a non-empty gearId`); return value; }
   function emptySlots() { return Object.fromEntries(SLOT_IDS.map((slotId) => [slotId, null])); }
   function defaultPreset(presetId) { const index = PRESET_IDS.indexOf(presetId) + 1; return { presetId, name: `Preset ${index}`, slots: emptySlots() }; }
   function defaultCharacter() { return { presets: PRESET_IDS.map(defaultPreset), modeDefaults: Object.fromEntries(MODE_IDS.map((mode) => [mode, 'preset1'])) }; }
@@ -84,5 +85,5 @@
     return freezeClone(conflicts);
   }
   function assertNoSimultaneousGearConflicts(loadouts) { const conflicts = findSimultaneousGearConflicts(loadouts); if (conflicts.length) { const conflict = conflicts[0]; fail('SIMULTANEOUS_GEAR_CONFLICT', `gear ${conflict.gearId} is requested by multiple simultaneous loadouts`, conflict); } return true; }
-  return Object.freeze({ GearPresetError, SCHEMA_VERSION, PRESET_IDS, SLOT_IDS, MODE_IDS, GEAR_ID_MAX_LENGTH, createInitialState, validateState, characterState, setPresetSlot, setModeDefault, setPresetName, resolveDefaultPreset, resolvePreset, resolvePresetLoadout, resolveDefaultLoadout, findSimultaneousGearConflicts, assertNoSimultaneousGearConflicts });
+  return Object.freeze({ GearPresetError, SCHEMA_VERSION, PRESET_IDS, SLOT_IDS, MODE_IDS, getGearIdMaxLength: gearIdMaxLength, createInitialState, validateState, characterState, setPresetSlot, setModeDefault, setPresetName, resolveDefaultPreset, resolvePreset, resolvePresetLoadout, resolveDefaultLoadout, findSimultaneousGearConflicts, assertNoSimultaneousGearConflicts });
 });
