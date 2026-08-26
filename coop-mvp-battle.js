@@ -4,11 +4,14 @@
     engine: require('./coop-mvp-engine.js'), survival: require('./coop-mvp-survival.js'),
     items: require('./coop-mvp-items.js'), subweapons: require('./subweapon-mvp.js'),
     rewards: require('./coop-mvp-rewards.js'), session: require('./coop-mvp-session.js'),
+    gearRewards: require('./shared/gear-rewards.js'), gearStorage: require('./shared/gear-storage.js'),
+    coopSettlement: require('./shared/gear-coop-settlement-storage.js'), coopRecovery: require('./shared/gear-coop-recovery.js'),
   } : {
     boss: root?.KatamonCoopBoss, ai: root?.KatamonCoopBossAi, engine: root?.KatamonCoopEngine,
     survival: root?.KatamonCoopSurvival, items: root?.KatamonCoopItems,
     subweapons: root?.KatamonSubweapons, rewards: root?.KatamonCoopRewards,
-    session: root?.KatamonCoopSession,
+    session: root?.KatamonCoopSession, gearRewards: root?.KatamonGearRewards, gearStorage: root?.KatamonGearStorage,
+    coopSettlement: root?.KatamonGearCoopSettlementStorage, coopRecovery: root?.KatamonGearCoopRecovery,
   };
   const api = factory(root, deps);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -448,14 +451,37 @@
     };
   }
 
-  async function recordResultLocked(foundation, runtime, battleState, options) {
+  function eventWasPersisted(foundation, event, difficulty, storage) {
+    const state = foundation.loadState(storage);
+    if (state.rewardLedger[`event:${event.id}`] !== true) return false;
+    return event.outcome !== 'victory' || state.boss.firstClears[difficulty] === true;
+  }
+
+  async function recoverPendingCoopGearSettlement(foundation, storage, options = {}) {
+    if (!deps.coopRecovery?.recoverPendingCoopGearSettlement) throw new Error('cooperative Gear recovery is unavailable');
+    return deps.coopRecovery.recoverPendingCoopGearSettlement(storage, options);
+  }
+
+  async function recordResultLocked(foundation, runtime, battleState, options = {}) {
     if (!foundation?.mutateStateLocked) throw new Error('foundation state lock is unavailable');
-    return foundation.mutateStateLocked((progressBefore) => {
+    const storage = options.storage;
+    const createdAtMs = safeNumber(options.createdAtMs, 0);
+    const recorded = await foundation.mutateStateLocked((progressBefore) => {
       const preliminary = deps.session.resultSummary(runtime, {
         ...resultStats(battleState),
         firstClear: !progressBefore.boss.firstClears[battleState.difficulty],
       });
       const event = deps.session.rewardEvent(preliminary);
+      // The settlement is written before recordEvent flips firstClears.  A
+      // retry therefore reuses the exact third Gear instead of re-rolling it.
+      if (event?.outcome === 'victory' && !progressBefore.rewardLedger[`event:${event.id}`]) {
+        const existing = deps.coopSettlement.load(storage);
+        if (existing && existing.eventId !== event.id) throw new Error('another cooperative Gear settlement is pending');
+        if (!existing) deps.coopSettlement.save(deps.coopSettlement.create({
+          matchId: preliminary.matchId, eventId: event.id, difficulty: battleState.difficulty,
+          outcome: 'victory', firstClear: preliminary.firstClear, foundationEvent: event, createdAtMs,
+        }), storage);
+      }
       const reward = event
         ? deps.rewards.recordEvent(progressBefore, event)
         : { state: progressBefore, duplicate: false, credited: 0, newlyCompleted: [] };
@@ -467,6 +493,13 @@
       });
       return { state: reward.state, resultSummary, newlyCompleted: reward.newlyCompleted, duplicate: reward.duplicate === true };
     }, options);
+    const event = deps.session.rewardEvent(recorded.resultSummary);
+    if (event && !eventWasPersisted(foundation, event, battleState.difficulty, storage)) {
+      throw new Error('cooperative result could not be persisted');
+    }
+    const settled = await recoverPendingCoopGearSettlement(foundation, storage, options);
+    if (settled?.pending) recorded.resultSummary.gearRewardCount = settled.pending.reward.gears.length;
+    return recorded;
   }
 
   function mountBrowser(browserRoot) {
@@ -508,7 +541,15 @@
     controlsEl.classList.remove('results'); resultActionsEl.classList.remove('open');
     let room = clone(roomSession.room);
     let generation = revisionPrefix(room.settings?.revision || 1);
-    let state = createBattleState({ matchId: generation + '0'.repeat(40), difficulty: room.settings?.difficulty, slots: room.slots, aiFill: room.settings?.aiFill, characters: config.characters });
+    function matchIdForRoom() {
+      const fixed = room.settings?.matchId;
+      // Older in-flight rooms did not persist matchId.  Their initial round
+      // remains the best compatible fallback; all new starts persist fixed.
+      return /^[0-9a-f]{48}$/i.test(fixed || '') ? String(fixed).toLowerCase()
+        : /^[0-9a-f]{48}$/i.test(room.round?.id || '') ? String(room.round.id).toLowerCase()
+          : generation + '0'.repeat(40);
+    }
+    let state = createBattleState({ matchId: matchIdForRoom(), difficulty: room.settings?.difficulty, slots: room.slots, aiFill: room.settings?.aiFill, characters: config.characters });
     let processed = new Set();
     let active = true;
     let pollTimer = 0;
@@ -753,17 +794,20 @@
       });
     }
 
-    function cachedResultKey() { return `katamon.coopResult.${generation}`; }
+    function cachedResultKey() { return `katamon.coopResult.${state.matchId}`; }
     async function enterResult() {
       if (resultEntered) return resultEntryPromise;
       resultEntered = true; resultOpenedAt = safeNumber(currentRound()?.deadlineAt) - deps.session.REMATCH_WINDOW_MS;
       resultEntryPromise = (async () => {
+        // A cached result is presentation-only.  It must never hide a durable
+        // cooperative Gear settlement left between foundation save and queue.
+        const recovered = await recoverPendingCoopGearSettlement(foundation, browserRoot.localStorage);
         let cached = null;
         try { cached = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cached = null; }
         if (cached?.matchId) resultSummary = cached;
         else {
-          const runtime = deps.session.createRuntime({ id: generation + '0'.repeat(40), seats: room.slots, bossId: deps.boss.BOSS_ID, difficulty: state.difficulty, stageId: state.stage.stageId });
-          const recorded = await recordResultLocked(foundation, runtime, state);
+          const runtime = deps.session.createRuntime({ id: state.matchId, seats: room.slots, bossId: deps.boss.BOSS_ID, difficulty: state.difficulty, stageId: state.stage.stageId });
+          const recorded = await recordResultLocked(foundation, runtime, state, { createdAtMs: Math.max(0, resultOpenedAt) });
           let cachedAfterLock = null;
           try { cachedAfterLock = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cachedAfterLock = null; }
           resultSummary = cachedAfterLock?.matchId ? cachedAfterLock : recorded.resultSummary;
@@ -772,10 +816,13 @@
           }
           if (recorded.newlyCompleted?.length) browserRoot.KatamonMvpShop?.notifyAchievements(recorded.newlyCompleted);
         }
+        if (recovered?.pending && resultSummary) resultSummary.gearRewardCount = recovered.pending.reward.gears.length;
         resultActionsEl.classList.add('open');
         controlsEl.classList.add('results');
         updateOwnReady(false).catch(() => {});
-        setStatus('再戦受付 15秒');
+        if (recovered?.status === 'capacity_blocked') setStatus('Gear報酬の保存待ちです。空きを作ってから再試行してください。');
+        else if (recovered?.status === 'foundation_unverified' || recovered?.status === 'gear_unverified') setStatus('Gear報酬の保存待ちです。安全確認後に再試行してください。');
+        else setStatus('再戦受付 15秒');
         return resultSummary;
       })();
       try {
@@ -788,11 +835,19 @@
     }
 
     async function updateOwnReady(ready) {
+      if (ready === true) {
+        try {
+          if (browserRoot.localStorage.getItem('katamon_gear_txn_v1') !== null) { setStatus('Gear取引の復旧待ちです。完了してから再戦してください'); return false; }
+          if (deps.coopSettlement.load(browserRoot.localStorage)) { setStatus('未処理のGear報酬を先に保存してください'); return false; }
+          const gate = deps.gearRewards.getGearRewardGate(deps.gearStorage.loadGearState(browserRoot.localStorage));
+          if (!gate.allowed) { setStatus('Gear報酬の空きを作ってから再戦してください'); return false; }
+        } catch (_error) { setStatus('Gear報酬の保存状態を確認できません'); return false; }
+      }
       const prior = room.slots?.[roomSession.seat];
       if (!prior?.uid) return;
       const next = { ...prior, ready: ready === true, seenAt: { '.sv': 'timestamp' } };
       await bridge.request(`coopRooms/${roomSession.code}/slots/${roomSession.seat}`, roomSession.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
-      room.slots[roomSession.seat] = { ...prior, ready: ready === true, seenAt: serverNow() };
+      room.slots[roomSession.seat] = { ...prior, ready: ready === true, seenAt: serverNow() }; return true;
     }
 
     async function hostResolveRematch() {
@@ -823,7 +878,7 @@
       const nextGeneration = revisionPrefix(room.settings?.revision || 1);
       if (nextGeneration !== generation && room.phase === 'playing') {
         generation = nextGeneration; processed = new Set(); resultEntered = false; resultEntryPromise = null; resultSummary = null; rematchResolved = false;
-        state = createBattleState({ matchId: generation + '0'.repeat(40), difficulty: room.settings?.difficulty, slots: room.slots, aiFill: room.settings?.aiFill, characters: config.characters, aiCharacters: room.settings?.aiCharacters });
+        state = createBattleState({ matchId: matchIdForRoom(), difficulty: room.settings?.difficulty, slots: room.slots, aiFill: room.settings?.aiFill, characters: config.characters, aiCharacters: room.settings?.aiCharacters });
       }
       if (await abortIfHostUnavailable()) return;
       replayVolleys();
@@ -1074,8 +1129,8 @@
         pinch = null; inputMode = null; inputPointerId = null; return true;
       },
     };
-    browserRoot.document.getElementById('coopVoteRematch').onclick = () => updateOwnReady(true).then(() => {
-      browserRoot.document.getElementById('coopVoteRematch').disabled = true; setStatus('再戦希望を送信しました');
+    browserRoot.document.getElementById('coopVoteRematch').onclick = () => updateOwnReady(true).then((sent) => {
+      if (sent === true) { browserRoot.document.getElementById('coopVoteRematch').disabled = true; setStatus('再戦希望を送信しました'); }
     }).catch(() => setStatus('再戦希望を送れませんでした'));
     browserRoot.document.getElementById('coopReturnLobby').onclick = () => updateOwnReady(false).then(() => {
       setStatus('受付終了後にロビーへ戻ります');

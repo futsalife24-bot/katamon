@@ -64,6 +64,7 @@
             "$other": { ".validate": false }
           },
           "revision": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100000" },
+          "matchId": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{48}$/)" },
           "$other": { ".validate": false }
         },
         "slots": {
