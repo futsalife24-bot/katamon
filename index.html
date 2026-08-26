@@ -4924,11 +4924,13 @@
       const raw = computeDamage(distanceToUnitBody(u, x, y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
-      const requested = Math.min(budget, Math.max(1, Math.round(raw * takenMul)));
+      const requested = Math.min(budget, cpuGearActionDamageRequested(p.owner, Math.max(1, Math.round(raw * takenMul))));
       const dmg = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: p.owner, target: u, requestedDamage: requested }));
       if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
+      const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - dmg);
-      recordCpuGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: dmg, damageType: 'normal_blast', fromEnemyAttackAction: true });
+      const actualHpDamage = beforeHp - u.hp;
+      recordCpuGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: actualHpDamage, damageType: 'normal_blast', fromEnemyAttackAction: true });
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
       creditDamage(p.owner, u, dmg);
     }
@@ -5387,7 +5389,12 @@
     faceAllUnitsTowardOpponents();
     // 保留から戻ってきた時はチャージを0にした後なので、readyの再判定はしない。
     if (!deferred && subweaponId) {
-      launchSubweaponShot(unit, anchor, vx0, vy0, subweaponId);
+      // Barrier is support-only. Impact/Drill are real offensive actions and
+      // therefore capture/consume the action-wide Last Stand 4pc modifier.
+      const offensiveSubweapon = subweaponId === 'impact' || subweaponId === 'drill';
+      if (offensiveSubweapon) beginCpuGearAttackAction(unit);
+      const launched = launchSubweaponShot(unit, anchor, vx0, vy0, subweaponId);
+      if (!launched && offensiveSubweapon) cancelCpuGearAttackAction(unit);
       return;
     }
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
@@ -8559,6 +8566,28 @@
     cpuGearActiveAttackRuntime = null;
   }
 
+  function cancelCpuGearAttackAction(unit) {
+    if (cpuGearActiveAttackRuntime?.ownerId === unit?.id) cpuGearActiveAttackRuntime = null;
+  }
+
+  // Last Stand 4pc is an action-wide Damage Modifier.  Fixed/special damage
+  // routes that intentionally do not use the Attack stat still receive this
+  // bucket, while their legacy Attack behavior stays untouched.
+  function cpuGearActiveActionDamageBp(ownerId) {
+    return ownerId === 'p1' && isCpuGearEligibleRun() && cpuGearActiveAttackRuntime?.ownerId === ownerId
+      ? cpuGearActiveAttackRuntime.actionDamageBp : 0;
+  }
+
+  function cpuGearActionDamageRequested(ownerId, existingBaseDamage) {
+    const actionDamageBp = cpuGearActiveActionDamageBp(ownerId);
+    if (actionDamageBp === 0) return Math.max(1, Math.round(existingBaseDamage));
+    return Math.max(1, Math.round(cpuGearModules().combat.calculateDamagePipeline({
+      baseDamage: existingBaseDamage, attackMultiplier: 1, modifierBp: actionDamageBp,
+      isCrit: false, critDamageMultiplier: 1, defenseMultiplier: 1,
+      damageReductionBp: 0, numericShield: 0
+    }).hpDamage));
+  }
+
   // Last Stand 4pc is deliberately driven by explicit attack-action provenance.
   // DoT/environment/self damage never gets inferred as an enemy attack.
   function recordCpuGearLastStandDamage({ ownerId, target, actualDamage, damageType, fromEnemyAttackAction }) {
@@ -8595,7 +8624,7 @@
     const incoming = defender ? combat.conditionalDamageModifiers({ combat: defender, damageType }) : { incomingDamageReductionBp: 0 };
     return {
       attackMultiplier: attacker && cpuGearActiveAttackRuntime?.ownerId === ownerId ? cpuGearActiveAttackRuntime.attackMultiplier : (attacker ? attacker.attackMultiplier : 1),
-      modifierBp: outgoing.outgoingDamageBp + (attacker && cpuGearActiveAttackRuntime?.ownerId === ownerId ? cpuGearActiveAttackRuntime.actionDamageBp : 0),
+      modifierBp: outgoing.outgoingDamageBp + (attacker ? cpuGearActiveActionDamageBp(ownerId) : 0),
       defenseMultiplier: defender ? defender.defenseMultiplier : 1,
       damageReductionBp: incoming.incomingDamageReductionBp,
     };
@@ -15342,10 +15371,12 @@
       const dist = distanceToUnitBody(u, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
-      const requested = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
+      const requested = cpuGearActionDamageRequested(owner, Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1))));
       const damage = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: owner, target: u, requestedDamage: requested }));
+      const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - damage);
-      recordCpuGearLastStandDamage({ ownerId: owner, target: u, actualDamage: damage, damageType: 'status', fromEnemyAttackAction: true });
+      const actualHpDamage = beforeHp - u.hp;
+      recordCpuGearLastStandDamage({ ownerId: owner, target: u, actualDamage: actualHpDamage, damageType: 'status', fromEnemyAttackAction: true });
       // Status Resistance is a hostile-status gate only.  EMP's legacy damage
       // always resolves first and is never reduced or removed by resistance.
       const statusId = effect === 'turnSkip' ? 'action_skip' : 'move_lock';
@@ -15470,7 +15501,8 @@
         // Math.round path; Gear uses the Phase 3B pipeline once, then meets
         // the same existing boundary without an intermediate round.
         const existingBaseDamage = dmg * takenMul;
-        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType, existingBaseDamage, techniqueProjectile);
+        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType,
+          gearDamageType ? existingBaseDamage : cpuGearActionDamageRequested(owner, existingBaseDamage), techniqueProjectile);
         const damageResult = applyResolvedUnitDamage(u, requestedDamage, {
           ownerId: owner,
           direct,

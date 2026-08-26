@@ -1073,6 +1073,19 @@ const HOOK = `
       return true;
     },
     setSubweaponBarrierForTest: (id, active) => { const u = unitById(id); if (!u) return false; u.subweaponBarrierActive = !!active; return u.subweaponBarrierActive; },
+    launchSubweaponForTest: (ownerId, subweaponId) => {
+      const unit = unitById(ownerId);
+      if (!unit) return null;
+      unit.subweapon = subweaponId;
+      unit.subweaponUsesLeft = 1;
+      const beforeCount = projectiles.length;
+      launchShot(unit, unitAnchor(unit), 8, -2, false, false, false, subweaponId);
+      return {
+        active: cpuGearActiveAttackRuntime ? { ...cpuGearActiveAttackRuntime } : null,
+        projectileIndex: projectiles.length > beforeCount ? projectiles.length - 1 : -1,
+        projectile: projectiles[projectiles.length - 1] ? { ...projectiles[projectiles.length - 1] } : null
+      };
+    },
     cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
     requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),

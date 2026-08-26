@@ -811,6 +811,15 @@ const before = {
 };
 check('保存前にクレーターができている', before.craters > 0, String(before.craters));
 
+// CPU公式中断は攻撃中ではなくturn startだけを保存する。背水のaction-wide
+// runtimeを途中保存しない契約に合わせ、クレーター生成直後の弾道を完了させて
+// 次の安全なp1 turn startでround-tripを取る。
+for (let i = 0; i < 5000 && !kt.state().matchOver && !kt.hud().fireActive; i++) kt.step(1 / 60);
+before.units = kt.units.map(u => ({ id: u.id, hp: u.hp, fuel: u.fuel, x: u.x, ch: u.character, sc: u.specialCharge }));
+before.wind = kt.wind();
+before.craters = kt.craters();
+before.state = kt.state();
+
 kt.save();
 const loaded = kt.load();
 check('中断セーブが読める', !!loaded, 'null');
