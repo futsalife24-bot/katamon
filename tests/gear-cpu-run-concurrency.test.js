@@ -455,6 +455,10 @@ function installDeferredGearWriterLock() {
     // silently rebound to a different durable run identity.
     delete legacy.cpuGearCritStateVersion;
     delete legacy.cpuGearCritState;
+    // This is intentionally a genuine pre-3C-3B ownerless legacy save.
+    // A current Status runtime field must be fenced just like Crit state.
+    delete legacy.cpuGearStatusStateVersion;
+    delete legacy.cpuGearStatusState;
     storage.setItem('katamon_suspend_v1', JSON.stringify(legacy));
     assert.equal(kt.clearCpuGearRunForTest(), true);
     kt.setPhase('title');

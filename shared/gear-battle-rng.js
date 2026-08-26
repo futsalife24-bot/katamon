@@ -6,6 +6,7 @@
   'use strict';
   const GEAR_BATTLE_RNG_VERSION = 1;
   const GEAR_CRIT_RNG_NAMESPACE = 'gear-crit:v1';
+  const GEAR_STATUS_RNG_NAMESPACE = 'gear-status:v1';
   function fail(code) { throw Object.assign(new Error(code), { code }); }
   function text(value, name) { if (typeof value !== 'string' || !value) fail(`INVALID_${name}`); return value; }
   function nonNegative(value, name) { if (!Number.isSafeInteger(value) || value < 0) fail(`INVALID_${name}`); return value; }
@@ -16,5 +17,15 @@
     const key = [text(input.namespace, 'RNG_NAMESPACE'), text(input.runId, 'RNG_RUN_ID'), nonNegative(input.matchOrdinal, 'RNG_MATCH_ORDINAL'), nonNegative(input.actionOrdinal, 'RNG_ACTION_ORDINAL'), text(input.targetUnitId, 'RNG_TARGET'), text(input.damageType, 'RNG_DAMAGE_TYPE'), nonNegative(input.hitOrdinal, 'RNG_HIT_ORDINAL'), input.version].join('|');
     return hash32(key) % 10000;
   }
-  return Object.freeze({ GEAR_BATTLE_RNG_VERSION, GEAR_CRIT_RNG_NAMESPACE, rollBasisPoints });
+  // Status actions deliberately have a different label contract from normal
+  // cannonball Crit.  Keeping this additive preserves every Crit roll for
+  // existing matches and prevents unrelated action types sharing an ordinal.
+  function rollStatusBasisPoints(input) {
+    if (!input || Object.keys(input).sort().join(',') !== 'actionOrdinal,hitOrdinal,matchOrdinal,namespace,runId,sourceUnitId,statusId,targetUnitId,version') fail('INVALID_GEAR_STATUS_RNG_INPUT');
+    if (input.version !== GEAR_BATTLE_RNG_VERSION) fail('UNSUPPORTED_GEAR_BATTLE_RNG_VERSION');
+    if (input.namespace !== GEAR_STATUS_RNG_NAMESPACE) fail('INVALID_GEAR_STATUS_RNG_NAMESPACE');
+    const key = [text(input.namespace, 'RNG_NAMESPACE'), text(input.runId, 'RNG_RUN_ID'), nonNegative(input.matchOrdinal, 'RNG_MATCH_ORDINAL'), nonNegative(input.actionOrdinal, 'RNG_ACTION_ORDINAL'), text(input.sourceUnitId, 'RNG_SOURCE'), text(input.targetUnitId, 'RNG_TARGET'), text(input.statusId, 'RNG_STATUS'), nonNegative(input.hitOrdinal, 'RNG_HIT_ORDINAL'), input.version].join('|');
+    return hash32(key) % 10000;
+  }
+  return Object.freeze({ GEAR_BATTLE_RNG_VERSION, GEAR_CRIT_RNG_NAMESPACE, GEAR_STATUS_RNG_NAMESPACE, rollBasisPoints, rollStatusBasisPoints });
 });
