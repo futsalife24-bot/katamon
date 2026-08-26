@@ -56,7 +56,7 @@ function expected(baseDamage, attackerCombat, defenderCombat, damageType) {
   const outgoing = attackerCombat ? combat.conditionalDamageModifiers({ combat: attackerCombat, damageType }) : { outgoingDamageBp: 0 };
   const incoming = defenderCombat ? combat.conditionalDamageModifiers({ combat: defenderCombat, damageType }) : { incomingDamageReductionBp: 0 };
   return Math.max(1, Math.round(combat.calculateDamagePipeline({
-    baseDamage,
+    baseDamage: baseDamage * (damageType === 'normal_blast' && attackerCombat ? attackerCombat.blastDamageMultiplier : 1),
     attackMultiplier: attackerCombat ? attackerCombat.attackMultiplier : 1,
     modifierBp: outgoing.outgoingDamageBp,
     isCrit: false,

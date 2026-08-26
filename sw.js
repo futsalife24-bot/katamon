@@ -51,6 +51,7 @@ const APP_SHELL = [
   './shared/gear-presets.js',
   './shared/gear-preset-storage.js',
   './shared/gear-combat.js',
+  './shared/gear-battle-rng.js',
   './shared/gear-battle-snapshot.js'
 ];
 // 初回はオフライン起動に必要な素材を保存し、以後は同じURLの端末内コピーを再利用する。
