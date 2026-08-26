@@ -459,6 +459,10 @@ function installDeferredGearWriterLock() {
     // A current Status runtime field must be fenced just like Crit state.
     delete legacy.cpuGearStatusStateVersion;
     delete legacy.cpuGearStatusState;
+    // 3C-3C1 added a current Numeric Shield runtime field.  A genuine
+    // pre-3C-3C1 legacy suspend has neither half of that field.
+    delete legacy.cpuGearShieldStateVersion;
+    delete legacy.cpuGearShieldState;
     storage.setItem('katamon_suspend_v1', JSON.stringify(legacy));
     assert.equal(kt.clearCpuGearRunForTest(), true);
     kt.setPhase('title');
