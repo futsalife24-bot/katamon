@@ -1020,6 +1020,8 @@ const HOOK = `
     },
     claimCpuGearSuspendForTest: (expectedSnapshot) => claimCpuGearLegacySuspendForResume(expectedSnapshot),
     cpuGearPersistenceForTest: () => ({ state: cpuGearPersistenceState, status: cpuGearStatusText }),
+    cpuBattleGearSnapshotForTest: () => cpuBattleGearSnapshot ? JSON.parse(JSON.stringify(cpuBattleGearSnapshot)) : null,
+    cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
     requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),
     continueCpuGearRunAfterWinForTest: () => continueCpuGearRunAfterWin(),

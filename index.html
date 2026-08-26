@@ -4315,12 +4315,22 @@
     if (teamOfOwner(owner) === 'player' && target.team !== 'player') runStats.damageDealt += amount;
   }
 
+  // Gear must always receive the pre-Gear, character-catalogue values.  Keep
+  // this small lookup shared with applyCharacter so a later unit mutation can
+  // never become the accidental source of a Battle Gear Snapshot context.
+  function characterBattleBaseStats(key) {
+    const def = CHARACTERS[key];
+    if (!def) throw Object.assign(new Error('UNKNOWN_CHARACTER'), { code: 'UNKNOWN_CHARACTER' });
+    return Object.freeze({ baseHp: def.maxHp, baseFuel: Math.round(FUEL_MAX * def.fuelMul) });
+  }
+
   function applyCharacter(u, key) {
     const def = CHARACTERS[key];
+    const base = characterBattleBaseStats(key);
     u.character = key;
-    u.maxHp = def.maxHp;
-    u.hp = def.maxHp;
-    u.fuelMax = Math.round(FUEL_MAX * def.fuelMul);
+    u.maxHp = base.baseHp;
+    u.hp = base.baseHp;
+    u.fuelMax = base.baseFuel;
     u.fuel = u.fuelMax;
     u.color = def.color;
     u.label = def.name;
@@ -6740,7 +6750,7 @@
     const discardToken = cpuGearActiveRunDiscardToken;
     cpuGearAllowActiveRunReplacement = false;
     cpuGearActiveRunDiscardToken = null;
-    const start = beginCpuGearRunForNewMatch({ allowActiveRunReplacement, discardToken }, ({ priorSuspendDiscarded = false } = {}) => {
+    const startBattleAfterGearCapture = () => beginCpuGearRunForNewMatch({ allowActiveRunReplacement, discardToken }, ({ priorSuspendDiscarded = false } = {}) => {
       pendingNewMatchKey = null;
       if (!priorSuspendDiscarded) clearSuspendedMatch();
       hasSuspendedSave = false;
@@ -6764,6 +6774,10 @@
       }
       return true;
     });
+    // Capture precedes CPU-run creation and every battle mutation.  A stale
+    // preset, raw WAL, or unavailable Web Lock therefore cannot consume a
+    // run/reward state or begin a half-initialized match.
+    const start = withCapturedCpuBattleGear(key, startBattleAfterGearCapture);
     if (!isThenable(start)) return !!start;
     // Native Web Locks are async.  The state mutation and match start happen
     // inside the lock callback; observe rejection explicitly instead of
@@ -7370,6 +7384,9 @@
   const SUSPEND_KEY = 'katamon_suspend_v1';
   const CUSTOM_SUSPEND_KEY = 'katamon_custom_suspend_v1';
 
+  // This shared battle/online snapshot version is intentionally unchanged by
+  // CPU-only Gear state.  The local CPU field below carries its own explicit
+  // version so Phase 3C-1 cannot perturb the online protocol.
   const SNAPSHOT_VERSION = 4;
   // Firebaseの開始パケットへ載せる宣言型JSONの上限。通常の生成ステージは10KB前後だが、
   // 編集量が多い場合も見越しつつ、巨大データで全員の開始処理を塞がない値に抑える。
@@ -7465,6 +7482,10 @@
     }
     if (typeof options.cpuGearSnapshotId === 'string') {
       snapshot.cpuGearSnapshotId = options.cpuGearSnapshotId;
+    }
+    if (isCpuGearEligibleRun() && cpuBattleGearSnapshot !== null) {
+      snapshot.cpuBattleGearSnapshotVersion = 1;
+      snapshot.cpuBattleGearSnapshot = cpuBattleGearSnapshot;
     }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
@@ -7845,6 +7866,10 @@
     }
     const customSnapshot = inspectCustomStageSnapshot(data);
     if (!customSnapshot.valid) throw new Error(customSnapshot.message);
+    // Validate the match-fixed CPU Gear snapshot before this function mutates
+    // terrain, units, or phase.  Official CPU data with a malformed field
+    // is never treated as a pre-Gear legacy save.
+    const restoredCpuGearSnapshot = restoreCpuBattleGearSnapshot(data, options);
     battleMode = data.battleMode === 'coop' ? 'coop' : data.battleMode === 'free' ? 'free' : 'normal';
     selectedCustomStage = null;
     selectedCustomAdapter = null;
@@ -7968,6 +7993,8 @@
       u.grounded = true;
       u.fallStartY = u.y;
     }
+    cpuBattleGearSnapshot = restoredCpuGearSnapshot;
+    pendingCpuBattleGearSnapshot = null;
     // 跳躍後の向きは相手の座標が揃った後に再計算し、通信順で一瞬反転するのを防ぐ。
     for (const u of units) faceUnitTowardOpponent(u);
 
@@ -8031,18 +8058,24 @@
     // restored.  Two tabs must never both read the same legacy turn snapshot,
     // fork the same runId, and later write incompatible peaks or settlements.
     const restore = (claimed) => {
-      if (!claimed || !claimed.data) return false;
-      const { data, cpuSnapshotClaimed } = claimed;
-      applySnapshot(data);
-      gamePhase = 'battle';
-      syncBgm({ restartStage: true });
-      // Keep the rebound CPU snapshot as the recovery point for the narrow
-      // interval before the next turn-start autosave.  Its owner fence blocks
-      // the old tab, and a later reload explicitly transfers it again.
-      if (!cpuSnapshotClaimed) clearSuspendedMatch(data);
-      hasSuspendedSave = !!loadSuspendedMatch();
-      updateDebug();
-      return true;
+      try {
+        if (!claimed || !claimed.data) return false;
+        const { data, cpuSnapshotClaimed } = claimed;
+        applySnapshot(data, { cpuOfficialResume: isCpuGearLegacySnapshot(data) });
+        gamePhase = 'battle';
+        syncBgm({ restartStage: true });
+        // Keep the rebound CPU snapshot as the recovery point for the narrow
+        // interval before the next turn-start autosave.  Its owner fence blocks
+        // the old tab, and a later reload explicitly transfers it again.
+        if (!cpuSnapshotClaimed) clearSuspendedMatch(data);
+        hasSuspendedSave = !!loadSuspendedMatch();
+        updateDebug();
+        return true;
+      } catch (error) {
+        setCpuGearStatus(error, 'CPU BATTLE再開');
+        showTitleNotice('装備Gearを確認できないためバトルを開始できません');
+        return false;
+      }
     };
     if (!isCpuGearLegacySnapshot(advisoryData)) {
       return restore({ data: advisoryData, cpuSnapshotClaimed: false });
@@ -8095,6 +8128,10 @@
   // "start new" confirmation displayed. It is never a blanket delete permit.
   let cpuGearActiveRunDiscardToken = null;
   let cpuGearLastSettlementIntent = null;
+  // CPU-only match state.  It is fixed at the locked preset capture point
+  // and is never refreshed from Gear storage until the next CPU match.
+  let cpuBattleGearSnapshot = null;
+  let pendingCpuBattleGearSnapshot = null;
 
   function cpuGearModules() {
     const domain = globalThis.KatamonGearDomain;
@@ -8103,10 +8140,12 @@
     const transactions = globalThis.KatamonGearTransactions;
     const cpuRewards = globalThis.KatamonGearCpuRewards;
     const runStorage = globalThis.KatamonGearCpuRunStorage;
-    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage) {
+    const presets = globalThis.KatamonGearPresetStorage;
+    const battleSnapshot = globalThis.KatamonGearBattleSnapshot;
+    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage || !presets || !battleSnapshot) {
       throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
     }
-    return { domain, storage, rewards, transactions, cpuRewards, runStorage };
+    return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot };
   }
 
   function cpuGearErrorCode(error) {
@@ -8197,6 +8236,101 @@
 
   function isCpuGearEligibleRun() {
     return battleMode === 'normal' && !isOnline() && !is2v2();
+  }
+
+  function cpuBattleTrustedGearContext(characterId) {
+    const base = characterBattleBaseStats(characterId);
+    return { baseHp: base.baseHp, baseFuel: base.baseFuel, expectedCharacterId: characterId };
+  }
+
+  function captureCpuBattleGearSnapshot(characterId) {
+    const { presets, battleSnapshot } = cpuGearModules();
+    const context = cpuBattleTrustedGearContext(characterId);
+    const materialize = (resolvedLoadout) => {
+      const created = battleSnapshot.createBattleGearSnapshot({
+        resolvedLoadout,
+        baseHp: context.baseHp,
+        baseFuel: context.baseFuel
+      });
+      return battleSnapshot.validateBattleGearSnapshot(created, context);
+    };
+    const captured = presets.captureResolvedPresetForBattle({ characterId, mode: 'cpu' }, localStorage, {
+      characterIds: CHARACTER_LIST,
+      // A synchronous compatible lock lets the existing start callback remain
+      // atomic. Native Web Locks ignore this and return their normal Promise.
+      throwSync: true
+    });
+    return isThenable(captured) ? Promise.resolve(captured).then(materialize) : materialize(captured);
+  }
+
+  function withCapturedCpuBattleGear(characterId, operation) {
+    let captured;
+    try { captured = captureCpuBattleGearSnapshot(characterId); }
+    catch (error) { setCpuGearStatus(error, '装備Gearの確認'); showTitleNotice('装備Gearを確認できないためバトルを開始できません'); return false; }
+    const begin = (snapshot) => {
+      // A tested, deep-frozen snapshot is the only Gear input accepted by
+      // resetMatch.  Do not set this pending handoff until every validation
+      // step succeeded, so failure leaves the current battle/title untouched.
+      pendingCpuBattleGearSnapshot = snapshot;
+      try {
+        const result = operation();
+        if (isThenable(result)) {
+          return Promise.resolve(result).then((value) => {
+            if (!value) pendingCpuBattleGearSnapshot = null;
+            return value;
+          }, (error) => { pendingCpuBattleGearSnapshot = null; throw error; });
+        }
+        if (!result) pendingCpuBattleGearSnapshot = null;
+        return result;
+      }
+      catch (error) { pendingCpuBattleGearSnapshot = null; throw error; }
+    };
+    if (!isThenable(captured)) return begin(captured);
+    return Promise.resolve(captured).then(begin, (error) => {
+      setCpuGearStatus(error, '装備Gearの確認');
+      showTitleNotice('装備Gearを確認できないためバトルを開始できません');
+      return false;
+    });
+  }
+
+  function applyPendingCpuBattleGearSnapshot() {
+    const snapshot = pendingCpuBattleGearSnapshot;
+    pendingCpuBattleGearSnapshot = null;
+    if (!snapshot) { cpuBattleGearSnapshot = null; return; }
+    const context = cpuBattleTrustedGearContext(player.character);
+    const checked = cpuGearModules().battleSnapshot.validateBattleGearSnapshot(snapshot, context);
+    // Phase 3C-1 deliberately consumes only static HP / Fuel.  Every other
+    // derived field and runtime capability remains inert until later phases.
+    player.maxHp = checked.derivedStats.maxHp;
+    player.hp = checked.derivedStats.maxHp;
+    player.fuelMax = checked.derivedStats.maxFuel;
+    player.fuel = checked.derivedStats.currentFuelAtBattleStart;
+    cpuBattleGearSnapshot = checked;
+  }
+
+  function restoreCpuBattleGearSnapshot(data, options) {
+    if (options?.cpuOfficialResume !== true) return null;
+    const hasVersion = Object.prototype.hasOwnProperty.call(data, 'cpuBattleGearSnapshotVersion');
+    const hasGearField = Object.prototype.hasOwnProperty.call(data, 'cpuBattleGearSnapshot');
+    if (!hasVersion && !hasGearField) return null; // valid pre-3C-1 official suspend: Gearless legacy behavior
+    if (data.cpuBattleGearSnapshotVersion !== 1 || !hasGearField) {
+      throw Object.assign(new Error('CPU_GEAR_SNAPSHOT_MALFORMED'), { code: 'CPU_GEAR_SNAPSHOT_MALFORMED' });
+    }
+    const savedPlayer = Array.isArray(data.units) ? data.units.find((entry) => entry?.id === 'p1') : null;
+    if (!savedPlayer?.character) throw Object.assign(new Error('CPU_GEAR_SNAPSHOT_CHARACTER_MISSING'), { code: 'CPU_GEAR_SNAPSHOT_CHARACTER_MISSING' });
+    const checked = cpuGearModules().battleSnapshot.validateBattleGearSnapshot(
+      data.cpuBattleGearSnapshot,
+      cpuBattleTrustedGearContext(savedPlayer.character)
+    );
+    // The outer unit values are runtime state, but their maxima are still
+    // bound to the immutable Gear snapshot.  Do not let a forged suspend
+    // bypass trusted snapshot validation by changing only units[p1].
+    if (savedPlayer.maxHp !== checked.derivedStats.maxHp || savedPlayer.fuelMax !== checked.derivedStats.maxFuel
+      || !Number.isFinite(savedPlayer.hp) || savedPlayer.hp < 0 || savedPlayer.hp > checked.derivedStats.maxHp
+      || !Number.isFinite(savedPlayer.fuel) || savedPlayer.fuel < 0 || savedPlayer.fuel > checked.derivedStats.maxFuel) {
+      throw Object.assign(new Error('CPU_GEAR_SNAPSHOT_RUNTIME_MISMATCH'), { code: 'CPU_GEAR_SNAPSHOT_RUNTIME_MISMATCH' });
+    }
+    return checked;
   }
 
   function isThenable(value) {
@@ -8665,7 +8799,7 @@
     if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
       return rejectCpuGearResultActionWhileBusy('CPU BATTLE継続');
     }
-    const continued = cpuGearRunLifecycle('CPU BATTLE継続', () => {
+    const continueAfterGearCapture = () => cpuGearRunLifecycle('CPU BATTLE継続', () => {
       // This recheck is required after acquiring the CPU lock.  A settlement
       // request can have started while this continue request was waiting.
       if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
@@ -8681,6 +8815,9 @@
       resetMatch(true);
       return true;
     });
+    // A continued streak is a new match boundary. Capture first; never let a
+    // changed/stale preset reset the board before its new snapshot is proven.
+    const continued = withCapturedCpuBattleGear(player.character, continueAfterGearCapture);
     if (!isThenable(continued)) return continued;
     const task = Promise.resolve(continued);
     cpuGearContinuePromise = task;
@@ -18818,7 +18955,7 @@
       // Queue this whole reset-and-suspend sequence behind it, then write the
       // next-round snapshot while we still own that same lock.  A title
       // transition is never allowed to outrun the durable peak/snapshot.
-      const suspended = cpuGearRunLifecycle('CPU BATTLE中断', () => {
+      const suspendAfterGearCapture = () => cpuGearRunLifecycle('CPU BATTLE中断', () => {
         if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
           return rejectCpuGearResultActionWhileBusy('CPU BATTLE中断');
         }
@@ -18858,6 +18995,9 @@
           cpuGearSkipNextTurnStartSuspend = false;
         }
       });
+      // The voluntary suspend prepares the next CPU round before persisting
+      // it, so that next round needs its own frozen snapshot too.
+      const suspended = withCapturedCpuBattleGear(player.character, suspendAfterGearCapture);
       const finish = (saved) => {
         if (!saved) return false;
         returnToTitleFromResult();
@@ -22635,6 +22775,11 @@
     if (battleMode !== 'demo') primeStageBgm(currentThemeKey);
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
+    // Only the local human unit of a fresh offline CPU match receives the
+    // already-captured Phase 3C-1 HP/Fuel values.  resetMatch remains the
+    // common initializer for every other mode, all of which clear this state.
+    if (battleMode === 'normal' && !isOnline() && !is2v2()) applyPendingCpuBattleGearSnapshot();
+    else { pendingCpuBattleGearSnapshot = null; cpuBattleGearSnapshot = null; }
     if (isBossMatch) {
       for (const u of units) {
         if (u.team !== 'cpu') continue;
