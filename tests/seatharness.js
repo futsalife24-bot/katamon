@@ -1024,6 +1024,21 @@ const HOOK = `
     cpuGearCritStateForTest: () => cpuGearCritState ? JSON.parse(JSON.stringify(cpuGearCritState)) : null,
     cpuGearStatusStateForTest: () => cpuGearStatusState ? JSON.parse(JSON.stringify(cpuGearStatusState)) : null,
     cpuGearShieldStateForTest: () => cpuGearShieldState ? JSON.parse(JSON.stringify(cpuGearShieldState)) : null,
+    cpuGearRuntimeEffectsStateForTest: () => cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null,
+    setCpuGearRuntimeEffectsForTest: (effects) => {
+      const p1 = unitById('p1'); const combat = cpuGearCombatForUnit(p1);
+      if (!cpuGearRuntimeEffectsState || !combat) return null;
+      const checked = cpuGearModules().combat.beginAttackAction({ combat, state: effects }).state;
+      if (checked.rescueNextAttackDamageBp !== 0) return null;
+      cpuGearRuntimeEffectsState = Object.freeze({ ...cpuGearRuntimeEffectsState, effects: checked });
+      return JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState));
+    },
+    beginCpuGearAttackForTest: () => { beginCpuGearAttackAction(unitById('p1')); return cpuGearActiveAttackRuntime ? { ...cpuGearActiveAttackRuntime } : null; },
+    completeCpuGearAttackForTest: () => { completeCpuGearAttackAction(unitById('p1')); return cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null; },
+    recordCpuGearLastStandDamageForTest: (ownerId, actualDamage, damageType = 'direct_projectile', fromEnemyAttackAction = true) => {
+      recordCpuGearLastStandDamage({ ownerId, target: unitById('p1'), actualDamage, damageType, fromEnemyAttackAction });
+      return cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null;
+    },
     setCpuGearShieldForTest: (value) => {
       if (!cpuGearShieldState || !Number.isFinite(value) || value < 0) return null;
       cpuGearShieldState = Object.freeze({ ...cpuGearShieldState, currentShield: value });
@@ -1058,6 +1073,19 @@ const HOOK = `
       return true;
     },
     setSubweaponBarrierForTest: (id, active) => { const u = unitById(id); if (!u) return false; u.subweaponBarrierActive = !!active; return u.subweaponBarrierActive; },
+    launchSubweaponForTest: (ownerId, subweaponId) => {
+      const unit = unitById(ownerId);
+      if (!unit) return null;
+      unit.subweapon = subweaponId;
+      unit.subweaponUsesLeft = 1;
+      const beforeCount = projectiles.length;
+      launchShot(unit, unitAnchor(unit), 8, -2, false, false, false, subweaponId);
+      return {
+        active: cpuGearActiveAttackRuntime ? { ...cpuGearActiveAttackRuntime } : null,
+        projectileIndex: projectiles.length > beforeCount ? projectiles.length - 1 : -1,
+        projectile: projectiles[projectiles.length - 1] ? { ...projectiles[projectiles.length - 1] } : null
+      };
+    },
     cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
     requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),
