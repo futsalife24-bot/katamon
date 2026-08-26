@@ -1023,6 +1023,13 @@ const HOOK = `
     cpuBattleGearSnapshotForTest: () => cpuBattleGearSnapshot ? JSON.parse(JSON.stringify(cpuBattleGearSnapshot)) : null,
     cpuGearCritStateForTest: () => cpuGearCritState ? JSON.parse(JSON.stringify(cpuGearCritState)) : null,
     cpuGearStatusStateForTest: () => cpuGearStatusState ? JSON.parse(JSON.stringify(cpuGearStatusState)) : null,
+    cpuGearShieldStateForTest: () => cpuGearShieldState ? JSON.parse(JSON.stringify(cpuGearShieldState)) : null,
+    setCpuGearShieldForTest: (value) => {
+      if (!cpuGearShieldState || !Number.isFinite(value) || value < 0) return null;
+      cpuGearShieldState = Object.freeze({ ...cpuGearShieldState, currentShield: value });
+      return cpuGearShieldState.currentShield;
+    },
+    setSubweaponBarrierForTest: (id, active) => { const u = unitById(id); if (!u) return false; u.subweaponBarrierActive = !!active; return u.subweaponBarrierActive; },
     cpuBattleBaseStatsForTest: (characterId) => ({ ...characterBattleBaseStats(characterId) }),
     cpuGearRecoveryPromiseForTest: () => cpuGearRecoveryPromise,
     requestCpuGearSettlementForTest: (outcome) => requestCpuGearSettlement(outcome),
@@ -1474,6 +1481,7 @@ const HOOK = `
       updateWallBreak(WALL_IMPACT_SEC);
     },
     fireworkShardExplodeForTest: (x, y, ownerId) => fireworkShardExplode({ owner: ownerId }, 1, x, y),
+    damageGroundFlameForTest: (x, y, ownerId) => damageGroundFlameTick({ x, y, owner: ownerId, remoteShot: false, ticksDone: 0, tickTimer: 0 }),
     fireworkConfigForTest: () => ({
       proximityRadius: typeof FIREWORK_PROXIMITY_RADIUS === 'undefined' ? null : FIREWORK_PROXIMITY_RADIUS,
       armDistance: typeof FIREWORK_ARM_DISTANCE === 'undefined' ? null : FIREWORK_ARM_DISTANCE,
