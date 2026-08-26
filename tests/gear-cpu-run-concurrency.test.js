@@ -450,6 +450,11 @@ function installDeferredGearWriterLock() {
     const legacy = JSON.parse(storage.getItem('katamon_suspend_v1'));
     delete legacy.cpuGearOwnerSessionId;
     delete legacy.cpuGearSnapshotId;
+    // This fixture models a genuine pre-3C-2B ownerless save. A current
+    // Crit runtime field without fencing is malformed and must not be
+    // silently rebound to a different durable run identity.
+    delete legacy.cpuGearCritStateVersion;
+    delete legacy.cpuGearCritState;
     storage.setItem('katamon_suspend_v1', JSON.stringify(legacy));
     assert.equal(kt.clearCpuGearRunForTest(), true);
     kt.setPhase('title');

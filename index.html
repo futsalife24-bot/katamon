@@ -634,6 +634,7 @@
 <script src="shared/gear-presets.js"></script>
 <script src="shared/gear-preset-storage.js"></script>
 <script src="shared/gear-combat.js"></script>
+<script src="shared/gear-battle-rng.js"></script>
 <script src="shared/gear-battle-snapshot.js"></script>
 <script>
 (() => {
@@ -4600,6 +4601,12 @@
     if (gearDamageProfile !== 'excluded' && gearDamageProfile !== 'normal_cannonball') {
       throw Object.assign(new Error('CPU_GEAR_DAMAGE_PROFILE_INVALID'), { code: 'CPU_GEAR_DAMAGE_PROFILE_INVALID' });
     }
+    let gearCritActionOrdinal = null;
+    if (gearDamageProfile === 'normal_cannonball' && owner === 'p1' && isCpuGearEligibleRun() && cpuBattleGearSnapshot !== null) {
+      if (!cpuGearCritState) throw Object.assign(new Error('CPU_GEAR_CRIT_STATE_MISSING'), { code: 'CPU_GEAR_CRIT_STATE_MISSING' });
+      gearCritActionOrdinal = cpuGearCritState.nextActionOrdinal;
+      cpuGearCritState = Object.freeze({ ...cpuGearCritState, nextActionOrdinal: gearCritActionOrdinal + 1 });
+    }
     projectiles.push({
       x: anchor.x, y: anchor.y, vx, vy, owner,
       radius: opts.radius != null ? opts.radius : 5,
@@ -4621,6 +4628,7 @@
       // ordinary cannonball opts into the explosive normal-blast path here;
       // direct-only projectile handlers classify their own direct component.
       gearDamageProfile,
+      gearCritActionOrdinal,
       pierce: !!opts.pierce,
       prismBeam: !!opts.prismBeam,
       prismBounces: 0,
@@ -7499,6 +7507,10 @@
     if (isCpuGearEligibleRun() && cpuBattleGearSnapshot !== null) {
       snapshot.cpuBattleGearSnapshotVersion = 1;
       snapshot.cpuBattleGearSnapshot = cpuBattleGearSnapshot;
+      if (cpuGearCritState !== null) {
+        snapshot.cpuGearCritStateVersion = CPU_GEAR_CRIT_STATE_VERSION;
+        snapshot.cpuGearCritState = cpuGearCritState;
+      }
     }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
@@ -7883,6 +7895,7 @@
     // terrain, units, or phase.  Official CPU data with a malformed field
     // is never treated as a pre-Gear legacy save.
     const restoredCpuGearSnapshot = restoreCpuBattleGearSnapshot(data, options);
+    const restoredCpuGearCritState = restoreCpuGearCritState(data, options, restoredCpuGearSnapshot);
     battleMode = data.battleMode === 'coop' ? 'coop' : data.battleMode === 'free' ? 'free' : 'normal';
     selectedCustomStage = null;
     selectedCustomAdapter = null;
@@ -8007,6 +8020,7 @@
       u.fallStartY = u.y;
     }
     cpuBattleGearSnapshot = restoredCpuGearSnapshot;
+    cpuGearCritState = restoredCpuGearCritState;
     pendingCpuBattleGearSnapshot = null;
     // 跳躍後の向きは相手の座標が揃った後に再計算し、通信順で一瞬反転するのを防ぐ。
     for (const u of units) faceUnitTowardOpponent(u);
@@ -8145,6 +8159,9 @@
   // and is never refreshed from Gear storage until the next CPU match.
   let cpuBattleGearSnapshot = null;
   let pendingCpuBattleGearSnapshot = null;
+  const CPU_GEAR_CRIT_STATE_VERSION = 1;
+  let cpuGearCritState = null;
+  let pendingCpuGearCritState = null;
 
   function cpuGearModules() {
     const domain = globalThis.KatamonGearDomain;
@@ -8156,10 +8173,11 @@
     const presets = globalThis.KatamonGearPresetStorage;
     const battleSnapshot = globalThis.KatamonGearBattleSnapshot;
     const combat = globalThis.KatamonGearCombat;
-    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage || !presets || !battleSnapshot || !combat) {
+    const battleRng = globalThis.KatamonGearBattleRng;
+    if (!domain || !storage || !rewards || !transactions || !cpuRewards || !runStorage || !presets || !battleSnapshot || !combat || !battleRng) {
       throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
     }
-    return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot, combat };
+    return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot, combat, battleRng };
   }
 
   function cpuGearErrorCode(error) {
@@ -8286,18 +8304,19 @@
       // resetMatch.  Do not set this pending handoff until every validation
       // step succeeded, so failure leaves the current battle/title untouched.
       pendingCpuBattleGearSnapshot = snapshot;
+      pendingCpuGearCritState = null;
       try {
         const result = operation();
         if (isThenable(result)) {
           return Promise.resolve(result).then((value) => {
-            if (!value) pendingCpuBattleGearSnapshot = null;
+            if (!value) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; }
             return value;
-          }, (error) => { pendingCpuBattleGearSnapshot = null; throw error; });
+          }, (error) => { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; throw error; });
         }
-        if (!result) pendingCpuBattleGearSnapshot = null;
+        if (!result) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; }
         return result;
       }
-      catch (error) { pendingCpuBattleGearSnapshot = null; throw error; }
+      catch (error) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; throw error; }
     };
     if (!isThenable(captured)) return begin(captured);
     return Promise.resolve(captured).then(begin, (error) => {
@@ -8309,8 +8328,11 @@
 
   function applyPendingCpuBattleGearSnapshot() {
     const snapshot = pendingCpuBattleGearSnapshot;
+    const critState = pendingCpuGearCritState;
     pendingCpuBattleGearSnapshot = null;
-    if (!snapshot) { cpuBattleGearSnapshot = null; return; }
+    pendingCpuGearCritState = null;
+    if (!snapshot) { cpuBattleGearSnapshot = null; cpuGearCritState = null; return; }
+    if (!critState) throw Object.assign(new Error('CPU_GEAR_CRIT_STATE_MISSING'), { code: 'CPU_GEAR_CRIT_STATE_MISSING' });
     const context = cpuBattleTrustedGearContext(player.character);
     const checked = cpuGearModules().battleSnapshot.validateBattleGearSnapshot(snapshot, context);
     // Phase 3C-1 deliberately consumes only static HP / Fuel.  Every other
@@ -8320,6 +8342,14 @@
     player.fuelMax = checked.derivedStats.maxFuel;
     player.fuel = checked.derivedStats.currentFuelAtBattleStart;
     cpuBattleGearSnapshot = checked;
+    cpuGearCritState = critState;
+  }
+
+  function preparePendingCpuGearCritState(run, matchOrdinal) {
+    if (!run || typeof run.runId !== 'string' || !run.runId || !Number.isSafeInteger(matchOrdinal) || matchOrdinal < 0) {
+      throw Object.assign(new Error('CPU_GEAR_CRIT_STATE_MISSING'), { code: 'CPU_GEAR_CRIT_STATE_MISSING' });
+    }
+    pendingCpuGearCritState = Object.freeze({ version: CPU_GEAR_CRIT_STATE_VERSION, runId: run.runId, matchOrdinal, nextActionOrdinal: 0 });
   }
 
   // Phase 3C-2A keeps the battle-facing boundary deliberately narrow: only
@@ -8359,17 +8389,34 @@
     };
   }
 
+  function cpuGearCritForNormalCannonball(projectile, target, damageType, attacker) {
+    if (!projectile || projectile.gearDamageProfile !== 'normal_cannonball' || projectile.owner !== 'p1' || target?.id === projectile.owner
+      || !attacker || !Number.isSafeInteger(projectile.gearCritActionOrdinal)) return { isCrit: false, rollBp: null };
+    const combat = cpuGearModules().combat;
+    if (!combat.isCritEligibleDamageType(damageType)) return { isCrit: false, rollBp: null };
+    const rng = cpuGearModules().battleRng;
+    const rollBp = rng.rollBasisPoints({ namespace: rng.GEAR_CRIT_RNG_NAMESPACE, version: rng.GEAR_BATTLE_RNG_VERSION,
+      runId: cpuGearCritState.runId, matchOrdinal: cpuGearCritState.matchOrdinal,
+      actionOrdinal: projectile.gearCritActionOrdinal, targetUnitId: target.id, damageType, hitOrdinal: 0 });
+    return { isCrit: rollBp < attacker.critRateBp, rollBp };
+  }
+
   // Keep the one Phase 3B pipeline boundary shared by the ordinary
   // cannonball and the existing direct-projectile handlers.  The caller gives
   // the historic damage value just before its old integer HP boundary.
-  function cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage) {
+  function cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile = null) {
     const gearContext = cpuGearDamageContext(ownerId, target, damageType);
     if (!gearContext) return Math.max(1, Math.round(existingBaseDamage));
+    const attacker = cpuGearCombatForUnit(unitById(ownerId));
+    const crit = cpuGearCritForNormalCannonball(projectile, target, damageType, attacker);
+    const blastMultiplier = damageType === 'normal_blast' && projectile?.gearDamageProfile === 'normal_cannonball' && attacker
+      ? attacker.blastDamageMultiplier : 1;
     return Math.max(1, Math.round(cpuGearModules().combat.calculateDamagePipeline({
-      baseDamage: existingBaseDamage,
+      baseDamage: existingBaseDamage * blastMultiplier,
       attackMultiplier: gearContext.attackMultiplier,
       modifierBp: gearContext.modifierBp,
-      isCrit: false,
+      isCrit: crit.isCrit,
+      critDamageMultiplier: attacker ? attacker.critDamageMultiplier : 1.5,
       defenseMultiplier: gearContext.defenseMultiplier,
       damageReductionBp: gearContext.damageReductionBp,
       numericShield: 0,
@@ -8400,6 +8447,24 @@
       throw Object.assign(new Error('CPU_GEAR_SNAPSHOT_RUNTIME_MISMATCH'), { code: 'CPU_GEAR_SNAPSHOT_RUNTIME_MISMATCH' });
     }
     return checked;
+  }
+
+  function restoreCpuGearCritState(data, options, gearSnapshot) {
+    if (options?.cpuOfficialResume !== true || gearSnapshot === null) return null;
+    const hasVersion = Object.prototype.hasOwnProperty.call(data, 'cpuGearCritStateVersion');
+    const hasState = Object.prototype.hasOwnProperty.call(data, 'cpuGearCritState');
+    const run = readCpuGearRunState();
+    if (!run) throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+    // 3C-2A saves had Gear snapshots but no Crit runtime. They resume with a
+    // fresh canonical ordinal because Crit did not exist when they were made.
+    if (!hasVersion && !hasState) return Object.freeze({ version: CPU_GEAR_CRIT_STATE_VERSION, runId: run.runId, matchOrdinal: data.winStreak, nextActionOrdinal: 0 });
+    const raw = data.cpuGearCritState;
+    if (data.cpuGearCritStateVersion !== CPU_GEAR_CRIT_STATE_VERSION || !raw || Object.keys(raw).sort().join(',') !== 'matchOrdinal,nextActionOrdinal,runId,version'
+      || raw.version !== CPU_GEAR_CRIT_STATE_VERSION || raw.runId !== run.runId || !Number.isSafeInteger(raw.matchOrdinal) || raw.matchOrdinal < 0
+      || !Number.isSafeInteger(raw.nextActionOrdinal) || raw.nextActionOrdinal < 0 || raw.matchOrdinal !== data.winStreak) {
+      throw Object.assign(new Error('CPU_GEAR_CRIT_STATE_MALFORMED'), { code: 'CPU_GEAR_CRIT_STATE_MALFORMED' });
+    }
+    return Object.freeze({ ...raw });
   }
 
   function isThenable(value) {
@@ -8674,6 +8739,7 @@
       }
       const created = createCpuGearRun(0);
       try {
+        preparePendingCpuGearCritState(created, 0);
         const started = typeof startMatch === 'function' ? startMatch({ priorSuspendDiscarded }) : true;
         // A run identity without the legacy battle snapshot cannot be resumed.
         // If turn-start persistence failed, remove only the just-created state;
@@ -8685,6 +8751,7 @@
         setCpuGearStatus(null);
         return true;
       } catch (error) {
+        pendingCpuGearCritState = null;
         try {
           const current = readCpuGearRunState();
           if (current && current.runId === created.runId && current.state === runStorage.ACTIVE) {
@@ -8881,6 +8948,7 @@
       }
       state = assertCpuGearRunOwnedByThisSession(state, { claimUnowned: true });
       if (!ensureCpuGearGate('CPU BATTLE継続')) return false;
+      preparePendingCpuGearCritState(state, winStreak);
       resetMatch(true);
       return true;
     });
@@ -14999,6 +15067,12 @@
     terrainBlastMul = terrainBlastMul || blastMul;
     const remoteShot = !!(isOnline() && unitById(owner)?.control === 'remote');
     const ownerTeam = teamOfOwner(owner);
+    const normalCannonCombat = techniqueProjectile?.gearDamageProfile === 'normal_cannonball'
+      ? cpuGearCombatForUnit(unitById(owner)) : null;
+    // Gear range changes combat reach only.  Keep visual particles and
+    // terrain untouched so Blast Gear never perturbs the legacy Math.random
+    // stream or terrain balance in Phase 3C-2B.
+    const combatBlastMul = normalCannonCombat ? blastMul * normalCannonCombat.blastRangeMultiplier : blastMul;
     let drainedDamage = 0;
     let enemyDamage = 0;
     let enemyDowns = 0;
@@ -15013,7 +15087,7 @@
       const a = unitAnchor(u);
       const dist = distanceToUnitBody(u, x, y);
       const vulnerabilityMul = isCoopBossUnit(u) && u.vulnerabilityTurns > 0 ? 1.25 : 1;
-      const dmg = computeDamage(dist, blastMul, damageMul * vulnerabilityMul);
+      const dmg = computeDamage(dist, combatBlastMul, damageMul * vulnerabilityMul);
       if (dmg > 0) {
         const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
         const hpBefore = u.hp;
@@ -15025,7 +15099,7 @@
         // Math.round path; Gear uses the Phase 3B pipeline once, then meets
         // the same existing boundary without an intermediate round.
         const existingBaseDamage = dmg * takenMul;
-        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType, existingBaseDamage);
+        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType, existingBaseDamage, techniqueProjectile);
         const damageResult = applyResolvedUnitDamage(u, requestedDamage, {
           direct,
           x,
@@ -19046,6 +19120,7 @@
         // own write was queued first, this is an idempotent same-peak write;
         // if it failed before queueing, the title action still cannot lose it.
         state = runStorage.saveCpuGearRunState(runStorage.withPeakStreak(state, winStreak), localStorage);
+        preparePendingCpuGearCritState(state, winStreak);
 
         // Keep resetMatch from launching an unobserved best-effort autosave.
         // The checked write directly below becomes the single durable commit.
@@ -22856,7 +22931,7 @@
     // already-captured Phase 3C-1 HP/Fuel values.  resetMatch remains the
     // common initializer for every other mode, all of which clear this state.
     if (battleMode === 'normal' && !isOnline() && !is2v2()) applyPendingCpuBattleGearSnapshot();
-    else { pendingCpuBattleGearSnapshot = null; cpuBattleGearSnapshot = null; }
+    else { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; cpuBattleGearSnapshot = null; cpuGearCritState = null; }
     if (isBossMatch) {
       for (const u of units) {
         if (u.team !== 'cpu') continue;
