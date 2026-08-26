@@ -1449,8 +1449,8 @@ const HOOK = `
     }) : null,
     // owner は**ユニットのidの文字列**。実際の発射経路(launchShot)がそう渡している。
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
-    explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound) => (
-      explodeAt(x, y, blastMul || 1, ownerId, 1, !!normalImpactSound)
+    explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound, projectile = null) => (
+      explodeAt(x, y, blastMul || 1, ownerId, 1, !!normalImpactSound, false, blastMul || 1, 0, false, projectile)
     ),
     setNormalImpactBufferForTest: () => { normalImpactBuffer = { __decodedAudio: true }; },
     decodedAudioStartsForTest: () => globalThis.__ktDecodedAudioStarts,
