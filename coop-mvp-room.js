@@ -96,6 +96,7 @@
 
   function localGearRewardableBattleReady(browserRoot) {
     try {
+      if (!browserRoot.navigator?.locks || typeof browserRoot.navigator.locks.request !== 'function') return { allowed: false, message: 'この端末では安全なGear報酬保存を利用できません。' };
       if (browserRoot.localStorage?.getItem('katamon_gear_txn_v1') !== null) return { allowed: false, message: 'Gear取引の復旧待ちです。完了してから協力戦を開始してください。' };
       const settlement = browserRoot.KatamonGearCoopSettlementStorage;
       const gearStorage = browserRoot.KatamonGearStorage;

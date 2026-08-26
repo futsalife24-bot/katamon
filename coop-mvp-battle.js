@@ -499,7 +499,7 @@
     }
     const settled = await recoverPendingCoopGearSettlement(foundation, storage, options);
     if (settled?.pending) recorded.resultSummary.gearRewardCount = settled.pending.reward.gears.length;
-    return recorded;
+    return { ...recorded, gearRecovery: settled };
   }
 
   function mountBrowser(browserRoot) {
@@ -802,12 +802,14 @@
         // A cached result is presentation-only.  It must never hide a durable
         // cooperative Gear settlement left between foundation save and queue.
         const recovered = await recoverPendingCoopGearSettlement(foundation, browserRoot.localStorage);
+        let effectiveRecovery = recovered;
         let cached = null;
         try { cached = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cached = null; }
         if (cached?.matchId) resultSummary = cached;
         else {
           const runtime = deps.session.createRuntime({ id: state.matchId, seats: room.slots, bossId: deps.boss.BOSS_ID, difficulty: state.difficulty, stageId: state.stage.stageId });
           const recorded = await recordResultLocked(foundation, runtime, state, { createdAtMs: Math.max(0, resultOpenedAt) });
+          effectiveRecovery = recorded.gearRecovery || effectiveRecovery;
           let cachedAfterLock = null;
           try { cachedAfterLock = JSON.parse(browserRoot.localStorage.getItem(cachedResultKey()) || 'null'); } catch (_) { cachedAfterLock = null; }
           resultSummary = cachedAfterLock?.matchId ? cachedAfterLock : recorded.resultSummary;
@@ -816,12 +818,12 @@
           }
           if (recorded.newlyCompleted?.length) browserRoot.KatamonMvpShop?.notifyAchievements(recorded.newlyCompleted);
         }
-        if (recovered?.pending && resultSummary) resultSummary.gearRewardCount = recovered.pending.reward.gears.length;
+        if (effectiveRecovery?.pending && resultSummary) resultSummary.gearRewardCount = effectiveRecovery.pending.reward.gears.length;
         resultActionsEl.classList.add('open');
         controlsEl.classList.add('results');
         updateOwnReady(false).catch(() => {});
-        if (recovered?.status === 'capacity_blocked') setStatus('Gear報酬の保存待ちです。空きを作ってから再試行してください。');
-        else if (recovered?.status === 'foundation_unverified' || recovered?.status === 'gear_unverified') setStatus('Gear報酬の保存待ちです。安全確認後に再試行してください。');
+        if (effectiveRecovery?.status === 'capacity_blocked') setStatus('Gear報酬の保存待ちです。空きを作ってから再試行してください。');
+        else if (effectiveRecovery?.status === 'foundation_unverified' || effectiveRecovery?.status === 'gear_unverified') setStatus('Gear報酬の保存待ちです。安全確認後に再試行してください。');
         else setStatus('再戦受付 15秒');
         return resultSummary;
       })();
@@ -837,6 +839,7 @@
     async function updateOwnReady(ready) {
       if (ready === true) {
         try {
+          if (!browserRoot.navigator?.locks || typeof browserRoot.navigator.locks.request !== 'function') { setStatus('この端末では安全なGear報酬保存を利用できません'); return false; }
           if (browserRoot.localStorage.getItem('katamon_gear_txn_v1') !== null) { setStatus('Gear取引の復旧待ちです。完了してから再戦してください'); return false; }
           if (deps.coopSettlement.load(browserRoot.localStorage)) { setStatus('未処理のGear報酬を先に保存してください'); return false; }
           const gate = deps.gearRewards.getGearRewardGate(deps.gearStorage.loadGearState(browserRoot.localStorage));

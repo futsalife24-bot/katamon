@@ -27,6 +27,7 @@
   function createCoopSettlementIntent(input) {
     exact(input, ['matchId', 'eventId', 'difficulty', 'outcome', 'firstClear', 'createdAtMs'], 'settlement input');
     const matchId = assertString(input.matchId, 'matchId'); const eventId = assertString(input.eventId, 'eventId'); const difficulty = assertDifficulty(input.difficulty); const createdAtMs = assertTime(input.createdAtMs, 'createdAtMs');
+    if (!/^[0-9a-f]{48}$/.test(matchId)) fail('INVALID_COOP_REWARD_INPUT', 'matchId must be lowercase 48-hex');
     if (eventId !== `${matchId}:result`) fail('INVALID_COOP_REWARD_INPUT', 'eventId must be the canonical cooperative result id');
     if (input.outcome !== 'victory') fail('INVALID_COOP_OUTCOME', 'only victory creates a cooperative Gear settlement');
     if (typeof input.firstClear !== 'boolean') fail('INVALID_COOP_REWARD_INPUT', 'firstClear must be a boolean');

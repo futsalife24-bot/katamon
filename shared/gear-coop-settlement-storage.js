@@ -23,13 +23,13 @@
     if (!plain(raw.foundationEvent) || Object.keys(raw.foundationEvent).sort().join(',') !== eventKeys.slice().sort().join(',')
       || raw.foundationEvent.id !== intent.eventId || raw.foundationEvent.type !== 'coop-result'
       || raw.foundationEvent.outcome !== intent.outcome || raw.foundationEvent.difficulty !== intent.difficulty
-      || !Number.isSafeInteger(raw.foundationEvent.rescues) || raw.foundationEvent.rescues < 0
-      || !Number.isSafeInteger(raw.foundationEvent.partsDestroyed) || raw.foundationEvent.partsDestroyed < 0
-      || !Number.isSafeInteger(raw.foundationEvent.totalParts) || raw.foundationEvent.totalParts < 1
+      || !Number.isSafeInteger(raw.foundationEvent.rescues) || raw.foundationEvent.rescues < 0 || raw.foundationEvent.rescues > 99
+      || !Number.isSafeInteger(raw.foundationEvent.partsDestroyed) || raw.foundationEvent.partsDestroyed < 0 || raw.foundationEvent.partsDestroyed > 99
+      || !Number.isSafeInteger(raw.foundationEvent.totalParts) || raw.foundationEvent.totalParts < 1 || raw.foundationEvent.totalParts > 99
       || raw.foundationEvent.partsDestroyed > raw.foundationEvent.totalParts
       || typeof raw.foundationEvent.bossHpRemainingRatio !== 'number' || !Number.isFinite(raw.foundationEvent.bossHpRemainingRatio) || raw.foundationEvent.bossHpRemainingRatio < 0 || raw.foundationEvent.bossHpRemainingRatio > 1
-      || !Number.isSafeInteger(raw.foundationEvent.playerCount) || raw.foundationEvent.playerCount < 1
-      || !Number.isSafeInteger(raw.foundationEvent.aiCount) || raw.foundationEvent.aiCount < 0
+      || !Number.isSafeInteger(raw.foundationEvent.playerCount) || raw.foundationEvent.playerCount < 0 || raw.foundationEvent.playerCount > 4
+      || !Number.isSafeInteger(raw.foundationEvent.aiCount) || raw.foundationEvent.aiCount < 0 || raw.foundationEvent.aiCount > 4
       || typeof raw.foundationEvent.allPartsDestroyed !== 'boolean' || typeof raw.foundationEvent.noDown !== 'boolean' || typeof raw.foundationEvent.deadLineWin !== 'boolean') fail('INVALID_COOP_FOUNDATION_EVENT', 'settlement foundation event is invalid');
     const reward = gearStorage().decodeGearStorageState(JSON.stringify({ storageSchemaVersion: 2, inventory: [], tempBox: [], unclaimedRewards: [raw.reward], rewardLedger: {}, resources: { powder: 0, blueprintShards: 0 } })).unclaimedRewards[0];
     const expectedReward = rewards().materializeCoopGearReward(intent);

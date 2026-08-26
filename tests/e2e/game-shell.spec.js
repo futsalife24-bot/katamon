@@ -82,6 +82,17 @@ test.describe('カタモン本体の基本導線', () => {
     expect(pageErrors, `AI編成画面でpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
   });
 
+  test('Web Locks非対応端末は協力部屋作成を安全に止める', async ({ page }) => {
+    test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
+    await page.addInitScript(() => Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined }));
+    await page.goto('/tests/fixtures/coop-ai-roster-visual.html?coopMvp=1');
+    await expect(page.locator('body')).toHaveAttribute('data-qa-ready', 'true');
+    await page.locator('#coopCreate').click();
+    await expect(page.locator('#coopRoom')).toBeHidden();
+    await expect(page.locator('#coopStatus')).toContainText('安全なGear報酬保存');
+    await expect.poll(() => page.evaluate(() => globalThis.qaRoom())).toBeNull();
+  });
+
   test('協力4vs1 fixtureが通常対戦エンジン上で5体・大型立体鋼鉄として起動する', async ({ page }) => {
     test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
     const pageErrors = [];
