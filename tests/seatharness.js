@@ -1024,6 +1024,21 @@ const HOOK = `
     cpuGearCritStateForTest: () => cpuGearCritState ? JSON.parse(JSON.stringify(cpuGearCritState)) : null,
     cpuGearStatusStateForTest: () => cpuGearStatusState ? JSON.parse(JSON.stringify(cpuGearStatusState)) : null,
     cpuGearShieldStateForTest: () => cpuGearShieldState ? JSON.parse(JSON.stringify(cpuGearShieldState)) : null,
+    cpuGearRuntimeEffectsStateForTest: () => cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null,
+    setCpuGearRuntimeEffectsForTest: (effects) => {
+      const p1 = unitById('p1'); const combat = cpuGearCombatForUnit(p1);
+      if (!cpuGearRuntimeEffectsState || !combat) return null;
+      const checked = cpuGearModules().combat.beginAttackAction({ combat, state: effects }).state;
+      if (checked.rescueNextAttackDamageBp !== 0) return null;
+      cpuGearRuntimeEffectsState = Object.freeze({ ...cpuGearRuntimeEffectsState, effects: checked });
+      return JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState));
+    },
+    beginCpuGearAttackForTest: () => { beginCpuGearAttackAction(unitById('p1')); return cpuGearActiveAttackRuntime ? { ...cpuGearActiveAttackRuntime } : null; },
+    completeCpuGearAttackForTest: () => { completeCpuGearAttackAction(unitById('p1')); return cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null; },
+    recordCpuGearLastStandDamageForTest: (ownerId, actualDamage, damageType = 'direct_projectile', fromEnemyAttackAction = true) => {
+      recordCpuGearLastStandDamage({ ownerId, target: unitById('p1'), actualDamage, damageType, fromEnemyAttackAction });
+      return cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null;
+    },
     setCpuGearShieldForTest: (value) => {
       if (!cpuGearShieldState || !Number.isFinite(value) || value < 0) return null;
       cpuGearShieldState = Object.freeze({ ...cpuGearShieldState, currentShield: value });

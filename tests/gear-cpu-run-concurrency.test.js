@@ -463,6 +463,11 @@ function installDeferredGearWriterLock() {
     // pre-3C-3C1 legacy suspend has neither half of that field.
     delete legacy.cpuGearShieldStateVersion;
     delete legacy.cpuGearShieldState;
+    // 3C-3D adds action-spanning Last Stand state.  This fixture remains a
+    // genuine pre-3C-3D ownerless legacy suspend, so neither current field
+    // may be present during the old-run rebind recovery path.
+    delete legacy.cpuGearRuntimeEffectsStateVersion;
+    delete legacy.cpuGearRuntimeEffectsState;
     storage.setItem('katamon_suspend_v1', JSON.stringify(legacy));
     assert.equal(kt.clearCpuGearRunForTest(), true);
     kt.setPhase('title');

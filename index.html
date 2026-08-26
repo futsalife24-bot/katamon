@@ -4928,6 +4928,7 @@
       const dmg = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: p.owner, target: u, requestedDamage: requested }));
       if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
       u.hp = Math.max(0, u.hp - dmg);
+      recordCpuGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: dmg, damageType: 'normal_blast', fromEnemyAttackAction: true });
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
       creditDamage(p.owner, u, dmg);
     }
@@ -5194,7 +5195,7 @@
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
     // Rail is a status/subweapon path, explicitly outside 3C-2A Gear damage.
     const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul)), {
-      ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot
+      ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
     const anchor = unitAnchor(target);
@@ -5391,6 +5392,10 @@
     }
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
     const activateJump = deferred ? !!useJump : (!!useJump && unit.jumpAvailable !== false && unit.moveLockTurns <= 0);
+    // Capture both Last Stand buckets once at an offensive action boundary.
+    // Deferred special replay is the same action, never a second begin.
+    const nonDamagingSpecial = activateSpecial && (def.key === 'hamulton' || def.key === 'shinigami');
+    if (!deferred && !activateJump && !nonDamagingSpecial) beginCpuGearAttackAction(unit);
     const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
 
     if (tutorialActive() && unit.id === 'p1' && !deferred) tutorial.stepShots++;
@@ -6054,7 +6059,10 @@
       const actualDamage = mitigateDamageAfterCpuGearShield(target, shieldedRequested);
       const before = target.hp;
       target.hp = Math.max(0, target.hp - actualDamage);
-      return { actualDamage: before - target.hp, target: 'body', bodyDamage: before - target.hp, partDamage: 0 };
+      const hpDamage = before - target.hp;
+      recordCpuGearLastStandDamage({ ownerId: options.ownerId, target, actualDamage: hpDamage,
+        damageType: options.damageType || 'fixed', fromEnemyAttackAction: options.fromEnemyAttackAction === true });
+      return { actualDamage: hpDamage, target: 'body', bodyDamage: hpDamage, partDamage: 0 };
     }
     const state = ensureCoopBossLiveState(target);
     const api = coopBossLiveApi();
@@ -6208,7 +6216,7 @@
       const directDamage = computeDamage(0, 1, p.damageMul);
       const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
       const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', directDamage * takenMul), {
-        ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot
+        ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
       });
       const actualDamage = damageResult.actualDamage;
       const a = unitAnchor(target);
@@ -6231,7 +6239,7 @@
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
     const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', computeDamage(0, p.blastMul, p.damageMul) * takenMul), {
-      ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot
+      ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
     const anchor = unitAnchor(target);
@@ -6278,7 +6286,7 @@
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
     const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', COOL_KAI_ONIGIRI_DAMAGE * takenMul), {
-      ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot
+      ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
     const anchor = unitAnchor(target);
@@ -6305,7 +6313,7 @@
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
     const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul), {
-      ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot
+      ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
     const anchor = unitAnchor(target);
@@ -7597,6 +7605,13 @@
         snapshot.cpuGearShieldStateVersion = CPU_GEAR_SHIELD_STATE_VERSION;
         snapshot.cpuGearShieldState = cpuGearShieldState;
       }
+      if (cpuGearRuntimeEffectsState !== null) {
+        // Official CPU snapshots are taken only at turn start: an active
+        // attack context must never be serialized halfway through an action.
+        if (cpuGearActiveAttackRuntime !== null) throw Object.assign(new Error('CPU_GEAR_ACTIVE_ATTACK_SUSPEND_FORBIDDEN'), { code: 'CPU_GEAR_ACTIVE_ATTACK_SUSPEND_FORBIDDEN' });
+        snapshot.cpuGearRuntimeEffectsStateVersion = CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION;
+        snapshot.cpuGearRuntimeEffectsState = cpuGearRuntimeEffectsState;
+      }
     }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
@@ -7984,6 +7999,7 @@
     const restoredCpuGearCritState = restoreCpuGearCritState(data, options, restoredCpuGearSnapshot);
     const restoredCpuGearStatusState = restoreCpuGearStatusState(data, options, restoredCpuGearSnapshot);
     const restoredCpuGearShieldState = restoreCpuGearShieldState(data, options, restoredCpuGearSnapshot);
+    const restoredCpuGearRuntimeEffectsState = restoreCpuGearRuntimeEffectsState(data, options, restoredCpuGearSnapshot);
     battleMode = data.battleMode === 'coop' ? 'coop' : data.battleMode === 'free' ? 'free' : 'normal';
     selectedCustomStage = null;
     selectedCustomAdapter = null;
@@ -8111,6 +8127,8 @@
     cpuGearCritState = restoredCpuGearCritState;
     cpuGearStatusState = restoredCpuGearStatusState;
     cpuGearShieldState = restoredCpuGearShieldState;
+    cpuGearRuntimeEffectsState = restoredCpuGearRuntimeEffectsState;
+    cpuGearActiveAttackRuntime = null;
     pendingCpuBattleGearSnapshot = null;
     // 跳躍後の向きは相手の座標が揃った後に再計算し、通信順で一瞬反転するのを防ぐ。
     for (const u of units) faceUnitTowardOpponent(u);
@@ -8261,6 +8279,12 @@
   const CPU_GEAR_SHIELD_STATE_VERSION = 1;
   let cpuGearShieldState = null;
   let pendingCpuGearShieldState = null;
+  // Last Stand is match-local runtime, deliberately separate from the
+  // immutable Gear Battle Snapshot and from Crit/Status ordinal state.
+  const CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION = 1;
+  let cpuGearRuntimeEffectsState = null;
+  let pendingCpuGearRuntimeEffectsState = null;
+  let cpuGearActiveAttackRuntime = null;
 
   function cpuGearModules() {
     const domain = globalThis.KatamonGearDomain;
@@ -8406,18 +8430,19 @@
       pendingCpuGearCritState = null;
       pendingCpuGearStatusState = null;
       pendingCpuGearShieldState = null;
+      pendingCpuGearRuntimeEffectsState = null;
       try {
         const result = operation();
         if (isThenable(result)) {
           return Promise.resolve(result).then((value) => {
-            if (!value) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; }
+            if (!value) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; pendingCpuGearRuntimeEffectsState = null; }
             return value;
-          }, (error) => { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; throw error; });
+          }, (error) => { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; pendingCpuGearRuntimeEffectsState = null; throw error; });
         }
-        if (!result) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; }
+        if (!result) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; pendingCpuGearRuntimeEffectsState = null; }
         return result;
       }
-      catch (error) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; throw error; }
+      catch (error) { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; pendingCpuGearRuntimeEffectsState = null; throw error; }
     };
     if (!isThenable(captured)) return begin(captured);
     return Promise.resolve(captured).then(begin, (error) => {
@@ -8432,14 +8457,17 @@
     const critState = pendingCpuGearCritState;
     const statusState = pendingCpuGearStatusState;
     const shieldState = pendingCpuGearShieldState;
+    const runtimeEffectsState = pendingCpuGearRuntimeEffectsState;
     pendingCpuBattleGearSnapshot = null;
     pendingCpuGearCritState = null;
     pendingCpuGearStatusState = null;
     pendingCpuGearShieldState = null;
-    if (!snapshot) { cpuBattleGearSnapshot = null; cpuGearCritState = null; cpuGearStatusState = null; cpuGearShieldState = null; return; }
+    pendingCpuGearRuntimeEffectsState = null;
+    if (!snapshot) { cpuBattleGearSnapshot = null; cpuGearCritState = null; cpuGearStatusState = null; cpuGearShieldState = null; cpuGearRuntimeEffectsState = null; cpuGearActiveAttackRuntime = null; return; }
     if (!critState) throw Object.assign(new Error('CPU_GEAR_CRIT_STATE_MISSING'), { code: 'CPU_GEAR_CRIT_STATE_MISSING' });
     if (!statusState) throw Object.assign(new Error('CPU_GEAR_STATUS_STATE_MISSING'), { code: 'CPU_GEAR_STATUS_STATE_MISSING' });
     if (!shieldState) throw Object.assign(new Error('CPU_GEAR_SHIELD_STATE_MISSING'), { code: 'CPU_GEAR_SHIELD_STATE_MISSING' });
+    if (!runtimeEffectsState) throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
     const context = cpuBattleTrustedGearContext(player.character);
     const checked = cpuGearModules().battleSnapshot.validateBattleGearSnapshot(snapshot, context);
     // Phase 3C-1 deliberately consumes only static HP / Fuel.  Every other
@@ -8452,6 +8480,8 @@
     cpuGearCritState = critState;
     cpuGearStatusState = statusState;
     cpuGearShieldState = shieldState;
+    cpuGearRuntimeEffectsState = runtimeEffectsState;
+    cpuGearActiveAttackRuntime = null;
   }
 
   function preparePendingCpuGearCritState(run, matchOrdinal) {
@@ -8476,6 +8506,16 @@
     pendingCpuGearShieldState = Object.freeze({ version: CPU_GEAR_SHIELD_STATE_VERSION, runId: run.runId, matchOrdinal, currentShield: shield.shieldAfter });
   }
 
+  function preparePendingCpuGearRuntimeEffectsState(run, matchOrdinal) {
+    if (!run || typeof run.runId !== 'string' || !run.runId || !Number.isSafeInteger(matchOrdinal) || matchOrdinal < 0) {
+      throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
+    }
+    pendingCpuGearRuntimeEffectsState = Object.freeze({
+      version: CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION, runId: run.runId, matchOrdinal,
+      effects: cpuGearModules().combat.createRuntimeEffectsState()
+    });
+  }
+
   function takeCpuGearStatusActionOrdinal(owner) {
     if (owner === 'p1' || !isCpuGearEligibleRun() || cpuBattleGearSnapshot === null) return null;
     if (!cpuGearStatusState) throw Object.assign(new Error('CPU_GEAR_STATUS_STATE_MISSING'), { code: 'CPU_GEAR_STATUS_STATE_MISSING' });
@@ -8491,6 +8531,46 @@
   function cpuGearCombatForUnit(unit) {
     if (!unit || unit.id !== 'p1' || !isCpuGearEligibleRun() || !cpuBattleGearSnapshot) return null;
     return cpuBattleGearSnapshot.derivedStats;
+  }
+
+  function cpuGearRuntimeEffectsForUnit(unit) {
+    if (!unit || unit.id !== 'p1' || !isCpuGearEligibleRun() || cpuBattleGearSnapshot === null || cpuGearRuntimeEffectsState === null) return null;
+    return cpuGearRuntimeEffectsState.effects;
+  }
+
+  function beginCpuGearAttackAction(unit) {
+    const combat = cpuGearCombatForUnit(unit);
+    const state = cpuGearRuntimeEffectsForUnit(unit);
+    if (!combat || !state || cpuGearActiveAttackRuntime) return;
+    const api = cpuGearModules().combat;
+    const runtime = api.resolveRuntimeEffects({ combat, state, currentHp: unit.hp });
+    const action = api.beginAttackAction({ combat, state: runtime.state });
+    cpuGearRuntimeEffectsState = Object.freeze({ ...cpuGearRuntimeEffectsState, effects: action.state });
+    cpuGearActiveAttackRuntime = Object.freeze({ ownerId: unit.id, attackMultiplier: runtime.attackMultiplier, actionDamageBp: action.actionDamageBp });
+  }
+
+  function completeCpuGearAttackAction(unit) {
+    if (!cpuGearActiveAttackRuntime || cpuGearActiveAttackRuntime.ownerId !== unit?.id) return;
+    const combat = cpuGearCombatForUnit(unit);
+    const state = cpuGearRuntimeEffectsForUnit(unit);
+    if (!combat || !state) throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
+    const effects = cpuGearModules().combat.completeAttackAction({ combat, state });
+    cpuGearRuntimeEffectsState = Object.freeze({ ...cpuGearRuntimeEffectsState, effects });
+    cpuGearActiveAttackRuntime = null;
+  }
+
+  // Last Stand 4pc is deliberately driven by explicit attack-action provenance.
+  // DoT/environment/self damage never gets inferred as an enemy attack.
+  function recordCpuGearLastStandDamage({ ownerId, target, actualDamage, damageType, fromEnemyAttackAction }) {
+    if (!target || target.id !== 'p1' || !isCpuGearEligibleRun() || !cpuBattleGearSnapshot || !cpuGearRuntimeEffectsState) return;
+    const ownerTeam = teamOfOwner(ownerId);
+    if (ownerTeam === null || ownerTeam === target.team || !(actualDamage > 0)) return;
+    const combat = cpuGearCombatForUnit(target);
+    const resolved = cpuGearModules().combat.resolveRuntimeEffects({
+      combat, state: cpuGearRuntimeEffectsState.effects, currentHp: target.hp,
+      actualEnemyDamage: actualDamage, damageType, fromEnemyAttackAction: fromEnemyAttackAction === true
+    });
+    cpuGearRuntimeEffectsState = Object.freeze({ ...cpuGearRuntimeEffectsState, effects: resolved.state });
   }
 
   // Damage eligibility is an explicit projectile contract, not a sound/UI
@@ -8514,8 +8594,8 @@
     const outgoing = attacker ? combat.conditionalDamageModifiers({ combat: attacker, damageType }) : { outgoingDamageBp: 0 };
     const incoming = defender ? combat.conditionalDamageModifiers({ combat: defender, damageType }) : { incomingDamageReductionBp: 0 };
     return {
-      attackMultiplier: attacker ? attacker.attackMultiplier : 1,
-      modifierBp: outgoing.outgoingDamageBp,
+      attackMultiplier: attacker && cpuGearActiveAttackRuntime?.ownerId === ownerId ? cpuGearActiveAttackRuntime.attackMultiplier : (attacker ? attacker.attackMultiplier : 1),
+      modifierBp: outgoing.outgoingDamageBp + (attacker && cpuGearActiveAttackRuntime?.ownerId === ownerId ? cpuGearActiveAttackRuntime.actionDamageBp : 0),
       defenseMultiplier: defender ? defender.defenseMultiplier : 1,
       damageReductionBp: incoming.incomingDamageReductionBp,
     };
@@ -8691,6 +8771,33 @@
       throw Object.assign(new Error('CPU_GEAR_SHIELD_STATE_MALFORMED'), { code: 'CPU_GEAR_SHIELD_STATE_MALFORMED' });
     }
     return Object.freeze({ ...raw });
+  }
+
+  function restoreCpuGearRuntimeEffectsState(data, options, gearSnapshot) {
+    if (options?.cpuOfficialResume !== true) return null;
+    const hasVersion = Object.prototype.hasOwnProperty.call(data, 'cpuGearRuntimeEffectsStateVersion');
+    const hasState = Object.prototype.hasOwnProperty.call(data, 'cpuGearRuntimeEffectsState');
+    if (gearSnapshot === null) {
+      if (hasVersion || hasState) throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED' });
+      return null;
+    }
+    const run = readCpuGearRunState();
+    if (!run) throw Object.assign(new Error('CPU_GEAR_RUN_NOT_FOUND'), { code: 'CPU_GEAR_RUN_NOT_FOUND' });
+    // Pre-3C-3D saves legitimately contain no action-spanning Gear buffs.
+    if (!hasVersion && !hasState) return Object.freeze({ version: CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION, runId: run.runId, matchOrdinal: data.winStreak, effects: cpuGearModules().combat.createRuntimeEffectsState() });
+    const raw = data.cpuGearRuntimeEffectsState;
+    if (data.cpuGearRuntimeEffectsStateVersion !== CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION || !raw
+      || Object.keys(raw).sort().join(',') !== 'effects,matchOrdinal,runId,version'
+      || raw.version !== CPU_GEAR_RUNTIME_EFFECTS_STATE_VERSION || raw.runId !== run.runId
+      || !Number.isSafeInteger(raw.matchOrdinal) || raw.matchOrdinal < 0 || raw.matchOrdinal !== data.winStreak) {
+      throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED' });
+    }
+    let effects;
+    try { effects = cpuGearModules().combat.beginAttackAction({ combat: gearSnapshot.derivedStats, state: raw.effects }).state; }
+    catch (_) { throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED' }); }
+    // Rescue 4pc has no eligible Gear-bearing ally in offline CPU 1v1.
+    if (effects.rescueNextAttackDamageBp !== 0) throw Object.assign(new Error('CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED'), { code: 'CPU_GEAR_RUNTIME_EFFECTS_STATE_MALFORMED' });
+    return Object.freeze({ version: raw.version, runId: raw.runId, matchOrdinal: raw.matchOrdinal, effects });
   }
 
   function isThenable(value) {
@@ -8968,6 +9075,7 @@
         preparePendingCpuGearCritState(created, 0);
         preparePendingCpuGearStatusState(created, 0);
         preparePendingCpuGearShieldState(created, 0);
+        preparePendingCpuGearRuntimeEffectsState(created, 0);
         const started = typeof startMatch === 'function' ? startMatch({ priorSuspendDiscarded }) : true;
         // A run identity without the legacy battle snapshot cannot be resumed.
         // If turn-start persistence failed, remove only the just-created state;
@@ -9181,6 +9289,7 @@
       preparePendingCpuGearCritState(state, winStreak);
       preparePendingCpuGearStatusState(state, winStreak);
       preparePendingCpuGearShieldState(state, winStreak);
+      preparePendingCpuGearRuntimeEffectsState(state, winStreak);
       resetMatch(true);
       return true;
     });
@@ -15236,6 +15345,7 @@
       const requested = Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1)));
       const damage = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: owner, target: u, requestedDamage: requested }));
       u.hp = Math.max(0, u.hp - damage);
+      recordCpuGearLastStandDamage({ ownerId: owner, target: u, actualDamage: damage, damageType: 'status', fromEnemyAttackAction: true });
       // Status Resistance is a hostile-status gate only.  EMP's legacy damage
       // always resolves first and is never reduced or removed by resistance.
       const statusId = effect === 'turnSkip' ? 'action_skip' : 'move_lock';
@@ -15368,6 +15478,8 @@
           y,
           projectileRadius: techniqueProjectile?.radius || 0,
           remoteShot,
+          damageType: gearDamageType || 'fixed',
+          fromEnemyAttackAction: owner !== 'p1' && !!techniqueProjectile,
         });
         const actualDamage = damageResult.actualDamage;
         const damageApplied = hpBefore - u.hp;
@@ -15885,6 +15997,9 @@
   function endTurn(onAdvanced) {
     if (matchOver) { if (onAdvanced) onAdvanced(); return; }
     const acting = activeUnit();
+    // Misses and zero-damage attacks still consume only after their complete
+    // action resolution reaches this boundary; direct+blast stays covered.
+    completeCpuGearAttackAction(acting);
     if (acting.moveLockTurns > 0) acting.moveLockTurns--;
     if (isCoop4v1() && acting.team === 'player') {
       const boss = unitById(COOP_BOSS_UNIT_ID);
@@ -19393,6 +19508,7 @@
         preparePendingCpuGearCritState(state, winStreak);
         preparePendingCpuGearStatusState(state, winStreak);
         preparePendingCpuGearShieldState(state, winStreak);
+        preparePendingCpuGearRuntimeEffectsState(state, winStreak);
 
         // Keep resetMatch from launching an unobserved best-effort autosave.
         // The checked write directly below becomes the single durable commit.
@@ -23203,7 +23319,7 @@
     // already-captured Phase 3C-1 HP/Fuel values.  resetMatch remains the
     // common initializer for every other mode, all of which clear this state.
     if (battleMode === 'normal' && !isOnline() && !is2v2()) applyPendingCpuBattleGearSnapshot();
-    else { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; cpuBattleGearSnapshot = null; cpuGearCritState = null; cpuGearStatusState = null; cpuGearShieldState = null; }
+    else { pendingCpuBattleGearSnapshot = null; pendingCpuGearCritState = null; pendingCpuGearStatusState = null; pendingCpuGearShieldState = null; pendingCpuGearRuntimeEffectsState = null; cpuBattleGearSnapshot = null; cpuGearCritState = null; cpuGearStatusState = null; cpuGearShieldState = null; cpuGearRuntimeEffectsState = null; cpuGearActiveAttackRuntime = null; }
     if (isBossMatch) {
       for (const u of units) {
         if (u.team !== 'cpu') continue;
