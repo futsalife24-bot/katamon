@@ -4505,6 +4505,10 @@
   });
   const B_IMPACT_TERRAIN_BLAST_MUL = 1.5;
   const B_IMPACT_KNOCKBACK_SPEED = 80;
+  // Gearで通常砲弾に追加するノックバックの基準。既存Impactサブ武器(160)
+  // より明確に弱く、Impact 4set相当(+20%)でも直撃は横3/上12に留まる。
+  // この値はGearの追加分だけに使い、既存必殺のknockbackSpeedは変更しない。
+  const NORMAL_GEAR_KNOCKBACK_BASE = 60;
   const PRISM_BEAM_MAX_BOUNCES = 4;
   const PRISM_BEAM_MAX_DISTANCE = 1320;
 
@@ -8422,6 +8426,35 @@
       numericShield: 0,
       hp: target.hp,
     }).hpDamage));
+  }
+
+  // Knockback uses the same narrow CPU-human Gear gate as the damage
+  // pipeline.  The pure combat module owns every multiplier; this adapter
+  // only chooses the battle-facing hit kind and supplies the legacy speed.
+  function cpuGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed) {
+    const attacker = cpuGearCombatForUnit(unitById(ownerId));
+    const defender = cpuGearCombatForUnit(target);
+    if (!attacker && !defender) return null;
+    const normalCannonball = projectile?.gearDamageProfile === 'normal_cannonball';
+    let hitKind = null;
+    let baseKnockback = 0;
+    if (normalCannonball && damageType === 'direct_projectile') {
+      hitKind = 'direct_hit';
+      baseKnockback = NORMAL_GEAR_KNOCKBACK_BASE;
+    } else if (normalCannonball && damageType === 'normal_blast') {
+      hitKind = 'blast_only';
+      baseKnockback = NORMAL_GEAR_KNOCKBACK_BASE;
+    } else if (legacyKnockbackSpeed > 0) {
+      hitKind = 'existing_knockback';
+      baseKnockback = legacyKnockbackSpeed;
+    }
+    if (!hitKind) return null;
+    return cpuGearModules().combat.knockbackPolicy({
+      hitKind,
+      baseKnockback,
+      knockbackPowerBp: attacker ? attacker.knockbackPowerBp : 0,
+      knockbackResistanceBp: defender ? defender.knockbackResistanceBp : 0,
+    });
   }
 
   function restoreCpuBattleGearSnapshot(data, options) {
@@ -15049,17 +15082,39 @@
     }
   }
 
-  function applyExplosionKnockback(u, blastX, speed, owner) {
-    if (!u || isCoopBossUnit(u) || u.hp <= 0 || !(speed > 0)) return;
+  function applyExplosionKnockbackComponents(u, blastX, horizontalSpeed, verticalSpeed, owner) {
+    if (!u || isCoopBossUnit(u) || u.hp <= 0 || !(horizontalSpeed > 0 || verticalSpeed > 0)) return;
     const ownerUnit = unitById(owner);
     const dx = u.x - blastX;
     const direction = Math.abs(dx) > 0.5
       ? Math.sign(dx)
       : (ownerUnit && ownerUnit.x > u.x ? -1 : 1);
-    u.knockbackVx = direction * speed;
-    u.vy = Math.min(Number.isFinite(u.vy) ? u.vy : 0, -speed * 1.1);
+    if (horizontalSpeed > 0) u.knockbackVx = direction * horizontalSpeed;
+    if (verticalSpeed > 0) u.vy = Math.min(Number.isFinite(u.vy) ? u.vy : 0, -verticalSpeed);
     u.grounded = false;
     u.fallStartY = u.y;
+  }
+
+  function applyExplosionKnockback(u, blastX, speed, owner) {
+    if (!(speed > 0)) return;
+    // Preserve the legacy explosion trajectory exactly.  Gear direct-popup
+    // uses the component helper below with its own explicit 25%/100% split.
+    applyExplosionKnockbackComponents(u, blastX, speed, speed * 1.1, owner);
+  }
+
+  function applyCpuGearKnockback(u, blastX, owner, policy) {
+    if (!policy) return;
+    if (policy.mode === 'existing_knockback') {
+      applyExplosionKnockback(u, blastX, policy.finalKnockback, owner);
+      return;
+    }
+    const added = policy.normalProjectileAdditional;
+    if (!added) return;
+    if (policy.mode === 'direct_popup') {
+      applyExplosionKnockbackComponents(u, blastX, added.horizontal, added.vertical, owner);
+      return;
+    }
+    if (policy.mode === 'radial') applyExplosionKnockback(u, blastX, added.radial, owner);
   }
 
   function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0, noTerrain = false, techniqueProjectile = null) {
@@ -15119,7 +15174,14 @@
           spawnDamageText(a.x, damageY, actualDamage);
         }
         creditDamage(owner, u, actualDamage);
-        applyExplosionKnockback(u, x, knockbackSpeed, owner);
+        // Gear knockback is strictly post-damage. A direct target is labelled
+        // direct_projectile and therefore receives exactly one popup; every
+        // other affected unit is normal_blast and receives at most one radial.
+        if (actualDamage > 0) {
+          const knockbackPolicy = cpuGearKnockbackPolicy(owner, u, gearDamageType, techniqueProjectile, knockbackSpeed);
+          if (knockbackPolicy) applyCpuGearKnockback(u, x, owner, knockbackPolicy);
+          else applyExplosionKnockback(u, x, knockbackSpeed, owner);
+        }
       }
     }
     // 勝敗確定(checkMatchEnd)より先に集計する。ここが後だと、とどめの一発が
