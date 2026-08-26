@@ -47,7 +47,9 @@ const APP_SHELL = [
   './shared/gear-cpu-run-storage.js',
   './shared/gear-coop-rewards.js',
   './shared/gear-coop-settlement-storage.js',
-  './shared/gear-coop-recovery.js'
+  './shared/gear-coop-recovery.js',
+  './shared/gear-presets.js',
+  './shared/gear-preset-storage.js'
 ];
 // 初回はオフライン起動に必要な素材を保存し、以後は同じURLの端末内コピーを再利用する。
 const CORE_ASSETS = [

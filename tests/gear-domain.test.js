@@ -288,6 +288,7 @@ test('可変メイン候補は各部位の全候補に到達できる', () => {
 });
 test('未知IDと範囲外の★・強化値を受け入れない', () => {
   expectCode('UNKNOWN_SLOT_ID', () => makeGear({ slotId: 'unknown-slot' }));
+  expectCode('INVALID_GEAR_ID', () => makeGear({ gearId: 'g'.repeat(gear.GEAR_ID_MAX_LENGTH + 1) }));
   expectCode('UNKNOWN_WEIGHT_ID', () => gear.validateQualityProfile({ id: 'bad-star', starWeights: [{ id: 7, weight: 1 }], rarityWeights: [{ id: 'normal', weight: 1 }] }));
   expectCode('INVALID_INTEGER', () => gear.mainValueAtLevel('engine', 'attack_pct', 7, 0));
   expectCode('INVALID_INTEGER', () => gear.mainValueAtLevel('engine', 'attack_pct', 6, 13));
