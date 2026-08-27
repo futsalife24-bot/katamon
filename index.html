@@ -5252,7 +5252,7 @@
     const knockback = Math.max(0, Math.min(500, Number(impact.knockback) || 0));
 
     if (skill.selfEffect && Number(skill.selfEffect.heal) > 0) {
-      const healing = applyCpuGearHealing({ sourceUnitId: owner, target: unit, baseHealing: Number(skill.selfEffect.heal) });
+      const healing = applyBattleGearHealing({ sourceUnitId: owner, target: unit, baseHealing: Number(skill.selfEffect.heal) });
       if (healing.actualHealing > 0) spawnHealText(unit.x, unit.y - 32, healing.actualHealing);
     }
 
@@ -6112,30 +6112,60 @@
     return mitigateDamageAfterBattleGearShield(unit, residualDamage);
   }
 
-  // Healing is a battle event, not every assignment to hp. This narrow
-  // adapter leaves start/reset/resume/respawn restoration outside Gear Healing
-  // and delegates the complete multiplier formula to the Phase 3B helper.
-  function applyCpuGearHealing({ sourceUnitId, target, baseHealing }) {
-    const source = unitById(sourceUnitId);
+  // Healing is a battle event, not every assignment to hp. This narrow final
+  // boundary leaves start/reset/resume/respawn restoration outside Gear Healing
+  // and rounds only after both canonical multipliers have been applied.
+  function applyResolvedBattleHealing({ target, baseHealing, sourceMultiplier = 1, targetMultiplier = 1 }) {
     const base = Math.max(0, Number(baseHealing) || 0);
     if (!target || !Number.isFinite(target.hp) || !Number.isFinite(target.maxHp)) {
       return { requestedHealing: 0, actualHealing: 0 };
     }
-    const sourceCombat = cpuGearCombatForUnit(source);
-    const targetCombat = cpuGearCombatForUnit(target);
-    const resolved = sourceCombat || targetCombat
-      ? cpuGearModules().combat.finalHealing(
-        base,
-        sourceCombat ? sourceCombat.healingMultiplier : 1,
-        targetCombat ? targetCombat.receivedHealingMultiplier : 1
-      )
-      : base;
-    // Keep the historic event-level integer boundary. Never round per stat or
-    // per multiplier, otherwise a self-heal would lose the combined precision.
+    const resolved = globalThis.KatamonGearCombat.finalHealing(base, sourceMultiplier, targetMultiplier);
     const requestedHealing = Math.max(0, Math.round(resolved));
     const before = target.hp;
     target.hp = Math.min(target.maxHp, before + requestedHealing);
     return { requestedHealing, actualHealing: target.hp - before };
+  }
+
+  // Preserve the completed Phase 3C CPU helper and its p1-only eligibility.
+  function applyCpuGearHealing({ sourceUnitId, target, baseHealing }) {
+    const source = unitById(sourceUnitId);
+    const sourceCombat = cpuGearCombatForUnit(source);
+    const targetCombat = cpuGearCombatForUnit(target);
+    return applyResolvedBattleHealing({
+      target,
+      baseHealing,
+      sourceMultiplier: sourceCombat ? sourceCombat.healingMultiplier : 1,
+      targetMultiplier: targetCombat ? targetCombat.receivedHealingMultiplier : 1,
+    });
+  }
+
+  function applyFirebaseOnlineGearHealing({ sourceUnitId, target, baseHealing }) {
+    if (!online || online.kind !== 'firebase' || !firebaseGearEnabled()) return null;
+    if (!online.battleGearSnapshotsByUnit) {
+      throw Object.assign(new Error('ONLINE Gear HealingのBattle Snapshotがありません'), { code: 'ONLINE_GEAR_HEALING_SNAPSHOT_MISSING' });
+    }
+    const source = unitById(sourceUnitId);
+    if (!source || !target || source.id !== target.id) {
+      throw Object.assign(new Error('ONLINE Gear Healingは正規self-heal eventだけに適用できます'), { code: 'ONLINE_GEAR_HEALING_EVENT_UNSUPPORTED' });
+    }
+    const sourceCombat = onlineGearStaticCombatForUnit(source);
+    const targetCombat = onlineGearStaticCombatForUnit(target);
+    if (!sourceCombat || !targetCombat) {
+      throw Object.assign(new Error('ONLINE Gear HealingのBattle Snapshotがありません'), { code: 'ONLINE_GEAR_HEALING_SNAPSHOT_MISSING' });
+    }
+    return applyResolvedBattleHealing({
+      target,
+      baseHealing,
+      sourceMultiplier: sourceCombat.healingMultiplier,
+      targetMultiplier: targetCombat.receivedHealingMultiplier,
+    });
+  }
+
+  function applyBattleGearHealing(options) {
+    const onlineResult = applyFirebaseOnlineGearHealing(options);
+    if (onlineResult !== null) return onlineResult;
+    return applyCpuGearHealing(options);
   }
 
   // 通常キャラの既存ダメージ経路は一切変えず、協力要塞への「直接着弾」だけを
@@ -16590,7 +16620,7 @@
       if (ownerUnit) {
         // drainedDamage aggregates only actual HP loss. Shield absorption and
         // Barrier-only prevention never become a life-steal base.
-        const healing = applyCpuGearHealing({ sourceUnitId: owner, target: ownerUnit, baseHealing: drainedDamage });
+        const healing = applyBattleGearHealing({ sourceUnitId: owner, target: ownerUnit, baseHealing: drainedDamage });
         if (healing.actualHealing > 0) spawnHealText(ownerUnit.x, ownerUnit.y - 32, healing.actualHealing);
       }
     }
