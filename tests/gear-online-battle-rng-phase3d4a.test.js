@@ -16,6 +16,8 @@ let passed = 0;
 const cases = [];
 const test = (name, fn) => { cases.push([name, fn]); };
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const normalizeEol = (text) => text.replace(/\r\n?/g, '\n');
+const readIndexSource = () => normalizeEol(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));
 
 function actionIdentity(overrides = {}) {
   return onlineRng.createOnlineGearActionIdentity({
@@ -204,7 +206,7 @@ test('Phase 3D-4A does not activate Crit, Blast, runtime effects, shield, or Mat
 });
 
 test('local and accepted remote actions retain only local canonical RNG identity; Firebase packet schema is unchanged', () => {
-  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const index = readIndexSource();
   const localBlock = /function netSendFire\([\s\S]+?\n  }\n\n/.exec(index)?.[0] || '';
   assert.match(localBlock, /online\.localAction = \{[^\n]+gearRngActionIdentity/);
   assert.match(index, /online\.remoteAction = \{[\s\S]{0,300}gearRngActionIdentity/);
@@ -214,7 +216,7 @@ test('local and accepted remote actions retain only local canonical RNG identity
 });
 
 test('fire lifecycle captures before transport nonce and does not advance ordinal on fire/state/result receipt', () => {
-  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const index = readIndexSource();
   const localStart = index.indexOf('function netSendFire(');
   const localEnd = index.indexOf('\n  function ', localStart + 20);
   const localBlock = index.slice(localStart, localEnd);
@@ -231,7 +233,7 @@ test('fire lifecycle captures before transport nonce and does not advance ordina
 });
 
 test('browser and APP_SHELL load the pure ONLINE RNG module after static damage without CPU RNG reuse', () => {
-  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const index = readIndexSource();
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   assert(index.indexOf('shared/gear-online-battle-damage.js') < index.indexOf('shared/gear-online-battle-rng.js'));
   assert.equal(sw.includes("'./shared/gear-online-battle-rng.js'"), true);
