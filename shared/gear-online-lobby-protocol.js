@@ -41,6 +41,11 @@
     if (root?.KatamonGearBattleSnapshot) return root.KatamonGearBattleSnapshot.GEAR_BATTLE_SNAPSHOT_VERSION;
     fail('GEAR_BATTLE_SNAPSHOT_UNAVAILABLE');
   }
+  function domain() {
+    if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-domain.js');
+    if (root?.KatamonGearDomain) return root.KatamonGearDomain;
+    fail('GEAR_DOMAIN_UNAVAILABLE');
+  }
   const seatIndex = (seatId) => online().ONLINE_GEAR_SEAT_IDS.indexOf(seatId);
   const assertVisibility = (value) => {
     if (value !== ONLINE_VISIBILITY_PUBLIC && value !== ONLINE_VISIBILITY_PRIVATE) fail('INVALID_ONLINE_GEAR_CAPABILITY');
@@ -52,7 +57,7 @@
   };
   const hashRe = () => new RegExp(`^${online().ONLINE_GEAR_LOADOUT_HASH_ALGORITHM}:[0-9a-f]{16}$`);
   const capabilityKeys = ['battleGearSnapshotVersion', 'gearMode', 'gearProtocolVersion', 'gearRulesVersion', 'gearTrustModel'];
-  const readyKeys = ['battleGearSnapshotVersion', 'gearProtocolVersion', 'gearRulesVersion', 'gearTrustModel', 'loadoutHash', 'version'];
+  const bindingKeys = ['battleGearSnapshotVersion', 'gearProtocolVersion', 'gearRulesVersion', 'gearTrustModel', 'loadoutHash', 'version'];
   const manifestKeys = ['battleGearSnapshotVersion', 'commitments', 'gearMode', 'gearProtocolVersion', 'gearRulesVersion', 'gearTrustModel', 'roundId', 'version'];
 
   function canonicalCapability() {
@@ -82,21 +87,23 @@
     if (input.gearMode !== online().GEAR_MODE_PRIVATE_TRUSTED_V1) fail('INVALID_ONLINE_GEAR_CAPABILITY');
     return validateRoomGearCapability(canonicalCapability(), { visibility });
   }
-  function validateReadyGearCommitment(value) {
-    exact(value, readyKeys, 'INVALID_ONLINE_GEAR_READY_COMMITMENT');
+  // Local-only material. 3D-2B must include this stable serialization inside
+  // the existing nonce-sealed character SHA-256 commit; never send it as READY wire data.
+  function validateReadyGearBinding(value) {
+    exact(value, bindingKeys, 'INVALID_ONLINE_GEAR_READY_BINDING');
     const p = online();
     if (value.version !== ONLINE_GEAR_READY_COMMITMENT_VERSION
       || value.gearProtocolVersion !== p.ONLINE_GEAR_PROTOCOL_VERSION
       || value.gearRulesVersion !== p.ONLINE_GEAR_RULES_VERSION
       || value.battleGearSnapshotVersion !== battleGearSnapshotVersion()
       || value.gearTrustModel !== p.ONLINE_GEAR_TRUST_MODEL
-      || typeof value.loadoutHash !== 'string' || !hashRe().test(value.loadoutHash)) fail('INVALID_ONLINE_GEAR_READY_COMMITMENT');
+      || typeof value.loadoutHash !== 'string' || !hashRe().test(value.loadoutHash)) fail('INVALID_ONLINE_GEAR_READY_BINDING');
     return freeze(clone(value));
   }
-  function createReadyGearCommitment(input) {
-    exact(input, ['loadoutCommitment', 'trustedContext'], 'INVALID_ONLINE_GEAR_READY_COMMITMENT');
+  function createReadyGearBinding(input) {
+    exact(input, ['loadoutCommitment', 'trustedContext'], 'INVALID_ONLINE_GEAR_READY_BINDING');
     const full = online().validateLoadoutCommitment(input.loadoutCommitment, input.trustedContext);
-    return validateReadyGearCommitment({
+    return validateReadyGearBinding({
       version: ONLINE_GEAR_READY_COMMITMENT_VERSION,
       gearProtocolVersion: full.gearProtocolVersion,
       gearRulesVersion: full.gearRulesVersion,
@@ -105,9 +112,10 @@
       loadoutHash: full.loadoutHash
     });
   }
+  function stableSerializeReadyGearBinding(value) { return domain().stableStringify(validateReadyGearBinding(value)); }
   function validateRevealedGearCommitment(input) {
-    exact(input, ['loadoutCommitment', 'readyCommitment', 'trustedContext'], 'INVALID_ONLINE_GEAR_REVEAL');
-    const ready = validateReadyGearCommitment(input.readyCommitment);
+    exact(input, ['loadoutCommitment', 'readyBinding', 'trustedContext'], 'INVALID_ONLINE_GEAR_REVEAL');
+    const ready = validateReadyGearBinding(input.readyBinding);
     const full = online().validateLoadoutCommitment(input.loadoutCommitment, input.trustedContext);
     for (const key of ['gearProtocolVersion', 'gearRulesVersion', 'battleGearSnapshotVersion', 'gearTrustModel']) {
       if (ready[key] !== full[key]) fail('GEAR_READY_VERSION_MISMATCH');
@@ -115,30 +123,34 @@
     if (ready.loadoutHash !== full.loadoutHash) fail('GEAR_READY_HASH_MISMATCH');
     return full;
   }
-  function contextsBySeat(participantContexts, roundId) {
-    if (!Array.isArray(participantContexts) || participantContexts.length === 0 || participantContexts.length > online().ONLINE_GEAR_SEAT_IDS.length) fail('INVALID_ONLINE_GEAR_START_PARTICIPANTS');
+  function revealsBySeat(participantReveals, roundId) {
+    if (!Array.isArray(participantReveals) || participantReveals.length === 0 || participantReveals.length > online().ONLINE_GEAR_SEAT_IDS.length) fail('INVALID_ONLINE_GEAR_START_PARTICIPANTS');
     const result = new Map();
-    for (const context of participantContexts) {
-      if (!plain(context) || typeof context.expectedSeatId !== 'string' || seatIndex(context.expectedSeatId) < 0 || result.has(context.expectedSeatId)) fail('INVALID_ONLINE_GEAR_START_PARTICIPANTS');
-      if (context.expectedRoundId !== roundId) fail('INVALID_ONLINE_GEAR_START_PARTICIPANTS');
-      result.set(context.expectedSeatId, context);
+    for (const entry of participantReveals) {
+      exact(entry, ['revealedCommitment', 'trustedContext'], 'INVALID_ONLINE_GEAR_START_PARTICIPANTS');
+      const commitment = online().validateLoadoutCommitment(entry.revealedCommitment, entry.trustedContext);
+      if (commitment.roundId !== roundId || result.has(commitment.seatId)) fail('INVALID_ONLINE_GEAR_START_PARTICIPANTS');
+      result.set(commitment.seatId, freeze({ trustedContext: clone(entry.trustedContext), revealedCommitment: commitment }));
     }
     return result;
   }
   function validateStartGearManifest(value, context) {
-    exact(context, ['participantContexts'], 'INVALID_ONLINE_GEAR_START_PARTICIPANTS');
+    exact(context, ['participantReveals'], 'INVALID_ONLINE_GEAR_START_PARTICIPANTS');
     exact(value, manifestKeys, 'INVALID_ONLINE_GEAR_START_MANIFEST');
     const p = online();
     if (value.version !== ONLINE_GEAR_LOBBY_PROTOCOL_VERSION || value.gearMode !== p.GEAR_MODE_PRIVATE_TRUSTED_V1
       || value.gearProtocolVersion !== p.ONLINE_GEAR_PROTOCOL_VERSION || value.gearRulesVersion !== p.ONLINE_GEAR_RULES_VERSION
       || value.battleGearSnapshotVersion !== battleGearSnapshotVersion() || value.gearTrustModel !== p.ONLINE_GEAR_TRUST_MODEL) fail('INVALID_ONLINE_GEAR_START_MANIFEST');
     const roundId = assertRoundId(value.roundId);
-    const expected = contextsBySeat(context.participantContexts, roundId);
-    if (!Array.isArray(value.commitments) || value.commitments.length !== expected.size) fail('MISSING_ONLINE_GEAR_COMMITMENT');
+    const expected = revealsBySeat(context.participantReveals, roundId);
+    if (!Array.isArray(value.commitments) || value.commitments.length < expected.size) fail('MISSING_ONLINE_GEAR_COMMITMENT');
+    if (value.commitments.length > expected.size) fail('UNEXPECTED_ONLINE_GEAR_COMMITMENT');
     const received = new Map();
     for (const rawCommitment of value.commitments) {
       if (!plain(rawCommitment) || typeof rawCommitment.seatId !== 'string' || !expected.has(rawCommitment.seatId) || received.has(rawCommitment.seatId)) fail('UNEXPECTED_ONLINE_GEAR_COMMITMENT');
-      const commitment = online().validateLoadoutCommitment(rawCommitment, expected.get(rawCommitment.seatId));
+      const reveal = expected.get(rawCommitment.seatId);
+      const commitment = online().validateLoadoutCommitment(rawCommitment, reveal.trustedContext);
+      if (online().stableSerializeCommitment(commitment, reveal.trustedContext) !== online().stableSerializeCommitment(reveal.revealedCommitment, reveal.trustedContext)) fail('ONLINE_GEAR_REVEAL_BINDING_MISMATCH');
       received.set(commitment.seatId, commitment);
     }
     if (received.size !== expected.size) fail('MISSING_ONLINE_GEAR_COMMITMENT');
@@ -155,7 +167,7 @@
     });
   }
   function createStartGearManifest(input) {
-    exact(input, ['commitments', 'participantContexts', 'roundId'], 'INVALID_ONLINE_GEAR_START_MANIFEST');
+    exact(input, ['commitments', 'participantReveals', 'roundId'], 'INVALID_ONLINE_GEAR_START_MANIFEST');
     const p = online();
     const value = {
       version: ONLINE_GEAR_LOBBY_PROTOCOL_VERSION,
@@ -167,7 +179,7 @@
       roundId: input.roundId,
       commitments: clone(input.commitments)
     };
-    return validateStartGearManifest(value, { participantContexts: input.participantContexts });
+    return validateStartGearManifest(value, { participantReveals: input.participantReveals });
   }
 
   return freeze({
@@ -175,7 +187,7 @@
     ONLINE_VISIBILITY_PUBLIC, ONLINE_VISIBILITY_PRIVATE,
     GearOnlineLobbyProtocolError,
     createRoomGearCapability, validateRoomGearCapability,
-    createReadyGearCommitment, validateReadyGearCommitment, validateRevealedGearCommitment,
+    createReadyGearBinding, validateReadyGearBinding, stableSerializeReadyGearBinding, validateRevealedGearCommitment,
     createStartGearManifest, validateStartGearManifest
   });
 });
