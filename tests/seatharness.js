@@ -696,6 +696,8 @@ const HOOK = `
       if (!p || !target) return false;
       if (p.prismBeam && typeof resolvePrismBeamUnitImpact === 'function') {
         resolvePrismBeamUnitImpact(p, target);
+      } else if (p.coolKaiOnigiri && typeof resolveCoolKaiOnigiriUnitImpact === 'function') {
+        resolveCoolKaiOnigiriUnitImpact(p, target, p.x, p.y);
       } else if (p.scorpionRail && typeof resolveScorpionRailImpact === 'function') {
         resolveScorpionRailImpact(p, target);
       } else if (p.barucopterBullet && typeof resolveBarucopterBulletUnitImpact === 'function') {
@@ -1226,6 +1228,9 @@ const HOOK = `
         applyBattleStartState: state => applyFirebaseOnlineGearBattleStartState(state),
         validateBattleStartSnapshot: (snap, state) => validateFirebaseOnlineGearStartSnapshot(snap, state),
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
+        requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
+          battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
+        onlineCombat: unitId => onlineGearStaticCombatForUnit(unitById(unitId)),
         battleSnapshotFreeze: () => online && online.battleGearSnapshotsByUnit ? {
           map: Object.isFrozen(online.battleGearSnapshotsByUnit),
           units: Object.fromEntries(Object.entries(online.battleGearSnapshotsByUnit).map(([id, value]) => [id, Object.isFrozen(value)]))

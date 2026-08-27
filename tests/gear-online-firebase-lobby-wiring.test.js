@@ -703,8 +703,9 @@ test('browser scripts/service worker load all pure modules in dependency order w
   const lobbyAt = index.indexOf('shared/gear-online-lobby-protocol.js');
   const wireAt = index.indexOf('shared/gear-online-firebase-wire.js');
   const battleStartAt = index.indexOf('shared/gear-online-battle-start.js');
-  assert.ok(snapshotAt >= 0 && snapshotAt < protocolAt && protocolAt < lobbyAt && lobbyAt < wireAt && wireAt < battleStartAt);
-  for (const file of ['shared/gear-online-protocol.js', 'shared/gear-online-lobby-protocol.js', 'shared/gear-online-firebase-wire.js', 'shared/gear-online-battle-start.js']) {
+  const battleDamageAt = index.indexOf('shared/gear-online-battle-damage.js');
+  assert.ok(snapshotAt >= 0 && snapshotAt < protocolAt && protocolAt < lobbyAt && lobbyAt < wireAt && wireAt < battleStartAt && battleStartAt < battleDamageAt);
+  for (const file of ['shared/gear-online-protocol.js', 'shared/gear-online-lobby-protocol.js', 'shared/gear-online-firebase-wire.js', 'shared/gear-online-battle-start.js', 'shared/gear-online-battle-damage.js']) {
     assert.equal(sw.includes(`'./${file}'`), true, file);
   }
   assert.equal(rules.rules.rooms.$room.protocol['.validate'], 'newData.val() === 3');

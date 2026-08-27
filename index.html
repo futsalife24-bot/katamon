@@ -645,6 +645,7 @@
 <script src="shared/gear-online-lobby-protocol.js"></script>
 <script src="shared/gear-online-firebase-wire.js"></script>
 <script src="shared/gear-online-battle-start.js"></script>
+<script src="shared/gear-online-battle-damage.js"></script>
 <script>
 (() => {
   'use strict';
@@ -6231,7 +6232,7 @@
     if (!unitDefeated(target)) {
       const directDamage = computeDamage(0, 1, p.damageMul);
       const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-      const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', directDamage * takenMul), {
+      const damageResult = applyResolvedUnitDamage(target, battleGearRequestedDamage(p.owner, target, 'direct_projectile', directDamage * takenMul), {
         ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
       });
       const actualDamage = damageResult.actualDamage;
@@ -6254,7 +6255,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', computeDamage(0, p.blastMul, p.damageMul) * takenMul), {
+    const damageResult = applyResolvedUnitDamage(target, battleGearRequestedDamage(p.owner, target, 'direct_projectile', computeDamage(0, p.blastMul, p.damageMul) * takenMul), {
       ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
@@ -6301,7 +6302,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', COOL_KAI_ONIGIRI_DAMAGE * takenMul), {
+    const damageResult = applyResolvedUnitDamage(target, battleGearRequestedDamage(p.owner, target, 'direct_projectile', COOL_KAI_ONIGIRI_DAMAGE * takenMul), {
       ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
@@ -6328,7 +6329,7 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    const damageResult = applyResolvedUnitDamage(target, cpuGearRequestedDamage(p.owner, target, 'direct_projectile', BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul), {
+    const damageResult = applyResolvedUnitDamage(target, battleGearRequestedDamage(p.owner, target, 'direct_projectile', BARUCOPTER_BULLET_DAMAGE * p.damageMul * takenMul), {
       ownerId: p.owner, direct: true, x, y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
@@ -8692,6 +8693,46 @@
       numericShield: 0,
       hp: target.hp,
     }).hpDamage));
+  }
+
+  function onlineGearStaticCombatForUnit(unit) {
+    if (!unit || !online || online.kind !== 'firebase' || !online.battleGearSnapshotsByUnit) return null;
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    if (!Object.isFrozen(online.battleGearSnapshotsByUnit)) {
+      throw Object.assign(new Error('ONLINE Gear Battle Snapshotがimmutableではありません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
+    }
+    const snapshot = online.battleGearSnapshotsByUnit[unit.id];
+    if (!snapshot) return null;
+    if (!Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.derivedStats)) {
+      throw Object.assign(new Error('ONLINE Gear unit snapshotがimmutableではありません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
+    }
+    return snapshot.derivedStats;
+  }
+
+  function onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage) {
+    if (!damageType || !target) return null;
+    const attackerCombat = onlineGearStaticCombatForUnit(unitById(ownerId));
+    const defenderCombat = onlineGearStaticCombatForUnit(target);
+    if (!attackerCombat && !defenderCombat) return null;
+    return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearStaticRequestedDamage({
+      existingBaseDamage,
+      damageType,
+      attackerCombat,
+      defenderCombat,
+      targetHp: target.hp
+    });
+  }
+
+  // The production hit routes share this narrow dispatcher. CPU keeps its
+  // complete Phase 3C pipeline; Firebase ONLINE receives only the static
+  // Attack/Defense resolver approved for Phase 3D-3B; every other mode keeps
+  // the historic Gearless boundary.
+  function battleGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile = null) {
+    const onlineDamage = onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage);
+    if (onlineDamage !== null) return onlineDamage;
+    return cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile);
   }
 
   // Knockback uses the same narrow CPU-human Gear gate as the damage
@@ -16216,7 +16257,7 @@
         // Math.round path; Gear uses the Phase 3B pipeline once, then meets
         // the same existing boundary without an intermediate round.
         const existingBaseDamage = dmg * takenMul;
-        const requestedDamage = cpuGearRequestedDamage(owner, u, gearDamageType,
+        const requestedDamage = battleGearRequestedDamage(owner, u, gearDamageType,
           gearDamageType ? existingBaseDamage : cpuGearActionDamageRequested(owner, existingBaseDamage), techniqueProjectile);
         const damageResult = applyResolvedUnitDamage(u, requestedDamage, {
           ownerId: owner,
