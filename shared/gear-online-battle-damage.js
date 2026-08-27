@@ -43,7 +43,7 @@
     const resolved = combat.calculateDamagePipeline({
       baseDamage: input.existingBaseDamage,
       attackMultiplier: input.attackerCombat ? input.attackerCombat.attackMultiplier : 1,
-      modifierBp: outgoing.outgoingDamageBp,
+      modifierBp: outgoing.outgoingDamageBp + (options.actionDamageBp || 0),
       isCrit: options.isCrit,
       critDamageMultiplier: input.attackerCombat ? input.attackerCombat.critDamageMultiplier : 1.5,
       defenseMultiplier: input.defenderCombat ? input.defenderCombat.defenseMultiplier : 1,
@@ -101,6 +101,29 @@
     return calculateRequestedDamage({ ...input, existingBaseDamage: blastAdjustedBaseDamage }, { isCrit: input.isCrit });
   }
 
+  // Phase 3D-7A keeps the three completed compatibility APIs above intact.
+  // The action-wide Last Stand bucket is supplied only by the locally captured
+  // accepted action context and joins the existing outgoing modifier bucket
+  // before Crit, never as a separate post-damage multiplier.
+  function calculateOnlineGearRuntimeRequestedDamage(input) {
+    validateDamageInput(input,
+      ['actionDamageBp', 'attackerCombat', 'damageType', 'defenderCombat', 'existingBaseDamage', 'isCrit', 'targetHp', 'useBlastPower'],
+      'INVALID_ONLINE_GEAR_RUNTIME_DAMAGE_INPUT');
+    if (typeof input.isCrit !== 'boolean' || typeof input.useBlastPower !== 'boolean' || !Number.isSafeInteger(input.actionDamageBp)
+        || input.actionDamageBp < 0 || input.actionDamageBp > 1500) fail('INVALID_ONLINE_GEAR_RUNTIME_DAMAGE_INPUT');
+    const blastAdjustedBaseDamage = input.useBlastPower && input.damageType === 'normal_blast' && input.attackerCombat
+      ? input.existingBaseDamage * input.attackerCombat.blastDamageMultiplier
+      : input.existingBaseDamage;
+    if (input.useBlastPower && input.damageType === 'normal_blast' && input.attackerCombat
+        && (!Number.isFinite(input.attackerCombat.blastDamageMultiplier) || input.attackerCombat.blastDamageMultiplier <= 0)) {
+      fail('INVALID_ONLINE_GEAR_BLAST_DAMAGE_MULTIPLIER');
+    }
+    return calculateRequestedDamage({ ...input, existingBaseDamage: blastAdjustedBaseDamage }, {
+      isCrit: input.isCrit,
+      actionDamageBp: input.actionDamageBp
+    });
+  }
+
   function isOnlineGearCriticalHit(input) {
     exact(input, ['critRateBp', 'rollBp'], 'INVALID_ONLINE_GEAR_CRIT_ROLL_INPUT');
     if (!Number.isSafeInteger(input.rollBp) || input.rollBp < 0 || input.rollBp >= 10000
@@ -116,6 +139,7 @@
     calculateOnlineGearStaticRequestedDamage,
     calculateOnlineGearCritRequestedDamage,
     calculateOnlineGearCritBlastRequestedDamage,
+    calculateOnlineGearRuntimeRequestedDamage,
     isOnlineGearCriticalHit
   });
 });

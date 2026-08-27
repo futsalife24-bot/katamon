@@ -1204,6 +1204,8 @@ const HOOK = `
           verifiedStartGearManifest: online.verifiedStartGearManifest || null,
           battleGearSnapshotsByUnit: online.battleGearSnapshotsByUnit || null,
           battleGearShieldStateByUnit: online.battleGearShieldStateByUnit || null,
+          battleGearRuntimeEffectsStateByUnit: online.battleGearRuntimeEffectsStateByUnit || null,
+          battleGearActiveAttackRuntime: online.battleGearActiveAttackRuntime || null,
           localAction: online.localAction || null,
           remoteAction: online.remoteAction || null,
           gearRevealCompatibility: online.gearRevealCompatibility || null,
@@ -1249,6 +1251,10 @@ const HOOK = `
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
         shieldState: () => online?.battleGearShieldStateByUnit
           ? structuredClone(online.battleGearShieldStateByUnit) : null,
+        runtimeEffectsState: () => online?.battleGearRuntimeEffectsStateByUnit
+          ? structuredClone(online.battleGearRuntimeEffectsStateByUnit) : null,
+        activeAttackRuntime: () => online?.battleGearActiveAttackRuntime
+          ? structuredClone(online.battleGearActiveAttackRuntime) : null,
         battleSnapshotsForRuntimeTest: () => online?.battleGearSnapshotsByUnit || null,
         runtimeState: () => {
           const runtimeState = createFirebaseOnlineGearRuntimeState();
@@ -1273,6 +1279,10 @@ const HOOK = `
         },
         applyResolvedDamage: (ownerId, targetId, requestedDamage, options = {}) =>
           applyResolvedUnitDamage(unitById(targetId), requestedDamage, { ownerId, ...options }),
+        beginLastStandAttack: ownerId => beginFirebaseOnlineGearAttackAction(unitById(ownerId)),
+        completeLastStandAttack: ownerId => completeFirebaseOnlineGearAttackAction(unitById(ownerId)),
+        cancelLastStandAttack: ownerId => cancelFirebaseOnlineGearAttackAction(unitById(ownerId)),
+        recordLastStandDamage: options => recordFirebaseOnlineGearLastStandDamage(options),
         applyHealing: (sourceUnitId, targetUnitId, baseHealing) =>
           applyBattleGearHealing({ sourceUnitId, target: unitById(targetUnitId), baseHealing }),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
