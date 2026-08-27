@@ -1233,6 +1233,26 @@ const HOOK = `
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
         rngActionIdentity: sourceUnitId => createFirebaseOnlineGearRngActionIdentity(sourceUnitId),
+        critResolution: (ownerId, targetId, damageType, projectile = null) =>
+          resolveFirebaseOnlineGearCrit(ownerId, unitById(targetId), damageType, projectile,
+            onlineGearStaticCombatForUnit(unitById(ownerId))),
+        setCritActionForTest: (ownerId, location = 'local', actionId = 'a'.repeat(32)) => {
+          const index = turnOrder.indexOf(ownerId);
+          if (index >= 0) activeIndex = index;
+          const action = {
+            unitId: ownerId,
+            actionId,
+            gearRngActionIdentity: createFirebaseOnlineGearRngActionIdentity(ownerId)
+          };
+          if (location === 'remote') {
+            online.localAction = null;
+            online.remoteAction = action;
+          } else {
+            online.localAction = action;
+            online.remoteAction = null;
+          }
+          return structuredClone(action.gearRngActionIdentity);
+        },
         onlineCombat: unitId => onlineGearStaticCombatForUnit(unitById(unitId)),
         battleSnapshotFreeze: () => online && online.battleGearSnapshotsByUnit ? {
           map: Object.isFrozen(online.battleGearSnapshotsByUnit),

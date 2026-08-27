@@ -23,17 +23,16 @@
     fail('GEAR_COMBAT_UNAVAILABLE');
   }
 
-  // Phase 3D-3B intentionally accepts only the already-reconstructed static
-  // Battle Gear combat views. Crit/Blast/runtime state is not an input, so it
-  // cannot be activated early by this ONLINE adapter.
-  function calculateOnlineGearStaticRequestedDamage(input) {
-    exact(input, ['attackerCombat', 'damageType', 'defenderCombat', 'existingBaseDamage', 'targetHp'], 'INVALID_ONLINE_GEAR_STATIC_DAMAGE_INPUT');
+  function validateDamageInput(input, keys, code) {
+    exact(input, keys, code);
     if (!ONLINE_GEAR_STATIC_DAMAGE_TYPES.includes(input.damageType)) fail('INVALID_ONLINE_GEAR_STATIC_DAMAGE_TYPE');
     if (input.attackerCombat !== null && !plain(input.attackerCombat)) fail('INVALID_ONLINE_GEAR_ATTACKER_COMBAT');
     if (input.defenderCombat !== null && !plain(input.defenderCombat)) fail('INVALID_ONLINE_GEAR_DEFENDER_COMBAT');
     if (!Number.isFinite(input.existingBaseDamage) || input.existingBaseDamage < 0
-        || !Number.isFinite(input.targetHp) || input.targetHp < 0) fail('INVALID_ONLINE_GEAR_STATIC_DAMAGE_INPUT');
+        || !Number.isFinite(input.targetHp) || input.targetHp < 0) fail(code);
+  }
 
+  function calculateRequestedDamage(input, options) {
     const combat = combatModule();
     const outgoing = input.attackerCombat
       ? combat.conditionalDamageModifiers({ combat: input.attackerCombat, damageType: input.damageType })
@@ -45,7 +44,8 @@
       baseDamage: input.existingBaseDamage,
       attackMultiplier: input.attackerCombat ? input.attackerCombat.attackMultiplier : 1,
       modifierBp: outgoing.outgoingDamageBp,
-      isCrit: false,
+      isCrit: options.isCrit,
+      critDamageMultiplier: input.attackerCombat ? input.attackerCombat.critDamageMultiplier : 1.5,
       defenseMultiplier: input.defenderCombat ? input.defenderCombat.defenseMultiplier : 1,
       damageReductionBp: incoming.incomingDamageReductionBp,
       numericShield: 0,
@@ -55,9 +55,46 @@
     return Math.max(1, Math.round(resolved.hpDamage));
   }
 
+  // Phase 3D-3B intentionally accepts only the already-reconstructed static
+  // Battle Gear combat views. Crit/Blast/runtime state is not an input, so it
+  // remains the compatibility API for callers that have not passed the
+  // Phase 3D-4B deterministic Crit gate.
+  function calculateOnlineGearStaticRequestedDamage(input) {
+    validateDamageInput(input,
+      ['attackerCombat', 'damageType', 'defenderCombat', 'existingBaseDamage', 'targetHp'],
+      'INVALID_ONLINE_GEAR_STATIC_DAMAGE_INPUT');
+    return calculateRequestedDamage(input, { isCrit: false });
+  }
+
+  // The caller may supply only the boolean outcome of the locally-derived
+  // deterministic Crit roll. Crit Damage itself always comes from the
+  // immutable reconstructed attacker combat view; Blast/runtime effects are
+  // deliberately absent from this ONLINE Phase 3D-4B boundary.
+  function calculateOnlineGearCritRequestedDamage(input) {
+    validateDamageInput(input,
+      ['attackerCombat', 'damageType', 'defenderCombat', 'existingBaseDamage', 'isCrit', 'targetHp'],
+      'INVALID_ONLINE_GEAR_CRIT_DAMAGE_INPUT');
+    if (typeof input.isCrit !== 'boolean') fail('INVALID_ONLINE_GEAR_CRIT_DAMAGE_INPUT');
+    if (!input.attackerCombat) fail('INVALID_ONLINE_GEAR_ATTACKER_COMBAT');
+    if (!Number.isFinite(input.attackerCombat.critDamageMultiplier)
+        || input.attackerCombat.critDamageMultiplier < 0) fail('INVALID_ONLINE_GEAR_CRIT_DAMAGE_MULTIPLIER');
+    return calculateRequestedDamage(input, { isCrit: input.isCrit });
+  }
+
+  function isOnlineGearCriticalHit(input) {
+    exact(input, ['critRateBp', 'rollBp'], 'INVALID_ONLINE_GEAR_CRIT_ROLL_INPUT');
+    if (!Number.isSafeInteger(input.rollBp) || input.rollBp < 0 || input.rollBp >= 10000
+        || !Number.isSafeInteger(input.critRateBp) || input.critRateBp < 0 || input.critRateBp > 10000) {
+      fail('INVALID_ONLINE_GEAR_CRIT_ROLL_INPUT');
+    }
+    return input.rollBp < input.critRateBp;
+  }
+
   return Object.freeze({
     ONLINE_GEAR_STATIC_DAMAGE_TYPES,
     GearOnlineBattleDamageError,
-    calculateOnlineGearStaticRequestedDamage
+    calculateOnlineGearStaticRequestedDamage,
+    calculateOnlineGearCritRequestedDamage,
+    isOnlineGearCriticalHit
   });
 });
