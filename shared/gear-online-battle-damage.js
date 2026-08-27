@@ -81,6 +81,26 @@
     return calculateRequestedDamage(input, { isCrit: input.isCrit });
   }
 
+  // Phase 3D-4C keeps the earlier static and Crit APIs unchanged, then adds
+  // Blast Power at its canonical position before Attack. Only a normal blast
+  // receives the immutable attacker snapshot multiplier; direct projectile
+  // damage deliberately remains identical to the Phase 3D-4B path.
+  function calculateOnlineGearCritBlastRequestedDamage(input) {
+    validateDamageInput(input,
+      ['attackerCombat', 'damageType', 'defenderCombat', 'existingBaseDamage', 'isCrit', 'targetHp'],
+      'INVALID_ONLINE_GEAR_CRIT_BLAST_DAMAGE_INPUT');
+    if (typeof input.isCrit !== 'boolean') fail('INVALID_ONLINE_GEAR_CRIT_BLAST_DAMAGE_INPUT');
+    if (!input.attackerCombat) fail('INVALID_ONLINE_GEAR_ATTACKER_COMBAT');
+    if (!Number.isFinite(input.attackerCombat.critDamageMultiplier)
+        || input.attackerCombat.critDamageMultiplier < 0) fail('INVALID_ONLINE_GEAR_CRIT_DAMAGE_MULTIPLIER');
+    if (!Number.isFinite(input.attackerCombat.blastDamageMultiplier)
+        || input.attackerCombat.blastDamageMultiplier <= 0) fail('INVALID_ONLINE_GEAR_BLAST_DAMAGE_MULTIPLIER');
+    const blastAdjustedBaseDamage = input.damageType === 'normal_blast'
+      ? input.existingBaseDamage * input.attackerCombat.blastDamageMultiplier
+      : input.existingBaseDamage;
+    return calculateRequestedDamage({ ...input, existingBaseDamage: blastAdjustedBaseDamage }, { isCrit: input.isCrit });
+  }
+
   function isOnlineGearCriticalHit(input) {
     exact(input, ['critRateBp', 'rollBp'], 'INVALID_ONLINE_GEAR_CRIT_ROLL_INPUT');
     if (!Number.isSafeInteger(input.rollBp) || input.rollBp < 0 || input.rollBp >= 10000
@@ -95,6 +115,7 @@
     GearOnlineBattleDamageError,
     calculateOnlineGearStaticRequestedDamage,
     calculateOnlineGearCritRequestedDamage,
+    calculateOnlineGearCritBlastRequestedDamage,
     isOnlineGearCriticalHit
   });
 });

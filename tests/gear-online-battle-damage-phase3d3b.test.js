@@ -353,8 +353,8 @@ test('all five production damage callsites use the dispatcher while CPU keeps it
     const block = index.slice(at, next < 0 ? undefined : next);
     assert.match(block, /battleGearRequestedDamage\(/, name);
   }
-  assert.match(index, /const normalCannonCombat = techniqueProjectile\?\.gearDamageProfile === 'normal_cannonball'[\s\S]{0,120}cpuGearCombatForUnit/,
-    'ONLINE Blast range must remain disconnected in Phase 3D-3B');
+  assert.match(index, /function battleGearNormalCannonCombatForUnit\(unit\)[\s\S]{0,240}onlineGearStaticCombatForUnit\(unit\)[\s\S]{0,160}cpuGearCombatForUnit\(unit\)/,
+    'Phase 3D-3B APIs remain static while the later Blast runtime uses a narrow mode-aware seam');
 });
 
 test('Gear ON 2v2 remains fail closed and the resolver accepts only approved static damage types', () => {
