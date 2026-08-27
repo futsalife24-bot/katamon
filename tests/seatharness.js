@@ -1187,6 +1187,7 @@ const HOOK = `
           participantGearReveals: online.participantGearReveals || {},
           verifiedStartGearManifest: online.verifiedStartGearManifest || null,
           battleGearSnapshotsByUnit: online.battleGearSnapshotsByUnit || null,
+          battleGearShieldStateByUnit: online.battleGearShieldStateByUnit || null,
           localAction: online.localAction || null,
           remoteAction: online.remoteAction || null,
           gearRevealCompatibility: online.gearRevealCompatibility || null,
@@ -1230,6 +1231,19 @@ const HOOK = `
         applyBattleStartState: state => applyFirebaseOnlineGearBattleStartState(state),
         validateBattleStartSnapshot: (snap, state) => validateFirebaseOnlineGearStartSnapshot(snap, state),
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
+        shieldState: () => online?.battleGearShieldStateByUnit
+          ? structuredClone(online.battleGearShieldStateByUnit) : null,
+        setShieldForTest: (unitId, value) => {
+          const state = online?.battleGearShieldStateByUnit;
+          if (!state?.[unitId] || !Number.isFinite(value) || value < 0) return null;
+          online.battleGearShieldStateByUnit = Object.freeze({
+            ...state,
+            [unitId]: Object.freeze({ currentShield: value })
+          });
+          return value;
+        },
+        applyResolvedDamage: (ownerId, targetId, requestedDamage, options = {}) =>
+          applyResolvedUnitDamage(unitById(targetId), requestedDamage, { ownerId, ...options }),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
         knockbackPolicy: (ownerId, targetId, damageType, projectile = null, legacyKnockbackSpeed = 0) =>
@@ -1641,6 +1655,10 @@ const HOOK = `
     // ここでユニットそのものを渡すと creditDamage が黙って何もしなくなり、検査が甘くなる。
     explodeAtForTest: (x, y, blastMul, ownerId, normalImpactSound, projectile = null) => (
       explodeAt(x, y, blastMul || 1, ownerId, 1, !!normalImpactSound, false, blastMul || 1,
+        Number(projectile?.knockbackSpeed) || 0, false, projectile)
+    ),
+    explodeDrainAtForTest: (x, y, blastMul, ownerId, projectile = null) => (
+      explodeAt(x, y, blastMul || 1, ownerId, 1, false, true, blastMul || 1,
         Number(projectile?.knockbackSpeed) || 0, false, projectile)
     ),
     normalGearKnockbackBaseForTest: () => NORMAL_GEAR_KNOCKBACK_BASE,

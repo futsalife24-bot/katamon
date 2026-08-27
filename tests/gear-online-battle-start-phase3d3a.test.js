@@ -210,13 +210,14 @@ test('turn-boundary baseline preserves Gear maxHp/fuelMax and rejects either bas
   assert.equal(h.stateSnapshotMismatchReason(fuelMax, baseline), 'fuelMax');
 });
 
-test('Phase 3D-3A runtime wiring leaves Attack and every later Gear effect inert', () => {
+test('start applies HP/Fuel to units while later mutable Shield state remains outside the Battle snapshot', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const block = /function applyFirebaseOnlineGearBattleStartState\([\s\S]*?\n  function validateFirebaseOnlineGearStartSnapshot/.exec(index)?.[0] || '';
   assert.match(block, /unit\.maxHp = expected\.maxHp/);
   assert.match(block, /unit\.hp = expected\.hp/);
   assert.match(block, /unit\.fuelMax = expected\.fuelMax/);
   assert.match(block, /unit\.fuel = expected\.fuel/);
+  assert.match(block, /battleGearShieldStateByUnit = createFirebaseOnlineGearShieldStateByUnit/);
   assert.doesNotMatch(block, /unit\.(?:attack|defense|crit|blast|knockback|status|shield|healing|lastStand|rescue)\s*=|calculateBattleGearCombat|Math\.random/i);
 });
 

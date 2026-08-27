@@ -4936,7 +4936,7 @@
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
       const requested = Math.min(budget, cpuGearActionDamageRequested(p.owner, Math.max(1, Math.round(raw * takenMul))));
-      const dmg = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: p.owner, target: u, requestedDamage: requested }));
+      const dmg = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: p.owner, target: u, requestedDamage: requested }));
       if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - dmg);
@@ -6034,12 +6034,82 @@
     return result.hpDamage;
   }
 
-  function mitigateDamageAfterCpuGearShield(unit, residualDamage) {
+  // ONLINE Shield is match-local runtime state. The immutable Battle Gear
+  // Snapshot remains the only stat authority and never stores the remaining
+  // Shield amount. Phase 3D-6C will define reconnect serialization separately.
+  function createFirebaseOnlineGearShieldStateByUnit(snapshots) {
+    if (!snapshots) return null;
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    if (!Object.isFrozen(snapshots)) {
+      throw Object.assign(new Error('ONLINE Gear Battle Snapshotがimmutableではありません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
+    }
+    const combat = globalThis.KatamonGearCombat;
+    if (!combat?.initialShieldFromSets) {
+      throw Object.assign(new Error('ONLINE Gear Shield計算を利用できません'), { code: 'ONLINE_GEAR_SHIELD_MODULE_MISSING' });
+    }
+    const entries = ['p1', 'e1'].map((unitId) => {
+      const snapshot = snapshots[unitId];
+      if (!snapshot || !Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.derivedStats)) {
+        throw Object.assign(new Error(`${unitId}のONLINE Gear Shield snapshotが不正です`), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
+      }
+      const initial = combat.initialShieldFromSets(snapshot.derivedStats);
+      if (!Number.isFinite(initial.shieldAfter) || initial.shieldAfter < 0) {
+        throw Object.assign(new Error(`${unitId}のONLINE Gear Shield初期値が不正です`), { code: 'ONLINE_GEAR_SHIELD_STATE_INVALID' });
+      }
+      return [unitId, Object.freeze({ currentShield: initial.shieldAfter })];
+    });
+    return Object.freeze(Object.fromEntries(entries));
+  }
+
+  function applyFirebaseOnlineGearNumericShieldToIncomingDamage({ ownerId, target, requestedDamage }) {
+    const requested = Math.max(0, Number(requestedDamage) || 0);
+    const targetCombat = onlineGearStaticCombatForUnit(target);
+    if (!targetCombat) return null;
+    const ownerTeam = teamOfOwner(ownerId);
+    if (ownerTeam === null || ownerTeam === target.team) return requested;
+    if (!onlineGearStaticCombatForUnit(unitById(ownerId))) {
+      throw Object.assign(new Error('ONLINE Gear Shieldの攻撃元snapshotがありません'), { code: 'ONLINE_GEAR_SHIELD_SOURCE_SNAPSHOT_MISSING' });
+    }
+    const states = online?.battleGearShieldStateByUnit;
+    const state = states?.[target.id];
+    const shieldCap = globalThis.KatamonGearCombat.initialShieldFromSets(targetCombat).cap;
+    if (!states || !state || !Object.isFrozen(states) || !Object.isFrozen(state)
+        || !Number.isFinite(state.currentShield) || state.currentShield < 0
+        || state.currentShield > shieldCap + Number.EPSILON) {
+      throw Object.assign(new Error('ONLINE Gear Shield runtime stateが不正です'), { code: 'ONLINE_GEAR_SHIELD_STATE_INVALID' });
+    }
+    const result = globalThis.KatamonGearCombat.calculateDamagePipeline({
+      baseDamage: requested,
+      numericShield: state.currentShield,
+      hp: target.hp,
+    });
+    online.battleGearShieldStateByUnit = Object.freeze({
+      ...states,
+      [target.id]: Object.freeze({ currentShield: result.shieldAfter })
+    });
+    return result.hpDamage;
+  }
+
+  function applyBattleGearNumericShieldToIncomingDamage(options) {
+    const onlineResidual = applyFirebaseOnlineGearNumericShieldToIncomingDamage(options);
+    if (onlineResidual !== null) return onlineResidual;
+    return applyCpuGearNumericShieldToIncomingDamage(options);
+  }
+
+  function mitigateDamageAfterBattleGearShield(unit, residualDamage) {
     const residual = Math.max(0, Number(residualDamage) || 0);
     // Barrier owns its historic one integer boundary. With no active Barrier,
     // meet the same legacy HP integer boundary exactly once here.
     if (unit?.subweaponBarrierActive) return mitigateDamageWithSubweaponBarrier(unit, residual);
     return Math.max(0, Math.round(residual));
+  }
+
+  // Preserve the completed Phase 3C CPU helper name for existing callers and
+  // tests while the shared battle boundary above serves ONLINE as well.
+  function mitigateDamageAfterCpuGearShield(unit, residualDamage) {
+    return mitigateDamageAfterBattleGearShield(unit, residualDamage);
   }
 
   // Healing is a battle event, not every assignment to hp. This narrow
@@ -6073,8 +6143,8 @@
   function applyResolvedUnitDamage(target, requestedDamage, options = {}) {
     const requested = Math.max(0, Number(requestedDamage) || 0);
     if (!isCoop4v1() || !isCoopBossUnit(target) || !options.direct) {
-      const shieldedRequested = applyCpuGearNumericShieldToIncomingDamage({ ownerId: options.ownerId, target, requestedDamage: requested });
-      const actualDamage = mitigateDamageAfterCpuGearShield(target, shieldedRequested);
+      const shieldedRequested = applyBattleGearNumericShieldToIncomingDamage({ ownerId: options.ownerId, target, requestedDamage: requested });
+      const actualDamage = mitigateDamageAfterBattleGearShield(target, shieldedRequested);
       const before = target.hp;
       target.hp = Math.max(0, target.hp - actualDamage);
       const hpDamage = before - target.hp;
@@ -6141,7 +6211,7 @@
       if (distanceToUnitBody(u, flame.x, flame.y) > GROUND_FLAME_HIT_RADIUS) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
       const requested = Math.max(1, Math.round(GROUND_FLAME_TICK_DAMAGE * takenMul));
-      const actualDamage = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: flame.owner, target: u, requestedDamage: requested }));
+      const actualDamage = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: flame.owner, target: u, requestedDamage: requested }));
       u.hp = Math.max(0, u.hp - actualDamage);
       if (!flame.remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
       creditDamage(flame.owner, u, actualDamage);
@@ -12926,6 +12996,7 @@
       participantGearReveals: {},
       verifiedStartGearManifest: null,
       battleGearSnapshotsByUnit: null,
+      battleGearShieldStateByUnit: null,
       peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
@@ -13054,6 +13125,7 @@
     online.participantGearReveals = {};
     online.verifiedStartGearManifest = null;
     online.battleGearSnapshotsByUnit = null;
+    online.battleGearShieldStateByUnit = null;
     online.pendingStart = null;
     renderFirebaseLobby();
   }
@@ -13424,7 +13496,10 @@
   }
   function applyFirebaseOnlineGearBattleStartState(battleStartState) {
     if (!battleStartState) {
-      if (online && online.kind === 'firebase') online.battleGearSnapshotsByUnit = null;
+      if (online && online.kind === 'firebase') {
+        online.battleGearSnapshotsByUnit = null;
+        online.battleGearShieldStateByUnit = null;
+      }
       return false;
     }
     const entries = Object.entries(battleStartState.hpFuelByUnit).map(([unitId, expected]) => {
@@ -13441,6 +13516,7 @@
       unit.fuel = expected.fuel;
     }
     online.battleGearSnapshotsByUnit = battleStartState.battleGearSnapshotsByUnit;
+    online.battleGearShieldStateByUnit = createFirebaseOnlineGearShieldStateByUnit(online.battleGearSnapshotsByUnit);
     return true;
   }
   function validateFirebaseOnlineGearStartSnapshot(snap, battleStartState) {
@@ -13453,6 +13529,9 @@
     applySnapshot(snap, options);
     if (online && online.kind === 'firebase') {
       online.battleGearSnapshotsByUnit = battleStartState ? battleStartState.battleGearSnapshotsByUnit : null;
+      online.battleGearShieldStateByUnit = battleStartState
+        ? createFirebaseOnlineGearShieldStateByUnit(online.battleGearSnapshotsByUnit)
+        : null;
     }
     return true;
   }
@@ -13704,7 +13783,7 @@
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
-    online.participantGearReveals = {}; online.verifiedStartGearManifest = null; online.battleGearSnapshotsByUnit = null;
+    online.participantGearReveals = {}; online.verifiedStartGearManifest = null; online.battleGearSnapshotsByUnit = null; online.battleGearShieldStateByUnit = null;
     resetFirebaseGearRevealCompatibilityClock();
     online.roundOpponentSeats = null; online.roundRivals = null;
     online.startAcks = {};
@@ -16316,7 +16395,7 @@
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
       const requested = cpuGearActionDamageRequested(owner, Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1))));
-      const damage = mitigateDamageAfterCpuGearShield(u, applyCpuGearNumericShieldToIncomingDamage({ ownerId: owner, target: u, requestedDamage: requested }));
+      const damage = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: owner, target: u, requestedDamage: requested }));
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - damage);
       const actualHpDamage = beforeHp - u.hp;
