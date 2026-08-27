@@ -30,7 +30,11 @@
     }
     return value;
   };
-  const ONLINE_GEAR_SEAT_IDS = freeze(['p1', 'p2', 'e1', 'e2']);
+  // Firebase seats and Battle unit IDs are intentionally distinct in 2v2.
+  // Existing ONLINE maps p1/e1/s1/s2 to p1/e1/p2/e2 respectively.
+  const ONLINE_GEAR_SEAT_IDS = freeze(['p1', 'e1', 's1', 's2']);
+  const ONLINE_GEAR_UNIT_IDS = freeze(['p1', 'e1', 'p2', 'e2']);
+  const ONLINE_GEAR_SEAT_UNIT_MAP = freeze({ p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' });
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const exact = (value, keys, code) => {
     if (!plain(value) || Object.keys(value).sort().join(',') !== keys.slice().sort().join(',')) fail(code, 'unknown or missing fields');
@@ -48,8 +52,8 @@
     if (!Number.isFinite(context.baseHp) || context.baseHp < 0 || !Number.isFinite(context.baseFuel) || context.baseFuel < 0) fail('INVALID_ONLINE_GEAR_TRUSTED_CONTEXT');
     text(context.expectedOwnerUid, 'expectedOwnerUid');
     assertSeat(context.expectedSeatId, 'expectedSeatId');
-    assertSeat(context.expectedUnitId, 'expectedUnitId');
-    if (context.expectedSeatId !== context.expectedUnitId) fail('INVALID_ONLINE_GEAR_TRUSTED_CONTEXT');
+    assertUnit(context.expectedUnitId, 'expectedUnitId');
+    assertSeatUnitPair(context.expectedSeatId, context.expectedUnitId, 'INVALID_ONLINE_GEAR_TRUSTED_CONTEXT');
     text(context.expectedCharacterId, 'expectedCharacterId');
     assertRoundId(context.expectedRoundId);
     return context;
@@ -57,6 +61,13 @@
   function assertSeat(value, name) {
     if (!ONLINE_GEAR_SEAT_IDS.includes(value)) fail('INVALID_ONLINE_GEAR_IDENTITY', `${name} is invalid`);
     return value;
+  }
+  function assertUnit(value, name) {
+    if (!ONLINE_GEAR_UNIT_IDS.includes(value)) fail('INVALID_ONLINE_GEAR_IDENTITY', `${name} is invalid`);
+    return value;
+  }
+  function assertSeatUnitPair(seatId, unitId, code = 'INVALID_ONLINE_GEAR_IDENTITY') {
+    if (ONLINE_GEAR_SEAT_UNIT_MAP[seatId] !== unitId) fail(code, 'seatId and unitId do not match the ONLINE mapping');
   }
   function assertRoundId(value) {
     if (typeof value !== 'string' || !ROUND_ID_RE.test(value)) fail('INVALID_ONLINE_GEAR_IDENTITY', 'roundId is invalid');
@@ -75,12 +86,29 @@
     exact(value.slots, d.SLOT_IDS, 'INVALID_ONLINE_GEAR_LOADOUT');
     return clone(value);
   }
+  // FNV-1a 64 is applied to canonical UTF-8 bytes, not JS UTF-16 code units.
+  function utf8Bytes(textValue) {
+    const bytes = [];
+    for (let index = 0; index < textValue.length; index += 1) {
+      let codePoint = textValue.charCodeAt(index);
+      if (codePoint >= 0xd800 && codePoint <= 0xdbff) {
+        const low = textValue.charCodeAt(index + 1);
+        if (low >= 0xdc00 && low <= 0xdfff) { codePoint = 0x10000 + ((codePoint - 0xd800) * 0x400) + (low - 0xdc00); index += 1; }
+        else codePoint = 0xfffd;
+      } else if (codePoint >= 0xdc00 && codePoint <= 0xdfff) codePoint = 0xfffd;
+      if (codePoint <= 0x7f) bytes.push(codePoint);
+      else if (codePoint <= 0x7ff) bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
+      else if (codePoint <= 0xffff) bytes.push(0xe0 | (codePoint >> 12), 0x80 | ((codePoint >> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
+      else bytes.push(0xf0 | (codePoint >> 18), 0x80 | ((codePoint >> 12) & 0x3f), 0x80 | ((codePoint >> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
+    }
+    return bytes;
+  }
   function hash64(textValue) {
     let hash = 0xcbf29ce484222325n;
     const prime = 0x100000001b3n;
     const mask = 0xffffffffffffffffn;
-    for (let index = 0; index < textValue.length; index += 1) {
-      hash ^= BigInt(textValue.charCodeAt(index));
+    for (const byte of utf8Bytes(textValue)) {
+      hash ^= BigInt(byte);
       hash = (hash * prime) & mask;
     }
     return hash.toString(16).padStart(16, '0');
@@ -124,8 +152,8 @@
     const trusted = trustedContext(context);
     exact(value, ['battleGearSnapshotVersion', 'canonicalLoadout', 'characterId', 'gearProtocolVersion', 'gearRulesVersion', 'gearTrustModel', 'loadoutHash', 'ownerUid', 'roundId', 'seatId', 'unitId'], 'INVALID_ONLINE_GEAR_COMMITMENT');
     assertVersions(value);
-    text(value.ownerUid, 'ownerUid'); assertSeat(value.seatId, 'seatId'); assertSeat(value.unitId, 'unitId'); assertRoundId(value.roundId); text(value.characterId, 'characterId');
-    if (value.seatId !== value.unitId || value.ownerUid !== trusted.expectedOwnerUid || value.seatId !== trusted.expectedSeatId || value.unitId !== trusted.expectedUnitId || value.characterId !== trusted.expectedCharacterId || value.roundId !== trusted.expectedRoundId) fail('INVALID_ONLINE_GEAR_IDENTITY');
+    text(value.ownerUid, 'ownerUid'); assertSeat(value.seatId, 'seatId'); assertUnit(value.unitId, 'unitId'); assertSeatUnitPair(value.seatId, value.unitId); assertRoundId(value.roundId); text(value.characterId, 'characterId');
+    if (value.ownerUid !== trusted.expectedOwnerUid || value.seatId !== trusted.expectedSeatId || value.unitId !== trusted.expectedUnitId || value.characterId !== trusted.expectedCharacterId || value.roundId !== trusted.expectedRoundId) fail('INVALID_ONLINE_GEAR_IDENTITY');
     canonicalLoadout(value.canonicalLoadout);
     if (typeof value.loadoutHash !== 'string' || !HASH_RE.test(value.loadoutHash)) fail('INVALID_ONLINE_GEAR_LOADOUT_HASH');
     const expectedHash = calculateLoadoutHash(value);
@@ -167,7 +195,7 @@
 
   return freeze({
     ONLINE_GEAR_PROTOCOL_VERSION, ONLINE_GEAR_RULES_VERSION, ONLINE_GEAR_TRUST_MODEL,
-    GEAR_MODE_OFF, GEAR_MODE_PRIVATE_TRUSTED_V1, ONLINE_GEAR_SEAT_IDS,
+    GEAR_MODE_OFF, GEAR_MODE_PRIVATE_TRUSTED_V1, ONLINE_GEAR_SEAT_IDS, ONLINE_GEAR_UNIT_IDS, ONLINE_GEAR_SEAT_UNIT_MAP,
     ONLINE_GEAR_LOADOUT_HASH_ALGORITHM, GearOnlineProtocolError,
     createLoadoutCommitment, validateLoadoutCommitment, reconstructBattleGearSnapshot,
     stableSerializeCommitment, calculateLoadoutHash

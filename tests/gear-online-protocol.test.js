@@ -37,7 +37,9 @@ test('protocol constants, modes, trust model and seat identities are v1-fixed', 
   assert.equal(protocol.ONLINE_GEAR_TRUST_MODEL, 'client_canonical');
   assert.equal(protocol.GEAR_MODE_OFF, 'off');
   assert.equal(protocol.GEAR_MODE_PRIVATE_TRUSTED_V1, 'private_trusted_v1');
-  assert.deepEqual(protocol.ONLINE_GEAR_SEAT_IDS, ['p1', 'p2', 'e1', 'e2']);
+  assert.deepEqual(protocol.ONLINE_GEAR_SEAT_IDS, ['p1', 'e1', 's1', 's2']);
+  assert.deepEqual(protocol.ONLINE_GEAR_UNIT_IDS, ['p1', 'e1', 'p2', 'e2']);
+  assert.deepEqual(protocol.ONLINE_GEAR_SEAT_UNIT_MAP, { p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' });
   assert.equal(protocol.ONLINE_GEAR_LOADOUT_HASH_ALGORITHM, 'fnv1a64-v1');
 });
 
@@ -77,6 +79,13 @@ test('canonical hash has a fixed v1 fixture', () => {
   assert.equal(value.loadoutHash, 'fnv1a64-v1:faf6ce071f25d275');
 });
 
+test('FNV-1a v1 hashes canonical UTF-8 bytes with a fixed Unicode fixture', () => {
+  const value = commitmentWith(makeGear('unicode-猫🛡️'));
+  const clone = structuredClone(value);
+  assert.equal(value.loadoutHash, 'fnv1a64-v1:6172f79e6241e0cf');
+  assert.equal(protocol.calculateLoadoutHash(clone), value.loadoutHash);
+});
+
 test('materialized stat or slot assignment changes the canonical hash', () => {
   const raw = makeGear('mutation');
   const before = commitmentWith(raw);
@@ -109,6 +118,24 @@ test('identity binds owner, seat, unit, character and round to trusted context',
   }
   const mismatch = structuredClone(value); mismatch.unitId = 'e1';
   fails('INVALID_ONLINE_GEAR_TRUSTED_CONTEXT', () => protocol.validateLoadoutCommitment(mismatch, trusted({ expectedUnitId: 'e1', expectedSeatId: 'p1' })));
+});
+
+test('all canonical Firebase seat to Battle unit mappings create, validate and reconstruct', () => {
+  for (const [seatId, unitId] of Object.entries({ p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' })) {
+    const context = trusted({ expectedSeatId: seatId, expectedUnitId: unitId });
+    const value = protocol.createLoadoutCommitment(createInput(snapshotWith(makeGear(`seat-${seatId}`)), context));
+    assert.equal(value.seatId, seatId); assert.equal(value.unitId, unitId);
+    assert.equal(protocol.validateLoadoutCommitment(value, context).loadoutHash, value.loadoutHash);
+    assert.equal(protocol.reconstructBattleGearSnapshot(value, context).characterId, 'kyoryu');
+  }
+});
+
+test('invalid Firebase seat and Battle unit mappings fail closed', () => {
+  const validS1 = protocol.createLoadoutCommitment(createInput(snapshotWith(makeGear('mapping')), trusted({ expectedSeatId: 's1', expectedUnitId: 'p2' })));
+  for (const [seatId, unitId] of [['s1', 's1'], ['s1', 'e2'], ['s2', 'p2'], ['p2', 'p2'], ['e2', 'e2'], ['p1', 's1']]) {
+    const copy = structuredClone(validS1); copy.seatId = seatId; copy.unitId = unitId;
+    fails('INVALID_ONLINE_GEAR_IDENTITY', () => protocol.validateLoadoutCommitment(copy, trusted({ expectedSeatId: 's1', expectedUnitId: 'p2' })));
+  }
 });
 
 test('protocol, rules, snapshot and trust model versions fail closed', () => {
@@ -148,4 +175,4 @@ test('creation rejects an invalid sender Battle Gear Snapshot and never mutates 
   const invalid = structuredClone(source); invalid.derivedStats.maxHp += 1; fails('INVALID_ONLINE_GEAR_BATTLE_SNAPSHOT', () => protocol.createLoadoutCommitment(createInput(invalid)));
 });
 
-console.log(`gear-online-protocol: ${passed}/15 passed`);
+console.log(`gear-online-protocol: ${passed}/18 passed`);
