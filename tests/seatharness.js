@@ -1232,6 +1232,19 @@ const HOOK = `
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
+        knockbackPolicy: (ownerId, targetId, damageType, projectile = null, legacyKnockbackSpeed = 0) =>
+          battleGearKnockbackPolicy(ownerId, unitById(targetId), damageType, projectile, legacyKnockbackSpeed),
+        applyKnockbackAfterDamage: ({ actualDamage, targetId, blastX, ownerId,
+          damageType, projectile = null, legacyKnockbackSpeed = 0 }) =>
+          applyBattleGearKnockbackAfterDamage({
+            actualDamage,
+            target: unitById(targetId),
+            blastX,
+            ownerId,
+            damageType,
+            projectile,
+            legacyKnockbackSpeed
+          }),
         rngActionIdentity: sourceUnitId => createFirebaseOnlineGearRngActionIdentity(sourceUnitId),
         critResolution: (ownerId, targetId, damageType, projectile = null) =>
           resolveFirebaseOnlineGearCrit(ownerId, unitById(targetId), damageType, projectile,
