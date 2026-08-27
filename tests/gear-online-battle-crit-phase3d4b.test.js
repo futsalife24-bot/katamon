@@ -195,7 +195,7 @@ test('p1 and e1 direct projectile Crit use immutable snapshot stats exactly once
   }
 });
 
-test('normal blast may Crit in both directions while Blast Power and Range remain inert', () => {
+test('normal blast may Crit in both directions while the Phase 3D-4B compatibility API remains Blast-inert', () => {
   const p1Gears = setGears('p1-critical-blast', 'critical', ['barrel', 'sight']);
   const e1Gears = setGears('e1-critical-blast', 'critical', ['barrel', 'sight']);
   const { state } = installBattle({ p1Gears, e1Gears });
@@ -209,8 +209,6 @@ test('normal blast may Crit in both directions while Blast Power and Range remai
   }
   const source = onlineDamage.calculateOnlineGearCritRequestedDamage.toString();
   assert.doesNotMatch(source, /blastDamageMultiplier|blastRangeMultiplier/);
-  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(index, /const normalCannonCombat = techniqueProjectile\?\.gearDamageProfile === 'normal_cannonball'[\s\S]{0,120}cpuGearCombatForUnit/);
 });
 
 test('Critical 2 rate and Critical 4 damage come from the snapshot without runtime soft-cap or double count', () => {
@@ -275,7 +273,7 @@ test('special direct projectiles and self blast remain non-Crit without consumin
     expectedDamage(6, 'direct_projectile', attacker, defender, false, before), before));
   const self = state.battleGearSnapshotsByUnit.p1.derivedStats;
   assert.equal(wiring.requestedDamage('p1', 'p1', 'normal_blast', 20, projectile('p1')),
-    expectedDamage(20, 'normal_blast', self, self, false, 100));
+    expectedDamage(20 * self.blastDamageMultiplier, 'normal_blast', self, self, false, 100));
 
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   for (const name of ['resolveProjectileUnitImpact', 'resolvePrismBeamUnitImpact', 'resolveCoolKaiOnigiriUnitImpact', 'resolveBarucopterBulletUnitImpact']) {
@@ -368,7 +366,7 @@ test('Gear OFF damage and Gear ON 2v2 gate remain unchanged', () => {
     (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
-test('Crit adds no Firebase field, Rules change, CPU RNG reuse, or Blast integration', () => {
+test('Crit adds no Firebase field, Rules change, CPU RNG reuse, or Blast behavior to its compatibility API', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const rngSource = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-battle-rng.js'), 'utf8');

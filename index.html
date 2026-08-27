@@ -8712,6 +8712,15 @@
     return snapshot.derivedStats;
   }
 
+  // Normal-cannon Blast reach is the one Phase 3C/3D seam shared by battle
+  // modes. Keep the CPU helper CPU-only; ONLINE reads only the immutable
+  // start-validated snapshot, while Gearless modes continue to return null.
+  function battleGearNormalCannonCombatForUnit(unit) {
+    const onlineCombat = onlineGearStaticCombatForUnit(unit);
+    if (onlineCombat) return onlineCombat;
+    return cpuGearCombatForUnit(unit);
+  }
+
   // Firebase ONLINE 1v1 accepts one Battle action for the current canonical
   // turn. The transport actionId remains a random duplicate/replay token; RNG
   // identity is derived locally from immutable room/round/turn authority.
@@ -8791,8 +8800,8 @@
     const defenderCombat = onlineGearStaticCombatForUnit(target);
     if (!attackerCombat && !defenderCombat) return null;
     const crit = resolveFirebaseOnlineGearCrit(ownerId, target, damageType, projectile, attackerCombat);
-    if (crit.eligible) {
-      return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearCritRequestedDamage({
+    if (projectile?.gearDamageProfile === 'normal_cannonball') {
+      return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearCritBlastRequestedDamage({
         existingBaseDamage,
         damageType,
         attackerCombat,
@@ -8812,8 +8821,8 @@
 
   // The production hit routes share this narrow dispatcher. CPU keeps its
   // complete Phase 3C pipeline; Firebase ONLINE receives the narrowly gated
-  // static Attack/Defense + deterministic normal-cannon Crit resolver; every
-  // other mode keeps the historic Gearless boundary.
+  // static Attack/Defense + deterministic normal-cannon Crit/Blast resolver;
+  // every other mode keeps the historic Gearless boundary.
   function battleGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile = null) {
     const onlineDamage = onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile);
     if (onlineDamage !== null) return onlineDamage;
@@ -16316,7 +16325,7 @@
     const remoteShot = !!(isOnline() && unitById(owner)?.control === 'remote');
     const ownerTeam = teamOfOwner(owner);
     const normalCannonCombat = techniqueProjectile?.gearDamageProfile === 'normal_cannonball'
-      ? cpuGearCombatForUnit(unitById(owner)) : null;
+      ? battleGearNormalCannonCombatForUnit(unitById(owner)) : null;
     // Gear range changes combat reach only.  Keep visual particles and
     // terrain untouched so Blast Gear never perturbs the legacy Math.random
     // stream or terrain balance in Phase 3C-2B.
