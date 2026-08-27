@@ -57,7 +57,8 @@ const APP_SHELL = [
   './shared/gear-online-lobby-protocol.js',
   './shared/gear-online-firebase-wire.js',
   './shared/gear-online-battle-start.js',
-  './shared/gear-online-battle-damage.js'
+  './shared/gear-online-battle-damage.js',
+  './shared/gear-online-battle-rng.js'
 ];
 // 初回はオフライン起動に必要な素材を保存し、以後は同じURLの端末内コピーを再利用する。
 const CORE_ASSETS = [

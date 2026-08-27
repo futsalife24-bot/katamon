@@ -646,6 +646,7 @@
 <script src="shared/gear-online-firebase-wire.js"></script>
 <script src="shared/gear-online-battle-start.js"></script>
 <script src="shared/gear-online-battle-damage.js"></script>
+<script src="shared/gear-online-battle-rng.js"></script>
 <script>
 (() => {
   'use strict';
@@ -8711,6 +8712,26 @@
     return snapshot.derivedStats;
   }
 
+  // Firebase ONLINE 1v1 accepts one Battle action for the current canonical
+  // turn. The transport actionId remains a random duplicate/replay token; RNG
+  // identity is derived locally from immutable room/round/turn authority.
+  function createFirebaseOnlineGearRngActionIdentity(sourceUnitId) {
+    if (!online || online.kind !== 'firebase' || !online.battleGearSnapshotsByUnit) return null;
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    if (activeUnit()?.id !== sourceUnitId) {
+      throw Object.assign(new Error('ONLINE Gear RNG action sourceが現在手番と一致しません'), { code: 'INVALID_ONLINE_GEAR_RNG_ACTION_SOURCE' });
+    }
+    return globalThis.KatamonGearOnlineBattleRng.createOnlineGearActionIdentity({
+      version: globalThis.KatamonGearOnlineBattleRng.ONLINE_GEAR_BATTLE_RNG_VERSION,
+      roomId: online.room,
+      roundId: online.currentRoundId,
+      turnOrdinal: turnCount,
+      sourceUnitId
+    });
+  }
+
   function onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage) {
     if (!damageType || !target) return null;
     const attackerCombat = onlineGearStaticCombatForUnit(unitById(ownerId));
@@ -11278,7 +11299,11 @@
         // state/result を受けるまでの紐付けを先に確立する。非アクティブタブでSSEだけが
         // 先行しても、後続パケットを正しい行動へ結び付けられる。
         if (online.kind === 'firebase' || online.kind === 'coop') {
-          online.remoteAction = { unitId: msg.unitId, actionId: msg.actionId, from: msg.from, sentAt: msg.sentAt, resolved: false };
+          const gearRngActionIdentity = online.kind === 'firebase' ? createFirebaseOnlineGearRngActionIdentity(msg.unitId) : null;
+          online.remoteAction = {
+            unitId: msg.unitId, actionId: msg.actionId, from: msg.from, sentAt: msg.sentAt, resolved: false,
+            ...(gearRngActionIdentity ? { gearRngActionIdentity } : {})
+          };
           if (online.kind === 'firebase') {
             const bufferedEntry = online.pendingRemoteTerminals.get(msg.actionId);
             const buffered = bufferedEntry && bufferedEntry.msg;
@@ -11490,8 +11515,9 @@
     if (!isOnline() || !netControlsUnit(unit)) return;
     let actionId = null;
     if (online.kind === 'firebase' || online.kind === 'coop') {
+      const gearRngActionIdentity = online.kind === 'firebase' ? createFirebaseOnlineGearRngActionIdentity(unit.id) : null;
       actionId = secureNonce();
-      online.localAction = { unitId: unit.id, actionId };
+      online.localAction = { unitId: unit.id, actionId, ...(gearRngActionIdentity ? { gearRngActionIdentity } : {}) };
     }
     // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
     if (moveSyncPending) sendMoveUpdate(unit);
