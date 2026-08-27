@@ -1233,6 +1233,19 @@ const HOOK = `
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
         shieldState: () => online?.battleGearShieldStateByUnit
           ? structuredClone(online.battleGearShieldStateByUnit) : null,
+        battleSnapshotsForRuntimeTest: () => online?.battleGearSnapshotsByUnit || null,
+        runtimeState: () => {
+          const runtimeState = createFirebaseOnlineGearRuntimeState();
+          return runtimeState ? structuredClone(runtimeState) : null;
+        },
+        prepareRuntimeState: snap => prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(snap),
+        setShieldStateRawForTest: value => { online.battleGearShieldStateByUnit = value; },
+        turnSnapshotForTest: () => {
+          const snap = buildSnapshot({ includeTerrain: false });
+          const runtimeState = createFirebaseOnlineGearRuntimeState();
+          if (runtimeState) snap.gearRuntimeState = runtimeState;
+          return structuredClone(snap);
+        },
         setShieldForTest: (unitId, value) => {
           const state = online?.battleGearShieldStateByUnit;
           if (!state?.[unitId] || !Number.isFinite(value) || value < 0) return null;
