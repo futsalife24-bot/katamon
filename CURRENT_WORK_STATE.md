@@ -1,6 +1,12 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-08-24 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-08-27 / GitHub正本: `futsalife24-bot/katamon` の `master`
+
+## 現在の開発状態
+
+Gear: P0仕様/P1 Domain/P2保存・取引・報酬/P3A Preset/P3B Calc/SS完了。P3Cは**正式COMPLETE**: 3C-1 Start/SS/HP/Fuel、2A A/D、2B Crit/Blast、3A KB、3B Status、3C1 Shield、3C2 Heal、3D LS。監査GO（P0/P1/P2=0、P3=1:更新遅れ）。PR305済、master `0d03f5d0c3ba614dd7d7cc9ac38d9f5046f76b00`。
+
+適用=offline CPU normal 1v1 p1のみ。CPU enemy/FREE/local2v2/ONLINE/Coop/Bossは意図的に無効。次は**3D-0 ONLINE protocol/authority audit**（設計監査のみ）。確認: Snapshot transport、host/server authority、unit ownership、action/RNG、runtime/reconnect、tamper、2v2 conflict、Rescue4 ally ownership。Rescue4=pure helperのみ（CPU 1v1 allyなし）、3D+で判断。以降:3D-1+ ONLINE、3E、4UI、5UX。
 
 ## v2.0.142 タイトルBATTLE／GARAGE 2ページ化
 
