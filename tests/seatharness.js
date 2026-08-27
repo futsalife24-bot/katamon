@@ -1187,6 +1187,8 @@ const HOOK = `
           participantGearReveals: online.participantGearReveals || {},
           verifiedStartGearManifest: online.verifiedStartGearManifest || null,
           battleGearSnapshotsByUnit: online.battleGearSnapshotsByUnit || null,
+          localAction: online.localAction || null,
+          remoteAction: online.remoteAction || null,
           gearRevealCompatibility: online.gearRevealCompatibility || null,
           protocolError: online.protocolError || ''
         }) : null,
@@ -1230,6 +1232,7 @@ const HOOK = `
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
+        rngActionIdentity: sourceUnitId => createFirebaseOnlineGearRngActionIdentity(sourceUnitId),
         onlineCombat: unitId => onlineGearStaticCombatForUnit(unitById(unitId)),
         battleSnapshotFreeze: () => online && online.battleGearSnapshotsByUnit ? {
           map: Object.isFrozen(online.battleGearSnapshotsByUnit),
