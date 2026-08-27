@@ -1162,6 +1162,68 @@ const HOOK = `
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,
       firebaseProto: () => FIREBASE_PROTO_VERSION, firebaseSeats: () => FIREBASE_SEATS.slice(), firebasePlayerSeats: () => FIREBASE_PLAYER_SEATS.slice(), firebaseRoundId, normalizeLobbySettings, firebasePacketSeatAllowed,
       receiveFirebaseForTest: msg => netReceiveInner(msg),
+      // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
+      // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は
+      // production helperを直接通す。READY/reveal/startの非同期経路をsleep無しで検査する。
+      firebaseGearLobbyForTest: () => ({
+        characterIds: () => CHARACTER_LIST.slice(),
+        state: () => online ? structuredClone({
+          visibility: online.visibility,
+          settings: online.settings,
+          slots: online.slots,
+          acceptedSettingsRevision: online.acceptedSettingsRevision,
+          acceptedSettingsIdentity: online.acceptedSettingsIdentity,
+          persistedRosterIdentity: online.persistedRosterIdentity,
+          settingsAuthorityBlocked: !!online.settingsAuthorityBlocked,
+          selfReady: !!online.selfReady,
+          readyCapturePending: !!online.readyCapturePending,
+          readyCaptureGeneration: online.readyCaptureGeneration || 0,
+          selfCommit: online.selfCommit || null,
+          selfCharacter: online.selfCharacter || null,
+          selfNonce: online.selfNonce || null,
+          selfGearCapture: online.selfGearCapture || null,
+          participantGearReveals: online.participantGearReveals || {},
+          verifiedStartGearManifest: online.verifiedStartGearManifest || null,
+          gearRevealCompatibility: online.gearRevealCompatibility || null,
+          protocolError: online.protocolError || ''
+        }) : null,
+        inspectPersistedRoom: room => inspectPersistedFirebaseRoom(room),
+        applyPersistedRoom: room => applyPersistedFirebaseRoomAuthority(room),
+        handleSettingsHint: settings => handleFirebaseSettingsHint(settings),
+        refreshPersistedRoom: (broadcast = false, expectedSettingsHint = null) =>
+          refreshFirebaseRoster(broadcast, expectedSettingsHint),
+        gearEnabled: () => firebaseGearEnabled(),
+        trustedContext: (seat, characterId) => firebaseGearTrustedContext(seat, characterId),
+        readyAuthorityIdentity: () => firebaseReadyAuthorityIdentity(),
+        renderGearMode: () => {
+          renderFirebaseLobby();
+          return {
+            value: onlineGearModeEl ? onlineGearModeEl.value : null,
+            disabled: onlineGearModeEl ? !!onlineGearModeEl.disabled : null,
+            status: onlineGearModeStatusEl ? onlineGearModeStatusEl.textContent : '',
+            enabled: onlineGearModeStatusEl ? onlineGearModeStatusEl.dataset.enabled : null
+          };
+        },
+        captureReady: characterId => captureFirebaseReadyGear(characterId),
+        commitReady: characterId => commitOwnCharacterSelection(characterId),
+        updateSettings: options => updateFirebaseSettings(options),
+        changeCharacter: characterId => {
+          if (!onlineCharacterEl) return false;
+          onlineCharacterEl.value = characterId;
+          onlineCharacterEl.dispatchEvent({ type: 'change' });
+          return true;
+        },
+        ensureReadyCurrent: () => ensureFirebaseReadyGearCurrent(),
+        pollReadyStorage: () => updateFirebaseReadyGearStorageWatch(true),
+        invalidateReady: reason => invalidateFirebaseRoundReadiness(reason),
+        storageMutation: event => handleFirebaseGearStorageMutation(event),
+        buildRevealPayload: () => buildFirebaseRevealPayload(),
+        verifyReveal: msg => verifyPeerReveal(msg),
+        buildStartEnvelope: () => buildFirebaseStartGearEnvelope(),
+        validateStartEnvelope: msg => validateFirebaseStartGearEnvelope(msg),
+        expireRevealCompatibility: () => updateFirebaseGearRevealCompatibility(true),
+        commitPayload: (character, nonce, bindingText = null) => commitPayload(character, nonce, bindingText)
+      }),
       // 通信ログ(2026-07-27、実機報告の追跡用)。stage3()の内側に置き、既存の h.stage3() 経由で使えるようにする。
       setOnlineForLogTest: (obj) => { online = obj; },
       noteRemoteDamageBaseline: () => noteRemoteDamageBaseline(),
@@ -1665,6 +1727,8 @@ for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', '
 elements.set('onlineCharacterPicker', makeElement('div'));
 elements.set('onlineCharacter', makeElement('select'));
 elements.set('onlineCharacterPreview', makeElement('img'));
+elements.set('onlineGearMode', makeElement('select'));
+elements.set('onlineGearModeStatus', makeElement('div'));
 
 // A one-shot pre-evaluation seed makes startup-recovery tests exercise the
 // real bootstrap ordering.  It is deliberately not a production hook and is
