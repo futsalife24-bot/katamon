@@ -332,7 +332,7 @@ test('self normal blast follows current CPU parity instead of inheriting Crit se
   assertClose(Math.abs(result.velocity.vx), expected);
 });
 
-test('Knockback adds no Math.random calls and leaves Status Resistance disconnected', () => {
+test('Knockback adds no Math.random calls', () => {
   const randomCalls = (gears) => {
     installBattle({ p1Gears: gears });
     installAction('p1', 9);
@@ -348,13 +348,6 @@ test('Knockback adds no Math.random calls and leaves Status Resistance disconnec
   };
   assert.equal(randomCalls(impactGears('random-impact4', ['barrel', 'armor', 'core', 'engine'])), randomCalls([]));
 
-  const statusGear = createGear('status-resistance', 'auxiliary', 'assault', (gear) =>
-    gear.mainOp.opId === 'status_resistance' || gear.subOps.some((sub) => sub.opId === 'status_resistance'));
-  const { state } = installBattle({ p1Gears: [statusGear] });
-  assert(state.battleGearSnapshotsByUnit.p1.derivedStats.statusResistanceBp > 0);
-  const p1 = kt.unitById('p1');
-  kt.emitEmpForTest(p1.x, p1.y, 100, 'e1', 2, 0);
-  assert.equal(kt.turnEffectForTest('p1').moveLockTurns, 2);
 });
 
 test('Gear ON 2v2 remains rejected and no Knockback wire or RNG field is introduced', () => {

@@ -150,6 +150,27 @@
     return Object.freeze(identity);
   }
 
+  function createStatusRollIdentity(input) {
+    exact(input, ['actionIdentity', 'hitOrdinal', 'statusId', 'targetUnitId'], 'INVALID_ONLINE_GEAR_STATUS_IDENTITY_INPUT');
+    const action = input.actionIdentity;
+    exact(action, ['authoritativeActionOrdinal', 'roomId', 'roundId', 'sourceUnitId', 'turnOrdinal', 'version'], 'INVALID_ONLINE_GEAR_ACTION_IDENTITY_INPUT');
+    const identity = {
+      version: action.version,
+      namespace: ONLINE_GEAR_STATUS_RNG_NAMESPACE,
+      roomId: action.roomId,
+      roundId: action.roundId,
+      turnOrdinal: action.turnOrdinal,
+      authoritativeActionOrdinal: action.authoritativeActionOrdinal,
+      sourceUnitId: action.sourceUnitId,
+      targetUnitId: input.targetUnitId,
+      effectKind: 'status',
+      statusId: input.statusId,
+      hitOrdinal: input.hitOrdinal
+    };
+    canonicalOnlineGearRngKey(identity);
+    return Object.freeze(identity);
+  }
+
   return Object.freeze({
     ONLINE_GEAR_BATTLE_RNG_VERSION,
     ONLINE_GEAR_RNG_HASH_ALGORITHM,
@@ -161,6 +182,7 @@
     deriveAuthoritativeActionOrdinal,
     createOnlineGearActionIdentity,
     createCritRollIdentity,
+    createStatusRollIdentity,
     canonicalOnlineGearRngKey,
     rollBasisPoints
   });

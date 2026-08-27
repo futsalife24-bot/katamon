@@ -1249,6 +1249,8 @@ const HOOK = `
         critResolution: (ownerId, targetId, damageType, projectile = null) =>
           resolveFirebaseOnlineGearCrit(ownerId, unitById(targetId), damageType, projectile,
             onlineGearStaticCombatForUnit(unitById(ownerId))),
+        statusResolution: (ownerId, targetId, statusId) =>
+          firebaseOnlineGearHostileStatusOutcome(ownerId, unitById(targetId), statusId),
         setCritActionForTest: (ownerId, location = 'local', actionId = 'a'.repeat(32)) => {
           const index = turnOrder.indexOf(ownerId);
           if (index >= 0) activeIndex = index;
