@@ -346,6 +346,9 @@
   #onlineLobby.in-room.results #onlineCharacterPicker { display: none; }
   #onlineSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
   #onlineSettings select { min-width: 0; padding: 5px 2px; color: #fff5dc; background: #101b20; border: 1px solid #c78335; }
+  #onlineGearMode { grid-column: 1 / -1; }
+  #onlineGearModeStatus { grid-column: 1 / -1; color: #8fb6c8; font-size: 10px; line-height: 1.45; }
+  #onlineGearModeStatus[data-enabled="true"] { color: #ffd24a; }
   #onlineCustomStage {
     grid-column: 1 / -1; min-height: 42px; padding: 7px 9px; color: #ffe2a1;
     font: 400 12px/1.35 var(--katamon-font-ui); text-align: left; cursor: pointer;
@@ -572,6 +575,8 @@
           <select id="onlineTurns" aria-label="手番数"><option value="10">10手番</option><option value="15" selected>15手番</option><option value="20">20手番</option></select>
           <select id="onlineFormat" aria-label="対戦方式"><option value="1v1" selected>1 vs 1</option><option value="2v2">2 vs 2</option></select>
           <select id="onlineStageSize" aria-label="ステージサイズ"><option value="standard" selected>標準ステージ</option><option value="large">大型ステージ</option></select>
+          <select id="onlineGearMode" aria-label="Gear設定"><option value="off" selected>Gear OFF</option><option value="private_trusted_v1">Gear ON（信頼できる非公開対戦）</option></select>
+          <div id="onlineGearModeStatus" data-enabled="false">Gear OFF：従来どおりのONLINE対戦です</div>
           <button id="onlineCustomStage" type="button" data-selected="false">カスタムステージを選ぶ</button>
         </div>
       </div>
@@ -636,6 +641,9 @@
 <script src="shared/gear-combat.js"></script>
 <script src="shared/gear-battle-rng.js"></script>
 <script src="shared/gear-battle-snapshot.js"></script>
+<script src="shared/gear-online-protocol.js"></script>
+<script src="shared/gear-online-lobby-protocol.js"></script>
+<script src="shared/gear-online-firebase-wire.js"></script>
 <script>
 (() => {
   'use strict';
@@ -9744,7 +9752,13 @@
     const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
   }
-  function commitPayload(character, nonce) { return sha256Hex(`${character}:${nonce}`); }
+  function commitPayload(character, nonce, readyGearBindingText = null) {
+    // Gear OFFは公開済みFirebase v3のbyte contractを維持する。Gear ONだけ、
+    // local-only Ready Gear Bindingをnonce付きSHA-256材料の内側へ封印する。
+    if (readyGearBindingText === null) return sha256Hex(`${character}:${nonce}`);
+    if (typeof readyGearBindingText !== 'string' || !readyGearBindingText) throw new Error('Ready Gear Bindingを確認できません');
+    return sha256Hex(`gear-v1:${character}:${nonce}:${readyGearBindingText.length}:${readyGearBindingText}`);
+  }
   async function fairFirstPlayer(room, hostNonce, guestNonce) {
     const digest = await sha256Hex(`${room}:${hostNonce}:${guestNonce}`);
     return (parseInt(digest.slice(-1), 16) & 1) === 0 ? 'p1' : 'e1';
@@ -10263,14 +10277,37 @@
     // 名前だけで同一人物扱いはせず、この2種の入室通知以外へも載せない。
     if (msg.rivalId != null && ((msg.t !== 'lobbyState' && msg.t !== 'presence')
         || typeof msg.rivalId !== 'string' || !FIREBASE_RIVAL_ID_RE.test(msg.rivalId))) return { ok: false, reason: `${msg.t}.rivalId` };
+    const gearFieldNames = ['gearWireVersion', 'gearCommitmentJson', 'gearManifestJson'];
+    const hasGearField = gearFieldNames.some(key => Object.prototype.hasOwnProperty.call(msg, key));
+    if (msg.t !== 'reveal' && msg.t !== 'start' && hasGearField) return { ok: false, reason: `${msg.t}.gearField` };
     if (msg.t === 'lobbyState') return typeof msg.status === 'string' && msg.status.length <= 16 && (!msg.nextRoundId || FIREBASE_ROUND_RE.test(msg.nextRoundId)) && (msg.autoReady == null || typeof msg.autoReady === 'boolean') ? { ok: true } : { ok: false, reason: 'lobbyState.status' };
     if (msg.t === 'settings') return msg.settings && typeof msg.settings === 'object' ? { ok: true } : { ok: false, reason: 'settings.payload' };
     // ready は準備完了の取り消しも運ぶ。value 省略は旧形式で「準備完了」の意味。
     if (msg.t === 'ready') return msg.value == null || typeof msg.value === 'boolean' ? { ok: true } : { ok: false, reason: 'ready.value' };
     if (msg.t === 'rematchVote') return typeof msg.vote === 'boolean' ? { ok: true } : { ok: false, reason: 'rematchVote.vote' };
     if (msg.t === 'commit') return /^[0-9a-f]{64}$/.test(msg.hash || '') ? { ok: true } : { ok: false, reason: 'commit.hash' };
-    if (msg.t === 'reveal') return CHARACTER_LIST.includes(msg.character) && /^[0-9a-f]{48}$/.test(msg.nonce || '') ? { ok: true } : { ok: false, reason: 'reveal.characterOrNonce' };
-    if (msg.t === 'start') { const reason = snapshotValidationReason(msg.snap); return reason ? { ok: false, reason: `start.${reason}` } : { ok: true }; }
+    const gearOn = !legacyV2 && online && online.kind === 'firebase' && firebaseGearEnabled();
+    if (msg.t === 'reveal') {
+      if (!CHARACTER_LIST.includes(msg.character) || !/^[0-9a-f]{48}$/.test(msg.nonce || '')) return { ok: false, reason: 'reveal.characterOrNonce' };
+      if (!gearOn && !hasGearField) return { ok: true };
+      const validGearWire = msg.gearWireVersion === globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION
+        && typeof msg.gearCommitmentJson === 'string' && msg.gearCommitmentJson.length > 0
+        && msg.gearCommitmentJson.length <= globalThis.KatamonGearOnlineFirebaseWire.MAX_REVEAL_GEAR_JSON_CHARS
+        && !Object.prototype.hasOwnProperty.call(msg, 'gearManifestJson');
+      // local cacheがOFFでも、正規形のGear envelopeなら同期validatorでは捨てない。
+      // verifyPeerRevealがFirebase正本を再取得し、persisted OFFならそこでfail closedする。
+      return validGearWire ? { ok: true } : { ok: false, reason: 'reveal.gearWire' };
+    }
+    if (msg.t === 'start') {
+      const reason = snapshotValidationReason(msg.snap);
+      if (reason) return { ok: false, reason: `start.${reason}` };
+      if (!gearOn && !hasGearField) return { ok: true };
+      const validGearWire = msg.gearWireVersion === globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION
+        && typeof msg.gearManifestJson === 'string' && msg.gearManifestJson.length > 0
+        && msg.gearManifestJson.length <= globalThis.KatamonGearOnlineFirebaseWire.MAX_START_GEAR_MANIFEST_JSON_CHARS
+        && !Object.prototype.hasOwnProperty.call(msg, 'gearCommitmentJson');
+      return validGearWire ? { ok: true } : { ok: false, reason: 'start.gearWire' };
+    }
     if (msg.t === 'state') {
       const reason = snapshotValidationReason(msg.snap, { includeTerrain: legacyV2 });
       const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
@@ -10312,6 +10349,10 @@
   function acceptPeerReveal(alreadySeen) { return !alreadySeen; }
   const FIREBASE_ACTION_ID_RE = /^[0-9a-f]{48}$/;
   const FIREBASE_PENDING_VISIBLE_TIMEOUT_MS = 15000;
+  // Gear ON roomでは旧clientのcommit自体はopaque SHA-256なので、READY時点では
+  // 対応可否を見分けられない。Rulesが旧revealを拒否したまま全員が永久待機しないよう、
+  // revealを待つ可視時間に上限を置き、silent Gearless fallbackではなく明示停止する。
+  const FIREBASE_GEAR_REVEAL_COMPAT_VISIBLE_TIMEOUT_MS = 20000;
   const FIREBASE_HEARTBEAT_VISIBLE_INTERVAL_MS = 10000;
   const FIREBASE_PEER_VISIBLE_TIMEOUT_MS = 35000;
   // ロビーの心拍は対戦中(10s/35s)より緩い。ロビーは急ぐ必要が無く、pingの書き込みも減らしたいため。
@@ -10956,14 +10997,17 @@
         online.queue.length = 0;
         return;
       }
+      // 常設roundのSSEは旧roundの履歴も再送する。Gear ON/OFFは現在roomのpersisted
+      // settingsで判定するため、旧round packetを先に現modeで検証すると、当時は正しかった
+      // envelopeだけで現roundを誤停止できてしまう。形式上正しい旧roundはmode検証前に捨てる。
+      if (FIREBASE_ROUND_RE.test(msg.roundId || '') && msg.roundId !== online.currentRoundId) return;
       if (msg.t === 'start' || msg.t === 'state') msg = { ...msg, snap: normalizeFirebaseSnapshot(msg.snap) };
       const validation = validateFirebaseMessageDetail(msg);
       if (!validation.ok) {
         rejectFirebaseMessage(`不正な通信データを受信しました（${validation.reason}）`);
         return;
       }
-      // 常設ロビーではSSEに過去ラウンドの履歴も届く。現在ラウンド以外は絶対に適用しない。
-      // 席の判定より先に捨てる。古いラウンドの正当なパケットで対戦を切らないため。
+      // malformed roundIdは上のvalidatorで拒否する。ここは正規packetの最終fence。
       if (msg.roundId !== online.currentRoundId) return;
       if (!firebasePacketSeatAllowed(msg)) { rejectFirebaseMessage(`不正な送信席です（${msg.t}/${msg.seat}）`); return; }
       if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'in', t: msg.t, seat: msg.seat });
@@ -10976,10 +11020,17 @@
       // 試合中の席ごとの生存(段D)。上の2つとは数える対象も使い道も違うので分けてある。
       noteFirebaseMatchSeatMessage(msg.seat);
       if (online.participantRole === 'spectator') {
-        if (msg.t === 'start' || msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
+        if (msg.t === 'start') {
+          if (firebaseGearEnabled() || firebaseMessageHasGearWire(msg)) {
+            if (firebaseRevealsReady()) void applyFirebaseSpectatorStart(msg);
+            else online.pendingStart = msg;
+          } else applyFirebaseSpectatorSnapshot(msg);
+        }
+        else if (msg.t === 'state') applyFirebaseSpectatorSnapshot(msg);
         else if (msg.t === 'result') receiveFirebaseSpectatorResult(msg);
         else if (msg.t === 'lobbyState') applyFirebaseLobbyState(msg);
-        else if (msg.t === 'settings') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); renderFirebaseLobby(); }
+        else if (msg.t === 'settings') void handleFirebaseSettingsHint(msg.settings);
+        else if (msg.t === 'commit' || msg.t === 'reveal' || msg.t === 'ready' || msg.t === 'presence' || msg.t === 'ping') applyNetMessage(msg);
         return;
       }
       if (msg.t === 'state' || msg.t === 'result') {
@@ -11083,7 +11134,7 @@
         if (online && online.kind === 'firebase') applyFirebaseLobbyState(msg);
         break;
       case 'settings':
-        if (online && online.kind === 'firebase') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); renderFirebaseLobby(); }
+        if (online && online.kind === 'firebase') void handleFirebaseSettingsHint(msg.settings);
         break;
       case 'rematchVote':
         if (online && online.kind === 'firebase' && firebasePlayerSeats().includes(msg.seat)) {
@@ -11116,7 +11167,11 @@
         netSend({ t: online.phase === 'waiting' ? 'join' : 'ready' });
         break;
       case 'start':
-        if (online && online.kind === 'firebase' && online.participantRole === 'spectator') { applyFirebaseSpectatorSnapshot(msg); break; }
+        if (online && online.kind === 'firebase' && online.participantRole === 'spectator') {
+          if (firebaseGearEnabled() || firebaseMessageHasGearWire(msg)) void applyFirebaseSpectatorStart(msg);
+          else applyFirebaseSpectatorSnapshot(msg);
+          break;
+        }
         if (online.role !== 'guest') break;
         if (online.kind === 'coop' && msg.to && msg.to !== online.clientId) break;
         if (online.kind === 'firebase' && (online.phase === 'playing' || online.phase === 'ended')) break; // SSE再送/リプレイは無害に捨てる
@@ -11496,6 +11551,8 @@
   const onlineTurnsEl = document.getElementById('onlineTurns');
   const onlineFormatEl = document.getElementById('onlineFormat');
   const onlineStageSizeEl = document.getElementById('onlineStageSize');
+  const onlineGearModeEl = document.getElementById('onlineGearMode');
+  const onlineGearModeStatusEl = document.getElementById('onlineGearModeStatus');
   const onlineCustomStageBtn = document.getElementById('onlineCustomStage');
   const onlineReadyBtn = document.getElementById('onlineReady');
   const onlineStartBtn = document.getElementById('onlineStart');
@@ -11577,6 +11634,69 @@
     const format = raw.format === '2v2' ? '2v2' : '1v1';
     const stageSize = raw.stageSize === 'large' ? 'large' : 'standard';
     return { terrain, wind, turnsPerPlayer, format, stageSize, revision: Math.max(1, Number(raw.revision) || 1) };
+  }
+  const FIREBASE_ROOM_VISIBILITIES = Object.freeze(['public', 'private']);
+  const FIREBASE_LOBBY_SETTING_KEYS = Object.freeze(['terrain', 'wind', 'turnsPerPlayer', 'format', 'stageSize', 'revision']);
+  const FIREBASE_GEAR_CAPABILITY_KEY = 'gearCapability';
+  function normalizeFirebaseRoomVisibility(value) {
+    if (value === undefined || value === null) return null; // legacy v3 room: Gear OFF only
+    if (!FIREBASE_ROOM_VISIBILITIES.includes(value)) throw new Error('部屋の公開設定が不正です');
+    return value;
+  }
+  function validatePersistedFirebaseSettings(value, visibility) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Firebase settingsが不正です');
+    const keys = Object.keys(value).sort();
+    const allowed = FIREBASE_LOBBY_SETTING_KEYS.concat([FIREBASE_GEAR_CAPABILITY_KEY]);
+    if (keys.some(key => !allowed.includes(key)) || FIREBASE_LOBBY_SETTING_KEYS.some(key => !keys.includes(key))) {
+      throw new Error('Firebase settingsのfieldが不正です');
+    }
+    if (!Number.isInteger(value.revision) || value.revision < 1 || value.revision > 100000) {
+      throw new Error('Firebase settings revisionが不正です');
+    }
+    const normalized = normalizeLobbySettings(value);
+    if (value.terrain !== normalized.terrain || value.wind !== normalized.wind
+        || value.turnsPerPlayer !== normalized.turnsPerPlayer || value.format !== normalized.format
+        || value.stageSize !== normalized.stageSize || value.revision !== normalized.revision) {
+      throw new Error('Firebase settingsの値が不正です');
+    }
+    const rawCapability = Object.prototype.hasOwnProperty.call(value, FIREBASE_GEAR_CAPABILITY_KEY)
+      ? value.gearCapability : null;
+    if (rawCapability !== null && visibility === null) throw new Error('legacy roomへGearを追加できません');
+    const capability = globalThis.KatamonGearOnlineLobbyProtocol.validateRoomGearCapability(
+      rawCapability,
+      { visibility: visibility === null ? 'public' : visibility }
+    );
+    return capability ? Object.freeze({ ...normalized, gearCapability: capability }) : Object.freeze(normalized);
+  }
+  function firebaseSettingsIdentity(settings) { return stableFirebaseJson(settings); }
+  function firebaseRosterIdentity(slots) {
+    const roster = {};
+    for (const seat of FIREBASE_SEATS) {
+      const uid = slots && slots[seat] && slots[seat].uid;
+      roster[seat] = typeof uid === 'string' && uid ? uid : null;
+    }
+    return stableFirebaseJson(roster);
+  }
+  function inspectPersistedFirebaseRoom(room) {
+    if (!room || typeof room !== 'object' || Array.isArray(room)) throw new Error('Firebase roomを確認できません');
+    const visibility = normalizeFirebaseRoomVisibility(room.visibility);
+    const settings = validatePersistedFirebaseSettings(room.settings, visibility);
+    if (visibility === 'public' && settings.gearCapability) throw new Error('公開部屋ではGearを有効にできません');
+    return Object.freeze({
+      visibility,
+      settings,
+      settingsIdentity: firebaseSettingsIdentity(settings),
+      rosterIdentity: firebaseRosterIdentity(room.slots),
+      slots: room.slots || {}
+    });
+  }
+  function firebaseGearEnabled(settings = online && online.settings) {
+    return !!(settings && settings.gearCapability);
+  }
+  function firebaseMessageHasGearWire(msg) {
+    return !!(msg && (Object.prototype.hasOwnProperty.call(msg, 'gearWireVersion')
+      || Object.prototype.hasOwnProperty.call(msg, 'gearCommitmentJson')
+      || Object.prototype.hasOwnProperty.call(msg, 'gearManifestJson')));
   }
   function firebaseRoundId() { return secureNonce(); }
   // 席と試合中のキャラの対応。ここを設定で動かせるようにすると、ルールの
@@ -12060,15 +12180,23 @@
   }
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && firebasePlayerSeats().includes(online.seat)); }
-  async function createFirebaseRoom(requestedCode = null, settings = null) {
+  async function createFirebaseRoom(requestedCode = null, settings = null, options = {}) {
     const auth = await ensureFirebaseAuth();
     const now = firebaseServerNow(auth);
+    if (!options || typeof options !== 'object' || Array.isArray(options)
+        || Object.keys(options).some(key => key !== 'visibility' && key !== 'gearMode')) throw new Error('部屋作成設定が不正です');
+    const visibility = normalizeFirebaseRoomVisibility(options.visibility === undefined ? 'private' : options.visibility);
+    if (visibility === null) throw new Error('新しい部屋には公開設定が必要です');
+    const gearMode = options.gearMode === undefined ? globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF : options.gearMode;
+    const gearCapability = globalThis.KatamonGearOnlineLobbyProtocol.createRoomGearCapability({ visibility, gearMode });
     for (let i = 0; i < (requestedCode ? 1 : 6); i++) {
       const code = requestedCode || generateRoomCode();
       const roundId = firebaseRoundId();
+      const roomSettings = { ...normalizeLobbySettings(settings || defaultLobbySettings()) };
+      if (gearCapability) roomSettings.gearCapability = gearCapability;
       const room = {
         protocol: FIREBASE_PROTO_VERSION, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS,
-        settings: normalizeLobbySettings(settings || defaultLobbySettings()), slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
+        visibility, settings: roomSettings, slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
         round: { id: roundId, status: 'lobby', players: { p1: auth.uid, e1: null } },
         // RTDBはnull/空objectだけのノードを保持しない。round自体を必ず残す具体値を入れる。
         rounds: { [roundId]: { createdAt: now, messages: {} } }
@@ -12096,6 +12224,7 @@
       const latest = await firebaseRequest(`rooms/${code}`, auth);
       if (!latest || latest.protocol !== FIREBASE_PROTO_VERSION || !latest.round || latest.round.status !== 'lobby'
           || !latest.slots || !latest.slots[seat] || latest.slots[seat].uid !== auth.uid) throw new Error('この部屋は参加受付中ではありません');
+      inspectPersistedFirebaseRoom(latest);
       return { code, auth, room: latest, seat };
     } catch (err) {
       // member化後の検証に失敗した時だけ、自分が取った席を戻す。ほかの席には一切触れない。
@@ -12174,7 +12303,8 @@
     catch (err) { onlineLobbyStatus(err.message || 'この部屋には入れませんでした。一覧を更新してください。'); }
     finally { setOnlineLobbyBusy(false); }
   }
-  async function publishOpenRoom(code, auth, format, roomName = 'だれでも歓迎', playerCount = 1) {
+  async function publishOpenRoom(code, auth, format, roomName = 'だれでも歓迎', playerCount = 1, visibility = null) {
+    if (visibility !== 'public') throw new Error('非公開部屋は公開一覧へ掲載できません');
     const now = firebaseServerNow(auth);
     await firebaseRequest(`open/${code}`, auth, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -12203,8 +12333,8 @@
       return { ...joined, role: 'guest', quickFormat: wanted };
     }
     // 2. どこにも座れなければ自分が部屋を作り、待っていることを一覧へ載せる。
-    const made = await createFirebaseRoom();
-    try { await publishOpenRoom(made.code, made.auth, wanted); }
+    const made = await createFirebaseRoom(null, { ...defaultLobbySettings(), format: wanted }, { visibility: 'public', gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF });
+    try { await publishOpenRoom(made.code, made.auth, wanted, 'だれでも歓迎', 1, made.room.visibility); }
     catch (_) {
       // 載せられなくても部屋は使える。合言葉を伝えれば入ってもらえるので、対戦をここで止めない。
       return { ...made, role: 'host', quickFormat: wanted, quickWaiting: true, quickListed: false };
@@ -12225,7 +12355,7 @@
     } catch (_) { /* 次の更新に任せる */ }
     // 待ち続けている間は案内も載せ直す。載せっぱなしにすると期限で落ちて拾われなくなる。
     if (online === leasing && leasing.quickWaiting && leasing.quickListed) {
-      try { await publishOpenRoom(leasing.room, leasing.auth, leasing.quickFormat, leasing.quickRoomName, 1); }
+      try { await publishOpenRoom(leasing.room, leasing.auth, leasing.quickFormat, leasing.quickRoomName, 1, leasing.visibility); }
       catch (_) { /* 次の更新に任せる */ }
     }
   }
@@ -12298,9 +12428,29 @@
       scheduleFirebaseSeatHeartbeat();
     }
     onlineLobbyStatus('通信が戻りました。再接続を確認しています…');
+    void refreshFirebaseRoster(false);
   }
   window.addEventListener('online', handleFirebaseNetworkOnline);
   window.addEventListener('offline', handleFirebaseNetworkOffline);
+  function handleFirebaseGearStorageMutation(event) {
+    if (!online || online.kind !== 'firebase' || !firebaseGearEnabled()
+        || (!online.selfReady && !online.readyCapturePending)) return;
+    if (event && event.storageArea && event.storageArea !== localStorage) return;
+    const relevant = new Set([
+      globalThis.KatamonGearStorage.GEAR_STORAGE_KEY,
+      globalThis.KatamonGearPresetStorage.STORAGE_KEY,
+      globalThis.KatamonGearPresetStorage.WAL_KEY
+    ]);
+    if (event && event.key !== null && !relevant.has(event.key)) return;
+    if (online.readyCapturePending || !event || event.key === null
+        || event.key === globalThis.KatamonGearPresetStorage.WAL_KEY) {
+      clearOwnFirebaseReadyState({ reason: 'Gear保存状態が変わったため、準備完了を解除しました。' });
+      renderFirebaseLobby();
+      return;
+    }
+    void ensureFirebaseReadyGearCurrent();
+  }
+  window.addEventListener('storage', handleFirebaseGearStorageMutation);
   // 自席が他人のものになっている/消えている＝ホストに空けられた。
   // 名簿は lobbyState でも降ってくるので、そちらからも呼ぶ。
   async function checkOwnFirebaseSeatLost() {
@@ -12327,7 +12477,7 @@
     const playerCount = playerSeats.filter(seat => online.slots && online.slots[seat] && online.slots[seat].uid).length;
     const shouldWait = playerCount < playerSeats.length && online.phase === 'lobby';
     if (shouldWait === online.quickWaiting) {
-      if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount).catch(() => {});
+      if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount, online.visibility).catch(() => {});
       return;
     }
     online.quickWaiting = shouldWait;
@@ -12335,7 +12485,7 @@
       online.quickListed = false;
       unpublishOpenRoom(online.room, online.auth);
     }
-    if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount).catch(() => {});
+    if (shouldWait && online.quickListed) publishOpenRoom(online.room, online.auth, online.quickFormat, online.quickRoomName, playerCount, online.visibility).catch(() => {});
     if (onlineLobbyEl) onlineLobbyEl.classList.toggle('quickplay', shouldWait);
     if (!shouldWait) onlineLobbyStatus('対戦相手が来ました。キャラを選んで「準備完了」を押してください。');
     renderFirebaseLobby();
@@ -12493,6 +12643,7 @@
       await ensureFirebaseAuth(force);
       if (!online || online.kind !== 'firebase') return;
       if (!online.transport.reconnect || !online.transport.reconnect()) throw new Error('SSEを再接続できません');
+      await refreshFirebaseRoster(false);
       onlineLobbyStatus('認証を更新して再接続しました。');
     } catch (err) {
       if (online) {
@@ -12508,6 +12659,8 @@
     }
   }
   function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null) {
+    const persisted = inspectPersistedFirebaseRoom(room);
+    if (!persisted.slots[seat] || persisted.slots[seat].uid !== auth.uid) throw new Error('自分のFirebase席を確認できません');
     const transport = makeFirebaseTransport(code, auth, room && room.round && room.round.id, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
       if (online && online.kind === 'firebase') rejectFirebaseMessage(err && err.message ? `通信を継続できません（${err.message}）` : '通信を継続できません');
     });
@@ -12521,11 +12674,26 @@
       // 設定を受け取った時点で renderFirebaseLobby 側が席の役割を出し直す。
       participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
       phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
-      settings: normalizeLobbySettings(room && room.settings), slots: (room && room.slots) || {}, rematchVotes: {}, queue: [], retryTimer: 0,
+      visibility: persisted.visibility,
+      settings: persisted.settings, slots: persisted.slots, rematchVotes: {}, queue: [], retryTimer: 0,
+      acceptedSettingsRevision: persisted.settings.revision,
+      acceptedSettingsIdentity: persisted.settingsIdentity,
+      persistedRosterIdentity: persisted.rosterIdentity,
+      settingsAuthorityBlocked: false,
+      settingsRefreshPromise: null,
+      settingsRefreshBroadcastRequested: false,
+      settingsWritePending: false,
       seatNames: {}, seatRivalIds: {}, roundOpponentSeats: null, roundRivals: null,
       customStageIdentity: null,
       resultSent: false, peerLeft: false, versionMismatch: false, matchStarted: false, pendingStart: null, startVerifying: false,
       selfCharacter: character, selfNonce: secureNonce(), selfCommit: null, selfRevealed: false,
+      selfGearCapture: null,
+      readyCapturePending: false,
+      readyCaptureGeneration: 0,
+      nextGearStorageWatchAt: 0,
+      gearRevealCompatibility: { visibleMs: 0, checkedAt: firebaseMonotonicNow() },
+      participantGearReveals: {},
+      verifiedStartGearManifest: null,
       peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
@@ -12572,36 +12740,208 @@
   }
   // 準備完了は取り消せる。ホストが設定を変えた後にキャラを選び直したくなるため。
   // 取り消しても commit は送り直せる(公開前なので情報は漏れない)。
-  async function commitOwnCharacter() {
-    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') return;
-    if (online.selfReady) { setSelfNotReady(); return; }
+  function firebaseGearTrustedContext(seat, characterId) {
+    if (!online || online.kind !== 'firebase' || !FIREBASE_SEATS.includes(seat)) throw new Error('Firebase Gear identityを確認できません');
+    const ownerUid = online.slots && online.slots[seat] && online.slots[seat].uid;
+    if (typeof ownerUid !== 'string' || !ownerUid) throw new Error('Firebase Gear ownerを確認できません');
+    const base = characterBattleBaseStats(characterId);
+    return Object.freeze({
+      expectedOwnerUid: ownerUid,
+      expectedSeatId: seat,
+      expectedUnitId: firebaseSeatUnitId(seat),
+      expectedCharacterId: characterId,
+      expectedRoundId: online.currentRoundId,
+      baseHp: base.baseHp,
+      baseFuel: base.baseFuel
+    });
+  }
+  function firebaseGearStorageIdentity() {
     try {
-      online.selfCharacter = selectedOnlineCharacter();
-      online.selfNonce = secureNonce();
-      online.selfCommit = await commitPayload(online.selfCharacter, online.selfNonce);
-      if (!online || online.kind !== 'firebase') return;
-      netSend({ t: 'commit', hash: online.selfCommit });
-      online.selfReady = true;
-      netSend({ t: 'ready', value: true });
+      return stableFirebaseJson({
+        gear: localStorage.getItem(globalThis.KatamonGearStorage.GEAR_STORAGE_KEY),
+        presets: localStorage.getItem(globalThis.KatamonGearPresetStorage.STORAGE_KEY),
+        wal: localStorage.getItem(globalThis.KatamonGearPresetStorage.WAL_KEY)
+      });
+    } catch (error) {
+      throw new Error(`Gear保存状態を読み取れません（${error?.message || 'storage'}）`);
+    }
+  }
+  async function captureFirebaseReadyGear(characterId) {
+    if (!firebaseGearEnabled()) return null;
+    if (!online || online.kind !== 'firebase' || online.settingsAuthorityBlocked) throw new Error('Gear設定の正本を確認できません');
+    const storageIdentityBefore = firebaseGearStorageIdentity();
+    const resolvedLoadout = await globalThis.KatamonGearPresetStorage.captureResolvedPresetForBattle(
+      { characterId, mode: 'online' },
+      localStorage,
+      { characterIds: CHARACTER_LIST }
+    );
+    const storageIdentity = firebaseGearStorageIdentity();
+    if (storageIdentity !== storageIdentityBefore) throw new Error('Gear capture中に保存状態が変更されました');
+    const trustedContext = firebaseGearTrustedContext(online.seat, characterId);
+    const battleGearSnapshot = globalThis.KatamonGearBattleSnapshot.createBattleGearSnapshot({
+      resolvedLoadout,
+      baseHp: trustedContext.baseHp,
+      baseFuel: trustedContext.baseFuel
+    });
+    const loadoutCommitment = globalThis.KatamonGearOnlineProtocol.createLoadoutCommitment({
+      battleGearSnapshot,
+      roundId: online.currentRoundId,
+      trustedContext
+    });
+    const readyGearBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({
+      loadoutCommitment,
+      trustedContext
+    });
+    const readyGearBindingText = globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyGearBinding);
+    return Object.freeze({ battleGearSnapshot, trustedContext, loadoutCommitment, readyGearBinding, readyGearBindingText, storageIdentity });
+  }
+  function clearOwnFirebaseReadyState({ broadcast = true, reason = '' } = {}) {
+    if (!online || online.kind !== 'firebase') return false;
+    const wasReady = !!online.selfReady;
+    // READY capture中のWeb Lock/refetch結果が後から戻っても採用しない。
+    online.readyCaptureGeneration = (online.readyCaptureGeneration || 0) + 1;
+    online.readyCapturePending = false;
+    online.selfReady = false;
+    online.selfCommit = null;
+    online.selfRevealed = false;
+    online.selfRevealSending = false;
+    online.selfGearCapture = null;
+    if (online.participantGearReveals) delete online.participantGearReveals[online.seat];
+    if (broadcast && wasReady && online.phase === 'lobby') netSend({ t: 'ready', value: false });
+    if (reason) onlineLobbyStatus(reason);
+    return wasReady;
+  }
+  function invalidateFirebaseRoundReadiness(reason, { broadcast = true } = {}) {
+    if (!online || online.kind !== 'firebase') return;
+    clearOwnFirebaseReadyState({ broadcast, reason });
+    online.peerReady = false; online.seatReady = {};
+    online.peerCommit = null; online.peerCommitAt = null; online.peerCommitted = false;
+    online.peerRevealSeen = false; online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
+    online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
+    online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {};
+    online.participantGearReveals = {};
+    online.verifiedStartGearManifest = null;
+    online.pendingStart = null;
+    renderFirebaseLobby();
+  }
+  async function ensureFirebaseReadyGearCurrent() {
+    if (!online || online.kind !== 'firebase' || !online.selfReady) return false;
+    if (!firebaseGearEnabled()) return online.selfGearCapture === null;
+    const current = online;
+    const prior = current.selfGearCapture;
+    if (!prior) return false;
+    try {
+      const fresh = await captureFirebaseReadyGear(current.selfCharacter);
+      if (!online || online !== current || !online.selfReady || online.selfGearCapture !== prior) return false;
+      if (!fresh || fresh.readyGearBindingText !== prior.readyGearBindingText) {
+        if (online.phase === 'lobby') clearOwnFirebaseReadyState({ reason: 'Gearが変わったため、準備完了を解除しました。' });
+        else rejectFirebaseMessage('READY後にGearが変更されました');
+        renderFirebaseLobby();
+        return false;
+      }
+      return true;
+    } catch (error) {
+      if (online && online === current) {
+        if (online.phase === 'lobby') clearOwnFirebaseReadyState({ reason: `Gearを再確認できないため、準備完了を解除しました（${error?.code || error?.message || 'capture'}）` });
+        else rejectFirebaseMessage('READY後のGearを再確認できません');
+        renderFirebaseLobby();
+      }
+      return false;
+    }
+  }
+  function updateFirebaseReadyGearStorageWatch(force = false) {
+    if (!online || online.kind !== 'firebase' || !firebaseGearEnabled() || !online.selfReady
+        || !online.selfGearCapture) return false;
+    const now = firebaseMonotonicNow();
+    if (!force && now < (online.nextGearStorageWatchAt || 0)) return false;
+    online.nextGearStorageWatchAt = now + 250;
+    let currentIdentity;
+    try { currentIdentity = firebaseGearStorageIdentity(); }
+    catch (_) { currentIdentity = null; }
+    if (currentIdentity === online.selfGearCapture.storageIdentity) return false;
+    clearOwnFirebaseReadyState({ reason: 'Gear保存状態が変わったため、準備完了を解除しました。' });
+    renderFirebaseLobby();
+    return true;
+  }
+  function firebaseReadyAuthorityIdentity() {
+    if (!online || online.kind !== 'firebase') return '';
+    return stableFirebaseJson({
+      visibility: online.visibility,
+      roundId: online.currentRoundId,
+      settingsRevision: online.acceptedSettingsRevision,
+      settingsIdentity: online.acceptedSettingsIdentity,
+      rosterIdentity: online.persistedRosterIdentity
+    });
+  }
+  async function commitOwnCharacterSelection(characterId) {
+    if (!online || online.kind !== 'firebase' || online.phase !== 'lobby') return;
+    if (online.selfReady) { setSelfNotReady(); return false; }
+    if (online.readyCapturePending) return false;
+    const readying = online;
+    const generation = (readying.readyCaptureGeneration || 0) + 1;
+    readying.readyCaptureGeneration = generation;
+    readying.readyCapturePending = true;
+    const operationIsCurrent = () => online === readying && readying.kind === 'firebase'
+      && readying.phase === 'lobby' && readying.readyCapturePending
+      && readying.readyCaptureGeneration === generation;
+    renderFirebaseLobby();
+    try {
+      if (!await ensureFirebaseSettingsAuthority('READY')) return false;
+      if (!operationIsCurrent() || !isFirebasePlayer()) return false;
+      const readyAuthorityIdentity = firebaseReadyAuthorityIdentity();
+      readying.selfCharacter = characterId;
+      const gearCapture = await captureFirebaseReadyGear(characterId);
+      if (!operationIsCurrent()) return false;
+      // Web Lockを待っている間にもsettings/名簿は変わり得る。capture前後で同じ
+      // Firebase正本だったことを再取得で確定し、古いowner/seatへcommitしない。
+      if (!await ensureFirebaseSettingsAuthority('READY capture')
+          || !operationIsCurrent() || firebaseReadyAuthorityIdentity() !== readyAuthorityIdentity) {
+        throw new Error('READY capture中にFirebase room authorityが変更されました');
+      }
+      readying.selfNonce = secureNonce();
+      readying.selfCommit = await commitPayload(characterId, readying.selfNonce, gearCapture ? gearCapture.readyGearBindingText : null);
+      if (!operationIsCurrent()) return false;
+      readying.selfGearCapture = gearCapture;
+      const commitSent = await netSend({ t: 'commit', hash: readying.selfCommit });
+      if (commitSent !== true) throw new Error('commitを保存できません');
+      if (!operationIsCurrent()) return false;
+      readying.selfReady = true;
+      const readySent = await netSend({ t: 'ready', value: true });
+      if (readySent !== true) throw new Error('READYを保存できません');
+      if (!operationIsCurrent()) return false;
+      // commit/readyの2書き込み中に設定が変わった場合も、READYを成立させない。
+      if (!await ensureFirebaseSettingsAuthority('READY finalize')
+          || !operationIsCurrent() || firebaseReadyAuthorityIdentity() !== readyAuthorityIdentity) {
+        throw new Error('READY送信中にFirebase room authorityが変更されました');
+      }
+      if (firebaseGearEnabled() && !await ensureFirebaseReadyGearCurrent()) return false;
+      if (!operationIsCurrent()) return false;
       onlineLobbyStatus('準備完了。取り消せばモンスターを選び直せます。');
       renderFirebaseLobby();
       // 再戦の自動開始は、これまで「誰かのready/commitを受け取った時」しか試していなかった。
       // 相手がCPUだけの部屋では誰も送ってこないので自動で始まらず、毎回「対戦開始」を
       // 押す必要があった。自分が押した時にもここで試す(条件が揃わなければ何もしない)。
       maybeAutoStartFirebaseRound();
+      return true;
     } catch (err) {
-      if (online) online.protocolError = '安全な確認処理に失敗しました';
-      onlineLobbyStatus('この端末では安全な確認処理を使えません。');
+      if (operationIsCurrent()) {
+        clearOwnFirebaseReadyState({ broadcast: true });
+        onlineLobbyStatus(`準備データを安全に確定できませんでした（${err?.code || err?.message || 'capture'}）`);
+        renderFirebaseLobby();
+      }
+      return false;
+    } finally {
+      if (online === readying && readying.readyCaptureGeneration === generation) {
+        readying.readyCapturePending = false;
+        renderFirebaseLobby();
+      }
     }
   }
+  async function commitOwnCharacter() { return commitOwnCharacterSelection(selectedOnlineCharacter()); }
 
   function setSelfNotReady() {
     if (!online || online.kind !== 'firebase' || online.phase !== 'lobby' || !online.selfReady) return;
-    online.selfReady = false;
-    online.selfCommit = null;
-    online.selfRevealed = false;
-    netSend({ t: 'ready', value: false });
-    onlineLobbyStatus('準備完了を取り消しました。モンスターを選び直せます。');
+    clearOwnFirebaseReadyState({ reason: '準備完了を取り消しました。モンスターを選び直せます。' });
     renderFirebaseLobby();
   }
   // 席ごとの伏せ合いの進み具合。人が座っていない席は決定3のとおりCPUが埋めるので、
@@ -12613,8 +12953,9 @@
   }
   function firebaseSeatRevealVerified(seat) {
     if (!online) return false;
-    if (seat === online.seat) return !!online.selfRevealed;
-    return !!(online.seatVerified && online.seatVerified[seat]);
+    const characterVerified = seat === online.seat ? !!online.selfRevealed : !!(online.seatVerified && online.seatVerified[seat]);
+    if (!characterVerified || !firebaseGearEnabled()) return characterVerified;
+    return !!(online.participantGearReveals && online.participantGearReveals[seat]);
   }
   function allFirebasePlayersCommitted() {
     const seats = firebaseOccupiedPlayerSeats();
@@ -12632,19 +12973,70 @@
   // 1vs1は従来どおり「相手のコミットが届いたか」だけを見る。ここを2vs2の判定へ
   // 一本化すると、席が埋まる前の状態まで巻き込んで既存の経路が変わる。
   function firebasePeersCommitted() { return firebaseLobbyIs2v2() ? allFirebasePlayersCommitted() : !!online.peerCommitted; }
-  function maybeRevealCharacter() {
-    if (!online || online.kind !== 'firebase' || !online.selfCommit || !firebasePeersCommitted() || online.selfRevealed || online.phase !== 'revealing') return;
-    online.selfRevealed = true;
-    netSend({ t: 'reveal', character: online.selfCharacter, nonce: online.selfNonce });
-    onlineLobbyStatus('相手のモンスターを検証しています…');
-    // ほかに人が座っていなければ、検証する相手の公開が届かない。開始の合図は
-    // verifyPeerReveal からしか出ていなかったため、1人＋CPU3体の2vs2が始まらなかった。
-    // ここでも試す。相手が居る場合は公開がそろうまで maybeStartFirebaseMatch 側が待つ。
-    maybeStartFirebaseMatch();
+  function buildFirebaseRevealPayload() {
+    if (!online || online.kind !== 'firebase' || !online.selfCommit) throw new Error('reveal材料を確認できません');
+    const payload = { character: online.selfCharacter, nonce: online.selfNonce };
+    if (!firebaseGearEnabled()) return payload;
+    if (!online.selfGearCapture) throw new Error('Gear READY captureを確認できません');
+    return {
+      ...payload,
+      gearWireVersion: globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION,
+      gearCommitmentJson: globalThis.KatamonGearOnlineFirebaseWire.encodeRevealGearCommitment({
+        loadoutCommitment: online.selfGearCapture.loadoutCommitment,
+        trustedContext: online.selfGearCapture.trustedContext
+      })
+    };
+  }
+  async function maybeRevealCharacter() {
+    if (!online || online.kind !== 'firebase' || !online.selfCommit || !firebasePeersCommitted()
+        || online.selfRevealed || online.selfRevealSending || online.phase !== 'revealing') return false;
+    const revealing = online;
+    revealing.selfRevealSending = true;
+    try {
+      if (!await ensureFirebaseSettingsAuthority('reveal') || !online || online !== revealing || online.phase !== 'revealing') return false;
+      if (firebaseGearEnabled() && !await ensureFirebaseReadyGearCurrent()) return false;
+      if (!online || online !== revealing || online.phase !== 'revealing') return false;
+      const payload = buildFirebaseRevealPayload();
+      if (firebaseGearEnabled()) {
+        const capture = online.selfGearCapture;
+        const revealedCommitment = globalThis.KatamonGearOnlineLobbyProtocol.validateRevealedGearCommitment({
+          readyBinding: capture.readyGearBinding,
+          loadoutCommitment: capture.loadoutCommitment,
+          trustedContext: capture.trustedContext
+        });
+        online.participantGearReveals[online.seat] = Object.freeze({
+          trustedContext: capture.trustedContext,
+          revealedCommitment
+        });
+      }
+      const sent = await netSend({ t: 'reveal', ...payload });
+      if (sent !== true) throw new Error('revealを保存できません');
+      if (!online || online !== revealing) return false;
+      online.selfRevealed = true;
+      onlineLobbyStatus('相手のモンスターを検証しています…');
+      // ほかに人が座っていなければ、検証する相手の公開が届かない。開始の合図は
+      // verifyPeerReveal からしか出ていなかったため、1人＋CPU3体の2vs2が始まらなかった。
+      // ここでも試す。相手が居る場合は公開がそろうまで maybeStartFirebaseMatch 側が待つ。
+      maybeStartFirebaseMatch();
+      return true;
+    } catch (error) {
+      if (online && online === revealing) {
+        if (online.participantGearReveals) delete online.participantGearReveals[online.seat];
+        rejectFirebaseMessage(`revealを検証できません（${error?.code || error?.message || 'unknown'}）`);
+      }
+      return false;
+    } finally {
+      if (online && online === revealing) online.selfRevealSending = false;
+    }
   }
   async function verifyPeerReveal(msg) {
     if (!online || online.kind !== 'firebase') return;
     const seat = msg.seat;
+    // Gear OFF は現行v3互換のまま検証する。Gear payloadを扱う時だけ、
+    // messageではなく永続化済みsettingsを再確認してauthorityを固定する。
+    if ((firebaseGearEnabled() || firebaseMessageHasGearWire(msg))
+        && !await ensureFirebaseSettingsAuthority('peer reveal')) return;
+    if (!online || online.kind !== 'firebase') return;
     if (!acceptPeerReveal(online.seatRevealSeen[seat])) { rejectFirebaseMessage('相手が選択内容を重複公開しました'); return; }
     online.seatRevealSeen[seat] = true;
     if (seat === online.peerSeat) online.peerRevealSeen = true;
@@ -12652,11 +13044,34 @@
       online.protocolError = '相手の選択データが不正です'; onlineLobbyStatus(online.protocolError); return;
     }
     try {
-      const expected = await commitPayload(msg.character, msg.nonce);
+      let expected;
+      let verifiedGearReveal = null;
+      if (firebaseGearEnabled()) {
+        if (msg.gearWireVersion !== globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION) throw new Error('ONLINE Gear wire versionが一致しません');
+        const trustedContext = firebaseGearTrustedContext(seat, msg.character);
+        if (msg.from !== trustedContext.expectedOwnerUid) throw new Error('ONLINE Gear ownerがFirebase席と一致しません');
+        const loadoutCommitment = globalThis.KatamonGearOnlineFirebaseWire.decodeRevealGearCommitment(msg.gearCommitmentJson, trustedContext);
+        // 受信値のderived combatは存在せず、canonical loadoutから受信側で必ず再計算する。
+        // ここで得たsnapshotはロビー検証専用で、Phase 3D-2BではBattleへ適用しない。
+        globalThis.KatamonGearOnlineProtocol.reconstructBattleGearSnapshot(loadoutCommitment, trustedContext);
+        const readyGearBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({ loadoutCommitment, trustedContext });
+        const bindingText = globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyGearBinding);
+        expected = await commitPayload(msg.character, msg.nonce, bindingText);
+        const revealedCommitment = globalThis.KatamonGearOnlineLobbyProtocol.validateRevealedGearCommitment({
+          readyBinding: readyGearBinding,
+          loadoutCommitment,
+          trustedContext
+        });
+        verifiedGearReveal = Object.freeze({ trustedContext, revealedCommitment });
+      } else {
+        if (firebaseMessageHasGearWire(msg)) throw new Error('Gear OFF roomへGear revealを送信できません');
+        expected = await commitPayload(msg.character, msg.nonce);
+      }
       if (!online || expected !== online.seatCommit[seat]) {
-        if (online) { online.protocolError = 'キャラクター確認が一致しません'; onlineLobbyStatus(online.protocolError); }
+        if (online) rejectFirebaseMessage('キャラクター／Gear確認が一致しません');
         return;
       }
+      if (verifiedGearReveal) online.participantGearReveals[seat] = verifiedGearReveal;
       online.seatCharacter[seat] = msg.character;
       online.seatNonce[seat] = msg.nonce;
       online.seatVerified[seat] = true;
@@ -12674,7 +13089,7 @@
         applyNetMessage(pendingStart);
       }
       maybeStartFirebaseMatch();
-    } catch (_) { if (online) { online.protocolError = '確認処理に失敗しました'; onlineLobbyStatus(online.protocolError); } }
+    } catch (error) { if (online) rejectFirebaseMessage(`公開データの確認に失敗しました（${error?.code || error?.message || 'unknown'}）`); }
   }
   // 先攻の抽選。1vs1は従来どおりホストとゲストの nonce 2つで決める。
   // 2vs2は席順に並べた nonce をまとめて混ぜる。空席のCPUは nonce を持たないので空文字を
@@ -12690,7 +13105,10 @@
     return parseInt(digest.slice(-1), 16) & 1;
   }
   // 公開がそろったか。1vs1は従来どおり相手ひとりぶんだけを見る。
-  function firebaseRevealsReady() { return firebaseLobbyIs2v2() ? allFirebaseRevealsVerified() : !!online.revealVerified; }
+  function firebaseRevealsReady() {
+    if (firebaseGearEnabled()) return allFirebaseRevealsVerified();
+    return firebaseLobbyIs2v2() ? allFirebaseRevealsVerified() : !!online.revealVerified;
+  }
   // ホストの開始データが、伏せ合いで確定したキャラと一致しているか。
   // 人が座っている席は公開済みのキャラと一致しなければならない。空席のCPUは
   // ホストが決めるので、ここでは「知らないキャラでないこと」だけを確かめる。
@@ -12723,11 +13141,52 @@
     }
     online.unitCharacters = table;
   }
+  function firebaseParticipantGearRevealsForStart() {
+    if (!online || online.kind !== 'firebase' || !firebaseGearEnabled()) return [];
+    return FIREBASE_SEATS.filter(seat => firebaseOccupiedPlayerSeats().includes(seat)).map(seat => {
+      const reveal = online.participantGearReveals && online.participantGearReveals[seat];
+      if (!reveal) throw new Error(`${seat}のGear revealが確認済みではありません`);
+      return reveal;
+    });
+  }
+  function buildFirebaseStartGearEnvelope() {
+    if (!firebaseGearEnabled()) return {};
+    const participantReveals = firebaseParticipantGearRevealsForStart();
+    const commitments = participantReveals.map(entry => entry.revealedCommitment);
+    const manifest = globalThis.KatamonGearOnlineLobbyProtocol.createStartGearManifest({
+      roundId: online.currentRoundId,
+      commitments,
+      participantReveals
+    });
+    return {
+      gearWireVersion: globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION,
+      gearManifestJson: globalThis.KatamonGearOnlineFirebaseWire.encodeStartGearManifest({ manifest, participantReveals })
+    };
+  }
+  function validateFirebaseStartGearEnvelope(msg) {
+    if (!firebaseGearEnabled()) {
+      if (firebaseMessageHasGearWire(msg)) throw new Error('Gear OFF roomへGear startを送信できません');
+      return null;
+    }
+    if (!msg || msg.gearWireVersion !== globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION) {
+      throw new Error('ONLINE Gear start wire versionが一致しません');
+    }
+    const participantReveals = firebaseParticipantGearRevealsForStart();
+    const manifest = globalThis.KatamonGearOnlineFirebaseWire.decodeStartGearManifest(
+      msg.gearManifestJson,
+      { participantReveals }
+    );
+    online.verifiedStartGearManifest = manifest;
+    return manifest;
+  }
   async function maybeStartFirebaseMatch() {
     if (!online || online.kind !== 'firebase' || online.role !== 'host' || !firebaseRevealsReady() || !online.selfRevealed || online.matchStarted) return;
     try {
+      if (!await ensureFirebaseSettingsAuthority('start')) return;
+      if (firebaseGearEnabled() && (!await ensureFirebaseReadyGearCurrent() || !firebaseRevealsReady())) return;
       const stageError = onlineCustomStageSelectionError();
       if (stageError) throw new Error(stageError);
+      const gearEnvelope = buildFirebaseStartGearEnvelope();
       // 人数を先に合わせる。2vs2の p2/e2 はユニットが4体ある状態でないと存在しない。
       setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
       assignFirebaseMatchCharacters();
@@ -12744,7 +13203,7 @@
       online.phase = 'starting';
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'playing' }) });
       const snap = buildSnapshot();
-      const startSent = await netSend({ t: 'start', snap });
+      const startSent = await netSend({ t: 'start', snap, ...gearEnvelope });
       if (startSent !== true) throw new Error('Match start could not be sent.');
       online.matchStarted = true;
       // ほかに人が座っていなければ、開始データを受け取ったと返してくる相手が居ない。
@@ -12760,12 +13219,18 @@
     if (!online || online.kind !== 'firebase' || online.participantRole !== 'player' || online.role === 'host' || online.phase === 'playing' || online.startVerifying || !firebaseRevealsReady()) return;
     online.startVerifying = true;
     try {
+      if (!await ensureFirebaseSettingsAuthority('start receive')) throw new Error('Firebase settings正本を確認できません');
+      validateFirebaseStartGearEnvelope(msg);
       // ゲスト側も同じ材料から先攻を再計算し、ホストのスナップショットを検証する。
       const firstIndex = await firebaseFirstUnitIndex();
       const mismatch = !online || online.kind !== 'firebase' || !msg.snap || Number(msg.snap.activeIndex) !== firstIndex
         || !firebaseStartCharactersMatch(msg.snap);
       if (mismatch) {
-        if (online) { online.startVerifying = false; online.protocolError = '先攻確認が一致しません'; onlineLobbyStatus(online.protocolError); }
+        if (online) {
+          online.startVerifying = false;
+          if (firebaseGearEnabled()) rejectFirebaseMessage('Gear startの先攻／キャラクター確認が一致しません');
+          else { online.protocolError = '先攻確認が一致しません'; onlineLobbyStatus(online.protocolError); }
+        }
         return;
       }
       rememberFirebaseStartCharacters(msg.snap);
@@ -12779,7 +13244,13 @@
       netSend({ t: 'ready' });
       closeOnlineLobby();
       showBattleStartCutIn();
-    } catch (error) { if (online) { online.startVerifying = false; online.protocolError = error?.message || '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); } }
+    } catch (error) {
+      if (online) {
+        online.startVerifying = false;
+        if (firebaseGearEnabled()) rejectFirebaseMessage(`Gear startを検証できません（${error?.code || error?.message || 'unknown'}）`);
+        else { online.protocolError = error?.message || '開始確認に失敗しました'; onlineLobbyStatus(online.protocolError); }
+      }
+    }
   }
 
   // 席1行分のDOM要素を組み立てる。名前は相手端末の入力なので、ここは
@@ -12867,6 +13338,22 @@
     if (onlineTurnsEl) onlineTurnsEl.value = String(online.settings.turnsPerPlayer);
     if (onlineFormatEl) onlineFormatEl.value = online.settings.format;
     if (onlineStageSizeEl) onlineStageSizeEl.value = online.settings.stageSize;
+    const gearOn = firebaseGearEnabled();
+    if (onlineGearModeEl) {
+      onlineGearModeEl.value = gearOn
+        ? globalThis.KatamonGearOnlineProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1
+        : globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF;
+      onlineGearModeEl.disabled = !canEdit || online.visibility !== 'private'
+        || online.settingsAuthorityBlocked || online.settingsWritePending;
+    }
+    if (onlineGearModeStatusEl) {
+      onlineGearModeStatusEl.dataset.enabled = gearOn ? 'true' : 'false';
+      onlineGearModeStatusEl.textContent = gearOn
+        ? 'Gear ON：信頼できる非公開対戦。全員の装備をREADY時に固定します'
+        : (online.visibility === 'public'
+          ? 'Gear OFF：公開部屋ではGearを使用できません'
+          : 'Gear OFF：従来どおりのONLINE対戦です');
+    }
     const hasCustomStage = !!(online.customStageIdentity && selectedCustomStage && selectedCustomAdapter);
     [onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.disabled = !canEdit; });
     if (onlineTerrainEl) onlineTerrainEl.disabled = !canEdit || hasCustomStage;
@@ -12877,20 +13364,23 @@
         ? `カスタム: ${selectedCustomStage.title}（タップで解除）`
         : (canEdit ? 'カスタムステージを選ぶ' : 'カスタムステージはホストが選択できます');
     }
-    if (onlineCharacterEl) onlineCharacterEl.disabled = !isFirebasePlayer() || online.selfReady || online.phase !== 'lobby';
+    if (onlineCharacterEl) onlineCharacterEl.disabled = !isFirebasePlayer() || online.selfReady
+      || online.readyCapturePending || online.phase !== 'lobby';
     if (onlineReadyBtn) {
-      onlineReadyBtn.disabled = !isFirebasePlayer() || online.phase !== 'lobby';
-      onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';
+      onlineReadyBtn.disabled = !isFirebasePlayer() || online.readyCapturePending || online.phase !== 'lobby';
+      onlineReadyBtn.textContent = online.readyCapturePending ? '装備を確認中…'
+        : (online.selfReady ? '準備完了を取り消す' : '準備完了');
       onlineReadyBtn.classList.toggle('is-ready', !!online.selfReady);
     }
     // 人が座っている対戦者席が全部そろって準備完了なら押せる。空席はCPUなので待たない。
     if (onlineStartBtn) onlineStartBtn.disabled = !isFirebaseHost() || !allFirebasePlayersReady()
-      || online.phase !== 'lobby' || !!onlineCustomStageSelectionError();
+      || online.phase !== 'lobby' || !!onlineCustomStageSelectionError()
+      || online.settingsAuthorityBlocked || online.settingsWritePending;
     const hasResultVote = Object.prototype.hasOwnProperty.call(online.rematchVotes || {}, online.seat);
     if (onlineRematchBtn) onlineRematchBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
     if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.disabled = !isFirebasePlayer() || online.phase !== 'results' || hasResultVote || !!online.roundResetting;
   }
-  function applyFirebaseLobbyState(msg) {
+  async function applyFirebaseLobbyState(msg) {
     if (!online || online.kind !== 'firebase') return;
     if (msg.seat !== 'p1') return;
     rememberFirebaseName(msg);
@@ -12903,18 +13393,17 @@
         void checkOwnFirebaseSeatLost();
         return;
       }
-      const before = online.slots || {};
-      // 段D。試合中に席が消えたら、ホストがCPUへ引き継いだということ。
-      // 名簿を入れ替える前に、どの席が消えたかを控えておく。
-      const takenOver = online.phase === 'playing' && firebaseLobbyIs2v2()
-        ? FIREBASE_SEATS.filter(s => s !== online.seat && before[s] && before[s].uid && !(msg.slots[s] && msg.slots[s].uid))
-        : [];
-      online.slots = msg.slots;
-      for (const seat of takenOver) applyFirebaseSeatTakeover(seat);
-      if (!online) return;
+      // messageのslotsは通知にすぎない。Gear owner/participantの正本にはせず、
+      // room全体のGETが成功した時だけ名簿を採用する。
+      if (!await refreshFirebaseRoster(false) || !online) return;
     }
-    if (msg.settings && typeof msg.settings === 'object') { online.settings = normalizeLobbySettings(msg.settings); syncFirebaseParticipantRole(); }
-    if (msg.status === 'revealing') { online.phase = 'revealing'; maybeRevealCharacter(); }
+    if (msg.settings && typeof msg.settings === 'object' && !await handleFirebaseSettingsHint(msg.settings)) return;
+    if (msg.status === 'revealing') {
+      const enteringReveal = online.phase !== 'revealing';
+      online.phase = 'revealing';
+      if (enteringReveal) resetFirebaseGearRevealCompatibilityClock();
+      maybeRevealCharacter();
+    }
     else if (msg.status === 'lobby') { if (msg.nextRoundId) { online.currentRoundId = msg.nextRoundId; online.transport.setRoundId(msg.nextRoundId); online.transport.reconnect(); } resetLocalFirebaseRoundState(msg.autoReady === true); openFirebaseLobby(); }
     renderFirebaseLobby();
   }
@@ -12925,12 +13414,15 @@
     online.seatReleaseReady = {}; online.seatReleaseNextCheckMs = 0; online.seatReleaseChecking = false;
     online.selfCharacter = selectedOnlineCharacter();
     online.selfNonce = secureNonce(); online.selfCommit = null; online.selfRevealed = false;
+    online.selfRevealSending = false; online.selfGearCapture = null;
     online.peerCommit = null; online.peerCommitted = false; online.peerRevealSeen = false; online.peerCommitAt = null;
     online.peerCharacter = null; online.peerNonce = null; online.revealVerified = false;
     // 席ごとの伏せ合いも全部捨てる。1件でも前のラウンドのものが残ると、
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
+    online.participantGearReveals = {}; online.verifiedStartGearManifest = null;
+    resetFirebaseGearRevealCompatibilityClock();
     online.roundOpponentSeats = null; online.roundRivals = null;
     online.startAcks = {};
     // 初戦の開始確認フラグを残すと、再戦のstartが「確認中」と誤判定されて無言で捨てられる。
@@ -12942,19 +13434,132 @@
     online.autoStartNextRound = !!autoReady;
     if (autoReady && isFirebasePlayer()) commitOwnCharacter();
   }
-  async function refreshFirebaseRoster(broadcast) {
-    if (!online || online.kind !== 'firebase') return;
+  function applyPersistedFirebaseRoomAuthority(room) {
+    if (!online || online.kind !== 'firebase') return false;
+    const persisted = inspectPersistedFirebaseRoom(room);
+    if (persisted.visibility !== online.visibility) throw new Error('room visibilityが変更されました');
+    const acceptedRevision = Number(online.acceptedSettingsRevision) || 0;
+    if (persisted.settings.revision < acceptedRevision) throw new Error('persisted settings revisionが巻き戻りました');
+    if (persisted.settings.revision === acceptedRevision
+        && online.acceptedSettingsIdentity && persisted.settingsIdentity !== online.acceptedSettingsIdentity) {
+      throw new Error('同じsettings revisionの内容が矛盾しています');
+    }
+    const settingsChanged = persisted.settings.revision > acceptedRevision;
+    const rosterChanged = !!online.persistedRosterIdentity && persisted.rosterIdentity !== online.persistedRosterIdentity;
+    const beforeSlots = online.slots || {};
+    const takenOver = rosterChanged && online.phase === 'playing' && firebaseLobbyIs2v2()
+      ? FIREBASE_SEATS.filter(seat => seat !== online.seat && beforeSlots[seat] && beforeSlots[seat].uid
+        && !(persisted.slots[seat] && persisted.slots[seat].uid))
+      : [];
+    if (settingsChanged && online.phase !== 'lobby') {
+      throw new Error('対戦開始後にFirebase settings authorityが変更されました');
+    }
+    if (rosterChanged && (online.phase === 'revealing' || online.phase === 'starting')) {
+      throw new Error('READY後にFirebase room authorityが変更されました');
+    }
+    if ((settingsChanged || rosterChanged) && online.phase === 'lobby') {
+      invalidateFirebaseRoundReadiness(settingsChanged
+        ? '対戦設定が更新されたため、もう一度準備完了を押してください。'
+        : '参加者が変わったため、もう一度準備完了を押してください。');
+    }
+    online.settings = persisted.settings;
+    online.slots = persisted.slots;
+    online.acceptedSettingsRevision = persisted.settings.revision;
+    online.acceptedSettingsIdentity = persisted.settingsIdentity;
+    online.persistedRosterIdentity = persisted.rosterIdentity;
+    online.settingsAuthorityBlocked = false;
+    syncFirebaseParticipantRole();
+    for (const seat of takenOver) applyFirebaseSeatTakeover(seat);
+    syncQuickMatchListing();
+    return true;
+  }
+  async function refreshFirebaseRoster(broadcast, expectedSettingsHint = null) {
+    if (!online || online.kind !== 'firebase') return false;
+    const target = online;
+    if (broadcast) target.settingsRefreshBroadcastRequested = true;
+    if (!target.settingsRefreshPromise) {
+      target.settingsRefreshPromise = (async () => {
+        const room = await firebaseRequest(`rooms/${target.room}`, target.auth);
+        if (!online || online !== target || !room) throw new Error('Firebase room正本を取得できません');
+        applyPersistedFirebaseRoomAuthority(room);
+        if (!online || online !== target) return false;
+        // 同時刻のfalse/true要求は1本のGETへ畳むが、後から来たbroadcast=trueを
+        // 失わない。presenceで参加者を拾ったホストのlobbyState通知を必ず残す。
+        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()) {
+          await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
+        }
+        renderFirebaseLobby();
+        return true;
+      })().finally(() => {
+        if (online === target) {
+          target.settingsRefreshPromise = null;
+          target.settingsRefreshBroadcastRequested = false;
+        }
+      });
+    }
     try {
-      const room = await firebaseRequest(`rooms/${online.room}`, online.auth);
-      if (!online || !room) return;
-      online.slots = room.slots || online.slots;
-      online.settings = normalizeLobbySettings(room.settings || online.settings);
-      syncFirebaseParticipantRole();
-      syncQuickMatchListing();
-      if (!online) return;
-      if (broadcast && isFirebaseHost()) await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
-      renderFirebaseLobby();
-    } catch (_) { /* SSEは継続し、次のpresenceで再試行する */ }
+      const ok = await target.settingsRefreshPromise;
+      if (!ok || !online || online !== target) return false;
+      if (expectedSettingsHint) {
+        const hinted = validatePersistedFirebaseSettings(expectedSettingsHint, online.visibility);
+        const hintIdentity = firebaseSettingsIdentity(hinted);
+        if (online.acceptedSettingsRevision < hinted.revision
+            || (online.acceptedSettingsRevision === hinted.revision && online.acceptedSettingsIdentity !== hintIdentity)) {
+          throw new Error('settings通知とFirebase正本が一致しません');
+        }
+      }
+      return true;
+    } catch (error) {
+      if (online && online === target) {
+        target.settingsAuthorityBlocked = true;
+        if (target.phase === 'lobby') invalidateFirebaseRoundReadiness('Firebase設定の正本を確認できません。通信を確認して再試行してください。');
+        if (expectedSettingsHint || /巻き戻|矛盾|変更/.test(String(error && error.message))) {
+          rejectFirebaseMessage(`Firebase settings authorityを確認できません（${error?.message || 'unknown'}）`);
+        } else {
+          onlineLobbyStatus('Firebase設定の正本を確認できません。通信を確認して再試行してください。');
+          renderFirebaseLobby();
+        }
+      }
+      return false;
+    }
+  }
+  async function ensureFirebaseSettingsAuthority(reason) {
+    const ok = await refreshFirebaseRoster(false);
+    if (!ok && online && !online.protocolError) onlineLobbyStatus(`${reason || '操作'}の前にFirebase設定を確認できませんでした。`);
+    return !!(ok && online && !online.settingsAuthorityBlocked && !online.protocolError);
+  }
+  async function handleFirebaseSettingsHint(rawSettings) {
+    if (!online || online.kind !== 'firebase') return false;
+    let hinted;
+    try { hinted = validatePersistedFirebaseSettings(rawSettings, online.visibility); }
+    catch (error) { rejectFirebaseMessage(`settings通知が不正です（${error?.message || 'invalid'}）`); return false; }
+    const identity = firebaseSettingsIdentity(hinted);
+    if (hinted.revision < online.acceptedSettingsRevision) return true;
+    if (hinted.revision === online.acceptedSettingsRevision && identity === online.acceptedSettingsIdentity) return true;
+    if (online.phase !== 'lobby') { rejectFirebaseMessage('対戦開始後にsettings変更通知を受信しました'); return false; }
+    invalidateFirebaseRoundReadiness('対戦設定の更新を確認しています…');
+    return refreshFirebaseRoster(false, hinted);
+  }
+  function resetFirebaseGearRevealCompatibilityClock() {
+    if (!online || online.kind !== 'firebase') return;
+    online.gearRevealCompatibility = { visibleMs: 0, checkedAt: firebaseMonotonicNow() };
+  }
+  function updateFirebaseGearRevealCompatibility(force = false) {
+    if (!online || online.kind !== 'firebase') return false;
+    if (!firebaseGearEnabled() || online.phase !== 'revealing' || allFirebaseRevealsVerified()) {
+      resetFirebaseGearRevealCompatibilityClock();
+      return false;
+    }
+    const entry = online.gearRevealCompatibility
+      || (online.gearRevealCompatibility = { visibleMs: 0, checkedAt: firebaseMonotonicNow() });
+    const now = firebaseMonotonicNow();
+    const elapsed = Math.max(0, now - entry.checkedAt);
+    entry.checkedAt = now;
+    if (!(typeof document !== 'undefined' && document.hidden)) entry.visibleMs += elapsed;
+    if (force) entry.visibleMs = FIREBASE_GEAR_REVEAL_COMPAT_VISIBLE_TIMEOUT_MS;
+    if (entry.visibleMs < FIREBASE_GEAR_REVEAL_COMPAT_VISIBLE_TIMEOUT_MS) return false;
+    rejectFirebaseMessage('Gear ONに対応していない参加者、またはGear revealを送れない参加者がいます。');
+    return true;
   }
   function maybeAutoStartFirebaseRound() {
     if (!isFirebaseHost() || !online.autoStartNextRound || online.phase !== 'lobby' || !online.selfReady) return;
@@ -12977,23 +13582,71 @@
     battleMode = 'normal'; gamePhase = 'battle'; online.phase = 'playing'; closeOnlineLobby();
     showBattleStartCutIn();
   }
+  async function applyFirebaseSpectatorStart(msg) {
+    if (!online || online.kind !== 'firebase' || online.participantRole !== 'spectator') return;
+    try {
+      if (!await ensureFirebaseSettingsAuthority('spectator start')) throw new Error('Firebase settings正本を確認できません');
+      if (!firebaseRevealsReady()) { online.pendingStart = msg; return; }
+      validateFirebaseStartGearEnvelope(msg);
+      if (!firebaseStartCharactersMatch(msg.snap)) throw new Error('開始キャラクターがverified revealと一致しません');
+      rememberFirebaseStartCharacters(msg.snap);
+      applyFirebaseSpectatorSnapshot(msg);
+    } catch (error) {
+      if (online) rejectFirebaseMessage(`観戦開始データを検証できません（${error?.code || error?.message || 'unknown'}）`);
+    }
+  }
   function receiveFirebaseSpectatorResult(msg) {
     if (!online || online.kind !== 'firebase') return;
     matchOver = true; winner = msg.winner; projectiles = []; barucopters = []; awaitingResolve = false; online.phase = 'results';
     beginMatchEnd(msg.reason); scheduleFirebaseResultsLobby();
   }
-  async function updateFirebaseSettings() {
+  async function updateFirebaseSettings(options = {}) {
     // ここのガードを canEdit と揃える。片方だけ直すと「選べるのに送られない」状態になる。
-    if (!isFirebaseHost() || online.phase !== 'lobby') return;
-    const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, stageSize: onlineStageSizeEl && onlineStageSizeEl.value, revision: (online.settings.revision || 0) + 1 });
-    if (online.customStageIdentity && selectedCustomAdapter && (selectedCustomAdapter.format !== settings.format || selectedCustomAdapter.stageSize !== settings.stageSize)) {
-      online.customStageIdentity = null;
-      selectedCustomStage = null;
-      selectedCustomAdapter = null;
-      onlineLobbyStatus('対戦方式を変更したため、カスタムステージの選択を解除しました。');
+    if (!isFirebaseHost() || online.phase !== 'lobby' || online.settingsWritePending) return false;
+    if (!options || typeof options !== 'object' || Array.isArray(options)
+        || Object.keys(options).some(key => key !== 'requestedGearMode')) return false;
+    // Authority GETのawaitより前に単一writer latchを取る。同じacceptedRevisionから
+    // 異なる設定を並行PUTすると同revision矛盾で自分自身を停止させるため、UIのdisabledだけに頼らない。
+    const targetOnline = online;
+    targetOnline.settingsWritePending = true;
+    renderFirebaseLobby();
+    try {
+      if (!await ensureFirebaseSettingsAuthority('settings update') || online !== targetOnline
+          || !isFirebaseHost() || targetOnline.phase !== 'lobby') return false;
+      const requestedGearMode = Object.prototype.hasOwnProperty.call(options, 'requestedGearMode')
+        ? options.requestedGearMode
+        : (firebaseGearEnabled() ? globalThis.KatamonGearOnlineProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1 : globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF);
+      if (requestedGearMode === globalThis.KatamonGearOnlineProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1 && targetOnline.visibility !== 'private') {
+        onlineLobbyStatus('Gear ONは非公開部屋でのみ選択できます。');
+        return false;
+      }
+      const capability = globalThis.KatamonGearOnlineLobbyProtocol.createRoomGearCapability({
+        visibility: targetOnline.visibility === null ? 'public' : targetOnline.visibility,
+        gearMode: requestedGearMode
+      });
+      const settings = normalizeLobbySettings({ terrain: onlineTerrainEl && onlineTerrainEl.value, wind: onlineWindEl && onlineWindEl.value, turnsPerPlayer: onlineTurnsEl && onlineTurnsEl.value, format: onlineFormatEl && onlineFormatEl.value, stageSize: onlineStageSizeEl && onlineStageSizeEl.value, revision: targetOnline.acceptedSettingsRevision + 1 });
+      if (capability) settings.gearCapability = capability;
+      if (targetOnline.customStageIdentity && selectedCustomAdapter && (selectedCustomAdapter.format !== settings.format || selectedCustomAdapter.stageSize !== settings.stageSize)) {
+        targetOnline.customStageIdentity = null;
+        selectedCustomStage = null;
+        selectedCustomAdapter = null;
+        onlineLobbyStatus('対戦方式を変更したため、カスタムステージの選択を解除しました。');
+      }
+      invalidateFirebaseRoundReadiness('対戦設定を更新しています…');
+      await firebaseRequest(`rooms/${targetOnline.room}/settings`, targetOnline.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+      if (online !== targetOnline || targetOnline.phase !== 'lobby') return false;
+      if (!await refreshFirebaseRoster(false, settings)) throw new Error('書き込んだsettingsをFirebase正本で確認できません');
+      if (online !== targetOnline || targetOnline.phase !== 'lobby') return false;
+      await netSend({ t: 'settings', settings: online.settings });
+      if (online !== targetOnline || targetOnline.phase !== 'lobby') return false;
+      onlineLobbyStatus('対戦設定を更新しました。全員もう一度準備完了を押してください。');
+      return true;
+    } catch (error) {
+      if (online === targetOnline && !targetOnline.protocolError) onlineLobbyStatus(`対戦設定を更新できませんでした（${error?.message || '通信エラー'}）`);
+      return false;
+    } finally {
+      if (online === targetOnline) { targetOnline.settingsWritePending = false; renderFirebaseLobby(); }
     }
-    await firebaseRequest(`rooms/${online.room}/settings`, online.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
-    online.settings = settings; syncFirebaseParticipantRole(); netSend({ t: 'settings', settings }); renderFirebaseLobby();
   }
 
   function toggleOnlineCustomStage() {
@@ -13019,7 +13672,9 @@
     // 人が座っている対戦者席ぶんの伏せ合いがそろってから開始する。
     if (!firebasePeersCommitted()) return;
     try {
-      await refreshFirebaseRoster(false);
+      if (!await ensureFirebaseSettingsAuthority('start request') || !online || online.phase !== 'lobby') return;
+      if (!allFirebasePlayersReady() || !firebasePeersCommitted()) return;
+      if (firebaseGearEnabled() && !await ensureFirebaseReadyGearCurrent()) return;
       const players = { p1: online.clientId };
       for (const seat of firebasePlayerSeats()) {
         if (seat !== 'p1' && firebaseSeatOccupied(seat)) players[seat] = online.slots[seat].uid;
@@ -13027,7 +13682,8 @@
       // 1vs1は相手が居ないと始まらない。2vs2は空席をCPUが埋めるので人数は問わない。
       if (!firebaseLobbyIs2v2() && !players.e1) { onlineLobbyStatus('対戦者の入室を確認できません。'); return; }
       await firebaseRequest(`rooms/${online.room}/round`, online.auth, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'revealing', players }) });
-      online.phase = 'revealing'; sendFirebaseIdentityPacket({ t: 'lobbyState', status: 'revealing', slots: online.slots, settings: online.settings }).catch(() => false); maybeRevealCharacter(); renderFirebaseLobby();
+      online.phase = 'revealing'; resetFirebaseGearRevealCompatibilityClock();
+      sendFirebaseIdentityPacket({ t: 'lobbyState', status: 'revealing', slots: online.slots, settings: online.settings }).catch(() => false); maybeRevealCharacter(); renderFirebaseLobby();
     } catch (_) { onlineLobbyStatus('開始状態を更新できませんでした。'); }
   }
   async function requestFirebaseRematch() {
@@ -13247,6 +13903,10 @@
     updateFirebasePeerLiveness();
     if (!online || online.phase === 'ended') return;
     updateFirebaseLobbyLiveness();
+    if (!online || online.phase === 'ended') return;
+    updateFirebaseGearRevealCompatibility();
+    if (!online || online.phase === 'ended') return;
+    updateFirebaseReadyGearStorageWatch();
     if (!online || online.phase === 'ended') return;
     netDrainQueue(dt);
     if (online.phase !== 'waiting') return;
@@ -21252,8 +21912,12 @@
     setOnlineLobbyBusy(true); onlineLobbyStatus('部屋を作っています…');
     try {
       const settings = { ...defaultLobbySettings(), format };
-      const { code, auth, room, seat } = await createFirebaseRoom(null, settings);
-      if (isPublic) await publishOpenRoom(code, auth, format, roomName, 1);
+      const visibility = isPublic ? 'public' : 'private';
+      const { code, auth, room, seat } = await createFirebaseRoom(null, settings, {
+        visibility,
+        gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF
+      });
+      if (isPublic) await publishOpenRoom(code, auth, format, roomName, 1, room.visibility);
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
       beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat, isPublic ? { quickFormat: format, quickRoomName: roomName, quickWaiting: true, quickListed: true } : null);
@@ -21287,7 +21951,10 @@
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('匿名で接続し、部屋を作っています…');
     try {
-      const { code, auth, room, seat } = await createFirebaseRoom();
+      const { code, auth, room, seat } = await createFirebaseRoom(null, null, {
+        visibility: 'private',
+        gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF
+      });
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       // 発行後は自分で書き換えるものではないので、編集できない見た目にする
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
@@ -21326,7 +21993,13 @@
     } catch (_) { onlineLobbyStatus(`合言葉: ${code}（長押しでコピーしてください）`); }
   });
   if (onlineReadyBtn) onlineReadyBtn.addEventListener('click', () => { if (!onlineLobbyBusy) commitOwnCharacter(); });
-  if (onlineCharacterEl) onlineCharacterEl.addEventListener('change', updateOnlineCharacterPreview);
+  if (onlineCharacterEl) onlineCharacterEl.addEventListener('change', () => {
+    if (online && online.kind === 'firebase' && (online.selfReady || online.readyCapturePending)) {
+      clearOwnFirebaseReadyState({ reason: 'モンスターが変わったため、準備完了を解除しました。' });
+      renderFirebaseLobby();
+    }
+    updateOnlineCharacterPreview();
+  });
   if (onlineStartBtn) onlineStartBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseStart(); });
   if (onlineRematchBtn) onlineRematchBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseRematch(); });
   if (onlineReturnLobbyBtn) onlineReturnLobbyBtn.addEventListener('click', () => { if (!onlineLobbyBusy) requestFirebaseReturnLobby(); });
@@ -21335,6 +22008,9 @@
   if (onlineLeaveConfirmNoButton) onlineLeaveConfirmNoButton.addEventListener('click', () => { cancelLeaveFirebaseLobbyConfirm(); });
   // 対戦方式もここに含めること。外すと選んでも送られず、次の描画で元へ戻るだけになる。
   [onlineTerrainEl, onlineWindEl, onlineTurnsEl, onlineFormatEl, onlineStageSizeEl].forEach(el => { if (el) el.addEventListener('change', () => { updateFirebaseSettings(); }); });
+  if (onlineGearModeEl) onlineGearModeEl.addEventListener('change', () => {
+    updateFirebaseSettings({ requestedGearMode: onlineGearModeEl.value });
+  });
   if (onlineCustomStageBtn) onlineCustomStageBtn.addEventListener('click', toggleOnlineCustomStage);
   if (onlineCancelButton) onlineCancelButton.addEventListener('click', () => {
     if (online && online.kind === 'firebase') { leaveFirebaseLobby(); return; }

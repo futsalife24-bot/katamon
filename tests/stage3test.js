@@ -969,7 +969,8 @@ function check(name, value) {
   check('ready is a toggle that can be taken back while in the lobby',
     htmlText.includes('function setSelfNotReady()')
     && htmlText.includes("netSend({ t: 'ready', value: false });")
-    && htmlText.includes("onlineReadyBtn.textContent = online.selfReady ? '準備完了を取り消す' : '準備完了';"));
+    && htmlText.includes("onlineReadyBtn.textContent = online.readyCapturePending ? '装備を確認中…'")
+    && htmlText.includes("online.selfReady ? '準備完了を取り消す' : '準備完了'"));
   check('taking back ready clears the commit so a new character can be picked',
     htmlText.includes('online.selfCommit = null;') && htmlText.includes('online.selfRevealed = false;'));
   check('an un-ready packet is understood, and the old payload-less form still means ready',
@@ -1095,7 +1096,7 @@ function check(name, value) {
   check('the host sends the start packet without persisting a spectator snapshot',
     !htmlText.includes('saveSnapshot')
     && !htmlText.includes('latestSnapshot')
-    && htmlText.includes("const startSent = await netSend({ t: 'start', snap });")
+    && htmlText.includes("const startSent = await netSend({ t: 'start', snap, ...gearEnvelope });")
     && htmlText.includes("if (startSent !== true) throw new Error('Match start could not be sent.');"));
   check('a rematch clears the guest start-verification latch before accepting the next start',
     htmlText.includes('pendingStart: null, startVerifying: false,')
@@ -1696,7 +1697,8 @@ function check(name, value) {
     /catch \(_\) \{[\s\S]{0,220}quickListed: false/.test(htmlText));
   check('the host learns someone arrived through the existing presence path',
     htmlText.includes("if (online && online.kind === 'firebase' && isFirebaseHost() && msg.seat !== 'p1') refreshFirebaseRoster(true);")
-    && /refreshFirebaseRoster[\s\S]{0,400}syncQuickMatchListing\(\);/.test(htmlText));
+    && /async function refreshFirebaseRoster[\s\S]{0,900}applyPersistedFirebaseRoomAuthority\(room\);/.test(htmlText)
+    && /function applyPersistedFirebaseRoomAuthority[\s\S]{0,2600}syncQuickMatchListing\(\);/.test(htmlText));
 
   // ===== Issue #25 段B: 観戦席を対戦者席へ転用する（土台） =====
   h.setOnlineForLogTest(null);
@@ -2285,7 +2287,7 @@ function check(name, value) {
   // ほかに人が座っていない2vs2(1人＋CPU3体)では、検証する相手の公開が届かない。
   // 開始の合図が verifyPeerReveal からしか出ていなかったため、試合が始まらなかった。
   check('a lone host still starts the match, without waiting for a reveal that never arrives',
-    /function maybeRevealCharacter\(\)[\s\S]{0,700}maybeStartFirebaseMatch\(\);/.test(htmlText));
+    /async function maybeRevealCharacter\(\)[\s\S]{0,2600}maybeStartFirebaseMatch\(\);/.test(htmlText));
   // 実機で「再戦できない」。認証の更新に一度失敗すると、以降の書き込みが全部401で
   // 落ち続け、再戦の準備すら作れなくなっていた。401は「鍵の期限切れ」と「ルール拒否」の
   // 両方で返るので、鍵を取り直して本当に新しくなった時だけ送り直す。
@@ -2299,7 +2301,11 @@ function check(name, value) {
   // しか走らず、相手がCPUだけの部屋では誰も送ってこないので毎回手で押す必要があった。
   // v105の「1人だと試合が始まらない」と同じ、受信経路にしか合図が無かった取りこぼし。
   check('a lone host’s rematch starts on its own, without an incoming packet to trigger it',
-    /async function commitOwnCharacter\(\)[\s\S]{0,900}maybeAutoStartFirebaseRound\(\);/.test(htmlText)
+    (() => {
+      const start = htmlText.indexOf('async function commitOwnCharacterSelection(characterId)');
+      const end = htmlText.indexOf('async function commitOwnCharacter()', start);
+      return start >= 0 && end > start && htmlText.slice(start, end).includes('maybeAutoStartFirebaseRound();');
+    })()
     && (htmlText.match(/maybeAutoStartFirebaseRound\(\);/g) || []).length === 3);
   // 実機で「4手番ぶん遊べたのに35秒で中断」。生存確認は「相手のパケットが届かなければ
   // 切る」作りだが、相手がCPUだけの部屋では永久に何も届かない。待つ相手が居るかを先に見る。
@@ -2447,7 +2453,7 @@ function check(name, value) {
   check('a Firebase guest shows the VS cut-in after accepting the verified start snapshot',
     /async function applyFirebaseStart\(msg\)[\s\S]{0,1700}applySnapshot\(msg\.snap\);[\s\S]{0,450}showBattleStartCutIn\(\);/.test(htmlText));
   check('the loopback guest also shows the VS cut-in after applying the start snapshot',
-    /case 'start':[\s\S]{0,900}applySnapshot\(msg\.snap\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
+    /case 'start':[\s\S]{0,1800}applySnapshot\(msg\.snap\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
   check('a spectator sees the same VS cut-in when the match starts',
     /function applyFirebaseSpectatorSnapshot\(msg\)[\s\S]{0,500}showBattleStartCutIn\(\);/.test(htmlText));
 
