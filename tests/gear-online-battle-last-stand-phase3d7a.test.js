@@ -54,7 +54,7 @@ function install({ p1 = [], e1 = [] } = {}) {
   const manifest = lobby.createStartGearManifest({ roundId, commitments: reveals.map((entry) => entry.revealedCommitment), participantReveals: reveals });
   current.participantGearReveals = Object.fromEntries(reveals.map((entry) => [entry.revealedCommitment.seatId, entry])); current.verifiedStartGearManifest = manifest;
   const state = start.createOnlineGearBattleStartState({ matchFormat: '1v1', manifest, participantReveals: reveals }); wiring.applyBattleStartState(state);
-  return { current, state };
+  return { current, state, manifest };
 }
 
 test('fresh p1/e1 runtime is zero, static snapshot stays static, and Rescue4 remains inert', () => {
@@ -98,6 +98,44 @@ test('captured Last Stand4 is action-wide, composes in the modifier bucket, and 
   wiring.completeLastStandAttack('p1'); assert.equal(wiring.runtimeEffectsState().p1.lastStandNextAttackDamageBp, 0);
 });
 
+test('Scorpion Rail uses only the captured Last Stand4 action modifier, then consumes it', () => {
+  const { state } = install({ p1: last(4) });
+  const p1 = kt.unitById('p1');
+  kt.setUnitHpForTest('p1', p1.maxHp * .5);
+  wiring.recordLastStandDamage({ ownerId: 'e1', target: p1, actualDamage: 1, damageType: 'direct_projectile', fromEnemyAttackAction: true });
+  wiring.beginLastStandAttack('p1');
+  const base = 24 * (kt.unitById('e1').character === 'iwa' ? 1 : 1);
+  const expected = wiring.actionDamageRequested('p1', base);
+  assert.equal(expected, Math.round(base * 1.15), 'Rail must receive Last Stand4, not Last Stand2 Attack');
+  const resolved = wiring.resolveScorpionRailImpact('p1', 'e1');
+  assert.equal(resolved.actualDamage, expected, 'actual Scorpion Rail production resolver must receive the action modifier');
+  wiring.completeLastStandAttack('p1');
+  assert.equal(wiring.runtimeEffectsState().p1.lastStandNextAttackDamageBp, 0);
+  assert.equal(state.battleGearSnapshotsByUnit.p1.derivedStats.conditional.lastStand2, true);
+});
+
+test('ONLINE 1v1 rejects an injected Rescue4 runtime value before an attack starts', () => {
+  install({ p1: last(4) });
+  const state = wiring.runtimeEffectsState();
+  wiring.setRuntimeEffectsStateRawForTest(Object.freeze({
+    p1: Object.freeze({ ...state.p1, rescueNextAttackDamageBp: 1000 }),
+    e1: Object.freeze(state.e1)
+  }));
+  assert.throws(() => wiring.beginLastStandAttack('p1'), (error) => error?.code === 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID');
+  assert.equal(wiring.activeAttackRuntime(), null);
+});
+
+test('offensive production routes retain the shared action boundary while Barrier stays outside it', () => {
+  const index = read('index.html');
+  const block = name => index.slice(index.indexOf(`function ${name}(`), index.indexOf('\n  function ', index.indexOf(`function ${name}(`) + 1));
+  assert.match(block('emitEmp'), /battleGearActionDamageRequested\(owner,/);
+  assert.match(block('fireworkShardExplode'), /battleGearActionDamageRequested\(p\.owner,/);
+  assert.match(index, /subweaponId === 'impact' \|\| subweaponId === 'drill'/);
+  assert.match(index, /beginBattleGearAttackAction\(unit\)/);
+  assert.match(block('endTurn'), /completeBattleGearAttackAction\(acting\)/);
+  assert.match(block('launchSubweaponShot'), /subweaponId === 'barrier'/);
+});
+
 test('p1/e1 symmetry, Gearless identity, cancel preservation, and 2v2 fence hold', () => {
   install({ p1: last(4), e1: last(4) });
   for (const id of ['p1', 'e1']) { const unit = kt.unitById(id); kt.setUnitHpForTest(id, unit.maxHp * .5); wiring.beginLastStandAttack(id); assert.equal(wiring.activeAttackRuntime().ownerId, id); wiring.cancelLastStandAttack(id); assert.equal(wiring.activeAttackRuntime(), null); }
@@ -112,6 +150,10 @@ test('runtime Shield wire v1, Firebase Rules, RNG and manifest v3 fence remain i
   assert.doesNotMatch(rules, /lastStandNextAttackDamageBp|battleGearRuntimeEffects/);
   const action = rng.createOnlineGearActionIdentity({ version: 1, roomId, roundId, turnOrdinal: 7, sourceUnitId: 'p1' });
   assert.equal(rng.rollBasisPoints(rng.createCritRollIdentity({ actionIdentity: action, targetUnitId: 'e1', damageType: 'direct_projectile', hitOrdinal: 0 })), 5220);
+  const { manifest } = install({ p1: last(4), e1: last(4) });
+  const v2 = structuredClone(manifest); v2.version = 2;
+  assert.throws(() => lobby.validateStartGearManifest(v2, { participantReveals: Object.values(wiring.state().participantGearReveals) }),
+    (error) => error?.code === 'INVALID_ONLINE_GEAR_START_MANIFEST');
 });
 
 async function main() {

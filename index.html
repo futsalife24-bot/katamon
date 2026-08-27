@@ -5207,8 +5207,11 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    // Rail is a status/subweapon path, explicitly outside 3C-2A Gear damage.
-    const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul)), {
+    // Rail is outside static Attack/Defense Gear damage, but it is still part
+    // of its accepted offensive action: apply Last Stand 4's modifier here.
+    const baseDamage = Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul));
+    const requestedDamage = battleGearActionDamageRequested(p.owner, baseDamage);
+    const damageResult = applyResolvedUnitDamage(target, requestedDamage, {
       ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
@@ -8883,8 +8886,13 @@
     if (!state || !Object.isFrozen(online.battleGearRuntimeEffectsStateByUnit) || !Object.isFrozen(state)) {
       throw Object.assign(new Error('ONLINE Gear runtime effects stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
     }
-    // The pure helper is the single state validator and rejects an accidental
-    // Rescue4 value during the intentionally 1v1-only Phase 3D-7A.
+    // The shared pure helper permits Rescue4 for the future 2v2 support phase.
+    // In this strictly 1v1 phase no support source can grant it, so a nonzero
+    // value must fail closed before it can become action damage.
+    if (state.rescueNextAttackDamageBp !== 0) {
+      throw Object.assign(new Error('ONLINE 1v1ではRescue runtimeは未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+    }
+    // Keep the pure helper as the validator for Last Stand and exact shape.
     globalThis.KatamonGearCombat.beginAttackAction({ combat, state });
     return state;
   }

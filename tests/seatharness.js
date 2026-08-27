@@ -1253,6 +1253,7 @@ const HOOK = `
           ? structuredClone(online.battleGearShieldStateByUnit) : null,
         runtimeEffectsState: () => online?.battleGearRuntimeEffectsStateByUnit
           ? structuredClone(online.battleGearRuntimeEffectsStateByUnit) : null,
+        setRuntimeEffectsStateRawForTest: value => { online.battleGearRuntimeEffectsStateByUnit = value; },
         activeAttackRuntime: () => online?.battleGearActiveAttackRuntime
           ? structuredClone(online.battleGearActiveAttackRuntime) : null,
         battleSnapshotsForRuntimeTest: () => online?.battleGearSnapshotsByUnit || null,
@@ -1283,6 +1284,13 @@ const HOOK = `
         completeLastStandAttack: ownerId => completeFirebaseOnlineGearAttackAction(unitById(ownerId)),
         cancelLastStandAttack: ownerId => cancelFirebaseOnlineGearAttackAction(unitById(ownerId)),
         recordLastStandDamage: options => recordFirebaseOnlineGearLastStandDamage(options),
+        actionDamageRequested: (ownerId, baseDamage) => battleGearActionDamageRequested(ownerId, baseDamage),
+        resolveScorpionRailImpact: (ownerId, targetId, damageMul = 1) => {
+          const target = unitById(targetId);
+          const beforeHp = target.hp;
+          resolveScorpionRailImpact({ owner: ownerId, damageMul, x: 0, y: 0, radius: 1, scorpionRailActive: false }, target);
+          return Object.freeze({ actualDamage: beforeHp - target.hp, targetHp: target.hp });
+        },
         applyHealing: (sourceUnitId, targetUnitId, baseHealing) =>
           applyBattleGearHealing({ sourceUnitId, target: unitById(targetUnitId), baseHealing }),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
