@@ -29,13 +29,16 @@
     if (root?.KatamonGearCombat) return root.KatamonGearCombat;
     fail('ONLINE_GEAR_RUNTIME_STATE_MODULE_MISSING');
   }
-  function shieldCapFor(snapshot, unitId) {
+  function maximumLegalCurrentShieldForRuntimeV1(snapshot, unitId) {
     if (!snapshot || !Object.isFrozen(snapshot) || !snapshot.derivedStats || !Object.isFrozen(snapshot.derivedStats)) {
       fail('ONLINE_GEAR_RUNTIME_STATE_SNAPSHOT_INVALID', `${unitId} snapshot`);
     }
     const initial = combat().initialShieldFromSets(snapshot.derivedStats);
-    if (!initial || !Number.isFinite(initial.cap) || initial.cap < 0) fail('ONLINE_GEAR_RUNTIME_STATE_SNAPSHOT_INVALID', `${unitId} cap`);
-    return initial.cap;
+    // Runtime v1 has no Shield-gain event.  The legal ceiling is therefore
+    // the actual canonical start remainder, not the generic 35%-of-HP cap
+    // that a future Shield gain could theoretically reach.
+    if (!initial || !Number.isFinite(initial.shieldAfter) || initial.shieldAfter < 0) fail('ONLINE_GEAR_RUNTIME_STATE_SNAPSHOT_INVALID', `${unitId} initialShield`);
+    return initial.shieldAfter;
   }
   function validateRuntimeState(value, { snapshots, localState = null } = {}) {
     exact(value, ['shieldByUnit', 'version'], 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
@@ -55,8 +58,8 @@
       const entry = value.shieldByUnit[unitId];
       exact(entry, ['currentShield'], 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
       const currentShield = entry.currentShield;
-      const cap = shieldCapFor(snapshots[unitId], unitId);
-      if (!Number.isFinite(currentShield) || currentShield < 0 || currentShield > cap + EPSILON) {
+      const maximumLegalCurrentShield = maximumLegalCurrentShieldForRuntimeV1(snapshots[unitId], unitId);
+      if (!Number.isFinite(currentShield) || currentShield < 0 || currentShield > maximumLegalCurrentShield + EPSILON) {
         fail('INVALID_ONLINE_GEAR_RUNTIME_STATE', `${unitId} currentShield`);
       }
       if (localRuntimeState && currentShield > localRuntimeState.shieldByUnit[unitId].currentShield + EPSILON) {

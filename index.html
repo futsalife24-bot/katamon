@@ -10561,7 +10561,13 @@
     // RTDBは値がnullのキーを保存しない。橋の無い地形はbridge:nullで送っているため、
     // 受信側では欠落(undefined)として届く。そのままだと baseline の null と型が
     // 揃わずJSON比較が常に不一致になり、橋の無いほぼ全ての試合でstateが拒否されていた。
-    if (!Object.prototype.hasOwnProperty.call(normalized, 'bridge')) {
+    // Turn-boundary state intentionally omits the immutable terrain base.
+    // Only a start/full terrain snapshot may need RTDB's missing bridge:null
+    // repair; adding bridge to a terrain delta would make its validator reject
+    // the packet as if it carried a mutable terrain base.
+    const hasTerrainBase = ['segments', 'pattern', 'startOnIsland', 'themeKey', 'parallaxSeed']
+      .some(key => Object.prototype.hasOwnProperty.call(normalized, key));
+    if (hasTerrainBase && !Object.prototype.hasOwnProperty.call(normalized, 'bridge')) {
       normalized.bridge = null;
     }
     const columns = normalizeRtdbDenseArray(normalized.segments);

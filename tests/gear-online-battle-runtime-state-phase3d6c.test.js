@@ -24,7 +24,7 @@ function fixture({ gear = true } = {}) {
     settings: { terrain: 'random', wind: 'random', turnsPerPlayer: 15, format: '1v1', stageSize: 'standard', revision: 1, ...(gear ? { gearCapability: capability } : {}) },
     slots: { p1: { uid: 'uid-p1', claimedAt: 1 }, e1: { uid: 'uid-e1', claimedAt: 1 }, s1: null, s2: null },
     participantGearReveals: {}, verifiedStartGearManifest: null, battleGearSnapshotsByUnit: null, battleGearShieldStateByUnit: null,
-    pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), seatCharacter: { e1: 'iwa' }, seatVerified: { e1: true }, selfCharacter: 'kyoryu', localAction: null, remoteAction: null
+    queue: [], pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), seatCharacter: { e1: 'iwa' }, seatVerified: { e1: true }, selfCharacter: 'kyoryu', peerCharacter: 'iwa', localAction: null, remoteAction: null
   };
 }
 function gear(prefix, slotId) {
@@ -46,6 +46,25 @@ function install({ p1 = [], e1 = [], gearOn = true } = {}) {
   return online;
 }
 const life4 = prefix => ['barrel', 'armor', 'core', 'engine'].map(slot => gear(prefix, slot));
+const remoteActionId = 'a'.repeat(48);
+function remoteFire(actionId = remoteActionId) {
+  return {
+    v: 3, from: 'uid-e1', seat: 'e1', roundId, t: 'fire', sentAt: 1,
+    actionId, unitId: 'e1', x: 1224, y: 512, anchor: { x: 1224, y: 512 },
+    vx0: -320, vy0: -460, useSpecial: false, useJump: false
+  };
+}
+function remoteState(snap, actionId = remoteActionId, stateRoundId = roundId) {
+  return { v: 3, from: 'uid-e1', seat: 'e1', roundId: stateRoundId, t: 'state', sentAt: 2, actionId, unitId: 'e1', snap };
+}
+function setRemoteTurnAndBuildTerminalSnapshot() {
+  assert.equal(h.setUnitControlForTest('p1', 'local'), true); assert.equal(h.setUnitControlForTest('e1', 'remote'), true);
+  const local = kt.snapshot(); local.activeIndex = local.turnOrder.indexOf('e1'); kt.applySnapshotForTest(local);
+  const terminal = wiring.turnSnapshotForTest(); terminal.activeIndex = terminal.turnOrder.indexOf('p1');
+  const remote = terminal.units.find(unit => unit.id === 'e1'); remote.x = 1224; remote.y = 512;
+  for (const key of ['segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey', 'parallaxSeed', 'terrainMaterial', 'terrainMaterialSegments', 'customStage', 'customStageIdentity']) delete terminal[key];
+  return terminal;
+}
 
 test('pure v1 runtime state is exact, frozen, p1/e1-only and validates canonical caps', () => {
   install({ p1: life4('p1') }); const snapshots = wiring.battleSnapshotsForRuntimeTest();
@@ -77,6 +96,80 @@ test('accepted-state preparation restores null local Shield and permits only mon
   wiring.setShieldStateRawForTest(restored); assert.equal(wiring.prepareRuntimeState(incoming).p1.currentShield, 2);
   incoming.gearRuntimeState.shieldByUnit.p1.currentShield = 3;
   assert.throws(() => wiring.prepareRuntimeState(incoming), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_ROLLBACK');
+});
+
+test('recovery cannot mint Shield: Gearless accepts only zero and Life4 accepts only its canonical initial remainder', () => {
+  install(); const gearlessSnapshots = wiring.battleSnapshotsForRuntimeTest(); const forgedGearless = wiring.runtimeState();
+  wiring.setShieldStateRawForTest(null); forgedGearless.shieldByUnit.p1.currentShield = 0.1;
+  assert.throws(() => runtime.restoreShieldState(forgedGearless, { snapshots: gearlessSnapshots, localState: null }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
+
+  install({ p1: life4('upper') }); const snapshots = wiring.battleSnapshotsForRuntimeTest(); const legal = wiring.runtimeState();
+  const initial = require('../shared/gear-combat.js').initialShieldFromSets(snapshots.p1.derivedStats).shieldAfter;
+  assert.ok(initial < require('../shared/gear-combat.js').initialShieldFromSets(snapshots.p1.derivedStats).cap, 'fixture distinguishes initial Shield from generic cap');
+  wiring.setShieldStateRawForTest(null); legal.shieldByUnit.p1.currentShield = initial;
+  assert.equal(runtime.restoreShieldState(legal, { snapshots, localState: null }).p1.currentShield, initial);
+  legal.shieldByUnit.p1.currentShield = initial + 0.1;
+  assert.throws(() => runtime.restoreShieldState(legal, { snapshots, localState: null }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
+});
+
+test('production receive flow buffers early state and restores Shield only after matching fire resolves', () => {
+  install({ p1: life4('receive') }); wiring.setShieldForTest('p1', 4); const snap = setRemoteTurnAndBuildTerminalSnapshot();
+  snap.gearRuntimeState.shieldByUnit.p1.currentShield = 2;
+  const before = wiring.state(); h.receiveFirebaseForTest(remoteState(snap));
+  assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'early state must not mutate Shield');
+  assert.equal(wiring.state().pendingRemoteTerminals, undefined, 'state observation stays intentionally narrow');
+  h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'fire acceptance alone must not restore Shield');
+  assert.equal(h.resolveRemoteActionForTest(), true, 'accepted fire must establish the remote action'); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 2, wiring.state().protocolError || 'only accepted terminal commits Shield');
+  assert.equal(wiring.state().protocolError, ''); assert.notDeepEqual(wiring.state().battleGearShieldStateByUnit, before.battleGearShieldStateByUnit);
+});
+
+test('production accepted state restores a null local Shield but rejects forged Gearless or over-initial remainders', () => {
+  install({ p1: life4('null-recovery') }); wiring.setShieldForTest('p1', 4); const valid = setRemoteTurnAndBuildTerminalSnapshot();
+  valid.gearRuntimeState.shieldByUnit.p1.currentShield = 2; wiring.setShieldStateRawForTest(null);
+  h.receiveFirebaseForTest(remoteState(valid)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 2, 'accepted state restores missing local runtime only at the terminal');
+
+  install(); const forgedGearless = setRemoteTurnAndBuildTerminalSnapshot(); forgedGearless.gearRuntimeState.shieldByUnit.p1.currentShield = 1;
+  wiring.setShieldStateRawForTest(null); h.receiveFirebaseForTest(remoteState(forgedGearless)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearShieldStateByUnit, null, 'Gearless recovery cannot mint Shield');
+
+  install({ p1: life4('over-initial') }); const overInitial = setRemoteTurnAndBuildTerminalSnapshot();
+  const initial = require('../shared/gear-combat.js').initialShieldFromSets(wiring.battleSnapshotsForRuntimeTest().p1.derivedStats).shieldAfter;
+  overInitial.gearRuntimeState.shieldByUnit.p1.currentShield = initial + 0.1; wiring.setShieldStateRawForTest(null);
+  h.receiveFirebaseForTest(remoteState(overInitial)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearShieldStateByUnit, null, 'recovery rejects an amount above canonical initial Shield');
+});
+
+test('production terminal rejection is atomic for wrong action, round and malformed runtime state', () => {
+  install({ p1: life4('atomic') }); wiring.setShieldForTest('p1', 4); const before = wiring.state(); const valid = setRemoteTurnAndBuildTerminalSnapshot();
+  const wrongAction = structuredClone(valid); wrongAction.gearRuntimeState.shieldByUnit.p1.currentShield = 2;
+  h.receiveFirebaseForTest(remoteState(wrongAction, 'b'.repeat(48))); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true);
+  assert.equal(h.drainOneNetworkMessageForTest(), false, 'wrong action terminal is rejected before state apply');
+  assert.deepEqual(wiring.state().battleGearShieldStateByUnit, before.battleGearShieldStateByUnit);
+
+  install({ p1: life4('atomic-round') }); wiring.setShieldForTest('p1', 4); const stale = setRemoteTurnAndBuildTerminalSnapshot(); stale.gearRuntimeState.shieldByUnit.p1.currentShield = 2;
+  h.receiveFirebaseForTest(remoteState(stale, remoteActionId, 'f'.repeat(48)));
+  assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'wrong round is ignored before Shield mutation');
+
+  install({ p1: life4('atomic-invalid') }); wiring.setShieldForTest('p1', 4); const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.version = 2;
+  h.receiveFirebaseForTest(remoteState(malformed)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true);
+  assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'invalid runtime cannot partially commit Shield');
+});
+
+test('runtime state survives JSON/RTDB normalization and preserves explicit zeroes', () => {
+  install(); const snap = wiring.turnSnapshotForTest(); const roundTrip = JSON.parse(JSON.stringify(snap));
+  const normalized = h.normalizeFirebaseSnapshot(roundTrip);
+  assert.deepEqual(normalized.gearRuntimeState, snap.gearRuntimeState);
+  assert.equal(normalized.gearRuntimeState.shieldByUnit.p1.currentShield, 0);
+  assert.equal(h.stableFirebaseJson(normalized.gearRuntimeState), h.stableFirebaseJson(snap.gearRuntimeState));
 });
 
 test('runtime state stays out of Battle Gear Snapshot, Healing, result and persistent storage', () => {
