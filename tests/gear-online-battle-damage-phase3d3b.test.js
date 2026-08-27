@@ -129,6 +129,7 @@ function expectedDamage(baseDamage, damageType, attackerCombat, defenderCombat, 
 }
 
 function runtimeNormalHit({ direct, ownerId = 'p1', targetId = 'e1' }) {
+  wiring.setCritActionForTest(ownerId, ownerId === 'p1' ? 'local' : 'remote');
   const target = kt.unitById(targetId);
   const before = target.hp;
   kt.explodeAtForTest(target.x, target.y, 1, ownerId, true, {
