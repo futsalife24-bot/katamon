@@ -5,7 +5,10 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearOnlineLobbyProtocol(root) {
   'use strict';
 
-  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 1;
+  // v2 is the compatibility fence for turn-boundary mutable Gear runtime
+  // state.  The core commitment/wire/snapshot versions intentionally remain
+  // v1; a mixed v1/v2 Gear battle must fail closed at start.
+  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 2;
   const ONLINE_GEAR_READY_COMMITMENT_VERSION = 1;
   const ONLINE_VISIBILITY_PUBLIC = 'public';
   const ONLINE_VISIBILITY_PRIVATE = 'private';

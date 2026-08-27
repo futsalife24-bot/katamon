@@ -1164,6 +1164,22 @@ const HOOK = `
       computeDamage, roomTtlMs: () => ROOM_TTL_MS, roomLeaseRenewMs: () => ROOM_LEASE_RENEW_MS,
       firebaseProto: () => FIREBASE_PROTO_VERSION, firebaseSeats: () => FIREBASE_SEATS.slice(), firebasePlayerSeats: () => FIREBASE_PLAYER_SEATS.slice(), firebaseRoundId, normalizeLobbySettings, firebasePacketSeatAllowed,
       receiveFirebaseForTest: msg => netReceiveInner(msg),
+      drainOneNetworkMessageForTest: () => {
+        if (!online?.queue?.length) return false;
+        applyNetMessage(online.queue.shift().msg);
+        return true;
+      },
+      resolveRemoteActionForTest: () => {
+        if (!online?.remoteAction) return false;
+        online.remoteAction.resolved = true;
+        return true;
+      },
+      setUnitControlForTest: (unitId, control) => {
+        const unit = unitById(unitId);
+        if (!unit || (control !== 'local' && control !== 'remote')) return false;
+        unit.control = control;
+        return true;
+      },
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
       // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は
       // production helperを直接通す。READY/reveal/startの非同期経路をsleep無しで検査する。
@@ -1233,6 +1249,19 @@ const HOOK = `
         applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
         shieldState: () => online?.battleGearShieldStateByUnit
           ? structuredClone(online.battleGearShieldStateByUnit) : null,
+        battleSnapshotsForRuntimeTest: () => online?.battleGearSnapshotsByUnit || null,
+        runtimeState: () => {
+          const runtimeState = createFirebaseOnlineGearRuntimeState();
+          return runtimeState ? structuredClone(runtimeState) : null;
+        },
+        prepareRuntimeState: snap => prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(snap),
+        setShieldStateRawForTest: value => { online.battleGearShieldStateByUnit = value; },
+        turnSnapshotForTest: () => {
+          const snap = buildSnapshot({ includeTerrain: false });
+          const runtimeState = createFirebaseOnlineGearRuntimeState();
+          if (runtimeState) snap.gearRuntimeState = runtimeState;
+          return structuredClone(snap);
+        },
         setShieldForTest: (unitId, value) => {
           const state = online?.battleGearShieldStateByUnit;
           if (!state?.[unitId] || !Number.isFinite(value) || value < 0) return null;

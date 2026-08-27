@@ -647,6 +647,7 @@
 <script src="shared/gear-online-battle-start.js"></script>
 <script src="shared/gear-online-battle-damage.js"></script>
 <script src="shared/gear-online-battle-rng.js"></script>
+<script src="shared/gear-online-battle-runtime-state.js"></script>
 <script>
 (() => {
   'use strict';
@@ -6063,6 +6064,47 @@
     return Object.freeze(Object.fromEntries(entries));
   }
 
+  function firebaseOnlineGearRuntimeStateApi() {
+    const api = globalThis.KatamonGearOnlineBattleRuntimeState;
+    if (!api?.createRuntimeState || !api?.restoreShieldState) {
+      throw Object.assign(new Error('ONLINE Gear runtime state moduleがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MODULE_MISSING' });
+    }
+    return api;
+  }
+
+  function createFirebaseOnlineGearRuntimeState() {
+    if (!firebaseGearEnabled()) return null;
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    if (!online?.battleGearSnapshotsByUnit || !online.battleGearShieldStateByUnit) {
+      throw Object.assign(new Error('ONLINE Gear Shield runtime stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
+    }
+    return firebaseOnlineGearRuntimeStateApi().createRuntimeState({
+      shieldStateByUnit: online.battleGearShieldStateByUnit,
+      snapshots: online.battleGearSnapshotsByUnit
+    });
+  }
+
+  function prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(snap) {
+    const hasRuntimeState = !!snap && Object.prototype.hasOwnProperty.call(snap, 'gearRuntimeState');
+    if (!firebaseGearEnabled()) {
+      if (hasRuntimeState) throw Object.assign(new Error('Gear OFF stateへruntime stateを送信できません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_UNEXPECTED' });
+      return null;
+    }
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    if (!hasRuntimeState || !online?.battleGearSnapshotsByUnit) {
+      throw Object.assign(new Error('ONLINE Gear stateのruntime stateが不足しています'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
+    }
+    const checked = firebaseOnlineGearRuntimeStateApi().restoreShieldState(snap.gearRuntimeState, {
+      snapshots: online.battleGearSnapshotsByUnit,
+      localState: online.battleGearShieldStateByUnit
+    });
+    return checked;
+  }
+
   function applyFirebaseOnlineGearNumericShieldToIncomingDamage({ ownerId, target, requestedDamage }) {
     const requested = Math.max(0, Number(requestedDamage) || 0);
     const targetCombat = onlineGearStaticCombatForUnit(target);
@@ -10519,7 +10561,13 @@
     // RTDBは値がnullのキーを保存しない。橋の無い地形はbridge:nullで送っているため、
     // 受信側では欠落(undefined)として届く。そのままだと baseline の null と型が
     // 揃わずJSON比較が常に不一致になり、橋の無いほぼ全ての試合でstateが拒否されていた。
-    if (!Object.prototype.hasOwnProperty.call(normalized, 'bridge')) {
+    // Turn-boundary state intentionally omits the immutable terrain base.
+    // Only a start/full terrain snapshot may need RTDB's missing bridge:null
+    // repair; adding bridge to a terrain delta would make its validator reject
+    // the packet as if it carried a mutable terrain base.
+    const hasTerrainBase = ['segments', 'pattern', 'startOnIsland', 'themeKey', 'parallaxSeed']
+      .some(key => Object.prototype.hasOwnProperty.call(normalized, key));
+    if (hasTerrainBase && !Object.prototype.hasOwnProperty.call(normalized, 'bridge')) {
       normalized.bridge = null;
     }
     const columns = normalizeRtdbDenseArray(normalized.segments);
@@ -10626,6 +10674,7 @@
     if (msg.t === 'start') {
       const reason = snapshotValidationReason(msg.snap);
       if (reason) return { ok: false, reason: `start.${reason}` };
+      if (Object.prototype.hasOwnProperty.call(msg.snap || {}, 'gearRuntimeState')) return { ok: false, reason: 'start.gearRuntimeStateUnexpected' };
       if (!gearOn && !hasGearField) return { ok: true };
       const validGearWire = msg.gearWireVersion === globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION
         && typeof msg.gearManifestJson === 'string' && msg.gearManifestJson.length > 0
@@ -10636,6 +10685,13 @@
     if (msg.t === 'state') {
       const reason = snapshotValidationReason(msg.snap, { includeTerrain: legacyV2 });
       const unitOk = legacyV2 || firebaseActionUnitAllowed(msg);
+      const hasRuntimeState = !!msg.snap && Object.prototype.hasOwnProperty.call(msg.snap, 'gearRuntimeState');
+      // Runtime Shield is a Gear-ON turn-boundary contract.  Keep the exact
+      // legacy Gear-OFF state shape, and never accept an old Gear-ON client
+      // that would silently omit the mutable remainder.
+      if (!legacyV2 && firebaseGearEnabled() !== hasRuntimeState) {
+        return { ok: false, reason: firebaseGearEnabled() ? 'state.gearRuntimeStateMissing' : 'state.gearRuntimeStateUnexpected' };
+      }
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }
     if (msg.t === 'fire') return isFirebaseUnitId(msg.unitId) && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && isFiniteIn(Number(msg.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.y), -1000, VH + 1000) && msg.anchor && isFiniteIn(Number(msg.anchor.x), -1000, STAGE_W + 1000) && isFiniteIn(Number(msg.anchor.y), -1000, VH + 1000) && isFiniteIn(Number(msg.vx0), -5000, 5000) && isFiniteIn(Number(msg.vy0), -5000, 5000) && typeof msg.useSpecial === 'boolean' && typeof msg.useJump === 'boolean' && (msg.subweaponId == null || globalThis.KatamonSubweapons?.SUBWEAPON_IDS?.includes(msg.subweaponId)) ? { ok: true } : { ok: false, reason: 'fire.payload' };
@@ -11606,11 +11662,22 @@
       case 'state':
         // ターン境界の権威。ここで完全に揃う。
         if (online.phase !== 'playing') break;
+        let acceptedGearRuntimeState = null;
         if (online.kind === 'firebase') {
           let mismatch = '';
           if (!online.remoteAction || !online.remoteAction.resolved) mismatch = 'remoteAction';
           else if (!firebaseStateTurnHandoffOk(msg)) mismatch = 'turnOrder.activeIndex';
           else mismatch = firebaseStateMismatchReason(msg.snap);
+          if (!mismatch) {
+            try {
+              // Prepare but do not commit mutable Shield until the existing
+              // snapshot application succeeds.  This leaves a malformed
+              // state packet with no partial HP/terrain/turn/Shield apply.
+              acceptedGearRuntimeState = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(msg.snap);
+            } catch (error) {
+              mismatch = error?.code || error?.message || 'gearRuntimeState';
+            }
+          }
           if (mismatch) {
             rejectFirebaseMessage(`相手の行動と一致しない状態更新です（${mismatch}）`);
             break;
@@ -11639,6 +11706,9 @@
         const previousCoopBossPhase = online.kind === 'coop' ? unitById(COOP_BOSS_UNIT_ID)?.phase : null;
         logOnlineEvent({ type: 'state', ok: true, units: msg.snap.units.map(u => ({ id: u.id, hp: u.hp })) });
         applySnapshot(msg.snap, { preserveTerrain: true });
+        if (online.kind === 'firebase' && acceptedGearRuntimeState) {
+          online.battleGearShieldStateByUnit = acceptedGearRuntimeState;
+        }
         if (online.kind === 'coop') {
           setCoopOnlineSeat(online.seat);
           const enteredPhase2 = previousCoopBossPhase === 1 && unitById(COOP_BOSS_UNIT_ID)?.phase === 2;
@@ -11809,6 +11879,10 @@
       // 捨てると、相手が決着通知を直前の砲撃へ結び付けられない。
       if (online.kind === 'coop' && turnCount >= maxTurnsTotal()) return;
       const snap = buildSnapshot({ includeTerrain: false });
+      if (online.kind === 'firebase') {
+        const runtimeState = createFirebaseOnlineGearRuntimeState();
+        if (runtimeState) snap.gearRuntimeState = runtimeState;
+      }
       netSend({ t: 'state', snap, actionId: action.actionId, unitId: action.unitId });
       if (online.kind === 'coop') rememberCoopCompletedAction(action.actionId);
       online.localAction = null;
