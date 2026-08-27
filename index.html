@@ -8829,12 +8829,10 @@
     return cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile);
   }
 
-  // Knockback uses the same narrow CPU-human Gear gate as the damage
-  // pipeline.  The pure combat module owns every multiplier; this adapter
-  // only chooses the battle-facing hit kind and supplies the legacy speed.
-  function cpuGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed) {
-    const attacker = cpuGearCombatForUnit(unitById(ownerId));
-    const defender = cpuGearCombatForUnit(target);
+  // The pure combat module owns every Knockback multiplier. This common seam
+  // only classifies the already-resolved hit and supplies the historic speed;
+  // it never reimplements Impact set values or the Power/Resistance formula.
+  function battleGearKnockbackPolicyForCombat(attacker, defender, damageType, projectile, legacyKnockbackSpeed) {
     if (!attacker && !defender) return null;
     const normalCannonball = projectile?.gearDamageProfile === 'normal_cannonball';
     let hitKind = null;
@@ -8850,12 +8848,44 @@
       baseKnockback = legacyKnockbackSpeed;
     }
     if (!hitKind) return null;
-    return cpuGearModules().combat.knockbackPolicy({
+    const combat = globalThis.KatamonGearCombat;
+    if (!combat?.knockbackPolicy) throw new Error('GEAR_COMBAT_UNAVAILABLE');
+    return combat.knockbackPolicy({
       hitKind,
       baseKnockback,
       knockbackPowerBp: attacker ? attacker.knockbackPowerBp : 0,
       knockbackResistanceBp: defender ? defender.knockbackResistanceBp : 0,
     });
+  }
+
+  // Keep the completed Phase 3C CPU eligibility and snapshot authority intact.
+  function cpuGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed) {
+    return battleGearKnockbackPolicyForCombat(
+      cpuGearCombatForUnit(unitById(ownerId)),
+      cpuGearCombatForUnit(target),
+      damageType,
+      projectile,
+      legacyKnockbackSpeed
+    );
+  }
+
+  // ONLINE 1v1 reads only the immutable, reveal-verified Battle snapshots.
+  // Gear OFF ONLINE has no such snapshot and falls through to the legacy path;
+  // a Gearless human in a Gear ON room still has a validated zero-stat snapshot.
+  function onlineGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed) {
+    return battleGearKnockbackPolicyForCombat(
+      onlineGearStaticCombatForUnit(unitById(ownerId)),
+      onlineGearStaticCombatForUnit(target),
+      damageType,
+      projectile,
+      legacyKnockbackSpeed
+    );
+  }
+
+  function battleGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed) {
+    const onlinePolicy = onlineGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed);
+    if (onlinePolicy) return onlinePolicy;
+    return cpuGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed);
   }
 
   function restoreCpuBattleGearSnapshot(data, options) {
@@ -16304,7 +16334,7 @@
     applyExplosionKnockbackComponents(u, blastX, speed, speed * 1.1, owner);
   }
 
-  function applyCpuGearKnockback(u, blastX, owner, policy) {
+  function applyBattleGearKnockback(u, blastX, owner, policy) {
     if (!policy) return;
     if (policy.mode === 'existing_knockback') {
       applyExplosionKnockback(u, blastX, policy.finalKnockback, owner);
@@ -16317,6 +16347,18 @@
       return;
     }
     if (policy.mode === 'radial') applyExplosionKnockback(u, blastX, added.radial, owner);
+  }
+
+  function applyBattleGearKnockbackAfterDamage({ actualDamage, target, blastX, ownerId,
+    damageType, projectile, legacyKnockbackSpeed }) {
+    if (!(actualDamage > 0)) return false;
+    const policy = battleGearKnockbackPolicy(ownerId, target, damageType, projectile, legacyKnockbackSpeed);
+    if (policy) {
+      applyBattleGearKnockback(target, blastX, ownerId, policy);
+      return true;
+    }
+    applyExplosionKnockback(target, blastX, legacyKnockbackSpeed, ownerId);
+    return legacyKnockbackSpeed > 0;
   }
 
   function explodeAt(x, y, blastMul, owner, damageMul = 1, normalImpactSound = false, drainHeal = false, terrainBlastMul = blastMul, knockbackSpeed = 0, noTerrain = false, techniqueProjectile = null) {
@@ -16383,11 +16425,15 @@
         // Gear knockback is strictly post-damage. A direct target is labelled
         // direct_projectile and therefore receives exactly one popup; every
         // other affected unit is normal_blast and receives at most one radial.
-        if (actualDamage > 0) {
-          const knockbackPolicy = cpuGearKnockbackPolicy(owner, u, gearDamageType, techniqueProjectile, knockbackSpeed);
-          if (knockbackPolicy) applyCpuGearKnockback(u, x, owner, knockbackPolicy);
-          else applyExplosionKnockback(u, x, knockbackSpeed, owner);
-        }
+        applyBattleGearKnockbackAfterDamage({
+          actualDamage,
+          target: u,
+          blastX: x,
+          ownerId: owner,
+          damageType: gearDamageType,
+          projectile: techniqueProjectile,
+          legacyKnockbackSpeed: knockbackSpeed,
+        });
       }
     }
     // 勝敗確定(checkMatchEnd)より先に集計する。ここが後だと、とどめの一発が
