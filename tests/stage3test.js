@@ -2451,11 +2451,12 @@ function check(name, value) {
   check('the Firebase host starts the VS cut-in only after the lobby closes',
     /async function maybeStartFirebaseMatch\(\)[\s\S]{0,2600}closeOnlineLobby\(\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
   check('a Firebase guest shows the VS cut-in after accepting the verified start snapshot',
-    /async function applyFirebaseStart\(msg\)[\s\S]{0,1700}applySnapshot\(msg\.snap\);[\s\S]{0,450}showBattleStartCutIn\(\);/.test(htmlText));
+    /async function applyFirebaseStart\(msg\)[\s\S]{0,2300}applyVerifiedFirebaseStartSnapshot\(msg\.snap, gearBattleStartState\);[\s\S]{0,450}showBattleStartCutIn\(\);/.test(htmlText)
+    && /function applyVerifiedFirebaseStartSnapshot\(snap, battleStartState, options = \{\}\)[\s\S]{0,500}validateFirebaseOnlineGearStartSnapshot\(snap, battleStartState\);[\s\S]{0,300}applySnapshot\(snap, options\);/.test(htmlText));
   check('the loopback guest also shows the VS cut-in after applying the start snapshot',
     /case 'start':[\s\S]{0,1800}applySnapshot\(msg\.snap\);[\s\S]{0,300}showBattleStartCutIn\(\);/.test(htmlText));
   check('a spectator sees the same VS cut-in when the match starts',
-    /function applyFirebaseSpectatorSnapshot\(msg\)[\s\S]{0,500}showBattleStartCutIn\(\);/.test(htmlText));
+    /function applyFirebaseSpectatorSnapshot\(msg, battleStartState = null\)[\s\S]{0,650}applyVerifiedFirebaseStartSnapshot\(msg\.snap, battleStartState\);[\s\S]{0,500}showBattleStartCutIn\(\);/.test(htmlText));
 
   // 起動前・タイトル・ロビーで端末の戻る操作を押しても、確認なしでアプリを抜けない。
   check('the device back trap stays armed outside battle too',

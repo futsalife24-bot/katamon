@@ -644,6 +644,7 @@
 <script src="shared/gear-online-protocol.js"></script>
 <script src="shared/gear-online-lobby-protocol.js"></script>
 <script src="shared/gear-online-firebase-wire.js"></script>
+<script src="shared/gear-online-battle-start.js"></script>
 <script>
 (() => {
   'use strict';
@@ -10662,6 +10663,7 @@
     if (snap.units.length !== baseline.units.length || !Array.isArray(snap.turnOrder) || !Array.isArray(baseline.turnOrder) || snap.turnOrder.length !== baseline.turnOrder.length) return 'shape';
     if (snap.turnOrder.some((id, i) => id !== baseline.turnOrder[i])) return 'turnOrder';
     if (snap.units.some((u, i) => u.maxHp !== baseline.units[i].maxHp)) return 'maxHp';
+    if (snap.units.some((u, i) => u.fuelMax !== baseline.units[i].fuelMax)) return 'fuelMax';
     if (Object.prototype.hasOwnProperty.call(snap, 'pattern') && snap.pattern !== baseline.pattern) return 'pattern';
     if (Object.prototype.hasOwnProperty.call(snap, 'themeKey') && snap.themeKey !== baseline.themeKey) return 'themeKey';
     if (Object.prototype.hasOwnProperty.call(snap, 'parallaxSeed') && snap.parallaxSeed !== baseline.parallaxSeed) return 'parallaxSeed';
@@ -12694,6 +12696,7 @@
       gearRevealCompatibility: { visibleMs: 0, checkedAt: firebaseMonotonicNow() },
       participantGearReveals: {},
       verifiedStartGearManifest: null,
+      battleGearSnapshotsByUnit: null,
       peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
@@ -12821,6 +12824,7 @@
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {};
     online.participantGearReveals = {};
     online.verifiedStartGearManifest = null;
+    online.battleGearSnapshotsByUnit = null;
     online.pendingStart = null;
     renderFirebaseLobby();
   }
@@ -13158,6 +13162,7 @@
       commitments,
       participantReveals
     });
+    online.verifiedStartGearManifest = manifest;
     return {
       gearWireVersion: globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION,
       gearManifestJson: globalThis.KatamonGearOnlineFirebaseWire.encodeStartGearManifest({ manifest, participantReveals })
@@ -13179,6 +13184,49 @@
     online.verifiedStartGearManifest = manifest;
     return manifest;
   }
+  function createFirebaseOnlineGearBattleStartState(manifest = online && online.verifiedStartGearManifest) {
+    if (!firebaseGearEnabled()) return null;
+    if (!manifest) throw new Error('検証済みGear start manifestを確認できません');
+    return globalThis.KatamonGearOnlineBattleStart.createOnlineGearBattleStartState({
+      matchFormat: firebaseLobbyIs2v2() ? '2v2' : '1v1',
+      manifest,
+      participantReveals: firebaseParticipantGearRevealsForStart()
+    });
+  }
+  function applyFirebaseOnlineGearBattleStartState(battleStartState) {
+    if (!battleStartState) {
+      if (online && online.kind === 'firebase') online.battleGearSnapshotsByUnit = null;
+      return false;
+    }
+    const entries = Object.entries(battleStartState.hpFuelByUnit).map(([unitId, expected]) => {
+      const unit = unitById(unitId);
+      if (!unit || unit.character !== expected.character) throw new Error(`${unitId}のGear開始キャラクターが一致しません`);
+      return { unit, expected };
+    });
+    // Phase 3D-3AでBattleへ流すのはHP/Fuelだけ。Snapshot内のAttack以降は
+    // immutableなまま保持するが、後続Phaseまでunit/damage runtimeへ接続しない。
+    for (const { unit, expected } of entries) {
+      unit.maxHp = expected.maxHp;
+      unit.hp = expected.hp;
+      unit.fuelMax = expected.fuelMax;
+      unit.fuel = expected.fuel;
+    }
+    online.battleGearSnapshotsByUnit = battleStartState.battleGearSnapshotsByUnit;
+    return true;
+  }
+  function validateFirebaseOnlineGearStartSnapshot(snap, battleStartState) {
+    if (!battleStartState) return true;
+    return globalThis.KatamonGearOnlineBattleStart.validateOnlineGearStartSnapshot(snap, battleStartState);
+  }
+  function applyVerifiedFirebaseStartSnapshot(snap, battleStartState, options = {}) {
+    validateFirebaseOnlineGearStartSnapshot(snap, battleStartState);
+    rememberFirebaseStartCharacters(snap);
+    applySnapshot(snap, options);
+    if (online && online.kind === 'firebase') {
+      online.battleGearSnapshotsByUnit = battleStartState ? battleStartState.battleGearSnapshotsByUnit : null;
+    }
+    return true;
+  }
   async function maybeStartFirebaseMatch() {
     if (!online || online.kind !== 'firebase' || online.role !== 'host' || !firebaseRevealsReady() || !online.selfRevealed || online.matchStarted) return;
     try {
@@ -13187,11 +13235,15 @@
       const stageError = onlineCustomStageSelectionError();
       if (stageError) throw new Error(stageError);
       const gearEnvelope = buildFirebaseStartGearEnvelope();
+      const gearBattleStartState = createFirebaseOnlineGearBattleStartState();
       // 人数を先に合わせる。2vs2の p2/e2 はユニットが4体ある状態でないと存在しない。
       setMatchFormat(firebaseLobbyIs2v2() ? '2v2' : '1v1');
       assignFirebaseMatchCharacters();
       // BGMの停止/開始は resetMatch 末尾の syncBgm({ restartStage: true }) がまとめて処理する
       gamePhase = 'battle'; resetMatch(false);
+      // resetMatchが素のキャラHP/Fuelを作った直後、start snapshotを組む前にだけ
+      // locally reconstructed Gear値へ置き換える。試合中はStorageを再読込しない。
+      applyFirebaseOnlineGearBattleStartState(gearBattleStartState);
       const firstIndex = await firebaseFirstUnitIndex();
       if (!online || online.kind !== 'firebase') return;
       activeIndex = firstIndex;
@@ -13220,7 +13272,8 @@
     online.startVerifying = true;
     try {
       if (!await ensureFirebaseSettingsAuthority('start receive')) throw new Error('Firebase settings正本を確認できません');
-      validateFirebaseStartGearEnvelope(msg);
+      const gearManifest = validateFirebaseStartGearEnvelope(msg);
+      const gearBattleStartState = createFirebaseOnlineGearBattleStartState(gearManifest);
       // ゲスト側も同じ材料から先攻を再計算し、ホストのスナップショットを検証する。
       const firstIndex = await firebaseFirstUnitIndex();
       const mismatch = !online || online.kind !== 'firebase' || !msg.snap || Number(msg.snap.activeIndex) !== firstIndex
@@ -13233,8 +13286,9 @@
         }
         return;
       }
-      rememberFirebaseStartCharacters(msg.snap);
-      applySnapshot(msg.snap);
+      // generic range/schema検証を通ったstartでも、Gear由来の初期HP/Fuelと
+      // 一致しなければsenderの数値申告は採用しない。applySnapshotより必ず前で止める。
+      applyVerifiedFirebaseStartSnapshot(msg.snap, gearBattleStartState);
       setOnlineSeat(online.seat);
       logSeatAssignment('guestStart');
       freezeFirebaseRoundRivals();
@@ -13421,7 +13475,7 @@
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
-    online.participantGearReveals = {}; online.verifiedStartGearManifest = null;
+    online.participantGearReveals = {}; online.verifiedStartGearManifest = null; online.battleGearSnapshotsByUnit = null;
     resetFirebaseGearRevealCompatibilityClock();
     online.roundOpponentSeats = null; online.roundRivals = null;
     online.startAcks = {};
@@ -13568,10 +13622,11 @@
     online.autoStartNextRound = false;
     requestFirebaseStart();
   }
-  function applyFirebaseSpectatorSnapshot(msg) {
+  function applyFirebaseSpectatorSnapshot(msg, battleStartState = null) {
     if (!online || online.kind !== 'firebase' || !msg.snap) return;
     try {
-      applySnapshot(msg.snap, { preserveTerrain: msg.t === 'state' });
+      if (msg.t === 'start') applyVerifiedFirebaseStartSnapshot(msg.snap, battleStartState);
+      else applySnapshot(msg.snap, { preserveTerrain: true });
     } catch (error) {
       online.protocolError = error?.message || '観戦用ステージを確認できませんでした。';
       onlineLobbyStatus(online.protocolError);
@@ -13587,10 +13642,10 @@
     try {
       if (!await ensureFirebaseSettingsAuthority('spectator start')) throw new Error('Firebase settings正本を確認できません');
       if (!firebaseRevealsReady()) { online.pendingStart = msg; return; }
-      validateFirebaseStartGearEnvelope(msg);
+      const gearManifest = validateFirebaseStartGearEnvelope(msg);
+      const gearBattleStartState = createFirebaseOnlineGearBattleStartState(gearManifest);
       if (!firebaseStartCharactersMatch(msg.snap)) throw new Error('開始キャラクターがverified revealと一致しません');
-      rememberFirebaseStartCharacters(msg.snap);
-      applyFirebaseSpectatorSnapshot(msg);
+      applyFirebaseSpectatorSnapshot(msg, gearBattleStartState);
     } catch (error) {
       if (online) rejectFirebaseMessage(`観戦開始データを検証できません（${error?.code || error?.message || 'unknown'}）`);
     }

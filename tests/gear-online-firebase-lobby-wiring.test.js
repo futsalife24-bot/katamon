@@ -702,19 +702,20 @@ test('browser scripts/service worker load all pure modules in dependency order w
   const protocolAt = index.indexOf('shared/gear-online-protocol.js');
   const lobbyAt = index.indexOf('shared/gear-online-lobby-protocol.js');
   const wireAt = index.indexOf('shared/gear-online-firebase-wire.js');
-  assert.ok(snapshotAt >= 0 && snapshotAt < protocolAt && protocolAt < lobbyAt && lobbyAt < wireAt);
-  for (const file of ['shared/gear-online-protocol.js', 'shared/gear-online-lobby-protocol.js', 'shared/gear-online-firebase-wire.js']) {
+  const battleStartAt = index.indexOf('shared/gear-online-battle-start.js');
+  assert.ok(snapshotAt >= 0 && snapshotAt < protocolAt && protocolAt < lobbyAt && lobbyAt < wireAt && wireAt < battleStartAt);
+  for (const file of ['shared/gear-online-protocol.js', 'shared/gear-online-lobby-protocol.js', 'shared/gear-online-firebase-wire.js', 'shared/gear-online-battle-start.js']) {
     assert.equal(sw.includes(`'./${file}'`), true, file);
   }
   assert.equal(rules.rules.rooms.$room.protocol['.validate'], 'newData.val() === 3');
 });
 
-test('Phase 3D-2B keeps reconstructed Gear snapshots out of ONLINE battle numerics', async () => {
+test('Phase 3D-2B wire remains derived-free while 3D-3A enters through the isolated Battle-start adapter', async () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.equal(index.includes('online.selfGearCapture.battleGearSnapshot'), false);
-  assert.equal((index.match(/verifiedStartGearManifest/g) || []).length <= 8, true);
-  assert.equal(/verifiedStartGearManifest[\s\S]{0,160}(?:maxHp|attack|defense|crit|shield|fuel)/i.test(index), false);
   assert.equal(/participantGearReveals[\s\S]{0,160}(?:applyDamage|calculateBattleGearCombat|cpuBattleGearSnapshot)/.test(index), false);
+  assert.match(index, /KatamonGearOnlineBattleStart\.createOnlineGearBattleStartState/);
+  assert.match(index, /KatamonGearOnlineBattleStart\.validateOnlineGearStartSnapshot/);
 });
 
 async function main() {

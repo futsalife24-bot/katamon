@@ -1184,6 +1184,7 @@ const HOOK = `
           selfGearCapture: online.selfGearCapture || null,
           participantGearReveals: online.participantGearReveals || {},
           verifiedStartGearManifest: online.verifiedStartGearManifest || null,
+          battleGearSnapshotsByUnit: online.battleGearSnapshotsByUnit || null,
           gearRevealCompatibility: online.gearRevealCompatibility || null,
           protocolError: online.protocolError || ''
         }) : null,
@@ -1221,6 +1222,14 @@ const HOOK = `
         verifyReveal: msg => verifyPeerReveal(msg),
         buildStartEnvelope: () => buildFirebaseStartGearEnvelope(),
         validateStartEnvelope: msg => validateFirebaseStartGearEnvelope(msg),
+        createBattleStartState: manifest => createFirebaseOnlineGearBattleStartState(manifest),
+        applyBattleStartState: state => applyFirebaseOnlineGearBattleStartState(state),
+        validateBattleStartSnapshot: (snap, state) => validateFirebaseOnlineGearStartSnapshot(snap, state),
+        applyVerifiedStartSnapshot: (snap, state) => applyVerifiedFirebaseStartSnapshot(snap, state),
+        battleSnapshotFreeze: () => online && online.battleGearSnapshotsByUnit ? {
+          map: Object.isFrozen(online.battleGearSnapshotsByUnit),
+          units: Object.fromEntries(Object.entries(online.battleGearSnapshotsByUnit).map(([id, value]) => [id, Object.isFrozen(value)]))
+        } : null,
         expireRevealCompatibility: () => updateFirebaseGearRevealCompatibility(true),
         commitPayload: (character, nonce, bindingText = null) => commitPayload(character, nonce, bindingText)
       }),
