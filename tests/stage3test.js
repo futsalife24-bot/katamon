@@ -2,6 +2,9 @@
 const fs = require('fs');
 const path = require('path');
 const { kt } = require('./seatharness');
+const gearOnlineProtocol = require('../shared/gear-online-protocol.js');
+const gearOnlineFirebaseWire = require('../shared/gear-online-firebase-wire.js');
+const gearBattleSnapshot = require('../shared/gear-battle-snapshot.js');
 
 let pass = 0, fail = 0;
 function check(name, value) {
@@ -1206,6 +1209,70 @@ function check(name, value) {
   check('rules bound the settings payload to supported values',
     rules.settings.$other['.validate'] === false && rules.settings.turnsPerPlayer['.validate'].includes('10')
     && rules.settings.terrain['.validate'].includes('tieredBasin') && rules.settings.wind['.validate'].includes('calm'));
+  const openRules = JSON.parse(rulesText).rules.open.$room;
+  const gearCapability = rules.settings.gearCapability;
+  const messageSettings = msg.settings;
+  const gearCapabilityKeys = ['gearMode', 'gearProtocolVersion', 'gearRulesVersion', 'battleGearSnapshotVersion', 'gearTrustModel'];
+  check('Gear OFF keeps Firebase protocol v3 and the six legacy settings fields required',
+    h.firebaseProto() === 3 && rules.protocol['.validate'] === 'newData.val() === 3'
+    && ['terrain', 'wind', 'turnsPerPlayer', 'format', 'stageSize', 'revision'].every(key => rules.settings['.validate'].includes("'" + key + "'"))
+    && !rules.settings['.validate'].includes('gearCapability'));
+  check('private trusted Gear capability has the exact v1 shape and shared constant values',
+    gearCapability.$other['.validate'] === false && gearCapabilityKeys.every(key => Object.prototype.hasOwnProperty.call(gearCapability, key))
+    && gearCapability.gearMode['.validate'].includes(gearOnlineProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1)
+    && gearCapability.gearProtocolVersion['.validate'].includes(String(gearOnlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION))
+    && gearCapability.gearRulesVersion['.validate'].includes(String(gearOnlineProtocol.ONLINE_GEAR_RULES_VERSION))
+    && gearCapability.battleGearSnapshotVersion['.validate'].includes(String(gearBattleSnapshot.GEAR_BATTLE_SNAPSHOT_VERSION))
+    && gearCapability.gearTrustModel['.validate'].includes(gearOnlineProtocol.ONLINE_GEAR_TRUST_MODEL));
+  check('room visibility is an immutable optional public/private authority for new rooms',
+    rules.visibility['.validate'].includes("newData.val() === 'public' || newData.val() === 'private'")
+    && rules.visibility['.validate'].includes("!data.exists() || newData.val() === data.val() || data.parent().child('expiresAt').val() <= now")
+    && !Object.prototype.hasOwnProperty.call(rules.visibility, '.write')
+    && rules['.write'].includes("(!data.exists() || data.child('expiresAt').val() <= now)")
+    && rules['.write'].includes("data.exists() && !newData.exists()")
+    && !rules['.validate'].includes("'rounds','visibility'"));
+  check('room creation and later settings writes bind Gear capability to immutable private visibility',
+    rules['.write'].includes("!newData.child('settings').child('gearCapability').exists() || newData.child('visibility').val() === 'private'")
+    && rules['.validate'].includes("!newData.child('settings').child('gearCapability').exists() || newData.child('visibility').val() === 'private'")
+    && rules.settings['.write'].includes("!newData.child('gearCapability').exists() || root.child('rooms').child($room).child('visibility').val() === 'private'")
+    && !gearCapability['.validate'].includes("root.child('open')"));
+  check('open listings bind to explicit public visibility with only Gearless legacy fallback',
+    openRules['.write'].includes("child('visibility').val() === 'public'")
+    && openRules['.write'].includes("!root.child('rooms').child($room).child('visibility').exists()")
+    && openRules['.write'].includes("!root.child('rooms').child($room).child('settings').child('gearCapability').exists()"));
+  check('settings and lobbyState packets preserve the exact legacy settings schema plus optional Gear capability',
+    messageSettings.$other['.validate'] === false
+    && ['terrain', 'wind', 'turnsPerPlayer', 'format', 'stageSize', 'revision', 'gearCapability'].every(key => Object.prototype.hasOwnProperty.call(messageSettings, key))
+    && messageSettings.gearCapability.$other['.validate'] === false
+    && messageSettings.gearCapability['.validate'].includes("root.child('rooms').child($room).child('visibility').val() === 'private'")
+    && messageSettings.gearCapability.gearTrustModel['.validate'].includes(gearOnlineProtocol.ONLINE_GEAR_TRUST_MODEL));
+  check('Gear OFF legacy v3 reveal and start packets remain valid by shape and forbid Gear fields',
+    msg['.validate'].includes("newData.child('t').val() === 'reveal' && newData.hasChildren(['character','nonce'])")
+    && msg['.validate'].includes("newData.child('t').val() === 'start' && newData.hasChildren(['snap'])")
+    && msg['.validate'].includes("!root.child('rooms').child($room).child('settings').child('gearCapability').exists() && !newData.child('gearWireVersion').exists()"));
+  check('Gear ON requires versioned commitment JSON on reveal and versioned manifest JSON on host start',
+    msg['.validate'].includes("newData.hasChildren(['gearWireVersion','gearCommitmentJson'])")
+    && msg['.validate'].includes("newData.hasChildren(['gearWireVersion','gearManifestJson'])")
+    && msg['.write'].includes("newData.child('t').val() !== 'settings' && newData.child('t').val() !== 'lobbyState' && newData.child('t').val() !== 'start' || newData.child('seat').val() === 'p1'"));
+  check('Gear wire version is exact v1, reveal/start-only, and private-capability-only',
+    msg.gearWireVersion['.validate'].includes("newData.parent().child('t').val() === 'reveal' || newData.parent().child('t').val() === 'start'")
+    && msg.gearWireVersion['.validate'].includes("newData.val() === " + gearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION)
+    && msg.gearWireVersion['.validate'].includes("child('gearMode').val() === 'private_trusted_v1'"));
+  check('Gear wire JSON fields are exact type-specific strings whose bounds mirror the pure codec',
+    msg.gearCommitmentJson['.validate'].includes("newData.parent().child('t').val() === 'reveal'")
+    && msg.gearCommitmentJson['.validate'].includes('newData.isString()')
+    && msg.gearCommitmentJson['.validate'].includes('<= ' + gearOnlineFirebaseWire.MAX_REVEAL_GEAR_JSON_CHARS)
+    && msg.gearManifestJson['.validate'].includes("newData.parent().child('t').val() === 'start'")
+    && msg.gearManifestJson['.validate'].includes('newData.isString()')
+    && msg.gearManifestJson['.validate'].includes('<= ' + gearOnlineFirebaseWire.MAX_START_GEAR_MANIFEST_JSON_CHARS));
+  check('commit remains the existing opaque SHA-256 hash-only packet and no Gear message type was added',
+    msg['.validate'].includes("newData.child('t').val() === 'commit' && newData.hasChildren(['hash'])")
+    && msg.hash['.validate'].includes('^[0-9a-f]{64}$')
+    && !msg.t['.validate'].includes("'gear'"));
+  check('Gear fields fail closed on every non-reveal/start packet while message logs remain append-only and strict',
+    msg.gearCommitmentJson['.validate'].includes("child('t').val() === 'reveal'")
+    && msg.gearManifestJson['.validate'].includes("child('t').val() === 'start'")
+    && msg.$other['.validate'] === false && msg['.write'].includes('!data.exists()'));
   check('rules let only p1 change round status or open the next round',
     rules.round['.write'].includes("child('p1').child('uid').val() === auth.uid")
     && rules.rounds.$roundId['.write'].includes("child('p1').child('uid').val() === auth.uid")
