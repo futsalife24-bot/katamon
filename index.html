@@ -4936,13 +4936,13 @@
       const raw = computeDamage(distanceToUnitBody(u, x, y), blastMul, FIREWORK_SHARD_DAMAGE_MUL);
       if (raw <= 0) continue;
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
-      const requested = Math.min(budget, cpuGearActionDamageRequested(p.owner, Math.max(1, Math.round(raw * takenMul))));
+      const requested = Math.min(budget, battleGearActionDamageRequested(p.owner, Math.max(1, Math.round(raw * takenMul))));
       const dmg = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: p.owner, target: u, requestedDamage: requested }));
       if (fireworkBurstDamage) fireworkBurstDamage[u.id] = dealt + dmg;
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - dmg);
       const actualHpDamage = beforeHp - u.hp;
-      recordCpuGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: actualHpDamage, damageType: 'normal_blast', fromEnemyAttackAction: true });
+      recordBattleGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: actualHpDamage, damageType: 'normal_blast', fromEnemyAttackAction: true });
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
       creditDamage(p.owner, u, dmg);
     }
@@ -5207,8 +5207,11 @@
     const remoteShot = !!(isOnline() && ownerUnit?.control === 'remote');
     if (remoteShot) noteRemoteDamageBaseline();
     const takenMul = CHARACTERS[target.character]?.damageTakenMul || 1;
-    // Rail is a status/subweapon path, explicitly outside 3C-2A Gear damage.
-    const damageResult = applyResolvedUnitDamage(target, Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul)), {
+    // Rail is outside static Attack/Defense Gear damage, but it is still part
+    // of its accepted offensive action: apply Last Stand 4's modifier here.
+    const baseDamage = Math.max(1, Math.round(SCORPION_RAIL_DAMAGE * p.damageMul * takenMul));
+    const requestedDamage = battleGearActionDamageRequested(p.owner, baseDamage);
+    const damageResult = applyResolvedUnitDamage(target, requestedDamage, {
       ownerId: p.owner, direct: true, x: p.x, y: p.y, projectileRadius: p.radius, remoteShot, damageType: 'direct_projectile', fromEnemyAttackAction: true
     });
     const actualDamage = damageResult.actualDamage;
@@ -5404,9 +5407,9 @@
       // Barrier is support-only. Impact/Drill are real offensive actions and
       // therefore capture/consume the action-wide Last Stand 4pc modifier.
       const offensiveSubweapon = subweaponId === 'impact' || subweaponId === 'drill';
-      if (offensiveSubweapon) beginCpuGearAttackAction(unit);
+      if (offensiveSubweapon) beginBattleGearAttackAction(unit);
       const launched = launchSubweaponShot(unit, anchor, vx0, vy0, subweaponId);
-      if (!launched && offensiveSubweapon) cancelCpuGearAttackAction(unit);
+      if (!launched && offensiveSubweapon) cancelBattleGearAttackAction(unit);
       return;
     }
     const activateSpecial = deferred ? !!useSpecial : (useSpecial && isSpecialReady(unit));
@@ -5414,7 +5417,7 @@
     // Capture both Last Stand buckets once at an offensive action boundary.
     // Deferred special replay is the same action, never a second begin.
     const nonDamagingSpecial = activateSpecial && (def.key === 'hamulton' || def.key === 'shinigami');
-    if (!deferred && !activateJump && !nonDamagingSpecial) beginCpuGearAttackAction(unit);
+    if (!deferred && !activateJump && !nonDamagingSpecial) beginBattleGearAttackAction(unit);
     const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
 
     if (tutorialActive() && unit.id === 'p1' && !deferred) tutorial.stepShots++;
@@ -6220,7 +6223,7 @@
       const before = target.hp;
       target.hp = Math.max(0, target.hp - actualDamage);
       const hpDamage = before - target.hp;
-      recordCpuGearLastStandDamage({ ownerId: options.ownerId, target, actualDamage: hpDamage,
+      recordBattleGearLastStandDamage({ ownerId: options.ownerId, target, actualDamage: hpDamage,
         damageType: options.damageType || 'fixed', fromEnemyAttackAction: options.fromEnemyAttackAction === true });
       return { actualDamage: hpDamage, target: 'body', bodyDamage: hpDamage, partDamage: 0 };
     }
@@ -8854,6 +8857,146 @@
     return snapshot.derivedStats;
   }
 
+  // Last Stand is an in-memory, per-unit battle effect. It deliberately does
+  // not extend the Phase 3D-6C Shield runtime wire: reconnect/replay of this
+  // next-action effect belongs to Phase 3D-8.
+  function createFirebaseOnlineGearRuntimeEffectsStateByUnit(snapshots) {
+    if (!snapshots) return null;
+    if (matchFormat !== '1v1') {
+      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
+    }
+    const combat = globalThis.KatamonGearCombat;
+    if (!combat?.createRuntimeEffectsState || !Object.isFrozen(snapshots)) {
+      throw Object.assign(new Error('ONLINE Gear runtime effectsを初期化できません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+    }
+    const entries = ['p1', 'e1'].map((unitId) => {
+      const snapshot = snapshots[unitId];
+      if (!snapshot || !Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.derivedStats)) {
+        throw Object.assign(new Error(`${unitId}のONLINE Gear runtime snapshotが不正です`), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+      }
+      return [unitId, combat.createRuntimeEffectsState()];
+    });
+    return Object.freeze(Object.fromEntries(entries));
+  }
+
+  function firebaseOnlineGearRuntimeEffectsForUnit(unit) {
+    const combat = onlineGearStaticCombatForUnit(unit);
+    if (!combat) return null;
+    const state = online?.battleGearRuntimeEffectsStateByUnit?.[unit.id];
+    if (!state || !Object.isFrozen(online.battleGearRuntimeEffectsStateByUnit) || !Object.isFrozen(state)) {
+      throw Object.assign(new Error('ONLINE Gear runtime effects stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
+    }
+    // The shared pure helper permits Rescue4 for the future 2v2 support phase.
+    // In this strictly 1v1 phase no support source can grant it, so a nonzero
+    // value must fail closed before it can become action damage.
+    if (state.rescueNextAttackDamageBp !== 0) {
+      throw Object.assign(new Error('ONLINE 1v1ではRescue runtimeは未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+    }
+    // Keep the pure helper as the validator for Last Stand and exact shape.
+    globalThis.KatamonGearCombat.beginAttackAction({ combat, state });
+    return state;
+  }
+
+  function beginFirebaseOnlineGearAttackAction(unit) {
+    const combat = onlineGearStaticCombatForUnit(unit);
+    if (!combat) return false;
+    const state = firebaseOnlineGearRuntimeEffectsForUnit(unit);
+    if (online.battleGearActiveAttackRuntime) {
+      if (online.battleGearActiveAttackRuntime.ownerId !== unit.id) {
+        throw Object.assign(new Error('ONLINE Gear active attackが重複しています'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_ACTION_CONFLICT' });
+      }
+      return true;
+    }
+    const api = globalThis.KatamonGearCombat;
+    const runtime = api.resolveRuntimeEffects({ combat, state, currentHp: unit.hp });
+    const action = api.beginAttackAction({ combat, state: runtime.state });
+    online.battleGearRuntimeEffectsStateByUnit = Object.freeze({
+      ...online.battleGearRuntimeEffectsStateByUnit,
+      [unit.id]: action.state
+    });
+    online.battleGearActiveAttackRuntime = Object.freeze({
+      ownerId: unit.id,
+      attackMultiplier: runtime.attackMultiplier,
+      actionDamageBp: action.actionDamageBp
+    });
+    return true;
+  }
+
+  function completeFirebaseOnlineGearAttackAction(unit) {
+    const active = online?.battleGearActiveAttackRuntime;
+    if (!active || active.ownerId !== unit?.id) return false;
+    const combat = onlineGearStaticCombatForUnit(unit);
+    const state = firebaseOnlineGearRuntimeEffectsForUnit(unit);
+    const effects = globalThis.KatamonGearCombat.completeAttackAction({ combat, state });
+    online.battleGearRuntimeEffectsStateByUnit = Object.freeze({
+      ...online.battleGearRuntimeEffectsStateByUnit,
+      [unit.id]: effects
+    });
+    online.battleGearActiveAttackRuntime = null;
+    return true;
+  }
+
+  function cancelFirebaseOnlineGearAttackAction(unit) {
+    if (online?.battleGearActiveAttackRuntime?.ownerId === unit?.id) online.battleGearActiveAttackRuntime = null;
+  }
+
+  function firebaseOnlineGearActiveAttackRuntime(ownerId) {
+    const combat = onlineGearStaticCombatForUnit(unitById(ownerId));
+    if (!combat) return null;
+    const active = online?.battleGearActiveAttackRuntime;
+    // Pre-3D-7A compatibility routes that have no Last Stand capability keep
+    // their static result without inventing an action context. A Last Stand
+    // owner, however, must have captured the canonical action and fails closed
+    // rather than silently dropping a conditional effect.
+    if (!active && !combat.conditional?.lastStand2 && !combat.conditional?.lastStand4) {
+      return Object.freeze({ ownerId, attackMultiplier: combat.attackMultiplier, actionDamageBp: 0 });
+    }
+    if (!active || active.ownerId !== ownerId || !Number.isSafeInteger(active.actionDamageBp)
+        || !Number.isFinite(active.attackMultiplier) || active.attackMultiplier <= 0) {
+      throw Object.assign(new Error('ONLINE Gear active attack runtimeがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_ACTION_MISSING' });
+    }
+    return active;
+  }
+
+  function recordFirebaseOnlineGearLastStandDamage({ ownerId, target, actualDamage, damageType, fromEnemyAttackAction }) {
+    if (!online || online.kind !== 'firebase' || !online.battleGearSnapshotsByUnit || !target) return false;
+    const targetCombat = onlineGearStaticCombatForUnit(target);
+    if (!targetCombat) return false;
+    const ownerTeam = teamOfOwner(ownerId);
+    if (ownerTeam === null || ownerTeam === target.team || !(actualDamage > 0)) return false;
+    const state = firebaseOnlineGearRuntimeEffectsForUnit(target);
+    const resolved = globalThis.KatamonGearCombat.resolveRuntimeEffects({
+      combat: targetCombat, state, currentHp: target.hp,
+      actualEnemyDamage: actualDamage, damageType,
+      fromEnemyAttackAction: fromEnemyAttackAction === true
+    });
+    online.battleGearRuntimeEffectsStateByUnit = Object.freeze({
+      ...online.battleGearRuntimeEffectsStateByUnit,
+      [target.id]: resolved.state
+    });
+    return true;
+  }
+
+  function beginBattleGearAttackAction(unit) {
+    if (beginFirebaseOnlineGearAttackAction(unit)) return;
+    beginCpuGearAttackAction(unit);
+  }
+
+  function completeBattleGearAttackAction(unit) {
+    if (completeFirebaseOnlineGearAttackAction(unit)) return;
+    completeCpuGearAttackAction(unit);
+  }
+
+  function cancelBattleGearAttackAction(unit) {
+    cancelFirebaseOnlineGearAttackAction(unit);
+    cancelCpuGearAttackAction(unit);
+  }
+
+  function recordBattleGearLastStandDamage(options) {
+    if (recordFirebaseOnlineGearLastStandDamage(options)) return;
+    recordCpuGearLastStandDamage(options);
+  }
+
   // Normal-cannon Blast reach is the one Phase 3C/3D seam shared by battle
   // modes. Keep the CPU helper CPU-only; ONLINE reads only the immutable
   // start-validated snapshot, while Gearless modes continue to return null.
@@ -8997,25 +9140,20 @@
 
   function onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile = null) {
     if (!damageType || !target) return null;
-    const attackerCombat = onlineGearStaticCombatForUnit(unitById(ownerId));
+    const staticAttackerCombat = onlineGearStaticCombatForUnit(unitById(ownerId));
     const defenderCombat = onlineGearStaticCombatForUnit(target);
-    if (!attackerCombat && !defenderCombat) return null;
+    if (!staticAttackerCombat && !defenderCombat) return null;
+    const active = firebaseOnlineGearActiveAttackRuntime(ownerId);
+    const attackerCombat = active ? { ...staticAttackerCombat, attackMultiplier: active.attackMultiplier } : staticAttackerCombat;
     const crit = resolveFirebaseOnlineGearCrit(ownerId, target, damageType, projectile, attackerCombat);
-    if (projectile?.gearDamageProfile === 'normal_cannonball') {
-      return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearCritBlastRequestedDamage({
-        existingBaseDamage,
-        damageType,
-        attackerCombat,
-        defenderCombat,
-        isCrit: crit.isCrit,
-        targetHp: target.hp
-      });
-    }
-    return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearStaticRequestedDamage({
+    return globalThis.KatamonGearOnlineBattleDamage.calculateOnlineGearRuntimeRequestedDamage({
       existingBaseDamage,
       damageType,
       attackerCombat,
       defenderCombat,
+      isCrit: crit.isCrit,
+      useBlastPower: projectile?.gearDamageProfile === 'normal_cannonball',
+      actionDamageBp: active.actionDamageBp,
       targetHp: target.hp
     });
   }
@@ -9028,6 +9166,26 @@
     const onlineDamage = onlineGearStaticRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile);
     if (onlineDamage !== null) return onlineDamage;
     return cpuGearRequestedDamage(ownerId, target, damageType, existingBaseDamage, projectile);
+  }
+
+  // Fixed/special offensive routes intentionally bypass the Attack stat, but
+  // Last Stand4 is still an action-wide Damage Modifier. Keep that one narrow
+  // bucket separate from the completed static Attack/Defense resolver.
+  function firebaseOnlineGearActionDamageRequested(ownerId, existingBaseDamage) {
+    const active = firebaseOnlineGearActiveAttackRuntime(ownerId);
+    if (!active) return null;
+    if (active.actionDamageBp === 0) return Math.max(1, Math.round(existingBaseDamage));
+    return Math.max(1, Math.round(globalThis.KatamonGearCombat.calculateDamagePipeline({
+      baseDamage: existingBaseDamage, attackMultiplier: 1, modifierBp: active.actionDamageBp,
+      isCrit: false, critDamageMultiplier: 1, defenseMultiplier: 1,
+      damageReductionBp: 0, numericShield: 0
+    }).hpDamage));
+  }
+
+  function battleGearActionDamageRequested(ownerId, existingBaseDamage) {
+    const onlineDamage = firebaseOnlineGearActionDamageRequested(ownerId, existingBaseDamage);
+    if (onlineDamage !== null) return onlineDamage;
+    return cpuGearActionDamageRequested(ownerId, existingBaseDamage);
   }
 
   // The pure combat module owns every Knockback multiplier. This common seam
@@ -13101,6 +13259,8 @@
       verifiedStartGearManifest: null,
       battleGearSnapshotsByUnit: null,
       battleGearShieldStateByUnit: null,
+      battleGearRuntimeEffectsStateByUnit: null,
+      battleGearActiveAttackRuntime: null,
       peerCommit: null, peerCommitAt: null, peerCommitted: false, revealVerified: false, protocolError: '', remoteAction: null,
       localAction: null, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), pendingRemoteDamage: null,
       peerLiveness: { peerVisibleMs: 0, pingVisibleMs: 0, checkedAt: firebaseMonotonicNow() },
@@ -13230,6 +13390,8 @@
     online.verifiedStartGearManifest = null;
     online.battleGearSnapshotsByUnit = null;
     online.battleGearShieldStateByUnit = null;
+    online.battleGearRuntimeEffectsStateByUnit = null;
+    online.battleGearActiveAttackRuntime = null;
     online.pendingStart = null;
     renderFirebaseLobby();
   }
@@ -13603,6 +13765,8 @@
       if (online && online.kind === 'firebase') {
         online.battleGearSnapshotsByUnit = null;
         online.battleGearShieldStateByUnit = null;
+        online.battleGearRuntimeEffectsStateByUnit = null;
+        online.battleGearActiveAttackRuntime = null;
       }
       return false;
     }
@@ -13621,6 +13785,8 @@
     }
     online.battleGearSnapshotsByUnit = battleStartState.battleGearSnapshotsByUnit;
     online.battleGearShieldStateByUnit = createFirebaseOnlineGearShieldStateByUnit(online.battleGearSnapshotsByUnit);
+    online.battleGearRuntimeEffectsStateByUnit = createFirebaseOnlineGearRuntimeEffectsStateByUnit(online.battleGearSnapshotsByUnit);
+    online.battleGearActiveAttackRuntime = null;
     return true;
   }
   function validateFirebaseOnlineGearStartSnapshot(snap, battleStartState) {
@@ -13636,6 +13802,10 @@
       online.battleGearShieldStateByUnit = battleStartState
         ? createFirebaseOnlineGearShieldStateByUnit(online.battleGearSnapshotsByUnit)
         : null;
+      online.battleGearRuntimeEffectsStateByUnit = battleStartState
+        ? createFirebaseOnlineGearRuntimeEffectsStateByUnit(online.battleGearSnapshotsByUnit)
+        : null;
+      online.battleGearActiveAttackRuntime = null;
     }
     return true;
   }
@@ -13887,7 +14057,7 @@
     // 「もう公開済み」と誤認して次のラウンドの公開が拒否される。
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {};
     online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.unitCharacters = null;
-    online.participantGearReveals = {}; online.verifiedStartGearManifest = null; online.battleGearSnapshotsByUnit = null; online.battleGearShieldStateByUnit = null;
+    online.participantGearReveals = {}; online.verifiedStartGearManifest = null; online.battleGearSnapshotsByUnit = null; online.battleGearShieldStateByUnit = null; online.battleGearRuntimeEffectsStateByUnit = null; online.battleGearActiveAttackRuntime = null;
     resetFirebaseGearRevealCompatibilityClock();
     online.roundOpponentSeats = null; online.roundRivals = null;
     online.startAcks = {};
@@ -16498,12 +16668,12 @@
       const dist = distanceToUnitBody(u, x, y);
       if (dist > radius) continue;
       const baseDamage = dist <= radius * 0.35 ? 20 : 10;
-      const requested = cpuGearActionDamageRequested(owner, Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1))));
+      const requested = battleGearActionDamageRequested(owner, Math.max(1, Math.round(baseDamage * (CHARACTERS[u.character]?.damageTakenMul || 1))));
       const damage = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: owner, target: u, requestedDamage: requested }));
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - damage);
       const actualHpDamage = beforeHp - u.hp;
-      recordCpuGearLastStandDamage({ ownerId: owner, target: u, actualDamage: actualHpDamage, damageType: 'status', fromEnemyAttackAction: true });
+      recordBattleGearLastStandDamage({ ownerId: owner, target: u, actualDamage: actualHpDamage, damageType: 'status', fromEnemyAttackAction: true });
       // Status Resistance is a hostile-status gate only.  EMP's legacy damage
       // always resolves first and is never reduced or removed by resistance.
       const statusId = effect === 'turnSkip' ? 'action_skip' : 'move_lock';
@@ -16641,7 +16811,7 @@
         // the same existing boundary without an intermediate round.
         const existingBaseDamage = dmg * takenMul;
         const requestedDamage = battleGearRequestedDamage(owner, u, gearDamageType,
-          gearDamageType ? existingBaseDamage : cpuGearActionDamageRequested(owner, existingBaseDamage), techniqueProjectile);
+          gearDamageType ? existingBaseDamage : battleGearActionDamageRequested(owner, existingBaseDamage), techniqueProjectile);
         const damageResult = applyResolvedUnitDamage(u, requestedDamage, {
           ownerId: owner,
           direct,
@@ -16650,7 +16820,10 @@
           projectileRadius: techniqueProjectile?.radius || 0,
           remoteShot,
           damageType: gearDamageType || 'fixed',
-          fromEnemyAttackAction: owner !== 'p1' && !!techniqueProjectile,
+          // Action provenance is not tied to the CPU-only p1 owner. Both
+          // Firebase humans may grant the target's Last Stand after a real
+          // offensive projectile action.
+          fromEnemyAttackAction: !!techniqueProjectile,
         });
         const actualDamage = damageResult.actualDamage;
         const damageApplied = hpBefore - u.hp;
@@ -17174,7 +17347,7 @@
     const acting = activeUnit();
     // Misses and zero-damage attacks still consume only after their complete
     // action resolution reaches this boundary; direct+blast stays covered.
-    completeCpuGearAttackAction(acting);
+    completeBattleGearAttackAction(acting);
     if (acting.moveLockTurns > 0) acting.moveLockTurns--;
     if (isCoop4v1() && acting.team === 'player') {
       const boss = unitById(COOP_BOSS_UNIT_ID);

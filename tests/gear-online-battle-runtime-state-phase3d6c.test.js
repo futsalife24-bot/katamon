@@ -181,7 +181,7 @@ test('runtime state stays out of Battle Gear Snapshot, Healing, result and persi
 });
 
 test('manifest v2 fences old Gear clients while core protocol, snapshot and Firebase wire stay v1', () => {
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 2); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 3); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.equal(battleSnapshot.GEAR_BATTLE_SNAPSHOT_VERSION, 1); assert.equal(require('../shared/gear-online-firebase-wire.js').ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
   install(); const manifest = wiring.state().verifiedStartGearManifest; const old = structuredClone(manifest); old.version = 1;
   assert.throws(() => lobby.validateStartGearManifest(old, { participantReveals: Object.values(wiring.state().participantGearReveals) }), error => error?.code === 'INVALID_ONLINE_GEAR_START_MANIFEST');
