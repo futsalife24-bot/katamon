@@ -219,7 +219,7 @@ test('self, friendly, and unknown environmental damage never consume ONLINE Nume
   assert.equal(wiring.shieldState().p1.currentShield, initial);
 });
 
-test('drain uses actual HP loss only while ONLINE Healing multipliers remain inert', () => {
+test('drain exposes actual HP loss only to the isolated ONLINE Healing boundary', () => {
   installBattle({ e1Gears: lifeSet('drain-target', 4) });
   wiring.setShieldForTest('e1', 0.5);
   installAction('p1', 17);
@@ -279,7 +279,7 @@ test('Gear ON 2v2 remains rejected and Shield introduces no RNG or Math.random c
   assert.throws(() => wiring.applyResolvedDamage('p1', 'e1', 5), (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
-test('source contract covers all hostile routes while Firebase wire, Rules, Healing, and reconnect stay untouched', () => {
+test('source contract covers all hostile routes while Firebase wire, Rules, and reconnect stay untouched', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const snapshotSource = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-battle-snapshot.js'), 'utf8');
@@ -295,7 +295,8 @@ test('source contract covers all hostile routes while Firebase wire, Rules, Heal
   assert.doesNotMatch(snapshotSource, /currentShield|gearShieldState|numericShield/);
   assert.doesNotMatch(rules, /currentShield|gearShieldState|numericShield/);
   assert.doesNotMatch(index, /netSend\(\{[^}]*\b(?:currentShield|gearShieldState|numericShield)\b/);
-  assert.doesNotMatch(index, /onlineGear.*(?:healingMultiplier|receivedHealingMultiplier)/i);
+  assert.equal((index.match(/\bapplyBattleGearHealing\(/g) || []).length, 3,
+    'Healing responsibility moved to its definition plus generated self-heal and drain only');
 });
 
 async function main() {

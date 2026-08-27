@@ -1244,6 +1244,8 @@ const HOOK = `
         },
         applyResolvedDamage: (ownerId, targetId, requestedDamage, options = {}) =>
           applyResolvedUnitDamage(unitById(targetId), requestedDamage, { ownerId, ...options }),
+        applyHealing: (sourceUnitId, targetUnitId, baseHealing) =>
+          applyBattleGearHealing({ sourceUnitId, target: unitById(targetUnitId), baseHealing }),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
         knockbackPolicy: (ownerId, targetId, damageType, projectile = null, legacyKnockbackSpeed = 0) =>
