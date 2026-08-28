@@ -1214,7 +1214,10 @@ const HOOK = `
         api: () => firebaseBattleRecoveryApi(),
         build: (candidate, messages) => buildFirebaseBattleRecoveryPlan(candidate, messages),
         readPending: () => readFirebaseBattleRecoveryPlanForPendingReentry(),
-        deduper: () => createSseDeduper()
+        deduper: () => createSseDeduper(),
+        replay: (plan, options) => replayFirebaseBattleRecoveryPlan(plan, options),
+        replayActive: () => firebaseBattleReplayActive(),
+        recoverySnapshotMismatch: (candidate, baseline) => firebaseRecoverySnapshotMismatchReason(candidate, baseline)
       }),
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
       // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は

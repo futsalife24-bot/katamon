@@ -1558,6 +1558,7 @@
   }
   // opts.restartStage === true の時だけステージ曲を頭から鳴らし直す(戦闘開始・再戦がこれに当たる)。
   function syncBgm(opts) {
+    if (firebaseBattleReplayActive()) return;
     const restartStage = !!(opts && opts.restartStage);
     if (soundTestOpen && gamePhase !== 'title') {
       soundTestOpen = false;
@@ -1672,6 +1673,7 @@
   }
 
   function playTone(freq, duration, type, peakGain, freqEnd, delay, attack) {
+    if (firebaseBattleReplayActive()) return;
     if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
@@ -1689,6 +1691,7 @@
   }
 
   function playFilteredNoise(duration, peakGain, filterType, frequency, delay, attack, q) {
+    if (firebaseBattleReplayActive()) return;
     if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
@@ -1763,6 +1766,7 @@
     return normalImpactLoadPromise;
   }
   function playNormalImpactSound(sampleGain = NORMAL_IMPACT_SOUND_GAIN) {
+    if (firebaseBattleReplayActive()) return;
     if (!sfxAudible()) return;
     if (!normalImpactBuffer) {
       // 読み込みが間に合わない初回や取得失敗でも、着弾が無音にはならない。
@@ -4254,6 +4258,26 @@
   // 中身は §オンライン対戦 で作る。ここで宣言だけ先にしておくのは、
   // 初期化時に走る中断セーブの読み込みより前に参照できるようにするため。
   let online = null;
+  // Recovery replay is an internal verifier, never a second live match.  Keep
+  // this context separate from online.phase so the normal receiver's trust
+  // boundaries stay intact while the replay adapter can suppress side effects.
+  let firebaseBattleReplayContext = null;
+  function firebaseBattleReplayActive() { return firebaseBattleReplayContext !== null; }
+  async function withFirebaseBattleReplayContext(task) {
+    if (firebaseBattleReplayContext) throw Object.assign(new Error('Firebase Battle replayは既に実行中です'), { code: 'FIREBASE_RECOVERY_REPLAY_ACTIVE' });
+    const context = { outboundCount: 0, visualCount: 0, randomCalls: 0 };
+    const nativeRandom = Math.random;
+    firebaseBattleReplayContext = context;
+    Math.random = () => { context.randomCalls++; return nativeRandom(); };
+    try {
+      const result = await task(context);
+      if (context.randomCalls !== 0) throw Object.assign(new Error('replay中にMath.randomが消費されました'), { code: 'FIREBASE_RECOVERY_REPLAY_RANDOM_CONSUMED' });
+      return result;
+    } finally {
+      Math.random = nativeRandom;
+      firebaseBattleReplayContext = null;
+    }
+  }
   function isOnline() { return online !== null; }
   function coopAwaitingAuthoritativeState() { return online?.kind === 'coop' && !!online.remoteAction; }
   // 相手待ち・決着後は自分の操作を受け付けない。
@@ -5654,6 +5678,7 @@
   let cutIn = null; // message: { timer, duration, text, sub, color, onDone } / matchup: { kind, left, right, ... }
   let coopPhase2CutInShown = false;
   function showCutIn(text, sub, duration, onDone, color) {
+    if (firebaseBattleReplayActive()) { if (onDone) onDone(); return; }
     cutIn = { kind: 'message', timer: duration, duration, text, sub: sub || '', onDone: onDone || null, color: color || '#fff' };
   }
 
@@ -5679,6 +5704,7 @@
   }
 
   function showBattleStartCutIn() {
+    if (firebaseBattleReplayActive()) return;
     // 中断セーブを作るために、タイトル画面の裏で resetMatch を呼ぶ経路がある。
     // そこでは表示せず、本当に戦闘画面へ入る時だけ作る。
     if (gamePhase !== 'battle') { battleIntroPending = false; return; }
@@ -5963,6 +5989,7 @@
   }
 
   function spawnExplosion(x, y, blastMul) {
+    if (firebaseBattleReplayActive()) { firebaseBattleReplayContext.visualCount++; return; }
     const count = Math.round(14 * Math.min(2, blastMul || 1));
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
@@ -5987,6 +6014,7 @@
   // 大きくしたぶん重なると読めなくなるので、近くに出ている数字があればずらして積む。
   // 花火のように短時間で連続ヒットする技では必ず起きる。
   function pushFloatText(x, y, text, color, size) {
+    if (firebaseBattleReplayActive()) { firebaseBattleReplayContext.visualCount++; return; }
     let stacked = 0;
     for (const ft of floatTexts) {
       if (Math.abs(ft.x - x) < 74 && Math.abs(ft.y - y) < 54) stacked++;
@@ -6257,6 +6285,7 @@
   }
 
   function triggerShake(mag, duration) {
+    if (firebaseBattleReplayActive()) { firebaseBattleReplayContext.visualCount++; return; }
     shakeMag = Math.max(shakeMag, mag);
     shakeTimer = Math.max(shakeTimer, duration);
   }
@@ -10777,6 +10806,174 @@
     assertFirebaseRecoveryCurrentRound(candidate, after);
     return buildFirebaseBattleRecoveryPlan(candidate, messages || {});
   }
+
+  // B3B1: this runner is intentionally not wired to re-entry.  It gives B3B2
+  // one side-effect-free way to prove a B3A candidate chain with the existing
+  // Battle engine before any candidate terminal snapshot can be adopted.
+  function firebaseRecoveryFail(code) { throw Object.assign(new Error(code), { code }); }
+  function firebaseHistoricalActionAllowed(msg) {
+    if (!online || online.kind !== 'firebase' || !msg || !firebasePacketSeatAllowed(msg)) return false;
+    const owner = online.slots && online.slots[msg.seat] && online.slots[msg.seat].uid;
+    return owner === msg.from || firebaseHostActsForEmptySeat(msg.seat, msg.unitId) && msg.from === online.roomHostUid;
+  }
+  function firebaseRecoverySnapshotMismatchReason(candidate, baseline) {
+    const candidateUnits = Array.isArray(candidate?.units) ? candidate.units : [];
+    const baselineUnits = Array.isArray(baseline?.units) ? baseline.units : [];
+    for (let i = 0; i < candidateUnits.length; i++) {
+      const incoming = candidateUnits[i]; const local = baselineUnits[i];
+      if (!local || incoming.id !== local.id) return 'units';
+      // Replay is stronger than the live tolerance: a persisted candidate may
+      // never rewrite HP/fuel after the engine has resolved the same action.
+      if (incoming.hp !== local.hp) return `hp.${i}`;
+      if (incoming.fuel !== local.fuel) return `fuel.${i}`;
+    }
+    if (stableFirebaseJson(candidate?.craters || []) !== stableFirebaseJson(baseline?.craters || [])) return 'craters';
+    const liveMismatch = firebaseStateMismatchReason(candidate, baseline);
+    if (liveMismatch) return liveMismatch;
+    return '';
+  }
+  function firebaseRecoveryStateHandoffOk(terminal, action, baseline) {
+    if (!terminal || terminal.t !== 'state' || !firebaseActionMatches(terminal, action)) return false;
+    const nextId = terminal.snap?.turnOrder?.[terminal.snap?.activeIndex];
+    const expectedNext = baseline?.turnOrder?.[baseline?.activeIndex];
+    return typeof nextId === 'string' && nextId === expectedNext && nextId !== action.unitId;
+  }
+  function firebaseRecoveryAwait(predicate, { timeoutMs = 15000, frame = null } = {}) {
+    const schedule = frame || (typeof requestAnimationFrame === 'function'
+      ? callback => requestAnimationFrame(callback)
+      : callback => setTimeout(callback, 16));
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (predicate()) return resolve(true);
+        if (Date.now() - started >= timeoutMs) {
+          const projectile = projectiles[0];
+          return reject(Object.assign(new Error(`Firebase replayのturn boundary待機がタイムアウトしました (awaiting=${awaitingResolve}, projectiles=${projectiles.length}, projectile=${projectile ? `${Math.round(projectile.x)},${Math.round(projectile.y)}` : 'none'}, groundFlames=${groundFlames.length}, grounded=${units.every(entry => entry.grounded)})`), { code: 'FIREBASE_RECOVERY_REPLAY_TIMEOUT' }));
+        }
+        schedule(check);
+      };
+      check();
+    });
+  }
+  async function verifyFirebaseHistoricalReveal(msg) {
+    if (!online || !firebaseSeatIsPlayer(msg?.seat) || !online.slots?.[msg.seat] || online.slots[msg.seat].uid !== msg.from) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_AUTHORITY_INVALID');
+    if (typeof msg.character !== 'string' || !CHARACTER_LIST.includes(msg.character) || typeof msg.nonce !== 'string' || msg.nonce.length < 24) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_INVALID');
+    const seat = msg.seat;
+    let expected; let verifiedGearReveal = null;
+    if (firebaseGearEnabled()) {
+      if (msg.gearWireVersion !== globalThis.KatamonGearOnlineFirebaseWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION) firebaseRecoveryFail('FIREBASE_RECOVERY_GEAR_WIRE_INVALID');
+      const trustedContext = firebaseGearTrustedContext(seat, msg.character);
+      const loadoutCommitment = globalThis.KatamonGearOnlineFirebaseWire.decodeRevealGearCommitment(msg.gearCommitmentJson, trustedContext);
+      globalThis.KatamonGearOnlineProtocol.reconstructBattleGearSnapshot(loadoutCommitment, trustedContext);
+      const readyBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({ loadoutCommitment, trustedContext });
+      expected = await commitPayload(msg.character, msg.nonce, globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyBinding));
+      verifiedGearReveal = Object.freeze({ trustedContext, revealedCommitment: globalThis.KatamonGearOnlineLobbyProtocol.validateRevealedGearCommitment({ readyBinding, loadoutCommitment, trustedContext }) });
+    } else {
+      if (firebaseMessageHasGearWire(msg)) firebaseRecoveryFail('FIREBASE_RECOVERY_GEAR_UNEXPECTED');
+      expected = await commitPayload(msg.character, msg.nonce);
+    }
+    if (online.seatCommit[seat] !== expected) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_COMMIT_MISMATCH');
+    online.seatRevealSeen[seat] = true; online.seatCharacter[seat] = msg.character; online.seatNonce[seat] = msg.nonce; online.seatVerified[seat] = true;
+    if (verifiedGearReveal) online.participantGearReveals[seat] = verifiedGearReveal;
+    if (seat === online.seat) { online.selfCharacter = msg.character; online.selfNonce = msg.nonce; online.selfCommit = expected; online.selfRevealed = true; }
+    if (seat === online.peerSeat) { online.peerCharacter = msg.character; online.peerNonce = msg.nonce; online.revealVerified = true; }
+  }
+  async function verifyFirebaseRecoveryStart(plan) {
+    if (!online || online.kind !== 'firebase' || !plan?.start?.packet) firebaseRecoveryFail('FIREBASE_RECOVERY_START_INVALID');
+    online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {}; online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.participantGearReveals = {};
+    for (const entry of plan.orderedEntriesThroughStart) {
+      const msg = entry.packet;
+      if (msg.t === 'commit') {
+        if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from || typeof msg.hash !== 'string') firebaseRecoveryFail('FIREBASE_RECOVERY_COMMIT_AUTHORITY_INVALID');
+        const decision = acceptPeerCommit(online.seatCommit[msg.seat], msg.hash, !!online.seatRevealSeen[msg.seat], online.seatCommitAt[msg.seat], msg.sentAt);
+        if (decision.error || decision.stale) firebaseRecoveryFail('FIREBASE_RECOVERY_COMMIT_INVALID');
+        if (!decision.duplicate) { online.seatCommit[msg.seat] = decision.hash; online.seatCommitAt[msg.seat] = decision.at; }
+      } else if (msg.t === 'reveal') await verifyFirebaseHistoricalReveal(msg);
+    }
+    if (!firebaseRevealsReady()) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_MISSING');
+    const start = plan.start.packet;
+    const gearManifest = validateFirebaseStartGearEnvelope(start);
+    const gearStart = createFirebaseOnlineGearBattleStartState(gearManifest);
+    const firstIndex = await firebaseFirstUnitIndex();
+    if (Number(start.snap?.activeIndex) !== firstIndex || !firebaseStartCharactersMatch(start.snap)) firebaseRecoveryFail('FIREBASE_RECOVERY_START_MISMATCH');
+    validateFirebaseOnlineGearStartSnapshot(start.snap, gearStart);
+    return Object.freeze({ start, gearStart });
+  }
+  async function replayFirebaseBattleRecoveryPlan(plan, options = {}) {
+    if (!plan?.requiresBattleReplayValidation) firebaseRecoveryFail('FIREBASE_RECOVERY_PLAN_NOT_REPLAYABLE');
+    if (!online || online.kind !== 'firebase') firebaseRecoveryFail('FIREBASE_RECOVERY_ONLINE_MISSING');
+    return withFirebaseBattleReplayContext(async context => {
+      const previousPhase = online.phase;
+      try {
+        online.phase = 'recovering';
+        const verifiedStart = await verifyFirebaseRecoveryStart(plan);
+        // The canonical start is recovery authority; terminals never are.
+        // applySnapshot intentionally does not own the screen phase because it
+        // also serves suspended/title restores.  Recovery is a real physics
+        // simulation, but never a visible start sequence.
+        gamePhase = 'battle';
+        battleIntroPending = false;
+        applyVerifiedFirebaseStartSnapshot(verifiedStart.start.snap, verifiedStart.gearStart);
+        setOnlineSeat(online.seat);
+        const validatedBoundaries = [];
+        let replayCursor = plan.orderedEntries.indexOf(plan.start) + 1;
+        for (const chain of plan.completedActionChain || []) {
+          const fire = chain.fire?.packet; const terminal = chain.terminal?.packet;
+          if (!firebaseHistoricalActionAllowed(fire)) firebaseRecoveryFail('FIREBASE_RECOVERY_ACTION_AUTHORITY_INVALID');
+          const unit = unitById(fire.unitId);
+          if (!unit || activeUnit()?.id !== fire.unitId || awaitingResolve) firebaseRecoveryFail('FIREBASE_RECOVERY_ACTION_TURN_INVALID');
+          // Moves remain in canonical log order.  They are applied only for
+          // this action's sender; a later fire still carries the final pose.
+          const fireIndex = plan.orderedEntries.indexOf(chain.fire);
+          const terminalIndex = plan.orderedEntries.indexOf(chain.terminal);
+          for (const entry of plan.orderedEntries.slice(replayCursor, fireIndex)) {
+            const move = entry.packet;
+            if (move.t !== 'move') continue;
+            if (!firebaseHistoricalActionAllowed(move) || move.unitId !== fire.unitId) firebaseRecoveryFail('FIREBASE_RECOVERY_MOVE_AUTHORITY_INVALID');
+            unit.netWalkTargetX = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, Number(move.x)));
+            unit.fuel = Math.max(0, Math.min(unit.fuelMax, Number(move.fuel)));
+          }
+          replayCursor = terminalIndex + 1;
+          unit.x = fire.x; unit.y = fire.y; faceAllUnitsTowardOpponents();
+          launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
+          awaitingResolve = true;
+          await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+          const baseline = buildSnapshot({ includeTerrain: false });
+          if (terminal.t === 'state') {
+            if (!firebaseRecoveryStateHandoffOk(terminal, fire, baseline)) firebaseRecoveryFail('FIREBASE_RECOVERY_STATE_HANDOFF_MISMATCH');
+            const mismatch = firebaseRecoverySnapshotMismatchReason(terminal.snap, baseline);
+            if (mismatch) firebaseRecoveryFail(`FIREBASE_RECOVERY_REPLAY_MISMATCH:${mismatch}`);
+            let runtime = null;
+            try { runtime = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(terminal.snap); }
+            catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
+            validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(baseline), runtime }));
+          } else if (terminal.t === 'result') {
+            const conceded = firebaseResultConcedes(terminal);
+            const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
+            if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
+          } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
+        }
+        let validatedResult = null;
+        if (plan.result) {
+          const terminal = plan.result.terminal?.packet;
+          if (!firebaseHistoricalActionAllowed(terminal)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_AUTHORITY_INVALID');
+          if (plan.result.conceded) {
+            if (!firebaseResultConcedes(terminal)) firebaseRecoveryFail('FIREBASE_RECOVERY_CONCEDE_INVALID');
+            // A concede has no projectile to replay, but it is still only a
+            // verified candidate.  B3B2 owns any visible result transition.
+            validatedResult = Object.freeze({ terminal: plan.result.terminal, conceded: true });
+          } else {
+            const terminalWasReplayed = (plan.completedActionChain || []).some(chain => chain.terminal === plan.result.terminal);
+            if (!terminalWasReplayed) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_CHAIN_MISSING');
+            validatedResult = Object.freeze({ terminal: plan.result.terminal, conceded: false });
+          }
+        }
+        return Object.freeze({ kind: plan.kind, start: verifiedStart.start, validatedBoundaries: Object.freeze(validatedBoundaries), pendingAction: plan.pendingAction || null, result: validatedResult, sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
+      } finally {
+        online.phase = previousPhase;
+      }
+    });
+  }
   function stableFirebaseJson(value) {
     if (Array.isArray(value)) return `[${value.map(stableFirebaseJson).join(',')}]`;
     if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableFirebaseJson(value[key])}`).join(',')}}`;
@@ -10922,6 +11119,10 @@
   const netSim = { delayMs: 0, lossRate: 0 };
 
   function netSend(msg) {
+    if (firebaseBattleReplayActive()) {
+      firebaseBattleReplayContext.outboundCount++;
+      return Promise.resolve(false);
+    }
     if (!online) return Promise.resolve(false);
     if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'out', t: msg.t, seat: online.seat });
     const packet = {
@@ -12395,6 +12596,7 @@
 
   // ターンの切れ目に、行動した側が権威として状態を送る。
   function netSyncTurn(actedUnit) {
+    if (firebaseBattleReplayActive()) return;
     if (!isOnline() || online.phase !== 'playing') return;
     if (!netControlsUnit(actedUnit)) return;
     if (online.kind === 'firebase' || online.kind === 'coop') {
@@ -12421,6 +12623,7 @@
 
   // 決着も行動側が決める。両者が独立に判定するとHPが1違うだけで勝敗が食い違う。
   function netSyncResult(reason) {
+    if (firebaseBattleReplayActive()) return;
     // 送信側の記録。これが無いと「相手に何も届かなかった」時に、送っていないのか
     // 送って弾かれたのかが実機ログから分からない(2026-07-27に実際に追えなくなった)。
     if (!isOnline()) return;
@@ -13042,6 +13245,7 @@
     return resultWinner === ownTeam ? 'win' : 'loss';
   }
   function recordFirebaseMatchResultOnce() {
+    if (firebaseBattleReplayActive()) return false;
     if (!online || online.kind !== 'firebase' || online.participantRole !== 'player') return false;
     const rivals = Array.isArray(online.roundRivals) ? online.roundRivals : firebaseRivalsForSeats(firebaseOpponentHumanSeats());
     const outcome = firebaseOutcomeForSeat(winner, online.seat);
@@ -17337,6 +17541,9 @@
   }
 
   function checkMatchEnd(reason) {
+    // Recovery verifies the same lethal physics, but must never settle a
+    // result, write a record, or transition the visible match.
+    if (firebaseBattleReplayActive()) return;
     if (matchOver) return;
     // チュートリアルは勝ち負けを付けない。的が落ちたかどうかは updateTutorial が見る。
     if (tutorialActive()) return;
@@ -17458,7 +17665,7 @@
     for (const u of units) u.netWalkTargetX = null;
     // 風は全員が2巡するごとに切り替える(1vs1では従来どおり4ターンごと)
     // チュートリアルは項目ごとに風を決めているので、勝手に振り直さない。
-    if (!options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
+    if (!firebaseBattleReplayActive() && !options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
     if (coopSoloSalvoEnabled() && acting.team === 'player'
         && (!coopSalvoState || coopSalvoState.phase !== 'collecting')) {
@@ -17469,7 +17676,7 @@
     // 発動可否側でデバフを優先する。将来デバフを解除できれば、その手番中の連続跳躍も可能になる。
     if (!isCoopBossUnit(acting)) acting.jumpAvailable = true;
     focusCameraOn(acting.x, false, acting.y);
-    if (acting.control === 'cpu') beginCpuTurnPlan(acting);
+    if (!firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
     if (cpuGearSkipNextTurnStartSuspend) cpuGearSkipNextTurnStartSuspend = false;
     else saveCpuBattleAtTurnStart();
   }
