@@ -69,7 +69,7 @@ function recoveryGear(prefix, setId, slotId) {
   return domain.createGear({ gearId: `${prefix}:${slotId}`, generationSeed: `${prefix}:g`, enhancementSeed: `${prefix}:e`, sourceId: 'cpu_battle', sourceDetail: {}, acquiredAt: '2026-08-28T00:00:00Z', qualityProfile: { id: 'q', starWeights: [{ id: 6, weight: 1 }], rarityWeights: [{ id: 'legend', weight: 1 }] }, setProfile: { id: setId, setWeights: [{ id: setId, weight: 1 }] }, slotId });
 }
 function recoverySet(prefix, setId) { return domain.SLOT_IDS.map(slotId => recoveryGear(prefix, setId, slotId)); }
-async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'life'), e1 = recoverySet('e1-last', 'last_stand') } = {}) {
+async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'life'), e1 = recoverySet('e1-last', 'last_stand'), tail = [], startSnapshot = null } = {}) {
   const capability = gearLobby.createRoomGearCapability({ visibility: 'private', gearMode: gearProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1 });
   installRecoveryOnline({ role });
   // Install the same production-shaped Firebase record used by recoveryPlan,
@@ -94,9 +94,10 @@ async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'l
   const reveals = [reveal('p1', 'kyoryu', p1), reveal('e1', 'iwa', e1)];
   const manifest = gearLobby.createStartGearManifest({ roundId, commitments: reveals.map(entry => entry.revealedCommitment), participantReveals: reveals });
   const startState = gearBattleStart.createOnlineGearBattleStartState({ matchFormat: '1v1', manifest, participantReveals: reveals });
+  kt.setMatchFormatForTest('1v1');
   kt.setCharactersForTest('kyoryu', 'iwa'); h.resetMatchForTest(); kt.setCharactersForTest('kyoryu', 'iwa');
   wiring.applyBattleStartState(startState);
-  const snap = kt.snapshot();
+  const snap = structuredClone(startSnapshot || kt.snapshot());
   const nonces = { p1: 'a'.repeat(48), e1: 'b'.repeat(48) };
   snap.activeIndex = (await h.fairFirstPlayer(roomCode, nonces.p1, nonces.e1)) === 'p1' ? 0 : 1;
   const messages = {};
@@ -107,9 +108,10 @@ async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'l
     messages[key(Object.keys(messages).length + 1)] = { ...packet('reveal', { character, nonce, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearCommitmentJson: gearWire.encodeRevealGearCommitment({ loadoutCommitment: entry.revealedCommitment, trustedContext: entry.trustedContext }) }), from: seat === 'p1' ? hostUid : guestUid, seat };
   }
   messages[key(5)] = packet('start', { snap, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearManifestJson: gearWire.encodeStartGearManifest({ manifest, participantReveals: reveals }) });
+  for (const [index, entry] of tail.entries()) messages[key(6 + index)] = entry;
   return bridge.build({ auth: { idToken: 'test' }, room: { hostUid, settings: { gearCapability: capability } }, roomCode, seat: role === 'host' ? 'p1' : 'e1', roundId, roundStatus: 'playing' }, messages);
 }
-async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
+async function gearRecoveryPlan2v2({ role = 'host', tail = [], startSnapshot = null } = {}) {
   const capability = gearLobby.createRoomGearCapability({ visibility: 'private', gearMode: gearProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1 });
   const seats = [
     ['p1', 'p1', hostUid, 'kyoryu', recoverySet('p1-life', 'life')],
@@ -141,7 +143,7 @@ async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
   h.resetMatchForTest();
   for (const [_seat, unit, _uid, character] of seats) kt.setCharacterForUnitForTest(unit, character);
   wiring.applyBattleStartState(state);
-  const snap = kt.snapshot(); const nonces = Object.fromEntries(seats.map(([seat], index) => [seat, String.fromCharCode(97 + index).repeat(48)]));
+  const snap = structuredClone(startSnapshot || kt.snapshot()); const nonces = Object.fromEntries(seats.map(([seat], index) => [seat, String.fromCharCode(97 + index).repeat(48)]));
   const digest = crypto.createHash('sha256').update(`${roomCode}:${seats.map(([seat]) => nonces[seat]).join(':')}`).digest('hex'); snap.activeIndex = parseInt(digest.slice(-1), 16) & 1;
   const messages = {};
   for (const entry of reveals) {
@@ -151,6 +153,7 @@ async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
     messages[key(Object.keys(messages).length + 1)] = { ...packet('reveal', { character, nonce, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearCommitmentJson: gearWire.encodeRevealGearCommitment({ loadoutCommitment: entry.revealedCommitment, trustedContext: entry.trustedContext }) }), from: actor[2], seat };
   }
   messages[key(9)] = packet('start', { snap, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearManifestJson: gearWire.encodeStartGearManifest({ manifest, participantReveals: reveals }) });
+  for (const [index, entry] of tail.entries()) messages[key(10 + index)] = entry;
   return bridge.build({ auth: { idToken: 'test' }, room: { hostUid, settings: { gearCapability: capability } }, roomCode, seat: selected[0], roundId, roundStatus: 'playing' }, messages);
 }
 
@@ -248,6 +251,138 @@ async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
     }
   });
 
+  await test('an independently generated canonical 1v1 terminal is accepted by the replay verifier', async () => {
+    const firstUnit = (await h.fairFirstPlayer(roomCode, 'a'.repeat(48), 'b'.repeat(48))) === 'p1' ? 'p1' : 'e1';
+    const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, y: 360, vx: 5000 } : { from: hostUid, seat: 'p1', x: 240, y: 360, vx: -5000 };
+    const actionId = `${firstUnit === 'e1' ? 'd' : 'c'}${'a'.repeat(47)}`;
+    const fire = { ...packet('fire', {
+      actionId, unitId: firstUnit, x: actor.x, y: actor.y, anchor: { x: actor.x, y: actor.y }, vx0: actor.vx, vy0: -140, useSpecial: false, useJump: false, sentAt: 1800000000001
+    }), from: actor.from, seat: actor.seat };
+    const provisional = await recoveryPlan({ role: firstUnit === 'p1' ? 'host' : 'guest', tail: [fire] });
+    const canonicalStart = structuredClone(provisional.start.packet.snap);
+    assert.equal(provisional.start.packet.snap.activeIndex, canonicalStart.activeIndex);
+    assert.equal(provisional.start.packet.snap.units.find(unit => unit.id === firstUnit).id, firstUnit);
+    assert.ok([fire.x, fire.y, fire.anchor.x, fire.anchor.y, fire.vx0, fire.vy0].every(Number.isFinite));
+    const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
+    const generated = await bridge.generateTerminal(provisional, fire, { frame, timeoutMs: 15000 });
+    assert.equal(generated.action.activeUnitId, firstUnit === 'p1' ? 'e1' : 'p1');
+    assert.equal(generated.sideEffects.outboundCount, 0);
+    assert.equal(generated.sideEffects.randomCalls, 0);
+    // Firebase turn-state packets omit immutable terrain base fields.  This
+    // is a wire normalization only; the generated Battle state itself is not
+    // edited or made authoritative by the fixture.
+    const terminal = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(generated.snap), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
+    const plan = await recoveryPlan({ role: firstUnit === 'p1' ? 'host' : 'guest', startSnapshot: canonicalStart, tail: [fire, terminal] });
+    assert.deepEqual(plan.start.packet.snap, canonicalStart, 'Path A and B must share the exact canonical start snapshot');
+    assert.equal(plan.completedActionChain[0].fire.packet.anchor.x, fire.anchor.x);
+    assert.equal(plan.completedActionChain[0].fire.packet.anchor.y, fire.anchor.y);
+    const beforeReplay = kt.snapshot();
+    const actual = await bridge.replay(plan, { frame, timeoutMs: 15000 });
+    assert.equal(actual.validatedBoundaries.length, 1);
+    assert.equal(actual.validatedBoundaries[0].fire.packet.actionId, actionId);
+    assert.equal(actual.sideEffects.outboundCount, 0);
+    assert.equal(actual.sideEffects.randomCalls, 0);
+    assert.deepEqual(kt.snapshot(), beforeReplay, 'a successful verifier must still restore its pre-replay Battle state');
+  });
+
+  await test('an independently generated canonical 1v1 move then fire terminal is accepted by the replay verifier', async () => {
+    const firstUnit = (await h.fairFirstPlayer(roomCode, 'a'.repeat(48), 'b'.repeat(48))) === 'p1' ? 'p1' : 'e1';
+    const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, y: 360, vx: 5000 } : { from: hostUid, seat: 'p1', x: 240, y: 360, vx: -5000 };
+    const actionId = `${firstUnit === 'e1' ? 'b' : 'a'}${'c'.repeat(47)}`;
+    const move = { ...packet('move', { unitId: firstUnit, x: actor.x, fuel: 77, sentAt: 1800000000000 }), from: actor.from, seat: actor.seat };
+    const fire = { ...packet('fire', {
+      actionId, unitId: firstUnit, x: actor.x, y: actor.y, anchor: { x: actor.x, y: actor.y }, vx0: actor.vx, vy0: -140, useSpecial: false, useJump: false, sentAt: 1800000000001
+    }), from: actor.from, seat: actor.seat };
+    const provisional = await recoveryPlan({ role: firstUnit === 'p1' ? 'host' : 'guest', tail: [move, fire] });
+    const canonicalStart = structuredClone(provisional.start.packet.snap);
+    const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
+    const generated = await bridge.generateTerminal(provisional, fire, { frame, timeoutMs: 15000, moves: [move] });
+    assert.equal(generated.snap.units.find(unit => unit.id === firstUnit).fuel, 77);
+    const terminal = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(generated.snap), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
+    const plan = await recoveryPlan({ role: firstUnit === 'p1' ? 'host' : 'guest', startSnapshot: canonicalStart, tail: [move, fire, terminal] });
+    assert.deepEqual(plan.start.packet.snap, canonicalStart);
+    const actual = await bridge.replay(plan, { frame, timeoutMs: 15000 });
+    assert.equal(actual.validatedBoundaries.length, 1);
+    assert.equal(actual.validatedBoundaries[0].baseline.units.find(unit => unit.id === firstUnit).fuel, 77);
+  });
+
+  await test('a production-generated Gear ON 2v2 chain accepts the occupied s1 to p2 historical action', async () => {
+    const provisional = await gearRecoveryPlan2v2({ role: 'host' });
+    const start = structuredClone(provisional.start.packet.snap);
+    const identity = {
+      p1: { from: hostUid, seat: 'p1' }, e1: { from: guestUid, seat: 'e1' },
+      p2: { from: 'ally-s1', seat: 's1' }, e2: { from: 'ally-s2', seat: 's2' }
+    };
+    const fires = [];
+    for (let offset = 0; offset < start.turnOrder.length; offset++) {
+      const unitId = start.turnOrder[(start.activeIndex + offset) % start.turnOrder.length];
+      const unit = start.units.find(entry => entry.id === unitId);
+      const actor = identity[unitId];
+      const actionId = `${String(offset).padStart(1, 'a')}${'b'.repeat(47)}`;
+      fires.push({ ...packet('fire', {
+        actionId, unitId, x: unit.x, y: unit.y, anchor: { x: unit.x, y: unit.y }, vx0: unit.team === 'player' ? -5000 : 5000, vy0: -140,
+        useSpecial: false, useJump: false, sentAt: 1800000000001 + offset
+      }), from: actor.from, seat: actor.seat });
+      if (unitId === 'p2') break;
+    }
+    assert.equal(fires.at(-1).unitId, 'p2', 'the fixture must reach p2 through canonical preceding turns');
+    const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
+    const generated = await bridge.generateTerminals(provisional, fires, { frame, timeoutMs: 15000 });
+    assert.equal(generated.terminals.length, fires.length);
+    assert.equal(generated.sideEffects.outboundCount, 0);
+    assert.equal(generated.sideEffects.randomCalls, 0);
+    assert.equal(generated.terminals.at(-1).identity.sourceUnitId, 'p2');
+    assert.equal(generated.terminals.at(-1).identity.actionId, undefined);
+    const tail = fires.flatMap((fire, index) => [fire, { ...packet('state', {
+      actionId: fire.actionId, unitId: fire.unitId, snap: turnStateFrom(generated.terminals[index].snap), sentAt: 1800000000010 + index
+    }), from: fire.from, seat: fire.seat }]);
+    const plan = await gearRecoveryPlan2v2({ role: 'host', startSnapshot: start, tail });
+    assert.deepEqual(plan.start.packet.snap, start);
+    const beforeReplay = kt.snapshot();
+    const actual = await bridge.replay(plan, { frame, timeoutMs: 15000 });
+    assert.equal(actual.validatedBoundaries.length, fires.length);
+    assert.equal(actual.validatedBoundaries.at(-1).fire.packet.unitId, 'p2');
+    assert.equal(actual.validatedBoundaries.at(-1).fire.packet.seat, 's1');
+    assert.deepEqual(kt.snapshot(), beforeReplay, '2v2 verification must restore the prior Battle state');
+    const s1Plan = await gearRecoveryPlan2v2({ role: 's1', startSnapshot: start, tail });
+    const s1Actual = await bridge.replay(s1Plan, { frame, timeoutMs: 15000 });
+    assert.equal(s1Actual.validatedBoundaries.at(-1).fire.packet.unitId, 'p2');
+    assert.equal(s1Actual.validatedBoundaries.at(-1).fire.packet.seat, 's1');
+  });
+
+  await test('a production-generated non-zero Gear runtime v3 checkpoint is accepted only after the Battle baseline', async () => {
+    const firstUnit = (await h.fairFirstPlayer(roomCode, 'a'.repeat(48), 'b'.repeat(48))) === 'p1' ? 'p1' : 'e1';
+    const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, y: 360, vx: 5000 } : { from: hostUid, seat: 'p1', x: 240, y: 360, vx: -5000 };
+    const actionId = `${firstUnit === 'e1' ? 'e' : 'f'}${'d'.repeat(47)}`;
+    const fire = { ...packet('fire', {
+      actionId, unitId: firstUnit, x: actor.x, y: actor.y, anchor: { x: actor.x, y: actor.y }, vx0: actor.vx, vy0: -140, useSpecial: false, useJump: false, sentAt: 1800000000001
+    }), from: actor.from, seat: actor.seat };
+    const role = firstUnit === 'p1' ? 'host' : 'guest';
+    const provisional = await gearRecoveryPlan({ role, tail: [fire] });
+    const canonicalStart = structuredClone(provisional.start.packet.snap);
+    const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
+    const generated = await bridge.generateTerminal(provisional, fire, { frame, timeoutMs: 15000 });
+    const runtime = generated.snap.gearRuntimeState;
+    assert.equal(runtime.version, 3);
+    assert.ok(runtime.shieldByUnit.p1.currentShield > 0, 'Life4 must produce a non-zero canonical Shield checkpoint');
+    const terminal = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(generated.snap), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
+    const plan = await gearRecoveryPlan({ role, startSnapshot: canonicalStart, tail: [fire, terminal] });
+    const accepted = await bridge.replay(plan, { frame, timeoutMs: 15000 });
+    assert.equal(accepted.validatedBoundaries.length, 1);
+    assert.equal(accepted.validatedBoundaries[0].runtime.runtimeEffectsStateByUnit.p1.lastStandNextAttackDamageBp, 0);
+    const tampered = structuredClone(terminal);
+    tampered.snap.gearRuntimeState.shieldByUnit.p1.currentShield += 1;
+    const tamperedPlan = await gearRecoveryPlan({ role, startSnapshot: canonicalStart, tail: [fire, tampered] });
+    const beforeReplay = kt.snapshot();
+    const runtimeHooks = h.firebaseGearLobbyForTest();
+    const beforeShield = runtimeHooks.shieldState();
+    const beforeEffects = runtimeHooks.runtimeEffectsState();
+    await assert.rejects(() => bridge.replay(tamperedPlan, { frame, timeoutMs: 15000 }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
+    assert.deepEqual(kt.snapshot(), beforeReplay, 'runtime-only mismatch must restore the pre-replay Battle state without a partial commit');
+    assert.deepEqual(runtimeHooks.shieldState(), beforeShield, 'runtime-only mismatch must not partially commit Shield');
+    assert.deepEqual(runtimeHooks.runtimeEffectsState(), beforeEffects, 'runtime-only mismatch must not partially commit next-action effects');
+  });
+
   await test('a historical concede result is validated without result delivery, records, or visible transition', async () => {
     installRecoveryOnline({ wind: 'random' });
     kt.startBattle('kyoryu');
@@ -303,5 +438,5 @@ async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
     }
   });
 
-  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/9 passed`);
+  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/13 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

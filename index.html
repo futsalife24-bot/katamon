@@ -4265,7 +4265,7 @@
   function firebaseBattleReplayActive() { return firebaseBattleReplayContext !== null; }
   async function withFirebaseBattleReplayContext(task) {
     if (firebaseBattleReplayContext) throw Object.assign(new Error('Firebase Battle replayは既に実行中です'), { code: 'FIREBASE_RECOVERY_REPLAY_ACTIVE' });
-    const context = { outboundCount: 0, visualCount: 0, randomCalls: 0 };
+    const context = { outboundCount: 0, visualCount: 0, randomCalls: 0, currentAction: null };
     const nativeRandom = Math.random;
     firebaseBattleReplayContext = context;
     Math.random = () => {
@@ -4283,6 +4283,25 @@
       Math.random = nativeRandom;
       firebaseBattleReplayContext = null;
     }
+  }
+  // Recovery replays reconstruct the same local, canonical Gear RNG identity
+  // that live Firebase fire handling installs on localAction/remoteAction.
+  // The transport actionId stays correlation-only; it is never RNG input.
+  function beginFirebaseBattleReplayAction(fire) {
+    if (!firebaseBattleReplayContext || firebaseBattleReplayContext.currentAction) {
+      throw Object.assign(new Error('Firebase replay action contextを開始できません'), { code: 'FIREBASE_RECOVERY_ACTION_CONTEXT_INVALID' });
+    }
+    const identity = createFirebaseOnlineGearRngActionIdentity(fire.unitId);
+    const action = Object.freeze({
+      unitId: fire.unitId,
+      actionId: fire.actionId,
+      gearRngActionIdentity: identity ? Object.freeze({ ...identity }) : null
+    });
+    firebaseBattleReplayContext.currentAction = action;
+    return action;
+  }
+  function clearFirebaseBattleReplayAction(action) {
+    if (firebaseBattleReplayContext?.currentAction === action) firebaseBattleReplayContext.currentAction = null;
   }
   function isOnline() { return online !== null; }
   function coopAwaitingAuthoritativeState() { return online?.kind === 'coop' && !!online.remoteAction; }
@@ -9117,12 +9136,14 @@
     });
   }
 
-  function firebaseOnlineGearCritActionIdentity(ownerId) {
-    const matchingActions = [online?.localAction, online?.remoteAction]
-      .filter(action => action?.unitId === ownerId);
+  function firebaseOnlineGearActionIdentity(ownerId, missingCode, mismatchCode) {
+    const replayAction = firebaseBattleReplayContext?.currentAction;
+    const matchingActions = replayAction
+      ? (replayAction.unitId === ownerId ? [replayAction] : [])
+      : [online?.localAction, online?.remoteAction].filter(action => action?.unitId === ownerId);
     if (matchingActions.length !== 1 || !matchingActions[0].gearRngActionIdentity) {
       throw Object.assign(new Error('ONLINE Gear Crit action identityを確認できません'), {
-        code: 'ONLINE_GEAR_CRIT_ACTION_IDENTITY_MISSING'
+        code: missingCode
       });
     }
     const identity = matchingActions[0].gearRngActionIdentity;
@@ -9132,31 +9153,17 @@
         || identity.turnOrdinal !== identity.authoritativeActionOrdinal
         || identity.turnOrdinal !== turnCount) {
       throw Object.assign(new Error('ONLINE Gear Crit action identityが現在の手番と一致しません'), {
-        code: 'ONLINE_GEAR_CRIT_ACTION_IDENTITY_MISMATCH'
+        code: mismatchCode
       });
     }
     return identity;
   }
+  function firebaseOnlineGearCritActionIdentity(ownerId) {
+    return firebaseOnlineGearActionIdentity(ownerId, 'ONLINE_GEAR_CRIT_ACTION_IDENTITY_MISSING', 'ONLINE_GEAR_CRIT_ACTION_IDENTITY_MISMATCH');
+  }
 
   function firebaseOnlineGearStatusActionIdentity(ownerId) {
-    const matchingActions = [online?.localAction, online?.remoteAction]
-      .filter(action => action?.unitId === ownerId);
-    if (matchingActions.length !== 1 || !matchingActions[0].gearRngActionIdentity) {
-      throw Object.assign(new Error('ONLINE Gear Status action identityを確認できません'), {
-        code: 'ONLINE_GEAR_STATUS_ACTION_IDENTITY_MISSING'
-      });
-    }
-    const identity = matchingActions[0].gearRngActionIdentity;
-    if (identity.roomId !== online.room
-        || identity.roundId !== online.currentRoundId
-        || identity.sourceUnitId !== ownerId
-        || identity.turnOrdinal !== identity.authoritativeActionOrdinal
-        || identity.turnOrdinal !== turnCount) {
-      throw Object.assign(new Error('ONLINE Gear Status action identityが現在の手番と一致しません'), {
-        code: 'ONLINE_GEAR_STATUS_ACTION_IDENTITY_MISMATCH'
-      });
-    }
-    return identity;
+    return firebaseOnlineGearActionIdentity(ownerId, 'ONLINE_GEAR_STATUS_ACTION_IDENTITY_MISSING', 'ONLINE_GEAR_STATUS_ACTION_IDENTITY_MISMATCH');
   }
 
   // Phase 3D-5B intentionally gates only hostile ONLINE EMP status. Damage
@@ -11046,24 +11053,29 @@
           }
           replayCursor = terminalIndex + 1;
           unit.x = fire.x; unit.y = fire.y; faceAllUnitsTowardOpponents();
-          launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
-          awaitingResolve = true;
-          await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
-          const baseline = buildSnapshot({ includeTerrain: false });
-          if (terminal.t === 'state') {
-            if (!firebaseRecoveryStateHandoffOk(terminal, fire, baseline)) firebaseRecoveryFail('FIREBASE_RECOVERY_STATE_HANDOFF_MISMATCH');
-            // Never apply a terminal snapshot. After replayed physics matches,
-            // retain only its action-authoritative next-wind forecast.
-            const acceptedBaseline = acceptFirebaseRecoveryNextWind(terminal, baseline);
-            let runtime = null;
-            try { runtime = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(terminal.snap); }
-            catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
-            validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
-          } else if (terminal.t === 'result') {
-            const conceded = firebaseResultConcedes(terminal);
-            const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
-            if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
-          } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
+          const replayAction = beginFirebaseBattleReplayAction(fire);
+          try {
+            launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
+            awaitingResolve = true;
+            await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+            const baseline = buildSnapshot({ includeTerrain: false });
+            if (terminal.t === 'state') {
+              if (!firebaseRecoveryStateHandoffOk(terminal, fire, baseline)) firebaseRecoveryFail('FIREBASE_RECOVERY_STATE_HANDOFF_MISMATCH');
+              // Never apply a terminal snapshot. After replayed physics matches,
+              // retain only its action-authoritative next-wind forecast.
+              const acceptedBaseline = acceptFirebaseRecoveryNextWind(terminal, baseline);
+              let runtime = null;
+              try { runtime = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(terminal.snap); }
+              catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
+              validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
+            } else if (terminal.t === 'result') {
+              const conceded = firebaseResultConcedes(terminal);
+              const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
+              if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
+            } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
+          } finally {
+            clearFirebaseBattleReplayAction(replayAction);
+          }
         }
         let validatedResult = null;
         if (plan.result) {

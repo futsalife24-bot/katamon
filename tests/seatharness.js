@@ -1219,6 +1219,95 @@ const HOOK = `
         readPending: () => readFirebaseBattleRecoveryPlanForPendingReentry(),
         deduper: () => createSseDeduper(),
         replay: (plan, options) => replayFirebaseBattleRecoveryPlan(plan, options),
+        // A test-only terminal generator.  It deliberately shares the
+        // recovery start/action *inputs* with the verifier, but never reads a
+        // candidate terminal or calls the replay runner.  This lets tests
+        // derive a terminal from the ordinary production engine before asking
+        // the verifier to validate that independent packet.
+        generateTerminal: async (plan, fire, options = {}) => {
+          if (!plan?.start?.packet || !fire || fire.t !== 'fire') throw new Error('recovery terminal generator input is invalid');
+          if (!online || online.kind !== 'firebase') throw new Error('Firebase ONLINE is required');
+          const rollback = captureFirebaseBattleReplayRollback();
+          return withFirebaseBattleReplayContext(async context => {
+            try {
+              online.phase = 'recovering';
+              const verifiedStart = await verifyFirebaseRecoveryStart(plan);
+              gamePhase = 'battle';
+              battleIntroPending = false;
+              applyVerifiedFirebaseStartSnapshot(verifiedStart.start.snap, verifiedStart.gearStart);
+              setOnlineSeat(online.seat);
+              const unit = unitById(fire.unitId);
+              if (!unit || activeUnit()?.id !== fire.unitId || awaitingResolve) throw new Error('recovery terminal generator action is not active');
+              if (![fire.x, fire.y, fire.anchor?.x, fire.anchor?.y, fire.vx0, fire.vy0].every(Number.isFinite)) throw new Error('recovery terminal generator fire is malformed');
+              for (const move of options.moves || []) {
+                if (!move || move.t !== 'move' || move.unitId !== fire.unitId || !firebaseHistoricalActionAllowed(move)) throw new Error('recovery terminal generator move is invalid');
+                unit.netWalkTargetX = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, Number(move.x)));
+                unit.fuel = Math.max(0, Math.min(unit.fuelMax, Number(move.fuel)));
+              }
+              unit.x = fire.x;
+              unit.y = fire.y;
+              faceAllUnitsTowardOpponents();
+              const action = beginFirebaseBattleReplayAction(fire);
+              try {
+                launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
+                awaitingResolve = true;
+                await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+                const snap = buildSnapshot({ includeTerrain: false });
+                const runtimeState = createFirebaseOnlineGearRuntimeState();
+                if (runtimeState) snap.gearRuntimeState = runtimeState;
+                return Object.freeze({
+                  snap: structuredClone(snap),
+                  identity: action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null,
+                  action: Object.freeze({ activeIndex, activeUnitId: activeUnit()?.id || null, turnCount, unit: Object.freeze({ id: unit.id, x: unit.x, y: unit.y, control: unit.control, team: unit.team }) }),
+                  sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls })
+                });
+              } finally {
+                clearFirebaseBattleReplayAction(action);
+              }
+            } finally {
+              restoreFirebaseBattleReplayRollback(rollback);
+            }
+          });
+        },
+        generateTerminals: async (plan, fires, options = {}) => {
+          if (!Array.isArray(fires) || fires.length === 0) throw new Error('recovery terminal generator actions are required');
+          if (!online || online.kind !== 'firebase') throw new Error('Firebase ONLINE is required');
+          const rollback = captureFirebaseBattleReplayRollback();
+          return withFirebaseBattleReplayContext(async context => {
+            try {
+              online.phase = 'recovering';
+              const verifiedStart = await verifyFirebaseRecoveryStart(plan);
+              gamePhase = 'battle';
+              battleIntroPending = false;
+              applyVerifiedFirebaseStartSnapshot(verifiedStart.start.snap, verifiedStart.gearStart);
+              setOnlineSeat(online.seat);
+              const terminals = [];
+              for (const fire of fires) {
+                const unit = unitById(fire?.unitId);
+                if (!fire || fire.t !== 'fire' || !unit || activeUnit()?.id !== fire.unitId || awaitingResolve || !firebaseHistoricalActionAllowed(fire)) throw new Error('recovery terminal generator action is not active');
+                if (![fire.x, fire.y, fire.anchor?.x, fire.anchor?.y, fire.vx0, fire.vy0].every(Number.isFinite)) throw new Error('recovery terminal generator fire is malformed');
+                unit.x = fire.x;
+                unit.y = fire.y;
+                faceAllUnitsTowardOpponents();
+                const action = beginFirebaseBattleReplayAction(fire);
+                try {
+                  launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
+                  awaitingResolve = true;
+                  await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+                  const snap = buildSnapshot({ includeTerrain: false });
+                  const runtimeState = createFirebaseOnlineGearRuntimeState();
+                  if (runtimeState) snap.gearRuntimeState = runtimeState;
+                  terminals.push(Object.freeze({ snap: structuredClone(snap), identity: action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null }));
+                } finally {
+                  clearFirebaseBattleReplayAction(action);
+                }
+              }
+              return Object.freeze({ terminals: Object.freeze(terminals), sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
+            } finally {
+              restoreFirebaseBattleReplayRollback(rollback);
+            }
+          });
+        },
         replayActive: () => firebaseBattleReplayActive(),
         replayRandomProbe: () => withFirebaseBattleReplayContext(async () => Math.random()),
         replayStartTurn: () => withFirebaseBattleReplayContext(async () => {
