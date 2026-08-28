@@ -1526,7 +1526,7 @@ function check(name, value) {
     htmlText.includes('showTitleNotice(reason)') && htmlText.includes('returnToTitleFromResult();')
     && htmlText.includes("応答が途切れたため、ホストに席を空けられました。"));
   check('the evicted player does not try to delete a seat that is no longer theirs',
-    /noticeOwnFirebaseSeatLost[\s\S]{0,600}endOnline\(false, false\)/.test(htmlText));
+    /noticeOwnFirebaseSeatLost[\s\S]{0,600}endOnline\(false, false, false, true\)/.test(htmlText));
 
   // ---- ハートビートを打つ席 ----
   h.setOnlineForLogTest(fakeLobby({ seat: 'p1' }));

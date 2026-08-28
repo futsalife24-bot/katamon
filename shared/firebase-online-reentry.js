@@ -10,6 +10,7 @@
   const ROOM_CODE_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
   const SEATS = Object.freeze(['p1', 'e1', 's1', 's2']);
   const ROUND_STATUSES = Object.freeze(['lobby', 'revealing', 'playing', 'results']);
+  const ROUND_ID_RE = /^[0-9a-f]{48}$/;
 
   class FirebaseReentryError extends Error {
     constructor(code, message) {
@@ -84,7 +85,7 @@
     if (!Number.isFinite(serverNow) || !Number.isFinite(room.expiresAt) || room.expiresAt <= serverNow) fail('FIREBASE_REENTRY_ROOM_EXPIRED');
     const slot = room.slots && room.slots[credential.seat];
     if (!slot || typeof slot !== 'object' || slot.uid !== credential.uid) fail('FIREBASE_REENTRY_SEAT_MISMATCH');
-    if (!room.round || typeof room.round !== 'object' || typeof room.round.id !== 'string' || !ROUND_STATUSES.includes(room.round.status)) {
+    if (!room.round || typeof room.round !== 'object' || !ROUND_ID_RE.test(room.round.id) || !ROUND_STATUSES.includes(room.round.status)) {
       fail('FIREBASE_REENTRY_ROUND_INVALID');
     }
     return Object.freeze({

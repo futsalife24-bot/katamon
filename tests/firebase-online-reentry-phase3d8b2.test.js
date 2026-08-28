@@ -23,8 +23,8 @@ function storage() {
     value: key => values.get(key) || null
   };
 }
-function token(userId) {
-  const now = Math.floor(Date.now() / 1000);
+function token(userId, issuedAtMs = Date.now()) {
+  const now = Math.floor(issuedAtMs / 1000);
   const encoded = Buffer.from(JSON.stringify({ iat: now, exp: now + 3600 })).toString('base64url');
   return `x.${encoded}.y`;
 }
@@ -55,17 +55,20 @@ function locks() {
     }
   };
 }
-function mockFirebase(currentRoom, { refreshUserId = uid, refreshStatus = 200, refreshError = 'INVALID_REFRESH_TOKEN' } = {}) {
+function mockFirebase(currentRoom, { refreshUserId = uid, refreshStatus = 200, refreshError = 'INVALID_REFRESH_TOKEN', roomStatus = 200, tokenIssuedAtMs = Date.now() } = {}) {
   const calls = [];
   const originalFetch = global.fetch;
   global.fetch = async (url, options = {}) => {
-    calls.push({ url: String(url), method: options.method || 'GET' });
+    calls.push({ url: String(url), method: options.method || 'GET', body: options.body || '' });
     if (String(url).includes('securetoken.googleapis.com')) {
       if (refreshStatus !== 200) return { ok: false, status: refreshStatus, json: async () => ({ error: { message: refreshError } }) };
-      return { ok: true, status: 200, json: async () => ({ user_id: refreshUserId, id_token: token(refreshUserId), refresh_token: 'rotated-refresh-token', expires_in: '3600' }) };
+      return { ok: true, status: 200, json: async () => ({ user_id: refreshUserId, id_token: token(refreshUserId, tokenIssuedAtMs), refresh_token: 'rotated-refresh-token', expires_in: '3600' }) };
     }
     if (String(url).includes(`/rooms/${roomCode}/slots/e1/seenAt.json`)) return { ok: true, status: 200, json: async () => null };
-    if (String(url).includes(`/rooms/${roomCode}.json`)) return { ok: true, status: 200, json: async () => currentRoom };
+    if (String(url).includes(`/rooms/${roomCode}.json`)) {
+      if (roomStatus !== 200) return { ok: false, status: roomStatus, json: async () => ({ error: { message: 'temporary room failure' } }) };
+      return { ok: true, status: 200, json: async () => currentRoom };
+    }
     throw new Error(`unexpected Firebase request: ${url}`);
   };
   return { calls, restore: () => { global.fetch = originalFetch; } };
@@ -73,7 +76,7 @@ function mockFirebase(currentRoom, { refreshUserId = uid, refreshStatus = 200, r
 async function restoreCandidate(currentRoom, options = {}) {
   bridge.reset();
   const store = storage();
-  bridge.saveCredential(credential(currentRoom), store);
+  bridge.saveCredential(options.credentialRecord || credential(options.credentialRoom || currentRoom), store);
   const lockManager = options.lockManager || locks();
   const mock = mockFirebase(currentRoom, options);
   try { return { candidate: await bridge.restore({ storage: store, lockManager }), store, lockManager, calls: mock.calls }; }
@@ -100,6 +103,25 @@ async function restoreCandidate(currentRoom, options = {}) {
       assert.equal(result.calls.some(call => call.url.includes('/slots/e1.json') && call.method === 'PUT'), false);
       bridge.reset();
     }
+  });
+
+  await test('stored expiry is only a hint: server-token time keeps a valid room through local clock skew and clears an authoritatively expired room', async () => {
+    const realNow = Date.now; const serverNow = realNow();
+    const validRoom = room('playing', { expiresAt: serverNow + 10 * 60 * 1000 });
+    Date.now = () => serverNow + 24 * 60 * 60 * 1000;
+    try {
+      const result = await restoreCandidate(validRoom, { tokenIssuedAtMs: serverNow });
+      assert.equal(result.candidate.roundStatus, 'playing'); assert.ok(result.store.value(bridge.storageKey())); bridge.reset();
+    } finally { Date.now = realNow; }
+
+    const expiredRoom = room('playing', { expiresAt: serverNow - 1000 });
+    Date.now = () => serverNow - 24 * 60 * 60 * 1000;
+    try {
+      bridge.reset(); const store = storage(); bridge.saveCredential(credential(expiredRoom), store); const mock = mockFirebase(expiredRoom, { tokenIssuedAtMs: serverNow });
+      try { await fails('FIREBASE_REENTRY_ROOM_EXPIRED', () => bridge.restore({ storage: store, lockManager: locks() })); }
+      finally { mock.restore(); }
+      assert.equal(store.value(bridge.storageKey()), null);
+    } finally { Date.now = realNow; }
   });
 
   await test('UID, room identity, expiry, and seat mismatches fail closed and clear the credential', async () => {
@@ -130,6 +152,74 @@ async function restoreCandidate(currentRoom, options = {}) {
     assert.equal(store.value(bridge.storageKey()), null);
   });
 
+  await test('room 408, 429, and 5xx responses are retryable, retain the rotated token, and a retry uses that token', async () => {
+    for (const roomStatus of [408, 429, 500, 502, 503, 504]) {
+      bridge.reset(); const current = room(); const store = storage(); bridge.saveCredential(credential(current), store); const manager = locks();
+      let mock = mockFirebase(current, { roomStatus });
+      try { await fails('FIREBASE_REENTRY_ROOM_TRANSIENT', () => bridge.restore({ storage: store, lockManager: manager })); }
+      finally { mock.restore(); }
+      assert.equal(bridge.auth(), null); assert.equal(bridge.loadCredential(store).refreshToken, 'rotated-refresh-token');
+      const retryManager = locks(); mock = mockFirebase(current);
+      try {
+        const candidate = await bridge.restore({ storage: store, lockManager: retryManager });
+        assert.equal(candidate.auth.uid, uid);
+        const refreshCall = mock.calls.find(call => call.url.includes('securetoken.googleapis.com'));
+        assert.match(refreshCall.body, /refresh_token=rotated-refresh-token/);
+      } finally { mock.restore(); }
+      bridge.reset();
+    }
+  });
+
+  await test('definitive missing rooms and non-canonical round identities clear the credential', async () => {
+    const missingReference = room();
+    bridge.reset();
+    const missingStore = storage(); bridge.saveCredential(credential(missingReference), missingStore);
+    let mock = mockFirebase(null);
+    try { await fails('FIREBASE_REENTRY_ROOM_UNAVAILABLE', () => bridge.restore({ storage: missingStore, lockManager: locks() })); }
+    finally { mock.restore(); }
+    assert.equal(missingStore.value(bridge.storageKey()), null);
+
+    bridge.reset();
+    const invalidStore = storage(); const invalidRoom = room('playing', { round: { id: 'not-a-round-id', status: 'playing' } });
+    bridge.saveCredential(credential(invalidRoom), invalidStore); mock = mockFirebase(invalidRoom);
+    try { await fails('FIREBASE_REENTRY_ROUND_INVALID', () => bridge.restore({ storage: invalidStore, lockManager: locks() })); }
+    finally { mock.restore(); }
+    assert.equal(invalidStore.value(bridge.storageKey()), null);
+  });
+
+  await test('a validated pending candidate blocks normal create and join without replacing its credential or lease', async () => {
+    const current = room('playing'); const result = await restoreCandidate(current);
+    const before = result.store.value(bridge.storageKey());
+    await fails('FIREBASE_REENTRY_PENDING', () => bridge.createRoom());
+    await fails('FIREBASE_REENTRY_PENDING', () => bridge.claimRoom(roomCode));
+    assert.equal(result.store.value(bridge.storageKey()), before);
+    assert.equal(bridge.pending().seat, 'e1');
+    bridge.reset();
+  });
+
+  await test('known terminal seat and fatal exits clear the persisted re-entry credential', async () => {
+    const key = bridge.storageKey();
+    const previous = globalThis.localStorage.getItem(key);
+    const value = credential(room());
+    try {
+      bridge.reset(); bridge.saveCredential(value);
+      bridge.setOnline({ kind: 'firebase', seat: 'e1', auth: { uid }, slots: { e1: { uid: 'someone-else' } }, seatLostHandled: false, transport: { close() {} } });
+      bridge.noticeSeatLost();
+      assert.equal(globalThis.localStorage.getItem(key), null);
+
+      bridge.reset(); bridge.saveCredential(value);
+      bridge.setOnline({ kind: 'firebase', role: 'guest', room: roomCode, seat: 'e1', auth: { uid, idToken: token(uid), refreshToken: 'refresh-secret-not-logged' } });
+      const originalFetch = global.fetch;
+      global.fetch = async () => ({ ok: true, status: 200, json: async () => null });
+      try { bridge.releaseFatal(); } finally { global.fetch = originalFetch; }
+      assert.equal(globalThis.localStorage.getItem(key), null);
+    } finally {
+      bridge.reset();
+      if (previous === null) globalThis.localStorage.removeItem(key);
+      else globalThis.localStorage.setItem(key, previous);
+    }
+  });
+
   await test('exclusive lease rejects a second tab and releases for the next activation without exposing refresh credentials', async () => {
     const current = room(); const manager = locks(); const value = credential(current);
     const first = await bridge.acquireLease(value, manager);
@@ -149,7 +239,10 @@ async function restoreCandidate(currentRoom, options = {}) {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n?/g, '\n');
     assert.match(source, /scheduleFirebaseRoomSeatReentryBootstrap\(\)/); assert.doesNotMatch(source, /restoreFirebaseRoomSeatReentry[\s\S]{0,1300}applySnapshot\(/);
     assert.doesNotMatch(source, /firebaseReentry[^\n]{0,100}(console\.log|onlineLog|location\.href)/i);
+    assert.doesNotMatch(source, /isDefinitelyExpired\(credential,\s*Date\.now\(\)\)/);
+    assert.match(source, /addEventListener\('pagehide',[\s\S]{0,500}endOnline\(true, true, true\)/);
+    assert.match(source, /function leaveFirebaseLobby\(\)[\s\S]{0,700}endOnline\(false, false, false, true\)/);
   });
 
-  console.log(`firebase-online-reentry-phase3d8b2: ${passed}/6 passed`);
+  console.log(`firebase-online-reentry-phase3d8b2: ${passed}/11 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
