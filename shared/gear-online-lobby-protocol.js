@@ -5,10 +5,10 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearOnlineLobbyProtocol(root) {
   'use strict';
 
-  // v4 is the compatibility fence for 2v2 Gear battle plus Shield runtime v2.
+  // v5 is the compatibility fence for owner-scoped 2v2 physical Gear conflicts.
   // The core commitment/wire/snapshot versions intentionally remain v1; a
-  // mixed v3/v4 Gear battle must fail closed at start.
-  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 4;
+  // mixed v4/v5 Gear battle must fail closed at start.
+  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 5;
   const ONLINE_GEAR_READY_COMMITMENT_VERSION = 1;
   const ONLINE_VISIBILITY_PUBLIC = 'public';
   const ONLINE_VISIBILITY_PRIVATE = 'private';

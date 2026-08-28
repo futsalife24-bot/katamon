@@ -142,9 +142,9 @@ test('p1/e1 symmetry, Gearless identity, and cancel preservation hold', () => {
   install(); assert.equal(wiring.beginLastStandAttack('p1'), true); assert.equal(wiring.activeAttackRuntime().actionDamageBp, 0); wiring.completeLastStandAttack('p1');
 });
 
-test('runtime Shield wire v2, Firebase Rules, RNG and manifest v4 fence remain isolated', () => {
+test('runtime Shield wire v2, Firebase Rules, RNG and manifest v5 fence remain isolated', () => {
   const index = read('index.html'); const rules = read('database.rules.json'); const runtime = read('shared', 'gear-online-battle-runtime-state.js');
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 4); assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1);
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5); assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.match(runtime, /shieldByUnit/); assert.doesNotMatch(runtime, /lastStandNextAttackDamageBp/);
   assert.doesNotMatch(rules, /lastStandNextAttackDamageBp|battleGearRuntimeEffects/);
   const action = rng.createOnlineGearActionIdentity({ version: 1, roomId, roundId, turnOrdinal: 7, sourceUnitId: 'p1' });

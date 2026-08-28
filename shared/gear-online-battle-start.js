@@ -35,6 +35,45 @@
     if (root?.KatamonGearOnlineLobbyProtocol) return root.KatamonGearOnlineLobbyProtocol;
     fail('ONLINE_GEAR_LOBBY_PROTOCOL_UNAVAILABLE');
   }
+  function gearPresets() {
+    if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-presets.js');
+    if (root?.KatamonGearPresets) return root.KatamonGearPresets;
+    fail('ONLINE_GEAR_PRESETS_UNAVAILABLE');
+  }
+
+  function assertNoSameOwnerGearConflicts(manifest, snapshotsByUnit) {
+    const presets = gearPresets();
+    const loadoutsByOwner = new Map();
+    manifest.commitments.forEach((commitment) => {
+      const snapshot = snapshotsByUnit[commitment.unitId];
+      const gearIds = presets.SLOT_IDS
+        .map(slotId => snapshot?.slots?.[slotId])
+        .filter(gear => gear !== null)
+        .map(gear => gear?.gearId);
+      const loadout = {
+        characterId: snapshot?.characterId,
+        presetId: snapshot?.presetId,
+        gearIds
+      };
+      const ownerLoadouts = loadoutsByOwner.get(commitment.ownerUid) || [];
+      ownerLoadouts.push(loadout);
+      loadoutsByOwner.set(commitment.ownerUid, ownerLoadouts);
+    });
+    for (const ownerLoadouts of loadoutsByOwner.values()) {
+      try {
+        presets.assertNoSimultaneousGearConflicts(ownerLoadouts);
+      } catch (error) {
+        if (error?.code !== 'SIMULTANEOUS_GEAR_CONFLICT') throw error;
+        const wrapped = new GearOnlineBattleStartError(
+          'ONLINE_GEAR_2V2_SAME_OWNER_GEAR_CONFLICT',
+          error.message
+        );
+        wrapped.cause = error;
+        wrapped.detail = error.cause;
+        throw wrapped;
+      }
+    }
+  }
 
   function createOnlineGearBattleStartState(input) {
     exact(input, ['manifest', 'matchFormat', 'participantReveals'], 'INVALID_ONLINE_GEAR_BATTLE_START');
@@ -49,10 +88,6 @@
     if (manifest.commitments.length !== unitIds.length || input.participantReveals.length !== unitIds.length) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
     const revealBySeat = new Map(input.participantReveals.map((entry) => [entry?.revealedCommitment?.seatId, entry]));
     if (revealBySeat.size !== requiredSeats.length || requiredSeats.some(seatId => !revealBySeat.has(seatId))) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
-    if (input.matchFormat === '2v2') {
-      const owners = manifest.commitments.map(entry => entry.ownerUid);
-      if (new Set(owners).size !== owners.length) fail('ONLINE_GEAR_2V2_SAME_OWNER_UNSUPPORTED');
-    }
     const battleGearSnapshotsByUnit = {};
     const hpFuelByUnit = {};
     for (const commitment of manifest.commitments) {
@@ -73,6 +108,7 @@
       });
     }
     if (Object.keys(battleGearSnapshotsByUnit).sort().join(',') !== unitIds.slice().sort().join(',')) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
+    if (input.matchFormat === '2v2') assertNoSameOwnerGearConflicts(manifest, battleGearSnapshotsByUnit);
     return freeze({
       matchFormat: input.matchFormat,
       battleGearSnapshotsByUnit,
