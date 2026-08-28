@@ -197,6 +197,65 @@ async function restoreCandidate(currentRoom, options = {}) {
     bridge.reset();
   });
 
+  await test('create and join re-check pending after auth restores a persisted candidate, before either new-room mutation', async () => {
+    const key = bridge.storageKey(); const previous = globalThis.localStorage.getItem(key); const previousNavigator = globalThis.navigator;
+    const newRoomCode = 'B3C4D5E6';
+    async function assertAuthRestoreRace(action, forbiddenPath) {
+      bridge.reset(); bridge.saveCredential(credential(room('playing')));
+      const manager = locks(); globalThis.navigator = { ...previousNavigator, locks: manager };
+      const mock = mockFirebase(room('playing'));
+      try {
+        await fails('FIREBASE_REENTRY_PENDING', action);
+        assert.ok(bridge.pending(), 'old candidate remains available for B3');
+        const stored = bridge.loadCredential();
+        assert.equal(stored.roomCode, roomCode); assert.equal(stored.seat, 'e1');
+        assert.equal(mock.calls.some(call => call.url.includes(forbiddenPath)), false, 'new room/seat mutation must not begin');
+      } finally { mock.restore(); bridge.reset(); }
+    }
+    try {
+      await assertAuthRestoreRace(() => bridge.createRoom(newRoomCode), `/rooms/${newRoomCode}.json`);
+      await assertAuthRestoreRace(() => bridge.claimRoom(newRoomCode), `/rooms/${newRoomCode}/slots/`);
+    } finally {
+      globalThis.navigator = previousNavigator;
+      if (previous === null) globalThis.localStorage.removeItem(key);
+      else globalThis.localStorage.setItem(key, previous);
+    }
+  });
+
+  await test('re-entry transient failures stop create/join before mutation, while a definitive cleanup permits the next normal auth attempt', async () => {
+    const key = bridge.storageKey(); const previous = globalThis.localStorage.getItem(key); const previousNavigator = globalThis.navigator;
+    const newRoomCode = 'B3C4D5E6';
+    try {
+      for (const options of [{ roomStatus: 503, code: 'FIREBASE_REENTRY_ROOM_TRANSIENT' }, { refreshStatus: 503, refreshError: 'SERVICE_UNAVAILABLE', code: 'FIREBASE_REENTRY_REFRESH_TRANSIENT' }]) {
+        bridge.reset(); bridge.saveCredential(credential(room('playing'))); globalThis.navigator = { ...previousNavigator, locks: locks() };
+        const mock = mockFirebase(room('playing'), options);
+        try { await fails(options.code, () => bridge.claimRoom(newRoomCode)); }
+        finally { mock.restore(); }
+        assert.equal(bridge.auth(), null); assert.ok(globalThis.localStorage.getItem(key));
+        assert.equal(mock.calls.some(call => call.url.includes(`/rooms/${newRoomCode}/slots/`)), false);
+      }
+
+      bridge.reset(); bridge.saveCredential(credential(room('playing'))); globalThis.navigator = { ...previousNavigator, locks: locks() };
+      let mock = mockFirebase(null);
+      try { await fails('FIREBASE_REENTRY_ROOM_UNAVAILABLE', () => bridge.createRoom(newRoomCode)); }
+      finally { mock.restore(); }
+      assert.equal(globalThis.localStorage.getItem(key), null);
+      const originalFetch = global.fetch; const calls = [];
+      global.fetch = async (url, options = {}) => {
+        calls.push({ url: String(url), method: options.method || 'GET' });
+        if (String(url).includes('accounts:signUp')) return { ok: true, status: 200, json: async () => ({ localId: 'new-user', idToken: token('new-user'), refreshToken: 'new-refresh', expiresIn: '3600' }) };
+        return { ok: false, status: 500, json: async () => ({}) };
+      };
+      try { await assert.rejects(() => bridge.createRoom(newRoomCode)); }
+      finally { global.fetch = originalFetch; }
+      assert.ok(calls.some(call => call.url.includes('accounts:signUp')), 'only a later user action may start normal anonymous auth');
+    } finally {
+      bridge.reset(); globalThis.navigator = previousNavigator;
+      if (previous === null) globalThis.localStorage.removeItem(key);
+      else globalThis.localStorage.setItem(key, previous);
+    }
+  });
+
   await test('known terminal seat and fatal exits clear the persisted re-entry credential', async () => {
     const key = bridge.storageKey();
     const previous = globalThis.localStorage.getItem(key);
@@ -244,5 +303,5 @@ async function restoreCandidate(currentRoom, options = {}) {
     assert.match(source, /function leaveFirebaseLobby\(\)[\s\S]{0,700}endOnline\(false, false, false, true\)/);
   });
 
-  console.log(`firebase-online-reentry-phase3d8b2: ${passed}/11 passed`);
+  console.log(`firebase-online-reentry-phase3d8b2: ${passed}/13 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

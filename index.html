@@ -13063,6 +13063,9 @@
   async function createFirebaseRoom(requestedCode = null, settings = null, options = {}) {
     assertNoPendingFirebaseReentry();
     const auth = await ensureFirebaseAuth();
+    // ensureFirebaseAuth can restore a persisted room-seat candidate while it
+    // awaits Firebase. Do not create a second session after that restoration.
+    assertNoPendingFirebaseReentry();
     const now = firebaseServerNow(auth);
     if (!options || typeof options !== 'object' || Array.isArray(options)
         || Object.keys(options).some(key => key !== 'visibility' && key !== 'gearMode')) throw new Error('部屋作成設定が不正です');
@@ -13099,6 +13102,9 @@
   async function claimFirebaseRoom(code, seatOrder = ['e1', 's1', 's2']) {
     assertNoPendingFirebaseReentry();
     const auth = await ensureFirebaseAuth();
+    // The same post-auth fence prevents a restored candidate from racing into
+    // an empty-seat claim in another room.
+    assertNoPendingFirebaseReentry();
     firebaseServerNow(auth); // オフセットが無い/不正なら入室前に止める。
     let seat = null;
     let reentryCredentialSaved = false;
