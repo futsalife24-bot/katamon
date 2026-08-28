@@ -40,9 +40,12 @@
     if (!initial || !Number.isFinite(initial.shieldAfter) || initial.shieldAfter < 0) fail('ONLINE_GEAR_RUNTIME_STATE_SNAPSHOT_INVALID', `${unitId} initialShield`);
     return initial.shieldAfter;
   }
-  function validateRuntimeState(value, { snapshots, localState = null } = {}) {
+  function validateRuntimeState(value, { snapshots, localState = null, expectedMatchFormat = null } = {}) {
     exact(value, ['matchFormat', 'shieldByUnit', 'version'], 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
     if (value.version !== ONLINE_GEAR_RUNTIME_STATE_VERSION) fail('UNSUPPORTED_ONLINE_GEAR_RUNTIME_STATE');
+    if (expectedMatchFormat !== null && value.matchFormat !== expectedMatchFormat) {
+      fail('ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
+    }
     const unitIds = UNIT_IDS_BY_FORMAT[value.matchFormat];
     if (!unitIds) fail('INVALID_ONLINE_GEAR_RUNTIME_STATE');
     exact(value.shieldByUnit, unitIds, 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
@@ -53,7 +56,7 @@
     if (localRuntimeState !== null && localRuntimeState !== undefined) {
       // Validate the local representation too: accepting an arbitrary mutable
       // local value would make the monotonic fence meaningless.
-      validateRuntimeState(localRuntimeState, { snapshots, localState: null });
+      validateRuntimeState(localRuntimeState, { snapshots, localState: null, expectedMatchFormat: value.matchFormat });
     }
     const shieldByUnit = {};
     for (const unitId of unitIds) {
@@ -80,7 +83,7 @@
       matchFormat,
       shieldByUnit: Object.fromEntries(unitIds.map(unitId => [unitId, { currentShield: shieldStateByUnit[unitId]?.currentShield }]))
     };
-    return validateRuntimeState(raw, { snapshots });
+    return validateRuntimeState(raw, { snapshots, expectedMatchFormat: matchFormat });
   }
   function restoreShieldState(runtimeState, context) {
     const checked = validateRuntimeState(runtimeState, context);

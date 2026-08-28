@@ -6101,7 +6101,8 @@
     }
     const checked = firebaseOnlineGearRuntimeStateApi().restoreShieldState(snap.gearRuntimeState, {
       snapshots: online.battleGearSnapshotsByUnit,
-      localState: online.battleGearShieldStateByUnit
+      localState: online.battleGearShieldStateByUnit,
+      expectedMatchFormat: matchFormat
     });
     return checked;
   }

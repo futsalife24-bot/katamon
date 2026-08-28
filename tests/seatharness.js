@@ -792,6 +792,12 @@ const HOOK = `
       applyCharacter(unitById('p1'), p1Key);
       applyCharacter(unitById('e1'), e1Key || p1Key);
     },
+    setCharacterForUnitForTest: (unitId, characterId) => {
+      const unit = unitById(unitId);
+      if (!unit || !CHARACTER_LIST.includes(characterId)) return false;
+      applyCharacter(unit, characterId);
+      return unit.character;
+    },
     // 素材の向きを加味した「世界で左を向いているか」。描画が使う式と同じもの。
     facesLeftInWorld: (id) => unitFacesLeftInWorld(unitById(id)),
     carveForTest: (x, y, r) => carveCrater(x, y, r),
@@ -1478,7 +1484,13 @@ const HOOK = `
       clearCpuPlan: () => { cpuPhase = null; cpuMoveDir = 0; cpuMoveRemaining = 0; cpuThinkTimer = -1; },
       setUnitControl: (id, control) => { const u = unitById(id); if (u) u.control = control; },
       unitControl: (id) => { const u = unitById(id); return u ? u.control : null; },
-      setActiveUnitForTest: (id) => { const i = turnOrder.indexOf(id); if (i >= 0) activeIndex = i; return activeUnit().id; }
+      setActiveUnitForTest: (id) => { const i = turnOrder.indexOf(id); if (i >= 0) activeIndex = i; return activeUnit().id; },
+      setTurnOrderForTest: (ids) => {
+        if (!Array.isArray(ids) || ids.length !== units.length || new Set(ids).size !== ids.length
+            || ids.some(id => !unitById(id))) return false;
+        turnOrder = ids.slice(); activeIndex = 0;
+        return turnOrder.slice();
+      }
     }),
     setPhase: (p) => { gamePhase = p; },
     phase: () => gamePhase,

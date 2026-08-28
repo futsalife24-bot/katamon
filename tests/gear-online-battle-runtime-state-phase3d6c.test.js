@@ -74,6 +74,8 @@ test('pure v2 runtime state is exact, frozen, format-bound and validates canonic
   assert.throws(() => runtime.validateRuntimeState(bad, { snapshots }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
   const future = structuredClone(state); future.version = 3;
   assert.throws(() => runtime.validateRuntimeState(future, { snapshots }), error => error?.code === 'UNSUPPORTED_ONLINE_GEAR_RUNTIME_STATE');
+  const wrongFormat = { version: 2, matchFormat: '2v2', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 }, p2: { currentShield: 0 }, e2: { currentShield: 0 } } };
+  assert.throws(() => runtime.validateRuntimeState(wrongFormat, { snapshots, localState: null, expectedMatchFormat: '1v1' }), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
 });
 
 test('Gearless Gear ON serializes explicit zero runtime Shield while Gear OFF keeps the legacy state shape', () => {
