@@ -644,6 +644,7 @@
 <script src="shared/gear-online-protocol.js"></script>
 <script src="shared/gear-online-lobby-protocol.js"></script>
 <script src="shared/gear-online-firebase-wire.js"></script>
+<script src="shared/firebase-online-reentry.js"></script>
 <script src="shared/gear-online-battle-start.js"></script>
 <script src="shared/gear-online-battle-damage.js"></script>
 <script src="shared/gear-online-battle-rng.js"></script>
@@ -10352,6 +10353,266 @@
     return estimateFirebaseServerNow(receivedAt, iatMs - receivedAt) === null ? null : iatMs - receivedAt;
   }
   let firebaseAuth = null;
+  let pendingFirebaseReentry = null;
+  let firebaseReentryBootstrapStarted = false;
+  function firebaseReentryApi() {
+    const api = globalThis.KatamonFirebaseOnlineReentry;
+    if (!api?.createCredential || !api?.validateRoomIdentity || !api?.isDefinitiveRefreshError) {
+      throw Object.assign(new Error('Firebase re-entry moduleがありません'), { code: 'FIREBASE_REENTRY_MODULE_MISSING' });
+    }
+    return api;
+  }
+  function firebaseReentryStorage() {
+    try {
+      if (globalThis.localStorage && typeof globalThis.localStorage.getItem === 'function') return globalThis.localStorage;
+    } catch (_) { /* explicit failure below */ }
+    throw Object.assign(new Error('Firebase re-entry storageを利用できません'), { code: 'FIREBASE_REENTRY_STORAGE_UNAVAILABLE' });
+  }
+  function loadFirebaseReentryCredential(storage = firebaseReentryStorage()) {
+    const api = firebaseReentryApi();
+    let raw;
+    try { raw = storage.getItem(api.FIREBASE_REENTRY_STORAGE_KEY); } catch (_) { throw Object.assign(new Error('Firebase re-entry credentialを読めません'), { code: 'FIREBASE_REENTRY_STORAGE_READ_FAILED' }); }
+    if (raw === null) return null;
+    try { return api.parseCredential(raw); }
+    catch (_) {
+      // A malformed local record is never an authority. Treat it exactly like
+      // an absent record so the normal new-anonymous-auth path stays usable.
+      try { storage.removeItem(api.FIREBASE_REENTRY_STORAGE_KEY); } catch (_) {}
+      return null;
+    }
+  }
+  function saveFirebaseReentryCredential(record, storage = firebaseReentryStorage()) {
+    const api = firebaseReentryApi();
+    const encoded = api.serializeCredential(record);
+    try { storage.setItem(api.FIREBASE_REENTRY_STORAGE_KEY, encoded); } catch (_) { throw Object.assign(new Error('Firebase re-entry credentialを保存できません'), { code: 'FIREBASE_REENTRY_STORAGE_WRITE_FAILED' }); }
+    let readBack;
+    try { readBack = storage.getItem(api.FIREBASE_REENTRY_STORAGE_KEY); } catch (_) { throw Object.assign(new Error('Firebase re-entry credentialを確認できません'), { code: 'FIREBASE_REENTRY_STORAGE_READ_BACK_FAILED' }); }
+    if (readBack !== encoded) throw Object.assign(new Error('Firebase re-entry credentialの保存確認に失敗しました'), { code: 'FIREBASE_REENTRY_STORAGE_READ_BACK_MISMATCH' });
+    return api.parseCredential(encoded);
+  }
+  function clearFirebaseReentryCredential(storage = firebaseReentryStorage()) {
+    const key = firebaseReentryApi().FIREBASE_REENTRY_STORAGE_KEY;
+    try { storage.removeItem(key); } catch (_) { return false; }
+    return true;
+  }
+  function createFirebaseReentryCredential({ auth, room, roomCode, seat, savedAt = Date.now() }) {
+    const persisted = inspectPersistedFirebaseRoom(room);
+    if (!auth || !persisted.slots?.[seat] || persisted.slots[seat].uid !== auth.uid) {
+      throw Object.assign(new Error('Firebase re-entryの席を確認できません'), { code: 'FIREBASE_REENTRY_SEAT_MISMATCH' });
+    }
+    return firebaseReentryApi().createCredential({
+      uid: auth.uid,
+      refreshToken: auth.refreshToken,
+      roomCode,
+      seat,
+      roomCreatedAt: persisted.createdAt,
+      hostUid: persisted.hostUid,
+      lastConfirmedExpiresAt: persisted.expiresAt,
+      savedAt
+    });
+  }
+  function persistFirebaseReentryCredential(context, storage = firebaseReentryStorage()) {
+    return saveFirebaseReentryCredential(createFirebaseReentryCredential(context), storage);
+  }
+  function updateActiveFirebaseReentryCredential() {
+    if (!online || online.kind !== 'firebase' || !online.auth?.refreshToken) return null;
+    let existing;
+    try { existing = loadFirebaseReentryCredential(); } catch (_) { return null; }
+    if (!existing || existing.uid !== online.auth.uid || existing.roomCode !== online.room || existing.seat !== online.seat
+        || existing.roomCreatedAt !== online.roomCreatedAt || existing.hostUid !== online.roomHostUid) return null;
+    try {
+      return saveFirebaseReentryCredential(firebaseReentryApi().rotateCredential(existing, {
+        refreshToken: online.auth.refreshToken,
+        lastConfirmedExpiresAt: online.roomExpiresAt,
+        savedAt: Date.now()
+      }));
+    } catch (_) { return null; }
+  }
+  function firebaseReentryLockManager(override = null) {
+    if (override && typeof override.request === 'function') return override;
+    try {
+      if (globalThis.navigator?.locks && typeof globalThis.navigator.locks.request === 'function') return globalThis.navigator.locks;
+    } catch (_) { /* explicit failure below */ }
+    throw Object.assign(new Error('Firebase re-entryにはWeb Lockが必要です'), { code: 'FIREBASE_REENTRY_LOCK_UNAVAILABLE' });
+  }
+  async function acquireFirebaseReentryLease(credential, lockManager = null) {
+    const checked = firebaseReentryApi().validateCredential(credential);
+    const name = `katamon_firebase_reentry:${checked.roomCode}:${checked.seat}:${checked.uid}`;
+    const manager = firebaseReentryLockManager(lockManager);
+    let releaseHold = null;
+    let started = false;
+    let acquiredSettled = false;
+    let resolveAcquired;
+    let rejectAcquired;
+    const acquired = new Promise((resolve, reject) => { resolveAcquired = resolve; rejectAcquired = reject; });
+    const resolveAcquiredOnce = () => {
+      if (acquiredSettled) return;
+      acquiredSettled = true;
+      resolveAcquired();
+    };
+    const rejectAcquiredOnce = error => {
+      if (acquiredSettled) return;
+      acquiredSettled = true;
+      rejectAcquired(error);
+    };
+    const hold = new Promise(resolve => { releaseHold = resolve; });
+    let request;
+    try {
+      request = manager.request(name, { mode: 'exclusive', ifAvailable: true }, async lock => {
+        if (lock == null) {
+          rejectAcquiredOnce(Object.assign(new Error('このroom/seatは別タブで使用中です'), { code: 'FIREBASE_REENTRY_ALREADY_ACTIVE' }));
+          return;
+        }
+        started = true;
+        resolveAcquiredOnce();
+        await hold;
+      });
+    } catch (_) {
+      throw Object.assign(new Error('Firebase re-entry lockを取得できません'), { code: 'FIREBASE_REENTRY_LOCK_UNAVAILABLE' });
+    }
+    Promise.resolve(request).then(() => {
+      if (!started) rejectAcquiredOnce(Object.assign(new Error('このroom/seatは別タブで使用中です'), { code: 'FIREBASE_REENTRY_ALREADY_ACTIVE' }));
+    }).catch(error => {
+      if (!started) rejectAcquiredOnce(error && error.code ? error : Object.assign(new Error('Firebase re-entry lockを取得できません'), { code: 'FIREBASE_REENTRY_LOCK_UNAVAILABLE' }));
+    });
+    await acquired;
+    let released = false;
+    return Object.freeze({
+      name,
+      release() {
+        if (released) return false;
+        released = true;
+        releaseHold();
+        return true;
+      }
+    });
+  }
+  function releaseFirebaseReentryLease(lease) {
+    if (lease && typeof lease.release === 'function') lease.release();
+  }
+  function clearPendingFirebaseReentry({ clearCredential = false } = {}) {
+    if (pendingFirebaseReentry) releaseFirebaseReentryLease(pendingFirebaseReentry.reentryLease);
+    pendingFirebaseReentry = null;
+    if (clearCredential) {
+      try { clearFirebaseReentryCredential(); } catch (_) {}
+    }
+  }
+  async function firebaseRefreshStoredReentryAuth(credential) {
+    const api = firebaseReentryApi();
+    let response;
+    try {
+      response = await firebaseFetchWithTimeout(`${FIREBASE_REFRESH_URL}?key=${encodeURIComponent(FIREBASE.apiKey)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(credential.refreshToken)}`
+      });
+    } catch (_) {
+      throw Object.assign(new Error('Firebase re-entryの認証更新を再試行できます'), { code: 'FIREBASE_REENTRY_REFRESH_TRANSIENT' });
+    }
+    if (!response.ok) {
+      let firebaseErrorCode = '';
+      try { firebaseErrorCode = (await response.json())?.error?.message || ''; } catch (_) {}
+      if (api.isDefinitiveRefreshError(response.status, firebaseErrorCode)) {
+        throw Object.assign(new Error('Firebase re-entry credentialが無効です'), { code: 'FIREBASE_REENTRY_REFRESH_INVALID' });
+      }
+      throw Object.assign(new Error('Firebase re-entryの認証更新を再試行できます'), { code: 'FIREBASE_REENTRY_REFRESH_TRANSIENT' });
+    }
+    let data;
+    try { data = await response.json(); } catch (_) { throw Object.assign(new Error('Firebase re-entryの認証応答が不正です'), { code: 'FIREBASE_REENTRY_REFRESH_TRANSIENT' }); }
+    const receivedAt = Date.now();
+    const serverTimeOffset = firebaseServerTimeOffsetFromToken(data.id_token, receivedAt);
+    if (serverTimeOffset === null || typeof data.user_id !== 'string' || typeof data.id_token !== 'string' || typeof data.refresh_token !== 'string') {
+      throw Object.assign(new Error('Firebase re-entryの認証応答が不正です'), { code: 'FIREBASE_REENTRY_REFRESH_TRANSIENT' });
+    }
+    if (data.user_id !== credential.uid) throw Object.assign(new Error('Firebase re-entryのUIDが一致しません'), { code: 'FIREBASE_REENTRY_UID_MISMATCH' });
+    return Object.freeze({ uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: receivedAt + Number(data.expires_in || 3600) * 1000, serverTimeOffset });
+  }
+  async function firebaseReadRoomForReentry(roomCode, auth) {
+    let response;
+    try { response = await firebaseFetchWithTimeout(firebaseRequestUrl(`rooms/${roomCode}`, auth)); }
+    catch (_) { throw Object.assign(new Error('Firebase roomの再確認を再試行できます'), { code: 'FIREBASE_REENTRY_ROOM_TRANSIENT' }); }
+    if (!response.ok) {
+      if ([408, 429, 500, 502, 503, 504].includes(response.status) || response.status >= 500) {
+        throw Object.assign(new Error('Firebase roomの再確認を再試行できます'), { code: 'FIREBASE_REENTRY_ROOM_TRANSIENT' });
+      }
+      throw Object.assign(new Error('Firebase roomへ戻れません'), { code: 'FIREBASE_REENTRY_ROOM_UNAVAILABLE' });
+    }
+    let room;
+    try { room = await response.json(); } catch (_) { throw Object.assign(new Error('Firebase room応答が不正です'), { code: 'FIREBASE_REENTRY_ROOM_TRANSIENT' }); }
+    if (!room || typeof room !== 'object') throw Object.assign(new Error('Firebase roomは存在しません'), { code: 'FIREBASE_REENTRY_ROOM_UNAVAILABLE' });
+    return room;
+  }
+  function assertNoPendingFirebaseReentry() {
+    if (pendingFirebaseReentry) {
+      throw Object.assign(new Error('復帰候補を確認中です。先に復帰を完了または破棄してください。'), { code: 'FIREBASE_REENTRY_PENDING' });
+    }
+  }
+  async function refreshFirebaseReentryGuestHeartbeat(candidate) {
+    if (candidate.seat === 'p1') return false;
+    try {
+      const response = await firebaseFetchWithTimeout(firebaseRequestUrl(`rooms/${candidate.roomCode}/slots/${candidate.seat}/seenAt`, candidate.auth), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ '.sv': 'timestamp' })
+      });
+      return response.ok;
+    } catch (_) { return false; }
+  }
+  async function restoreFirebaseRoomSeatReentry({ storage = firebaseReentryStorage(), lockManager = null } = {}) {
+    if (pendingFirebaseReentry) return pendingFirebaseReentry;
+    const api = firebaseReentryApi();
+    const credential = loadFirebaseReentryCredential(storage);
+    if (!credential) return null;
+    let lease = null;
+    try {
+      lease = await acquireFirebaseReentryLease(credential, lockManager);
+      const auth = await firebaseRefreshStoredReentryAuth(credential);
+      // Firebase refresh tokens are rotated. Preserve the returned token as
+      // soon as the UID has been exact-bound, before any room GET can fail.
+      const refreshedCredential = saveFirebaseReentryCredential(api.rotateCredential(credential, {
+        refreshToken: auth.refreshToken,
+        lastConfirmedExpiresAt: credential.lastConfirmedExpiresAt,
+        savedAt: Date.now()
+      }), storage);
+      const room = await firebaseReadRoomForReentry(refreshedCredential.roomCode, auth);
+      let persisted;
+      try { persisted = inspectPersistedFirebaseRoom(room); }
+      catch (_) { throw Object.assign(new Error('Firebase room identityを確認できません'), { code: 'FIREBASE_REENTRY_ROOM_IDENTITY_MISMATCH' }); }
+      const identity = api.validateRoomIdentity(persisted, refreshedCredential, { protocol: FIREBASE_PROTO_VERSION, serverNow: firebaseServerNow(auth) });
+      const updatedCredential = saveFirebaseReentryCredential(api.rotateCredential(refreshedCredential, {
+        refreshToken: auth.refreshToken,
+        lastConfirmedExpiresAt: identity.expiresAt,
+        savedAt: Date.now()
+      }), storage);
+      const candidate = Object.freeze({
+        auth,
+        room: persisted,
+        roomCode: identity.roomCode,
+        seat: identity.seat,
+        role: identity.role,
+        roundId: identity.roundId,
+        roundStatus: identity.roundStatus,
+        credential: updatedCredential,
+        reentryLease: lease
+      });
+      firebaseAuth = auth;
+      pendingFirebaseReentry = candidate;
+      void refreshFirebaseReentryGuestHeartbeat(candidate);
+      return candidate;
+    } catch (error) {
+      const code = error?.code || 'FIREBASE_REENTRY_FAILED';
+      if (['FIREBASE_REENTRY_REFRESH_INVALID', 'FIREBASE_REENTRY_UID_MISMATCH', 'FIREBASE_REENTRY_ROOM_UNAVAILABLE', 'FIREBASE_REENTRY_ROOM_PROTOCOL_MISMATCH', 'FIREBASE_REENTRY_ROOM_IDENTITY_MISMATCH', 'FIREBASE_REENTRY_ROOM_EXPIRED', 'FIREBASE_REENTRY_SEAT_MISMATCH', 'FIREBASE_REENTRY_ROUND_INVALID'].includes(code)) {
+        clearFirebaseReentryCredential(storage);
+      }
+      releaseFirebaseReentryLease(lease);
+      throw error;
+    }
+  }
+  function scheduleFirebaseRoomSeatReentryBootstrap() {
+    if (firebaseReentryBootstrapStarted) return;
+    firebaseReentryBootstrapStarted = true;
+    Promise.resolve().then(() => restoreFirebaseRoomSeatReentry()).catch(() => {
+      // A candidate failure intentionally does not create a replacement UID.
+      // The next explicit ONLINE action decides whether a new account is needed.
+    });
+  }
   async function ensureFirebaseAuth(force = false) {
     const now = Date.now();
     if (!force && firebaseAuth && firebaseAuth.idToken && Number.isFinite(firebaseAuth.serverTimeOffset) && firebaseAuth.expiresAt > now + 60 * 1000) return firebaseAuth;
@@ -10371,11 +10632,21 @@
         if (serverTimeOffset === null) throw new Error('token-time-invalid');
         const refreshed = { uid: data.user_id, idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: receivedAt + Number(data.expires_in || 3600) * 1000, serverTimeOffset };
         Object.assign(firebaseAuth, refreshed);
+        updateActiveFirebaseReentryCredential();
         return firebaseAuth;
       } catch (err) {
         // firebaseAuthは残す。30秒後のrefreshFirebaseTransport再試行も同じUIDで行える。
         throw new Error(err && err.message === 'token-time-invalid' ? '認証の時刻情報を確認できません。端末の日時と通信を確認して再試行します。' : '認証の更新に失敗しました。通信を確認して再試行します。');
       }
+    }
+    // A surviving room-seat credential must be resolved before a new anonymous
+    // account can be created. Failing closed prevents a reload from silently
+    // replacing the UID that owns the existing Firebase seat.
+    const storedReentry = loadFirebaseReentryCredential();
+    if (storedReentry) {
+      const candidate = await restoreFirebaseRoomSeatReentry();
+      if (candidate?.auth) return candidate.auth;
+      throw Object.assign(new Error('Firebase re-entryを確認できません'), { code: 'FIREBASE_REENTRY_FAILED' });
     }
     // 新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ。
     try {
@@ -12287,6 +12558,11 @@
     const settings = validatePersistedFirebaseSettings(room.settings, visibility);
     if (visibility === 'public' && settings.gearCapability) throw new Error('公開部屋ではGearを有効にできません');
     return Object.freeze({
+      protocol: room.protocol,
+      hostUid: room.hostUid,
+      createdAt: room.createdAt,
+      expiresAt: room.expiresAt,
+      round: room.round,
       visibility,
       settings,
       settingsIdentity: firebaseSettingsIdentity(settings),
@@ -12785,7 +13061,11 @@
   function isFirebaseHost() { return !!(online && online.kind === 'firebase' && online.role === 'host'); }
   function isFirebasePlayer() { return !!(online && online.kind === 'firebase' && firebasePlayerSeats().includes(online.seat)); }
   async function createFirebaseRoom(requestedCode = null, settings = null, options = {}) {
+    assertNoPendingFirebaseReentry();
     const auth = await ensureFirebaseAuth();
+    // ensureFirebaseAuth can restore a persisted room-seat candidate while it
+    // awaits Firebase. Do not create a second session after that restoration.
+    assertNoPendingFirebaseReentry();
     const now = firebaseServerNow(auth);
     if (!options || typeof options !== 'object' || Array.isArray(options)
         || Object.keys(options).some(key => key !== 'visibility' && key !== 'gearMode')) throw new Error('部屋作成設定が不正です');
@@ -12807,15 +13087,27 @@
       };
       try {
         await firebaseRequest(`rooms/${code}`, auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(room) });
-        return { code, auth, room, seat: 'p1' };
-      } catch (_) { /* 衝突と時刻ずれを含む。数回だけ別コードを試す。 */ }
+      } catch (_) { /* 衝突と時刻ずれを含む。数回だけ別コードを試す。 */ continue; }
+      // ServerValue.TIMESTAMPを解決した正規roomを読む。re-entry credentialは
+      // auth取得だけでは保存せず、このroom/seatの権威確認後に限る。
+      const latest = await firebaseRequest(`rooms/${code}`, auth);
+      const persisted = inspectPersistedFirebaseRoom(latest);
+      if (!persisted.slots?.p1 || persisted.slots.p1.uid !== auth.uid) throw new Error('作成したFirebase席を確認できません');
+      const credential = persistFirebaseReentryCredential({ auth, room: persisted, roomCode: code, seat: 'p1' });
+      const reentryLease = await acquireFirebaseReentryLease(credential);
+      return { code, auth, room: persisted, seat: 'p1', reentryLease };
     }
     throw new Error('部屋を作れませんでした。端末の日時・通信を確認してお試しください。');
   }
   async function claimFirebaseRoom(code, seatOrder = ['e1', 's1', 's2']) {
+    assertNoPendingFirebaseReentry();
     const auth = await ensureFirebaseAuth();
+    // The same post-auth fence prevents a restored candidate from racing into
+    // an empty-seat claim in another room.
+    assertNoPendingFirebaseReentry();
     firebaseServerNow(auth); // オフセットが無い/不正なら入室前に止める。
     let seat = null;
+    let reentryCredentialSaved = false;
     try {
       // Rulesは非memberのreadを許可しない。e1→s1→s2を条件付きPUTで確保してから読む。
       for (const candidate of seatOrder) {
@@ -12828,11 +13120,15 @@
       const latest = await firebaseRequest(`rooms/${code}`, auth);
       if (!latest || latest.protocol !== FIREBASE_PROTO_VERSION || !latest.round || latest.round.status !== 'lobby'
           || !latest.slots || !latest.slots[seat] || latest.slots[seat].uid !== auth.uid) throw new Error('この部屋は参加受付中ではありません');
-      inspectPersistedFirebaseRoom(latest);
-      return { code, auth, room: latest, seat };
+      const persisted = inspectPersistedFirebaseRoom(latest);
+      const credential = persistFirebaseReentryCredential({ auth, room: persisted, roomCode: code, seat });
+      reentryCredentialSaved = true;
+      const reentryLease = await acquireFirebaseReentryLease(credential);
+      return { code, auth, room: persisted, seat, reentryLease };
     } catch (err) {
       // member化後の検証に失敗した時だけ、自分が取った席を戻す。ほかの席には一切触れない。
       if (seat) await firebaseRequest(`rooms/${code}/slots/${seat}`, auth, { method: 'DELETE' }).catch(() => {});
+      if (reentryCredentialSaved) clearFirebaseReentryCredential();
       throw err;
     }
   }
@@ -12903,7 +13199,7 @@
   async function joinFirebaseRoomFromBrowser(code) {
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('部屋に参加しています…');
-    try { const { auth, room, seat } = await claimFirebaseRoom(code, ['e1']); if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code; beginFirebaseOnline('guest', code, auth, selectedOnlineCharacter(), room, seat); }
+    try { const { auth, room, seat, reentryLease } = await claimFirebaseRoom(code, ['e1']); if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code; beginFirebaseOnline('guest', code, auth, selectedOnlineCharacter(), room, seat, null, reentryLease); }
     catch (err) { onlineLobbyStatus(err.message || 'この部屋には入れませんでした。一覧を更新してください。'); }
     finally { setOnlineLobbyBusy(false); }
   }
@@ -12956,6 +13252,10 @@
       await firebaseRequest(`rooms/${leasing.room}/expiresAt`, leasing.auth, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next)
       });
+      if (online === leasing) {
+        leasing.roomExpiresAt = next;
+        updateActiveFirebaseReentryCredential();
+      }
     } catch (_) { /* 次の更新に任せる */ }
     // 待ち続けている間は案内も載せ直す。載せっぱなしにすると期限で落ちて拾われなくなる。
     if (online === leasing && leasing.quickWaiting && leasing.quickListed) {
@@ -13107,7 +13407,7 @@
     logOnlineEvent({ type: 'seatLost', seat: online.seat });
     onlineLobbyStatus(reason);
     // 席はもう自分のものではないので、返しに行かない(消しに行っても権限が無い)。
-    endOnline(false, false);
+    endOnline(false, false, false, true);
     showTitleNotice(reason);
     returnToTitleFromResult();
   }
@@ -13262,7 +13562,7 @@
       if (online) online.authRefreshing = false;
     }
   }
-  function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null) {
+  function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null, reentryLease = null) {
     const persisted = inspectPersistedFirebaseRoom(room);
     if (!persisted.slots[seat] || persisted.slots[seat].uid !== auth.uid) throw new Error('自分のFirebase席を確認できません');
     const transport = makeFirebaseTransport(code, auth, room && room.round && room.round.id, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
@@ -13273,6 +13573,7 @@
     selectedCustomAdapter = null;
     online = {
       kind: 'firebase', role, room: code, auth, transport, clientId: auth.uid,
+      reentryLease, roomCreatedAt: persisted.createdAt, roomHostUid: persisted.hostUid, roomExpiresAt: persisted.expiresAt,
       seat, peerSeat: seat === 'p1' ? 'e1' : 'p1',
       // 2vs2かどうかは settings が届いてから決まる。入室直後は1vs1として扱い、
       // 設定を受け取った時点で renderFirebaseLobby 側が席の役割を出し直す。
@@ -14145,6 +14446,8 @@
     online.acceptedSettingsIdentity = persisted.settingsIdentity;
     online.persistedRosterIdentity = persisted.rosterIdentity;
     online.settingsAuthorityBlocked = false;
+    online.roomExpiresAt = persisted.expiresAt;
+    updateActiveFirebaseReentryCredential();
     syncFirebaseParticipantRole();
     for (const seat of takenOver) applyFirebaseSeatTakeover(seat);
     syncQuickMatchListing();
@@ -14466,7 +14769,7 @@
     cancelLeaveFirebaseLobbyConfirm();
     if (!online || online.kind !== 'firebase' || !canLeaveFirebaseLobby(online.phase, !!online.protocolError)) { onlineLobbyStatus('対戦中はメニューから退出してください。'); return; }
     const leaving = online;
-    endOnline(false, false);
+    endOnline(false, false, false, true);
     // 結果ロビーからの退出も戦闘画面を経由している。gamePhaseをtitleへ戻してからsyncBgmを呼べば
     // ステージ曲を止めてタイトル曲へ戻す判断は director 側がやってくれる。
     gamePhase = 'title'; syncBgm();
@@ -14485,6 +14788,7 @@
   function releaseFirebaseRoomOnFatalExit() {
     if (!online || online.kind !== 'firebase') return;
     const leaving = online;
+    clearPendingFirebaseReentry({ clearCredential: true });
     const path = leaving.role === 'host' ? `rooms/${leaving.room}` : `rooms/${leaving.room}/slots/${leaving.seat}`;
     firebaseRequest(path, leaving.auth, { method: 'DELETE' }).catch(() => {});
   }
@@ -14521,13 +14825,15 @@
     return true;
   }
 
-  function endOnline(sendBye, cleanup = true, skipDeferredCleanup = false) {
+  function endOnline(sendBye, cleanup = true, skipDeferredCleanup = false, clearReentryCredential = false) {
     if (!online) return;
     const leaving = online;
     if (leaving.authRefreshTimer) clearTimeout(leaving.authRefreshTimer);
     if (leaving.authRetryTimer) clearTimeout(leaving.authRetryTimer);
     if (leaving.roomLeaseTimer) clearTimeout(leaving.roomLeaseTimer);
     if (leaving.seatHeartbeatTimer) clearTimeout(leaving.seatHeartbeatTimer);
+    if (leaving.kind === 'firebase') releaseFirebaseReentryLease(leaving.reentryLease);
+    if (clearReentryCredential) clearPendingFirebaseReentry({ clearCredential: true });
     // どの抜け方でもここを通るので、すぐ対戦の案内の取り下げは1箇所にまとめる。
     // 間に合わなくても案内は期限で消え、拾った側は席の確保に失敗して次へ進むだけ。
     if (leaving.kind === 'firebase' && leaving.quickListed) unpublishOpenRoom(leaving.room, leaving.auth);
@@ -20969,7 +21275,7 @@
         const path = leaving.role === 'host' ? `rooms/${leaving.room}` : `rooms/${leaving.room}/slots/${leaving.seat}`;
         return firebaseRequest(path, leaving.auth, { method: 'DELETE' });
       }).catch(() => {});
-      endOnline(false, false);
+      endOnline(false, false, false, true);
       hasSuspendedSave = false;
       returnToTitleFromResult();
       return;
@@ -22610,14 +22916,14 @@
     try {
       const settings = { ...defaultLobbySettings(), format };
       const visibility = isPublic ? 'public' : 'private';
-      const { code, auth, room, seat } = await createFirebaseRoom(null, settings, {
+      const { code, auth, room, seat, reentryLease } = await createFirebaseRoom(null, settings, {
         visibility,
         gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF
       });
       if (isPublic) await publishOpenRoom(code, auth, format, roomName, 1, room.visibility);
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
-      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat, isPublic ? { quickFormat: format, quickRoomName: roomName, quickWaiting: true, quickListed: true } : null);
+      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat, isPublic ? { quickFormat: format, quickRoomName: roomName, quickWaiting: true, quickListed: true } : null, reentryLease);
     } catch (err) { onlineLobbyStatus(err.message || '部屋を作れませんでした。'); }
     finally { setOnlineLobbyBusy(false); }
   });
@@ -22633,11 +22939,11 @@
     setOnlineLobbyBusy(true); onlineLobbyStatus('対戦相手を探しています…');
     try {
       const quick = await joinQuickFirebaseRoom('1v1');
-      const { code, auth, room, seat, role } = quick;
+      const { code, auth, room, seat, role, reentryLease } = quick;
       // 待っている間も合言葉は使える。呼びたい相手が居るなら、これを伝えれば直接来てもらえる。
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
-      beginFirebaseOnline(role, code, auth, selectedOnlineCharacter(), room, seat, quick);
+      beginFirebaseOnline(role, code, auth, selectedOnlineCharacter(), room, seat, quick, reentryLease);
       setOnlineLobbyBusy(false);
     } catch (err) {
       setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '簡単対戦を始められませんでした。');
@@ -22648,14 +22954,14 @@
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('匿名で接続し、部屋を作っています…');
     try {
-      const { code, auth, room, seat } = await createFirebaseRoom(null, null, {
+      const { code, auth, room, seat, reentryLease } = await createFirebaseRoom(null, null, {
         visibility: 'private',
         gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF
       });
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       // 発行後は自分で書き換えるものではないので、編集できない見た目にする
       if (onlineRoomInput) { onlineRoomInput.value = code; onlineRoomInput.readOnly = true; }
-      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat);
+      beginFirebaseOnline('host', code, auth, selectedOnlineCharacter(), room, seat, null, reentryLease);
       setOnlineLobbyBusy(false);
     } catch (err) {
       setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '部屋を作れませんでした。');
@@ -22668,11 +22974,11 @@
     if (onlineRoomInput) onlineRoomInput.value = code;
     setOnlineLobbyBusy(true); onlineLobbyStatus('部屋に参加しています…');
     try {
-      const { auth, room, seat } = await claimFirebaseRoom(code);
+      const { auth, room, seat, reentryLease } = await claimFirebaseRoom(code);
       if (onlineRoomCodeEl) onlineRoomCodeEl.textContent = code;
       // 入れた後だけ編集を止める。失敗時は打ち直せないと困るので触らない。
       if (onlineRoomInput) onlineRoomInput.readOnly = true;
-      beginFirebaseOnline(seat === 'e1' ? 'guest' : 'spectator', code, auth, selectedOnlineCharacter(), room, seat);
+      beginFirebaseOnline(seat === 'e1' ? 'guest' : 'spectator', code, auth, selectedOnlineCharacter(), room, seat, null, reentryLease);
       setOnlineLobbyBusy(false);
     } catch (err) {
       setOnlineLobbyBusy(false); onlineLobbyStatus(err.message || '部屋に入れませんでした。');
@@ -25121,6 +25427,9 @@
   window.addEventListener('pageshow', () => {
     if (!document.hidden) resumeAudioAfterVisible();
   });
+  // This validates only an identity/room-seat candidate and its exclusive
+  // lease. Battle reconstruction remains exclusively Phase 3D-8B3 work.
+  scheduleFirebaseRoomSeatReentryBootstrap();
 
   // ===== 端末の「戻る」操作 =====
   // CloseWatcher対応環境ではAndroidの戻るジェスチャーを履歴遷移より先に受ける。
