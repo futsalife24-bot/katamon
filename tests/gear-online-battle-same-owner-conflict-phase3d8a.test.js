@@ -72,9 +72,9 @@ test('production Firebase 2v2 start accepts same-owner distinct Gear and rejects
   const before = kt.snapshot(); fails('ONLINE_GEAR_2V2_SAME_OWNER_GEAR_CONFLICT', () => wiring.createBattleStartState(build(true))); assert.deepEqual(kt.snapshot(), before, 'conflict rejects before HP/Fuel or runtime mutation');
 });
 
-test('manifest v5 fences v4 while core, snapshot and Firebase wire remain unchanged', () => {
+test('manifest v6 fences v5 while core, snapshot and Firebase wire remain unchanged', () => {
   const { reveals, manifest } = stateFor(); const previous = structuredClone(manifest); previous.version = 4; fails('INVALID_ONLINE_GEAR_START_MANIFEST', () => lobby.validateStartGearManifest(previous, { participantReveals: reveals }));
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5); assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1); assert.equal(snapshots.GEAR_BATTLE_SNAPSHOT_VERSION, 1); assert.equal(wire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 6); assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1); assert.equal(snapshots.GEAR_BATTLE_SNAPSHOT_VERSION, 1); assert.equal(wire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
 });
 
 console.log(`gear-online-battle-same-owner-conflict-phase3d8a: ${passed}/5 passed`);

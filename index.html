@@ -6039,8 +6039,7 @@
   }
 
   // ONLINE Shield is match-local runtime state. The immutable Battle Gear
-  // Snapshot remains the only stat authority and never stores the remaining
-  // Shield amount. Phase 3D-6C will define reconnect serialization separately.
+  // Snapshot remains the only stat authority and never stores mutable runtime.
   function firebaseOnlineGearBattleUnitIds() {
     const seatUnitMap = globalThis.KatamonGearOnlineProtocol?.ONLINE_GEAR_SEAT_UNIT_MAP;
     if (!seatUnitMap) throw new Error('ONLINE_GEAR_PROTOCOL_UNAVAILABLE');
@@ -6072,7 +6071,7 @@
 
   function firebaseOnlineGearRuntimeStateApi() {
     const api = globalThis.KatamonGearOnlineBattleRuntimeState;
-    if (!api?.createRuntimeState || !api?.restoreShieldState) {
+    if (!api?.createRuntimeState || !api?.restoreRuntimeState) {
       throw Object.assign(new Error('ONLINE Gear runtime state moduleがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MODULE_MISSING' });
     }
     return api;
@@ -6080,11 +6079,12 @@
 
   function createFirebaseOnlineGearRuntimeState() {
     if (!firebaseGearEnabled()) return null;
-    if (!online?.battleGearSnapshotsByUnit || !online.battleGearShieldStateByUnit) {
-      throw Object.assign(new Error('ONLINE Gear Shield runtime stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
+    if (!online?.battleGearSnapshotsByUnit || !online.battleGearShieldStateByUnit || !online.battleGearRuntimeEffectsStateByUnit) {
+      throw Object.assign(new Error('ONLINE Gear runtime checkpointがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
     }
     return firebaseOnlineGearRuntimeStateApi().createRuntimeState({
       shieldStateByUnit: online.battleGearShieldStateByUnit,
+      runtimeEffectsStateByUnit: online.battleGearRuntimeEffectsStateByUnit,
       snapshots: online.battleGearSnapshotsByUnit,
       matchFormat
     });
@@ -6099,12 +6099,12 @@
     if (!hasRuntimeState || !online?.battleGearSnapshotsByUnit) {
       throw Object.assign(new Error('ONLINE Gear stateのruntime stateが不足しています'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
     }
-    const checked = firebaseOnlineGearRuntimeStateApi().restoreShieldState(snap.gearRuntimeState, {
+    return firebaseOnlineGearRuntimeStateApi().restoreRuntimeState(snap.gearRuntimeState, {
       snapshots: online.battleGearSnapshotsByUnit,
-      localState: online.battleGearShieldStateByUnit,
+      localShieldState: online.battleGearShieldStateByUnit,
+      localRuntimeEffectsState: online.battleGearRuntimeEffectsStateByUnit,
       expectedMatchFormat: matchFormat
     });
-    return checked;
   }
 
   function applyFirebaseOnlineGearNumericShieldToIncomingDamage({ ownerId, target, requestedDamage }) {
@@ -8860,9 +8860,8 @@
     return snapshot.derivedStats;
   }
 
-  // Last Stand is an in-memory, per-unit battle effect. It deliberately does
-  // not extend the Phase 3D-6C Shield runtime wire: reconnect/replay of this
-  // next-action effect belongs to Phase 3D-8.
+  // Last Stand is an in-memory, per-unit battle effect. Phase 3D-8B1 includes
+  // accepted turn-boundary checkpoints, never active-action wire state.
   function createFirebaseOnlineGearRuntimeEffectsStateByUnit(snapshots) {
     if (!snapshots) return null;
     const combat = globalThis.KatamonGearCombat;
@@ -11861,7 +11860,7 @@
       case 'state':
         // ターン境界の権威。ここで完全に揃う。
         if (online.phase !== 'playing') break;
-        let acceptedGearRuntimeState = null;
+        let acceptedGearRuntimeCheckpoint = null;
         if (online.kind === 'firebase') {
           let mismatch = '';
           if (!online.remoteAction || !online.remoteAction.resolved) mismatch = 'remoteAction';
@@ -11872,7 +11871,7 @@
               // Prepare but do not commit mutable Shield until the existing
               // snapshot application succeeds.  This leaves a malformed
               // state packet with no partial HP/terrain/turn/Shield apply.
-              acceptedGearRuntimeState = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(msg.snap);
+              acceptedGearRuntimeCheckpoint = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(msg.snap);
             } catch (error) {
               mismatch = error?.code || error?.message || 'gearRuntimeState';
             }
@@ -11905,8 +11904,9 @@
         const previousCoopBossPhase = online.kind === 'coop' ? unitById(COOP_BOSS_UNIT_ID)?.phase : null;
         logOnlineEvent({ type: 'state', ok: true, units: msg.snap.units.map(u => ({ id: u.id, hp: u.hp })) });
         applySnapshot(msg.snap, { preserveTerrain: true });
-        if (online.kind === 'firebase' && acceptedGearRuntimeState) {
-          online.battleGearShieldStateByUnit = acceptedGearRuntimeState;
+        if (online.kind === 'firebase' && acceptedGearRuntimeCheckpoint) {
+          online.battleGearShieldStateByUnit = acceptedGearRuntimeCheckpoint.shieldStateByUnit;
+          online.battleGearRuntimeEffectsStateByUnit = acceptedGearRuntimeCheckpoint.runtimeEffectsStateByUnit;
         }
         if (online.kind === 'coop') {
           setCoopOnlineSeat(online.seat);

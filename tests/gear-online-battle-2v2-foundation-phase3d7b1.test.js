@@ -112,19 +112,20 @@ test('2v2 Start rejects incomplete and non-canonical participant sets', () => {
   fails('MISSING_ONLINE_GEAR_BATTLE_REVEAL', () => start.createOnlineGearBattleStartState({ matchFormat: '2v2', manifest: incompleteManifest, participantReveals: incomplete }));
 });
 
-test('runtime Shield v2 is exact per match format and rejects v1 or a p2/e2 key mismatch', () => {
+test('runtime checkpoint v3 is exact per match format and rejects v1 or a p2/e2 key mismatch', () => {
   const state = stateFor(fourReveals());
   const shieldState = Object.fromEntries(['p1', 'e1', 'p2', 'e2'].map(unitId => [unitId, { currentShield: 0 }]));
-  const valid = runtime.createRuntimeState({ shieldStateByUnit: shieldState, snapshots: state.battleGearSnapshotsByUnit, matchFormat: '2v2' });
-  assert.deepEqual(valid, { version: 2, matchFormat: '2v2', shieldByUnit: shieldState });
+  const runtimeEffectsStateByUnit = Object.fromEntries(['p1', 'e1', 'p2', 'e2'].map(unitId => [unitId, { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 }]));
+  const valid = runtime.createRuntimeState({ shieldStateByUnit: shieldState, runtimeEffectsStateByUnit, snapshots: state.battleGearSnapshotsByUnit, matchFormat: '2v2' });
+  assert.equal(valid.version, 3); assert.deepEqual(valid.shieldByUnit, shieldState); assert.deepEqual(valid.runtimeEffectsByUnit, runtimeEffectsStateByUnit);
   assert.equal(Object.isFrozen(valid), true);
   const old = structuredClone(valid); old.version = 1;
   fails('UNSUPPORTED_ONLINE_GEAR_RUNTIME_STATE', () => runtime.validateRuntimeState(old, { snapshots: state.battleGearSnapshotsByUnit }));
   const mismatched = structuredClone(valid); delete mismatched.shieldByUnit.e2;
   fails('INVALID_ONLINE_GEAR_RUNTIME_STATE', () => runtime.validateRuntimeState(mismatched, { snapshots: state.battleGearSnapshotsByUnit }));
   const oneVsOneSnapshots = Object.freeze({ p1: state.battleGearSnapshotsByUnit.p1, e1: state.battleGearSnapshotsByUnit.e1 });
-  const oneVsOne = runtime.createRuntimeState({ shieldStateByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 } }, snapshots: oneVsOneSnapshots, matchFormat: '1v1' });
-  fails('ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH', () => runtime.validateRuntimeState(oneVsOne, { snapshots: state.battleGearSnapshotsByUnit, localState: null, expectedMatchFormat: '2v2' }));
+  const oneVsOne = runtime.createRuntimeState({ shieldStateByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 } }, runtimeEffectsStateByUnit: { p1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 }, e1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 } }, snapshots: oneVsOneSnapshots, matchFormat: '1v1' });
+  fails('ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH', () => runtime.validateRuntimeState(oneVsOne, { snapshots: state.battleGearSnapshotsByUnit, expectedMatchFormat: '2v2' }));
 });
 
 test('p2/e2 use the established deterministic RNG identity without changing the 1v1 Crit fixture', () => {
@@ -140,8 +141,8 @@ test('2v2 source boundaries are format-aware while legacy wire versions stay unc
   const stateModule = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-battle-runtime-state.js'), 'utf8');
   assert.match(index, /function firebaseOnlineGearBattleUnitIds\(/);
   assert.match(index, /function recordFirebaseOnlineGearSupportEvent\(/);
-  assert.match(stateModule, /ONLINE_GEAR_RUNTIME_STATE_VERSION = 2/);
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5);
+  assert.match(stateModule, /ONLINE_GEAR_RUNTIME_STATE_VERSION = 3/);
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 6);
   assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.equal(snapshots.GEAR_BATTLE_SNAPSHOT_VERSION, 1);
   assert.equal(require('../shared/gear-online-firebase-wire.js').ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
@@ -185,7 +186,7 @@ test('production 2v2 serializes and restores all Shield entries, while a 1v1 rec
   assert.deepEqual(Object.keys(snap.gearRuntimeState.shieldByUnit).sort(), ['e1', 'e2', 'p1', 'p2']);
   assert.deepEqual(JSON.parse(JSON.stringify(snap)).gearRuntimeState, snap.gearRuntimeState);
   wiring.setShieldStateRawForTest(null);
-  assert.deepEqual(Object.keys(wiring.prepareRuntimeState(snap)).sort(), ['e1', 'e2', 'p1', 'p2']);
+  assert.deepEqual(Object.keys(wiring.prepareRuntimeState(snap).shieldStateByUnit).sort(), ['e1', 'e2', 'p1', 'p2']);
   const before = kt.snapshot(); const invalid = structuredClone(snap);
   invalid.gearRuntimeState.matchFormat = '1v1'; invalid.gearRuntimeState.shieldByUnit = { p1: invalid.gearRuntimeState.shieldByUnit.p1, e1: invalid.gearRuntimeState.shieldByUnit.e1 };
   assert.throws(() => wiring.prepareRuntimeState(invalid), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
