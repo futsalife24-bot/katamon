@@ -9,7 +9,9 @@
   const ONLINE_GEAR_RNG_HASH_ALGORITHM = 'fnv1a64-ascii-v1';
   const ONLINE_GEAR_CRIT_RNG_NAMESPACE = 'online-gear-crit:v1';
   const ONLINE_GEAR_STATUS_RNG_NAMESPACE = 'online-gear-status:v1';
-  const ONLINE_GEAR_RNG_UNIT_IDS = Object.freeze(['p1', 'e1']);
+  // The canonical Battle unit ids are format-independent.  A 1v1 action
+  // simply uses the p1/e1 subset; 2v2 may also use p2/e2.
+  const ONLINE_GEAR_RNG_UNIT_IDS = Object.freeze(['p1', 'e1', 'p2', 'e2']);
   const ONLINE_GEAR_RNG_DAMAGE_TYPES = Object.freeze(['direct_projectile', 'normal_blast']);
   const ROOM_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
   const ROUND_RE = /^[0-9a-f]{48}$/;

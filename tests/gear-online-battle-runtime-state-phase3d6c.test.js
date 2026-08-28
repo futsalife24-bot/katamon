@@ -66,14 +66,16 @@ function setRemoteTurnAndBuildTerminalSnapshot() {
   return terminal;
 }
 
-test('pure v1 runtime state is exact, frozen, p1/e1-only and validates canonical caps', () => {
+test('pure v2 runtime state is exact, frozen, format-bound and validates canonical caps', () => {
   install({ p1: life4('p1') }); const snapshots = wiring.battleSnapshotsForRuntimeTest();
-  const state = wiring.runtimeState(); assert.equal(state.version, 1); assert.deepEqual(Object.keys(state.shieldByUnit), ['p1', 'e1']);
+  const state = wiring.runtimeState(); assert.equal(state.version, 2); assert.equal(state.matchFormat, '1v1'); assert.deepEqual(Object.keys(state.shieldByUnit), ['p1', 'e1']);
   assert.equal(Object.isFrozen(runtime.validateRuntimeState(state, { snapshots })), true);
   const bad = structuredClone(state); bad.shieldByUnit.p1.currentShield = -1;
   assert.throws(() => runtime.validateRuntimeState(bad, { snapshots }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
-  const future = structuredClone(state); future.version = 2;
+  const future = structuredClone(state); future.version = 3;
   assert.throws(() => runtime.validateRuntimeState(future, { snapshots }), error => error?.code === 'UNSUPPORTED_ONLINE_GEAR_RUNTIME_STATE');
+  const wrongFormat = { version: 2, matchFormat: '2v2', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 }, p2: { currentShield: 0 }, e2: { currentShield: 0 } } };
+  assert.throws(() => runtime.validateRuntimeState(wrongFormat, { snapshots, localState: null, expectedMatchFormat: '1v1' }), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
 });
 
 test('Gearless Gear ON serializes explicit zero runtime Shield while Gear OFF keeps the legacy state shape', () => {
@@ -157,7 +159,7 @@ test('production terminal rejection is atomic for wrong action, round and malfor
   h.receiveFirebaseForTest(remoteState(stale, remoteActionId, 'f'.repeat(48)));
   assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'wrong round is ignored before Shield mutation');
 
-  install({ p1: life4('atomic-invalid') }); wiring.setShieldForTest('p1', 4); const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.version = 2;
+  install({ p1: life4('atomic-invalid') }); wiring.setShieldForTest('p1', 4); const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.version = 3;
   h.receiveFirebaseForTest(remoteState(malformed)); h.receiveFirebaseForTest(remoteFire());
   assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true);
   assert.equal(h.drainOneNetworkMessageForTest(), true);
@@ -180,17 +182,17 @@ test('runtime state stays out of Battle Gear Snapshot, Healing, result and persi
   assert.doesNotMatch(rules, /gearRuntimeState/);
 });
 
-test('manifest v2 fences old Gear clients while core protocol, snapshot and Firebase wire stay v1', () => {
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 3); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
+test('manifest v4 fences old Gear clients while core protocol, snapshot and Firebase wire stay v1', () => {
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 4); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.equal(battleSnapshot.GEAR_BATTLE_SNAPSHOT_VERSION, 1); assert.equal(require('../shared/gear-online-firebase-wire.js').ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
   install(); const manifest = wiring.state().verifiedStartGearManifest; const old = structuredClone(manifest); old.version = 1;
   assert.throws(() => lobby.validateStartGearManifest(old, { participantReveals: Object.values(wiring.state().participantGearReveals) }), error => error?.code === 'INVALID_ONLINE_GEAR_START_MANIFEST');
 });
 
-test('source contract keeps accepted-state commit after applySnapshot and leaves CPU/2v2/RNG untouched', () => {
+test('source contract keeps accepted-state commit after applySnapshot and keeps runtime state local to state snaps', () => {
   const index = read('index.html'); const sw = read('sw.js');
   assert.match(index, /applySnapshot\(msg\.snap, \{ preserveTerrain: true \}\);\s*if \(online\.kind === 'firebase' && acceptedGearRuntimeState\)/);
-  assert.match(index, /ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED/); assert.match(sw, /gear-online-battle-runtime-state\.js/);
+  assert.match(index, /firebaseOnlineGearBattleUnitIds/); assert.match(sw, /gear-online-battle-runtime-state\.js/);
   assert.doesNotMatch(index, /localStorage[\s\S]{0,120}gearRuntimeState/);
 });
 

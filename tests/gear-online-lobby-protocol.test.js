@@ -151,9 +151,9 @@ test('manifest schemas, version/hash tamper and caller inputs fail closed withou
   const manifest = lobby.createStartGearManifest(input); assert.deepEqual(input, before);
   const hash = structuredClone(manifest); hash.commitments[0].loadoutHash = 'fnv1a64-v1:0000000000000000';
   fails('INVALID_ONLINE_GEAR_LOADOUT_HASH', () => lobby.validateStartGearManifest(hash, { participantReveals: input.participantReveals }));
-  const version = structuredClone(manifest); version.version = 1;
+  const version = structuredClone(manifest); version.version = 3;
   fails('INVALID_ONLINE_GEAR_START_MANIFEST', () => lobby.validateStartGearManifest(version, { participantReveals: input.participantReveals }));
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 3, 'Last-Stand-aware manifests must fence old Gear clients');
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 4, '2v2-Gear-aware manifests must fence old Gear clients');
   const unknown = structuredClone(manifest); unknown.extra = true;
   fails('INVALID_ONLINE_GEAR_START_MANIFEST', () => lobby.validateStartGearManifest(unknown, { participantReveals: input.participantReveals }));
 });

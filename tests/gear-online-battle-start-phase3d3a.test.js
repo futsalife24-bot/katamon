@@ -187,10 +187,10 @@ test('start manifest remains exact-bound to locally verified reveals', () => {
   }), (error) => error?.code === 'ONLINE_GEAR_REVEAL_BINDING_MISMATCH');
 });
 
-test('Gear ON 2v2 fails closed while Gear OFF 1v1/2v2 returns the legacy no-op state', () => {
+test('incomplete Gear ON 2v2 fails closed while Gear OFF 1v1/2v2 returns the legacy no-op state', () => {
   const { manifest, reveals } = setupGearless();
   assert.throws(() => battleStart.createOnlineGearBattleStartState({ matchFormat: '2v2', manifest, participantReveals: reveals }),
-    (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
+    (error) => error?.code === 'MISSING_ONLINE_GEAR_BATTLE_REVEAL');
   h.setOnlineForLogTest(onlineFixture({ format: '1v1', gear: false }));
   assert.equal(wiring.createBattleStartState(null), null);
   h.setOnlineForLogTest(onlineFixture({ format: '2v2', gear: false }));

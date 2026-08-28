@@ -5,10 +5,10 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearOnlineLobbyProtocol(root) {
   'use strict';
 
-  // v3 is the compatibility fence for in-memory Last Stand action runtime.
+  // v4 is the compatibility fence for 2v2 Gear battle plus Shield runtime v2.
   // The core commitment/wire/snapshot versions intentionally remain v1; a
-  // mixed v2/v3 Gear battle must fail closed at start.
-  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 3;
+  // mixed v3/v4 Gear battle must fail closed at start.
+  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 4;
   const ONLINE_GEAR_READY_COMMITMENT_VERSION = 1;
   const ONLINE_VISIBILITY_PUBLIC = 'public';
   const ONLINE_VISIBILITY_PRIVATE = 'private';

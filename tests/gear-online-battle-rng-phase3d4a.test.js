@@ -87,7 +87,7 @@ test('v1 constants, Crit/Status namespaces, unit/damage domains are fixed and fr
   assert.equal(onlineRng.ONLINE_GEAR_BATTLE_RNG_VERSION, 1);
   assert.equal(onlineRng.ONLINE_GEAR_RNG_HASH_ALGORITHM, 'fnv1a64-ascii-v1');
   assert.notEqual(onlineRng.ONLINE_GEAR_CRIT_RNG_NAMESPACE, onlineRng.ONLINE_GEAR_STATUS_RNG_NAMESPACE);
-  assert.deepEqual(onlineRng.ONLINE_GEAR_RNG_UNIT_IDS, ['p1', 'e1']);
+  assert.deepEqual(onlineRng.ONLINE_GEAR_RNG_UNIT_IDS, ['p1', 'e1', 'p2', 'e2']);
   assert.deepEqual(onlineRng.ONLINE_GEAR_RNG_DAMAGE_TYPES, ['direct_projectile', 'normal_blast']);
   assert.equal(Object.isFrozen(onlineRng.ONLINE_GEAR_RNG_UNIT_IDS), true);
 });
@@ -169,13 +169,11 @@ test('runtime host/guest derive identical action identity without mutation; next
   assert.notDeepEqual(rematch, host);
 });
 
-test('runtime seam is Gear ON 1v1 only and rejects a non-active source or Gear ON 2v2', () => {
+test('runtime seam is inactive Gear OFF and rejects a non-active source', () => {
   installRuntime({ gear: false });
   assert.equal(wiring.rngActionIdentity('p1'), null);
   installRuntime();
   assert.throws(() => wiring.rngActionIdentity('e1'), (error) => error?.code === 'INVALID_ONLINE_GEAR_RNG_ACTION_SOURCE');
-  installRuntime({ format: '2v2' });
-  assert.throws(() => wiring.rngActionIdentity('p1'), (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
 test('Phase 3D-4A does not activate Crit, Blast, runtime effects, shield, or Math.random', () => {

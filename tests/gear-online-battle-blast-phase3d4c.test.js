@@ -298,7 +298,7 @@ test('source contract keeps combat reach separate from terrain and visual multip
   assert.doesNotMatch(block, /spawnExplosion\([^\n]*blastRangeMultiplier|playExplosionSound\([^\n]*blastRangeMultiplier|triggerShake\([^\n]*blastRangeMultiplier/);
 });
 
-test('Blast adds no wire field, Rules change, future effect, RNG change, or 2v2 support', () => {
+test('Blast adds no wire field, Rules change, future effect, or RNG change', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const rngSource = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-battle-rng.js'), 'utf8');
@@ -307,7 +307,7 @@ test('Blast adds no wire field, Rules change, future effect, RNG change, or 2v2 
   assert.doesNotMatch(index, /netSend\(\{[^}]*blast(?:Power|Range|DamageMultiplier|RangeMultiplier)/);
   assert.doesNotMatch(blastSource, /knockback|status|shield|healing|lastStand|rescue|Math\.random/);
   assert.doesNotMatch(rngSource, /blastDamageMultiplier|blastRangeMultiplier/);
-  assert.match(index, /ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED/);
+  assert.match(index, /firebaseOnlineGearBattleUnitIds/);
 });
 
 async function main() {

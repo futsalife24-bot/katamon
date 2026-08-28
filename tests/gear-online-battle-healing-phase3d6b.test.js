@@ -279,11 +279,9 @@ test('Gear OFF remains legacy and Gear ON fails closed without immutable Healing
   assert.throws(() => heal('p1', 20), (error) => error?.code === 'ONLINE_GEAR_HEALING_SNAPSHOT_MISSING');
 });
 
-test('ONLINE Healing accepts only self-heal and keeps Gear ON 2v2 unsupported', () => {
+test('ONLINE Healing accepts only existing self-heal events', () => {
   installBattle();
   assert.throws(() => wiring.applyHealing('p1', 'e1', 20), (error) => error?.code === 'ONLINE_GEAR_HEALING_EVENT_UNSUPPORTED');
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => heal('p1', 20), (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
 test('Healing adds no RNG, preserves Crit fixture, and leaves Rescue4/Last Stand inert', () => {
