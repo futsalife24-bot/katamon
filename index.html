@@ -645,6 +645,7 @@
 <script src="shared/gear-online-lobby-protocol.js"></script>
 <script src="shared/gear-online-firebase-wire.js"></script>
 <script src="shared/firebase-online-reentry.js"></script>
+<script src="shared/firebase-online-battle-recovery.js"></script>
 <script src="shared/gear-online-battle-start.js"></script>
 <script src="shared/gear-online-battle-damage.js"></script>
 <script src="shared/gear-online-battle-rng.js"></script>
@@ -10300,11 +10301,17 @@
   }
   function createSseDeduper() {
     const seen = new Set();
-    return key => {
+    const accept = key => {
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     };
+    accept.seed = keys => {
+      if (!Array.isArray(keys)) return false;
+      keys.forEach(key => seen.add(key));
+      return true;
+    };
+    return accept;
   }
   function secureNonce() {
     if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') throw new Error('安全な乱数を利用できません');
@@ -10721,6 +10728,55 @@
     }
     return timeChars.join('') + firebaseLastPushRand.map(i => FIREBASE_PUSH_CHARS.charAt(i)).join('');
   }
+  function isFirebasePushId(value) { return typeof value === 'string' && /^[-0-9A-Z_a-z]{20}$/.test(value); }
+  function firebaseBattleRecoveryApi() {
+    const api = globalThis.KatamonFirebaseOnlineBattleRecovery;
+    if (!api?.buildRecoveryPlan) {
+      throw Object.assign(new Error('Firebase battle recovery moduleがありません'), { code: 'FIREBASE_RECOVERY_MODULE_MISSING' });
+    }
+    return api;
+  }
+  function normalizeFirebaseRecoveryPacket(packet) {
+    if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return packet;
+    if (packet.t !== 'start' && packet.t !== 'state') return packet;
+    return { ...packet, snap: normalizeFirebaseSnapshot(packet.snap) };
+  }
+  function buildFirebaseBattleRecoveryPlan(candidate, messages) {
+    if (!candidate?.auth || !candidate?.room || !FIREBASE_ROUND_RE.test(candidate.roundId || '')
+        || !['lobby', 'revealing', 'playing', 'results'].includes(candidate.roundStatus)) {
+      throw Object.assign(new Error('Firebase re-entry candidateが不正です'), { code: 'FIREBASE_RECOVERY_CANDIDATE_INVALID' });
+    }
+    const gearEnabled = firebaseGearEnabled(candidate.room.settings);
+    return firebaseBattleRecoveryApi().buildRecoveryPlan({
+      roundId: candidate.roundId,
+      roundStatus: candidate.roundStatus,
+      messages,
+      hostUid: candidate.room.hostUid,
+      isPushKey: isFirebasePushId,
+      actionMatches: firebaseActionMatches,
+      isConcededResult: firebaseResultConcedes,
+      validatePacket: packet => validateFirebaseMessageDetail(normalizeFirebaseRecoveryPacket(packet), { gearEnabled })
+    });
+  }
+  function assertFirebaseRecoveryCurrentRound(candidate, round) {
+    if (!round || !FIREBASE_ROUND_RE.test(round.id || '') || !['lobby', 'revealing', 'playing', 'results'].includes(round.status)) {
+      throw Object.assign(new Error('Firebase current roundを確認できません'), { code: 'FIREBASE_RECOVERY_ROUND_INVALID' });
+    }
+    if (round.id !== candidate.roundId || round.status !== candidate.roundStatus) {
+      throw Object.assign(new Error('Firebase roundが更新されています。復帰候補を取り直してください。'), { code: 'FIREBASE_RECOVERY_ROUND_ADVANCED' });
+    }
+  }
+  async function readFirebaseBattleRecoveryPlanForPendingReentry() {
+    const candidate = pendingFirebaseReentry;
+    if (!candidate) throw Object.assign(new Error('Firebase re-entry candidateがありません'), { code: 'FIREBASE_RECOVERY_PENDING_MISSING' });
+    // B3A is deliberately read-only.  The candidate lease stays held for B3B.
+    const before = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/round`, candidate.auth);
+    assertFirebaseRecoveryCurrentRound(candidate, before);
+    const messages = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/rounds/${encodeURIComponent(candidate.roundId)}/messages`, candidate.auth);
+    const after = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/round`, candidate.auth);
+    assertFirebaseRecoveryCurrentRound(candidate, after);
+    return buildFirebaseBattleRecoveryPlan(candidate, messages || {});
+  }
   function stableFirebaseJson(value) {
     if (Array.isArray(value)) return `[${value.map(stableFirebaseJson).join(',')}]`;
     if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableFirebaseJson(value[key])}`).join(',')}}`;
@@ -11102,7 +11158,7 @@
     return normalized;
   }
   function hasSafeSnapshot(snap) { return snapshotValidationReason(snap) === ''; }
-  function validateFirebaseMessageDetail(msg) {
+  function validateFirebaseMessageDetail(msg, { gearEnabled = null } = {}) {
     if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return { ok: false, reason: 'packet.type' };
     // テスト/診断用には旧v2パケットの形も検証できるよう残す。ただし本番受信は下でv3だけに絞る。
     const legacyV2 = msg.v === PROTO_VERSION && !Object.prototype.hasOwnProperty.call(msg, 'roundId');
@@ -11128,7 +11184,9 @@
     if (msg.t === 'ready') return msg.value == null || typeof msg.value === 'boolean' ? { ok: true } : { ok: false, reason: 'ready.value' };
     if (msg.t === 'rematchVote') return typeof msg.vote === 'boolean' ? { ok: true } : { ok: false, reason: 'rematchVote.vote' };
     if (msg.t === 'commit') return /^[0-9a-f]{64}$/.test(msg.hash || '') ? { ok: true } : { ok: false, reason: 'commit.hash' };
-    const gearOn = !legacyV2 && online && online.kind === 'firebase' && firebaseGearEnabled();
+    const gearOn = !legacyV2 && (gearEnabled === null
+      ? !!(online && online.kind === 'firebase' && firebaseGearEnabled())
+      : gearEnabled === true);
     if (msg.t === 'reveal') {
       if (!CHARACTER_LIST.includes(msg.character) || !/^[0-9a-f]{48}$/.test(msg.nonce || '')) return { ok: false, reason: 'reveal.characterOrNonce' };
       if (!gearOn && !hasGearField) return { ok: true };
@@ -11158,8 +11216,8 @@
       // Runtime Shield is a Gear-ON turn-boundary contract.  Keep the exact
       // legacy Gear-OFF state shape, and never accept an old Gear-ON client
       // that would silently omit the mutable remainder.
-      if (!legacyV2 && firebaseGearEnabled() !== hasRuntimeState) {
-        return { ok: false, reason: firebaseGearEnabled() ? 'state.gearRuntimeStateMissing' : 'state.gearRuntimeStateUnexpected' };
+      if (!legacyV2 && gearOn !== hasRuntimeState) {
+        return { ok: false, reason: gearOn ? 'state.gearRuntimeStateMissing' : 'state.gearRuntimeStateUnexpected' };
       }
       return !reason && FIREBASE_ACTION_ID_RE.test(msg.actionId || '') && unitOk ? { ok: true } : { ok: false, reason: reason ? `state.${reason}` : 'state.actionIdOrUnitId' };
     }

@@ -57,6 +57,7 @@ const APP_SHELL = [
   './shared/gear-online-lobby-protocol.js',
   './shared/gear-online-firebase-wire.js',
   './shared/firebase-online-reentry.js',
+  './shared/firebase-online-battle-recovery.js',
   './shared/gear-online-battle-start.js',
   './shared/gear-online-battle-damage.js',
   './shared/gear-online-battle-rng.js',
