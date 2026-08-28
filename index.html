@@ -9138,11 +9138,14 @@
 
   function firebaseOnlineGearActionIdentity(ownerId, missingCode, mismatchCode) {
     const replayAction = firebaseBattleReplayContext?.currentAction;
-    const matchingActions = replayAction
-      ? (replayAction.unitId === ownerId ? [replayAction] : [])
+    // A verifier must never accidentally borrow a pre-existing live action.
+    // While replay is active, only its explicitly installed action context is
+    // authority; an absent or mismatched context remains fail-closed.
+    const matchingActions = firebaseBattleReplayContext
+      ? (replayAction?.unitId === ownerId ? [replayAction] : [])
       : [online?.localAction, online?.remoteAction].filter(action => action?.unitId === ownerId);
     if (matchingActions.length !== 1 || !matchingActions[0].gearRngActionIdentity) {
-      throw Object.assign(new Error('ONLINE Gear Crit action identityを確認できません'), {
+      throw Object.assign(new Error('ONLINE Gear action identityを確認できません'), {
         code: missingCode
       });
     }
@@ -9152,7 +9155,7 @@
         || identity.sourceUnitId !== ownerId
         || identity.turnOrdinal !== identity.authoritativeActionOrdinal
         || identity.turnOrdinal !== turnCount) {
-      throw Object.assign(new Error('ONLINE Gear Crit action identityが現在の手番と一致しません'), {
+      throw Object.assign(new Error('ONLINE Gear action identityが現在の手番と一致しません'), {
         code: mismatchCode
       });
     }

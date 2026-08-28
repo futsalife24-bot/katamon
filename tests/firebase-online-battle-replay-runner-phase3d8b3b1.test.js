@@ -350,6 +350,47 @@ async function gearRecoveryPlan2v2({ role = 'host', tail = [], startSnapshot = n
     assert.equal(s1Actual.validatedBoundaries.at(-1).fire.packet.seat, 's1');
   });
 
+  await test('the live and replay Gear RNG identities are exactly equal for the same canonical 2v2 p2 turn', async () => {
+    const provisional = await gearRecoveryPlan2v2({ role: 'host' });
+    const start = structuredClone(provisional.start.packet.snap);
+    const owners = {
+      p1: { from: hostUid, seat: 'p1' }, e1: { from: guestUid, seat: 'e1' },
+      p2: { from: 'ally-s1', seat: 's1' }, e2: { from: 'ally-s2', seat: 's2' }
+    };
+    const fires = [];
+    for (let offset = 0; offset < start.turnOrder.length; offset++) {
+      const unitId = start.turnOrder[(start.activeIndex + offset) % start.turnOrder.length];
+      const unit = start.units.find(entry => entry.id === unitId);
+      const owner = owners[unitId];
+      fires.push({ ...packet('fire', {
+        actionId: `${String(offset)}${'c'.repeat(47)}`, unitId, x: unit.x, y: unit.y,
+        anchor: { x: unit.x, y: unit.y }, vx0: unit.team === 'player' ? -5000 : 5000, vy0: -140,
+        useSpecial: false, useJump: false, sentAt: 1800000000020 + offset
+      }), from: owner.from, seat: owner.seat });
+      if (unitId === 'p2') break;
+    }
+    const p2Index = fires.findIndex(fire => fire.unitId === 'p2');
+    assert.ok(p2Index > 0, 'p2 must have canonical predecessor turns');
+    const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
+    const generated = await bridge.generateTerminals(provisional, fires.slice(0, p2Index), { frame, timeoutMs: 15000 });
+    // This is the exact canonical pre-fire board after p2's preceding turns;
+    // the next identity is then produced through the ordinary live action seam
+    // with no replay context installed.
+    kt.applySnapshotForTest(generated.terminals.at(-1).fullSnap);
+    assert.equal(kt.snapshot().turnOrder[kt.snapshot().activeIndex], 'p2');
+    assert.equal(bridge.replayActive(), false);
+    const live = h.firebaseGearLobbyForTest().setCritActionForTest('p2', 'local', 'a'.repeat(48));
+    const replay = await bridge.replayGearActionIdentity({ ...fires[p2Index], actionId: 'b'.repeat(48) });
+    assert.deepEqual(replay, live);
+    assert.equal(replay.version, 1);
+    assert.equal(replay.roomId, roomCode);
+    assert.equal(replay.roundId, roundId);
+    assert.equal(replay.turnOrdinal, replay.authoritativeActionOrdinal);
+    assert.equal(replay.sourceUnitId, 'p2');
+    assert.equal(Object.hasOwn(replay, 'actionId'), false, 'transport actionId must never become RNG input');
+    await fails('ONLINE_GEAR_CRIT_ACTION_IDENTITY_MISSING', () => bridge.replayGearIdentityMissingProbe('p2'));
+  });
+
   await test('a production-generated non-zero Gear runtime v3 checkpoint is accepted only after the Battle baseline', async () => {
     const firstUnit = (await h.fairFirstPlayer(roomCode, 'a'.repeat(48), 'b'.repeat(48))) === 'p1' ? 'p1' : 'e1';
     const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, y: 360, vx: 5000 } : { from: hostUid, seat: 'p1', x: 240, y: 360, vx: -5000 };
@@ -438,5 +479,5 @@ async function gearRecoveryPlan2v2({ role = 'host', tail = [], startSnapshot = n
     }
   });
 
-  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/13 passed`);
+  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/14 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

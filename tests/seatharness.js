@@ -1252,11 +1252,13 @@ const HOOK = `
                 launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
                 awaitingResolve = true;
                 await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+                const fullSnap = buildSnapshot({ includeTerrain: true });
                 const snap = buildSnapshot({ includeTerrain: false });
                 const runtimeState = createFirebaseOnlineGearRuntimeState();
                 if (runtimeState) snap.gearRuntimeState = runtimeState;
                 return Object.freeze({
                   snap: structuredClone(snap),
+                  fullSnap: structuredClone(fullSnap),
                   identity: action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null,
                   action: Object.freeze({ activeIndex, activeUnitId: activeUnit()?.id || null, turnCount, unit: Object.freeze({ id: unit.id, x: unit.x, y: unit.y, control: unit.control, team: unit.team }) }),
                   sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls })
@@ -1294,10 +1296,11 @@ const HOOK = `
                   launchShot(unit, fire.anchor, fire.vx0, fire.vy0, fire.useSpecial, false, fire.useJump, fire.subweaponId || null);
                   awaitingResolve = true;
                   await firebaseRecoveryAwait(() => !awaitingResolve && !pendingShot && !projectiles.length && !barucopters.length && !groundFlames.length && units.every(entry => entry.grounded), options);
+                  const fullSnap = buildSnapshot({ includeTerrain: true });
                   const snap = buildSnapshot({ includeTerrain: false });
                   const runtimeState = createFirebaseOnlineGearRuntimeState();
                   if (runtimeState) snap.gearRuntimeState = runtimeState;
-                  terminals.push(Object.freeze({ snap: structuredClone(snap), identity: action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null }));
+                  terminals.push(Object.freeze({ snap: structuredClone(snap), fullSnap: structuredClone(fullSnap), identity: action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null }));
                 } finally {
                   clearFirebaseBattleReplayAction(action);
                 }
@@ -1308,6 +1311,19 @@ const HOOK = `
             }
           });
         },
+        // These two read-only identity probes keep the live and recovery
+        // construction paths independently observable in the focused runner
+        // suite.  Neither launches an action nor reads a candidate terminal.
+        replayGearActionIdentity: async fire => withFirebaseBattleReplayContext(async () => {
+          const action = beginFirebaseBattleReplayAction(fire);
+          try {
+            return action.gearRngActionIdentity ? structuredClone(action.gearRngActionIdentity) : null;
+          } finally {
+            clearFirebaseBattleReplayAction(action);
+          }
+        }),
+        replayGearIdentityMissingProbe: async ownerId => withFirebaseBattleReplayContext(async () =>
+          firebaseOnlineGearCritActionIdentity(ownerId)),
         replayActive: () => firebaseBattleReplayActive(),
         replayRandomProbe: () => withFirebaseBattleReplayContext(async () => Math.random()),
         replayStartTurn: () => withFirebaseBattleReplayContext(async () => {
