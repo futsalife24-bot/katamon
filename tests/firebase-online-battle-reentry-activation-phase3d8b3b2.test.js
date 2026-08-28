@@ -33,11 +33,11 @@ function candidate(status, lease) {
     roomCode, seat: 'e1', role: 'guest', roundId, roundStatus: status,
     credential: { uid: guestUid, roomCode, seat: 'e1' }, reentryLease: lease });
 }
-function fakeEventSource() {
+function fakeEventSource({ failConnect = false } = {}) {
   const original = global.EventSource;
   const instances = [];
   global.EventSource = class {
-    constructor(url) { this.url = url; this.listeners = new Map(); this.closed = false; instances.push(this); }
+    constructor(url) { if (failConnect) throw new Error('connect failed'); this.url = url; this.listeners = new Map(); this.closed = false; instances.push(this); }
     addEventListener(type, fn) { this.listeners.set(type, fn); }
     close() { this.closed = true; }
   };
@@ -164,6 +164,71 @@ async function battleBoundaryPlan(lease) {
     }
   });
 
+  await test('historical rematch votes are rebuilt before their seeded history can be ignored by SSE', async () => {
+    const source = fakeEventSource();
+    const lease = { release: () => {} };
+    const value = candidate('revealing', lease);
+    const plan = await revealingPlan(lease);
+    const messages = Object.fromEntries(plan.orderedEntries.map(entry => [entry.key, structuredClone(entry.packet)]));
+    messages[key(7)] = packet('rematchVote', { vote: true });
+    messages[key(8)] = { ...packet('rematchVote', { vote: false }), from: guestUid, seat: 'e1' };
+    const voted = bridge.build(value, messages);
+    bridge.setPending(value);
+    try {
+      await bridge.activatePending({ plan: voted });
+      assert.deepEqual(bridge.activeOnline().rematchVotes, { p1: true, e1: false });
+    } finally {
+      bridge.endActive();
+      source.restore();
+    }
+  });
+
+  await test('an old-round nextRoundId handoff waits without activating stale results or seeding its history', async () => {
+    const source = fakeEventSource();
+    let released = 0;
+    const lease = { release: () => { released += 1; } };
+    const value = candidate('results', lease);
+    const nextRoundId = 'b'.repeat(48);
+    const plan = Object.freeze({ kind: 'results_candidate', roundId, orderedEntries: Object.freeze([
+      Object.freeze({ key: key(1), packet: packet('lobbyState', { status: 'lobby', nextRoundId }) })
+    ]) });
+    const beforeOnline = bridge.activeOnline();
+    bridge.setPending(value);
+    try {
+      const waiting = await bridge.activatePending({ plan, noRetry: true });
+      assert.equal(waiting.kind, 'wait_for_round_handoff');
+      assert.equal(waiting.nextRoundId, nextRoundId);
+      assert.equal(bridge.activeOnline(), beforeOnline, 'handoff wait must not create an online shell');
+      assert.equal(bridge.pending(), value);
+      assert.equal(released, 0);
+      assert.equal(source.instances.length, 0);
+    } finally {
+      bridge.setPending(null);
+      source.restore();
+    }
+  });
+
+  await test('transport connection failure occurs before Battle commit and preserves the same pending lease', async () => {
+    const source = fakeEventSource({ failConnect: true });
+    let released = 0;
+    const lease = { release: () => { released += 1; } };
+    const value = candidate('playing', lease);
+    const plan = await battleStartPlan(lease);
+    const before = structuredClone(kt.snapshot());
+    const beforeOnline = bridge.activeOnline();
+    bridge.setPending(value);
+    try {
+      await assert.rejects(() => bridge.activatePending({ plan }), error => error?.code === 'FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED');
+      assert.equal(bridge.activeOnline(), beforeOnline);
+      assert.equal(bridge.pending(), value);
+      assert.equal(released, 0);
+      assert.deepEqual(kt.snapshot(), before);
+    } finally {
+      bridge.setPending(null);
+      source.restore();
+    }
+  });
+
   await test('a verified Gear-OFF start bundle commits only after B3B1 verification, then hands off to seeded SSE', async () => {
     const source = fakeEventSource();
     let released = 0;
@@ -216,5 +281,5 @@ async function battleBoundaryPlan(lease) {
     assert.equal(released, 1);
   });
 
-  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/5 passed`);
+  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/8 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
