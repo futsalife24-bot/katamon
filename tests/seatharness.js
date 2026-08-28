@@ -1210,6 +1210,12 @@ const HOOK = `
           pendingFirebaseReentry = null;
         }
       }),
+      firebaseBattleRecoveryForTest: () => ({
+        api: () => firebaseBattleRecoveryApi(),
+        build: (candidate, messages) => buildFirebaseBattleRecoveryPlan(candidate, messages),
+        readPending: () => readFirebaseBattleRecoveryPlanForPendingReentry(),
+        deduper: () => createSseDeduper()
+      }),
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
       // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は
       // production helperを直接通す。READY/reveal/startの非同期経路をsleep無しで検査する。
