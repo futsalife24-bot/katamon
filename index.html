@@ -4268,7 +4268,13 @@
     const context = { outboundCount: 0, visualCount: 0, randomCalls: 0 };
     const nativeRandom = Math.random;
     firebaseBattleReplayContext = context;
-    Math.random = () => { context.randomCalls++; return nativeRandom(); };
+    Math.random = () => {
+      context.randomCalls++;
+      // A verifier must never advance the browser's gameplay RNG, even for a
+      // moment.  Calling the saved native function and failing afterwards is
+      // already a deterministic-state corruption.
+      throw Object.assign(new Error('Firebase replay中のMath.randomは禁止です'), { code: 'FIREBASE_RECOVERY_REPLAY_RANDOM_CONSUMED' });
+    };
     try {
       const result = await task(context);
       if (context.randomCalls !== 0) throw Object.assign(new Error('replay中にMath.randomが消費されました'), { code: 'FIREBASE_RECOVERY_REPLAY_RANDOM_CONSUMED' });
@@ -10899,9 +10905,86 @@
     validateFirebaseOnlineGearStartSnapshot(start.snap, gearStart);
     return Object.freeze({ start, gearStart });
   }
+  // B3B1 is a verifier, not an activation path.  Keep its engine work inside
+  // a rollback envelope so a rejected (or even verified) candidate cannot
+  // leak a replayed board into the still-live page.  This deliberately saves
+  // the pre-replay local board, never a candidate terminal packet.
+  function cloneFirebaseReplayValue(value) {
+    if (Array.isArray(value)) return value.map(cloneFirebaseReplayValue);
+    if (value instanceof Map) return new Map([...value.entries()].map(([key, child]) => [cloneFirebaseReplayValue(key), cloneFirebaseReplayValue(child)]));
+    if (value instanceof Set) return new Set([...value].map(cloneFirebaseReplayValue));
+    if (value && typeof value === 'object') {
+      const clone = {};
+      for (const [key, child] of Object.entries(value)) clone[key] = cloneFirebaseReplayValue(child);
+      return clone;
+    }
+    return value;
+  }
+  function restoreFirebaseReplayObject(target, source) {
+    for (const key of Object.keys(target)) if (!Object.prototype.hasOwnProperty.call(source, key)) delete target[key];
+    for (const [key, value] of Object.entries(source)) target[key] = cloneFirebaseReplayValue(value);
+  }
+  function captureFirebaseBattleReplayRollback() {
+    return {
+      // applySnapshot is the established terrain/unit restoration boundary;
+      // the full unit copies additionally retain transient per-unit fields
+      // that a turn-boundary wire snapshot intentionally omits.
+      battleSnapshot: cloneFirebaseReplayValue(buildSnapshot()),
+      unitStates: units.map(unit => cloneFirebaseReplayValue(unit)),
+      onlineReference: online,
+      onlineState: cloneFirebaseReplayValue(online),
+      scalars: {
+        gamePhase, battleMode, simTimeMs, physicsAccumulator, battleIntroPending,
+        turnSettle, matchOver, matchEndPause, matchEndReason, winner,
+        cpuThinkTimer, cpuMoveDir, cpuMoveRemaining, cpuPhase,
+        moveDir, inputMode, inputPointerId, pinchState, specialArmed,
+        subweaponArmed, jumpArmed, coopItemArmed, menuOpen, moveSyncTimer,
+        moveSyncPending, shakeTimer, shakeMag, bossBannerTimer, submitRevealTimer,
+        specialAura: cloneFirebaseReplayValue(specialAura),
+        specialFlash: cloneFirebaseReplayValue(specialFlash),
+        coopSalvoSpecialAura: cloneFirebaseReplayValue(coopSalvoSpecialAura),
+        coopSalvoSpecialFlash: cloneFirebaseReplayValue(coopSalvoSpecialFlash),
+        pendingShot: cloneFirebaseReplayValue(pendingShot), cutIn: cloneFirebaseReplayValue(cutIn),
+        coopSalvoState: cloneFirebaseReplayValue(coopSalvoState), specialDemo: cloneFirebaseReplayValue(specialDemo),
+        cameraX, cameraY, cameraTargetX, cameraTargetY
+      },
+      collections: {
+        projectiles: cloneFirebaseReplayValue(projectiles), barucopters: cloneFirebaseReplayValue(barucopters),
+        creamClouds: cloneFirebaseReplayValue(creamClouds), particles: cloneFirebaseReplayValue(particles),
+        empRings: cloneFirebaseReplayValue(empRings), scorpionRailSpikeBursts: cloneFirebaseReplayValue(scorpionRailSpikeBursts),
+        lightningBeams: cloneFirebaseReplayValue(lightningBeams), groundFlames: cloneFirebaseReplayValue(groundFlames),
+        floatTexts: cloneFirebaseReplayValue(floatTexts), activeTouchPoints: cloneFirebaseReplayValue(activeTouchPoints)
+      }
+    };
+  }
+  function restoreFirebaseBattleReplayRollback(rollback) {
+    // Restoration itself remains inside the replay context, so it cannot emit
+    // BGM, network, record, or visual effects.
+    applySnapshot(rollback.battleSnapshot);
+    for (let index = 0; index < units.length; index++) {
+      if (rollback.unitStates[index]) restoreFirebaseReplayObject(units[index], rollback.unitStates[index]);
+    }
+    online = rollback.onlineReference;
+    restoreFirebaseReplayObject(online, rollback.onlineState);
+    const scalar = rollback.scalars;
+    ({ gamePhase, battleMode, simTimeMs, physicsAccumulator, battleIntroPending,
+      turnSettle, matchOver, matchEndPause, matchEndReason, winner,
+      cpuThinkTimer, cpuMoveDir, cpuMoveRemaining, cpuPhase,
+      moveDir, inputMode, inputPointerId, pinchState, specialArmed,
+      subweaponArmed, jumpArmed, coopItemArmed, menuOpen, moveSyncTimer,
+      moveSyncPending, shakeTimer, shakeMag, bossBannerTimer, submitRevealTimer,
+      specialAura, specialFlash, coopSalvoSpecialAura, coopSalvoSpecialFlash,
+      pendingShot, cutIn, coopSalvoState, specialDemo, cameraX, cameraY,
+      cameraTargetX, cameraTargetY } = scalar);
+    ({ projectiles, barucopters, creamClouds, particles, empRings,
+      scorpionRailSpikeBursts, lightningBeams, groundFlames, floatTexts } = rollback.collections);
+    activeTouchPoints.clear();
+    for (const [key, value] of rollback.collections.activeTouchPoints) activeTouchPoints.set(key, value);
+  }
   async function replayFirebaseBattleRecoveryPlan(plan, options = {}) {
     if (!plan?.requiresBattleReplayValidation) firebaseRecoveryFail('FIREBASE_RECOVERY_PLAN_NOT_REPLAYABLE');
     if (!online || online.kind !== 'firebase') firebaseRecoveryFail('FIREBASE_RECOVERY_ONLINE_MISSING');
+    const rollback = captureFirebaseBattleReplayRollback();
     return withFirebaseBattleReplayContext(async context => {
       const previousPhase = online.phase;
       try {
@@ -10970,7 +11053,9 @@
         }
         return Object.freeze({ kind: plan.kind, start: verifiedStart.start, validatedBoundaries: Object.freeze(validatedBoundaries), pendingAction: plan.pendingAction || null, result: validatedResult, sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
       } finally {
-        online.phase = previousPhase;
+        // Restore first: `online.phase` is included in the original online
+        // object and must not be the only field that survives a verifier run.
+        restoreFirebaseBattleReplayRollback(rollback);
       }
     });
   }

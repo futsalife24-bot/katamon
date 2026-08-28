@@ -62,6 +62,8 @@ async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], rou
   await test('historical start validates through the production snapshot path without outbound, visual, or Math.random side effects', async () => {
     const plan = await recoveryPlan();
     const nativeRandom = Math.random;
+    const beforeReplay = kt.snapshot();
+    const beforePhase = bridge.onlinePhase();
     const result = await bridge.replay(plan);
     assert.equal(result.kind, 'battle_start_candidate');
     assert.equal(result.validatedBoundaries.length, 0);
@@ -69,6 +71,8 @@ async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], rou
     assert.equal(result.sideEffects.randomCalls, 0);
     assert.equal(Math.random, nativeRandom, 'replay context must restore Math.random identity');
     assert.equal(bridge.replayActive(), false, 'replay context must be released after success');
+    assert.deepEqual(kt.snapshot(), beforeReplay, 'verified replay must restore the pre-replay Battle state');
+    assert.equal(bridge.onlinePhase(), beforePhase, 'verified replay must restore the prior ONLINE phase');
   });
 
   await test('historical start rejects a character mismatch instead of adopting its candidate snapshot', async () => {
@@ -87,9 +91,27 @@ async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], rou
     assert.equal(bridge.recoverySnapshotMismatch(candidate, baseline), 'craters');
   });
 
+  await test('a forbidden replay Math.random call fails before the captured native RNG can advance', async () => {
+    const nativeRandom = Math.random;
+    let nativeCalls = 0;
+    const guardedNative = () => { nativeCalls += 1; return nativeRandom(); };
+    Math.random = guardedNative;
+    try {
+      await fails('FIREBASE_RECOVERY_REPLAY_RANDOM_CONSUMED', () => bridge.replayRandomProbe());
+      assert.equal(nativeCalls, 0, 'the replay guard must not call its captured native RNG');
+      assert.equal(Math.random, guardedNative, 'Math.random identity must restore after the rejected probe');
+      assert.equal(bridge.replayActive(), false);
+    } finally {
+      Math.random = nativeRandom;
+    }
+  });
+
   await test('historical local/remote move and fire settle through the production game loop before terminal acceptance', async () => {
     const firstUnit = (await h.fairFirstPlayer(roomCode, 'a'.repeat(48), 'b'.repeat(48))) === 'p1' ? 'p1' : 'e1';
-    const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, vx: -220 } : { from: hostUid, seat: 'p1', x: 240, vx: 220 };
+    // Fire outward at high speed so this fixture validates replay sequencing
+    // and turn settlement without making a terrain-impact fixture depend on
+    // an unrelated collision location.
+    const actor = firstUnit === 'e1' ? { from: guestUid, seat: 'e1', x: 1200, vx: 5000 } : { from: hostUid, seat: 'p1', x: 240, vx: -5000 };
     const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
     for (const [role, includeMove] of [['guest', true], ['host', false]]) {
       const actionId = `${role === 'guest' ? 'f' : 'e'}${'a'.repeat(47)}`;
@@ -101,17 +123,30 @@ async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], rou
       // settle the real projectile before it can reject that candidate.
       const staleState = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(kt.snapshot()), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
       const first = await recoveryPlan({ role, tail: includeMove ? [move, fire, staleState] : [fire, staleState] });
-      await fails('FIREBASE_RECOVERY_REPLAY_MISMATCH', () => bridge.replay(first, { frame, timeoutMs: 15000 }));
+      const startSnapshot = structuredClone(first.start.packet.snap);
+      // Produce the independently expected terminal through the ordinary
+      // Battle engine, then restore the start before exercising the verifier.
+      // A failed verifier must never be the source of its own "valid" state.
+      kt.applySnapshotForTest(startSnapshot);
+      kt.setGamePhaseForTest('battle');
+      h.setActiveUnitForTest(firstUnit);
+      const historicalUnit = kt.unitById(firstUnit);
+      if (includeMove) historicalUnit.fuel = 77;
+      kt.setUnitPositionForTest(firstUnit, actor.x, actor.y);
+      kt.fireForTest(actor.vx, -140, { unitId: firstUnit });
+      kt.setAwaitingResolveForTest(true);
+      for (let tick = 0; tick < 1200 && kt.snapshot().activeIndex === startSnapshot.activeIndex; tick++) kt.step(0.05);
       const resolved = kt.snapshot();
-      const state = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(resolved), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
-      const candidate = { auth: { idToken: 'test' }, room: { hostUid, settings: { gearCapability: false } }, roomCode, seat: role === 'host' ? 'p1' : 'e1', roundId, roundStatus: 'playing' };
-      const messages = Object.fromEntries(first.orderedEntries.map(entry => [entry.key, structuredClone(entry.packet)]));
-      messages[Object.keys(messages).find(messageKey => messages[messageKey].t === 'state')] = state;
-      const second = bridge.build(candidate, messages);
-      const actual = await bridge.replay(second, { frame, timeoutMs: 15000 });
-      assert.equal(actual.validatedBoundaries.length, 1);
-      assert.equal(actual.sideEffects.outboundCount, 0);
-      assert.equal(actual.sideEffects.randomCalls, 0);
+      assert.notEqual(resolved.activeIndex, startSnapshot.activeIndex, 'independent production simulation must reach the next turn');
+      kt.applySnapshotForTest(startSnapshot);
+      const beforeReplay = kt.snapshot();
+      await assert.rejects(() => bridge.replay(first, { frame, timeoutMs: 15000 }), error => String(error?.code || '').startsWith('FIREBASE_RECOVERY_'));
+      assert.deepEqual(kt.snapshot(), beforeReplay, 'mismatched replay must restore the pre-replay Battle state');
+      const beforeTimeoutPhase = bridge.onlinePhase();
+      await fails('FIREBASE_RECOVERY_REPLAY_TIMEOUT', () => bridge.replay(first, { timeoutMs: 0 }));
+      assert.deepEqual(kt.snapshot(), beforeReplay, 'timeout replay must restore the pre-replay Battle state');
+      assert.equal(bridge.onlinePhase(), beforeTimeoutPhase, 'timeout must restore the prior ONLINE phase');
+      assert.equal(bridge.replayActive(), false, 'timeout must release the replay context');
     }
   });
 
@@ -127,5 +162,5 @@ async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], rou
     assert.equal(actual.sideEffects.randomCalls, 0);
   });
 
-  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/5 passed`);
+  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/6 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

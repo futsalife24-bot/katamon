@@ -782,6 +782,8 @@ const HOOK = `
       const u = opts.unitId ? unitById(opts.unitId) : localUnit();
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, !!opts.useSpecial, false, !!opts.useJump);
     },
+    setAwaitingResolveForTest: value => { awaitingResolve = value === true; return awaitingResolve; },
+    setGamePhaseForTest: value => { gamePhase = value; return gamePhase; },
     physicsDt: () => PHYSICS_DT,
     unitRadius: () => UNIT_RADIUS,
     terrainBottomY: () => TERRAIN_BOTTOM_Y,
@@ -1217,6 +1219,8 @@ const HOOK = `
         deduper: () => createSseDeduper(),
         replay: (plan, options) => replayFirebaseBattleRecoveryPlan(plan, options),
         replayActive: () => firebaseBattleReplayActive(),
+        replayRandomProbe: () => withFirebaseBattleReplayContext(async () => Math.random()),
+        onlinePhase: () => online?.phase || null,
         recoverySnapshotMismatch: (candidate, baseline) => firebaseRecoverySnapshotMismatchReason(candidate, baseline)
       }),
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
