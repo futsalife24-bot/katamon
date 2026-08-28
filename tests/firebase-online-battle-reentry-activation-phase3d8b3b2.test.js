@@ -31,7 +31,7 @@ function candidate(status, lease) {
   const current = room(status);
   return Object.freeze({ auth: { uid: guestUid, idToken: 'test', refreshToken: 'refresh', expiresAt: Date.now() + 3600000, serverTimeOffset: 0 }, room: current,
     roomCode, seat: 'e1', role: 'guest', roundId, roundStatus: status,
-    credential: { uid: guestUid, roomCode, seat: 'e1' }, reentryLease: lease });
+    credential: { version: 1, uid: guestUid, refreshToken: 'refresh', roomCode, seat: 'e1', roomCreatedAt: current.createdAt, hostUid, lastConfirmedExpiresAt: current.expiresAt, savedAt: current.createdAt }, reentryLease: lease });
 }
 function fakeEventSource({ failConnect = false } = {}) {
   const original = global.EventSource;
@@ -41,7 +41,13 @@ function fakeEventSource({ failConnect = false } = {}) {
     addEventListener(type, fn) { this.listeners.set(type, fn); }
     close() { this.closed = true; }
   };
-  return { instances, restore: () => { global.EventSource = original; } };
+  const put = (instance, payload) => instance.listeners.get('put')?.({ data: JSON.stringify(payload) });
+  return { instances, put, restore: () => { global.EventSource = original; } };
+}
+function fakeFetchRoom(roomValue) {
+  const original = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => structuredClone(roomValue) });
+  return () => { global.fetch = original; };
 }
 async function battleStartPlan(lease) {
   const current = candidate('playing', lease);
@@ -255,6 +261,54 @@ async function battleBoundaryPlan(lease) {
     assert.equal(released, 1);
   });
 
+  await test('seeded historical SSE packets stay inert while a REST-to-SSE gap packet drains exactly once after activation', async () => {
+    const source = fakeEventSource();
+    const lease = { release: () => {} };
+    const value = candidate('playing', lease);
+    const plan = await battleStartPlan(lease);
+    bridge.setPending(value);
+    try {
+      await bridge.activatePending({ plan });
+      const active = bridge.activeOnline();
+      const stream = source.instances[0];
+      const freshReady = packet('ready', { value: true, sentAt: 1800000000003 });
+      source.put(stream, { path: '/', data: { [key(5)]: plan.start.packet, [key(6)]: freshReady } });
+      assert.equal(active.seatReady.p1, true, 'unseeded gap key reaches the ordinary receiver');
+      assert.equal(active.phase, 'playing', 'seeded historical start must not reset the committed battle');
+      source.put(stream, { path: '/', data: { [key(6)]: freshReady } });
+      assert.equal(active.seatReady.p1, true, 'the same gap push key remains a no-op');
+    } finally {
+      bridge.endActive();
+      source.restore();
+    }
+  });
+
+  await test('a final round fence race after replay rejects before commit, transfer, or live receiver handoff', async () => {
+    const source = fakeEventSource();
+    let released = 0;
+    const lease = { release: () => { released += 1; } };
+    const value = candidate('playing', lease);
+    const plan = await battleStartPlan(lease);
+    const advanced = room('playing');
+    advanced.round.id = 'b'.repeat(48);
+    const restoreFetch = fakeFetchRoom(advanced);
+    const before = structuredClone(kt.snapshot());
+    const beforeOnline = bridge.activeOnline();
+    bridge.setPending(value);
+    try {
+      await assert.rejects(() => bridge.activatePending({ plan, enforceFinalRoundFence: true, finalRoundRefreshed: true }), error => error?.code === 'FIREBASE_RECOVERY_ROUND_ADVANCED');
+      assert.deepEqual(kt.snapshot(), before);
+      assert.equal(bridge.activeOnline(), beforeOnline);
+      assert.equal(bridge.pending(), value);
+      assert.equal(released, 0);
+      assert.equal(source.instances[0].closed, true, 'quarantine transport is closed on final-fence failure');
+    } finally {
+      bridge.setPending(null);
+      restoreFetch();
+      source.restore();
+    }
+  });
+
   await test('a replay-verified turn boundary commits the local baseline, never the candidate board, before SSE handoff', async () => {
     const source = fakeEventSource();
     let released = 0;
@@ -281,5 +335,5 @@ async function battleBoundaryPlan(lease) {
     assert.equal(released, 1);
   });
 
-  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/8 passed`);
+  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/10 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
