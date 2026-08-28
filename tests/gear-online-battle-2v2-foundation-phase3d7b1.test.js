@@ -104,14 +104,12 @@ test('2v2 Battle Start reconstructs exactly p1/e1/p2/e2 from the canonical seat 
   }
 });
 
-test('2v2 Start rejects incomplete, non-canonical, and same-owner participant sets', () => {
+test('2v2 Start rejects incomplete and non-canonical participant sets', () => {
   const complete = fourReveals();
   const manifest = lobby.createStartGearManifest({ roundId, commitments: complete.map(entry => entry.revealedCommitment), participantReveals: complete });
   const incomplete = complete.slice(0, 3);
   const incompleteManifest = lobby.createStartGearManifest({ roundId, commitments: incomplete.map(entry => entry.revealedCommitment), participantReveals: incomplete });
   fails('MISSING_ONLINE_GEAR_BATTLE_REVEAL', () => start.createOnlineGearBattleStartState({ matchFormat: '2v2', manifest: incompleteManifest, participantReveals: incomplete }));
-  const sharedOwner = fourReveals({ p1: 'uid-shared', s1: 'uid-shared' });
-  fails('ONLINE_GEAR_2V2_SAME_OWNER_UNSUPPORTED', () => stateFor(sharedOwner));
 });
 
 test('runtime Shield v2 is exact per match format and rejects v1 or a p2/e2 key mismatch', () => {
@@ -143,7 +141,7 @@ test('2v2 source boundaries are format-aware while legacy wire versions stay unc
   assert.match(index, /function firebaseOnlineGearBattleUnitIds\(/);
   assert.match(index, /function recordFirebaseOnlineGearSupportEvent\(/);
   assert.match(stateModule, /ONLINE_GEAR_RUNTIME_STATE_VERSION = 2/);
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 4);
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5);
   assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.equal(snapshots.GEAR_BATTLE_SNAPSHOT_VERSION, 1);
   assert.equal(require('../shared/gear-online-firebase-wire.js').ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
