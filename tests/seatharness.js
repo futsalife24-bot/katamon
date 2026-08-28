@@ -1186,6 +1186,24 @@ const HOOK = `
         unit.control = control;
         return true;
       },
+      firebaseReentryForTest: () => ({
+        api: () => firebaseReentryApi(),
+        storageKey: () => firebaseReentryApi().FIREBASE_REENTRY_STORAGE_KEY,
+        loadCredential: storage => loadFirebaseReentryCredential(storage),
+        saveCredential: (record, storage) => saveFirebaseReentryCredential(record, storage),
+        clearCredential: storage => clearFirebaseReentryCredential(storage),
+        createCredential: options => createFirebaseReentryCredential(options),
+        restore: options => restoreFirebaseRoomSeatReentry(options),
+        acquireLease: (credential, lockManager) => acquireFirebaseReentryLease(credential, lockManager),
+        releaseLease: lease => releaseFirebaseReentryLease(lease),
+        pending: () => pendingFirebaseReentry,
+        auth: () => firebaseAuth,
+        reset: () => {
+          clearPendingFirebaseReentry();
+          firebaseAuth = null;
+          pendingFirebaseReentry = null;
+        }
+      }),
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
       // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は
       // production helperを直接通す。READY/reveal/startの非同期経路をsleep無しで検査する。

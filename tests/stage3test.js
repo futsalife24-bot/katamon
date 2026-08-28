@@ -738,8 +738,8 @@ function check(name, value) {
   // R4(2026-07-27):通信不調でも必ず退出できるよう、ローカル遷移(endOnline/gamePhase/syncBgm)を
   // 先に済ませてからFirebaseの削除を投げ捨てで送る(要件6)。await不通で退出できない旧実装の再発防止。
   check('leaving a Firebase lobby runs the local transition before firing the (fire-and-forget) delete',
-    firebaseLeaveSrc.includes('endOnline(false, false);')
-    && firebaseLeaveSrc.indexOf('endOnline(false, false);') < firebaseLeaveSrc.indexOf('firebaseRequest(')
+    firebaseLeaveSrc.includes('endOnline(false, false, false, true);')
+    && firebaseLeaveSrc.indexOf('endOnline(false, false, false, true);') < firebaseLeaveSrc.indexOf('firebaseRequest(')
     && firebaseLeaveSrc.includes('cleanup.catch(() => {});')
     && !/await firebaseRequest/.test(firebaseLeaveSrc));
   // ネイティブconfirm()はロビー退出を通信不調でなくても止めてしまう(ダイアログが出た端末依存の挙動)。
@@ -1690,7 +1690,7 @@ function check(name, value) {
     && !htmlText.includes('CPUで始める')
     && /onlineStartBtn\.disabled = !isFirebaseHost\(\) \|\| !allFirebasePlayersReady\(\)[\s\S]{0,100}online\.phase !== 'lobby' \|\| !!onlineCustomStageSelectionError\(\)/.test(htmlText));
   check('the listing is withdrawn from the single place every exit path goes through',
-    /function endOnline[\s\S]{0,600}if \(leaving\.kind === 'firebase' && leaving\.quickListed\) unpublishOpenRoom\(leaving\.room, leaving\.auth\);/.test(htmlText));
+    /function endOnline[\s\S]{0,1000}if \(leaving\.kind === 'firebase' && leaving\.quickListed\) unpublishOpenRoom\(leaving\.room, leaving\.auth\);/.test(htmlText));
   check('a room still waiting is re-listed alongside the room lease, so it does not expire out of the index',
     /renewFirebaseRoomLease[\s\S]{0,900}leasing\.quickWaiting && leasing\.quickListed[\s\S]{0,120}publishOpenRoom/.test(htmlText));
   check('failing to publish still leaves a usable room rather than aborting the match',
