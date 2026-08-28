@@ -1219,6 +1219,11 @@ const HOOK = `
         readPending: () => readFirebaseBattleRecoveryPlanForPendingReentry(),
         deduper: () => createSseDeduper(),
         replay: (plan, options) => replayFirebaseBattleRecoveryPlan(plan, options),
+        activatePending: options => activatePendingFirebaseBattleReentry(options),
+        setPending: candidate => { pendingFirebaseReentry = candidate; },
+        pending: () => pendingFirebaseReentry,
+        activeOnline: () => online,
+        endActive: () => endOnline(false),
         // A test-only terminal generator.  It deliberately shares the
         // recovery start/action *inputs* with the verifier, but never reads a
         // candidate terminal or calls the replay runner.  This lets tests
