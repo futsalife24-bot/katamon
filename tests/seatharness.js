@@ -784,7 +784,6 @@ const HOOK = `
     },
     setAwaitingResolveForTest: value => { awaitingResolve = value === true; return awaitingResolve; },
     awaitingResolveForTest: () => awaitingResolve,
-    awaitingResolveForTest: () => awaitingResolve,
     setGamePhaseForTest: value => { gamePhase = value; return gamePhase; },
     physicsDt: () => PHYSICS_DT,
     unitRadius: () => UNIT_RADIUS,

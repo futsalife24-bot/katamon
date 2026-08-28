@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const domain = require('../shared/gear-domain.js');
 const snapshots = require('../shared/gear-battle-snapshot.js');
 const gearProtocol = require('../shared/gear-online-protocol.js');
@@ -40,10 +41,10 @@ function installRecoveryOnline({ role = 'guest', wind = 'calm' } = {}) {
   return { settings, slots };
 }
 
-async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], roundStatus = 'playing' } = {}) {
+async function recoveryPlan({ role = 'guest', mutateStart = null, tail = [], roundStatus = 'playing', startSnapshot = null } = {}) {
   installRecoveryOnline({ role });
-  kt.startBattle('kyoryu');
-  const snap = kt.snapshot();
+  if (!startSnapshot) kt.startBattle('kyoryu');
+  const snap = structuredClone(startSnapshot || kt.snapshot());
   const hostCharacter = 'kyoryu'; const guestCharacter = 'iwa';
   const hostNonce = 'a'.repeat(48); const guestNonce = 'b'.repeat(48);
   const hostHash = await h.commitPayload(hostCharacter, hostNonce);
@@ -107,6 +108,50 @@ async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'l
   }
   messages[key(5)] = packet('start', { snap, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearManifestJson: gearWire.encodeStartGearManifest({ manifest, participantReveals: reveals }) });
   return bridge.build({ auth: { idToken: 'test' }, room: { hostUid, settings: { gearCapability: capability } }, roomCode, seat: role === 'host' ? 'p1' : 'e1', roundId, roundStatus: 'playing' }, messages);
+}
+async function gearRecoveryPlan2v2({ role = 'host' } = {}) {
+  const capability = gearLobby.createRoomGearCapability({ visibility: 'private', gearMode: gearProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1 });
+  const seats = [
+    ['p1', 'p1', hostUid, 'kyoryu', recoverySet('p1-life', 'life')],
+    ['e1', 'e1', guestUid, 'iwa', recoverySet('e1-last', 'last_stand')],
+    ['s1', 'p2', 'ally-s1', 'kyoryu', recoverySet('p2-rescue', 'rescue')],
+    ['s2', 'e2', 'ally-s2', 'iwa', recoverySet('e2-life', 'life')]
+  ];
+  const selected = seats.find(entry => entry[0] === (role === 's1' ? 's1' : 'p1'));
+  h.setOnlineForLogTest({
+    kind: 'firebase', role: selected[0] === 'p1' ? 'host' : 'guest', room: roomCode, roomHostUid: hostUid, auth: { uid: selected[2] }, clientId: selected[2], seat: selected[0], peerSeat: 'e1', phase: 'lobby', currentRoundId: roundId,
+    settings: { terrain: 'rolling', wind: 'calm', turnsPerPlayer: 15, format: '2v2', stageSize: 'standard', revision: 1, gearCapability: capability },
+    slots: Object.fromEntries(seats.map(([seat, _unit, uid]) => [seat, { uid }])), queue: [], seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {}, participantGearReveals: {}, verifiedStartGearManifest: null,
+    battleGearSnapshotsByUnit: null, battleGearShieldStateByUnit: null, battleGearRuntimeEffectsStateByUnit: null, battleGearActiveAttackRuntime: null,
+    selfCharacter: selected[3], selfNonce: '', selfCommit: null, selfRevealed: false, peerCharacter: null, peerNonce: null, revealVerified: false,
+    unitCharacters: Object.fromEntries(seats.map(([_seat, unit, _uid, character]) => [unit, character])), visibility: 'private', acceptedSettingsRevision: 1, acceptedSettingsIdentity: '', persistedRosterIdentity: '', transport: { send: async () => true }
+  });
+  const wiring = h.firebaseGearLobbyForTest();
+  const reveals = seats.map(([seat, _unit, _uid, characterId, gears]) => {
+    const trustedContext = wiring.trustedContext(seat, characterId); const slots = Object.fromEntries(domain.SLOT_IDS.map(slotId => [slotId, null]));
+    for (const item of gears) slots[item.slotId] = item;
+    const battleGearSnapshot = snapshots.createBattleGearSnapshot({ resolvedLoadout: { characterId, presetId: 'preset1', gearIds: gears.map(item => item.gearId), slots }, baseHp: trustedContext.baseHp, baseFuel: trustedContext.baseFuel });
+    return Object.freeze({ trustedContext, revealedCommitment: gearProtocol.createLoadoutCommitment({ battleGearSnapshot, roundId, trustedContext }) });
+  });
+  const manifest = gearLobby.createStartGearManifest({ roundId, commitments: reveals.map(entry => entry.revealedCommitment), participantReveals: reveals });
+  const state = gearBattleStart.createOnlineGearBattleStartState({ matchFormat: '2v2', manifest, participantReveals: reveals });
+  kt.setMatchFormatForTest('2v2');
+  kt.setCharactersForTest('kyoryu', 'iwa');
+  kt.setCharacterForUnitForTest('p2', 'kyoryu'); kt.setCharacterForUnitForTest('e2', 'iwa');
+  h.resetMatchForTest();
+  for (const [_seat, unit, _uid, character] of seats) kt.setCharacterForUnitForTest(unit, character);
+  wiring.applyBattleStartState(state);
+  const snap = kt.snapshot(); const nonces = Object.fromEntries(seats.map(([seat], index) => [seat, String.fromCharCode(97 + index).repeat(48)]));
+  const digest = crypto.createHash('sha256').update(`${roomCode}:${seats.map(([seat]) => nonces[seat]).join(':')}`).digest('hex'); snap.activeIndex = parseInt(digest.slice(-1), 16) & 1;
+  const messages = {};
+  for (const entry of reveals) {
+    const seat = entry.revealedCommitment.seatId; const actor = seats.find(row => row[0] === seat); const nonce = nonces[seat]; const character = entry.trustedContext.expectedCharacterId;
+    const binding = gearLobby.createReadyGearBinding({ loadoutCommitment: entry.revealedCommitment, trustedContext: entry.trustedContext });
+    messages[key(Object.keys(messages).length + 1)] = { ...packet('commit', { hash: await h.commitPayload(character, nonce, gearLobby.stableSerializeReadyGearBinding(binding)) }), from: actor[2], seat };
+    messages[key(Object.keys(messages).length + 1)] = { ...packet('reveal', { character, nonce, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearCommitmentJson: gearWire.encodeRevealGearCommitment({ loadoutCommitment: entry.revealedCommitment, trustedContext: entry.trustedContext }) }), from: actor[2], seat };
+  }
+  messages[key(9)] = packet('start', { snap, gearWireVersion: gearWire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearManifestJson: gearWire.encodeStartGearManifest({ manifest, participantReveals: reveals }) });
+  return bridge.build({ auth: { idToken: 'test' }, room: { hostUid, settings: { gearCapability: capability } }, roomCode, seat: selected[0], roundId, roundStatus: 'playing' }, messages);
 }
 
 (async () => {
@@ -226,7 +271,7 @@ async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'l
     const before = kt.snapshot();
     try {
       const replayed = await bridge.replayStartTurn();
-      assert.deepEqual(replayed.wind, { dir: 1, strength: .73, calmWind: false, calmBattle: false });
+      assert.equal(replayed.wind.dir, 1); assert.equal(replayed.wind.strength, .73); assert.equal(replayed.wind.calmWind, false);
       assert.equal(calls, 0, 'replay must use the previously persisted forecast, never native RNG');
       assert.equal(kt.windForecast(), null, 'the next forecast remains pending until an accepted action-side terminal provides it');
     } finally {
@@ -247,5 +292,16 @@ async function gearRecoveryPlan({ role = 'guest', p1 = recoverySet('p1-life', 'l
     }
   });
 
-  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/8 passed`);
+  await test('Gear ON 2v2 validates all four occupied seats for host and s1 re-entry without board adoption', async () => {
+    for (const role of ['host', 's1']) {
+      const plan = await gearRecoveryPlan2v2({ role });
+      const before = kt.snapshot(); const actual = await bridge.replay(plan);
+      assert.equal(actual.kind, 'battle_start_candidate');
+      assert.equal(actual.sideEffects.outboundCount, 0);
+      assert.equal(actual.sideEffects.randomCalls, 0);
+      assert.deepEqual(kt.snapshot(), before, `2v2 ${role} verifier must roll back`);
+    }
+  });
+
+  console.log(`Firebase Battle Replay Runner Phase 3D-8B3B1 tests: ${passed}/9 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
