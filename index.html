@@ -10758,11 +10758,23 @@
       validatePacket: packet => validateFirebaseMessageDetail(normalizeFirebaseRecoveryPacket(packet), { gearEnabled })
     });
   }
+  function assertFirebaseRecoveryCurrentRound(candidate, round) {
+    if (!round || !FIREBASE_ROUND_RE.test(round.id || '') || !['lobby', 'revealing', 'playing', 'results'].includes(round.status)) {
+      throw Object.assign(new Error('Firebase current roundを確認できません'), { code: 'FIREBASE_RECOVERY_ROUND_INVALID' });
+    }
+    if (round.id !== candidate.roundId || round.status !== candidate.roundStatus) {
+      throw Object.assign(new Error('Firebase roundが更新されています。復帰候補を取り直してください。'), { code: 'FIREBASE_RECOVERY_ROUND_ADVANCED' });
+    }
+  }
   async function readFirebaseBattleRecoveryPlanForPendingReentry() {
     const candidate = pendingFirebaseReentry;
     if (!candidate) throw Object.assign(new Error('Firebase re-entry candidateがありません'), { code: 'FIREBASE_RECOVERY_PENDING_MISSING' });
     // B3A is deliberately read-only.  The candidate lease stays held for B3B.
+    const before = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/round`, candidate.auth);
+    assertFirebaseRecoveryCurrentRound(candidate, before);
     const messages = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/rounds/${encodeURIComponent(candidate.roundId)}/messages`, candidate.auth);
+    const after = await firebaseRequest(`rooms/${encodeURIComponent(candidate.roomCode)}/round`, candidate.auth);
+    assertFirebaseRecoveryCurrentRound(candidate, after);
     return buildFirebaseBattleRecoveryPlan(candidate, messages || {});
   }
   function stableFirebaseJson(value) {
