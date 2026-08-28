@@ -6190,20 +6190,26 @@
       throw Object.assign(new Error('ONLINE Gear HealingのBattle Snapshotがありません'), { code: 'ONLINE_GEAR_HEALING_SNAPSHOT_MISSING' });
     }
     const source = unitById(sourceUnitId);
-    if (!source || !target || source.id !== target.id) {
-      throw Object.assign(new Error('ONLINE Gear Healingは正規self-heal eventだけに適用できます'), { code: 'ONLINE_GEAR_HEALING_EVENT_UNSUPPORTED' });
+    if (!source || !target || source.team !== target.team) {
+      throw Object.assign(new Error('ONLINE Gear Healingは同一teamの正規eventだけに適用できます'), { code: 'ONLINE_GEAR_HEALING_EVENT_UNSUPPORTED' });
     }
     const sourceCombat = onlineGearStaticCombatForUnit(source);
     const targetCombat = onlineGearStaticCombatForUnit(target);
     if (!sourceCombat || !targetCombat) {
       throw Object.assign(new Error('ONLINE Gear HealingのBattle Snapshotがありません'), { code: 'ONLINE_GEAR_HEALING_SNAPSHOT_MISSING' });
     }
-    return applyResolvedBattleHealing({
+    const healing = applyResolvedBattleHealing({
       target,
       baseHealing,
       sourceMultiplier: sourceCombat.healingMultiplier,
       targetMultiplier: targetCombat.receivedHealingMultiplier,
     });
+    recordFirebaseOnlineGearSupportEvent({
+      sourceUnitId: source.id,
+      targetUnitId: target.id,
+      actualHealing: healing.actualHealing,
+    });
+    return healing;
   }
 
   function applyBattleGearHealing(options) {
@@ -8880,15 +8886,58 @@
     if (!state || !Object.isFrozen(online.battleGearRuntimeEffectsStateByUnit) || !Object.isFrozen(state)) {
       throw Object.assign(new Error('ONLINE Gear runtime effects stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
     }
-    // The shared pure helper permits Rescue4 for the future 2v2 support phase.
-    // No support source is connected in this phase, so a nonzero
-    // value must fail closed before it can become action damage.
-    if (state.rescueNextAttackDamageBp !== 0) {
-      throw Object.assign(new Error('ONLINE Gear Rescue runtimeは未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+    // Rescue4 can only be granted through a 2v2 same-team support event.
+    // Keeping a nonzero value fail-closed in 1v1 preserves its no-op contract.
+    if (matchFormat !== '2v2' && state.rescueNextAttackDamageBp !== 0) {
+      throw Object.assign(new Error('ONLINE Gear Rescue runtimeは1v1で未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
     }
-    // Keep the pure helper as the validator for Last Stand and exact shape.
+    // Keep the pure helper as the only validator for the exact Rescue/Last
+    // Stand state shape and canonical next-attack values.
     globalThis.KatamonGearCombat.beginAttackAction({ combat, state });
     return state;
+  }
+
+  // Rescue4 is target-side, in-memory runtime only. Existing production
+  // events currently reach this boundary through self-heals (which are a
+  // deliberate no-op); a future ally Shield event may provide actualShield
+  // without changing the Shield runtime wire or inventing a Shield producer.
+  function recordFirebaseOnlineGearSupportEvent({ sourceUnitId, targetUnitId, actualHealing = 0, actualShield = 0 }) {
+    if (!online || online.kind !== 'firebase' || !firebaseGearEnabled()) return false;
+    if (!Number.isFinite(actualHealing) || actualHealing < 0 || !Number.isFinite(actualShield) || actualShield < 0) {
+      throw Object.assign(new Error('ONLINE Gear support実績が不正です'), { code: 'ONLINE_GEAR_SUPPORT_EVENT_INVALID' });
+    }
+    const source = unitById(sourceUnitId);
+    const target = unitById(targetUnitId);
+    if (!source || !target || source.team !== target.team) {
+      throw Object.assign(new Error('ONLINE Gear support対象が不正です'), { code: 'ONLINE_GEAR_SUPPORT_EVENT_UNSUPPORTED' });
+    }
+    if (source.id === target.id) return false;
+    if (matchFormat !== '2v2') {
+      throw Object.assign(new Error('ONLINE Gear Rescue supportは2v2専用です'), { code: 'ONLINE_GEAR_SUPPORT_EVENT_UNSUPPORTED' });
+    }
+    const sourceCombat = onlineGearStaticCombatForUnit(source);
+    const targetCombat = onlineGearStaticCombatForUnit(target);
+    if (!sourceCombat || !targetCombat) {
+      throw Object.assign(new Error('ONLINE Gear supportのBattle Snapshotがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
+    }
+    const targetState = firebaseOnlineGearRuntimeEffectsForUnit(target);
+    if (!targetState) {
+      throw Object.assign(new Error('ONLINE Gear supportのruntime stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
+    }
+    const support = globalThis.KatamonGearCombat.recordSupportEvent({
+      sourceCombat,
+      targetCombat,
+      targetState,
+      sourceUnitId: source.id,
+      targetUnitId: target.id,
+      actualHealing,
+      actualShield,
+    });
+    online.battleGearRuntimeEffectsStateByUnit = Object.freeze({
+      ...online.battleGearRuntimeEffectsStateByUnit,
+      [target.id]: support.state
+    });
+    return support.didGrant;
   }
 
   function beginFirebaseOnlineGearAttackAction(unit) {

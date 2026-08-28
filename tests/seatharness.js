@@ -1299,6 +1299,7 @@ const HOOK = `
         },
         applyHealing: (sourceUnitId, targetUnitId, baseHealing) =>
           applyBattleGearHealing({ sourceUnitId, target: unitById(targetUnitId), baseHealing }),
+        recordSupportEvent: options => recordFirebaseOnlineGearSupportEvent(options),
         requestedDamage: (ownerId, targetId, damageType, baseDamage, projectile = null) =>
           battleGearRequestedDamage(ownerId, unitById(targetId), damageType, baseDamage, projectile),
         knockbackPolicy: (ownerId, targetId, damageType, projectile = null, legacyKnockbackSpeed = 0) =>
