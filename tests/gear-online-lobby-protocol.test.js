@@ -153,7 +153,7 @@ test('manifest schemas, version/hash tamper and caller inputs fail closed withou
   fails('INVALID_ONLINE_GEAR_LOADOUT_HASH', () => lobby.validateStartGearManifest(hash, { participantReveals: input.participantReveals }));
   const version = structuredClone(manifest); version.version = 3;
   fails('INVALID_ONLINE_GEAR_START_MANIFEST', () => lobby.validateStartGearManifest(version, { participantReveals: input.participantReveals }));
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5, 'owner-scoped 2v2 Gear conflict manifests must fence old Gear clients');
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 6, 'runtime checkpoint v3 manifests must fence old Gear clients');
   const unknown = structuredClone(manifest); unknown.extra = true;
   fails('INVALID_ONLINE_GEAR_START_MANIFEST', () => lobby.validateStartGearManifest(unknown, { participantReveals: input.participantReveals }));
 });

@@ -27,8 +27,8 @@ function fixture({ gear = true } = {}) {
     queue: [], pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), seatCharacter: { e1: 'iwa' }, seatVerified: { e1: true }, selfCharacter: 'kyoryu', peerCharacter: 'iwa', localAction: null, remoteAction: null
   };
 }
-function gear(prefix, slotId) {
-  return domain.createGear({ gearId: `${prefix}:${slotId}`, generationSeed: `${prefix}:g`, enhancementSeed: `${prefix}:e`, sourceId: 'cpu_battle', sourceDetail: {}, acquiredAt: '2026-08-28T00:00:00Z', qualityProfile: { id: 'q', starWeights: [{ id: 6, weight: 1 }], rarityWeights: [{ id: 'legend', weight: 1 }] }, setProfile: { id: 'life', setWeights: [{ id: 'life', weight: 1 }] }, slotId });
+function gear(prefix, slotId, setId = 'life') {
+  return domain.createGear({ gearId: `${prefix}:${slotId}`, generationSeed: `${prefix}:g`, enhancementSeed: `${prefix}:e`, sourceId: 'cpu_battle', sourceDetail: {}, acquiredAt: '2026-08-28T00:00:00Z', qualityProfile: { id: 'q', starWeights: [{ id: 6, weight: 1 }], rarityWeights: [{ id: 'legend', weight: 1 }] }, setProfile: { id: setId, setWeights: [{ id: setId, weight: 1 }] }, slotId });
 }
 function reveal(seat, characterId, gears = []) {
   const ctx = wiring.trustedContext(seat, characterId); const slots = Object.fromEntries(domain.SLOT_IDS.map(id => [id, null]));
@@ -66,16 +66,16 @@ function setRemoteTurnAndBuildTerminalSnapshot() {
   return terminal;
 }
 
-test('pure v2 runtime state is exact, frozen, format-bound and validates canonical caps', () => {
+test('runtime checkpoint remains exact, frozen, format-bound and validates canonical Shield caps', () => {
   install({ p1: life4('p1') }); const snapshots = wiring.battleSnapshotsForRuntimeTest();
-  const state = wiring.runtimeState(); assert.equal(state.version, 2); assert.equal(state.matchFormat, '1v1'); assert.deepEqual(Object.keys(state.shieldByUnit), ['p1', 'e1']);
+  const state = wiring.runtimeState(); assert.equal(state.version, 3); assert.equal(state.matchFormat, '1v1'); assert.deepEqual(Object.keys(state.shieldByUnit), ['p1', 'e1']);
   assert.equal(Object.isFrozen(runtime.validateRuntimeState(state, { snapshots })), true);
   const bad = structuredClone(state); bad.shieldByUnit.p1.currentShield = -1;
   assert.throws(() => runtime.validateRuntimeState(bad, { snapshots }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
-  const future = structuredClone(state); future.version = 3;
+  const future = structuredClone(state); future.version = 4;
   assert.throws(() => runtime.validateRuntimeState(future, { snapshots }), error => error?.code === 'UNSUPPORTED_ONLINE_GEAR_RUNTIME_STATE');
-  const wrongFormat = { version: 2, matchFormat: '2v2', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 }, p2: { currentShield: 0 }, e2: { currentShield: 0 } } };
-  assert.throws(() => runtime.validateRuntimeState(wrongFormat, { snapshots, localState: null, expectedMatchFormat: '1v1' }), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
+  const wrongFormat = { version: 3, matchFormat: '2v2', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 }, p2: { currentShield: 0 }, e2: { currentShield: 0 } }, runtimeEffectsByUnit: { p1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 }, e1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 }, p2: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 }, e2: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 0 } } };
+  assert.throws(() => runtime.validateRuntimeState(wrongFormat, { snapshots, expectedMatchFormat: '1v1' }), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_FORMAT_MISMATCH');
 });
 
 test('Gearless Gear ON serializes explicit zero runtime Shield while Gear OFF keeps the legacy state shape', () => {
@@ -94,8 +94,8 @@ test('outgoing turn snapshot carries only current Shield runtime state, never st
 
 test('accepted-state preparation restores null local Shield and permits only monotonic decreases', () => {
   install({ p1: life4('recovery') }); wiring.setShieldForTest('p1', 4); const incoming = wiring.turnSnapshotForTest(); incoming.gearRuntimeState.shieldByUnit.p1.currentShield = 2;
-  wiring.setShieldStateRawForTest(null); const restored = wiring.prepareRuntimeState(incoming); assert.equal(restored.p1.currentShield, 2);
-  wiring.setShieldStateRawForTest(restored); assert.equal(wiring.prepareRuntimeState(incoming).p1.currentShield, 2);
+  wiring.setShieldStateRawForTest(null); const restored = wiring.prepareRuntimeState(incoming); assert.equal(restored.shieldStateByUnit.p1.currentShield, 2);
+  wiring.setShieldStateRawForTest(restored.shieldStateByUnit); assert.equal(wiring.prepareRuntimeState(incoming).shieldStateByUnit.p1.currentShield, 2);
   incoming.gearRuntimeState.shieldByUnit.p1.currentShield = 3;
   assert.throws(() => wiring.prepareRuntimeState(incoming), error => error?.code === 'ONLINE_GEAR_RUNTIME_STATE_ROLLBACK');
 });
@@ -103,15 +103,15 @@ test('accepted-state preparation restores null local Shield and permits only mon
 test('recovery cannot mint Shield: Gearless accepts only zero and Life4 accepts only its canonical initial remainder', () => {
   install(); const gearlessSnapshots = wiring.battleSnapshotsForRuntimeTest(); const forgedGearless = wiring.runtimeState();
   wiring.setShieldStateRawForTest(null); forgedGearless.shieldByUnit.p1.currentShield = 0.1;
-  assert.throws(() => runtime.restoreShieldState(forgedGearless, { snapshots: gearlessSnapshots, localState: null }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
+  assert.throws(() => runtime.restoreRuntimeState(forgedGearless, { snapshots: gearlessSnapshots }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
 
   install({ p1: life4('upper') }); const snapshots = wiring.battleSnapshotsForRuntimeTest(); const legal = wiring.runtimeState();
   const initial = require('../shared/gear-combat.js').initialShieldFromSets(snapshots.p1.derivedStats).shieldAfter;
   assert.ok(initial < require('../shared/gear-combat.js').initialShieldFromSets(snapshots.p1.derivedStats).cap, 'fixture distinguishes initial Shield from generic cap');
   wiring.setShieldStateRawForTest(null); legal.shieldByUnit.p1.currentShield = initial;
-  assert.equal(runtime.restoreShieldState(legal, { snapshots, localState: null }).p1.currentShield, initial);
+  assert.equal(runtime.restoreRuntimeState(legal, { snapshots }).shieldStateByUnit.p1.currentShield, initial);
   legal.shieldByUnit.p1.currentShield = initial + 0.1;
-  assert.throws(() => runtime.restoreShieldState(legal, { snapshots, localState: null }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
+  assert.throws(() => runtime.restoreRuntimeState(legal, { snapshots }), error => error?.code === 'INVALID_ONLINE_GEAR_RUNTIME_STATE');
 });
 
 test('production receive flow buffers early state and restores Shield only after matching fire resolves', () => {
@@ -147,6 +147,25 @@ test('production accepted state restores a null local Shield but rejects forged 
   assert.equal(wiring.state().battleGearShieldStateByUnit, null, 'recovery rejects an amount above canonical initial Shield');
 });
 
+test('production accepted terminal commits Last Stand checkpoint only after snapshot apply and rejects malformed effects atomically', () => {
+  install({ p1: ['barrel', 'armor', 'core', 'engine'].map(slot => gear('checkpoint-last', slot, 'last_stand')) });
+  kt.setUnitHpForTest('p1', kt.unitById('p1').maxHp * .5);
+  wiring.recordLastStandDamage({ ownerId: 'e1', target: kt.unitById('p1'), actualDamage: 1, damageType: 'direct_projectile', fromEnemyAttackAction: true });
+  const valid = setRemoteTurnAndBuildTerminalSnapshot(); assert.equal(valid.gearRuntimeState.runtimeEffectsByUnit.p1.lastStandNextAttackDamageBp, 1500);
+  h.receiveFirebaseForTest(remoteState(valid)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.equal(wiring.state().battleGearRuntimeEffectsStateByUnit.p1.lastStandNextAttackDamageBp, 1500);
+
+  install({ p1: ['barrel', 'armor', 'core', 'engine'].map(slot => gear('checkpoint-atomic', slot, 'last_stand')) });
+  kt.setUnitHpForTest('p1', kt.unitById('p1').maxHp * .5);
+  wiring.recordLastStandDamage({ ownerId: 'e1', target: kt.unitById('p1'), actualDamage: 1, damageType: 'direct_projectile', fromEnemyAttackAction: true });
+  const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.runtimeEffectsByUnit.e1.lastStandNextAttackDamageBp = 1500;
+  const before = wiring.state(); h.receiveFirebaseForTest(remoteState(malformed)); h.receiveFirebaseForTest(remoteFire());
+  assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true); assert.equal(h.drainOneNetworkMessageForTest(), true);
+  assert.deepEqual(wiring.state().battleGearShieldStateByUnit, before.battleGearShieldStateByUnit);
+  assert.deepEqual(wiring.state().battleGearRuntimeEffectsStateByUnit, before.battleGearRuntimeEffectsStateByUnit);
+});
+
 test('production terminal rejection is atomic for wrong action, round and malformed runtime state', () => {
   install({ p1: life4('atomic') }); wiring.setShieldForTest('p1', 4); const before = wiring.state(); const valid = setRemoteTurnAndBuildTerminalSnapshot();
   const wrongAction = structuredClone(valid); wrongAction.gearRuntimeState.shieldByUnit.p1.currentShield = 2;
@@ -159,7 +178,7 @@ test('production terminal rejection is atomic for wrong action, round and malfor
   h.receiveFirebaseForTest(remoteState(stale, remoteActionId, 'f'.repeat(48)));
   assert.equal(wiring.state().battleGearShieldStateByUnit.p1.currentShield, 4, 'wrong round is ignored before Shield mutation');
 
-  install({ p1: life4('atomic-invalid') }); wiring.setShieldForTest('p1', 4); const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.version = 3;
+  install({ p1: life4('atomic-invalid') }); wiring.setShieldForTest('p1', 4); const malformed = setRemoteTurnAndBuildTerminalSnapshot(); malformed.gearRuntimeState.version = 4;
   h.receiveFirebaseForTest(remoteState(malformed)); h.receiveFirebaseForTest(remoteFire());
   assert.equal(h.drainOneNetworkMessageForTest(), true); assert.equal(h.resolveRemoteActionForTest(), true);
   assert.equal(h.drainOneNetworkMessageForTest(), true);
@@ -182,8 +201,8 @@ test('runtime state stays out of Battle Gear Snapshot, Healing, result and persi
   assert.doesNotMatch(rules, /gearRuntimeState/);
 });
 
-test('manifest v5 fences old Gear clients while core protocol, snapshot and Firebase wire stay v1', () => {
-  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 5); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
+test('manifest v6 fences old Gear clients while core protocol, snapshot and Firebase wire stay v1', () => {
+  assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 6); assert.equal(onlineProtocol.ONLINE_GEAR_PROTOCOL_VERSION, 1);
   assert.equal(battleSnapshot.GEAR_BATTLE_SNAPSHOT_VERSION, 1); assert.equal(require('../shared/gear-online-firebase-wire.js').ONLINE_GEAR_FIREBASE_WIRE_VERSION, 1);
   install(); const manifest = wiring.state().verifiedStartGearManifest; const old = structuredClone(manifest); old.version = 1;
   assert.throws(() => lobby.validateStartGearManifest(old, { participantReveals: Object.values(wiring.state().participantGearReveals) }), error => error?.code === 'INVALID_ONLINE_GEAR_START_MANIFEST');
@@ -191,7 +210,7 @@ test('manifest v5 fences old Gear clients while core protocol, snapshot and Fire
 
 test('source contract keeps accepted-state commit after applySnapshot and keeps runtime state local to state snaps', () => {
   const index = read('index.html'); const sw = read('sw.js');
-  assert.match(index, /applySnapshot\(msg\.snap, \{ preserveTerrain: true \}\);\s*if \(online\.kind === 'firebase' && acceptedGearRuntimeState\)/);
+  assert.match(index, /applySnapshot\(msg\.snap, \{ preserveTerrain: true \}\);\s*if \(online\.kind === 'firebase' && acceptedGearRuntimeCheckpoint\)/);
   assert.match(index, /firebaseOnlineGearBattleUnitIds/); assert.match(sw, /gear-online-battle-runtime-state\.js/);
   assert.doesNotMatch(index, /localStorage[\s\S]{0,120}gearRuntimeState/);
 });

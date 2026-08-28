@@ -160,13 +160,22 @@ test('all four 2v2 directions are team-symmetric and Gearless targets keep the s
   }
 });
 
-test('Rescue4 stays out of Shield runtime wire, reconnect state, Rules, and Firebase packets', () => {
+test('Rescue4 stays out of start/fire/result, Rules, and Firebase wire while turn checkpoints own it', () => {
   install();
   assert.ok(healAlly().actualHealing > 0);
   const turnSnap = wiring.turnSnapshotForTest();
-  assert.equal(turnSnap.gearRuntimeState.version, 2);
-  assert.deepEqual(Object.keys(turnSnap.gearRuntimeState).sort(), ['matchFormat', 'shieldByUnit', 'version']);
-  assert.doesNotMatch(JSON.stringify(turnSnap), /rescueNextAttackDamageBp|lastStandNextAttackDamageBp/);
+  assert.equal(turnSnap.gearRuntimeState.version, 3);
+  assert.deepEqual(Object.keys(turnSnap.gearRuntimeState).sort(), ['matchFormat', 'runtimeEffectsByUnit', 'shieldByUnit', 'version']);
+  assert.equal(turnSnap.gearRuntimeState.runtimeEffectsByUnit.p2.rescueNextAttackDamageBp, 1000);
+  wiring.setRuntimeEffectsStateRawForTest(null);
+  const restored = wiring.prepareRuntimeState(turnSnap);
+  assert.equal(restored.runtimeEffectsStateByUnit.p2.rescueNextAttackDamageBp, 1000);
+  wiring.setRuntimeEffectsStateRawForTest(restored.runtimeEffectsStateByUnit);
+  wiring.setShieldStateRawForTest(restored.shieldStateByUnit);
+  assert.equal(wiring.beginLastStandAttack('p2'), true);
+  assert.equal(wiring.activeAttackRuntime().actionDamageBp, 1000);
+  assert.equal(wiring.completeLastStandAttack('p2'), true);
+  assert.equal(wiring.runtimeState().runtimeEffectsByUnit.p2.rescueNextAttackDamageBp, 0);
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n?/g, '\n');
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const wire = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-firebase-wire.js'), 'utf8');

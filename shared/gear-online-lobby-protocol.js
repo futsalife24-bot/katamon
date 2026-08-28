@@ -5,10 +5,10 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearOnlineLobbyProtocol(root) {
   'use strict';
 
-  // v5 is the compatibility fence for owner-scoped 2v2 physical Gear conflicts.
+  // v6 is the compatibility fence for runtime checkpoint v3.
   // The core commitment/wire/snapshot versions intentionally remain v1; a
-  // mixed v4/v5 Gear battle must fail closed at start.
-  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 5;
+  // mixed v5/v6 Gear battle must fail closed at start.
+  const ONLINE_GEAR_LOBBY_PROTOCOL_VERSION = 6;
   const ONLINE_GEAR_READY_COMMITMENT_VERSION = 1;
   const ONLINE_VISIBILITY_PUBLIC = 'public';
   const ONLINE_VISIBILITY_PRIVATE = 'private';
