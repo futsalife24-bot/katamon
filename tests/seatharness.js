@@ -783,6 +783,8 @@ const HOOK = `
       launchShot(u, { ...unitAnchor(u) }, vx0, vy0, !!opts.useSpecial, false, !!opts.useJump);
     },
     setAwaitingResolveForTest: value => { awaitingResolve = value === true; return awaitingResolve; },
+    awaitingResolveForTest: () => awaitingResolve,
+    awaitingResolveForTest: () => awaitingResolve,
     setGamePhaseForTest: value => { gamePhase = value; return gamePhase; },
     physicsDt: () => PHYSICS_DT,
     unitRadius: () => UNIT_RADIUS,
@@ -1220,6 +1222,10 @@ const HOOK = `
         replay: (plan, options) => replayFirebaseBattleRecoveryPlan(plan, options),
         replayActive: () => firebaseBattleReplayActive(),
         replayRandomProbe: () => withFirebaseBattleReplayContext(async () => Math.random()),
+        replayStartTurn: () => withFirebaseBattleReplayContext(async () => {
+          startTurn();
+          return buildSnapshot({ includeTerrain: false });
+        }),
         onlinePhase: () => online?.phase || null,
         recoverySnapshotMismatch: (candidate, baseline) => firebaseRecoverySnapshotMismatchReason(candidate, baseline)
       }),

@@ -4523,6 +4523,20 @@
       nextWind = { ...fixed };
       return;
     }
+    // Recovery may replay a boundary where the action-side client rolled a
+    // new forecast. The current wind is already known: it is the forecast
+    // saved before this boundary. Consume only that known value here; the
+    // following forecast is accepted later from the validated state packet.
+    // Never fall through to rollWindValue() in replay: that would consume the
+    // browser RNG and alter the live game's RNG sequence.
+    if (firebaseBattleReplayActive()) {
+      if (!nextWind || !Number.isFinite(nextWind.strength) || (nextWind.dir !== -1 && nextWind.dir !== 1)) {
+        throw Object.assign(new Error('Firebase replayの風予報がありません'), { code: 'FIREBASE_RECOVERY_WIND_FORECAST_MISSING' });
+      }
+      applyWindValue(nextWind);
+      nextWind = null;
+      return;
+    }
     applyWindValue(nextWind || rollWindValue());
     nextWind = rollWindValue();
   }
@@ -10844,6 +10858,20 @@
     const expectedNext = baseline?.turnOrder?.[baseline?.activeIndex];
     return typeof nextId === 'string' && nextId === expectedNext && nextId !== action.unitId;
   }
+  function acceptFirebaseRecoveryNextWind(terminal, baseline) {
+    const forecast = terminal?.snap?.nextWind;
+    // nextWind is action-side authority in the existing live state contract:
+    // current wind is compared, while the newly rolled forecast is accepted.
+    // Recovery adopts exactly this one field only after deterministic battle
+    // fields and the current (previously forecast) wind have matched.
+    if (!forecast || (forecast.dir !== -1 && forecast.dir !== 1)
+      || !Number.isFinite(forecast.strength) || forecast.strength < 0 || forecast.strength > 1
+      || typeof forecast.calmWind !== 'boolean') firebaseRecoveryFail('FIREBASE_RECOVERY_WIND_FORECAST_INVALID');
+    const mismatch = firebaseRecoverySnapshotMismatchReason(terminal.snap, baseline);
+    if (mismatch) firebaseRecoveryFail(`FIREBASE_RECOVERY_REPLAY_MISMATCH:${mismatch}`);
+    nextWind = { dir: forecast.dir, strength: forecast.strength, calmWind: forecast.calmWind };
+    return buildSnapshot({ includeTerrain: false });
+  }
   function firebaseRecoveryAwait(predicate, { timeoutMs = 15000, frame = null } = {}) {
     const schedule = frame || (typeof requestAnimationFrame === 'function'
       ? callback => requestAnimationFrame(callback)
@@ -10935,7 +10963,7 @@
       onlineState: cloneFirebaseReplayValue(online),
       scalars: {
         gamePhase, battleMode, simTimeMs, physicsAccumulator, battleIntroPending,
-        turnSettle, matchOver, matchEndPause, matchEndReason, winner,
+        turnSettle, awaitingResolve, matchOver, matchEndPause, matchEndReason, winner,
         cpuThinkTimer, cpuMoveDir, cpuMoveRemaining, cpuPhase,
         moveDir, inputMode, inputPointerId, pinchState, specialArmed,
         subweaponArmed, jumpArmed, coopItemArmed, menuOpen, moveSyncTimer,
@@ -10968,7 +10996,7 @@
     restoreFirebaseReplayObject(online, rollback.onlineState);
     const scalar = rollback.scalars;
     ({ gamePhase, battleMode, simTimeMs, physicsAccumulator, battleIntroPending,
-      turnSettle, matchOver, matchEndPause, matchEndReason, winner,
+      turnSettle, awaitingResolve, matchOver, matchEndPause, matchEndReason, winner,
       cpuThinkTimer, cpuMoveDir, cpuMoveRemaining, cpuPhase,
       moveDir, inputMode, inputPointerId, pinchState, specialArmed,
       subweaponArmed, jumpArmed, coopItemArmed, menuOpen, moveSyncTimer,
@@ -11024,12 +11052,13 @@
           const baseline = buildSnapshot({ includeTerrain: false });
           if (terminal.t === 'state') {
             if (!firebaseRecoveryStateHandoffOk(terminal, fire, baseline)) firebaseRecoveryFail('FIREBASE_RECOVERY_STATE_HANDOFF_MISMATCH');
-            const mismatch = firebaseRecoverySnapshotMismatchReason(terminal.snap, baseline);
-            if (mismatch) firebaseRecoveryFail(`FIREBASE_RECOVERY_REPLAY_MISMATCH:${mismatch}`);
+            // Never apply a terminal snapshot. After replayed physics matches,
+            // retain only its action-authoritative next-wind forecast.
+            const acceptedBaseline = acceptFirebaseRecoveryNextWind(terminal, baseline);
             let runtime = null;
             try { runtime = prepareFirebaseOnlineGearRuntimeStateForAcceptedSnapshot(terminal.snap); }
             catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
-            validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(baseline), runtime }));
+            validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
           } else if (terminal.t === 'result') {
             const conceded = firebaseResultConcedes(terminal);
             const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
@@ -17750,7 +17779,7 @@
     for (const u of units) u.netWalkTargetX = null;
     // 風は全員が2巡するごとに切り替える(1vs1では従来どおり4ターンごと)
     // チュートリアルは項目ごとに風を決めているので、勝手に振り直さない。
-    if (!firebaseBattleReplayActive() && !options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
+    if (!options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
     if (coopSoloSalvoEnabled() && acting.team === 'player'
         && (!coopSalvoState || coopSalvoState.phase !== 'collecting')) {
