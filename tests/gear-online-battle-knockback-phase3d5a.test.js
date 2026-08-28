@@ -350,13 +350,8 @@ test('Knockback adds no Math.random calls', () => {
 
 });
 
-test('Gear ON 2v2 remains rejected and no Knockback wire or RNG field is introduced', () => {
+test('No Knockback wire or RNG field is introduced', () => {
   installBattle({ p1Gears: impactGears('two-v-two', ['barrel', 'armor']) });
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => wiring.knockbackPolicy('p1', 'e1', 'direct_projectile',
-    projectile({ ownerId: 'p1', directTargetId: 'e1' }), 0),
-  (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
-
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const rngSource = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-battle-rng.js'), 'utf8');
   assert.doesNotMatch(rules, /knockbackPower|knockbackResistance|knockbackVx|knockbackVy|gearKnockback/);

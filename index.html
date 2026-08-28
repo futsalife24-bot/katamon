@@ -6041,11 +6041,14 @@
   // ONLINE Shield is match-local runtime state. The immutable Battle Gear
   // Snapshot remains the only stat authority and never stores the remaining
   // Shield amount. Phase 3D-6C will define reconnect serialization separately.
+  function firebaseOnlineGearBattleUnitIds() {
+    const seatUnitMap = globalThis.KatamonGearOnlineProtocol?.ONLINE_GEAR_SEAT_UNIT_MAP;
+    if (!seatUnitMap) throw new Error('ONLINE_GEAR_PROTOCOL_UNAVAILABLE');
+    const seats = matchFormat === '2v2' ? ['p1', 'e1', 's1', 's2'] : ['p1', 'e1'];
+    return seats.map(seatId => seatUnitMap[seatId]);
+  }
   function createFirebaseOnlineGearShieldStateByUnit(snapshots) {
     if (!snapshots) return null;
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
-    }
     if (!Object.isFrozen(snapshots)) {
       throw Object.assign(new Error('ONLINE Gear Battle Snapshotがimmutableではありません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
     }
@@ -6053,7 +6056,7 @@
     if (!combat?.initialShieldFromSets) {
       throw Object.assign(new Error('ONLINE Gear Shield計算を利用できません'), { code: 'ONLINE_GEAR_SHIELD_MODULE_MISSING' });
     }
-    const entries = ['p1', 'e1'].map((unitId) => {
+    const entries = firebaseOnlineGearBattleUnitIds().map((unitId) => {
       const snapshot = snapshots[unitId];
       if (!snapshot || !Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.derivedStats)) {
         throw Object.assign(new Error(`${unitId}のONLINE Gear Shield snapshotが不正です`), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
@@ -6077,15 +6080,13 @@
 
   function createFirebaseOnlineGearRuntimeState() {
     if (!firebaseGearEnabled()) return null;
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
-    }
     if (!online?.battleGearSnapshotsByUnit || !online.battleGearShieldStateByUnit) {
       throw Object.assign(new Error('ONLINE Gear Shield runtime stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
     }
     return firebaseOnlineGearRuntimeStateApi().createRuntimeState({
       shieldStateByUnit: online.battleGearShieldStateByUnit,
-      snapshots: online.battleGearSnapshotsByUnit
+      snapshots: online.battleGearSnapshotsByUnit,
+      matchFormat
     });
   }
 
@@ -6094,9 +6095,6 @@
     if (!firebaseGearEnabled()) {
       if (hasRuntimeState) throw Object.assign(new Error('Gear OFF stateへruntime stateを送信できません'), { code: 'ONLINE_GEAR_RUNTIME_STATE_UNEXPECTED' });
       return null;
-    }
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
     }
     if (!hasRuntimeState || !online?.battleGearSnapshotsByUnit) {
       throw Object.assign(new Error('ONLINE Gear stateのruntime stateが不足しています'), { code: 'ONLINE_GEAR_RUNTIME_STATE_MISSING' });
@@ -8843,9 +8841,7 @@
 
   function onlineGearStaticCombatForUnit(unit) {
     if (!unit || !online || online.kind !== 'firebase' || !online.battleGearSnapshotsByUnit) return null;
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
-    }
+    if (!firebaseOnlineGearBattleUnitIds().includes(unit.id)) throw Object.assign(new Error('ONLINE Gear unitがformatと一致しません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
     if (!Object.isFrozen(online.battleGearSnapshotsByUnit)) {
       throw Object.assign(new Error('ONLINE Gear Battle Snapshotがimmutableではありません'), { code: 'ONLINE_GEAR_BATTLE_SNAPSHOT_NOT_IMMUTABLE' });
     }
@@ -8862,14 +8858,11 @@
   // next-action effect belongs to Phase 3D-8.
   function createFirebaseOnlineGearRuntimeEffectsStateByUnit(snapshots) {
     if (!snapshots) return null;
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
-    }
     const combat = globalThis.KatamonGearCombat;
     if (!combat?.createRuntimeEffectsState || !Object.isFrozen(snapshots)) {
       throw Object.assign(new Error('ONLINE Gear runtime effectsを初期化できません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
     }
-    const entries = ['p1', 'e1'].map((unitId) => {
+    const entries = firebaseOnlineGearBattleUnitIds().map((unitId) => {
       const snapshot = snapshots[unitId];
       if (!snapshot || !Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.derivedStats)) {
         throw Object.assign(new Error(`${unitId}のONLINE Gear runtime snapshotが不正です`), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
@@ -8887,10 +8880,10 @@
       throw Object.assign(new Error('ONLINE Gear runtime effects stateがありません'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_MISSING' });
     }
     // The shared pure helper permits Rescue4 for the future 2v2 support phase.
-    // In this strictly 1v1 phase no support source can grant it, so a nonzero
+    // No support source is connected in this phase, so a nonzero
     // value must fail closed before it can become action damage.
     if (state.rescueNextAttackDamageBp !== 0) {
-      throw Object.assign(new Error('ONLINE 1v1ではRescue runtimeは未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
+      throw Object.assign(new Error('ONLINE Gear Rescue runtimeは未対応です'), { code: 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID' });
     }
     // Keep the pure helper as the validator for Last Stand and exact shape.
     globalThis.KatamonGearCombat.beginAttackAction({ combat, state });
@@ -9011,9 +9004,7 @@
   // identity is derived locally from immutable room/round/turn authority.
   function createFirebaseOnlineGearRngActionIdentity(sourceUnitId) {
     if (!online || online.kind !== 'firebase' || !online.battleGearSnapshotsByUnit) return null;
-    if (matchFormat !== '1v1') {
-      throw Object.assign(new Error('Gear ONのONLINE 2v2 Battleはまだ利用できません'), { code: 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED' });
-    }
+    if (!firebaseOnlineGearBattleUnitIds().includes(sourceUnitId)) throw Object.assign(new Error('ONLINE Gear RNG action sourceがformatと一致しません'), { code: 'INVALID_ONLINE_GEAR_RNG_ACTION_SOURCE' });
     if (activeUnit()?.id !== sourceUnitId) {
       throw Object.assign(new Error('ONLINE Gear RNG action sourceが現在手番と一致しません'), { code: 'INVALID_ONLINE_GEAR_RNG_ACTION_SOURCE' });
     }

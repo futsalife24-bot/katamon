@@ -357,11 +357,8 @@ test('all five production damage callsites use the dispatcher while CPU keeps it
     'Phase 3D-3B APIs remain static while the later Blast runtime uses a narrow mode-aware seam');
 });
 
-test('Gear ON 2v2 remains fail closed and the resolver accepts only approved static damage types', () => {
+test('resolver accepts only approved static damage types', () => {
   const setup = installBattle();
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => wiring.requestedDamage('p1', 'e1', 'direct_projectile', 45),
-    (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
   assert.throws(() => onlineDamage.calculateOnlineGearStaticRequestedDamage({
     existingBaseDamage: 45,
     damageType: 'status',

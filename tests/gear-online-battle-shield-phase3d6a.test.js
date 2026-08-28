@@ -265,7 +265,7 @@ test('eligible hostile damage fails closed when ONLINE runtime Shield state is m
   assert.throws(() => wiring.applyResolvedDamage('p1', 'e1', 5), (error) => error?.code === 'ONLINE_GEAR_SHIELD_STATE_INVALID');
 });
 
-test('Gear ON 2v2 remains rejected and Shield introduces no RNG or Math.random consumption', () => {
+test('Shield introduces no RNG or Math.random consumption', () => {
   installBattle({ e1Gears: lifeSet('random', 4) });
   const actionIdentity = onlineRng.createOnlineGearActionIdentity({ version: 1, roomId, roundId, turnOrdinal: 7, sourceUnitId: 'p1' });
   const critIdentity = onlineRng.createCritRollIdentity({ actionIdentity, targetUnitId: 'e1', damageType: 'direct_projectile', hitOrdinal: 0 });
@@ -275,8 +275,6 @@ test('Gear ON 2v2 remains rejected and Shield introduces no RNG or Math.random c
   Math.random = () => { calls += 1; return 0.5; };
   try { wiring.applyResolvedDamage('p1', 'e1', 5); } finally { Math.random = original; }
   assert.equal(calls, 0);
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => wiring.applyResolvedDamage('p1', 'e1', 5), (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
 test('source contract covers all hostile routes while Firebase wire, Rules, and reconnect stay untouched', () => {

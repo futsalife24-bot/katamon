@@ -5,8 +5,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createKatamonGearOnlineBattleStart(root) {
   'use strict';
 
-  const ONLINE_GEAR_BATTLE_START_MATCH_FORMAT = '1v1';
-  const START_UNIT_IDS = Object.freeze(['p1', 'e1']);
+  const ONLINE_GEAR_BATTLE_START_MATCH_FORMATS = Object.freeze(['1v1', '2v2']);
+  const START_UNIT_IDS_BY_FORMAT = Object.freeze({ '1v1': Object.freeze(['p1', 'e1']), '2v2': Object.freeze(['p1', 'e1', 'p2', 'e2']) });
 
   class GearOnlineBattleStartError extends Error {
     constructor(code, message) { super(message || code); this.name = 'GearOnlineBattleStartError'; this.code = code; }
@@ -38,17 +38,25 @@
 
   function createOnlineGearBattleStartState(input) {
     exact(input, ['manifest', 'matchFormat', 'participantReveals'], 'INVALID_ONLINE_GEAR_BATTLE_START');
-    if (input.matchFormat !== ONLINE_GEAR_BATTLE_START_MATCH_FORMAT) {
-      fail('ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED', 'Gear ONのONLINE 2v2 Battleはまだ利用できません');
-    }
+    if (!ONLINE_GEAR_BATTLE_START_MATCH_FORMATS.includes(input.matchFormat)) fail('INVALID_ONLINE_GEAR_BATTLE_START');
     const manifest = lobbyProtocol().validateStartGearManifest(input.manifest, {
       participantReveals: input.participantReveals
     });
+    const unitIds = START_UNIT_IDS_BY_FORMAT[input.matchFormat];
+    const protocol = onlineProtocol();
+    const requiredSeats = Object.entries(protocol.ONLINE_GEAR_SEAT_UNIT_MAP)
+      .filter(([, unitId]) => unitIds.includes(unitId)).map(([seatId]) => seatId);
+    if (manifest.commitments.length !== unitIds.length || input.participantReveals.length !== unitIds.length) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
     const revealBySeat = new Map(input.participantReveals.map((entry) => [entry?.revealedCommitment?.seatId, entry]));
+    if (revealBySeat.size !== requiredSeats.length || requiredSeats.some(seatId => !revealBySeat.has(seatId))) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
+    if (input.matchFormat === '2v2') {
+      const owners = manifest.commitments.map(entry => entry.ownerUid);
+      if (new Set(owners).size !== owners.length) fail('ONLINE_GEAR_2V2_SAME_OWNER_UNSUPPORTED');
+    }
     const battleGearSnapshotsByUnit = {};
     const hpFuelByUnit = {};
     for (const commitment of manifest.commitments) {
-      if (!START_UNIT_IDS.includes(commitment.unitId) || commitment.seatId !== commitment.unitId) {
+      if (!unitIds.includes(commitment.unitId) || protocol.ONLINE_GEAR_SEAT_UNIT_MAP[commitment.seatId] !== commitment.unitId) {
         fail('INVALID_ONLINE_GEAR_BATTLE_PARTICIPANT');
       }
       const reveal = revealBySeat.get(commitment.seatId);
@@ -64,9 +72,9 @@
         fuel: derived.currentFuelAtBattleStart
       });
     }
-    if (!Object.keys(battleGearSnapshotsByUnit).length) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
+    if (Object.keys(battleGearSnapshotsByUnit).sort().join(',') !== unitIds.slice().sort().join(',')) fail('MISSING_ONLINE_GEAR_BATTLE_REVEAL');
     return freeze({
-      matchFormat: ONLINE_GEAR_BATTLE_START_MATCH_FORMAT,
+      matchFormat: input.matchFormat,
       battleGearSnapshotsByUnit,
       hpFuelByUnit
     });
@@ -74,8 +82,8 @@
 
   function validateOnlineGearStartSnapshot(snapshot, battleStartState) {
     exact(battleStartState, ['battleGearSnapshotsByUnit', 'hpFuelByUnit', 'matchFormat'], 'INVALID_ONLINE_GEAR_BATTLE_START');
-    if (battleStartState.matchFormat !== ONLINE_GEAR_BATTLE_START_MATCH_FORMAT
-        || snapshot?.matchFormat !== ONLINE_GEAR_BATTLE_START_MATCH_FORMAT
+    if (!ONLINE_GEAR_BATTLE_START_MATCH_FORMATS.includes(battleStartState.matchFormat)
+        || snapshot?.matchFormat !== battleStartState.matchFormat
         || !Array.isArray(snapshot?.units)) fail('INVALID_ONLINE_GEAR_START_SNAPSHOT');
     for (const [unitId, expected] of Object.entries(battleStartState.hpFuelByUnit)) {
       const unit = snapshot.units.find((entry) => entry?.id === unitId);
@@ -90,7 +98,7 @@
   }
 
   return freeze({
-    ONLINE_GEAR_BATTLE_START_MATCH_FORMAT,
+    ONLINE_GEAR_BATTLE_START_MATCH_FORMATS,
     GearOnlineBattleStartError,
     createOnlineGearBattleStartState,
     validateOnlineGearStartSnapshot

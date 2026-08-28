@@ -356,14 +356,10 @@ test('later Gear effects and Math.random remain inert in the ONLINE Crit damage 
   assert.doesNotMatch(source, /Math\.random|blastDamageMultiplier|blastRangeMultiplier|resolveRuntimeEffects|beginAttackAction/);
 });
 
-test('Gear OFF damage and Gear ON 2v2 gate remain unchanged', () => {
+test('Gear OFF damage remains unchanged', () => {
   h.setOnlineForLogTest(onlineFixture({ gear: false }));
   prepareUnits();
   assert.equal(wiring.requestedDamage('p1', 'e1', 'direct_projectile', 45, projectile('p1')), 45);
-  installBattle();
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => wiring.requestedDamage('p1', 'e1', 'direct_projectile', 45, projectile('p1')),
-    (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
 });
 
 test('Crit adds no Firebase field, Rules change, CPU RNG reuse, or Blast behavior to its compatibility API', () => {
@@ -374,7 +370,7 @@ test('Crit adds no Firebase field, Rules change, CPU RNG reuse, or Blast behavio
   assert.doesNotMatch(index, /netSend\(\{[^}]*crit(?:Roll|Result)|gearRngIdentity:/);
   assert.doesNotMatch(rngSource, /gear-battle-rng\.js|runId|matchOrdinal|Math\.random/);
   assert.doesNotMatch(onlineDamage.calculateOnlineGearCritRequestedDamage.toString(), /blastDamageMultiplier|blastRangeMultiplier/);
-  assert.match(index, /ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED/);
+  assert.match(index, /firebaseOnlineGearBattleUnitIds/);
 });
 
 async function main() {

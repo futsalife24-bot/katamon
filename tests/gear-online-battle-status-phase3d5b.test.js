@@ -286,12 +286,9 @@ test('Status resolution adds no Math.random calls', () => {
   assert.equal(calls, 0);
 });
 
-test('Gear ON 2v2 remains rejected while Firebase wire and Rules stay unchanged', () => {
+test('Firebase wire and Rules stay unchanged as 2v2 capability moves to the Battle foundation', () => {
   installBattle({ e1Gears: [statusGear('two-v-two')] });
   installAction('p1', 2);
-  kt.setMatchFormatForTest('2v2');
-  assert.throws(() => wiring.statusResolution('p1', 'e1', 'move_lock'),
-    (error) => error?.code === 'ONLINE_GEAR_2V2_BATTLE_UNSUPPORTED');
   const rules = fs.readFileSync(path.join(__dirname, '..', 'database.rules.json'), 'utf8');
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.doesNotMatch(rules, /statusRoll|statusResult|statusResistance|gearRngStatusIdentity/);
