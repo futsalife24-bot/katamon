@@ -1224,6 +1224,11 @@ const HOOK = `
         pending: () => pendingFirebaseReentry,
         activeOnline: () => online,
         endActive: () => endOnline(false),
+        retryScheduled: () => !!firebaseBattleRecoveryRetryTimer,
+        setRecoveryDocumentHidden: hidden => {
+          document.hidden = !!hidden;
+          document.dispatchEvent({ type: 'visibilitychange' });
+        },
         // A test-only terminal generator.  It deliberately shares the
         // recovery start/action *inputs* with the verifier, but never reads a
         // candidate terminal or calls the replay runner.  This lets tests

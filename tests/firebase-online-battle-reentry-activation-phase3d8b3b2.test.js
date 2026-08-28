@@ -149,6 +149,32 @@ async function battleBoundaryPlan(lease) {
     }
   });
 
+  await test('hiding a queued wait retry cancels it, and repeated visible resumes schedule exactly one retry', async () => {
+    const source = fakeEventSource();
+    const lease = { release: () => {} };
+    const value = candidate('playing', lease);
+    const plan = Object.freeze({ kind: 'wait_for_start', pendingAction: null });
+    bridge.setRecoveryDocumentHidden(false);
+    bridge.setPending(value);
+    try {
+      await bridge.activatePending({ plan });
+      assert.equal(bridge.retryScheduled(), true);
+      bridge.setRecoveryDocumentHidden(true);
+      assert.equal(bridge.retryScheduled(), false, 'hidden transition cancels a previously queued retry');
+      assert.equal(bridge.activeOnline(), null);
+      assert.equal(source.instances.length, 0);
+      bridge.setRecoveryDocumentHidden(false);
+      assert.equal(bridge.retryScheduled(), true, 'visible resume schedules one retry');
+      bridge.setRecoveryDocumentHidden(false);
+      assert.equal(bridge.retryScheduled(), true, 'repeated visible events do not multiply retries');
+      bridge.setRecoveryDocumentHidden(true);
+    } finally {
+      bridge.setPending(null);
+      bridge.setRecoveryDocumentHidden(false);
+      source.restore();
+    }
+  });
+
   await test('revealing re-entry rebuilds persisted own commit, ready, and reveal evidence before seeded SSE starts', async () => {
     const source = fakeEventSource();
     const lease = { release: () => {} };
@@ -335,5 +361,5 @@ async function battleBoundaryPlan(lease) {
     assert.equal(released, 1);
   });
 
-  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/10 passed`);
+  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/11 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

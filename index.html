@@ -10429,6 +10429,9 @@
     if (firebaseBattleRecoveryRetryTimer || firebaseRecoveryDocumentHidden()) return;
     firebaseBattleRecoveryRetryTimer = setTimeout(() => {
       firebaseBattleRecoveryRetryTimer = 0;
+      // A retry may have been queued while visible and the tab hidden before
+      // this callback ran.  Re-check here as well as at scheduling time.
+      if (firebaseRecoveryDocumentHidden()) return;
       // Re-read the canonical log; never turn a pending action into a live
       // projectile just to make a reconnect look faster.
       activatePendingFirebaseBattleReentry().catch(() => {});
@@ -10436,7 +10439,12 @@
   }
   if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
     document.addEventListener('visibilitychange', () => {
-      if (!firebaseRecoveryDocumentHidden() && pendingFirebaseReentry && !online) scheduleFirebaseBattleRecoveryReplan();
+      if (firebaseRecoveryDocumentHidden()) {
+        if (firebaseBattleRecoveryRetryTimer) clearTimeout(firebaseBattleRecoveryRetryTimer);
+        firebaseBattleRecoveryRetryTimer = 0;
+        return;
+      }
+      if (pendingFirebaseReentry && !online) scheduleFirebaseBattleRecoveryReplan();
     });
   }
   function firebaseReentryApi() {
