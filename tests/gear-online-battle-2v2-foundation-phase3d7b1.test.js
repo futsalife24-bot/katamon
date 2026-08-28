@@ -137,11 +137,11 @@ test('p2/e2 use the established deterministic RNG identity without changing the 
   assert.equal(rng.rollBasisPoints(rng.createCritRollIdentity({ actionIdentity: legacyAction, targetUnitId: 'e1', damageType: 'direct_projectile', hitOrdinal: 0 })), 5220);
 });
 
-test('2v2 source boundaries are format-aware while Rescue remains inert and legacy wire versions stay unchanged', () => {
+test('2v2 source boundaries are format-aware while legacy wire versions stay unchanged', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n?/g, '\n');
   const stateModule = fs.readFileSync(path.join(__dirname, '..', 'shared', 'gear-online-battle-runtime-state.js'), 'utf8');
   assert.match(index, /function firebaseOnlineGearBattleUnitIds\(/);
-  assert.match(index, /rescueNextAttackDamageBp !== 0/);
+  assert.match(index, /function recordFirebaseOnlineGearSupportEvent\(/);
   assert.match(stateModule, /ONLINE_GEAR_RUNTIME_STATE_VERSION = 2/);
   assert.equal(lobby.ONLINE_GEAR_LOBBY_PROTOCOL_VERSION, 4);
   assert.equal(online.ONLINE_GEAR_PROTOCOL_VERSION, 1);
@@ -177,9 +177,8 @@ test('production 2v2 applies p2/e2 damage, Shield, Healing, Last Stand, and acti
   wiring.recordLastStandDamage({ ownerId: 'e2', target: kt.unitById('p2'), actualDamage: 1, damageType: 'direct_projectile', fromEnemyAttackAction: true });
   assert.equal(wiring.beginLastStandAttack('p2'), true); assert.equal(wiring.completeLastStandAttack('p2'), true);
   assert.equal(wiring.rngActionIdentity('p2').sourceUnitId, 'p2');
-  const effects = wiring.runtimeEffectsState();
-  wiring.setRuntimeEffectsStateRawForTest(Object.freeze({ ...effects, p2: Object.freeze({ ...effects.p2, rescueNextAttackDamageBp: 1000 }) }));
-  assert.throws(() => wiring.beginLastStandAttack('p2'), error => error?.code === 'ONLINE_GEAR_RUNTIME_EFFECTS_STATE_INVALID');
+  assert.equal(wiring.runtimeEffectsState().p2.rescueNextAttackDamageBp, 0,
+    '2v2 foundation starts Rescue runtime at zero; Phase 3D-7B2 owns grants');
 });
 
 test('production 2v2 serializes and restores all Shield entries, while a 1v1 recovery payload fails atomically', () => {
