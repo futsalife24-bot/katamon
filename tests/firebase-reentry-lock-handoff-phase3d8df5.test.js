@@ -106,12 +106,32 @@ void (async () => {
 
   await test('bootstrap retry is narrowly scoped and the exclusive lock contract remains unchanged', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const bootstrap = /function scheduleFirebaseRoomSeatReentryBootstrap\(\) \{[\s\S]*?\n  \}(?=\n  async function ensureFirebaseAuth)/.exec(source)?.[0] || '';
+    const bootstrapStart = source.indexOf('function scheduleFirebaseRoomSeatReentryBootstrap()');
+    const bootstrapEnd = source.indexOf('async function ensureFirebaseAuth', bootstrapStart);
+    const bootstrap = bootstrapStart >= 0 && bootstrapEnd > bootstrapStart
+      ? source.slice(bootstrapStart, bootstrapEnd) : '';
     assert.match(bootstrap, /error\?\.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE'/);
     assert.match(bootstrap, /firebaseReentryBootstrapState = 'retry_wait'/);
     assert.match(bootstrap, /firebaseReentryBootstrapRetryTimer = setTimeout/);
     assert.match(source, /\{ mode: 'exclusive', ifAvailable: true \}/, 'same-seat exclusivity must not be weakened');
     assert.doesNotMatch(bootstrap, /clearFirebaseReentryCredential|ensureFirebaseAuth|signUp/, 'contention retry must not replace identity authority');
+  });
+
+  await test('non-bfcache guest document handoff closes transport and releases only its existing lease', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const handoffStart = source.indexOf('function releaseFirebaseGuestLeaseForDocumentHandoff(event)');
+    const handoffEnd = source.indexOf("window.addEventListener('pagehide'", handoffStart);
+    const handoff = handoffStart >= 0 && handoffEnd > handoffStart
+      ? source.slice(handoffStart, handoffEnd) : '';
+    assert.match(handoff, /online\.kind !== 'firebase'/);
+    assert.match(handoff, /online\.role === 'host'/, 'host keeps its existing pagehide/endOnline contract');
+    assert.match(handoff, /event\?\.persisted === true/, 'bfcache-capable documents retain the exclusive seat lease');
+    assert.match(handoff, /online\.transport\?\.close\(\)/);
+    assert.match(handoff, /releaseFirebaseReentryLease\(online\.reentryLease\)/);
+    assert.match(handoff, /online\.reentryLease = null/);
+    assert.match(source, /else releaseFirebaseGuestLeaseForDocumentHandoff\(event\)/);
+    assert.doesNotMatch(handoff, /clearFirebaseReentryCredential|removeItem|resumeSuspendedMatch|ensureFirebaseAuth/,
+      'document handoff must not rewrite identity or CPU authority');
   });
 
   console.log(`firebase re-entry lock handoff phase3d8df5: ${passed}/${passed} passed`);

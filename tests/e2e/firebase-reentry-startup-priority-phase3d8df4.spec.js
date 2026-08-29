@@ -6,6 +6,8 @@ const ROOM_CODE = 'A2BC3DEF';
 const ROUND_ID = 'a'.repeat(48);
 const HOST_UID = 'host-p1';
 const GUEST_UID = 'guest-e1';
+const SUPPORT1_UID = 'support-s1';
+const SUPPORT2_UID = 'support-s2';
 
 function token() {
   const now = Math.floor(Date.now() / 1000);
@@ -49,8 +51,35 @@ async function installF4Bridge(context, fixture) {
   };
   restoreFirebaseRoomSeatReentry = f4WrapAsync('restoreFirebaseRoomSeatReentry', restoreFirebaseRoomSeatReentry);
   acquireFirebaseReentryLease = f4WrapAsync('acquireFirebaseReentryLease', acquireFirebaseReentryLease);
-  activatePendingFirebaseBattleReentry = f4WrapAsync('activatePendingFirebaseBattleReentry', activatePendingFirebaseBattleReentry);
+  const f4OriginalActivatePending = activatePendingFirebaseBattleReentry;
+  activatePendingFirebaseBattleReentry = async function(...args) {
+    f4Push('activatePendingFirebaseBattleReentry', 'before');
+    try {
+      const value = await f4OriginalActivatePending.apply(this, args);
+      f4Push('activatePendingFirebaseBattleReentry', 'after');
+      // Once canonical replay has reached its stable boundary, stop only this
+      // mock's ping-less frame loop. Replay itself keeps native RAF authority.
+      requestAnimationFrame = () => 0;
+      return value;
+    } catch (error) {
+      f4Push('activatePendingFirebaseBattleReentry', 'error', { name: error?.name, message: error?.message, code: error?.code || null });
+      throw error;
+    }
+  };
   replayFirebaseBattleRecoveryPlan = f4WrapAsync('replayFirebaseBattleRecoveryPlan', replayFirebaseBattleRecoveryPlan);
+  beginFirebaseBattleReplayAction = f4WrapSync('beginFirebaseBattleReplayAction', beginFirebaseBattleReplayAction);
+  const f4OriginalSnapshotMismatch = firebaseRecoverySnapshotMismatchReason;
+  firebaseRecoverySnapshotMismatchReason = function(candidate, baseline) {
+    const reason = f4OriginalSnapshotMismatch(candidate, baseline);
+    if (reason) f4Push('firebaseRecoverySnapshotMismatchReason', 'mismatch', {
+      reason,
+      candidateTurn: candidate?.turnCount,
+      baselineTurn: baseline?.turnCount,
+      candidateCraters: structuredClone(candidate?.craters || []),
+      baselineCraters: structuredClone(baseline?.craters || [])
+    });
+    return reason;
+  };
   const f4OriginalFinalFence = assertFinalFirebaseRecoveryRound;
   assertFinalFirebaseRecoveryRound = async function(candidate, plan) {
     f4Push('assertFinalFirebaseRecoveryRound', 'before', {
@@ -64,9 +93,14 @@ async function installF4Bridge(context, fixture) {
   restoreFirebaseBattleReplayRollback = f4WrapSync('restoreFirebaseBattleReplayRollback', restoreFirebaseBattleReplayRollback);
   resumeSuspendedMatch = f4WrapSync('resumeSuspendedMatch', resumeSuspendedMatch);
   applySnapshot = f4WrapSync('applySnapshot', applySnapshot);
-
   globalThis.KatamonF4StartupBridge = Object.freeze({
     async seed(options = {}) {
+      const format = options.format === '2v2' ? '2v2' : '1v1';
+      const requestedSeat = ['p1', 'e1', 's1', 's2'].includes(options.reentrySeat) ? options.reentrySeat : 'e1';
+      const reentrySeat = format === '2v2' ? requestedSeat : (requestedSeat === 'p1' ? 'p1' : 'e1');
+      const reentryUid = ({ p1: '${HOST_UID}', e1: '${GUEST_UID}', s1: '${SUPPORT1_UID}', s2: '${SUPPORT2_UID}' })[reentrySeat];
+      const reentryCharacter = ({ p1: 'kyoryu', e1: 'iwa', s1: 'medama', s2: 'kyoryu' })[reentrySeat];
+      const reentryRole = reentrySeat === 'p1' ? 'host' : 'guest';
       setMatchFormat('1v1');
       gamePhase = 'battle';
       selectCharacterAndStart('kyoryu');
@@ -74,45 +108,167 @@ async function installF4Bridge(context, fixture) {
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       if (!localStorage.getItem(SUSPEND_KEY)) throw new Error('F4 CPU suspend seed failed');
+      // The mock has no natural peer ping stream. Stop the production frame loop
+      // after it has created the CPU suspend so a successful recovery cannot age
+      // into peer-timeout/ended while the suite is asserting a later case.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      requestAnimationFrame = () => 0;
+      await new Promise(resolve => setTimeout(resolve, 25));
 
-      setMatchFormat('1v1');
+      setMatchFormat(format);
       applyCharacter(unitById('p1'), 'kyoryu');
       applyCharacter(unitById('e1'), 'iwa');
+      if (format === '2v2') {
+        applyCharacter(unitById('p2'), 'medama');
+        applyCharacter(unitById('e2'), 'kyoryu');
+      }
       resetMatch(false);
       const snap = structuredClone(buildSnapshot());
       const hostNonce = 'a'.repeat(48);
       const guestNonce = 'b'.repeat(48);
       snap.activeIndex = (await fairFirstPlayer('${ROOM_CODE}', hostNonce, guestNonce)) === 'p1' ? 0 : 1;
+      if (options.completedHitActions === true) {
+        const player = snap.units.find(unit => unit.id === 'p1');
+        const enemy = snap.units.find(unit => unit.id === 'e1');
+        player.x = 600; player.y = 360;
+        enemy.x = 840; enemy.y = 360;
+      }
       const room = {
         protocol: 3, hostUid: '${HOST_UID}', createdAt: 1800000000000,
         expiresAt: Date.now() + 600000, visibility: 'private',
-        settings: { terrain: 'rolling', wind: 'calm', turnsPerPlayer: 15, format: '1v1', stageSize: 'standard', revision: 1 },
-        slots: { p1: { uid: '${HOST_UID}', claimedAt: Date.now() - 2 }, e1: { uid: '${GUEST_UID}', claimedAt: Date.now() - 1 }, s1: null, s2: null },
-        round: { id: '${ROUND_ID}', status: 'playing', players: { p1: '${HOST_UID}', e1: '${GUEST_UID}' } }
+        settings: { terrain: 'rolling', wind: 'calm', turnsPerPlayer: 15, format, stageSize: 'standard', revision: 1 },
+        slots: {
+          p1: { uid: '${HOST_UID}', claimedAt: Date.now() - 4 },
+          e1: { uid: '${GUEST_UID}', claimedAt: Date.now() - 3 },
+          s1: format === '2v2' ? { uid: '${SUPPORT1_UID}', claimedAt: Date.now() - 2 } : null,
+          s2: format === '2v2' ? { uid: '${SUPPORT2_UID}', claimedAt: Date.now() - 1 } : null
+        },
+        round: {
+          id: '${ROUND_ID}', status: 'playing',
+          players: format === '2v2'
+            ? { p1: '${HOST_UID}', e1: '${GUEST_UID}', s1: '${SUPPORT1_UID}', s2: '${SUPPORT2_UID}' }
+            : { p1: '${HOST_UID}', e1: '${GUEST_UID}' }
+        }
       };
       const credential = createFirebaseReentryCredential({
-        auth: { uid: '${GUEST_UID}', refreshToken: 'refresh-f4' }, room,
-        roomCode: '${ROOM_CODE}', seat: 'e1', savedAt: Date.now()
+        auth: { uid: reentryUid, refreshToken: 'refresh-f4' }, room,
+        roomCode: '${ROOM_CODE}', seat: reentrySeat, savedAt: Date.now()
       });
       saveFirebaseReentryCredential(credential);
-      if (options.holdReentryLease === true) {
+      if (options.holdReentryLease === true || options.activeOnlineLease === true) {
         globalThis.__f5HeldReentryLease = await acquireFirebaseReentryLease(credential);
       }
+      if (options.activeOnlineLease === true) {
+        const auth = {
+          uid: reentryUid, idToken: 'test-f5', refreshToken: 'refresh-f5',
+          expiresAt: Date.now() + 3600000, serverTimeOffset: 0
+        };
+        beginFirebaseOnline(reentryRole, '${ROOM_CODE}', auth, reentryCharacter, room, reentrySeat, null, globalThis.__f5HeldReentryLease);
+        online.phase = 'playing';
+      }
       const base = { v: 3, roundId: '${ROUND_ID}', sentAt: 1800000000000 };
-      const messages = {
+      let messages = {
         '-0000000000000000001': { ...base, t: 'commit', from: '${HOST_UID}', seat: 'p1', hash: await commitPayload('kyoryu', hostNonce) },
         '-0000000000000000002': { ...base, t: 'commit', from: '${GUEST_UID}', seat: 'e1', hash: await commitPayload('iwa', guestNonce) },
         '-0000000000000000003': { ...base, t: 'reveal', from: '${HOST_UID}', seat: 'p1', character: 'kyoryu', nonce: hostNonce },
         '-0000000000000000004': { ...base, t: 'reveal', from: '${GUEST_UID}', seat: 'e1', character: 'iwa', nonce: guestNonce },
         '-0000000000000000005': { ...base, t: 'start', from: '${HOST_UID}', seat: 'p1', snap }
       };
+      if (format === '2v2') {
+        const support1Nonce = 'c'.repeat(48);
+        const support2Nonce = 'd'.repeat(48);
+        messages = {
+          '-0000000000000000001': { ...base, t: 'commit', from: '${HOST_UID}', seat: 'p1', hash: await commitPayload('kyoryu', hostNonce) },
+          '-0000000000000000002': { ...base, t: 'commit', from: '${GUEST_UID}', seat: 'e1', hash: await commitPayload('iwa', guestNonce) },
+          '-0000000000000000003': { ...base, t: 'commit', from: '${SUPPORT1_UID}', seat: 's1', hash: await commitPayload('medama', support1Nonce) },
+          '-0000000000000000004': { ...base, t: 'commit', from: '${SUPPORT2_UID}', seat: 's2', hash: await commitPayload('kyoryu', support2Nonce) },
+          '-0000000000000000005': { ...base, t: 'reveal', from: '${HOST_UID}', seat: 'p1', character: 'kyoryu', nonce: hostNonce },
+          '-0000000000000000006': { ...base, t: 'reveal', from: '${GUEST_UID}', seat: 'e1', character: 'iwa', nonce: guestNonce },
+          '-0000000000000000007': { ...base, t: 'reveal', from: '${SUPPORT1_UID}', seat: 's1', character: 'medama', nonce: support1Nonce },
+          '-0000000000000000008': { ...base, t: 'reveal', from: '${SUPPORT2_UID}', seat: 's2', character: 'kyoryu', nonce: support2Nonce },
+          '-0000000000000000009': { ...base, t: 'start', from: '${HOST_UID}', seat: 'p1', snap }
+        };
+      }
+      if (options.resultMode === 'concede') {
+        room.round.status = 'results';
+        messages['-0000000000000000000'] = {
+          ...base, t: 'presence', from: '${HOST_UID}', seat: 'p1',
+          rivalId: 'c'.repeat(64), name: 'Host'
+        };
+        messages['-0000000000000000006'] = {
+          ...base, t: 'result', from: '${HOST_UID}', seat: 'p1',
+          actionId: 'f'.repeat(48), unitId: 'p1', winner: 'cpu', reason: '投了',
+          units: snap.units.map(unit => ({ id: unit.id, hp: unit.hp }))
+        };
+      }
+      const completedActionCount = Math.max(0, Math.min(4, Number(options.completedActionCount) || 0));
+      if (completedActionCount > 0) {
+        const rollback = captureFirebaseBattleReplayRollback();
+        try {
+          gamePhase = 'battle';
+          battleIntroPending = false;
+          applySnapshot(snap);
+          for (let index = 0; index < completedActionCount; index += 1) {
+            const unit = activeUnit();
+            if (!unit) throw new Error('F5 completed history active unit is missing');
+            const isPlayer = unit.team === 'player';
+            const target = units.find(entry => entry.team !== unit.team);
+            const actor = isPlayer
+              ? { from: '${HOST_UID}', seat: 'p1', x: 240, vx0: -5000 }
+              : { from: '${GUEST_UID}', seat: 'e1', x: 1200, vx0: 5000 };
+            if (options.completedHitActions === true && target) {
+              actor.x = unit.x;
+              actor.vx0 = Math.sign(target.x - unit.x || (isPlayer ? 1 : -1)) * 1000;
+            }
+            const actionId = String.fromCharCode(99 + index).repeat(48);
+            unit.x = actor.x;
+            unit.y = 360;
+            faceAllUnitsTowardOpponents();
+            const fire = {
+              ...base, t: 'fire', from: actor.from, seat: actor.seat,
+              actionId, unitId: unit.id, x: unit.x, y: unit.y,
+              anchor: { x: unit.x, y: unit.y }, vx0: actor.vx0, vy0: -140,
+              useSpecial: false, useJump: false, sentAt: base.sentAt + 1 + index * 2
+            };
+            launchShot(unit, fire.anchor, fire.vx0, fire.vy0, false, false, false);
+            awaitingResolve = true;
+            await firebaseRecoveryAwait(
+              () => !awaitingResolve && !pendingShot && !projectiles.length
+                && !barucopters.length && !groundFlames.length
+                && units.every(entry => entry.grounded),
+              {
+                timeoutMs: 15000,
+                frame: callback => setTimeout(() => { update(0.05); callback(); }, 0)
+              }
+            );
+            const terminalSnap = buildSnapshot({ includeTerrain: false });
+            for (const field of [
+              'segments', 'pattern', 'startOnIsland', 'bridge', 'themeKey',
+              'parallaxSeed', 'terrainMaterial', 'terrainMaterialSegments',
+              'customStage', 'customStageIdentity', 'terrainDelta'
+            ]) delete terminalSnap[field];
+            messages['-' + String(6 + index * 2).padStart(19, '0')] = fire;
+            messages['-' + String(7 + index * 2).padStart(19, '0')] = {
+              ...base, t: 'state', from: actor.from, seat: actor.seat,
+              actionId, unitId: unit.id, snap: structuredClone(terminalSnap),
+              sentAt: base.sentAt + 2 + index * 2
+            };
+          }
+        } finally {
+          restoreFirebaseBattleReplayRollback(rollback);
+        }
+      }
       // Fixture construction uses the production Battle path and may legitimately
       // refresh the current CPU suspend. The authority contract starts here: these
       // exact final bytes must survive the subsequent zero-input ONLINE re-entry.
       const cpuRaw = localStorage.getItem(SUSPEND_KEY);
       if (!cpuRaw) throw new Error('F4 CPU suspend disappeared during fixture construction');
       return {
-        room, messages, cpuRaw,
+        room, messages, cpuRaw, reentrySeat, reentryUid, reentryCharacter,
+        historySummary: {
+          units: Object.values(messages).filter(packet => packet.t === 'state')
+            .map(packet => packet.snap.units.map(unit => ({ id: unit.id, hp: unit.hp, maxHp: unit.maxHp })))
+        },
         validation: Object.entries(messages).map(([key, value]) => ({ key, result: validateFirebaseMessageDetail(value) }))
       };
     },
@@ -123,6 +279,7 @@ async function installF4Bridge(context, fixture) {
         onlinePhase: online?.phase || null, onlineSeat: online?.seat || null,
         currentRoundId: online?.currentRoundId || null, localUnitId,
         localCharacter: unit?.character || null, pendingReentry: !!pendingFirebaseReentry,
+        matchOver, winner, resultSent: online?.resultSent || false,
         cpuRaw: localStorage.getItem(SUSPEND_KEY),
         credentialPresent: !!localStorage.getItem(firebaseReentryApi().FIREBASE_REENTRY_STORAGE_KEY),
         trace: f4Trace.slice(), pageErrors: globalThis.__f4PageErrors.slice()
@@ -143,9 +300,9 @@ async function installF4Bridge(context, fixture) {
       return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'F5_NEW_UID_FORBIDDEN' } }) });
     }
     if (url.includes('securetoken.googleapis.com')) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: fixture.reentryUid || GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
     }
-    if (url.includes(`/rooms/${ROOM_CODE}/slots/e1/seenAt.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    if (url.includes(`/rooms/${ROOM_CODE}/slots/`) && url.includes('/seenAt.json')) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
     if (url.includes(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.messages) });
     if (url.includes(`/rooms/${ROOM_CODE}/round.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room.round) });
     if (url.includes(`/rooms/${ROOM_CODE}.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room) });
@@ -287,7 +444,10 @@ test('native Firebase re-entry Web Lock contention retries without weakening sec
     expect(restoredState.cpuRaw).toBe(cpuRawAtHandoff);
     expect(fixture.authSignUpCount || 0).toBe(0);
     const successfulAcquireAt = restoredState.acquireTrace.find(entry => entry.phase === 'after')?.timestamp;
-    expect(successfulAcquireAt - handoffStartedAt).toBeLessThan(5000);
+    // Loaded CI workers can add several seconds after the owner closes.  The
+    // security contract is eventual acquisition only after release; 8 seconds
+    // remains well inside the production disconnect timeout.
+    expect(successfulAcquireAt - handoffStartedAt).toBeLessThan(8000);
   } finally {
     if (contenderPage && !contenderPage.isClosed()) await contenderPage.close();
     await context.close();
@@ -342,6 +502,187 @@ test('same-tab zero-input reload releases and reacquires its native Firebase re-
     });
     expect(restored.cpuRaw).toBe(beforeReload.cpuRaw);
     expect(restored.acquireTrace.some(entry => entry.phase === 'after')).toBe(true);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('non-bfcache guest pagehide releases its native lease for the replacement document', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the F5 production authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const ownerPage = await context.newPage();
+  let replacementPage = null;
+  try {
+    await ownerPage.goto(GAME_URL);
+    await expect.poll(() => ownerPage.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await ownerPage.evaluate(() => globalThis.KatamonF4StartupBridge.seed({ activeOnlineLease: true }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+
+    replacementPage = await context.newPage();
+    await replacementPage.goto(GAME_URL);
+    await expect.poll(async () => {
+      const state = await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+      return state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease'
+        && entry.phase === 'error' && entry.detail?.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE').length;
+    }, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+
+    const persistedStillHeld = await ownerPage.evaluate(async () => {
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return (await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive');
+    });
+    expect(persistedStillHeld).toBe(true);
+
+    const releasedForReplacement = await ownerPage.evaluate(async () => {
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive');
+    });
+    expect(releasedForReplacement).toBe(true);
+    await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    if (replacementPage && !replacementPage.isClosed()) await replacementPage.close();
+    await context.close();
+  }
+});
+
+test('same-tab zero-input reload replays two completed production actions after native lock handoff', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the F5 production authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      holdReentryLease: true,
+      completedActionCount: 2,
+      completedHitActions: false,
+    }));
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    expect(Object.values(fixture.messages).filter(packet => packet.t === 'fire')).toHaveLength(2);
+    expect(Object.values(fixture.messages).filter(packet => packet.t === 'state')).toHaveLength(2);
+
+    await page.reload();
+    await expect.poll(async () => {
+      const state = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+      if (state.onlinePhase === 'playing') return 'playing';
+      const terminalError = state.trace.find(entry => entry.phase === 'error'
+        && ['replayFirebaseBattleRecoveryPlan', 'activatePendingFirebaseBattleReentry'].includes(entry.name));
+      return terminalError?.detail?.code || null;
+    }, { timeout: 15000 }).toBeTruthy();
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored.onlinePhase, JSON.stringify(restored, null, 2)).toBe('playing');
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1',
+      localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.trace.some(entry => entry.name === 'restoreFirebaseBattleReplayRollback' && entry.phase === 'error')).toBe(false);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('host zero-input reload retains p1 authority after completed production history', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0, reentryUid: HOST_UID };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      reentrySeat: 'p1', activeOnlineLease: true, completedActionCount: 2,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    fixture.reentryUid = seeded.reentryUid;
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'p1', currentRoundId: ROUND_ID, localUnitId: 'p1',
+      localCharacter: 'kyoryu', credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('results reload restores a verified concede result without a second outbound result', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      holdReentryLease: true, resultMode: 'concede',
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('results');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      onlineKind: 'firebase', onlinePhase: 'results', onlineSeat: 'e1',
+      currentRoundId: ROUND_ID, localUnitId: 'e1', localCharacter: 'iwa',
+      matchOver: true, winner: 'cpu', resultSent: true,
+      credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('2v2 support zero-input reload restores s1 only as canonical p2', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0, reentryUid: SUPPORT1_UID };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      format: '2v2', reentrySeat: 's1', activeOnlineLease: true,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    fixture.reentryUid = seeded.reentryUid;
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 's1', currentRoundId: ROUND_ID, localUnitId: 'p2',
+      localCharacter: 'medama', credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();

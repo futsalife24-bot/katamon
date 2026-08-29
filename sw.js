@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.147-firebase-reentry-lock-handoff-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.148-firebase-guest-lease-handoff-fix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。

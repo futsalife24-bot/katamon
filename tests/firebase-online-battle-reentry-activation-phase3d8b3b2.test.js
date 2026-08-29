@@ -83,7 +83,7 @@ async function gear2v2StartPlan(seat, lease, tail = [], startSnapshot = null, { 
     settings: current.room.settings, slots: current.room.slots, queue: [], seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {}, participantGearReveals: {}, verifiedStartGearManifest: null,
     battleGearSnapshotsByUnit: null, battleGearShieldStateByUnit: null, battleGearRuntimeEffectsStateByUnit: null, battleGearActiveAttackRuntime: null,
     selfCharacter: own[3], selfNonce: '', selfCommit: null, selfRevealed: false, peerCharacter: null, peerNonce: null, revealVerified: false,
-    unitCharacters: Object.fromEntries(seats.map(([_seat, unit, _uid, character]) => [unit, character])), visibility: 'private', acceptedSettingsRevision: 1, acceptedSettingsIdentity: '', persistedRosterIdentity: '', transport: { send: async () => true }
+    unitCharacters: Object.fromEntries(seats.map(([_seat, unit, _uid, character]) => [unit, character])), visibility: 'private', acceptedSettingsRevision: 1, acceptedSettingsIdentity: '', persistedRosterIdentity: '', transport: { send: async () => true, close: () => {} }
   });
   const wiring = h.firebaseGearLobbyForTest();
   const reveals = seats.map(([seatId, _unit, _uid, characterId, gears]) => {
@@ -137,7 +137,7 @@ async function battleStartPlan(lease) {
     settings: current.room.settings, slots: current.room.slots, queue: [], seatCommit: {}, seatCommitAt: {}, seatRevealSeen: {}, seatCharacter: {}, seatNonce: {}, seatVerified: {}, participantGearReveals: {}, pendingRemoteTerminals: new Map(), completedRemoteActions: new Map(), battleGearSnapshotsByUnit: null,
     battleGearShieldStateByUnit: null, battleGearRuntimeEffectsStateByUnit: null, battleGearActiveAttackRuntime: null,
     selfCharacter: 'iwa', selfNonce: '', selfCommit: null, selfRevealed: false, peerCharacter: null, peerNonce: null, revealVerified: false,
-    unitCharacters: { p1: 'kyoryu', e1: 'iwa' }, visibility: 'private', acceptedSettingsRevision: 1, acceptedSettingsIdentity: '', persistedRosterIdentity: '', transport: { send: async () => true }
+    unitCharacters: { p1: 'kyoryu', e1: 'iwa' }, visibility: 'private', acceptedSettingsRevision: 1, acceptedSettingsIdentity: '', persistedRosterIdentity: '', transport: { send: async () => true, close: () => {} }
   });
   kt.startBattle('kyoryu');
   const snap = structuredClone(kt.snapshot());
