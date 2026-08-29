@@ -634,6 +634,8 @@ async function normalResultPlan(lease) {
       const activated = await bridge.activatePending({ plan, frame, timeoutMs: 15000 });
       const verified = activated.replay.lastBoundary.runtime;
       assert.equal(activated.kind, 'candidate_turn_boundary');
+      assert.equal(bridge.activeOnline().verifiedStartGearManifest.roundId, roundId,
+        'the same verified Gear manifest must survive the replay rollback and live commit');
       assert.equal(bridge.activeOnline().battleGearShieldStateByUnit.p1.currentShield, verified.shieldStateByUnit.p1.currentShield);
       assert.equal(bridge.activeOnline().localAction, null); assert.equal(bridge.activeOnline().remoteAction, null);
       assert.equal(bridge.activeOnline().pendingRemoteTerminals.size, 0);

@@ -2292,7 +2292,7 @@ function check(name, value) {
   // 落ち続け、再戦の準備すら作れなくなっていた。401は「鍵の期限切れ」と「ルール拒否」の
   // 両方で返るので、鍵を取り直して本当に新しくなった時だけ送り直す。
   check('an expired key is renewed and the write is sent once more, instead of failing for good',
-    /async function firebaseRequest\([\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,200}response = await firebaseFetchWithTimeout\(firebaseRequestUrl\(path, auth, query\), fetchOptions\);/.test(htmlText));
+    /async function firebaseRequest\([\s\S]{0,500}const requestOnce = async \(\) => \{[\s\S]{0,260}firebaseFetchWithTimeout\(firebaseRequestUrl\(path, auth, query\), fetchOptions\)[\s\S]{0,900}if \(response\.status === 401\) \{[\s\S]{0,400}const renewed = await ensureFirebaseAuth\(\)\.catch\(\(\) => null\);[\s\S]{0,200}renewed\.idToken !== before[\s\S]{0,160}response = await requestOnce\(\);/.test(htmlText));
   check('a rules rejection is not mistaken for an expired key, so it never loops on the token endpoint',
     // force しない = 期限内なら同じ鍵が返る = 送り直さずそのまま失敗する
     /async function firebaseRequest\([\s\S]{0,900}ensureFirebaseAuth\(\)\.catch/.test(htmlText)
