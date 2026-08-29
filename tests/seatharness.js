@@ -1359,7 +1359,14 @@ const HOOK = `
           return buildSnapshot({ includeTerrain: false });
         }),
         onlinePhase: () => online?.phase || null,
-        recoverySnapshotMismatch: (candidate, baseline) => firebaseRecoverySnapshotMismatchReason(candidate, baseline)
+        recoverySnapshotMismatch: (candidate, baseline) => firebaseRecoverySnapshotMismatchReason(candidate, baseline),
+        captureRollbackForTest: () => captureFirebaseBattleReplayRollback(),
+        restoreRollbackForTest: rollback => restoreFirebaseBattleReplayRollback(rollback),
+        startupStateForTest: () => ({
+          gamePhase, battleMode, localUnitId, localCharacter: localUnit()?.character || null,
+          onlineKind: online?.kind || null, onlinePhase: online?.phase || null,
+          pendingReentry: !!pendingFirebaseReentry, suspended: !!loadSuspendedMatch()
+        })
       }),
       // ---- Gear Phase 3D-2B: Firebaseロビー実配線 ----
       // mutableなonline本体は既存setOnlineForLogTest()だけで投入し、観測と操作は
