@@ -114,12 +114,15 @@ async function gear2v2StartPlan(seat, lease, tail = [], startSnapshot = null, { 
   for (const [index, entry] of tail.entries()) messages[key(10 + index)] = entry;
   return bridge.build(current, messages);
 }
-function fakeEventSource({ failConnect = false } = {}) {
+function fakeEventSource({ failConnect = false, failListenerOnce = false } = {}) {
   const original = global.EventSource;
   const instances = [];
   global.EventSource = class {
     constructor(url) { if (failConnect) throw new Error('connect failed'); this.url = url; this.listeners = new Map(); this.closed = false; instances.push(this); }
-    addEventListener(type, fn) { this.listeners.set(type, fn); }
+    addEventListener(type, fn) {
+      if (failListenerOnce) { failListenerOnce = false; throw new Error('listener registration failed'); }
+      this.listeners.set(type, fn);
+    }
     close() { this.closed = true; }
   };
   const put = (instance, payload) => instance.listeners.get('put')?.({ data: JSON.stringify(payload) });
@@ -378,6 +381,39 @@ async function normalResultPlan(lease) {
       bridge.setPending(null);
       source.restore();
     }
+  });
+
+  await test('a bare recovery transport activation exception is normalized as retryable without adopting the candidate', async () => {
+    const source = fakeEventSource({ failListenerOnce: true });
+    let released = 0;
+    const lease = { release: () => { released += 1; } };
+    const value = candidate('playing', lease);
+    const plan = await battleStartPlan(lease);
+    // A production reload begins without a previous live ONLINE shell.  The
+    // plan builder uses one only to generate the canonical fixture above.
+    bridge.endActive();
+    const before = structuredClone(kt.snapshot());
+    bridge.setPending(value);
+    try {
+      await assert.rejects(() => bridge.activatePending({ plan }), error => error?.code === 'FIREBASE_RECOVERY_ACTIVATION_TRANSIENT');
+      assert.equal(bridge.activeOnline(), null, 'the failed shell never becomes live authority');
+      assert.equal(bridge.pending(), value, 'the original candidate and lease remain quarantined');
+      assert.equal(released, 0);
+      assert.deepEqual(kt.snapshot(), before);
+      // The production timer obtains this plan through a new canonical REST
+      // read.  Supplying the same verified fixture directly keeps this unit
+      // test focused on activation's failure-atomic retry boundary.
+      const retried = await bridge.activatePending({ plan });
+      assert.equal(retried.activated, true);
+      assert.equal(bridge.activeOnline()?.phase, 'playing');
+      assert.equal(bridge.pending(), null, 'only the successful replan transfers the lease');
+      assert.equal(released, 0);
+    } finally {
+      bridge.endActive();
+      bridge.setPending(null);
+      source.restore();
+    }
+    assert.equal(released, 1);
   });
 
   await test('a verified Gear-OFF start bundle commits only after B3B1 verification, then hands off to seeded SSE', async () => {
@@ -682,5 +718,5 @@ async function normalResultPlan(lease) {
     } finally { bridge.endActive(); source.restore(); }
   });
 
-  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/18 passed`);
+  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/19 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
