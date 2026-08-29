@@ -19,7 +19,15 @@ async function installF4Bridge(context, fixture) {
   await context.addInitScript(() => {
     class F4EventSource {
       constructor(url) { this.url = url; this.listeners = new Map(); this.closed = false; }
-      addEventListener(type, listener) { this.listeners.set(type, listener); }
+      addEventListener(type, listener) {
+        // Persisted only within this browser-test session so the next document
+        // sees the same one-shot shell/transport handoff failure as a reload.
+        if (sessionStorage.getItem('__f6_listener_failure_once') === '1') {
+          sessionStorage.removeItem('__f6_listener_failure_once');
+          throw new Error('F6 listener registration failed');
+        }
+        this.listeners.set(type, listener);
+      }
       close() { this.closed = true; }
     }
     globalThis.EventSource = F4EventSource;
@@ -173,6 +181,11 @@ async function installF4Bridge(context, fixture) {
         };
         beginFirebaseOnline(reentryRole, '${ROOM_CODE}', auth, reentryCharacter, room, reentrySeat, null, globalThis.__f5HeldReentryLease);
         online.phase = 'playing';
+      }
+      // Set this after the active shell exists: the next document's recovery
+      // transport, rather than fixture setup, must consume the one-shot fault.
+      if (options.activationListenerFailure === true) {
+        sessionStorage.setItem('__f6_listener_failure_once', '1');
       }
       let gearFixture = null;
       if (options.gear === true) {
@@ -660,6 +673,47 @@ test('same-tab zero-input reload replays two completed production actions after 
       localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
     });
     expect(restored.trace.some(entry => entry.name === 'restoreFirebaseBattleReplayRollback' && entry.phase === 'error')).toBe(false);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('same-tab zero-input reload replans after one bare recovery transport activation exception', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium is the production activation-handoff authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      activeOnlineLease: true,
+      completedActionCount: 2,
+      activationListenerFailure: true,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+
+    await page.reload();
+    await expect.poll(async () => {
+      const state = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+      return state.trace.filter(entry => entry.name === 'activatePendingFirebaseBattleReentry'
+        && entry.phase === 'error' && entry.detail?.code === 'FIREBASE_RECOVERY_ACTIVATION_TRANSIENT').length;
+    }, { timeout: 15000 }).toBeGreaterThanOrEqual(1);
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase,
+      { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', battleMode: 'normal', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1', localCharacter: 'iwa',
+      pendingReentry: false, credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.trace.filter(entry => entry.name === 'activatePendingFirebaseBattleReentry'
+      && entry.phase === 'after')).toHaveLength(1);
+    expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();

@@ -694,10 +694,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.149-firebase-reentry-convergence-fix';
+  const BUILD_ID = 'v2.0.150-firebase-reentry-activation-retry-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.150', date: '2026/08/30', summary: 'ONLINE再入場中の一時的な起動例外から自動復帰を修正' },
     { version: 'v2.0.149', date: '2026/08/29', summary: 'ONLINE再入場の一時通信失敗からの自動復帰を修正' },
     { version: 'v2.0.148', date: '2026/08/29', summary: 'ONLINE再入場の旧GUEST document lease引継ぎを修正' },
     { version: 'v2.0.147', date: '2026/08/29', summary: 'ONLINE再入場のreload時Web Lock引継ぎを修正' },
@@ -10464,7 +10465,8 @@
   function firebaseBattleRecoveryRetryable(error) {
     if (!pendingFirebaseReentry || online) return false;
     return ['FIREBASE_REENTRY_REFRESH_TRANSIENT', 'FIREBASE_REENTRY_ROOM_TRANSIENT',
-      'FIREBASE_REQUEST_TRANSIENT', 'FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED'].includes(firebaseReentryErrorCode(error));
+      'FIREBASE_REQUEST_TRANSIENT', 'FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED',
+      'FIREBASE_RECOVERY_ACTIVATION_TRANSIENT'].includes(firebaseReentryErrorCode(error));
   }
   function recordFirebaseReentryTerminalFailure(error) {
     firebaseReentryLastFailureCode = firebaseReentryErrorCode(error);
@@ -10954,6 +10956,17 @@
   // one side-effect-free way to prove a B3A candidate chain with the existing
   // Battle engine before any candidate terminal snapshot can be adopted.
   function firebaseRecoveryFail(code) { throw Object.assign(new Error(code), { code }); }
+  // Every expected recovery rejection has a protocol-specific code.  A bare
+  // platform exception during the quarantined shell/transport handoff is not
+  // authority evidence and must not make a valid room-seat credential terminal.
+  // Keep the original failure as the cause, then let the existing replan path
+  // re-read canonical history without adopting any candidate state.
+  function normalizeFirebaseRecoveryActivationError(error) {
+    if (typeof error?.code === 'string' && error.code) return error;
+    return Object.assign(new Error('Firebase recovery activation can be retried'), {
+      code: 'FIREBASE_RECOVERY_ACTIVATION_TRANSIENT', cause: error || null
+    });
+  }
   function firebaseHistoricalActionAllowed(msg) {
     if (!online || online.kind !== 'firebase' || !msg || !firebasePacketSeatAllowed(msg)) return false;
     const owner = online.slots && online.slots[msg.seat] && online.slots[msg.seat].uid;
@@ -14439,7 +14452,7 @@
         const { plan: _discardedPlan, ...retryOptions } = options;
         return activatePendingFirebaseBattleReentry({ ...retryOptions, finalRoundRefreshed: true });
       }
-      throw error;
+      throw normalizeFirebaseRecoveryActivationError(error);
     }
   }
   // 準備完了は取り消せる。ホストが設定を変えた後にキャラを選び直したくなるため。
