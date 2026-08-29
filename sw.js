@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.145-firebase-guest-battle-render-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.146-firebase-reentry-priority-fix';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。

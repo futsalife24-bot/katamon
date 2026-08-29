@@ -694,10 +694,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.145-firebase-guest-battle-render-fix';
+  const BUILD_ID = 'v2.0.146-firebase-reentry-priority-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.146', date: '2026/08/29', summary: 'ONLINE再入場の起動時rollbackとBattle復帰を修正' },
     { version: 'v2.0.145', date: '2026/08/29', summary: 'ONLINE対戦のゲスト側Battle開始描画を修正' },
     { version: 'v2.0.144', date: '2026/08/29', summary: 'ONLINE対戦の復帰処理を既存端末へ確実に更新' },
     { version: 'v2.0.143', date: '2026/08/25', summary: '石壁の奥で新タイトルロゴ演出を一度だけ再生' },
@@ -8333,6 +8334,14 @@
         // 見た目・当たり判定・BGMが先行しないようにする。
         u.phase = u.bossState?.phase === 2 ? 2 : 1;
         u.vulnerabilityTurns = Math.max(0, Math.min(5, Number(saved.vulnerabilityTurns) || 0));
+      } else if (options.allowUninitializedCharacters === true && saved.character == null) {
+        // A fresh boot has no selected Battle character yet.  Firebase replay
+        // rollback may locally capture that pre-Battle state, but it must not
+        // turn a null character into candidate authority or reject its own
+        // rollback after the verifier temporarily applied a canonical start.
+        // Full unit fields are restored from the trusted local rollback copy
+        // immediately after applySnapshot returns.
+        u.character = null;
       } else {
         applyCharacter(u, saved.character);
       }
@@ -11065,12 +11074,15 @@
   function restoreFirebaseBattleReplayRollback(rollback) {
     // Restoration itself remains inside the replay context, so it cannot emit
     // BGM, network, record, or visual effects.
-    applySnapshot(rollback.battleSnapshot);
+    applySnapshot(rollback.battleSnapshot, { allowUninitializedCharacters: true });
     for (let index = 0; index < units.length; index++) {
       if (rollback.unitStates[index]) restoreFirebaseReplayObject(units[index], rollback.unitStates[index]);
     }
     online = rollback.onlineReference;
-    restoreFirebaseReplayObject(online, rollback.onlineState);
+    // Fresh page bootstrap legitimately starts without an ONLINE shell.
+    // Restoring that local pre-activation state means restoring null, not
+    // attempting to mutate null as an object after the replay shell closes.
+    if (online && rollback.onlineState) restoreFirebaseReplayObject(online, rollback.onlineState);
     const scalar = rollback.scalars;
     ({ gamePhase, battleMode, simTimeMs, physicsAccumulator, battleIntroPending,
       turnSettle, awaitingResolve, matchOver, matchEndPause, matchEndReason, winner,
@@ -14237,8 +14249,12 @@
     const identity = firebaseReentryApi().validateRoomIdentity(persisted, candidate.credential, {
       protocol: FIREBASE_PROTO_VERSION, serverNow: firebaseServerNow(candidate.auth)
     });
+    // Recovery Plan v1 binds the canonical round id; its local kind is the
+    // interpretation of candidate.roundStatus and does not duplicate that
+    // status as a plan field.  Fence against the refreshed room/candidate
+    // status plus the plan's bound id instead of comparing an undefined field.
     if (identity.roundId !== candidate.roundId || identity.roundStatus !== candidate.roundStatus
-        || identity.roundId !== plan.roundId || identity.roundStatus !== plan.roundStatus) {
+        || identity.roundId !== plan.roundId) {
       firebaseRecoveryFail('FIREBASE_RECOVERY_ROUND_ADVANCED');
     }
     return persisted;
@@ -14292,6 +14308,11 @@
       if (!options.plan || options.enforceFinalRoundFence) await assertFinalFirebaseRecoveryRound(candidate, plan);
       if (plan.kind === 'battle_start_candidate' || plan.kind === 'candidate_turn_boundary' || plan.kind === 'results_candidate') {
         if (!replay) firebaseRecoveryFail('FIREBASE_RECOVERY_REPLAY_REQUIRED');
+        // B3B1 restores the pre-replay page phase by design.  Activation must
+        // promote the verified boundary to the visible Battle phase as part
+        // of the same commit; applySnapshot intentionally never owns screens.
+        gamePhase = 'battle';
+        battleIntroPending = false;
         const boundary = commitFirebaseRecoveryBoundary(replay);
         // B3B1 intentionally rolls its shell back.  Restore persisted
         // commit/reveal/presence evidence once more for the newly committed
