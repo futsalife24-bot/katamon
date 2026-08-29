@@ -90,7 +90,8 @@
     "test:firebase-online-live-round-contract-phase3d8c": "node tests/firebase-online-live-round-contract-phase3d8c.test.js",
     "test:firebase-online-player-name-phase3d8df1": "node tests/firebase-online-player-name-phase3d8df1.test.js",
     "test:firebase-guest-battle-render-phase3d8df3": "node tests/firebase-guest-battle-render-phase3d8df3.test.js",
-    "test:firebase-reentry-startup-priority-phase3d8df4": "node tests/firebase-reentry-startup-priority-phase3d8df4.test.js && playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch"
+    "test:firebase-reentry-startup-priority-phase3d8df4": "node tests/firebase-reentry-startup-priority-phase3d8df4.test.js",
+    "test:e2e:firebase-reentry-startup-priority-phase3d8df4": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
