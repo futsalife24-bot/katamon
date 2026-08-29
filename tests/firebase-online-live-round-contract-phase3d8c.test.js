@@ -103,7 +103,7 @@ function completeCanonicalAction(fixture) {
   assert.equal(fixture.online.protocolError, undefined);
   assert.equal(live.state().remoteAction, null);
   assert.deepEqual(live.state().pendingRemoteTerminals, []);
-  assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, t: 'state' }]]);
+  assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
   return terminal;
 }
 
@@ -196,7 +196,7 @@ await test('fresh push key carrying the same completed action remains a no-op', 
     assert.deepEqual(kt.snapshot(), before);
     source.put(es, '-fresh-state-key', terminal);
     assert.equal(fixture.online.queue.length, 0);
-    assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, t: 'state' }]]);
+    assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
   } finally { source.restore(); }
 });
 
@@ -207,7 +207,22 @@ await test('a completed actionId reused by another valid seat fails closed', () 
   h.receiveFirebaseForTest(forged);
   h.drainOneNetworkMessageForTest();
   assert.match(fixture.online.protocolError || '', /通信順序|手番/);
-  assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, t: 'state' }]]);
+  assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
+});
+
+await test('a completed actionId reused by the same sender for another unit fails closed', () => {
+  const fixture = setupRemoteTurn({ format: '2v2', occupied: ['p1', 'e1'] });
+  completeCanonicalAction(fixture);
+  const before = structuredClone(kt.snapshot());
+  const beforeTurn = kt.state().turnCount;
+  const forged = { ...fixture.fire, unitId: 'p2' };
+  h.receiveFirebaseForTest(forged);
+  h.drainOneNetworkMessageForTest();
+  assert.match(fixture.online.protocolError || '', /通信順序|手番/);
+  assert.equal(kt.projectiles().length, 0);
+  assert.equal(kt.state().turnCount, beforeTurn);
+  assert.deepEqual(kt.snapshot(), before);
+  assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
 });
 
 await test('1v1 rematch advances only after every seated human votes and switches transport once', async () => {

@@ -12191,17 +12191,17 @@
   function firebaseCompletedTerminalStatus(msg) {
     const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg.actionId);
     if (!completed) return '';
-    if (completed.from === msg.from && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
+    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
     return 'mismatch';
   }
   function firebaseCompletedActionStatus(msg) {
     const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg?.actionId);
     if (!completed) return '';
-    return completed.from === msg.from ? 'duplicate' : 'mismatch';
+    return completed.from === msg.from && completed.unitId === msg.unitId ? 'duplicate' : 'mismatch';
   }
   function rememberFirebaseTerminal(msg) {
     if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
-    online.completedRemoteActions.set(msg.actionId, { from: msg.from, t: msg.t });
+    online.completedRemoteActions.set(msg.actionId, { from: msg.from, unitId: msg.unitId, t: msg.t });
     while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
   }
   function receiveFirebaseTerminal(msg) {
