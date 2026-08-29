@@ -10978,6 +10978,12 @@
         // Canonical push-key order makes the last valid persisted vote the
         // current round state.  No reset/send/UI side effect is allowed here.
         online.rematchVotes[msg.seat] = msg.vote;
+      } else if (msg?.t === 'presence') {
+        // Presence identity is also persisted history.  Restore it before
+        // seeding SSE so a recovered result can use the normal round-id
+        // idempotent record path without depending on a discarded echo.
+        if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from) firebaseRecoveryFail('FIREBASE_RECOVERY_PRESENCE_AUTHORITY_INVALID');
+        rememberFirebaseIdentity(msg);
       }
     }
   }
@@ -14265,6 +14271,10 @@
       if (plan.kind === 'battle_start_candidate' || plan.kind === 'candidate_turn_boundary' || plan.kind === 'results_candidate') {
         if (!replay) firebaseRecoveryFail('FIREBASE_RECOVERY_REPLAY_REQUIRED');
         const boundary = commitFirebaseRecoveryBoundary(replay);
+        // B3B1 intentionally rolls its shell back.  Restore persisted
+        // commit/reveal/presence evidence once more for the newly committed
+        // live shell before any result ledger can consult it.
+        await rebuildFirebaseRecoveryLobbyEvidence(plan.orderedEntriesThroughStart || []);
         online.localAction = null;
         online.remoteAction = null;
         online.pendingRemoteTerminals = new Map();
@@ -14284,6 +14294,10 @@
           beginMatchEnd(replay.result.terminal.packet.reason);
           online.resultSent = true;
           online.phase = 'results';
+          // Recovery never sends a result.  It may, however, use the normal
+          // round-id ledger once the verified result is visibly committed.
+          // The ledger itself is idempotent across repeated re-entry.
+          recordFirebaseMatchResultOnce();
         } else {
           online.phase = 'playing';
         }
