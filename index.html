@@ -10421,6 +10421,32 @@
   let firebaseAuth = null;
   let pendingFirebaseReentry = null;
   let firebaseReentryBootstrapStarted = false;
+  let firebaseBattleRecoveryRetryTimer = 0;
+  function firebaseRecoveryDocumentHidden() {
+    return typeof document !== 'undefined' && document && document.hidden === true;
+  }
+  function scheduleFirebaseBattleRecoveryReplan() {
+    if (firebaseBattleRecoveryRetryTimer || firebaseRecoveryDocumentHidden()) return;
+    firebaseBattleRecoveryRetryTimer = setTimeout(() => {
+      firebaseBattleRecoveryRetryTimer = 0;
+      // A retry may have been queued while visible and the tab hidden before
+      // this callback ran.  Re-check here as well as at scheduling time.
+      if (firebaseRecoveryDocumentHidden()) return;
+      // Re-read the canonical log; never turn a pending action into a live
+      // projectile just to make a reconnect look faster.
+      activatePendingFirebaseBattleReentry().catch(() => {});
+    }, 1000);
+  }
+  if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (firebaseRecoveryDocumentHidden()) {
+        if (firebaseBattleRecoveryRetryTimer) clearTimeout(firebaseBattleRecoveryRetryTimer);
+        firebaseBattleRecoveryRetryTimer = 0;
+        return;
+      }
+      if (pendingFirebaseReentry && !online) scheduleFirebaseBattleRecoveryReplan();
+    });
+  }
   function firebaseReentryApi() {
     const api = globalThis.KatamonFirebaseOnlineReentry;
     if (!api?.createCredential || !api?.validateRoomIdentity || !api?.isDefinitiveRefreshError) {
@@ -10557,6 +10583,7 @@
     if (lease && typeof lease.release === 'function') lease.release();
   }
   function clearPendingFirebaseReentry({ clearCredential = false } = {}) {
+    if (firebaseBattleRecoveryRetryTimer) { clearTimeout(firebaseBattleRecoveryRetryTimer); firebaseBattleRecoveryRetryTimer = 0; }
     if (pendingFirebaseReentry) releaseFirebaseReentryLease(pendingFirebaseReentry.reentryLease);
     pendingFirebaseReentry = null;
     if (clearCredential) {
@@ -10674,9 +10701,12 @@
   function scheduleFirebaseRoomSeatReentryBootstrap() {
     if (firebaseReentryBootstrapStarted) return;
     firebaseReentryBootstrapStarted = true;
-    Promise.resolve().then(() => restoreFirebaseRoomSeatReentry()).catch(() => {
-      // A candidate failure intentionally does not create a replacement UID.
-      // The next explicit ONLINE action decides whether a new account is needed.
+    Promise.resolve().then(async () => {
+      const candidate = await restoreFirebaseRoomSeatReentry();
+      if (candidate) await activatePendingFirebaseBattleReentry();
+    }).catch(() => {
+      // A candidate/recovery failure intentionally does not create a
+      // replacement UID.  B2 keeps the credential for retryable failures.
     });
   }
   async function ensureFirebaseAuth(force = false) {
@@ -10922,18 +10952,44 @@
     if (seat === online.seat) { online.selfCharacter = msg.character; online.selfNonce = msg.nonce; online.selfCommit = expected; online.selfRevealed = true; }
     if (seat === online.peerSeat) { online.peerCharacter = msg.character; online.peerNonce = msg.nonce; online.revealVerified = true; }
   }
-  async function verifyFirebaseRecoveryStart(plan) {
-    if (!online || online.kind !== 'firebase' || !plan?.start?.packet) firebaseRecoveryFail('FIREBASE_RECOVERY_START_INVALID');
+  // Commit/reveal history is needed twice: first to prove a Battle start and
+  // also to restore a lobby/revealing shell without relying on own SSE echo.
+  // Keep it side-effect-free: this only rebuilds already persisted evidence.
+  async function rebuildFirebaseRecoveryLobbyEvidence(entries) {
+    if (!online || online.kind !== 'firebase' || !Array.isArray(entries)) firebaseRecoveryFail('FIREBASE_RECOVERY_LOBBY_EVIDENCE_INVALID');
     online.seatCommit = {}; online.seatCommitAt = {}; online.seatRevealSeen = {}; online.seatCharacter = {}; online.seatNonce = {}; online.seatVerified = {}; online.participantGearReveals = {};
-    for (const entry of plan.orderedEntriesThroughStart) {
-      const msg = entry.packet;
-      if (msg.t === 'commit') {
+    for (const entry of entries) {
+      const msg = entry?.packet;
+      if (msg?.t === 'commit') {
         if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from || typeof msg.hash !== 'string') firebaseRecoveryFail('FIREBASE_RECOVERY_COMMIT_AUTHORITY_INVALID');
         const decision = acceptPeerCommit(online.seatCommit[msg.seat], msg.hash, !!online.seatRevealSeen[msg.seat], online.seatCommitAt[msg.seat], msg.sentAt);
         if (decision.error || decision.stale) firebaseRecoveryFail('FIREBASE_RECOVERY_COMMIT_INVALID');
         if (!decision.duplicate) { online.seatCommit[msg.seat] = decision.hash; online.seatCommitAt[msg.seat] = decision.at; }
-      } else if (msg.t === 'reveal') await verifyFirebaseHistoricalReveal(msg);
+      } else if (msg?.t === 'reveal') {
+        await verifyFirebaseHistoricalReveal(msg);
+      } else if (msg?.t === 'ready') {
+        if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from) firebaseRecoveryFail('FIREBASE_RECOVERY_READY_AUTHORITY_INVALID');
+        if (!online.seatReady) online.seatReady = {};
+        online.seatReady[msg.seat] = msg.value !== false;
+        if (msg.seat === online.peerSeat) online.peerReady = msg.value !== false;
+      } else if (msg?.t === 'rematchVote') {
+        if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from || typeof msg.vote !== 'boolean') firebaseRecoveryFail('FIREBASE_RECOVERY_REMATCH_VOTE_INVALID');
+        if (!online.rematchVotes) online.rematchVotes = {};
+        // Canonical push-key order makes the last valid persisted vote the
+        // current round state.  No reset/send/UI side effect is allowed here.
+        online.rematchVotes[msg.seat] = msg.vote;
+      } else if (msg?.t === 'presence') {
+        // Presence identity is also persisted history.  Restore it before
+        // seeding SSE so a recovered result can use the normal round-id
+        // idempotent record path without depending on a discarded echo.
+        if (!firebaseSeatIsPlayer(msg.seat) || online.slots?.[msg.seat]?.uid !== msg.from) firebaseRecoveryFail('FIREBASE_RECOVERY_PRESENCE_AUTHORITY_INVALID');
+        rememberFirebaseIdentity(msg);
+      }
     }
+  }
+  async function verifyFirebaseRecoveryStart(plan) {
+    if (!online || online.kind !== 'firebase' || !plan?.start?.packet) firebaseRecoveryFail('FIREBASE_RECOVERY_START_INVALID');
+    await rebuildFirebaseRecoveryLobbyEvidence(plan.orderedEntriesThroughStart);
     if (!firebaseRevealsReady()) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_MISSING');
     const start = plan.start.packet;
     const gearManifest = validateFirebaseStartGearEnvelope(start);
@@ -11095,7 +11151,23 @@
             validatedResult = Object.freeze({ terminal: plan.result.terminal, conceded: false });
           }
         }
-        return Object.freeze({ kind: plan.kind, start: verifiedStart.start, validatedBoundaries: Object.freeze(validatedBoundaries), pendingAction: plan.pendingAction || null, result: validatedResult, sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
+        // B3B2 may commit only these locally verified values.  In particular,
+        // this bundle never promotes a candidate terminal snapshot to authority.
+        const lastBoundary = validatedBoundaries.length ? validatedBoundaries[validatedBoundaries.length - 1] : null;
+        if (validatedResult && !validatedResult.conceded) {
+          // A result packet has no state checkpoint.  Preserve only the
+          // deterministic runtime that the local replay has just calculated;
+          // B3B2 never obtains it from the candidate result packet.
+          validatedResult = Object.freeze({ ...validatedResult,
+            finalBaseline: structuredClone(buildSnapshot({ includeTerrain: false })),
+            finalRuntime: cloneFirebaseReplayValue({
+              shieldStateByUnit: online.battleGearShieldStateByUnit,
+              runtimeEffectsStateByUnit: online.battleGearRuntimeEffectsStateByUnit
+            }) });
+        }
+        return Object.freeze({ kind: plan.kind, start: verifiedStart.start, gearStart: verifiedStart.gearStart || null,
+          validatedBoundaries: Object.freeze(validatedBoundaries), lastBoundary, pendingAction: plan.pendingAction || null,
+          result: validatedResult, sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
       } finally {
         // Restore first: `online.phase` is included in the original online
         // object and must not be the only field that survives a verifier run.
@@ -11190,11 +11262,12 @@
       close: () => { try { ch.close(); } catch (err) { /* noop */ } }
     };
   }
-  function makeFirebaseTransport(room, auth, roundId, onStatus, onAuthRevoked, onFatal) {
+  function makeFirebaseTransport(room, auth, roundId, onStatus, onAuthRevoked, onFatal, options = {}) {
     if (typeof EventSource !== 'function') return null;
     let handler = null;
     let closed = false;
     const acceptKey = createSseDeduper();
+    if (Array.isArray(options.seedMessageKeys)) acceptKey.seed(options.seedMessageKeys);
     const backlog = [];
     let source = null;
     let sendQueue = null;
@@ -11215,7 +11288,7 @@
       source.onerror = () => { if (!closed && onStatus) onStatus('接続が不安定です。再接続を試しています…'); };
       return true;
     }
-    if (!connect()) return null;
+    if (!options.deferConnect && !connect()) return null;
     sendQueue = createSerialSendQueue(async ({ path, body }) => {
       await firebasePutMessageWithRetry(path, auth, body);
     }, err => {
@@ -11236,6 +11309,7 @@
         return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
       },
       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
+      connect: () => !closed && connect(),
       reconnect: () => { if (closed) return false; try { if (source) source.close(); } catch (_) { /* noop */ } return connect(); },
       setRoundId: nextRoundId => { if (!FIREBASE_ROUND_RE.test(nextRoundId || '')) return false; roundId = nextRoundId; return true; },
       close: () => { closed = true; try { if (source) source.close(); } catch (_) { /* noop */ } }
@@ -12120,6 +12194,11 @@
     if (completed.from === msg.from && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
     return 'mismatch';
   }
+  function firebaseCompletedActionStatus(msg) {
+    const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg?.actionId);
+    if (!completed) return '';
+    return completed.from === msg.from ? 'duplicate' : 'mismatch';
+  }
   function rememberFirebaseTerminal(msg) {
     if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
     online.completedRemoteActions.set(msg.actionId, { from: msg.from, t: msg.t });
@@ -12456,6 +12535,11 @@
         } else if (online.role === 'host') online.phase = 'playing';
         break;
       case 'fire': {
+        if (online.kind === 'firebase') {
+          const completed = firebaseCompletedActionStatus(msg);
+          if (completed === 'duplicate') break;
+          if (completed === 'mismatch') { rejectFirebaseMessage('不正な通信順序です（fire.actionId）'); break; }
+        }
         const u = unitById(msg.unitId);
         if (!u || u.control !== 'remote') break;
         if (online.kind === 'coop' && (online.phase !== 'playing' || activeUnit()?.id !== msg.unitId
@@ -13953,12 +14037,13 @@
       if (online) online.authRefreshing = false;
     }
   }
-  function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null, reentryLease = null) {
+  function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null, reentryLease = null, recoveryOptions = null) {
     const persisted = inspectPersistedFirebaseRoom(room);
     if (!persisted.slots[seat] || persisted.slots[seat].uid !== auth.uid) throw new Error('自分のFirebase席を確認できません');
+    const recovering = !!recoveryOptions?.recovering;
     const transport = makeFirebaseTransport(code, auth, room && room.round && room.round.id, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
       if (online && online.kind === 'firebase') rejectFirebaseMessage(err && err.message ? `通信を継続できません（${err.message}）` : '通信を継続できません');
-    });
+    }, { deferConnect: recovering, seedMessageKeys: recoveryOptions?.seedMessageKeys || [] });
     if (!transport) throw new Error('このブラウザはオンライン通信に対応していません。');
     selectedCustomStage = null;
     selectedCustomAdapter = null;
@@ -13969,7 +14054,7 @@
       // 2vs2かどうかは settings が届いてから決まる。入室直後は1vs1として扱い、
       // 設定を受け取った時点で renderFirebaseLobby 側が席の役割を出し直す。
       participantRole: FIREBASE_PLAYER_SEATS.includes(seat) ? 'player' : 'spectator',
-      phase: room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby', currentRoundId: room && room.round && room.round.id,
+      phase: recovering ? 'recovering' : (room && room.round && room.round.status === 'playing' ? 'playing' : 'lobby'), currentRoundId: room && room.round && room.round.id,
       visibility: persisted.visibility,
       settings: persisted.settings, slots: persisted.slots, rematchVotes: {}, queue: [], retryTimer: 0,
       acceptedSettingsRevision: persisted.settings.revision,
@@ -14017,7 +14102,7 @@
       quickRoomName: quick && quick.quickRoomName ? quick.quickRoomName : 'だれでも歓迎',
       log: []
     };
-    transport.onMessage(netReceive);
+    if (!recovering) transport.onMessage(netReceive);
     if (online.participantRole === 'player') setOnlineSeat(online.seat);
     onlineLogCopyStatus = '';
     // オンライン対戦は中断再開できないが、既存のCPU中断データまで消す必要はない。
@@ -14032,11 +14117,218 @@
     onlineLobbyStatus(online.quickWaiting
       ? '対戦相手を探しています… 上の部屋IDを伝えれば直接呼べます。'
       : (online.participantRole === 'spectator' ? '観戦席に入りました。試合開始を待っています。' : 'キャラを選んで「準備完了」を押してください。'));
+    if (!recovering) {
+      scheduleFirebaseTokenRefresh();
+      scheduleFirebaseRoomLease();
+      scheduleFirebaseSeatHeartbeat();
+    }
+    renderFirebaseLobby();
+    if (!recovering && seat !== 'p1') sendFirebaseIdentityPacket({ t: 'presence' }).catch(() => false);
+    return online;
+  }
+  // B3B2 starts from the exact same session builder as a normal join, but
+  // postpones its EventSource and every outbound lifecycle side effect until a
+  // B3A/B3B1 boundary has been verified and committed.
+  function discardFirebaseRecoveryShell(shell) {
+    if (!shell || online !== shell) return;
+    try { shell.transport?.close?.(); } catch (_) {}
+    online = null;
+  }
+  function transferPendingFirebaseReentryLease(candidate) {
+    if (!online || online.kind !== 'firebase' || pendingFirebaseReentry !== candidate) {
+      firebaseRecoveryFail('FIREBASE_RECOVERY_LEASE_TRANSFER_INVALID');
+    }
+    // Do not call clearPendingFirebaseReentry here: it releases the one
+    // long-lived Web Lock that must cover both pending and active sessions.
+    online.reentryLease = candidate.reentryLease;
+    pendingFirebaseReentry = null;
+  }
+  function connectFirebaseRecoveryTransport() {
+    if (!online || online.kind !== 'firebase' || !online.transport?.connect) firebaseRecoveryFail('FIREBASE_RECOVERY_TRANSPORT_MISSING');
+    // makeFirebaseTransport seeded history before this call.  No normal
+    // handler is attached yet, so every gap packet remains quarantined in its
+    // canonical SSE backlog until activation is fully committed.
+    if (!online.transport.connect()) firebaseRecoveryFail('FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED');
+    return true;
+  }
+  function startActivatedFirebaseRecoveryTransport() {
+    if (!online || online.kind !== 'firebase' || !online.transport?.onMessage) firebaseRecoveryFail('FIREBASE_RECOVERY_TRANSPORT_MISSING');
+    // The transport is already connected and seeded.  onMessage drains only
+    // unseeded REST-to-SSE gap packets in their source arrival order.
+    online.transport.onMessage(netReceive);
     scheduleFirebaseTokenRefresh();
     scheduleFirebaseRoomLease();
     scheduleFirebaseSeatHeartbeat();
-    renderFirebaseLobby();
-    if (seat !== 'p1') sendFirebaseIdentityPacket({ t: 'presence' }).catch(() => false);
+    if (online.seat !== 'p1') sendFirebaseIdentityPacket({ t: 'presence' }).catch(() => false);
+    return true;
+  }
+  function commitFirebaseRecoveryBoundary(replay) {
+    applyVerifiedFirebaseStartSnapshot(replay.start.snap, replay.gearStart);
+    setOnlineSeat(online.seat);
+    const boundary = replay.lastBoundary;
+    if (!boundary) return null;
+    // The start owns immutable terrain.  The B3B1 local baseline owns only
+    // mutable boundary state and is applied after verification, never before.
+    applySnapshot(boundary.baseline, { preserveTerrain: true });
+    if (boundary.runtime) {
+      online.battleGearShieldStateByUnit = boundary.runtime.shieldStateByUnit;
+      online.battleGearRuntimeEffectsStateByUnit = boundary.runtime.runtimeEffectsStateByUnit;
+    }
+    setOnlineSeat(online.seat);
+    return boundary;
+  }
+  function seedFirebaseRecoveryCompletedActions(plan) {
+    if (!online || online.kind !== 'firebase') return;
+    if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
+    for (const chain of plan?.completedActionChain || []) {
+      const fire = chain.fire?.packet;
+      const terminal = chain.terminal?.packet;
+      // Own historical packets are ignored by the live receiver.  For a
+      // remote packet, retain the normal completion-cache shape so a new push
+      // key cannot replay an already verified action after the handoff.
+      if (!fire || !terminal || fire.from === online.clientId) continue;
+      rememberFirebaseTerminal(terminal);
+    }
+  }
+  async function refreshPendingFirebaseReentryCandidate() {
+    const candidate = pendingFirebaseReentry;
+    if (!candidate) firebaseRecoveryFail('FIREBASE_RECOVERY_PENDING_MISSING');
+    const room = await firebaseReadRoomForReentry(candidate.roomCode, candidate.auth);
+    let persisted;
+    try { persisted = inspectPersistedFirebaseRoom(room); }
+    catch (_) { firebaseRecoveryFail('FIREBASE_REENTRY_ROOM_IDENTITY_MISMATCH'); }
+    const identity = firebaseReentryApi().validateRoomIdentity(persisted, candidate.credential, {
+      protocol: FIREBASE_PROTO_VERSION, serverNow: firebaseServerNow(candidate.auth)
+    });
+    const refreshed = Object.freeze({ ...candidate, room: persisted, roomCode: identity.roomCode,
+      seat: identity.seat, role: identity.role, roundId: identity.roundId, roundStatus: identity.roundStatus });
+    if (pendingFirebaseReentry !== candidate) firebaseRecoveryFail('FIREBASE_RECOVERY_PENDING_REPLACED');
+    pendingFirebaseReentry = refreshed;
+    void refreshFirebaseReentryGuestHeartbeat(refreshed);
+    return refreshed;
+  }
+  async function assertFinalFirebaseRecoveryRound(candidate, plan) {
+    const room = await firebaseReadRoomForReentry(candidate.roomCode, candidate.auth);
+    let persisted;
+    try { persisted = inspectPersistedFirebaseRoom(room); }
+    catch (_) { firebaseRecoveryFail('FIREBASE_REENTRY_ROOM_IDENTITY_MISMATCH'); }
+    const identity = firebaseReentryApi().validateRoomIdentity(persisted, candidate.credential, {
+      protocol: FIREBASE_PROTO_VERSION, serverNow: firebaseServerNow(candidate.auth)
+    });
+    if (identity.roundId !== candidate.roundId || identity.roundStatus !== candidate.roundStatus
+        || identity.roundId !== plan.roundId || identity.roundStatus !== plan.roundStatus) {
+      firebaseRecoveryFail('FIREBASE_RECOVERY_ROUND_ADVANCED');
+    }
+    return persisted;
+  }
+  function firebaseRecoveryPlanRoundHandoff(plan) {
+    for (const entry of plan?.orderedEntries || []) {
+      const msg = entry?.packet;
+      if (msg?.t === 'lobbyState' && msg.status === 'lobby' && FIREBASE_ROUND_RE.test(msg.nextRoundId || '') && msg.nextRoundId !== plan.roundId) {
+        return Object.freeze({ nextRoundId: msg.nextRoundId, entry });
+      }
+    }
+    return null;
+  }
+  async function activatePendingFirebaseBattleReentry(options = {}) {
+    let candidate = pendingFirebaseReentry;
+    if (!candidate) firebaseRecoveryFail('FIREBASE_RECOVERY_PENDING_MISSING');
+    let plan = options.plan || null;
+    try { plan = plan || await readFirebaseBattleRecoveryPlanForPendingReentry(); }
+    catch (error) {
+      if (error?.code === 'FIREBASE_RECOVERY_ROUND_ADVANCED' && !options.roundRefreshed) {
+        await refreshPendingFirebaseReentryCandidate();
+        return activatePendingFirebaseBattleReentry({ ...options, roundRefreshed: true });
+      }
+      throw error;
+    }
+    candidate = pendingFirebaseReentry;
+    // An active action never becomes a synthetic remoteAction/projectile.  A
+    // later read/replan must first turn it into a B3A completed action chain.
+    const handoff = firebaseRecoveryPlanRoundHandoff(plan);
+    if (plan.kind === 'wait_for_start' || plan.kind === 'wait_for_turn_boundary' || handoff) {
+      if (!options.noRetry) {
+        if (firebaseBattleRecoveryRetryTimer) clearTimeout(firebaseBattleRecoveryRetryTimer);
+        firebaseBattleRecoveryRetryTimer = 0;
+        scheduleFirebaseBattleRecoveryReplan();
+      }
+      return Object.freeze({ kind: handoff ? 'wait_for_round_handoff' : plan.kind, activated: false, pendingAction: plan.pendingAction || null, nextRoundId: handoff?.nextRoundId || null });
+    }
+    const activationRollback = captureFirebaseBattleReplayRollback();
+    const shell = beginFirebaseOnline(candidate.role, candidate.roomCode, candidate.auth,
+      selectedOnlineCharacter(), candidate.room, candidate.seat, null, candidate.reentryLease,
+      { recovering: true, seedMessageKeys: plan.historicalMessageKeys });
+    try {
+      if (firebaseBattleRecoveryRetryTimer) { clearTimeout(firebaseBattleRecoveryRetryTimer); firebaseBattleRecoveryRetryTimer = 0; }
+      // Failure here occurs before any Battle/lease commit.  The connected
+      // transport intentionally has no handler, so it is only quarantine.
+      connectFirebaseRecoveryTransport();
+      let replay = null;
+      if (plan.requiresBattleReplayValidation) replay = await replayFirebaseBattleRecoveryPlan(plan, options);
+      // B3A fenced its read.  Fence once more after the potentially long
+      // B3B1 replay before promoting any local baseline to live authority.
+      if (!options.plan || options.enforceFinalRoundFence) await assertFinalFirebaseRecoveryRound(candidate, plan);
+      if (plan.kind === 'battle_start_candidate' || plan.kind === 'candidate_turn_boundary' || plan.kind === 'results_candidate') {
+        if (!replay) firebaseRecoveryFail('FIREBASE_RECOVERY_REPLAY_REQUIRED');
+        const boundary = commitFirebaseRecoveryBoundary(replay);
+        // B3B1 intentionally rolls its shell back.  Restore persisted
+        // commit/reveal/presence evidence once more for the newly committed
+        // live shell before any result ledger can consult it.
+        await rebuildFirebaseRecoveryLobbyEvidence(plan.orderedEntriesThroughStart || []);
+        online.localAction = null;
+        online.remoteAction = null;
+        online.pendingRemoteTerminals = new Map();
+        seedFirebaseRecoveryCompletedActions(plan);
+        if (replay.result) {
+          if (!replay.result.conceded && replay.result.finalBaseline) {
+            applySnapshot(replay.result.finalBaseline, { preserveTerrain: true });
+            // This runtime comes from the verified local replay, not from the
+            // result packet.  It is committed atomically with its baseline.
+            if (replay.result.finalRuntime) {
+              online.battleGearShieldStateByUnit = replay.result.finalRuntime.shieldStateByUnit;
+              online.battleGearRuntimeEffectsStateByUnit = replay.result.finalRuntime.runtimeEffectsStateByUnit;
+            }
+          }
+          matchOver = true;
+          winner = replay.result.terminal.packet.winner;
+          beginMatchEnd(replay.result.terminal.packet.reason);
+          online.resultSent = true;
+          online.phase = 'results';
+          // Recovery never sends a result.  It may, however, use the normal
+          // round-id ledger once the verified result is visibly committed.
+          // The ledger itself is idempotent across repeated re-entry.
+          recordFirebaseMatchResultOnce();
+        } else {
+          online.phase = 'playing';
+        }
+        transferPendingFirebaseReentryLease(candidate);
+        startActivatedFirebaseRecoveryTransport();
+        return Object.freeze({ kind: plan.kind, activated: true, boundary, replay });
+      }
+      // Lobby/revealing use persisted room authority; their historical keys
+      // are still seeded before SSE.  Rebuild own commit/reveal evidence from
+      // persisted history so it never depends on an ignored self SSE echo.
+      await rebuildFirebaseRecoveryLobbyEvidence(plan.orderedEntries || []);
+      online.phase = plan.kind === 'revealing' ? 'revealing' : 'lobby';
+      transferPendingFirebaseReentryLease(candidate);
+      startActivatedFirebaseRecoveryTransport();
+      return Object.freeze({ kind: plan.kind, activated: true, boundary: null, replay: null });
+    } catch (error) {
+      // A connect/handler/commit failure must be indistinguishable from not
+      // having started: restore the old board and return the same candidate
+      // with the same still-held lease.  Never call clearPending here.
+      try { shell.transport?.close?.(); } catch (_) {}
+      restoreFirebaseBattleReplayRollback(activationRollback);
+      pendingFirebaseReentry = candidate;
+      if (error?.code === 'FIREBASE_RECOVERY_ROUND_ADVANCED' && !options.finalRoundRefreshed) {
+        await refreshPendingFirebaseReentryCandidate();
+        // A final-fence race invalidates the old plan entirely.  Re-read the
+        // new current round once; persistent churn remains fail-closed.
+        const { plan: _discardedPlan, ...retryOptions } = options;
+        return activatePendingFirebaseBattleReentry({ ...retryOptions, finalRoundRefreshed: true });
+      }
+      throw error;
+    }
   }
   // 準備完了は取り消せる。ホストが設定を変えた後にキャラを選び直したくなるため。
   // 取り消しても commit は送り直せる(公開前なので情報は漏れない)。

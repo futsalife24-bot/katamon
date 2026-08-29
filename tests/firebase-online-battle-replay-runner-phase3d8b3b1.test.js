@@ -297,13 +297,18 @@ async function gearRecoveryPlan2v2({ role = 'host', tail = [], startSnapshot = n
     const canonicalStart = structuredClone(provisional.start.packet.snap);
     const frame = callback => setImmediate(() => { kt.step(0.05); callback(); });
     const generated = await bridge.generateTerminal(provisional, fire, { frame, timeoutMs: 15000, moves: [move] });
-    assert.equal(generated.snap.units.find(unit => unit.id === firstUnit).fuel, 77);
+    // Walking consumes the exact amount needed to reach the canonical firing
+    // pose. That amount depends on the canonical start position, so the
+    // independently produced terminal—not the move packet's requested fuel—
+    // is authoritative for the post-resolution value.
+    const generatedFuel = generated.snap.units.find(unit => unit.id === firstUnit).fuel;
+    assert.ok(Number.isFinite(generatedFuel));
     const terminal = { ...packet('state', { actionId, unitId: firstUnit, snap: turnStateFrom(generated.snap), sentAt: 1800000000002 }), from: actor.from, seat: actor.seat };
     const plan = await recoveryPlan({ role: firstUnit === 'p1' ? 'host' : 'guest', startSnapshot: canonicalStart, tail: [move, fire, terminal] });
     assert.deepEqual(plan.start.packet.snap, canonicalStart);
     const actual = await bridge.replay(plan, { frame, timeoutMs: 15000 });
     assert.equal(actual.validatedBoundaries.length, 1);
-    assert.equal(actual.validatedBoundaries[0].baseline.units.find(unit => unit.id === firstUnit).fuel, 77);
+    assert.equal(actual.validatedBoundaries[0].baseline.units.find(unit => unit.id === firstUnit).fuel, generatedFuel);
   });
 
   await test('a production-generated Gear ON 2v2 chain accepts the occupied s1 to p2 historical action', async () => {
