@@ -42,6 +42,8 @@
     "test:gear-preset-storage": "node tests/gear-preset-storage.test.js",
     "test:gear-preset-capture": "node tests/gear-preset-capture.test.js",
     "test:gear-combat": "node tests/gear-combat.test.js",
+    "test:gear-ui-phase4": "node tests/gear-ui-phase4.test.js",
+    "test:e2e:gear-ui-phase4": "playwright test tests/e2e/gear-ui-phase4.spec.js --project=android-chromium-portrait-touch",
     "test:gear-battle-snapshot": "node tests/gear-battle-snapshot.test.js",
     "test:gear-online-protocol": "node tests/gear-online-protocol.test.js",
     "test:gear-online-lobby-protocol": "node tests/gear-online-lobby-protocol.test.js",
