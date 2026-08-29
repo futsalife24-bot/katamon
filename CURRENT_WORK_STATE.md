@@ -1,23 +1,25 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-08-27 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-08-29 / GitHub正本: `futsalife24-bot/katamon` の `master`
 
 ## 現在の開発状態
 
-Gear: P0仕様/P1 Domain/P2保存・取引・報酬/P3A Preset/P3B Calc/SS完了。P3Cは**正式COMPLETE**: 3C-1 Start/SS/HP/Fuel、2A A/D、2B Crit/Blast、3A KB、3B Status、3C1 Shield、3C2 Heal、3D LS。総合監査GO（P0/P1/P2=0、P3=1:本書更新遅れのみ）。PR #305済、master `0d03f5d0c3ba614dd7d7cc9ac38d9f5046f76b00`。
+Gear ONLINE Phase 3D-8Bは**正式COMPLETE**。PR #331を通常mergeしたmaster `bfa5f8576a78759c91cc2561f6aea2a9f8886ff2` を正本とし、B2本人・席・lease復元、B3A append-only Recovery Plan、B3B1 deterministic replay、B3B2 verified boundaryのlive activation / SSE handoffまで完了。
 
-適用=offline CPU normal 1v1 human p1のみ。CPU enemy/FREE/local2v2/ONLINE/Coop/Bossは意図的に未接続。Rescue4はpure helperのみで、Gear ally不在の3Cでは未接続（3D+で判断）。
+現在は **Phase 3D-8C Live Firebase Ordering / Rematch Contract**。3D-8D（実Firebase・複数プロファイル/実端末のcross-device E2Eとrollout audit）は未着手。正本に存在しない3D-8B3B3は新設しない。
 
 ## 現在の最優先タスク
 
-1. **Phase 3D-0 ONLINE Gear protocol / authority audit**（設計・監査のみ。production実装なし）
-   - Battle Gear Snapshot transport、host/server authority、per-unit Gear ownership、action identity、Crit/Status deterministic RNG authority、runtime state ownership、reconnect、tamper/reject boundary、ONLINE 2v2 Gear conflict、Rescue4 ally-target ownershipを確認する。
+1. **Phase 3D-8C Live Firebase Ordering / Rematch Contract**
+   - 通常live receiverのmove / fire / state ordering、push-key/action duplicate、terminal-before-fire、1v1/2v2 rematch、new-round resetをproduction pathで固定する。
+2. **Phase 3D-8D Cross-device E2E / Rollout Audit**
+   - 8C merge後に実Firebase・複数クライアントで最終受入を行う。Firebase Rules/Consoleや手動public deployは別途明示承認なしに変更しない。
 
-以降の概略: 3D-1+ ONLINE Battle Gear transport/integration、3E remaining modes/balance/full regression、Phase 4 Gear UI、Phase 5 UX/transfer/polish。
+以降の概略: 3D-8D、3E remaining modes/balance/full regression、Phase 4 Gear UI、Phase 5 UX/transfer/polish。
 
 ## 現在の公開版
 
-- 最新版は **v2.0.142**。Phase 3Cは未deploy・未version update・未public release。
+- アプリ内BUILD正本は **v2.0.143**。master push時の既存GitHub Pages自動workflowと、Firebase Rules/Console変更・手動public releaseは別管理とする。Phase 3D-8Cではdeployしない。
 
 ## Backlog / 保留タスク
 

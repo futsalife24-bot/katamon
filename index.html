@@ -12439,6 +12439,17 @@
         return;
       }
     }
+    // SSEの再接続では、同じ完了済みfireが別push keyで再配送されることがある。
+    // 手番のflow判定より先にaction cacheを確認しないと、正規duplicateを「今の手番ではない」
+    // と誤ってprotocol errorにしてしまう。送信者が違うactionId再利用だけは従来どおりfail closed。
+    if (online && online.kind === 'firebase' && msg.t === 'fire') {
+      const completed = firebaseCompletedActionStatus(msg);
+      if (completed === 'duplicate') return;
+      if (completed === 'mismatch') {
+        rejectFirebaseMessage('不正な通信順序です（fire.actionId）');
+        return;
+      }
+    }
     if (online && online.kind === 'firebase' && !firebaseFlowAllows(msg, {
       activeId: activeUnit().id,
       remoteUnitId: unitById(msg.unitId || '') && unitById(msg.unitId).control === 'remote' ? msg.unitId : null,
@@ -12535,11 +12546,6 @@
         } else if (online.role === 'host') online.phase = 'playing';
         break;
       case 'fire': {
-        if (online.kind === 'firebase') {
-          const completed = firebaseCompletedActionStatus(msg);
-          if (completed === 'duplicate') break;
-          if (completed === 'mismatch') { rejectFirebaseMessage('不正な通信順序です（fire.actionId）'); break; }
-        }
         const u = unitById(msg.unitId);
         if (!u || u.control !== 'remote') break;
         if (online.kind === 'coop' && (online.phase !== 'playing' || activeUnit()?.id !== msg.unitId
@@ -15071,6 +15077,10 @@
   function resetLocalFirebaseRoundState(autoReady) {
     if (!online || online.kind !== 'firebase') return;
     logSeatAssignment('roundReset');
+    // 結果画面から次roundのlobbyへ戻る時も、通常の開始・同期と同じ正本で
+    // projectile / matchOver / winner / match-end演出を捨てる。Gearや通信cacheは下で
+    // Firebase round-local stateとして明示的に初期化する。
+    resetTransientBattleState();
     online.phase = 'lobby'; online.selfReady = false; online.peerReady = false; online.seatReady = {};
     online.seatReleaseReady = {}; online.seatReleaseNextCheckMs = 0; online.seatReleaseChecking = false;
     online.selfCharacter = selectedOnlineCharacter();
