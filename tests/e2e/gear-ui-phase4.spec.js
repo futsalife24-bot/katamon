@@ -1,0 +1,49 @@
+const { test, expect } = require('@playwright/test');
+
+test('GARAGEからGearを開き、slot比較と装備をAndroid縦画面で完了できる', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/index.html?gear-ui-phase4=1', async (route) => {
+    const response = await route.fetch();
+    const source = (await response.text()).replace(/\r\n/g, '\n');
+    const marker = '\n})();\n</script>';
+    const position = source.lastIndexOf(marker);
+    expect(position).toBeGreaterThan(0);
+    await route.fulfill({ response, body: `${source.slice(0, position)}\n  window.__gearUiTest = { open: openGearWorkshop };${source.slice(position)}` });
+  });
+  await page.goto('/index.html?gear-ui-phase4=1');
+  await expect(page.locator('#game')).toBeVisible();
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    const domain = globalThis.KatamonGearDomain;
+    const storage = globalThis.KatamonGearStorage;
+    const presetStorage = globalThis.KatamonGearPresetStorage;
+    const presets = globalThis.KatamonGearPresets;
+    const make = (id, setId, seed) => domain.createGear({ gearId: id, generationSeed: `ui:${seed}:g`, enhancementSeed: `ui:${seed}:e`, sourceId: 'cpu_battle', sourceDetail: { e2e: 'gear-ui' }, acquiredAt: '2026-08-30T00:00:00Z', qualityProfile: { id: 'ui', starWeights: [{ id: 6, weight: 1 }], rarityWeights: [{ id: 'legend', weight: 1 }] }, setProfile: { id: `ui:${setId}`, setWeights: [{ id: setId, weight: 1 }] }, slotId: 'barrel', setId });
+    const current = make('ui-current-barrel', 'assault', 'current');
+    const candidate = make('ui-candidate-barrel', 'life', 'candidate');
+    const gearState = storage.createDefaultGearStorageState();
+    gearState.inventory = [current, candidate].map((gear) => ({ gear, locked: false, favorite: false }));
+    storage.saveGearState(gearState, localStorage);
+    let presetState = presets.createInitialState(['kyoryu']);
+    presetState = presets.setPresetSlot(presetState, { characterId: 'kyoryu', presetId: 'preset1', slotId: 'barrel', gearId: current.gearId, characterIds: ['kyoryu'] });
+    presetStorage.save(presetState, localStorage, { characterIds: ['kyoryu'] });
+  });
+  await page.evaluate(() => globalThis.__gearUiTest.open());
+  await expect(page.locator('#gearWorkshop')).toHaveClass(/open/);
+  await expect(page.locator('.gearSlot')).toHaveCount(6);
+  await expect(page.locator('.gearCharacterImage')).toBeVisible();
+  await page.locator('[data-gear-slot="barrel"]').click();
+  await expect(page.locator('[data-gear-candidate]')).toHaveCount(2);
+  await page.locator('[data-gear-candidate="ui-candidate-barrel"]').click();
+  await expect(page.locator('#gearCompare')).toBeVisible();
+  await page.locator('[data-gear-equip="ui-candidate-barrel"]').click();
+  await expect(page.locator('[data-gear-slot="barrel"]')).toContainText('生命');
+  await expect(page.locator('.gearSetPanel')).toContainText('生命');
+  await expect(page.locator('#gearWorkshop')).not.toContainText('undefined');
+  expect(await page.locator('#gearWorkshopBox').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('gear-ui-phase4-android.png'), fullPage: true });
+  await page.setViewportSize({ width: 320, height: 640 });
+  expect(await page.locator('#gearWorkshopBox').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});

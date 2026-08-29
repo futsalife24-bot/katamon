@@ -499,6 +499,34 @@
   @media (max-height: 620px) {
     #deviceBackConfirmPanel { min-height: 520px; padding-top: 72px; padding-bottom: 34px; transform: scale(.92); }
   }
+
+  /* Gearは戦闘Canvasを止めずに扱える、ガレージ内のDOMワークベンチ。 */
+  #gearWorkshop { position:fixed; inset:0; z-index:27; display:none; color:#fff5dc; background:linear-gradient(rgba(3,7,10,.78),rgba(3,7,10,.94)),url("assets/wall.jpg") center/cover; }
+  #gearWorkshop.open { display:flex; justify-content:center; }
+  #gearWorkshopBox { width:min(100%,620px); height:100%; overflow:auto; overscroll-behavior:contain; box-sizing:border-box; padding:calc(12px + env(safe-area-inset-top)) 12px calc(22px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(52,67,73,.98),rgba(16,26,31,.99) 46%,rgba(5,10,13,.99)); border-inline:2px solid rgba(199,131,53,.65); }
+  .gearHeader { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 2px 12px; border-bottom:2px solid #b87a33; }
+  .gearHeader h2 { margin:0; color:#ffe2a1; font:400 clamp(19px,5vw,26px)/1.1 var(--katamon-font-display); letter-spacing:.08em; text-shadow:0 2px 0 #160b04; }
+  .gearButton, .gearSelect { min-height:44px; box-sizing:border-box; color:#fff5dc; border:2px solid #b77a36; border-radius:6px; background:linear-gradient(#4b5d63,#142229); font:400 13px var(--katamon-font-ui); }
+  .gearButton { padding:8px 12px; cursor:pointer; }
+  .gearButton:active, .gearSlot:active, .gearCandidate:active { transform:translateY(2px); filter:brightness(1.13); }
+  .gearButton--gold { color:#211206; border-color:#ffd24a; background:linear-gradient(#ffe195,#bd7424); font-weight:900; }
+  .gearButton:disabled { opacity:.5; cursor:wait; }
+  .gearCharacterBar { display:grid; grid-template-columns:44px 1fr 44px; align-items:center; gap:8px; margin:12px 0 6px; }
+  .gearCharacterBar .gearButton { padding:0; font-size:22px; }
+  .gearCharacterName { min-width:0; text-align:center; color:#ffe2a1; font-size:15px; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gearCharacterRole { display:block; margin-top:2px; color:#d8a663; font-size:10px; font-weight:400; letter-spacing:.09em; }
+  .gearBuildStage { position:relative; min-height:335px; margin:8px 0 12px; overflow:hidden; border:2px solid rgba(199,131,53,.75); border-radius:14px; background:radial-gradient(ellipse at 50% 45%,rgba(92,124,107,.25),transparent 42%),linear-gradient(150deg,#13252a,#090f13 70%); box-shadow:inset 0 0 36px rgba(0,0,0,.72),0 8px 20px rgba(0,0,0,.35); }
+  .gearBuildStage::before { content:""; position:absolute; inset:13px; border:1px dashed rgba(255,211,110,.17); border-radius:50%; pointer-events:none; }
+  .gearCharacterImage { position:absolute; z-index:1; width:154px; height:154px; left:50%; top:49%; transform:translate(-50%,-50%); object-fit:contain; filter:drop-shadow(0 10px 8px rgba(0,0,0,.68)); pointer-events:none; }
+  .gearCharacterPlate { position:absolute; z-index:2; left:50%; bottom:12px; transform:translateX(-50%); max-width:82%; padding:5px 11px; color:#f9dc9b; border:1px solid #8e5b28; border-radius:999px; background:rgba(8,16,19,.84); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gearSlot { position:absolute; z-index:3; width:104px; min-height:78px; padding:7px 6px 6px; color:#fff5dc; text-align:left; border:2px solid #7d5933; border-radius:12px; background:linear-gradient(145deg,rgba(67,82,85,.98),rgba(18,29,34,.98)); box-shadow:0 5px 10px rgba(0,0,0,.44),inset 0 0 0 1px rgba(255,229,177,.1); cursor:pointer; }
+  .gearSlot[data-slot="barrel"]{left:7%;top:10%;}.gearSlot[data-slot="armor"]{right:7%;top:10%;}.gearSlot[data-slot="core"]{left:3%;top:41%;}.gearSlot[data-slot="engine"]{right:3%;top:41%;}.gearSlot[data-slot="sight"]{left:11%;bottom:8%;}.gearSlot[data-slot="auxiliary"]{right:11%;bottom:8%;}
+  .gearSlot.selected { border-color:#ffd24a; box-shadow:0 0 0 2px rgba(255,210,74,.23),0 0 18px rgba(255,196,69,.38),inset 0 0 0 1px #fff0b7; }
+  .gearSlotLabel { display:flex; justify-content:space-between; align-items:center; gap:3px; color:#ffd995; font-size:10px; }.gearSlotGlyph { font-size:16px; }.gearSlotName { display:block; margin-top:3px; font-size:11px; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.gearSlotEmpty { color:#aeb8b8; font-size:10px; }.gearCrest { display:inline-grid; place-items:center; width:17px; height:17px; flex:0 0 auto; color:#1a1007; border:1px solid rgba(255,244,190,.7); border-radius:50%; background:#e5a24c; font:900 10px/1 sans-serif; }
+  .gearSummary { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:10px 0; }.gearStat { min-height:48px; padding:6px 7px; border:1px solid rgba(195,128,54,.65); border-radius:7px; background:rgba(7,15,19,.66); }.gearStat b{display:block;color:#fff4d6;font-size:15px}.gearStat small{display:block;color:#d6ad73;font-size:10px}.gearStat.soft b{color:#ffd35b}.gearStat.hard b{color:#ff8c76}.gearCapNote{display:block;font-size:9px;color:#ffd35b}.gearSetPanel { margin:8px 0 14px; padding:9px; border:1px solid rgba(192,128,53,.6); border-radius:8px; background:rgba(9,16,19,.66); }.gearSetTitle{font-size:11px;color:#d8ad73}.gearSetRows{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gearSetChip{display:flex;gap:5px;align-items:center;padding:4px 6px;border:1px solid #80572e;border-radius:999px;background:#1b2a2d;font-size:10px}.gearSetChip.active{border-color:#ffd24a;color:#fff0b0}.gearSetHint{margin-top:6px;color:#cbd2cb;font-size:10px}
+  .gearLoadoutControls { display:grid; grid-template-columns:1fr auto; gap:8px; margin:10px 0; }.gearSelect{width:100%;padding:0 8px}.gearStatus{min-height:18px;margin:0 2px 8px;color:#f5ce84;font-size:11px}.gearStatus.error{color:#ff9f86}.gearInventory{border-top:2px solid rgba(199,131,53,.55);padding-top:11px}.gearInventory h3{margin:0 0 3px;color:#ffe2a1;font:400 16px var(--katamon-font-display)}.gearInventoryNote{margin:0 0 8px;color:#c8c4b7;font-size:10px}.gearCandidates{display:grid;gap:8px}.gearCandidate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;width:100%;min-height:65px;padding:8px;text-align:left;color:#fff5dc;border:1px solid #815a31;border-radius:8px;background:linear-gradient(135deg,#263941,#111c21);cursor:pointer}.gearCandidate.current{border-color:#ffd24a;box-shadow:inset 0 0 0 1px rgba(255,219,125,.42)}.gearCandidate strong{display:block;font-size:12px}.gearCandidate small{display:block;color:#d6c4a6;font-size:10px}.gearDiff{font-size:11px;font-weight:900}.gearDiff.up{color:#80ec99}.gearDiff.down{color:#ff9c86}.gearEmpty{padding:17px 10px;color:#d2d2c8;text-align:center;border:1px dashed #80603e;border-radius:8px;font-size:12px}.gearCompare{position:sticky;bottom:0;margin-top:12px;padding:11px;border:2px solid #c78335;border-radius:10px;background:linear-gradient(180deg,rgba(54,69,72,.98),rgba(9,16,20,.99));box-shadow:0 -5px 20px rgba(0,0,0,.38)}.gearCompare[hidden]{display:none}.gearCompareTitle{color:#ffe2a1;font-weight:900;font-size:12px}.gearCompareGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}.gearCompareGrid div{padding:6px;border-radius:6px;background:rgba(2,7,9,.55);font-size:11px}.gearCompareGrid b{display:block;color:#d5ad73;font-size:9px}.gearCompareSet{color:#ffd45a;font-size:10px}.gearCompareActions{display:flex;gap:8px}.gearCompareActions .gearButton{flex:1}
+  @media (max-width:380px){#gearWorkshopBox{padding-inline:8px}.gearBuildStage{min-height:315px}.gearSlot{width:91px;min-height:70px;padding:5px}.gearCharacterImage{width:140px;height:140px}.gearSlotName{font-size:10px}.gearSummary{gap:5px}.gearStat{padding:5px}.gearStat b{font-size:13px}}
+  @media (prefers-reduced-motion:no-preference){.gearSlot,.gearCandidate,.gearButton{transition:transform .12s ease,filter .12s ease,box-shadow .16s ease}}
 </style>
 </head>
 <body>
@@ -600,6 +628,20 @@
       <button id="onlineCodeToggle" type="button">部屋IDを使う</button>
     </div>
   </div>
+</div>
+<!-- 装備変更は既存Gear domain/storageを読むだけのガレージ画面。戦闘Canvasの常時描画には参加しない。 -->
+<div id="gearWorkshop" aria-hidden="true">
+  <main id="gearWorkshopBox" role="dialog" aria-modal="true" aria-labelledby="gearWorkshopTitle">
+    <header class="gearHeader"><h2 id="gearWorkshopTitle">GEAR WORKBENCH</h2><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></header>
+    <div class="gearCharacterBar"><button id="gearCharacterPrev" class="gearButton" type="button" aria-label="前のCATAMON">‹</button><div id="gearCharacterName" class="gearCharacterName"></div><button id="gearCharacterNext" class="gearButton" type="button" aria-label="次のCATAMON">›</button></div>
+    <section id="gearBuildStage" class="gearBuildStage" aria-label="現在のGear装備"></section>
+    <section id="gearSummary" class="gearSummary" aria-label="装備後の主要能力"></section>
+    <section id="gearSetPanel" class="gearSetPanel" aria-label="セット効果"></section>
+    <div class="gearLoadoutControls"><select id="gearPresetSelect" class="gearSelect" aria-label="Gearプリセット"></select><button id="gearPresetSave" class="gearButton" type="button">この構成を保存</button></div>
+    <p id="gearWorkshopStatus" class="gearStatus" aria-live="polite"></p>
+    <section class="gearInventory" aria-labelledby="gearInventoryTitle"><h3 id="gearInventoryTitle">部位を選んで装備する</h3><p id="gearInventoryNote" class="gearInventoryNote">部位スロットをタップすると候補を比較できます。</p><div id="gearCandidates" class="gearCandidates"></div></section>
+    <section id="gearCompare" class="gearCompare" hidden aria-live="polite"></section>
+  </main>
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
@@ -4403,6 +4445,114 @@
     return Object.freeze({ baseHp: def.maxHp, baseFuel: Math.round(FUEL_MAX * def.fuelMul) });
   }
 
+  // ===== Gear Workbench =====
+  // ここは画面の見せ方と既存APIの橋渡しだけを担当する。Gearの判定・保存・セット計算は
+  // KatamonGearDomain / KatamonGearPresetStorage の正本へ必ず委譲する。
+  const gearWorkshopEl = document.getElementById('gearWorkshop');
+  const gearBuildStageEl = document.getElementById('gearBuildStage');
+  const gearSummaryEl = document.getElementById('gearSummary');
+  const gearSetPanelEl = document.getElementById('gearSetPanel');
+  const gearCandidatesEl = document.getElementById('gearCandidates');
+  const gearCompareEl = document.getElementById('gearCompare');
+  const gearPresetSelectEl = document.getElementById('gearPresetSelect');
+  const gearStatusEl = document.getElementById('gearWorkshopStatus');
+  const gearCharacterNameEl = document.getElementById('gearCharacterName');
+  const gearSlotGlyphs = Object.freeze({ barrel: '◉', armor: '▣', core: '◆', engine: '⚙', sight: '⌖', auxiliary: '✦' });
+  const gearSetCrests = Object.freeze({ assault: '⚔', life: '♥', fortify: '⬟', critical: '✹', blast: '✸', impact: '➤', rescue: '✚', last_stand: '⚑' });
+  const gearUi = { open: false, characterId: CHARACTER_LIST[0], presetId: 'preset1', slotId: null, comparisonGearId: null, busy: false, status: '' };
+
+  const gearHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  const gearModules = () => {
+    const domain = globalThis.KatamonGearDomain;
+    const storage = globalThis.KatamonGearStorage;
+    const presetStorage = globalThis.KatamonGearPresetStorage;
+    const presets = globalThis.KatamonGearPresets;
+    const combat = globalThis.KatamonGearCombat;
+    if (!domain || !storage || !presetStorage || !presets || !combat) throw new Error('GEAR_WORKBENCH_MODULES_UNAVAILABLE');
+    return { domain, storage, presetStorage, presets, combat };
+  };
+  const gearRarity = (domain, id) => domain.RARITIES.find((entry) => entry.id === id)?.labelJa || id;
+  const gearSet = (domain, id) => domain.SETS.find((entry) => entry.id === id) || null;
+  const gearSlot = (domain, id) => domain.SLOTS.find((entry) => entry.id === id) || null;
+  const gearOpLabel = (domain, opId) => [...domain.SUB_OPS, { id: 'flat_attack', labelJa: '攻撃' }, { id: 'flat_hp', labelJa: 'HP' }, { id: 'flat_defense', labelJa: '防御' }, { id: 'max_fuel', labelJa: '最大燃料' }].find((entry) => entry.id === opId)?.labelJa || opId;
+  const gearValue = (value, unit) => unit === 'flat' ? String(Math.round(value)) : `+${(value / 100).toFixed(value % 100 ? 2 : 0)}%`;
+  function gearCharacterAsset(characterId) {
+    const def = CHARACTERS[characterId] || {};
+    return def.assetBase ? `${def.assetBase}.webp` : `assets/characters/runtime/${def.asset || 'dirano'}.webp`;
+  }
+  function gearLoadState() {
+    const { storage, presetStorage, presets, domain, combat } = gearModules();
+    const gearState = storage.loadGearState(localStorage);
+    const presetState = presetStorage.load(localStorage, { characterIds: CHARACTER_LIST });
+    const preset = presets.resolvePreset(presetState, { characterId: gearUi.characterId, presetId: gearUi.presetId, characterIds: CHARACTER_LIST });
+    const resolved = presets.resolvePresetLoadout({ presetState, gearState, characterId: gearUi.characterId, presetId: gearUi.presetId, characterIds: CHARACTER_LIST, validateGear: domain.validateGear });
+    const loadout = Object.values(resolved.slots).filter(Boolean);
+    const base = characterBattleBaseStats(gearUi.characterId);
+    return { gearState, presetState, preset, resolved, loadout, aggregate: domain.aggregateLoadout(loadout), combat: combat.calculateGearCombat({ loadout, ...base }), domain, presets };
+  }
+  function gearStatRows(state) {
+    const c = state.combat; const caps = state.aggregate.softCaps;
+    return [
+      ['HP', c.maxHp, ''], ['ATK', Math.round(c.effectiveAttack), ''], ['DEF', Math.round(c.effectiveDefense), ''],
+      ['FUEL', c.maxFuel, ''], ['会心', `${(c.critRateBp / 100).toFixed(0)}%`, caps.critRate], ['爆風', `${(c.blastPowerBp / 100).toFixed(0)}%`, caps.blastPower],
+      ['耐性', `${(c.statusResistanceBp / 100).toFixed(0)}%`, caps.statusResistance], ['盾', `×${c.shieldMultiplier.toFixed(2)}`, caps.shieldPower], ['回復', `×${c.healingMultiplier.toFixed(2)}`, caps.healPower]
+    ];
+  }
+  function gearCapClass(cap) { return cap?.overflowBp > 0 ? 'soft' : ''; }
+  function gearSetSummary(state) {
+    const { domain, aggregate } = state;
+    const rows = domain.SETS.filter((set) => aggregate.setCounts[set.id] > 0).map((set) => {
+      const count = aggregate.setCounts[set.id]; const active = aggregate.activeSetEffects.filter((effect) => effect.setId === set.id).map((effect) => `${effect.threshold}SET`).join(' / ');
+      const next = count < 2 ? `あと${2 - count}部位で2SET` : count < 4 ? `あと${4 - count}部位で4SET` : '4SET発動中';
+      return `<span class="gearSetChip ${active ? 'active' : ''}"><i class="gearCrest">${gearSetCrests[set.id] || '◆'}</i>${gearHtml(set.labelJa)} ${count}/4${active ? ` · ${active}` : ''}</span><span class="gearSetHint">${next}</span>`;
+    });
+    return rows.length ? `<div class="gearSetTitle">SET EFFECT — そろえるほど強くなる</div><div class="gearSetRows">${rows.join('')}</div>` : `<div class="gearSetTitle">SET EFFECT</div><div class="gearSetHint">同じ紋章を2部位・4部位そろえるとセット効果が発動します。</div>`;
+  }
+  function gearCurrentGear(state, slotId) { return state.resolved.slots[slotId] || null; }
+  function gearCandidateLoadout(state, slotId, candidate) { return state.loadout.filter((gear) => gear.slotId !== slotId).concat(candidate ? [candidate] : []); }
+  function gearDiff(current, next) { const diff = Math.round(next - current); return diff > 0 ? `<span class="gearDiff up">+${diff}</span>` : diff < 0 ? `<span class="gearDiff down">${diff}</span>` : '<span class="gearDiff">±0</span>'; }
+  function gearRender() {
+    if (!gearUi.open) return;
+    let state;
+    try { state = gearLoadState(); } catch (error) { gearStatusEl.textContent = 'Gearデータを安全に読めませんでした。'; gearStatusEl.className = 'gearStatus error'; return; }
+    const { domain, preset, resolved, gearState, aggregate, combat } = state;
+    const def = CHARACTERS[gearUi.characterId];
+    gearCharacterNameEl.innerHTML = `${gearHtml(def?.name || gearUi.characterId)}<span class="gearCharacterRole">${gearHtml(def?.roleEn || 'CATAMON')} · ${gearHtml(def?.role || '')}</span>`;
+    gearBuildStageEl.innerHTML = `<img class="gearCharacterImage" src="${gearCharacterAsset(gearUi.characterId)}" alt="${gearHtml(def?.name || '')}" draggable="false"><div class="gearCharacterPlate">${gearHtml(preset.name)} · ${aggregate.equippedSlotCount}/6 EQUIPPED</div>${domain.SLOTS.map((slot) => { const gear = resolved.slots[slot.id]; const set = gear ? gearSet(domain, gear.setId) : null; return `<button class="gearSlot ${gearUi.slotId === slot.id ? 'selected' : ''}" data-gear-slot="${slot.id}" data-slot="${slot.id}" type="button"><span class="gearSlotLabel"><span class="gearSlotGlyph">${gearSlotGlyphs[slot.id]}</span>${gearHtml(slot.labelJa)}${set ? `<i class="gearCrest" title="${gearHtml(set.labelJa)}">${gearSetCrests[set.id] || '◆'}</i>` : ''}</span><strong class="gearSlotName">${gear ? `${gearHtml(set?.labelJa || '')} ${gear.star}★` : '未装備'}</strong><span class="gearSlotEmpty">${gear ? `${gearRarity(domain, gear.rarityId)} · +${gear.enhancementLevel}` : 'タップして選ぶ'}</span></button>`; }).join('')}`;
+    gearSummaryEl.innerHTML = gearStatRows(state).map(([label, value, cap]) => `<div class="gearStat ${gearCapClass(cap)}"><b>${gearHtml(value)}</b><small>${label}</small>${cap?.overflowBp > 0 ? '<span class="gearCapNote">効率低下 ↓</span>' : ''}</div>`).join('');
+    gearSetPanelEl.innerHTML = gearSetSummary(state);
+    const characterState = state.presets.characterState(state.presetState, gearUi.characterId, CHARACTER_LIST);
+    gearPresetSelectEl.innerHTML = characterState.presets.map((entry) => `<option value="${entry.presetId}" ${entry.presetId === gearUi.presetId ? 'selected' : ''}>${gearHtml(entry.name)}</option>`).join('');
+    gearStatusEl.textContent = gearUi.status; gearStatusEl.className = `gearStatus${gearUi.status.startsWith('装備') || gearUi.status.startsWith('保存') ? '' : gearUi.status ? ' error' : ''}`;
+    if (!gearUi.slotId) { gearCandidatesEl.innerHTML = '<div class="gearEmpty">中央のCATAMONを囲む6部位から、確認したい装備スロットを選んでください。</div>'; gearCompareEl.hidden = true; return; }
+    const selectedSlot = gearSlot(domain, gearUi.slotId); const current = gearCurrentGear(state, gearUi.slotId);
+    const candidates = gearState.inventory.map((entry) => entry.gear).filter((gear) => gear.slotId === gearUi.slotId).sort((a, b) => b.star - a.star || b.enhancementLevel - a.enhancementLevel);
+    gearCandidatesEl.innerHTML = candidates.length ? candidates.map((gear) => { const predicted = combat ? gearModules().combat.calculateGearCombat({ loadout: gearCandidateLoadout(state, gearUi.slotId, gear), ...characterBattleBaseStats(gearUi.characterId) }) : null; const isCurrent = current?.gearId === gear.gearId; return `<button class="gearCandidate ${isCurrent ? 'current' : ''}" data-gear-candidate="${gear.gearId}" type="button"><i class="gearCrest">${gearSetCrests[gear.setId] || '◆'}</i><span><strong>${gearHtml(gearSet(domain, gear.setId)?.labelJa || gear.setId)} ${gear.star}★ ${gearRarity(domain, gear.rarityId)}</strong><small>${gearHtml(selectedSlot?.labelJa || '')} · ${gearHtml(gearOpLabel(domain, gear.mainOp.opId))} ${gearValue(gear.mainOp.value, gear.mainOp.unit)} · 強化 +${gear.enhancementLevel}</small></span>${gearDiff(combat.effectiveAttack, predicted.effectiveAttack)}</button>`; }).join('') : `<div class="gearEmpty">${gearHtml(selectedSlot?.labelJa || '')}に装備できるGearはまだありません。CPU BATTLEや協力ボスでGearを集めると、ここで比較できます。</div>`;
+    const compared = candidates.find((gear) => gear.gearId === gearUi.comparisonGearId);
+    if (!compared || compared.gearId === current?.gearId) { gearCompareEl.hidden = true; return; }
+    const predictedLoadout = gearCandidateLoadout(state, gearUi.slotId, compared); const nextAggregate = domain.aggregateLoadout(predictedLoadout); const nextCombat = gearModules().combat.calculateGearCombat({ loadout: predictedLoadout, ...characterBattleBaseStats(gearUi.characterId) });
+    const setBefore = Object.entries(aggregate.setCounts).filter(([, count]) => count).map(([id, count]) => `${gearSet(domain, id)?.labelJa || id} ${count}/4`).join(' · ') || 'なし'; const setAfter = Object.entries(nextAggregate.setCounts).filter(([, count]) => count).map(([id, count]) => `${gearSet(domain, id)?.labelJa || id} ${count}/4`).join(' · ') || 'なし';
+    gearCompareEl.hidden = false; gearCompareEl.innerHTML = `<div class="gearCompareTitle">CURRENT → NEW</div><div class="gearCompareGrid"><div><b>現在</b>HP ${combat.maxHp} / ATK ${Math.round(combat.effectiveAttack)} / DEF ${Math.round(combat.effectiveDefense)}</div><div><b>装備後</b>HP ${nextCombat.maxHp} ${gearDiff(combat.maxHp, nextCombat.maxHp)}<br>ATK ${Math.round(nextCombat.effectiveAttack)} ${gearDiff(combat.effectiveAttack, nextCombat.effectiveAttack)}<br>DEF ${Math.round(nextCombat.effectiveDefense)} ${gearDiff(combat.effectiveDefense, nextCombat.effectiveDefense)}</div></div><div class="gearCompareSet">SET: ${gearHtml(setBefore)} → ${gearHtml(setAfter)}</div><div class="gearCompareActions"><button class="gearButton" data-gear-unequip="${gearUi.slotId}" type="button" ${current ? '' : 'disabled'}>装備を外す</button><button class="gearButton gearButton--gold" data-gear-equip="${compared.gearId}" type="button">このGearを装備</button></div>`;
+  }
+  async function gearMutateSlot(slotId, gearId) {
+    if (gearUi.busy) return; gearUi.busy = true; gearUi.status = '装備を安全に保存中…'; gearRender();
+    try { const { presetStorage, presets } = gearModules(); await presetStorage.mutateGearPresetsLocked((before) => presets.setPresetSlot(before, { characterId: gearUi.characterId, presetId: gearUi.presetId, slotId, gearId, characterIds: CHARACTER_LIST }), localStorage, { characterIds: CHARACTER_LIST }); gearUi.comparisonGearId = null; gearUi.status = gearId ? '装備を更新しました。' : '装備を外しました。'; }
+    catch (error) { gearUi.status = error?.code === 'PENDING_GEAR_TRANSACTION_EXISTS' ? 'Gear取引を復旧中です。少し待ってからお試しください。' : '装備を安全に更新できませんでした。'; }
+    finally { gearUi.busy = false; gearRender(); }
+  }
+  function openGearWorkshop() { if (isOnline?.()) return false; gearUi.open = true; gearUi.status = ''; gearUi.slotId = null; gearUi.comparisonGearId = null; gearWorkshopEl.classList.add('open'); gearWorkshopEl.setAttribute('aria-hidden', 'false'); gearRender(); return true; }
+  function closeGearWorkshop() { gearUi.open = false; gearWorkshopEl.classList.remove('open'); gearWorkshopEl.setAttribute('aria-hidden', 'true'); }
+  if (gearWorkshopEl && gearBuildStageEl && gearCandidatesEl && gearCompareEl && gearPresetSelectEl) {
+    document.getElementById('gearWorkshopClose').addEventListener('click', closeGearWorkshop);
+    document.getElementById('gearCharacterPrev').addEventListener('click', () => { const index = CHARACTER_LIST.indexOf(gearUi.characterId); gearUi.characterId = CHARACTER_LIST[(index - 1 + CHARACTER_LIST.length) % CHARACTER_LIST.length]; gearUi.slotId = null; gearUi.comparisonGearId = null; gearRender(); });
+    document.getElementById('gearCharacterNext').addEventListener('click', () => { const index = CHARACTER_LIST.indexOf(gearUi.characterId); gearUi.characterId = CHARACTER_LIST[(index + 1) % CHARACTER_LIST.length]; gearUi.slotId = null; gearUi.comparisonGearId = null; gearRender(); });
+    gearPresetSelectEl.addEventListener('change', () => { gearUi.presetId = gearPresetSelectEl.value; gearUi.slotId = null; gearUi.comparisonGearId = null; gearRender(); });
+    document.getElementById('gearPresetSave').addEventListener('click', () => { gearUi.status = '現在の装備はこのプリセットへ保存されています。'; gearRender(); });
+    gearBuildStageEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-slot]'); if (!button) return; gearUi.slotId = button.dataset.gearSlot; gearUi.comparisonGearId = null; gearUi.status = ''; gearRender(); });
+    gearCandidatesEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-candidate]'); if (!button) return; gearUi.comparisonGearId = button.dataset.gearCandidate; gearRender(); });
+    gearCompareEl.addEventListener('click', (event) => { const equip = event.target.closest('[data-gear-equip]'); const unequip = event.target.closest('[data-gear-unequip]'); if (equip && gearUi.slotId) gearMutateSlot(gearUi.slotId, equip.dataset.gearEquip); if (unequip) gearMutateSlot(unequip.dataset.gearUnequip, null); });
+  }
+
   function applyCharacter(u, key) {
     const def = CHARACTERS[key];
     const base = characterBattleBaseStats(key);
@@ -6643,7 +6793,8 @@
     ranking: { asset: 'hangingSign', x: 270, y: 787, w: 220, h: 139 },
     shop: { asset: 'parchment', x: 270, y: 548, w: 301, h: 82 },
     achievements: { asset: 'parchment', x: 270, y: 643, w: 301, h: 82 },
-    soundTest: { asset: 'shield', x: 270, y: 784, w: 146, h: 131 }
+    gear: { asset: 'parchment', x: 169, y: 735, w: 189, h: 52 },
+    soundTest: { asset: 'shield', x: 395, y: 792, w: 146, h: 131 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
   const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
@@ -6652,7 +6803,8 @@
   const titleRankingBtn = { x: 270, y: 829, w: 204, h: 47 };
   const titleShopBtn = { x: 270, y: 548, w: 283, h: 63 };
   const titleAchievementsBtn = { x: 270, y: 643, w: 283, h: 63 };
-  const titleSoundTestBtn = { x: 270, y: 786, w: 116, h: 92 };
+  const titleGearBtn = { x: 169, y: 735, w: 175, h: 43 };
+  const titleSoundTestBtn = { x: 395, y: 792, w: 116, h: 92 };
   const titleMenuLeftBtn = { x: 32, y: 690, w: 56, h: 66 };
   const titleMenuRightBtn = { x: 508, y: 690, w: 56, h: 66 };
   const titleBattleTabBtn = { x: 218, y: 476, w: 96, h: 32 };
@@ -6685,10 +6837,10 @@
     }),
     Object.freeze({
       key: 'garage', label: 'GARAGE', sub: '育成・管理・コレクション',
-      // ギア装備・倉庫・プリセット・ガイドは、実装時にこのitemsへ追加する。
       items: Object.freeze([
         Object.freeze({ id: 'shop', image: 'shop', button: titleShopBtn, label: 'ショップ', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'achievements', image: 'achievements', button: titleAchievementsBtn, label: '実績', kind: 'parchmentLarge' }),
+        Object.freeze({ id: 'gear', image: 'gear', button: titleGearBtn, label: 'GEAR', sub: '装備・セット効果', kind: 'parchmentSmall' }),
         Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'サウンドテスト', kind: 'shield' })
       ])
     })
@@ -24989,6 +25141,7 @@
       fetchRankingBoard();
       return true;
     }
+    if (itemId === 'gear') return openGearWorkshop();
     if (itemId === 'shop' && COOP_MVP_FEATURE_ENABLED) {
       return globalThis.KatamonMvpShop?.openShop?.() === true;
     }
