@@ -2011,7 +2011,13 @@ function makeCtx() {
   // はみ出すか小さく寄る。大きさだけ見ていると気づけないので記録する。
   ctx.setTransform = (a, b, c, d, e, f) => { globalThis.__ktTransform = [a, b, c, d, e, f]; };
   ctx.measureText = () => ({ width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
-  ctx.createLinearGradient = ctx.createRadialGradient = () => ({ addColorStop: noop });
+  ctx.createLinearGradient = ctx.createRadialGradient = () => ({
+    addColorStop(offset, color) {
+      if (typeof color !== 'string' || !color.trim()) {
+        throw new TypeError(`invalid CanvasGradient color at ${offset}: ${String(color)}`);
+      }
+    }
+  });
   ctx.createPattern = () => ({});
   ctx.getImageData = (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)), width: w, height: h });
   ctx.createImageData = (w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)), width: w, height: h });

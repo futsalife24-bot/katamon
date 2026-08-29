@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.144-online-recovery-cache-refresh';
+const EXPECTED_BUILD_ID = 'v2.0.145-firebase-guest-battle-render-fix';
 
 function assertCacheVersionContract(html, worker) {
   const buildId = /const BUILD_ID = '([^']+)'/.exec(html)?.[1];
@@ -13,7 +13,7 @@ function assertCacheVersionContract(html, worker) {
   assert.ok(buildId && cacheVersion, 'BUILD_ID と CACHE_VERSION が必要です。');
   assert.equal(buildId, cacheVersion, `BUILD_ID (${buildId}) と CACHE_VERSION (${cacheVersion}) を一致させてください。`);
   assert.equal(buildId, EXPECTED_BUILD_ID,
-    'ONLINE Battle recovery更新を既存端末へ配るrelease版へ更新してください。');
+    'Firebase guest Battle render修正を既存端末へ配るrelease版へ更新してください。');
   assert.doesNotMatch(worker, /ignoreSearch\s*:\s*true/, 'Service Workerでクエリを無視してはいけません。');
   assert.doesNotMatch(html, /\?v=\d+/, 'index.htmlのアセットを ?v= で版管理してはいけません。BUILD_ID/CACHE_VERSIONを上げてください。');
   assert.doesNotMatch(worker, /\?v=\d+/, 'APP_SHELLのアセットを ?v= で版管理してはいけません。');
