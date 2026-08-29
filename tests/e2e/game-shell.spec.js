@@ -55,6 +55,14 @@ async function openTitle(page, url = GAME_URL) {
   await expect.poll(() => gameState(page), { timeout: 15_000 }).toMatchObject({ gamePhase: 'title' });
 }
 
+async function submitRequiredPlayerName(page, name = 'E2Eホスト') {
+  await expect(page.locator('#nameOverlay')).toHaveClass(/open/);
+  await expect(page.locator('#nameNote')).toContainText('プレイヤー名が必要');
+  await page.locator('#nameInput').fill(name);
+  await page.locator('#nameOk').click();
+  await expect(page.locator('#nameOverlay')).not.toHaveClass(/open/);
+}
+
 test.describe('カタモン本体の基本導線', () => {
   test('協力ボスの味方AI3席を縦画面で選び、席別設定へ保存する', async ({ page }) => {
     test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Mobile WebKit crashes before the game shell loads in this environment.');
@@ -167,6 +175,7 @@ test.describe('カタモン本体の基本導線', () => {
 
     await openTitle(page);
     await tapVirtualCanvas(page, 270, 538); // CPU BATTLE
+    await submitRequiredPlayerName(page);
     await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'select' });
     await tapVirtualCanvas(page, 438, 454); // 選択中キャラで出撃
     await expect.poll(() => gameState(page), { timeout: 15_000 }).toMatchObject({ gamePhase: 'battle', battleMode: 'normal' });
@@ -193,6 +202,7 @@ test.describe('カタモン本体の基本導線', () => {
     await expect(page.locator('#mvpCollection')).toHaveCount(1);
     await expect(page.locator('#titleCoopBtn')).toHaveCount(0);
     await tapVirtualCanvas(page, 270, 619); // ONLINE BATTLE
+    await submitRequiredPlayerName(page);
     await expect(page.locator('#onlineLobby')).toHaveClass(/open.*coop-choice|coop-choice.*open/);
     await expect(page.locator('#onlineLobbyNote')).toContainText('通常対戦の部屋と協力ボスの部屋は別々');
     await expect(page.getByRole('button', { name: /協力ボス/ })).toBeVisible();
@@ -244,6 +254,7 @@ test.describe('カタモン本体の基本導線', () => {
     await page.waitForTimeout(380);
     await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'title' });
     await tapVirtualCanvas(page, 270, 538);
+    await submitRequiredPlayerName(page);
     await expect.poll(() => gameState(page)).toMatchObject({ gamePhase: 'select' });
     expect(pageErrors, `タイトルスワイプでpageerrorが発生: ${pageErrors.join(' | ')}`).toEqual([]);
     await page.goto('about:blank');
