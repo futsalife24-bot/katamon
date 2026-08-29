@@ -31,7 +31,7 @@ async function installF4Bridge(context, fixture) {
     const bridge = `
   const f4Trace = [];
   const f4Push = (name, phase, detail = null) => f4Trace.push({
-    sequence: f4Trace.length + 1, name, phase, detail,
+    sequence: f4Trace.length + 1, timestamp: performance.now(), name, phase, detail,
     gamePhase, battleMode, onlineKind: online?.kind || null,
     onlinePhase: online?.phase || null, pendingReentry: !!pendingFirebaseReentry,
     localUnitId: localUnitId || null, localCharacter: localUnit()?.character || null,
@@ -48,6 +48,7 @@ async function installF4Bridge(context, fixture) {
     catch (error) { f4Push(name, 'error', { name: error?.name, message: error?.message, code: error?.code || null }); throw error; }
   };
   restoreFirebaseRoomSeatReentry = f4WrapAsync('restoreFirebaseRoomSeatReentry', restoreFirebaseRoomSeatReentry);
+  acquireFirebaseReentryLease = f4WrapAsync('acquireFirebaseReentryLease', acquireFirebaseReentryLease);
   activatePendingFirebaseBattleReentry = f4WrapAsync('activatePendingFirebaseBattleReentry', activatePendingFirebaseBattleReentry);
   replayFirebaseBattleRecoveryPlan = f4WrapAsync('replayFirebaseBattleRecoveryPlan', replayFirebaseBattleRecoveryPlan);
   const f4OriginalFinalFence = assertFinalFirebaseRecoveryRound;
@@ -65,7 +66,7 @@ async function installF4Bridge(context, fixture) {
   applySnapshot = f4WrapSync('applySnapshot', applySnapshot);
 
   globalThis.KatamonF4StartupBridge = Object.freeze({
-    async seed() {
+    async seed(options = {}) {
       setMatchFormat('1v1');
       gamePhase = 'battle';
       selectCharacterAndStart('kyoryu');
@@ -94,6 +95,9 @@ async function installF4Bridge(context, fixture) {
         roomCode: '${ROOM_CODE}', seat: 'e1', savedAt: Date.now()
       });
       saveFirebaseReentryCredential(credential);
+      if (options.holdReentryLease === true) {
+        globalThis.__f5HeldReentryLease = await acquireFirebaseReentryLease(credential);
+      }
       const base = { v: 3, roundId: '${ROUND_ID}', sentAt: 1800000000000 };
       const messages = {
         '-0000000000000000001': { ...base, t: 'commit', from: '${HOST_UID}', seat: 'p1', hash: await commitPayload('kyoryu', hostNonce) },
@@ -134,6 +138,10 @@ async function installF4Bridge(context, fixture) {
   });
   await context.route('**/*', async route => {
     const url = route.request().url();
+    if (url.includes('identitytoolkit.googleapis.com') && url.includes('signUp')) {
+      fixture.authSignUpCount = (fixture.authSignUpCount || 0) + 1;
+      return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'F5_NEW_UID_FORBIDDEN' } }) });
+    }
     if (url.includes('securetoken.googleapis.com')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
     }
@@ -185,6 +193,156 @@ test('zero-input reload gives Firebase re-entry authority while preserving CPU s
     expect(state.trace.some(entry => entry.name === 'restoreFirebaseBattleReplayRollback' && entry.phase === 'error')).toBe(false);
     expect(state.pageErrors).toEqual([]);
     expect(browserErrors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('native Firebase re-entry Web Lock contention retries without weakening second-tab exclusivity', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the F5 production authority.');
+  const fixture = { room: null, messages: null };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  await installF4Bridge(context, fixture);
+  const lockOwnerPage = await context.newPage();
+  let contenderPage = null;
+  try {
+    await lockOwnerPage.goto(GAME_URL);
+    await expect.poll(() => lockOwnerPage.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await lockOwnerPage.evaluate(() => globalThis.KatamonF4StartupBridge.seed({ holdReentryLease: true }));
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+
+    const heldBeforeHandoff = await lockOwnerPage.evaluate(async () => {
+      const snapshot = await navigator.locks.query();
+      return snapshot.held.map(lock => ({ name: lock.name, mode: lock.mode }));
+    });
+    expect(heldBeforeHandoff.some(lock => lock.mode === 'exclusive')).toBe(true);
+
+    contenderPage = await context.newPage();
+    await contenderPage.goto(GAME_URL);
+    await expect.poll(() => contenderPage.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    await expect.poll(async () => {
+      const state = await contenderPage.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+      return state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease'
+        && entry.phase === 'error' && entry.detail?.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE').length;
+    }, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+
+    // TAB A remains authoritative while it owns the native exclusive lock. TAB B
+    // may retry, but it must not enter the same seat or erase the credential.
+    await expect.poll(async () => {
+      const state = await contenderPage.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+      return state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease' && entry.phase === 'before').length;
+    }, { timeout: 3000 }).toBeGreaterThanOrEqual(2);
+    const blockedState = await contenderPage.evaluate(() => {
+      const state = globalThis.KatamonF4StartupBridge.state();
+      return {
+        onlineKind: state.onlineKind,
+        onlinePhase: state.onlinePhase,
+        credentialPresent: state.credentialPresent,
+        acquireTrace: state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease'),
+      };
+    });
+    expect(blockedState.onlineKind).toBeNull();
+    expect(blockedState.onlinePhase).toBeNull();
+    expect(blockedState.credentialPresent).toBe(true);
+    expect(fixture.authSignUpCount || 0).toBe(0);
+
+    const cpuRawAtHandoff = await contenderPage.evaluate(() => localStorage.getItem('katamon_suspend_v1'));
+    expect(cpuRawAtHandoff).toBeTruthy();
+
+    // Closing the old document models the reload handoff boundary. Its lock is
+    // released by Chromium; the already-running new document must acquire on a
+    // later retry without a tap or a second bootstrap.
+    const handoffStartedAt = await contenderPage.evaluate(() => performance.now());
+    await lockOwnerPage.close();
+    await expect.poll(async () => (await contenderPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+    const restoredState = await contenderPage.evaluate(() => {
+      const state = globalThis.KatamonF4StartupBridge.state();
+      return {
+        gamePhase: state.gamePhase,
+        onlineKind: state.onlineKind,
+        onlinePhase: state.onlinePhase,
+        onlineSeat: state.onlineSeat,
+        currentRoundId: state.currentRoundId,
+        localUnitId: state.localUnitId,
+        localCharacter: state.localCharacter,
+        credentialPresent: state.credentialPresent,
+        cpuRaw: state.cpuRaw,
+        activationTrace: state.trace.filter(entry => entry.name === 'activatePendingFirebaseBattleReentry'),
+        acquireTrace: state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease'),
+        pageErrors: state.pageErrors,
+      };
+    });
+    expect(restoredState).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1',
+      localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
+    });
+    const activationAfter = restoredState.activationTrace.find(entry => entry.phase === 'after');
+    expect(activationAfter).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      localUnitId: 'e1', localCharacter: 'iwa', pendingReentry: false,
+    });
+    expect(restoredState.cpuRaw).toBe(cpuRawAtHandoff);
+    expect(fixture.authSignUpCount || 0).toBe(0);
+    const successfulAcquireAt = restoredState.acquireTrace.find(entry => entry.phase === 'after')?.timestamp;
+    expect(successfulAcquireAt - handoffStartedAt).toBeLessThan(5000);
+  } finally {
+    if (contenderPage && !contenderPage.isClosed()) await contenderPage.close();
+    await context.close();
+  }
+});
+
+test('same-tab zero-input reload releases and reacquires its native Firebase re-entry Web Lock', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the F5 production authority.');
+  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({ holdReentryLease: true }));
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    const beforeReload = await page.evaluate(async () => {
+      const lockSnapshot = await navigator.locks.query();
+      return {
+        cpuRaw: localStorage.getItem('katamon_suspend_v1'),
+        heldExclusive: lockSnapshot.held.some(lock => lock.mode === 'exclusive'),
+      };
+    });
+    expect(beforeReload.heldExclusive).toBe(true);
+    expect(beforeReload.cpuRaw).toBeTruthy();
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => {
+      const state = globalThis.KatamonF4StartupBridge.state();
+      return {
+        gamePhase: state.gamePhase,
+        onlineKind: state.onlineKind,
+        onlinePhase: state.onlinePhase,
+        onlineSeat: state.onlineSeat,
+        currentRoundId: state.currentRoundId,
+        localUnitId: state.localUnitId,
+        localCharacter: state.localCharacter,
+        cpuRaw: state.cpuRaw,
+        credentialPresent: state.credentialPresent,
+        pageErrors: state.pageErrors,
+        acquireTrace: state.trace.filter(entry => entry.name === 'acquireFirebaseReentryLease'),
+      };
+    });
+    expect(restored).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1',
+      localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
+    });
+    expect(restored.cpuRaw).toBe(beforeReload.cpuRaw);
+    expect(restored.acquireTrace.some(entry => entry.phase === 'after')).toBe(true);
+    expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();
   }

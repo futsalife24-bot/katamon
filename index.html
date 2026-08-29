@@ -694,10 +694,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.146-firebase-reentry-priority-fix';
+  const BUILD_ID = 'v2.0.147-firebase-reentry-lock-handoff-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.147', date: '2026/08/29', summary: 'ONLINE再入場のreload時Web Lock引継ぎを修正' },
     { version: 'v2.0.146', date: '2026/08/29', summary: 'ONLINE再入場の起動時rollbackとBattle復帰を修正' },
     { version: 'v2.0.145', date: '2026/08/29', summary: 'ONLINE対戦のゲスト側Battle開始描画を修正' },
     { version: 'v2.0.144', date: '2026/08/29', summary: 'ONLINE対戦の復帰処理を既存端末へ確実に更新' },
@@ -10440,7 +10441,9 @@
   }
   let firebaseAuth = null;
   let pendingFirebaseReentry = null;
-  let firebaseReentryBootstrapStarted = false;
+  const FIREBASE_REENTRY_BOOTSTRAP_RETRY_MS = 250;
+  let firebaseReentryBootstrapState = 'idle';
+  let firebaseReentryBootstrapRetryTimer = 0;
   let firebaseBattleRecoveryRetryTimer = 0;
   function firebaseRecoveryDocumentHidden() {
     return typeof document !== 'undefined' && document && document.hidden === true;
@@ -10719,12 +10722,26 @@
     }
   }
   function scheduleFirebaseRoomSeatReentryBootstrap() {
-    if (firebaseReentryBootstrapStarted) return;
-    firebaseReentryBootstrapStarted = true;
+    if (firebaseReentryBootstrapState === 'running' || firebaseReentryBootstrapState === 'completed' || firebaseReentryBootstrapRetryTimer) return;
+    firebaseReentryBootstrapState = 'running';
     Promise.resolve().then(async () => {
       const candidate = await restoreFirebaseRoomSeatReentry();
       if (candidate) await activatePendingFirebaseBattleReentry();
-    }).catch(() => {
+      firebaseReentryBootstrapState = 'completed';
+    }).catch(error => {
+      if (error?.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE') {
+        // A same-tab reload can start the new document just before Chromium
+        // releases the old document's room/seat/uid Web Lock. Keep exclusive
+        // authority intact and retry only this transient lock contention.
+        firebaseReentryBootstrapState = 'retry_wait';
+        firebaseReentryBootstrapRetryTimer = setTimeout(() => {
+          firebaseReentryBootstrapRetryTimer = 0;
+          firebaseReentryBootstrapState = 'idle';
+          scheduleFirebaseRoomSeatReentryBootstrap();
+        }, FIREBASE_REENTRY_BOOTSTRAP_RETRY_MS);
+        return;
+      }
+      firebaseReentryBootstrapState = 'completed';
       // A candidate/recovery failure intentionally does not create a
       // replacement UID.  B2 keeps the credential for retryable failures.
     });
