@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.148-firebase-guest-lease-handoff-fix';
+const EXPECTED_BUILD_ID = 'v2.0.149-firebase-reentry-convergence-fix';
 
 function assertCacheVersionContract(html, worker) {
   const buildId = /const BUILD_ID = '([^']+)'/.exec(html)?.[1];

@@ -123,7 +123,7 @@ async function installF4Bridge(context, fixture) {
         applyCharacter(unitById('e2'), 'kyoryu');
       }
       resetMatch(false);
-      const snap = structuredClone(buildSnapshot());
+      let snap = structuredClone(buildSnapshot());
       const hostNonce = 'a'.repeat(48);
       const guestNonce = 'b'.repeat(48);
       snap.activeIndex = (await fairFirstPlayer('${ROOM_CODE}', hostNonce, guestNonce)) === 'p1' ? 0 : 1;
@@ -136,7 +136,15 @@ async function installF4Bridge(context, fixture) {
       const room = {
         protocol: 3, hostUid: '${HOST_UID}', createdAt: 1800000000000,
         expiresAt: Date.now() + 600000, visibility: 'private',
-        settings: { terrain: 'rolling', wind: 'calm', turnsPerPlayer: 15, format, stageSize: 'standard', revision: 1 },
+        settings: {
+          terrain: 'rolling', wind: 'calm', turnsPerPlayer: 15, format, stageSize: 'standard', revision: 1,
+          ...(options.gear === true ? {
+            gearCapability: globalThis.KatamonGearOnlineLobbyProtocol.createRoomGearCapability({
+              visibility: 'private',
+              gearMode: globalThis.KatamonGearOnlineProtocol.GEAR_MODE_PRIVATE_TRUSTED_V1,
+            }),
+          } : {}),
+        },
         slots: {
           p1: { uid: '${HOST_UID}', claimedAt: Date.now() - 4 },
           e1: { uid: '${GUEST_UID}', claimedAt: Date.now() - 3 },
@@ -166,6 +174,44 @@ async function installF4Bridge(context, fixture) {
         beginFirebaseOnline(reentryRole, '${ROOM_CODE}', auth, reentryCharacter, room, reentrySeat, null, globalThis.__f5HeldReentryLease);
         online.phase = 'playing';
       }
+      let gearFixture = null;
+      if (options.gear === true) {
+        if (format !== '1v1') throw new Error('F4 Gear browser fixture currently supports canonical 1v1 only');
+        const makeReveal = (seat, characterId) => {
+          const trustedContext = firebaseGearTrustedContext(seat, characterId);
+          const slots = Object.fromEntries(globalThis.KatamonGearDomain.SLOT_IDS.map(slotId => [slotId, null]));
+          const battleGearSnapshot = globalThis.KatamonGearBattleSnapshot.createBattleGearSnapshot({
+            resolvedLoadout: { characterId, presetId: 'preset1', gearIds: [], slots },
+            baseHp: trustedContext.baseHp, baseFuel: trustedContext.baseFuel,
+          });
+          const revealedCommitment = globalThis.KatamonGearOnlineProtocol.createLoadoutCommitment({
+            battleGearSnapshot, roundId: '${ROUND_ID}', trustedContext,
+          });
+          return Object.freeze({ trustedContext, revealedCommitment });
+        };
+        const reveals = [makeReveal('p1', 'kyoryu'), makeReveal('e1', 'iwa')];
+        const readyBindingTexts = Object.fromEntries(reveals.map(entry => {
+          const readyBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({
+            loadoutCommitment: entry.revealedCommitment, trustedContext: entry.trustedContext,
+          });
+          return [entry.revealedCommitment.seatId,
+            globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyBinding)];
+        }));
+        const manifest = globalThis.KatamonGearOnlineLobbyProtocol.createStartGearManifest({
+          roundId: '${ROUND_ID}',
+          commitments: reveals.map(entry => entry.revealedCommitment),
+          participantReveals: reveals,
+        });
+        const startState = globalThis.KatamonGearOnlineBattleStart.createOnlineGearBattleStartState({
+          matchFormat: '1v1', manifest, participantReveals: reveals,
+        });
+        online.participantGearReveals = Object.fromEntries(reveals.map(entry => [entry.revealedCommitment.seatId, entry]));
+        online.verifiedStartGearManifest = manifest;
+        applyFirebaseOnlineGearBattleStartState(startState);
+        snap = structuredClone(buildSnapshot());
+        snap.activeIndex = (await fairFirstPlayer('${ROOM_CODE}', hostNonce, guestNonce)) === 'p1' ? 0 : 1;
+        gearFixture = { reveals, manifest, readyBindingTexts };
+      }
       const base = { v: 3, roundId: '${ROUND_ID}', sentAt: 1800000000000 };
       let messages = {
         '-0000000000000000001': { ...base, t: 'commit', from: '${HOST_UID}', seat: 'p1', hash: await commitPayload('kyoryu', hostNonce) },
@@ -174,6 +220,18 @@ async function installF4Bridge(context, fixture) {
         '-0000000000000000004': { ...base, t: 'reveal', from: '${GUEST_UID}', seat: 'e1', character: 'iwa', nonce: guestNonce },
         '-0000000000000000005': { ...base, t: 'start', from: '${HOST_UID}', seat: 'p1', snap }
       };
+      if (gearFixture) {
+        const hostReveal = gearFixture.reveals[0];
+        const guestReveal = gearFixture.reveals[1];
+        const wire = globalThis.KatamonGearOnlineFirebaseWire;
+        messages = {
+          '-0000000000000000001': { ...base, t: 'commit', from: '${HOST_UID}', seat: 'p1', hash: await commitPayload('kyoryu', hostNonce, gearFixture.readyBindingTexts.p1) },
+          '-0000000000000000002': { ...base, t: 'commit', from: '${GUEST_UID}', seat: 'e1', hash: await commitPayload('iwa', guestNonce, gearFixture.readyBindingTexts.e1) },
+          '-0000000000000000003': { ...base, t: 'reveal', from: '${HOST_UID}', seat: 'p1', character: 'kyoryu', nonce: hostNonce, gearWireVersion: wire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearCommitmentJson: wire.encodeRevealGearCommitment({ loadoutCommitment: hostReveal.revealedCommitment, trustedContext: hostReveal.trustedContext }) },
+          '-0000000000000000004': { ...base, t: 'reveal', from: '${GUEST_UID}', seat: 'e1', character: 'iwa', nonce: guestNonce, gearWireVersion: wire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearCommitmentJson: wire.encodeRevealGearCommitment({ loadoutCommitment: guestReveal.revealedCommitment, trustedContext: guestReveal.trustedContext }) },
+          '-0000000000000000005': { ...base, t: 'start', from: '${HOST_UID}', seat: 'p1', snap, gearWireVersion: wire.ONLINE_GEAR_FIREBASE_WIRE_VERSION, gearManifestJson: wire.encodeStartGearManifest({ manifest: gearFixture.manifest, participantReveals: gearFixture.reveals }) },
+        };
+      }
       if (format === '2v2') {
         const support1Nonce = 'c'.repeat(48);
         const support2Nonce = 'd'.repeat(48);
@@ -280,6 +338,12 @@ async function installF4Bridge(context, fixture) {
         currentRoundId: online?.currentRoundId || null, localUnitId,
         localCharacter: unit?.character || null, pendingReentry: !!pendingFirebaseReentry,
         matchOver, winner, resultSent: online?.resultSent || false,
+        gearEnabled: firebaseGearEnabled(),
+        verifiedGearManifest: !!online?.verifiedStartGearManifest,
+        gearSnapshotUnits: Object.keys(online?.battleGearSnapshotsByUnit || {}).sort(),
+        gearShieldByUnit: structuredClone(online?.battleGearShieldStateByUnit || null),
+        gearRuntimeByUnit: structuredClone(online?.battleGearRuntimeEffectsStateByUnit || null),
+        reentryFailureCode: firebaseReentryLastFailureCode,
         cpuRaw: localStorage.getItem(SUSPEND_KEY),
         credentialPresent: !!localStorage.getItem(firebaseReentryApi().FIREBASE_REENTRY_STORAGE_KEY),
         trace: f4Trace.slice(), pageErrors: globalThis.__f4PageErrors.slice()
@@ -303,7 +367,16 @@ async function installF4Bridge(context, fixture) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: fixture.reentryUid || GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
     }
     if (url.includes(`/rooms/${ROOM_CODE}/slots/`) && url.includes('/seenAt.json')) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
-    if (url.includes(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.messages) });
+    if (url.includes(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages.json`)) {
+      if ((fixture.recoveryMessageFailuresRemaining || 0) > 0) {
+        fixture.recoveryMessageFailuresRemaining -= 1;
+        return route.fulfill({
+          status: fixture.recoveryMessageFailureStatus || 503,
+          contentType: 'application/json', body: JSON.stringify({ error: 'temporary' }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.messages) });
+    }
     if (url.includes(`/rooms/${ROOM_CODE}/round.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room.round) });
     if (url.includes(`/rooms/${ROOM_CODE}.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room) });
     return route.fallback();
@@ -561,7 +634,7 @@ test('same-tab zero-input reload replays two completed production actions after 
     await page.goto(GAME_URL);
     await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
     const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
-      holdReentryLease: true,
+      activeOnlineLease: true,
       completedActionCount: 2,
       completedHitActions: false,
     }));
@@ -593,9 +666,76 @@ test('same-tab zero-input reload replays two completed production actions after 
   }
 });
 
-test('host zero-input reload retains p1 authority after completed production history', async ({ browser }) => {
+test('zero-input reload retries a transient canonical history read without losing its active guest identity', async ({ browser }) => {
   test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
-  const fixture = { room: null, messages: null, authSignUpCount: 0, reentryUid: HOST_UID };
+  const fixture = { room: null, messages: null, authSignUpCount: 0, recoveryMessageFailuresRemaining: 1 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      activeOnlineLease: true, completedActionCount: 2,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase,
+      { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1',
+      localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
+    });
+    expect(fixture.recoveryMessageFailuresRemaining).toBe(0);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('permission failure remains terminal without replacing or deleting the existing identity', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = {
+    room: null, messages: null, authSignUpCount: 0,
+    recoveryMessageFailuresRemaining: 1, recoveryMessageFailureStatus: 401,
+  };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      activeOnlineLease: true, completedActionCount: 2,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).reentryFailureCode,
+      { timeout: 10000 }).toBe('FIREBASE_REQUEST_UNAUTHORIZED');
+    await page.waitForTimeout(1500);
+    const stopped = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(stopped).toMatchObject({
+      onlineKind: null, onlinePhase: null, credentialPresent: true,
+      reentryFailureCode: 'FIREBASE_REQUEST_UNAUTHORIZED', pageErrors: [],
+    });
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('host zero-input reload retries a transient history read and retains p1 authority', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = {
+    room: null, messages: null, authSignUpCount: 0, reentryUid: HOST_UID,
+    recoveryMessageFailuresRemaining: 1,
+  };
   const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
   await installF4Bridge(context, fixture);
   const page = await context.newPage();
@@ -619,15 +759,16 @@ test('host zero-input reload retains p1 authority after completed production his
       localCharacter: 'kyoryu', credentialPresent: true, pageErrors: [],
     });
     expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
+    expect(fixture.recoveryMessageFailuresRemaining).toBe(0);
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();
   }
 });
 
-test('results reload restores a verified concede result without a second outbound result', async ({ browser }) => {
+test('results reload retries a transient history read and restores a verified concede result once', async ({ browser }) => {
   test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
-  const fixture = { room: null, messages: null, authSignUpCount: 0 };
+  const fixture = { room: null, messages: null, authSignUpCount: 0, recoveryMessageFailuresRemaining: 1 };
   const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
   await installF4Bridge(context, fixture);
   const page = await context.newPage();
@@ -651,15 +792,54 @@ test('results reload restores a verified concede result without a second outboun
       credentialPresent: true, pageErrors: [],
     });
     expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
+    expect(fixture.recoveryMessageFailuresRemaining).toBe(0);
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();
   }
 });
 
-test('2v2 support zero-input reload restores s1 only as canonical p2', async ({ browser }) => {
+test('Gear ON reload retries a transient history read and restores the verified manifest runtime', async ({ browser }) => {
   test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
-  const fixture = { room: null, messages: null, authSignUpCount: 0, reentryUid: SUPPORT1_UID };
+  const fixture = { room: null, messages: null, authSignUpCount: 0, recoveryMessageFailuresRemaining: 1 };
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    await expect.poll(() => page.evaluate(() => typeof globalThis.KatamonF4StartupBridge)).toBe('object');
+    const seeded = await page.evaluate(() => globalThis.KatamonF4StartupBridge.seed({
+      activeOnlineLease: true, gear: true,
+    }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    expect(seeded.validation.every(entry => entry.result.ok), JSON.stringify(seeded.validation, null, 2)).toBe(true);
+
+    await page.reload();
+    await expect.poll(async () => (await page.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase,
+      { timeout: 15000 }).toBe('playing');
+    const restored = await page.evaluate(() => globalThis.KatamonF4StartupBridge.state());
+    expect(restored, JSON.stringify(restored, null, 2)).toMatchObject({
+      gamePhase: 'battle', onlineKind: 'firebase', onlinePhase: 'playing',
+      onlineSeat: 'e1', currentRoundId: ROUND_ID, localUnitId: 'e1',
+      localCharacter: 'iwa', credentialPresent: true, pageErrors: [],
+      gearEnabled: true, verifiedGearManifest: true, gearSnapshotUnits: ['e1', 'p1'],
+    });
+    expect(Object.keys(restored.gearShieldByUnit || {}).sort()).toEqual(['e1', 'p1']);
+    expect(Object.keys(restored.gearRuntimeByUnit || {}).sort()).toEqual(['e1', 'p1']);
+    expect(fixture.recoveryMessageFailuresRemaining).toBe(0);
+    expect(fixture.authSignUpCount).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('2v2 support zero-input reload retries a transient history read and restores s1 only as p2', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium Web Locks are the reconnect authority.');
+  const fixture = {
+    room: null, messages: null, authSignUpCount: 0, reentryUid: SUPPORT1_UID,
+    recoveryMessageFailuresRemaining: 1,
+  };
   const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block' });
   await installF4Bridge(context, fixture);
   const page = await context.newPage();
@@ -683,6 +863,7 @@ test('2v2 support zero-input reload restores s1 only as canonical p2', async ({ 
       localCharacter: 'medama', credentialPresent: true, pageErrors: [],
     });
     expect(restored.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
+    expect(fixture.recoveryMessageFailuresRemaining).toBe(0);
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
     await context.close();

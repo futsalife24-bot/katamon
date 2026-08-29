@@ -53,7 +53,7 @@ async function waitFor(predicate, timeoutMs = 4000) {
 }
 
 void (async () => {
-  await test('startup retries only exclusive Web Lock contention and preserves both credentials', async () => {
+  await test('startup retries exclusive Web Lock contention and preserves both credentials', async () => {
     reentry.reset();
     reentry.resetBootstrapForTest();
     kt.startBattle('kyoryu');
@@ -104,15 +104,27 @@ void (async () => {
     }
   });
 
-  await test('bootstrap retry is narrowly scoped and the exclusive lock contract remains unchanged', () => {
+  await test('bootstrap and replay retries are limited to transient failures while exclusivity stays unchanged', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const bootstrapStart = source.indexOf('function scheduleFirebaseRoomSeatReentryBootstrap()');
     const bootstrapEnd = source.indexOf('async function ensureFirebaseAuth', bootstrapStart);
     const bootstrap = bootstrapStart >= 0 && bootstrapEnd > bootstrapStart
       ? source.slice(bootstrapStart, bootstrapEnd) : '';
-    assert.match(bootstrap, /error\?\.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE'/);
+    const retryHelpersStart = source.indexOf('function firebaseReentryErrorCode(error)');
+    const retryHelpersEnd = source.indexOf('function recordFirebaseReentryTerminalFailure(error)', retryHelpersStart);
+    const retryHelpers = retryHelpersStart >= 0 && retryHelpersEnd > retryHelpersStart
+      ? source.slice(retryHelpersStart, retryHelpersEnd) : '';
+    assert.match(retryHelpers, /FIREBASE_REENTRY_ALREADY_ACTIVE/);
+    assert.match(retryHelpers, /FIREBASE_REENTRY_REFRESH_TRANSIENT/);
+    assert.match(retryHelpers, /FIREBASE_REENTRY_ROOM_TRANSIENT/);
+    assert.match(retryHelpers, /FIREBASE_REQUEST_TRANSIENT/);
+    assert.match(retryHelpers, /FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED/);
+    assert.doesNotMatch(retryHelpers, /FIREBASE_REQUEST_UNAUTHORIZED|FIREBASE_REQUEST_FAILED|FIREBASE_REENTRY_UID_MISMATCH/,
+      'identity, permission and protocol failures must remain terminal');
     assert.match(bootstrap, /firebaseReentryBootstrapState = 'retry_wait'/);
     assert.match(bootstrap, /firebaseReentryBootstrapRetryTimer = setTimeout/);
+    assert.match(bootstrap, /scheduleFirebaseBattleRecoveryReplan\(error\)/,
+      'a verified candidate must retry canonical recovery rather than restarting identity bootstrap');
     assert.match(source, /\{ mode: 'exclusive', ifAvailable: true \}/, 'same-seat exclusivity must not be weakened');
     assert.doesNotMatch(bootstrap, /clearFirebaseReentryCredential|ensureFirebaseAuth|signUp/, 'contention retry must not replace identity authority');
   });

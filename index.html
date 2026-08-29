@@ -694,10 +694,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.148-firebase-guest-lease-handoff-fix';
+  const BUILD_ID = 'v2.0.149-firebase-reentry-convergence-fix';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.149', date: '2026/08/29', summary: 'ONLINE再入場の一時通信失敗からの自動復帰を修正' },
     { version: 'v2.0.148', date: '2026/08/29', summary: 'ONLINE再入場の旧GUEST document lease引継ぎを修正' },
     { version: 'v2.0.147', date: '2026/08/29', summary: 'ONLINE再入場のreload時Web Lock引継ぎを修正' },
     { version: 'v2.0.146', date: '2026/08/29', summary: 'ONLINE再入場の起動時rollbackとBattle復帰を修正' },
@@ -10443,13 +10444,34 @@
   let firebaseAuth = null;
   let pendingFirebaseReentry = null;
   const FIREBASE_REENTRY_BOOTSTRAP_RETRY_MS = 250;
+  const FIREBASE_BATTLE_RECOVERY_RETRY_MS = 1000;
   let firebaseReentryBootstrapState = 'idle';
   let firebaseReentryBootstrapRetryTimer = 0;
   let firebaseBattleRecoveryRetryTimer = 0;
+  let firebaseReentryLastFailureCode = '';
   function firebaseRecoveryDocumentHidden() {
     return typeof document !== 'undefined' && document && document.hidden === true;
   }
-  function scheduleFirebaseBattleRecoveryReplan() {
+  function firebaseReentryErrorCode(error) {
+    return typeof error?.code === 'string' && error.code
+      ? error.code
+      : 'FIREBASE_REENTRY_FAILED';
+  }
+  function firebaseReentryBootstrapRetryable(error) {
+    return ['FIREBASE_REENTRY_ALREADY_ACTIVE', 'FIREBASE_REENTRY_REFRESH_TRANSIENT',
+      'FIREBASE_REENTRY_ROOM_TRANSIENT', 'FIREBASE_REQUEST_TRANSIENT'].includes(firebaseReentryErrorCode(error));
+  }
+  function firebaseBattleRecoveryRetryable(error) {
+    if (!pendingFirebaseReentry || online) return false;
+    return ['FIREBASE_REENTRY_REFRESH_TRANSIENT', 'FIREBASE_REENTRY_ROOM_TRANSIENT',
+      'FIREBASE_REQUEST_TRANSIENT', 'FIREBASE_RECOVERY_TRANSPORT_CONNECT_FAILED'].includes(firebaseReentryErrorCode(error));
+  }
+  function recordFirebaseReentryTerminalFailure(error) {
+    firebaseReentryLastFailureCode = firebaseReentryErrorCode(error);
+    console.warn(`[Firebase re-entry] ${firebaseReentryLastFailureCode}`);
+  }
+  function scheduleFirebaseBattleRecoveryReplan(error = null) {
+    if (error && !firebaseBattleRecoveryRetryable(error)) return false;
     if (firebaseBattleRecoveryRetryTimer || firebaseRecoveryDocumentHidden()) return;
     firebaseBattleRecoveryRetryTimer = setTimeout(() => {
       firebaseBattleRecoveryRetryTimer = 0;
@@ -10458,8 +10480,13 @@
       if (firebaseRecoveryDocumentHidden()) return;
       // Re-read the canonical log; never turn a pending action into a live
       // projectile just to make a reconnect look faster.
-      activatePendingFirebaseBattleReentry().catch(() => {});
-    }, 1000);
+      activatePendingFirebaseBattleReentry().then(result => {
+        if (result?.activated) firebaseReentryLastFailureCode = '';
+      }).catch(retryError => {
+        if (!scheduleFirebaseBattleRecoveryReplan(retryError)) recordFirebaseReentryTerminalFailure(retryError);
+      });
+    }, FIREBASE_BATTLE_RECOVERY_RETRY_MS);
+    return true;
   }
   if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
     document.addEventListener('visibilitychange', () => {
@@ -10730,10 +10757,11 @@
       if (candidate) await activatePendingFirebaseBattleReentry();
       firebaseReentryBootstrapState = 'completed';
     }).catch(error => {
-      if (error?.code === 'FIREBASE_REENTRY_ALREADY_ACTIVE') {
+      if (!pendingFirebaseReentry && firebaseReentryBootstrapRetryable(error)) {
         // A same-tab reload can start the new document just before Chromium
-        // releases the old document's room/seat/uid Web Lock. Keep exclusive
-        // authority intact and retry only this transient lock contention.
+        // releases the old document's room/seat/uid Web Lock. A refresh/room
+        // read can also fail transiently during the same handoff. Keep the
+        // existing identity and retry without creating a replacement UID.
         firebaseReentryBootstrapState = 'retry_wait';
         firebaseReentryBootstrapRetryTimer = setTimeout(() => {
           firebaseReentryBootstrapRetryTimer = 0;
@@ -10742,7 +10770,12 @@
         }, FIREBASE_REENTRY_BOOTSTRAP_RETRY_MS);
         return;
       }
+      if (pendingFirebaseReentry && !online && scheduleFirebaseBattleRecoveryReplan(error)) {
+        firebaseReentryBootstrapState = 'completed';
+        return;
+      }
       firebaseReentryBootstrapState = 'completed';
+      recordFirebaseReentryTerminalFailure(error);
       // A candidate/recovery failure intentionally does not create a
       // replacement UID.  B2 keeps the credential for retryable failures.
     });
@@ -10812,7 +10845,13 @@
   }
   async function firebaseRequest(path, auth, options = {}) {
     const { query, ...fetchOptions } = options;
-    let response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth, query), fetchOptions);
+    const requestOnce = async () => {
+      try { return await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth, query), fetchOptions); }
+      catch (cause) {
+        throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_REQUEST_TRANSIENT', cause });
+      }
+    };
+    let response = await requestOnce();
     // 401は「鍵の期限切れ」と「ルールに弾かれた」の両方で返り、見分けが付かない。
     // まず期限切れの方を潰す。鍵を取り直して**本当に新しくなった時だけ**1回だけ送り直す。
     // 鍵が変わらなければ期限切れではないので、そのまま従来どおり失敗させる
@@ -10823,10 +10862,16 @@
       const before = auth.idToken;
       const renewed = await ensureFirebaseAuth().catch(() => null);
       if (renewed && renewed.idToken && renewed.idToken !== before) {
-        response = await firebaseFetchWithTimeout(firebaseRequestUrl(path, auth, query), fetchOptions);
+        response = await requestOnce();
       }
     }
-    if (!response.ok) throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
+    if (!response.ok) {
+      const transient = [408, 429, 500, 502, 503, 504].includes(response.status) || response.status >= 500;
+      throw Object.assign(new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。'), {
+        code: response.status === 401 ? 'FIREBASE_REQUEST_UNAUTHORIZED' : (transient ? 'FIREBASE_REQUEST_TRANSIENT' : 'FIREBASE_REQUEST_FAILED'),
+        status: response.status
+      });
+    }
     return response.status === 204 ? null : response.json();
   }
   function estimateFirebaseServerNow(clientNow, serverTimeOffset) {
@@ -11035,7 +11080,7 @@
     const firstIndex = await firebaseFirstUnitIndex();
     if (Number(start.snap?.activeIndex) !== firstIndex || !firebaseStartCharactersMatch(start.snap)) firebaseRecoveryFail('FIREBASE_RECOVERY_START_MISMATCH');
     validateFirebaseOnlineGearStartSnapshot(start.snap, gearStart);
-    return Object.freeze({ start, gearStart });
+    return Object.freeze({ start, gearManifest: gearManifest || null, gearStart });
   }
   // B3B1 is a verifier, not an activation path.  Keep its engine work inside
   // a rollback envelope so a rejected (or even verified) candidate cannot
@@ -11206,7 +11251,8 @@
               runtimeEffectsStateByUnit: online.battleGearRuntimeEffectsStateByUnit
             }) });
         }
-        return Object.freeze({ kind: plan.kind, start: verifiedStart.start, gearStart: verifiedStart.gearStart || null,
+        return Object.freeze({ kind: plan.kind, start: verifiedStart.start,
+          gearManifest: verifiedStart.gearManifest || null, gearStart: verifiedStart.gearStart || null,
           validatedBoundaries: Object.freeze(validatedBoundaries), lastBoundary, pendingAction: plan.pendingAction || null,
           result: validatedResult, sideEffects: Object.freeze({ outboundCount: context.outboundCount, visualCount: context.visualCount, randomCalls: context.randomCalls }) });
       } finally {
@@ -14216,6 +14262,11 @@
   }
   function commitFirebaseRecoveryBoundary(replay) {
     applyVerifiedFirebaseStartSnapshot(replay.start.snap, replay.gearStart);
+    // B3B1 validates the canonical start envelope inside a rollback context.
+    // Commit that verified manifest alongside its derived Battle snapshots;
+    // otherwise the rollback would leave a Gear ON live shell with runtime
+    // authority but no record of the manifest that created it.
+    online.verifiedStartGearManifest = replay.gearManifest || null;
     setOnlineSeat(online.seat);
     const boundary = replay.lastBoundary;
     if (!boundary) return null;
