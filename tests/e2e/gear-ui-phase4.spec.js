@@ -21,7 +21,7 @@ test('GARAGEからGearを開き、slot比較と装備をAndroid縦画面で完�
     const presets = globalThis.KatamonGearPresets;
     const make = (id, setId, seed) => domain.createGear({ gearId: id, generationSeed: `ui:${seed}:g`, enhancementSeed: `ui:${seed}:e`, sourceId: 'cpu_battle', sourceDetail: { e2e: 'gear-ui' }, acquiredAt: '2026-08-30T00:00:00Z', qualityProfile: { id: 'ui', starWeights: [{ id: 6, weight: 1 }], rarityWeights: [{ id: 'legend', weight: 1 }] }, setProfile: { id: `ui:${setId}`, setWeights: [{ id: setId, weight: 1 }] }, slotId: 'barrel', setId });
     const current = make('ui-current-barrel', 'assault', 'current');
-    const candidate = make('ui-candidate-barrel', 'life', 'candidate');
+    const candidate = make('ui-candidate-\"<&-barrel', 'life', 'candidate');
     const gearState = storage.createDefaultGearStorageState();
     gearState.inventory = [current, candidate].map((gear) => ({ gear, locked: false, favorite: false }));
     storage.saveGearState(gearState, localStorage);
@@ -35,9 +35,13 @@ test('GARAGEからGearを開き、slot比較と装備をAndroid縦画面で完�
   await expect(page.locator('.gearCharacterImage')).toBeVisible();
   await page.locator('[data-gear-slot="barrel"]').click();
   await expect(page.locator('[data-gear-candidate]')).toHaveCount(2);
-  await page.locator('[data-gear-candidate="ui-candidate-barrel"]').click();
+  const candidate = page.locator('[data-gear-candidate]').filter({ hasText: '生命' });
+  await expect(candidate).toHaveAttribute('data-gear-candidate', 'ui-candidate-\"<&-barrel');
+  await candidate.click();
   await expect(page.locator('#gearCompare')).toBeVisible();
-  await page.locator('[data-gear-equip="ui-candidate-barrel"]').click();
+  const equip = page.locator('[data-gear-equip]');
+  await expect(equip).toHaveAttribute('data-gear-equip', 'ui-candidate-\"<&-barrel');
+  await equip.click();
   await expect(page.locator('[data-gear-slot="barrel"]')).toContainText('生命');
   await expect(page.locator('.gearSetPanel')).toContainText('生命');
   await expect(page.locator('#gearWorkshop')).not.toContainText('undefined');

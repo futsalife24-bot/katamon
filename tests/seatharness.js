@@ -106,7 +106,8 @@ const HOOK = `
         cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn },
         tutorial: { ...titleTutorialBtn }, free: { ...titleFreeBtn },
         ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn },
-        achievements: { ...titleAchievementsBtn }, soundTest: { ...titleSoundTestBtn },
+        achievements: { ...titleAchievementsBtn }, gear: { ...titleGearBtn },
+        soundTest: { ...titleSoundTestBtn },
         update: { ...titleUpdateBtn }
       },
       pages: typeof TITLE_MENU_PAGES === 'undefined' ? [] : TITLE_MENU_PAGES.map(page => ({
@@ -1726,6 +1727,7 @@ const HOOK = `
       cpu: { ...titleVsCpuBtn }, online: { ...titleOnlineBtn }, free: { ...titleFreeBtn },
       tutorial: { ...titleTutorialBtn },
       ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn }, achievements: { ...titleAchievementsBtn },
+      gear: { ...titleGearBtn },
       soundTest: { ...titleSoundTestBtn }, update: { ...titleUpdateBtn },
       left: { ...titleMenuLeftBtn }, right: { ...titleMenuRightBtn },
       battleTab: { ...titleBattleTabBtn }, garageTab: { ...titleGarageTabBtn },

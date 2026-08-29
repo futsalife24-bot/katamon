@@ -51,4 +51,9 @@ test('GARAGEから単一のGear導線を持ち、比較・装備・解除の操�
   assert.match(html, /data-gear-unequip/);
   assert.match(html, /CURRENT → NEW/);
 });
-console.log(`gear-ui-phase4: ${passed}/5 passed`);
+test('Gear IDはHTML属性へ入れる前にescapeし、プリセットの自動保存を明示する', () => {
+  assert.match(html, /data-gear-candidate=\"\$\{gearHtml\(gear\.gearId\)\}\"/);
+  assert.match(html, /data-gear-equip=\"\$\{gearHtml\(compared\.gearId\)\}\"/);
+  assert.match(html, /id=\"gearPresetSave\"[^>]*>自動保存済み<\/button>/);
+});
+console.log(`gear-ui-phase4: ${passed}/6 passed`);

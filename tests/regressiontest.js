@@ -1973,7 +1973,7 @@ check('タイトルはBATTLEとGARAGEの意味別2ページへ分かれる',
       key: 'battle', items: ['cpu', 'online', 'tutorial', 'free', 'ranking']
     })
     && JSON.stringify(titleMenuInfo.pages[1]) === JSON.stringify({
-      key: 'garage', items: ['shop', 'achievements', 'soundTest']
+      key: 'garage', items: ['shop', 'achievements', 'gear', 'soundTest']
     }),
   JSON.stringify(titleMenuInfo.pages));
 check('タイトルスライドは250〜400msで、短いスワイプを戻す閾値を持つ',
@@ -1981,7 +1981,7 @@ check('タイトルスライドは250〜400msで、短いスワイプを戻す�
     && titleMenuInfo.swipeThreshold >= 50 && titleMenuInfo.swipeThreshold <= 80,
   JSON.stringify(titleMenuInfo));
 const battleTitleBtns = [btns.cpu, btns.online, btns.tutorial, btns.free, btns.ranking];
-const garageTitleBtns = [btns.shop, btns.achievements, btns.soundTest];
+const garageTitleBtns = [btns.shop, btns.achievements, btns.gear, btns.soundTest];
 check('各ページ内のボタンと左右矢印は重ならない',
   [battleTitleBtns, garageTitleBtns].every(pageButtons => pageButtons.every((button, index) => (
     pageButtons.slice(index + 1).every(other => !rectsOverlap(button, other))
@@ -2910,9 +2910,9 @@ kt.setLocalSeat('p1');
     soundLabel && soundSub && /16px/.test(soundLabel.font)
       && soundLabel.y <= b.soundTest.y - 15 && soundSub.y <= b.soundTest.y + 10,
     JSON.stringify({ soundLabel, soundSub, button: b.soundTest }));
-  check('GARAGEにはショップ・実績・サウンドテストだけを表示する',
-    ['ショップ', '実績', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
-    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
+  check('GARAGEにはショップ・実績・Gear・サウンドテストを表示する',
+    ['ショップ', '実績', 'GEAR', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
+    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'GEAR', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
   kt.setTitleMenuPageForTest(0);
 
   // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
@@ -2934,16 +2934,19 @@ kt.setLocalSeat('p1');
     const expectedKinds = {
       cpu: 'parchment', online: 'parchment',
       tutorial: 'parchment', free: 'parchment',
-      ranking: 'hangingSign', shop: 'parchment', achievements: 'parchment', soundTest: 'shield'
+      ranking: 'hangingSign', shop: 'parchment', achievements: 'parchment', gear: 'parchment', soundTest: 'shield'
     };
     check('BATTLEとGARAGEが既存の羊皮紙・吊り看板・緑盾を役割別に再利用する',
       Object.entries(expectedKinds).every(([role, asset]) => (
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),
       JSON.stringify(woodUi.imageRects));
-    check('GARAGEのサウンドテストは緑盾を中央へ置く',
-      woodUi.imageRects.soundTest.x === kt.viewW() / 2 && woodUi.imageRects.soundTest.y <= 805,
-      JSON.stringify(woodUi.imageRects.soundTest));
+    check('GARAGE下段はGearを左、サウンドテストの緑盾を右へ分けて置く',
+      woodUi.imageRects.gear.x < kt.viewW() / 2
+        && woodUi.imageRects.soundTest.x > kt.viewW() / 2
+        && woodUi.imageRects.gear.y <= woodUi.imageRects.soundTest.y
+        && !rectsOverlap(woodUi.buttons.gear, woodUi.buttons.soundTest),
+      JSON.stringify({ gear: woodUi.imageRects.gear, soundTest: woodUi.imageRects.soundTest }));
     check('木枠と中のボタン素材を同じ割合で一回り大きくする',
       woodUi.board.w >= 450 && woodUi.board.h >= 430
         && woodUi.imageRects.cpu.w >= 295 && woodUi.imageRects.cpu.h >= 80
@@ -2957,7 +2960,7 @@ kt.setLocalSeat('p1');
         && woodUi.imageRects.ranking.y - woodUi.imageRects.ranking.h / 2
           <= woodUi.imageRects.tutorial.y + woodUi.imageRects.tutorial.h / 2 + 12,
       JSON.stringify({ ranking: woodUi.imageRects.ranking, tutorial: woodUi.imageRects.tutorial }));
-    check('BATTLEは対戦5項目、GARAGEは管理3項目の順で、更新ボタンは木枠外へ固定する',
+    check('BATTLEは対戦5項目、GARAGEは管理4項目の順で、更新ボタンは木枠外へ固定する',
       woodUi.buttons.cpu.y < woodUi.buttons.online.y
         && woodUi.buttons.online.y < woodUi.buttons.tutorial.y
         && woodUi.buttons.tutorial.y === woodUi.buttons.free.y
@@ -2965,7 +2968,8 @@ kt.setLocalSeat('p1');
         && woodUi.buttons.tutorial.w < woodUi.buttons.cpu.w
         && woodUi.buttons.ranking.y > woodUi.buttons.tutorial.y
         && woodUi.buttons.shop.y < woodUi.buttons.achievements.y
-        && woodUi.buttons.achievements.y < woodUi.buttons.soundTest.y
+        && woodUi.buttons.achievements.y < woodUi.buttons.gear.y
+        && woodUi.buttons.gear.y < woodUi.buttons.soundTest.y
         && woodUi.buttons.update.y - woodUi.buttons.update.h / 2 > woodUi.board.y + woodUi.board.h,
       JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
     const pageButtonGroups = woodUi.pages.map(page => page.items.map(item => woodUi.buttons[item.id]));
