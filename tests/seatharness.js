@@ -1223,6 +1223,14 @@ const HOOK = `
         releaseFatal: () => releaseFirebaseRoomOnFatalExit(),
         acquireLease: (credential, lockManager) => acquireFirebaseReentryLease(credential, lockManager),
         releaseLease: lease => releaseFirebaseReentryLease(lease),
+        bootstrapState: () => firebaseReentryBootstrapState,
+        bootstrapRetryScheduled: () => !!firebaseReentryBootstrapRetryTimer,
+        scheduleBootstrap: () => scheduleFirebaseRoomSeatReentryBootstrap(),
+        resetBootstrapForTest: () => {
+          if (firebaseReentryBootstrapRetryTimer) clearTimeout(firebaseReentryBootstrapRetryTimer);
+          firebaseReentryBootstrapRetryTimer = 0;
+          firebaseReentryBootstrapState = 'idle';
+        },
         pending: () => pendingFirebaseReentry,
         auth: () => firebaseAuth,
         reset: () => {
