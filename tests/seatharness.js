@@ -1611,6 +1611,34 @@ const HOOK = `
       allFirebasePlayersCommitted: () => allFirebasePlayersCommitted(),
       allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
+      firebaseLiveRoundContractForTest: () => ({
+        createTransport: (...args) => makeFirebaseTransport(...args),
+        requestRematch: () => requestFirebaseRematch(),
+        resetRound: autoReady => resetFirebaseRound(autoReady === true),
+        resetLocalRound: autoReady => resetLocalFirebaseRoundState(autoReady === true),
+        applyLobbyState: msg => applyFirebaseLobbyState(msg),
+        state: () => online ? {
+          phase: online.phase,
+          currentRoundId: online.currentRoundId,
+          resultSent: !!online.resultSent,
+          localAction: online.localAction ? structuredClone(online.localAction) : null,
+          remoteAction: online.remoteAction ? structuredClone(online.remoteAction) : null,
+          pendingRemoteTerminals: Array.from((online.pendingRemoteTerminals || new Map()).entries()).map(([key, value]) => [key, structuredClone(value)]),
+          completedRemoteActions: Array.from((online.completedRemoteActions || new Map()).entries()).map(([key, value]) => [key, structuredClone(value)]),
+          rematchVotes: structuredClone(online.rematchVotes || {}),
+          roundResetting: !!online.roundResetting,
+          autoStartNextRound: !!online.autoStartNextRound,
+          verifiedStartGearManifest: online.verifiedStartGearManifest ? structuredClone(online.verifiedStartGearManifest) : null,
+          battleGearSnapshotsByUnit: online.battleGearSnapshotsByUnit ? structuredClone(online.battleGearSnapshotsByUnit) : null,
+          battleGearShieldStateByUnit: online.battleGearShieldStateByUnit ? structuredClone(online.battleGearShieldStateByUnit) : null,
+          battleGearRuntimeEffectsStateByUnit: online.battleGearRuntimeEffectsStateByUnit ? structuredClone(online.battleGearRuntimeEffectsStateByUnit) : null,
+          battleGearActiveAttackRuntime: online.battleGearActiveAttackRuntime ? structuredClone(online.battleGearActiveAttackRuntime) : null
+        } : null,
+        unitAnchor: unitId => {
+          const unit = unitById(unitId);
+          return unit ? { ...unitAnchor(unit) } : null;
+        }
+      }),
       firebasePeersCommitted: () => firebasePeersCommitted(),
       firebaseRevealsReady: () => firebaseRevealsReady(),
       firebaseStartCharactersMatch: (snap) => firebaseStartCharactersMatch(snap),
