@@ -509,9 +509,9 @@
 <!-- 名前入力だけはCanvasではなくHTMLで受ける。日本語入力(IME)を自前で作るのは非現実的なため。 -->
 <div id="nameOverlay">
   <div id="nameBox">
-    <div id="nameTitle">ランキング用の名前</div>
+    <div id="nameTitle">プレイヤー名</div>
     <div id="nameNote">12文字まで。あとから変更できます。</div>
-    <input id="nameInput" type="text" maxlength="12" autocomplete="off" placeholder="ななし">
+    <input id="nameInput" type="text" maxlength="12" autocomplete="off" placeholder="プレイヤー名">
     <div id="nameButtons">
       <button id="nameCancel" type="button">やめる</button>
       <button id="nameOk" type="button">決定</button>
@@ -13363,7 +13363,7 @@
     return true;
   }
 
-  function localPlayerName() { return (rankingProfile && rankingProfile.name) || ''; }
+  function localPlayerName() { return normalizeBattleName(rankingProfile && rankingProfile.name); }
   async function deriveRivalId(deviceId) {
     if (typeof deviceId !== 'string' || !deviceId) return '';
     return sha256Hex(`${RIVAL_ID_PURPOSE}${deviceId}`);
@@ -13684,15 +13684,20 @@
     catch (err) { onlineLobbyStatus(err.message || 'この部屋には入れませんでした。一覧を更新してください。'); }
     finally { setOnlineLobbyBusy(false); }
   }
+  function firebaseOpenRoomPayload(auth, format, roomName = 'だれでも歓迎', playerCount = 1) {
+    const hostName = localPlayerName();
+    if (!hostName) throw new Error('公開部屋を作るにはプレイヤー名が必要です');
+    const now = firebaseServerNow(auth);
+    return {
+      format: normalizeOpenFormat(format), hostUid: auth.uid, hostName, roomName: publicRoomName(roomName), playerCount,
+      createdAt: { '.sv': 'timestamp' }, expiresAt: now + OPEN_INDEX_TTL_MS
+    };
+  }
   async function publishOpenRoom(code, auth, format, roomName = 'だれでも歓迎', playerCount = 1, visibility = null) {
     if (visibility !== 'public') throw new Error('非公開部屋は公開一覧へ掲載できません');
-    const now = firebaseServerNow(auth);
     await firebaseRequest(`open/${code}`, auth, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        format: normalizeOpenFormat(format), hostUid: auth.uid, hostName: localPlayerName(), roomName: publicRoomName(roomName), playerCount,
-        createdAt: { '.sv': 'timestamp' }, expiresAt: now + OPEN_INDEX_TTL_MS
-      })
+      body: JSON.stringify(firebaseOpenRoomPayload(auth, format, roomName, playerCount))
     });
   }
   // 取り下げは投げ捨てでよい。失敗しても案内は期限で消えるし、満室の部屋を拾った側は
@@ -23528,12 +23533,16 @@
 
   // ===== 名前入力(HTMLのオーバーレイ)=====
   const nameOverlay = document.getElementById('nameOverlay');
+  const nameTitle = document.getElementById('nameTitle');
+  const nameNote = document.getElementById('nameNote');
   const nameInput = document.getElementById('nameInput');
   let nameDialogDone = null;
 
-  function openNameDialog(onDone) {
+  function openNameDialog(onDone, copy = null) {
     nameDialogDone = onDone || null;
-    nameInput.value = rankingProfile.name || '';
+    if (nameTitle) nameTitle.textContent = copy?.title || 'プレイヤー名';
+    if (nameNote) nameNote.textContent = copy?.note || '12文字まで。あとから変更できます。';
+    nameInput.value = localPlayerName();
     nameOverlay.classList.add('open');
     // スマホでキーボードを確実に出すため、表示が確定してから焦点を当てる
     setTimeout(() => { try { nameInput.focus(); nameInput.select(); } catch (err) { /* noop */ } }, 30);
@@ -23548,8 +23557,13 @@
   }
 
   document.getElementById('nameOk').addEventListener('click', () => {
-    const value = nameInput.value.replace(/[\r\n\t]/g, ' ').trim().slice(0, 12);
-    rankingProfile.name = value || 'ななし';
+    const value = normalizeBattleName(nameInput.value);
+    if (!value) {
+      if (nameNote) nameNote.textContent = 'CPU BATTLEとONLINE BATTLEには、名前を1文字以上入力してください。';
+      try { nameInput.focus(); } catch (_) { /* noop */ }
+      return;
+    }
+    rankingProfile.name = value;
     saveRankingProfile();
     playUiSound();
     closeNameDialog(true);
@@ -23561,6 +23575,20 @@
   nameInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('nameOk').click();
   });
+
+  function runTitleActionWithPlayerName(action) {
+    if (localPlayerName()) {
+      action();
+      return true;
+    }
+    openNameDialog(saved => {
+      if (saved && localPlayerName()) action();
+    }, {
+      title: 'プレイヤー名を設定',
+      note: 'CPU BATTLEとONLINE BATTLEにはプレイヤー名が必要です。12文字まで。'
+    });
+    return true;
+  }
 
   // ===== オンラインロビー(HTML) =====
   // テスト用DOMにはロビー要素が無いので、実ブラウザにだけイベントを登録する。
@@ -24822,17 +24850,17 @@
   function activateTitleMenuItem(itemId) {
     if (itemId === 'cpu') {
       if (openCpuGearPendingSettlementFromTitle()) return true;
-      battleMode = 'normal';
-      selectWheelPosition = 0;
-      selectWheelVelocity = 0;
-      selectWheelDragging = false;
-      syncSelectedSubweapon();
-      gamePhase = 'select';
-      return true;
+      return runTitleActionWithPlayerName(() => {
+        battleMode = 'normal';
+        selectWheelPosition = 0;
+        selectWheelVelocity = 0;
+        selectWheelDragging = false;
+        syncSelectedSubweapon();
+        gamePhase = 'select';
+      });
     }
     if (itemId === 'online') {
-      openOnlineLobby();
-      return true;
+      return runTitleActionWithPlayerName(() => openOnlineLobby());
     }
     if (itemId === 'tutorial') {
       startTutorial();

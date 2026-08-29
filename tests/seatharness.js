@@ -997,6 +997,24 @@ const HOOK = `
     },
     openCpuGearPendingSettlementFromTitleForTest: () => openCpuGearPendingSettlementFromTitle(),
     activateTitleCpuForTest: () => activateTitleMenuItem('cpu'),
+    activateTitleOnlineForTest: () => activateTitleMenuItem('online'),
+    playerNameForTest: () => localPlayerName(),
+    setPlayerNameForTest: (value) => { rankingProfile.name = value; return localPlayerName(); },
+    submitPlayerNameForTest: (value) => {
+      const input = document.getElementById('nameInput');
+      input.value = value;
+      document.getElementById('nameOk').__fire('click');
+      return localPlayerName();
+    },
+    playerNameGateForTest: () => ({
+      nameOpen: document.getElementById('nameOverlay').classList.contains('open'),
+      lobbyOpen: document.getElementById('onlineLobby').classList.contains('open'),
+      title: document.getElementById('nameTitle').textContent,
+      note: document.getElementById('nameNote').textContent,
+      phase: gamePhase
+    }),
+    firebaseOpenRoomPayloadForTest: (auth, format, roomName, playerCount) => firebaseOpenRoomPayload(auth, format, roomName, playerCount),
+    publishOpenRoomForTest: (...args) => publishOpenRoom(...args),
     retryCpuGearTerminalSettlementPreparationForTest: () => retryCpuGearTerminalSettlementPreparation(),
     retryCpuGearTerminalSettlementReadForTest: () => retryCpuGearTerminalSettlementRead(),
     cpuGearRunStateForTest: () => {
@@ -2011,9 +2029,19 @@ function makeCanvas(w = 540, h = 960) {
 }
 function makeElement(tag) {
   const listeners = new Map();
+  const classes = new Set();
   const el = {
     tagName: (tag || 'div').toUpperCase(),
-    style: {}, dataset: {}, classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
+    style: {}, dataset: {}, classList: {
+      add: (...names) => names.forEach(name => classes.add(name)),
+      remove: (...names) => names.forEach(name => classes.delete(name)),
+      toggle: (name, force) => {
+        const enabled = force === undefined ? !classes.has(name) : !!force;
+        if (enabled) classes.add(name); else classes.delete(name);
+        return enabled;
+      },
+      contains: name => classes.has(name)
+    },
     children: [], value: '', textContent: '', currentTime: 0, volume: 1, loop: false, muted: false,
     width: 0, height: 0, clientWidth: 540, clientHeight: 960,
     addEventListener: (type, fn) => { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(fn); },
@@ -2038,7 +2066,7 @@ const elements = new Map();
 const gameCanvas = makeCanvas();
 elements.set('game', gameCanvas);
 // onlineSlots / onlineBattleRecord はロビー内で組み立てたDOMを検査したいので実体を持たせる。
-for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameInput', 'nameOk', 'nameCancel', 'onlineSlots', 'onlineBattleRecord']) {
+for (const id of ['debugPanel', 'titleBgm', 'stageBgm', 'roomBgm', 'bonusBgm', 'nameOverlay', 'nameTitle', 'nameNote', 'nameInput', 'nameOk', 'nameCancel', 'onlineLobby', 'onlineLobbyNote', 'onlineLobbyStatus', 'onlineRoomCode', 'onlineSlots', 'onlineBattleRecord']) {
   elements.set(id, makeElement(id.includes('Bgm') ? 'audio' : 'div'));
 }
 elements.set('onlineCharacterPicker', makeElement('div'));
