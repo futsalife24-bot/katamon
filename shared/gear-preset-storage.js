@@ -36,6 +36,28 @@
   function publicFailure(error, options) { if (options?.throwSync === true) throw error; return Promise.reject(error); }
   function publicResult(result, options) { return options?.throwSync === true ? result : Promise.resolve(result); }
   function mutateGearPresetsLocked(mutator, target, options = {}) { try { if (typeof mutator !== 'function') fail('INVALID_PRESET_MUTATOR', 'mutator must be a function'); return publicResult(withLock(target, options, (storage) => { const before = load(storage, options); const candidate = mutator(clone(before)); const next = candidate === undefined ? before : candidate; return save(next, storage, options); }), options); } catch (error) { return publicFailure(error, options); } }
+  function setPresetSlotValidatedLocked(input, target, options = {}) {
+    try {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) fail('INVALID_PRESET_SLOT_INPUT', 'preset slot input must be an object');
+      const allowed = ['characterId', 'presetId', 'slotId', 'gearId'];
+      if (Object.keys(input).length !== allowed.length || Object.keys(input).some((key) => !allowed.includes(key))) fail('INVALID_PRESET_SLOT_INPUT', 'preset slot input has unknown or missing fields');
+      return publicResult(withLock(target, options, (storage) => {
+        const presetState = load(storage, options);
+        if (input.gearId !== null) {
+          const gearState = gearStorage().loadGearState(storage);
+          const entry = gearState.inventory.find((candidate) => candidate.gear.gearId === input.gearId);
+          if (!entry) fail('GEAR_NOT_IN_INVENTORY', 'the selected Gear is no longer in Inventory');
+          const checked = gearDomain().validateGear(entry.gear);
+          if (checked.slotId !== input.slotId) fail('GEAR_PRESET_SLOT_MISMATCH', 'the selected Gear does not match the requested slot');
+        }
+        const next = presets().setPresetSlot(presetState, { ...input, characterIds: options.characterIds });
+        const stored = save(next, storage, options);
+        const resolved = presets().resolvePreset(stored, { characterId: input.characterId, presetId: input.presetId, characterIds: options.characterIds });
+        if (resolved.slots[input.slotId] !== input.gearId) fail('STORAGE_READ_BACK_MISMATCH', 'preset slot read-back did not match');
+        return stored;
+      }), options);
+    } catch (error) { return publicFailure(error, options); }
+  }
   function captureResolvedPresetForBattle(input, target, options = {}) { try { if (!input || typeof input !== 'object' || Array.isArray(input)) fail('INVALID_CAPTURE_INPUT', 'capture input must be an object'); const hasMode = Object.prototype.hasOwnProperty.call(input, 'mode'); const hasPresetId = Object.prototype.hasOwnProperty.call(input, 'presetId'); if (hasMode === hasPresetId) fail('INVALID_CAPTURE_INPUT', 'capture requires exactly one of mode or presetId'); const allowed = hasMode ? ['characterId', 'mode'] : ['characterId', 'presetId']; if (Object.keys(input).length !== allowed.length || Object.keys(input).some((key) => !allowed.includes(key))) fail('INVALID_CAPTURE_INPUT', 'capture input has unknown fields'); return publicResult(withLock(target, options, (storage) => { const presetState = load(storage, options); const gearState = gearStorage().loadGearState(storage); const characterIds = options.characterIds; const validateGear = gearDomain().validateGear; return hasPresetId ? presets().resolvePresetLoadout({ presetState, gearState, characterId: input.characterId, presetId: input.presetId, characterIds, validateGear }) : presets().resolveDefaultLoadout({ presetState, gearState, characterId: input.characterId, mode: input.mode, characterIds, validateGear }); }), options); } catch (error) { return publicFailure(error, options); } }
-  return Object.freeze({ GearPresetStorageError, STORAGE_KEY, SCHEMA_VERSION, WAL_KEY, LOCK_NAME, load, save, mutateGearPresetsLocked, captureResolvedPresetForBattle });
+  return Object.freeze({ GearPresetStorageError, STORAGE_KEY, SCHEMA_VERSION, WAL_KEY, LOCK_NAME, load, save, mutateGearPresetsLocked, setPresetSlotValidatedLocked, captureResolvedPresetForBattle });
 });

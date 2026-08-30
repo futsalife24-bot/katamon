@@ -65,6 +65,11 @@
     if (root && root.KatamonGearDomain) return root.KatamonGearDomain;
     fail('GEAR_DOMAIN_UNAVAILABLE', 'KatamonGearDomain must be available before using gear rewards');
   }
+  function resolvePresetStorage() {
+    if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-preset-storage.js');
+    if (root && root.KatamonGearPresetStorage) return root.KatamonGearPresetStorage;
+    fail('PRESET_STORAGE_UNAVAILABLE', 'KatamonGearPresetStorage must be available before dismantling Gear');
+  }
   function canonicalState(rawState) {
     const api = resolveStorageApi();
     try { return api.validateGearStorageState(rawState); } catch (error) {
@@ -269,6 +274,32 @@
     const nextState = canonicalState({ ...state, inventory, tempBox });
     return { nextState, gearId: id, location, favorite: nextState[location].find((entry) => entry.gear.gearId === id).favorite, locked: nextState[location].find((entry) => entry.gear.gearId === id).locked };
   }
+  function presetReferencesGear(presetState, gearId) {
+    return Object.values(presetState.characters || {}).some((character) => (character.presets || []).some((preset) => Object.values(preset.slots || {}).includes(gearId)));
+  }
+  function dismantleInventoryGear(rawState, presetState, gearId) {
+    const state = canonicalState(rawState);
+    const id = assertGearId(gearId);
+    const index = state.inventory.findIndex((entry) => entry.gear.gearId === id);
+    if (index < 0) fail('GEAR_NOT_IN_INVENTORY', 'manual dismantle is limited to Inventory Gear');
+    const entry = state.inventory[index];
+    if (entry.locked) fail('GEAR_LOCKED', 'locked Gear cannot be dismantled');
+    if (presetReferencesGear(presetState, id)) fail('GEAR_REFERENCED_BY_PRESET', 'remove Gear from every preset before dismantling it');
+    let checkedGear; let yieldValue;
+    try {
+      checkedGear = resolveDomain().validateGear(entry.gear);
+      yieldValue = resolveDomain().calculateDismantleYield(checkedGear);
+    } catch (error) { fail(error?.code || 'INVALID_DISMANTLE_YIELD', 'could not calculate dismantle yield', error); }
+    const nextState = canonicalState({
+      ...state,
+      inventory: state.inventory.filter((_candidate, candidateIndex) => candidateIndex !== index),
+      resources: {
+        powder: addSafe(state.resources.powder, yieldValue.powder, 'resources.powder'),
+        blueprintShards: addSafe(state.resources.blueprintShards, yieldValue.blueprintShards, 'resources.blueprintShards'),
+      },
+    });
+    return { nextState, gearId: id, gear: checkedGear, yield: { ...yieldValue } };
+  }
 
   function resolveLockManager(storage, options) {
     if (options !== undefined && (!isPlainRecord(options) || Reflect.ownKeys(options).some((key) => key !== 'lockManager'))) {
@@ -368,10 +399,25 @@
       return result;
     });
   }
+  async function persistDismantleInventoryGear(gearId, storage, options = {}) {
+    if (!isPlainRecord(options) || Object.keys(options).some((key) => key !== 'lockManager' && key !== 'characterIds')) fail('INVALID_DISMANTLE_OPTIONS', 'dismantle options contain unknown fields');
+    const lockOptions = options.lockManager === undefined ? undefined : { lockManager: options.lockManager };
+    return withGearStorageLock(storage, lockOptions, () => {
+      const api = resolveStorageApi();
+      const current = api.loadGearState(storage);
+      const presetState = resolvePresetStorage().load(storage, { characterIds: options.characterIds });
+      const result = dismantleInventoryGear(current, presetState, gearId);
+      result.nextState = api.saveGearState(result.nextState, storage);
+      const remaining = result.nextState.inventory.some((entry) => entry.gear.gearId === result.gearId)
+        || result.nextState.tempBox.some((entry) => entry.gear.gearId === result.gearId);
+      if (remaining) fail('STORAGE_READ_BACK_MISMATCH', 'dismantled Gear still exists after read-back');
+      return result;
+    });
+  }
 
   return Object.freeze({
     GearRewardsError, MAX_GEARS_PER_REWARD, GEAR_TRANSACTION_STORAGE_KEY, GEAR_MUTATION_LOCK_NAME,
-    queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate, setStoredGearMetadata,
-    persistQueueReward, persistClaimReward, persistStorageMaintenance, persistSetGearEntryMetadata,
+    queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate, setStoredGearMetadata, dismantleInventoryGear,
+    persistQueueReward, persistClaimReward, persistStorageMaintenance, persistSetGearEntryMetadata, persistDismantleInventoryGear,
   });
 });

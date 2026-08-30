@@ -26,8 +26,8 @@ test('比較はcanonical aggregate/combatを使い、独自set判定を持たな
   assert.match(html, /aggregate\.softCaps/);
 });
 test('装備・解除はpreset storageのlock付き正本mutationだけを通す', () => {
-  assert.match(html, /presetStorage\.mutateGearPresetsLocked/);
-  assert.match(html, /presets\.setPresetSlot/);
+  assert.match(html, /presetStorage\.setPresetSlotValidatedLocked/);
+  assert.match(html, /characterId: gearUi\.characterId, presetId: gearUi\.presetId, slotId, gearId/);
   assert.doesNotMatch(html, /localStorage\.setItem\(['\"]katamon_gear_presets_v1/);
 });
 test('比較候補はslotを置換した最終combatとset効果を再計算する', () => {
