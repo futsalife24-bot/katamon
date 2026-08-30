@@ -35,8 +35,10 @@ const expectCode = (code, fn) => assert.throws(fn, (error) => error?.code === co
 test('capacityとTTLはStorage定数を表示正本にする', () => {
   assert.match(html, /storage\.MAIN_INVENTORY_CAPACITY/); assert.match(html, /storage\.TEMP_BOX_CAPACITY/); assert.match(html, /storage\.UNCLAIMED_REWARD_CAPACITY/); assert.match(html, /view\.storage\.TEMP_BOX_TTL_MS/);
 });
-test('正式6部位とPhase 4Bのmini symbolをfilter/list/detailで再利用する', () => {
-  assert.match(html, /gearModules\(\)\.domain\.SLOTS\.map/); assert.match(html, /gearSlotMiniHtml\(slot\.id\)/); assert.match(html, /gearSlotMiniHtml\(gear\.slotId\)/);
+test('正式6部位とPhase 4B/4Fの部位visualをfilter/list/detailで再利用する', () => {
+  assert.match(html, /gearModules\(\)\.domain\.SLOTS\.map/);
+  assert.match(html, /gearSlotMiniHtml\(slot\.id\)/);
+  assert.match(html, /gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearDetailAsset'\)/);
 });
 test('rarity・star・enhancement・recent・slot・set sortは表示だけで行う', () => {
   ['star', 'rarity', 'enhancement', 'recent', 'slot', 'set'].forEach((value) => assert.match(html, new RegExp(`value="${value}"`)));

@@ -1,0 +1,40 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+let passed = 0;
+function test(name, fn) { fn(); passed += 1; console.log(`  ok ${name}`); }
+
+test('Workbenchは左右3段の向きを保ち、Gear visualを装備として読める大きさへ上げる', () => {
+  assert.match(html, /\.gearSlotAsset\{[^}]*width:46px;height:46px/);
+  assert.match(html, /\.gearSlot\[data-frame-position\^="right"\] \.gearSlotAsset\{right:auto;left:1px\}/);
+  assert.match(html, /\.gearSlot\[data-frame-position\^="right"\] \.gearSlotContent\{[^}]*text-align:right/);
+  assert.match(html, /gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearCandidateAsset'\)/);
+  for (const className of ['gearSlotSetName', 'gearSlotStars', 'gearSlotRarity', 'gearSlotLevel']) assert.match(html, new RegExp(className));
+  assert.match(html, /\.gearSlotStars,\.gearSlotLevel\{flex:0 0 auto;white-space:nowrap\}/);
+  assert.match(html, /\.gearSlotSetName,\.gearSlotRarity\{flex:1 1 auto;min-width:0/);
+});
+
+test('Storageは部位・rarity/star・set・強化・main OPを別階層で表示する', () => {
+  for (const className of ['gearStorageAsset', 'gearStorageSlotName', 'gearStorageQuality', 'gearStorageMeta', 'gearDetailAsset']) {
+    assert.match(html, new RegExp(className));
+  }
+  assert.match(html, /gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearDetailAsset'\)/);
+  assert.match(html, /gearStorageQuality[^`]+gearRarity\(view\.domain, gear\.rarityId\)[^`]+gear\.star/);
+});
+
+test('Drop・Enhance・Dismantleは同じ合成素材で対象Gearのidentityを保つ', () => {
+  assert.match(html, /gearAssetVisualHtml\(checked\.slotId, checked\.setId, 'gearDropCardAsset'\)/);
+  assert.match(html, /gearDropSlot\.active \.gearDropAsset\{width:59px;height:59px/);
+  assert.equal((html.match(/gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearActionAsset'\)/g) || []).length, 2);
+  assert.match(html, /\.gearActionGear\{display:grid;grid-template-columns:auto minmax\(0,1fr\)/);
+});
+
+test('visual-only変更は既存authority writerを追加・置換しない', () => {
+  assert.equal((html.match(/globalThis\.KatamonGearStorageUi = Object\.freeze/g) || []).length, 1);
+  assert.equal((html.match(/globalThis\.KatamonGearDropReveal = Object\.freeze/g) || []).length, 1);
+  assert.doesNotMatch(html, /48[^\n]*(gear|Gear)[^\n]*(image|画像)/);
+});
+
+console.log(`gear-visual-polish-phase4g: ${passed}/4 passed`);
