@@ -4552,7 +4552,16 @@
     armor: Object.freeze({ socket: [39, 68, 28], silhouette: 'assets/gear/runtime/silhouettes/gear_silhouette_armor_01.webp' }),
     core: Object.freeze({ socket: [50, 73, 28], silhouette: 'assets/gear/runtime/silhouettes/gear_silhouette_core_01.webp' })
   });
-  const gearSetEmblemAssets = Object.freeze(Object.fromEntries(Object.keys(gearSetCrests).map((setId) => [setId, `assets/gear/runtime/emblems/gear_emblem_${setId}_01.webp`])));
+  const gearSetEmblemAssets = Object.freeze({
+    assault: 'assets/gear/runtime/emblems/gear_emblem_assault_01.webp',
+    life: 'assets/gear/runtime/emblems/gear_emblem_life_01.webp',
+    fortify: 'assets/gear/runtime/emblems/gear_emblem_fortify_01.webp',
+    critical: 'assets/gear/runtime/emblems/gear_emblem_critical_01.webp',
+    blast: 'assets/gear/runtime/emblems/gear_emblem_blast_01.webp',
+    impact: 'assets/gear/runtime/emblems/gear_emblem_impact_01.webp',
+    rescue: 'assets/gear/runtime/emblems/gear_emblem_rescue_01.webp',
+    last_stand: 'assets/gear/runtime/emblems/gear_emblem_laststand_01.webp'
+  });
   const gearUi = { open: false, characterId: CHARACTER_LIST[0], presetId: 'preset1', slotId: null, comparisonGearId: null, highlightSlotId: null, busy: false, status: '' };
   let gearSlotHighlightTimer = null;
 
@@ -4586,7 +4595,7 @@
     if (!visual) return gearSlotMiniHtml(slotId);
     const [x, y, width] = visual.socket;
     const emblem = gearSetEmblemAssets[setId] || '';
-    return `<span class="gearAssetVisual ${gearHtml(variant)}" data-gear-asset-slot="${gearHtml(slotId)}" data-gear-asset-set="${gearHtml(setId)}" style="--gear-emblem-x:${x}%;--gear-emblem-y:${y}%;--gear-emblem-w:${width}%" aria-hidden="true"><img class="gearAssetSilhouette" src="${gearHtml(visual.silhouette)}" alt=""><img class="gearAssetEmblem" src="${gearHtml(emblem)}" alt=""></span>`;
+    return `<span class="gearAssetVisual ${gearHtml(variant)}" data-gear-asset-slot="${gearHtml(slotId)}" data-gear-asset-set="${gearHtml(setId)}" style="--gear-emblem-x:${x}%;--gear-emblem-y:${y}%;--gear-emblem-w:${width}%" aria-hidden="true"><img class="gearAssetSilhouette" src="${gearHtml(visual.silhouette)}" alt="">${emblem ? `<img class="gearAssetEmblem" src="${gearHtml(emblem)}" alt="">` : ''}</span>`;
   }
   function gearHighlightSlot(slotId, durationMs = 900) {
     if (!gearSlotFramePositions[slotId]) return false;

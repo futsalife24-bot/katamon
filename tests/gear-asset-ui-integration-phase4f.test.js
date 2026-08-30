@@ -12,8 +12,13 @@ test('6部位と8セットを完成画像にせず、runtime素材として合�
   assert.match(html, /function gearAssetVisualHtml\(slotId, setId = '', variant = ''\)/);
   assert.equal(manifest.completedCombinationImages, 0);
   for (const slot of manifest.slots) assert.match(html, new RegExp(`gear_silhouette_${slot.id}_01\\.webp`));
-  assert.match(html, /gear_emblem_\$\{setId\}_01\.webp/);
-  for (const set of manifest.sets) assert.ok(fs.existsSync(path.join(root, 'assets', 'gear', set.runtime)), `${set.id} emblem runtime exists`);
+  for (const set of manifest.sets) {
+    const runtimePath = `assets/gear/${set.runtime}`;
+    assert.ok(fs.existsSync(path.join(root, 'assets', 'gear', set.runtime)), `${set.id} emblem runtime exists`);
+    assert.match(html, new RegExp(`${set.id}: '${runtimePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `${set.id} UI mapping matches manifest`);
+  }
+  assert.match(html, /last_stand: 'assets\/gear\/runtime\/emblems\/gear_emblem_laststand_01\.webp'/);
+  assert.doesNotMatch(html, /gear_emblem_\$\{setId\}_01\.webp/);
 });
 
 test('Workbench、Storage、Drop Revealは同じ部位/セット合成ヘルパーを使う', () => {
@@ -30,4 +35,9 @@ test('既存フレーム、レアリティ、Gear authorityを置き換えない
   assert.doesNotMatch(html, /enhanceStoredGearAtomic\([^)]*gearAsset/);
 });
 
-console.log(`gear-asset-ui-integration-phase4f: ${passed}/3 passed`);
+test('セット未指定時は空srcの紋章imgを生成しない', () => {
+  assert.match(html, /\$\{emblem \? `<img class="gearAssetEmblem"[^`]+` : ''\}/);
+  assert.doesNotMatch(html, /<img class="gearAssetEmblem" src="\$\{gearHtml\(emblem\)\}" alt=""><\/span>/);
+});
+
+console.log(`gear-asset-ui-integration-phase4f: ${passed}/4 passed`);

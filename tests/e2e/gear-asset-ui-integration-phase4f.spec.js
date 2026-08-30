@@ -25,7 +25,7 @@ test('Workbench・Storage・Drop Revealは同じ部位シルエットとセッ�
       setProfile: { id: `asset-ui-${setId}`, setWeights: [{ id: setId, weight: 1 }] }, slotId, setId,
     });
     const barrel = make('asset-ui-barrel', 'barrel', 'assault');
-    const dropBarrel = make('asset-ui-drop-barrel', 'barrel', 'assault');
+    const dropBarrel = make('asset-ui-drop-barrel', 'barrel', 'last_stand');
     const state = storage.createDefaultGearStorageState();
     state.inventory = [{ gear: barrel, locked: false, favorite: false }];
     storage.saveGearState(state, localStorage);
@@ -49,7 +49,7 @@ test('Workbench・Storage・Drop Revealは同じ部位シルエットとセッ�
   await expect(page.locator('#gearDropReveal')).toHaveClass(/open/);
   const active = page.locator('.gearDropSlot.active');
   await expect(active).toHaveAttribute('data-gear-drop-slot', 'barrel');
-  await expect(active.locator('.gearDropAsset')).toHaveAttribute('data-gear-asset-set', 'assault');
+  await expect(active.locator('.gearDropAsset')).toHaveAttribute('data-gear-asset-set', 'last_stand');
   await expect(active.locator('.gearAssetSilhouette')).toHaveJSProperty('naturalWidth', 256);
   await expect(active.locator('.gearAssetEmblem')).toHaveJSProperty('naturalWidth', 256);
   await page.screenshot({ path: testInfo.outputPath('gear-asset-ui-integration-phase4f.png'), fullPage: true });
