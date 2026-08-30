@@ -539,6 +539,18 @@
   .gearSummary { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:10px 0; }.gearStat { min-height:48px; padding:6px 7px; border:1px solid rgba(195,128,54,.65); border-radius:7px; background:rgba(7,15,19,.66); }.gearStat b{display:block;color:#fff4d6;font-size:15px}.gearStat small{display:block;color:#d6ad73;font-size:10px}.gearStat.soft b{color:#ffd35b}.gearStat.hard b{color:#ff8c76}.gearCapNote{display:block;font-size:9px;color:#ffd35b}.gearSetPanel { margin:8px 0 14px; padding:9px; border:1px solid rgba(192,128,53,.6); border-radius:8px; background:rgba(9,16,19,.66); }.gearSetTitle{font-size:11px;color:#d8ad73}.gearSetRows{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gearSetChip{display:flex;gap:5px;align-items:center;padding:4px 6px;border:1px solid #80572e;border-radius:999px;background:#1b2a2d;font-size:10px}.gearSetChip.active{border-color:#ffd24a;color:#fff0b0}.gearSetHint{margin-top:6px;color:#cbd2cb;font-size:10px}
   .gearLoadoutControls { display:grid; grid-template-columns:1fr auto; gap:8px; margin:10px 0; }.gearSelect{width:100%;padding:0 8px}.gearStatus{min-height:18px;margin:0 2px 8px;color:#f5ce84;font-size:11px}.gearStatus.error{color:#ff9f86}.gearInventory{border-top:2px solid rgba(199,131,53,.55);padding-top:11px}.gearInventory h3{display:flex;align-items:center;margin:0 0 3px;color:#ffe2a1;font:400 16px var(--katamon-font-display)}.gearInventoryNote{margin:0 0 8px;color:#c8c4b7;font-size:10px}.gearCandidates{display:grid;gap:8px}.gearCandidate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;width:100%;min-height:65px;padding:8px;text-align:left;color:#fff5dc;border:1px solid #815a31;border-radius:8px;background:linear-gradient(135deg,#263941,#111c21);cursor:pointer}.gearCandidateMarks{display:flex;align-items:center;gap:3px}.gearCandidate.current{border-color:#ffd24a;box-shadow:inset 0 0 0 1px rgba(255,219,125,.42)}.gearCandidate strong{display:block;font-size:12px}.gearCandidate small{display:block;color:#d6c4a6;font-size:10px}.gearDiff{font-size:11px;font-weight:900}.gearDiff.up{color:#80ec99}.gearDiff.down{color:#ff9c86}.gearEmpty{padding:17px 10px;color:#d2d2c8;text-align:center;border:1px dashed #80603e;border-radius:8px;font-size:12px}.gearCompare{position:sticky;bottom:0;margin-top:12px;padding:11px;border:2px solid #c78335;border-radius:10px;background:linear-gradient(180deg,rgba(54,69,72,.98),rgba(9,16,20,.99));box-shadow:0 -5px 20px rgba(0,0,0,.38)}.gearCompare[hidden]{display:none}.gearCompareTitle{display:flex;align-items:center;color:#ffe2a1;font-weight:900;font-size:12px}.gearCompareGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}.gearCompareGrid div{padding:6px;border-radius:6px;background:rgba(2,7,9,.55);font-size:11px}.gearCompareGrid b{display:block;color:#d5ad73;font-size:9px}.gearCompareSet{color:#ffd45a;font-size:10px}.gearCompareActions{display:flex;gap:8px}.gearCompareActions .gearButton{flex:1}
   @media (max-width:400px){#gearWorkshopBox{padding-inline:8px}.gearBuildStage{min-height:326px}.gearBuildStage::before{width:232px;height:232px}.gearBuildStage::after{width:136px;height:136px}.gearSlot{width:98px;height:74px}.gearSlotContent{inset:9px 10px 8px;padding-inline:3px}.gearSlotLabel{font-size:9px}.gearSlotGlyph{font-size:14px}.gearSlotName{font-size:9px}.gearSlotEmpty{font-size:8px}.gearCharacterImage{width:118px;height:118px}.gearSummary{gap:5px}.gearStat{padding:5px}.gearStat b{font-size:13px}}
+
+  /* 保存済み報酬を見せるだけのDrop Reveal。6P配置はWorkbenchと同じ正本を使う。 */
+  #gearDropReveal{position:fixed;inset:0;z-index:110;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));color:#fff5dc;background:radial-gradient(circle at 50% 42%,rgba(91,67,31,.4),rgba(2,5,7,.94) 70%);font-family:var(--katamon-font-ui)}
+  #gearDropReveal.open{display:flex}.gearDropPanel{width:min(430px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:16px 14px 14px;border:2px solid #c99245;border-radius:15px;background:linear-gradient(160deg,rgba(55,70,73,.99),rgba(12,21,25,.99) 55%,rgba(5,10,13,.99));box-shadow:inset 0 0 0 3px rgba(44,27,13,.7),0 18px 45px rgba(0,0,0,.72);text-align:center}
+  .gearDropKicker{margin:0;color:#ffd467;font:900 12px/1 var(--katamon-font-ui);letter-spacing:.24em}.gearDropTitle{margin:6px 0 2px;color:#fff1bd;font:400 clamp(24px,8vw,36px)/1 var(--katamon-font-display);letter-spacing:.08em;text-shadow:0 2px 0 #241205,0 0 18px rgba(255,200,70,.35)}.gearDropProgress{margin:0;color:#c8b999;font-size:10px}
+  .gearDropMap{position:relative;width:min(240px,78vw);height:220px;margin:8px auto 5px}.gearDropMap::before{content:"6 SLOT";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-4deg);display:grid;place-items:center;width:82px;height:82px;color:#d0a962;border:2px solid #74502b;border-radius:22px;background:radial-gradient(circle,#26393c,#0c171b 72%);font:900 11px/1 var(--katamon-font-ui);letter-spacing:.1em;box-shadow:inset 0 0 18px #05090b}
+  .gearDropSlot{position:absolute;width:clamp(62px,19vw,72px);height:50px;color:#8f9b99;filter:grayscale(.75) brightness(.7);opacity:.62}.gearDropSlot .gearSlotFrame{inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px)}.gearDropSlotGlyph{position:absolute;z-index:2;inset:0;display:grid;place-items:center;font:900 17px/1 sans-serif;text-shadow:0 1px 0 #000}.gearDropSlot[data-frame-position="north"]{left:50%;top:0;transform:translateX(-50%);--frame-angle:90deg}.gearDropSlot[data-frame-position="north-east"]{right:0;top:23%;--frame-angle:150deg}.gearDropSlot[data-frame-position="south-east"]{right:0;bottom:23%;--frame-angle:210deg}.gearDropSlot[data-frame-position="south"]{left:50%;bottom:0;transform:translateX(-50%);--frame-angle:270deg}.gearDropSlot[data-frame-position="south-west"]{left:0;bottom:23%;--frame-angle:330deg}.gearDropSlot[data-frame-position="north-west"]{left:0;top:23%;--frame-angle:30deg}
+  .gearDropSlot.active{color:#fff0ac;filter:none;opacity:1}.gearDropSlot.active .gearSlotFrameOuter{fill:#99652c;stroke:#fff0a0;filter:drop-shadow(0 0 8px #ffd24a)}.gearDropSlot.active .gearSlotFrameInner{fill:#40575a}.gearDropSlotName{position:absolute;z-index:3;left:50%;top:100%;transform:translate(-50%,-2px);min-width:54px;padding:2px 5px;color:#fff1b5;border:1px solid #b47b35;border-radius:999px;background:#101c20;font-size:9px;white-space:nowrap}
+  .gearDropCard{position:relative;margin:2px 0 9px;padding:11px;border:2px solid var(--drop-accent,#b98947);border-radius:11px;background:linear-gradient(145deg,rgba(26,41,45,.98),rgba(8,14,17,.98));box-shadow:inset 0 0 20px rgba(0,0,0,.45),0 0 16px var(--drop-glow,transparent);text-align:left}.gearDropCard[data-rarity="rare"]{--drop-accent:#66bce2;--drop-glow:rgba(83,175,221,.18)}.gearDropCard[data-rarity="epic"]{--drop-accent:#b084ee;--drop-glow:rgba(162,102,235,.22)}.gearDropCard[data-rarity="legend"]{--drop-accent:#ffb841;--drop-glow:rgba(255,177,46,.28)}.gearDropCard[data-rarity="mythic"]{--drop-accent:#ff7181;--drop-glow:rgba(255,77,101,.32)}
+  .gearDropIdentity{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px}.gearDropIdentity .gearSlotMini{margin:0;transform:scale(1.18)}.gearDropIdentity strong{display:block;color:#fff0c5;font-size:15px}.gearDropIdentity small{display:block;margin-top:2px;color:#ceb987;font-size:10px}.gearDropStars{color:#ffd45b;font-weight:900;white-space:nowrap}.gearDropMainOp{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding:8px;border:1px solid rgba(212,165,85,.42);border-radius:7px;background:rgba(3,8,10,.5);font-size:11px}.gearDropMainOp b{color:#ffdf8e}.gearDropQueue{display:flex;justify-content:center;gap:5px;margin:7px 0}.gearDropQueue span{width:8px;height:8px;border:1px solid #9d7542;border-radius:50%;background:#172428}.gearDropQueue span.current{background:#ffd45b;box-shadow:0 0 7px #ffd45b}.gearDropActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearDropActions .gearButton{min-width:0}.gearDropActions .gearDropNext{grid-column:1/-1}.gearDropFallback{padding:16px;color:#ffe3a4;font-size:13px}
+  @media(max-width:340px){.gearDropPanel{padding-inline:9px}.gearDropMap{width:220px;height:202px}.gearDropSlot{width:62px;height:46px}.gearDropIdentity strong{font-size:13px}.gearDropActions{grid-template-columns:1fr}.gearDropActions .gearDropNext{grid-column:auto}}
+  @media(prefers-reduced-motion:no-preference){.gearDropPanel{animation:gearDropPanelIn .3s ease-out}.gearDropSlot.active .gearSlotFrame{animation:gearDropSlotPulse .8s ease-out 1}.gearDropCard{animation:gearDropCardIn .32s ease-out}@keyframes gearDropPanelIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}@keyframes gearDropCardIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes gearDropSlotPulse{0%{filter:brightness(.88)}45%{filter:brightness(1.45) drop-shadow(0 0 12px #ffd24a)}100%{filter:none}}}
   @media (max-width:340px){.gearSlot{width:90px;height:66px}.gearSlot[data-frame-position="north-east"],.gearSlot[data-frame-position="north-west"]{top:26%}.gearSlot[data-frame-position="south-east"],.gearSlot[data-frame-position="south-west"]{bottom:26%}.gearSlotContent{inset:8px 9px 7px}.gearSlotLabel{font-size:8px}.gearSlotGlyph{font-size:12px}.gearSlotName{font-size:8px}.gearSlotEmpty{font-size:7px}.gearCharacterImage{width:110px;height:110px}}
   @media (prefers-reduced-motion:no-preference){.gearSlot,.gearCandidate,.gearButton{transition:transform .12s ease,filter .12s ease,box-shadow .16s ease}.gearSlot.updated{animation:gearSlotUpdatePulse .82s ease-out}@keyframes gearSlotUpdatePulse{0%{filter:brightness(1.55) drop-shadow(0 0 14px #ffd24a)}55%{filter:brightness(1.18) drop-shadow(0 0 9px rgba(255,210,74,.9))}100%{filter:drop-shadow(0 6px 5px rgba(0,0,0,.56))}}}
 </style>
@@ -656,6 +668,20 @@
     <section class="gearInventory" aria-labelledby="gearInventoryTitle"><h3 id="gearInventoryTitle">部位を選んで装備する</h3><p id="gearInventoryNote" class="gearInventoryNote">部位スロットをタップすると候補を比較できます。</p><div id="gearCandidates" class="gearCandidates"></div></section>
     <section id="gearCompare" class="gearCompare" hidden aria-live="polite"></section>
   </main>
+</div>
+<div id="gearDropReveal" aria-hidden="true">
+  <section class="gearDropPanel" role="dialog" aria-modal="true" aria-labelledby="gearDropTitle">
+    <p id="gearDropKicker" class="gearDropKicker">GEAR REWARD</p>
+    <h2 id="gearDropTitle" class="gearDropTitle">GEAR GET!</h2>
+    <p id="gearDropProgress" class="gearDropProgress"></p>
+    <div id="gearDropContent"></div>
+    <div id="gearDropQueue" class="gearDropQueue" aria-hidden="true"></div>
+    <div class="gearDropActions">
+      <button id="gearDropClose" class="gearButton" type="button">あとで確認</button>
+      <button id="gearDropWorkbench" class="gearButton gearButton--gold" type="button">GEARを見る</button>
+      <button id="gearDropNext" class="gearButton gearDropNext" type="button">次のGearへ</button>
+    </div>
+  </section>
 </div>
 <div id="deviceBackConfirm" hidden aria-hidden="true">
   <div id="deviceBackConfirmPanel" role="alertdialog" aria-modal="true" aria-labelledby="deviceBackConfirmTitle" aria-describedby="deviceBackConfirmNote">
@@ -4575,6 +4601,13 @@
     finally { gearUi.busy = false; gearRender(); }
   }
   function openGearWorkshop() { if (isOnline?.()) return false; gearUi.open = true; gearUi.status = ''; gearUi.slotId = null; gearUi.comparisonGearId = null; gearUi.highlightSlotId = null; gearWorkshopEl.classList.add('open'); gearWorkshopEl.setAttribute('aria-hidden', 'false'); gearRender(); return true; }
+  function openGearWorkshopForSlot(slotId) {
+    if (!gearSlotFramePositions[slotId] || !openGearWorkshop()) return false;
+    gearUi.slotId = slotId;
+    gearHighlightSlot(slotId, 1200);
+    gearRender();
+    return true;
+  }
   function closeGearWorkshop() { gearUi.open = false; if (gearSlotHighlightTimer) clearTimeout(gearSlotHighlightTimer); gearSlotHighlightTimer = null; gearUi.highlightSlotId = null; gearWorkshopEl.classList.remove('open'); gearWorkshopEl.setAttribute('aria-hidden', 'true'); }
   if (gearWorkshopEl && gearBuildStageEl && gearCandidatesEl && gearCompareEl && gearPresetSelectEl) {
     document.getElementById('gearWorkshopClose').addEventListener('click', closeGearWorkshop);
@@ -4586,6 +4619,66 @@
     gearCandidatesEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-candidate]'); if (!button) return; gearUi.comparisonGearId = button.dataset.gearCandidate; gearRender(); });
     gearCompareEl.addEventListener('click', (event) => { const equip = event.target.closest('[data-gear-equip]'); const unequip = event.target.closest('[data-gear-unequip]'); if (equip && gearUi.slotId) gearMutateSlot(gearUi.slotId, equip.dataset.gearEquip); if (unequip) gearMutateSlot(unequip.dataset.gearUnequip, null); });
   }
+
+  const gearDropRevealEl = document.getElementById('gearDropReveal');
+  const gearDropContentEl = document.getElementById('gearDropContent');
+  const gearDropProgressEl = document.getElementById('gearDropProgress');
+  const gearDropQueueEl = document.getElementById('gearDropQueue');
+  const gearDropNextBtn = document.getElementById('gearDropNext');
+  const gearDropWorkbenchBtn = document.getElementById('gearDropWorkbench');
+  const gearDropSeenRewardIds = new Set();
+  const gearDropUi = { rewardId: null, reward: null, index: 0 };
+  function gearDropCanonicalReward(rewardId) {
+    if (typeof rewardId !== 'string' || !rewardId) return null;
+    try {
+      const state = gearModules().storage.loadGearState(localStorage);
+      return state.unclaimedRewards.find((reward) => reward.rewardId === rewardId) || null;
+    } catch (_) { return null; }
+  }
+  function gearDropMapHtml(domain, activeSlotId) {
+    return `<div class="gearDropMap" aria-label="6部位のうち${gearHtml(gearSlot(domain, activeSlotId)?.labelJa || activeSlotId)}">${domain.SLOTS.map((slot) => `<div class="gearDropSlot ${slot.id === activeSlotId ? 'active' : ''}" data-gear-drop-slot="${gearHtml(slot.id)}" data-frame-position="${gearHtml(gearSlotFramePositions[slot.id])}" aria-label="${gearHtml(slot.labelJa)}${slot.id === activeSlotId ? '・今回の獲得部位' : ''}">${gearSlotFrameSvg(slot.id)}<span class="gearDropSlotGlyph">${gearSlotGlyphs[slot.id] || '◆'}</span>${slot.id === activeSlotId ? `<strong class="gearDropSlotName">${gearHtml(slot.labelJa)}</strong>` : ''}</div>`).join('')}</div>`;
+  }
+  function gearDropRender() {
+    const reward = gearDropUi.reward; const gear = reward?.gears?.[gearDropUi.index];
+    if (!reward || !gear || !gearDropContentEl) return false;
+    try {
+      const { domain } = gearModules();
+      const checked = domain.validateGear(gear);
+      const slot = gearSlot(domain, checked.slotId); const set = gearSet(domain, checked.setId);
+      const rarity = domain.RARITIES.find((entry) => entry.id === checked.rarityId);
+      gearDropProgressEl.textContent = `${gearDropUi.index + 1} / ${reward.gears.length} · ${reward.sourceId === 'coop_boss' ? 'BOSS DROP' : 'CPU BATTLE REWARD'}`;
+      gearDropContentEl.innerHTML = `${gearDropMapHtml(domain, checked.slotId)}<article class="gearDropCard" data-rarity="${gearHtml(checked.rarityId)}" data-gear-drop-card="${gearHtml(checked.gearId)}"><div class="gearDropIdentity">${gearSlotMiniHtml(checked.slotId)}<span><strong>${gearHtml(slot?.labelJa || checked.slotId)} · ${gearHtml(set?.labelJa || checked.setId)}</strong><small><i class="gearCrest">${gearSetCrests[checked.setId] || '◆'}</i> ${gearHtml(set?.labelJa || checked.setId)} SET · 強化 +${checked.enhancementLevel}</small></span><span class="gearDropStars">${'★'.repeat(checked.star)}</span></div><div class="gearDropMainOp"><span>${gearHtml(rarity?.labelJa || checked.rarityId)}</span><b>${gearHtml(gearOpLabel(domain, checked.mainOp.opId))} ${gearHtml(gearValue(checked.mainOp.value, checked.mainOp.unit))}</b></div></article>`;
+      gearDropQueueEl.innerHTML = reward.gears.map((_entry, index) => `<span class="${index === gearDropUi.index ? 'current' : ''}"></span>`).join('');
+      gearDropNextBtn.hidden = gearDropUi.index >= reward.gears.length - 1;
+      gearDropNextBtn.textContent = `次のGearへ（${gearDropUi.index + 2}/${reward.gears.length}）`;
+      gearDropWorkbenchBtn.dataset.gearDropSlot = checked.slotId;
+      return true;
+    } catch (_) {
+      gearDropContentEl.innerHTML = `<div class="gearDropFallback">Gearを獲得しました。詳細はGEAR WORKBENCHで確認できます。</div>`;
+      gearDropNextBtn.hidden = true; gearDropWorkbenchBtn.removeAttribute('data-gear-drop-slot');
+      return false;
+    }
+  }
+  function presentGearRewardId(rewardId) {
+    if (!gearDropRevealEl || gearDropSeenRewardIds.has(rewardId)) return false;
+    const reward = gearDropCanonicalReward(rewardId);
+    if (!reward || !Array.isArray(reward.gears) || reward.gears.length === 0) return false;
+    gearDropUi.rewardId = reward.rewardId; gearDropUi.reward = reward; gearDropUi.index = 0;
+    gearDropRevealEl.classList.add('open'); gearDropRevealEl.setAttribute('aria-hidden', 'false');
+    gearDropSeenRewardIds.add(reward.rewardId);
+    gearDropRender();
+    return true;
+  }
+  function closeGearDropReveal() {
+    gearDropRevealEl?.classList.remove('open'); gearDropRevealEl?.setAttribute('aria-hidden', 'true');
+    gearDropUi.rewardId = null; gearDropUi.reward = null; gearDropUi.index = 0;
+  }
+  if (gearDropRevealEl && gearDropNextBtn && gearDropWorkbenchBtn) {
+    document.getElementById('gearDropClose').addEventListener('click', closeGearDropReveal);
+    gearDropNextBtn.addEventListener('click', () => { if (!gearDropUi.reward || gearDropUi.index >= gearDropUi.reward.gears.length - 1) return; gearDropUi.index += 1; gearDropRender(); });
+    gearDropWorkbenchBtn.addEventListener('click', () => { const slotId = gearDropWorkbenchBtn.dataset.gearDropSlot; closeGearDropReveal(); if (slotId) openGearWorkshopForSlot(slotId); else openGearWorkshop(); });
+  }
+  globalThis.KatamonGearDropReveal = Object.freeze({ presentRewardId: presentGearRewardId });
 
   function applyCharacter(u, key) {
     const def = CHARACTERS[key];
@@ -10481,12 +10574,13 @@
     try { task = Promise.resolve(settleCpuGearRun(outcome)); }
     catch (error) { task = Promise.reject(error); }
     cpuGearSettlementPromise = task;
-    task.then(() => {
+    task.then((settlement) => {
       cpuGearTerminalSettlementPrepared = false;
       cpuGearStatusText = '';
       winStreak = 0;
       runStats = { damageDealt: 0, shots: 0 };
       returnToTitleFromResult();
+      if (settlement?.reward?.rewardId) presentGearRewardId(settlement.reward.rewardId);
     }, (error) => {
       setCpuGearStatus(error, 'CPU BATTLE報酬の精算');
     }).finally(() => {
