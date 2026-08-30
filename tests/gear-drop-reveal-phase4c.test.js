@@ -16,10 +16,19 @@ test('DropとWorkbenchはcanonical 6部位と同じ固定position正本を共有
   assert.match(html, /gearSlotMiniHtml\(checked\.slotId\)/);
 });
 
-test('presentationはdurable unclaimed rewardIdを再読しGearを生成・claimしない', () => {
+test('presentationはdurable unclaimed rewardIdを再読し、表示だけではstorageを変更しない', () => {
   assert.match(html, /storage\.loadGearState\(localStorage\)/);
   assert.match(html, /state\.unclaimedRewards\.find\(\(reward\) => reward\.rewardId === rewardId\)/);
-  assert.doesNotMatch(html, /function presentGearRewardId[\s\S]{0,1500}(createGear|persistClaimReward|claimUnclaimedReward|persistQueueReward)/);
+  const presentation = html.match(/function presentGearRewardId\(rewardId, allowSeen = false\)[\s\S]*?\n  }\n  function presentFirstPendingGearReward/)[0];
+  assert.doesNotMatch(presentation, /createGear|persistClaimReward|claimUnclaimedReward|persistQueueReward/);
+});
+
+test('明示claimだけが既存persistClaimRewardを通りcanonical read-backを検証する', () => {
+  assert.match(html, /async function claimPresentedGearReward\(\)/);
+  assert.match(html, /await rewards\.persistClaimReward\(gearDropUi\.reward\.rewardId, Date\.now\(\), localStorage\)/);
+  assert.match(html, /state\.unclaimedRewards\.some\(\(entry\) => entry\.rewardId === reward\.rewardId\)/);
+  assert.match(html, /state\.rewardLedger\?\.\[reward\.rewardId\] !== true/);
+  assert.doesNotMatch(html, /function claimPresentedGearReward[\s\S]*?saveGearState\(/);
 });
 
 test('CPUはdurable settlement完了後だけrewardIdをpresentationへ渡す', () => {
@@ -39,6 +48,17 @@ test('複数Gear・rarity・set・main OP・Workbench highlightを表示する',
   assert.match(html, /gearOpLabel\(domain, checked\.mainOp\.opId\)/);
   assert.match(html, /openGearWorkshopForSlot\(slotId\)/);
   assert.match(html, /gearHighlightSlot\(slotId, 1200\)/);
+  assert.match(html, /gearDropUi\.index < gearDropUi\.reward\.gears\.length - 1/);
+  assert.match(html, /gearDropWorkbenchBtn\.hidden = !gearDropUi\.claimed/);
+});
+
+test('未受取報酬はWorkbenchから明示的に再表示でき、実routingだけを案内する', () => {
+  assert.match(html, /id="gearPendingRewards"/);
+  assert.match(html, /presentGearRewardId\(reward\.rewardId, true\)/);
+  assert.match(html, /gearDropSeenRewardIds\.has\(rewardId\)/);
+  assert.match(html, /インベントリへ保存/);
+  assert.match(html, /TEMP BOXへ保管/);
+  assert.match(html, /inventoryGear \? 'GEARを見る' : '同じ部位を見る'/);
 });
 
 test('visual dedupeはruntime-localでstorage ledgerの意味を変えない', () => {
