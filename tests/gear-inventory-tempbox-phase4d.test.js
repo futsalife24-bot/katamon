@@ -88,9 +88,9 @@ test('装備中はcurrent character/presetだけで他presetを区別する', ()
   assert.match(html, /<span class="gearStorageBadge">装備中<\/span>/); assert.match(html, /<span class="gearStorageBadge">プリセット登録<\/span>/);
   assert.doesNotMatch(source, /return ids/);
 });
-test('maintenanceは既存persistStorageMaintenanceだけを呼び返却resultを表示する', () => {
+test('recovery後maintenanceは既存persistStorageMaintenanceだけを呼び返却resultを表示する', () => {
   assert.match(html, /rewards\.persistStorageMaintenance\(Date\.now\(\), localStorage\)/); ['movedGearIds', 'expiredGearIds', 'powderGained', 'blueprintShardsGained'].forEach((key) => assert.match(html, new RegExp(`result\\.${key}`)));
-  assert.doesNotMatch(html, /function gearStorageRunMaintenance[\s\S]*?calculateDismantleYield/);
+  assert.match(html, /transactions\.recoverPendingGearTransaction\(localStorage\)/); assert.doesNotMatch(html, /function gearStorageRecoverThenMaintain[\s\S]*?calculateDismantleYield/);
 });
 test('Workbench導線はInventory gearIdをfocusするが自動装備しない', () => {
   const source = html.match(/function openGearWorkshopForGear\(gearId\) \{[\s\S]*?return true;\r?\n  \}/)?.[0] || '';
@@ -104,6 +104,6 @@ test('未受取はPhase 4CのpresentFirstPendingGearRewardを再利用する', (
   assert.doesNotMatch(handler, /persistClaimReward/);
 });
 test('ONLINE中はGear Storageを開かず既存Workbench方針と一致する', () => { assert.match(html, /async function openGearStorage\(\) \{\r?\n    if \(isOnline\?\.\(\)\) return false/); });
-test('手動分解・強化・TEMP手動移動をPhase 4D UIへ追加しない', () => { const section = html.match(/\/\/ ===== Gear Storage \/ TEMP BOX =====[\s\S]*?globalThis\.KatamonGearStorageUi/)[0]; assert.doesNotMatch(section, /dismantleStoredGear|enhanceStoredGear|manualMove|moveTemp/); });
+test('Phase 4E追加後もTEMP手動移動を作らずInventory限定actionを維持する', () => { const section = html.match(/\/\/ ===== Gear Storage \/ TEMP BOX =====[\s\S]*?globalThis\.KatamonGearStorageUi/)[0]; assert.doesNotMatch(section, /manualMove|moveTemp/); assert.match(section, /gearStorageUi\.tab === 'inventory'/); assert.match(section, /TEMP BOXのGearは強化・手動分解できません/); });
 
 Promise.all(pending).then(() => console.log(`gear-inventory-tempbox-phase4d: ${passed}/${18} passed`)).catch((error) => { console.error(error); process.exitCode = 1; });
