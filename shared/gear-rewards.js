@@ -35,6 +35,19 @@
     if (!Number.isSafeInteger(value) || value < 0) fail('INVALID_NOW_MS', 'nowMs must be a non-negative safe integer');
     return value;
   };
+  const assertGearId = (value) => assertNonEmptyString(value, 'gearId');
+  function canonicalMetadataPatch(rawPatch) {
+    if (!isPlainRecord(rawPatch)) fail('INVALID_GEAR_METADATA_PATCH', 'metadata patch must be a plain object');
+    const keys = Reflect.ownKeys(rawPatch);
+    if (keys.length < 1 || keys.some((key) => key !== 'favorite' && key !== 'locked')) fail('INVALID_GEAR_METADATA_PATCH', 'metadata patch may contain only favorite and locked');
+    const patch = {};
+    keys.sort().forEach((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(rawPatch, key);
+      if (!descriptor || !descriptor.enumerable || !hasOwn(descriptor, 'value') || typeof descriptor.value !== 'boolean') fail('INVALID_GEAR_METADATA_PATCH', `metadata.${key} must be a boolean data property`);
+      patch[key] = descriptor.value;
+    });
+    return patch;
+  }
   const addSafe = (left, right, path) => {
     if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) || left < 0 || right < 0 || left > Number.MAX_SAFE_INTEGER - right) {
       fail('INTEGER_OVERFLOW', `${path} exceeds the safe integer range`);
@@ -238,6 +251,25 @@
     return { allowed: reasons.length === 0, reasons };
   }
 
+  function setStoredGearMetadata(rawState, gearId, rawPatch) {
+    const state = canonicalState(rawState);
+    const id = assertGearId(gearId);
+    const patch = canonicalMetadataPatch(rawPatch);
+    let location = null;
+    let found = false;
+    const update = (entry, candidateLocation) => {
+      if (entry.gear.gearId !== id) return entry;
+      if (found) fail('DUPLICATE_GEAR_ID', `gearId ${id} appears more than once`);
+      found = true; location = candidateLocation;
+      return { ...entry, ...patch };
+    };
+    const inventory = state.inventory.map((entry) => update(entry, 'inventory'));
+    const tempBox = state.tempBox.map((entry) => update(entry, 'tempBox'));
+    if (!found) fail('GEAR_NOT_FOUND', `gearId ${id} is not stored in inventory or TEMP BOX`);
+    const nextState = canonicalState({ ...state, inventory, tempBox });
+    return { nextState, gearId: id, location, favorite: nextState[location].find((entry) => entry.gear.gearId === id).favorite, locked: nextState[location].find((entry) => entry.gear.gearId === id).locked };
+  }
+
   function resolveLockManager(storage, options) {
     if (options !== undefined && (!isPlainRecord(options) || Reflect.ownKeys(options).some((key) => key !== 'lockManager'))) {
       fail('INVALID_PERSIST_OPTIONS', 'persistence options may contain only lockManager');
@@ -325,10 +357,21 @@
       return result;
     });
   }
+  async function persistSetGearEntryMetadata(gearId, patch, storage, options) {
+    return withGearStorageLock(storage, options, () => {
+      const api = resolveStorageApi();
+      const current = api.loadGearState(storage);
+      const result = setStoredGearMetadata(current, gearId, patch);
+      result.nextState = api.saveGearState(result.nextState, storage);
+      const stored = result.nextState[result.location].find((entry) => entry.gear.gearId === result.gearId);
+      if (!stored || stored.favorite !== result.favorite || stored.locked !== result.locked) fail('STORAGE_READ_BACK_MISMATCH', 'Gear metadata read-back did not match');
+      return result;
+    });
+  }
 
   return Object.freeze({
     GearRewardsError, MAX_GEARS_PER_REWARD, GEAR_TRANSACTION_STORAGE_KEY, GEAR_MUTATION_LOCK_NAME,
-    queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate,
-    persistQueueReward, persistClaimReward, persistStorageMaintenance,
+    queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate, setStoredGearMetadata,
+    persistQueueReward, persistClaimReward, persistStorageMaintenance, persistSetGearEntryMetadata,
   });
 });

@@ -19,7 +19,7 @@ test('DropとWorkbenchはcanonical 6部位と同じ固定position正本を共有
 test('presentationはdurable unclaimed rewardIdを再読し、表示だけではstorageを変更しない', () => {
   assert.match(html, /storage\.loadGearState\(localStorage\)/);
   assert.match(html, /state\.unclaimedRewards\.find\(\(reward\) => reward\.rewardId === rewardId\)/);
-  const presentation = html.match(/function presentGearRewardId\(rewardId, allowSeen = false\)[\s\S]*?\n  }\n  function presentFirstPendingGearReward/)[0];
+  const presentation = html.match(/function presentGearRewardId\(rewardId, allowSeen = false\)[\s\S]*?\r?\n  }\r?\n  function presentFirstPendingGearReward/)[0];
   assert.doesNotMatch(presentation, /createGear|persistClaimReward|claimUnclaimedReward|persistQueueReward/);
 });
 
