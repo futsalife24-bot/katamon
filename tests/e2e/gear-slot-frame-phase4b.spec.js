@@ -39,6 +39,31 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
   });
   await page.evaluate(() => globalThis.__gearSlotFrameTest.open());
 
+  const measureLayout = () => page.evaluate(() => {
+    const stage = document.querySelector('#gearBuildStage').getBoundingClientRect();
+    const boxes = [...document.querySelectorAll('.gearSlot')].map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { id: element.dataset.gearSlot, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+    });
+    return { stage: { left: stage.left, top: stage.top, right: stage.right, bottom: stage.bottom, cx: stage.left + stage.width / 2, cy: stage.top + stage.height / 2 }, boxes, horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+  });
+  const expectClearLayout = (layout, width) => {
+    expect(layout.horizontalOverflow, `${width}px page has horizontal overflow`).toBe(false);
+    for (const box of layout.boxes) {
+      expect(box.left, `${width}px ${box.id} leaves stage left`).toBeGreaterThanOrEqual(layout.stage.left);
+      expect(box.right, `${width}px ${box.id} leaves stage right`).toBeLessThanOrEqual(layout.stage.right);
+      expect(box.top, `${width}px ${box.id} leaves stage top`).toBeGreaterThanOrEqual(layout.stage.top);
+      expect(box.bottom, `${width}px ${box.id} leaves stage bottom`).toBeLessThanOrEqual(layout.stage.bottom);
+    }
+    for (let index = 0; index < layout.boxes.length; index += 1) {
+      for (let other = index + 1; other < layout.boxes.length; other += 1) {
+        const a = layout.boxes[index]; const b = layout.boxes[other];
+        const overlap = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        expect(overlap, `${width}px ${a.id} and ${b.id} overlap`).toBe(false);
+      }
+    }
+  };
+
   const stage = page.locator('#gearBuildStage');
   const slots = page.locator('.gearSlot');
   await expect(slots).toHaveCount(6);
@@ -55,14 +80,7 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
     await expect(page.locator(`[data-gear-slot="${slotId}"]`)).toHaveAttribute('data-frame-position', position);
   }
 
-  const layout = await page.evaluate(() => {
-    const stage = document.querySelector('#gearBuildStage').getBoundingClientRect();
-    const boxes = [...document.querySelectorAll('.gearSlot')].map((element) => {
-      const rect = element.getBoundingClientRect();
-      return { id: element.dataset.gearSlot, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-    });
-    return { stage: { left: stage.left, top: stage.top, right: stage.right, bottom: stage.bottom, cx: stage.left + stage.width / 2, cy: stage.top + stage.height / 2 }, boxes };
-  });
+  const layout = await measureLayout();
   const byId = Object.fromEntries(layout.boxes.map((box) => [box.id, box]));
   expect(Math.abs(byId.barrel.cx - layout.stage.cx)).toBeLessThan(4);
   expect(byId.barrel.cy).toBeLessThan(layout.stage.cy);
@@ -76,19 +94,14 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
   expect(byId.sight.cy).toBeGreaterThan(layout.stage.cy);
   expect(byId.auxiliary.cx).toBeLessThan(layout.stage.cx);
   expect(byId.auxiliary.cy).toBeLessThan(layout.stage.cy);
-  for (const box of layout.boxes) {
-    expect(box.left).toBeGreaterThanOrEqual(layout.stage.left);
-    expect(box.right).toBeLessThanOrEqual(layout.stage.right);
-    expect(box.top).toBeGreaterThanOrEqual(layout.stage.top);
-    expect(box.bottom).toBeLessThanOrEqual(layout.stage.bottom);
+  expectClearLayout(layout, page.viewportSize().width);
+
+  const initialViewport = page.viewportSize();
+  for (const viewport of [{ width: 390, height: 844 }, { width: 412, height: 915 }, { width: 320, height: 640 }]) {
+    await page.setViewportSize(viewport);
+    expectClearLayout(await measureLayout(), viewport.width);
   }
-  for (let index = 0; index < layout.boxes.length; index += 1) {
-    for (let other = index + 1; other < layout.boxes.length; other += 1) {
-      const a = layout.boxes[index]; const b = layout.boxes[other];
-      const overlap = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-      expect(overlap, `${a.id} and ${b.id} overlap`).toBe(false);
-    }
-  }
+  await page.setViewportSize(initialViewport);
 
   await page.locator('[data-gear-slot="barrel"]').click();
   await expect(page.locator('[data-gear-slot="barrel"]')).toHaveClass(/selected/);
@@ -102,8 +115,5 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
   expect(await page.locator('#gearWorkshopBox').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('gear-slot-frame-phase4b-android.png'), fullPage: true });
 
-  await page.setViewportSize({ width: 320, height: 640 });
-  await expect(stage).toBeVisible();
-  expect(await page.locator('#gearWorkshopBox').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(errors).toEqual([]);
 });

@@ -42,7 +42,8 @@ test('inventoryとcomparisonは同じslot mini記号を再利用する', () => {
 });
 
 test('小型Androidとreduced motionの表示契約を持つ', () => {
-  assert.match(html, /@media \(max-width:380px\)/);
+  assert.match(html, /@media \(max-width:400px\)/);
+  assert.match(html, /@media \(max-width:340px\)/);
   assert.match(html, /\.gearBuildStage\{min-height:326px\}/);
   assert.match(html, /@media \(prefers-reduced-motion:no-preference\)/);
   assert.match(html, /@keyframes gearSlotUpdatePulse/);
