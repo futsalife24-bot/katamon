@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.150-firebase-reentry-activation-retry-fix';
+const EXPECTED_BUILD_ID = 'v2.0.151-gear-phase4-complete';
 
 function assertCacheVersionContract(html, worker) {
   const buildId = /const BUILD_ID = '([^']+)'/.exec(html)?.[1];
@@ -13,7 +13,7 @@ function assertCacheVersionContract(html, worker) {
   assert.ok(buildId && cacheVersion, 'BUILD_ID と CACHE_VERSION が必要です。');
   assert.equal(buildId, cacheVersion, `BUILD_ID (${buildId}) と CACHE_VERSION (${cacheVersion}) を一致させてください。`);
   assert.equal(buildId, EXPECTED_BUILD_ID,
-    'Firebase guest Battle render修正を既存端末へ配るrelease版へ更新してください。');
+    'Gear Phase 4 completionを既存端末へ配るrelease版へ更新してください。');
   assert.doesNotMatch(worker, /ignoreSearch\s*:\s*true/, 'Service Workerでクエリを無視してはいけません。');
   assert.doesNotMatch(html, /\?v=\d+/, 'index.htmlのアセットを ?v= で版管理してはいけません。BUILD_ID/CACHE_VERSIONを上げてください。');
   assert.doesNotMatch(worker, /\?v=\d+/, 'APP_SHELLのアセットを ?v= で版管理してはいけません。');
@@ -55,4 +55,4 @@ assert.throws(
   '旧式の版不一致を検出できること',
 );
 
-console.log('キャッシュ版管理契約: ONLINE recovery rollout・BUILD_ID/CACHE_VERSION一致・素材の差分更新（2/2 passed）');
+console.log('キャッシュ版管理契約: Gear Phase 4 rollout・BUILD_ID/CACHE_VERSION一致・素材の差分更新（2/2 passed）');
