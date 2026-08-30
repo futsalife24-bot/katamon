@@ -4,6 +4,7 @@ const path = require('node:path');
 const domain = require('../shared/gear-domain.js');
 const storage = require('../shared/gear-storage.js');
 const rewards = require('../shared/gear-rewards.js');
+const cpuRewards = require('../shared/gear-cpu-rewards.js');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 let passed = 0;
@@ -41,6 +42,15 @@ test('rarity・star・enhancement・recent・slot・set sortは表示だけで�
   ['star', 'rarity', 'enhancement', 'recent', 'slot', 'set'].forEach((value) => assert.match(html, new RegExp(`value="${value}"`)));
   assert.match(html, /const entries = source\.map/); assert.doesNotMatch(html, /state\.(inventory|tempBox)\.sort/);
 });
+test('recent sortはproduction CPU rewardのepoch millisecondsとISO文字列を正しく扱う', () => {
+  const source = html.match(/function gearAcquiredAtMs\(value\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.ok(source); const acquiredAtMs = Function(`${source}; return gearAcquiredAtMs;`)();
+  const older = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-old', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000000000 })).gears[0];
+  const newer = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-new', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000005000 })).gears[0];
+  assert.equal(acquiredAtMs(older.acquisition.acquiredAt), 1770000000000); assert.equal(acquiredAtMs(newer.acquisition.acquiredAt), 1770000005000);
+  assert.deepEqual([older, newer].sort((a, b) => acquiredAtMs(b.acquisition.acquiredAt) - acquiredAtMs(a.acquisition.acquiredAt)).map((gear) => gear.gearId), [newer.gearId, older.gearId]);
+  assert.equal(acquiredAtMs('2026-08-30T00:00:00Z'), Date.parse('2026-08-30T00:00:00Z')); assert.equal(acquiredAtMs('invalid'), 0);
+});
 test('favorite filterとlocked/favorite状態を画面へ出す', () => {
   assert.match(html, /gearStorageUi\.favoriteOnly/); assert.match(html, /entry\.favorite/); assert.match(html, /entry\.locked/); assert.match(html, /aria-pressed/);
 });
@@ -68,6 +78,16 @@ test('WAL pending中はmetadataをfail closedしGear Storageを変更しない',
   await assert.rejects(() => rewards.persistSetGearEntryMetadata('metadata-wal', { locked: true }, target, { lockManager: new LockManager() }), (error) => error?.code === 'PENDING_GEAR_TRANSACTION_EXISTS'); assert.equal(target.getItem(storage.GEAR_STORAGE_KEY), before);
 });
 test('TEMP countdownはenteredAtMsとcanonical TTLだけから表示する', () => { assert.match(html, /entry\.enteredAtMs \+ ttlMs - nowMs/); assert.match(html, /残り\$\{hours\}時間/); assert.match(html, /hours <= 6/); });
+test('TEMP BOXはlockedでも期限保護を示さずlock toggleを出さない', () => {
+  assert.match(html, /保護設定に関係なく、期限を過ぎたGearは自動分解されます/); assert.match(html, /gearStorageUi\.tab === 'inventory' \? `<button[^`]+data-gear-storage-lock/); assert.match(html, /' · 期限保護なし'/);
+  assert.match(html, /rewards\.persistStorageMaintenance/); assert.doesNotMatch(html, /entry\.locked[^\n]+TEMP_BOX_TTL_MS|TEMP_BOX_TTL_MS[^\n]+entry\.locked/);
+});
+test('装備中はcurrent character/presetだけで他presetを区別する', () => {
+  const source = html.match(/function gearStoragePresetUsage\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+  assert.match(source, /gearUi\.characterId/); assert.match(source, /gearUi\.presetId/); assert.match(source, /presets\.resolvePreset/);
+  assert.match(html, /<span class="gearStorageBadge">装備中<\/span>/); assert.match(html, /<span class="gearStorageBadge">プリセット登録<\/span>/);
+  assert.doesNotMatch(source, /return ids/);
+});
 test('maintenanceは既存persistStorageMaintenanceだけを呼び返却resultを表示する', () => {
   assert.match(html, /rewards\.persistStorageMaintenance\(Date\.now\(\), localStorage\)/); ['movedGearIds', 'expiredGearIds', 'powderGained', 'blueprintShardsGained'].forEach((key) => assert.match(html, new RegExp(`result\\.${key}`)));
   assert.doesNotMatch(html, /function gearStorageRunMaintenance[\s\S]*?calculateDismantleYield/);
@@ -86,4 +106,4 @@ test('未受取はPhase 4CのpresentFirstPendingGearRewardを再利用する', (
 test('ONLINE中はGear Storageを開かず既存Workbench方針と一致する', () => { assert.match(html, /async function openGearStorage\(\) \{\r?\n    if \(isOnline\?\.\(\)\) return false/); });
 test('手動分解・強化・TEMP手動移動をPhase 4D UIへ追加しない', () => { const section = html.match(/\/\/ ===== Gear Storage \/ TEMP BOX =====[\s\S]*?globalThis\.KatamonGearStorageUi/)[0]; assert.doesNotMatch(section, /dismantleStoredGear|enhanceStoredGear|manualMove|moveTemp/); });
 
-Promise.all(pending).then(() => console.log(`gear-inventory-tempbox-phase4d: ${passed}/${15} passed`)).catch((error) => { console.error(error); process.exitCode = 1; });
+Promise.all(pending).then(() => console.log(`gear-inventory-tempbox-phase4d: ${passed}/${18} passed`)).catch((error) => { console.error(error); process.exitCode = 1; });

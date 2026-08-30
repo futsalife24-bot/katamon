@@ -548,6 +548,7 @@
   .gearStorageTools{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;margin:9px 0}.gearStorageTools .gearSelect{min-width:0;width:100%;padding:0 6px;font-size:11px}.gearStorageFilterChips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:1px 0 7px}.gearStorageFilterChips .gearStorageChip{min-width:0;padding:5px 2px;font-size:10px;white-space:nowrap}.gearStorageChip{min-height:38px;padding:5px 10px}.gearStorageChip.active{color:#231306;border-color:#ffd45b;background:#eab75d;font-weight:900}
   .gearStorageRack{display:grid;gap:8px}.gearStorageCard{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px;border:1px solid #76532e;border-radius:10px;background:linear-gradient(145deg,#2b4043,#101a20 68%);box-shadow:inset 0 0 18px rgba(0,0,0,.32)}.gearStorageCard[data-rarity="rare"]{border-color:#4d9dc1}.gearStorageCard[data-rarity="epic"]{border-color:#9367ca}.gearStorageCard[data-rarity="legend"]{border-color:#d4932c}.gearStorageCard[data-rarity="mythic"]{border-color:#d85f70}.gearStorageCard.favorite{box-shadow:inset 0 0 0 1px rgba(255,211,74,.5),0 0 10px rgba(255,196,46,.12)}.gearStorageCardMain{min-width:0;text-align:left;color:inherit;border:0;background:transparent;cursor:pointer}.gearStorageCardMain strong{display:block;overflow:hidden;color:#fff0ca;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.gearStorageCardMain small{display:block;margin-top:3px;overflow:hidden;color:#c9baa0;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.gearStorageMarks{display:flex;flex-direction:column;gap:5px}.gearStorageMarks .gearButton{min-width:44px;min-height:38px;padding:4px 7px;font-size:14px}.gearStorageMarks .active{color:#2a1605;border-color:#ffd45a;background:#efc068}.gearStorageExpiry{display:block;margin-top:4px;color:#efd56d;font-size:9px;font-weight:900}.gearStorageExpiry.urgent{color:#ff9a82}.gearStorageBadge{display:inline-block;margin-left:5px;padding:2px 5px;color:#baf4c5;border:1px solid #4f9561;border-radius:999px;font-size:8px}.gearStorageEmpty{padding:28px 14px;text-align:center;color:#c9c7bb;border:1px dashed #7e6240;border-radius:10px;background:rgba(7,13,16,.48);font-size:12px;line-height:1.7}.gearStorageMore{width:100%;margin-top:9px}
   .gearStorageDetail{position:sticky;z-index:3;bottom:0;margin-top:10px;padding:11px;border:2px solid #c78335;border-radius:11px;background:linear-gradient(160deg,rgba(58,73,74,.99),rgba(9,16,20,.99));box-shadow:0 -7px 24px rgba(0,0,0,.55)}.gearStorageDetail[hidden]{display:none}.gearStorageDetailHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.gearStorageDetailHeader h3{margin:0;color:#ffe09a;font-size:14px}.gearStorageDetailGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.gearStorageDetailGrid div{padding:7px;border-radius:7px;background:rgba(2,7,9,.48);font-size:10px}.gearStorageDetailSubs{color:#cfc5ad;font-size:9px;line-height:1.6}.gearStorageDetailActions{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:9px}.gearStoragePending{width:100%;margin:9px 0}.gearStorageMaintenance{width:100%;margin:0 0 9px}
+  .gearStorageTempPolicy{margin:0 0 9px;padding:8px 10px;color:#ffd98b;border:1px solid #9f6b2f;border-radius:8px;background:rgba(65,37,13,.72);font-size:10px;line-height:1.5}.gearStorageTempPolicy[hidden]{display:none}
   @media(max-width:400px){#gearStorageBox{padding-inline:8px}.gearHeader{gap:6px}.gearHeader>.gearButton{padding-inline:8px;font-size:10px}.gearStorageTools{grid-template-columns:1fr 1fr}.gearStorageTools select:last-child{grid-column:1/-1}.gearStorageCard{gap:6px;padding:8px}.gearStorageSummary{gap:5px}.gearStorageMeter{padding-inline:3px}.gearStorageMeter strong{font-size:14px}.gearStorageDetailGrid{grid-template-columns:1fr}.gearStorageDetailActions{grid-template-columns:1fr}.gearStorageDetailActions .gearButton{width:100%}}
   @media(max-width:340px){.gearStorageTools{grid-template-columns:1fr}.gearStorageTools select:last-child{grid-column:auto}.gearStorageCard{grid-template-columns:auto minmax(0,1fr)}.gearStorageMarks{grid-column:1/-1;flex-direction:row}.gearStorageMarks .gearButton{flex:1}.gearStorageSummary{grid-template-columns:1fr 1fr}.gearStorageSummary .gearStorageMeter:last-child{grid-column:1/-1}}
   @media (max-width:400px){#gearWorkshopBox{padding-inline:8px}.gearBuildStage{min-height:272px}.gearBuildStage::before{width:232px;height:190px}.gearBuildStage::after{width:136px;height:136px}.gearSlot{width:98px;height:74px}.gearSlotContent{inset:9px 10px 8px;padding-inline:3px}.gearSlotLabel{font-size:9px}.gearSlotGlyph{font-size:14px}.gearSlotName{font-size:9px}.gearSlotEmpty{font-size:8px}.gearCharacterImage{width:118px;height:118px}.gearSummary{gap:5px}.gearStat{padding:5px}.gearStat b{font-size:13px}}
@@ -692,6 +693,7 @@
     <button id="gearStorageMaintenance" class="gearButton gearStorageMaintenance" type="button">保管庫を点検</button>
     <p id="gearStorageNotice" class="gearStorageNotice" aria-live="polite"></p>
     <div class="gearStorageTabs" role="tablist" aria-label="保管場所"><button class="gearButton gearStorageTab active" data-gear-storage-tab="inventory" type="button" role="tab" aria-selected="true">INVENTORY <b>0</b></button><button class="gearButton gearStorageTab" data-gear-storage-tab="tempBox" type="button" role="tab" aria-selected="false">TEMP BOX <b>0</b></button></div>
+    <p id="gearStorageTempPolicy" class="gearStorageTempPolicy" hidden>⚠ 保護設定に関係なく、期限を過ぎたGearは自動分解されます。</p>
     <div class="gearStorageFilterChips" id="gearStorageSlotFilters" aria-label="部位フィルター"></div>
     <div class="gearStorageTools"><select id="gearStorageRarity" class="gearSelect" aria-label="レアリティ"><option value="all">全レアリティ</option></select><select id="gearStorageSet" class="gearSelect" aria-label="セット"><option value="all">全セット</option></select><select id="gearStorageSort" class="gearSelect" aria-label="並び順"><option value="recent">最近入手</option><option value="star">★ 高い順</option><option value="rarity">rarity 高い順</option><option value="enhancement">強化値 高い順</option><option value="slot">部位順</option><option value="set">set順</option></select></div>
     <button id="gearStorageFavoriteOnly" class="gearButton gearStorageChip" type="button" aria-pressed="false">☆ お気に入りのみ</button>
@@ -4685,12 +4687,20 @@
     if (error?.code === 'GEAR_NOT_FOUND') return '対象Gearは既に移動した可能性があります。保管庫を再読込しました。';
     return 'Gear保管庫を安全に更新できませんでした。データは変更されていません。';
   }
-  function gearStorageEquippedIds() {
+  function gearStoragePresetUsage() {
     try {
-      const { presetStorage } = gearModules(); const state = presetStorage.load(localStorage, { characterIds: CHARACTER_LIST }); const ids = new Set();
-      Object.values(state.characters || {}).forEach((character) => character.presets?.forEach((preset) => Object.values(preset.slots || {}).forEach((gearId) => { if (gearId) ids.add(gearId); })));
-      return ids;
-    } catch (_) { return new Set(); }
+      const { presetStorage, presets } = gearModules(); const state = presetStorage.load(localStorage, { characterIds: CHARACTER_LIST });
+      const current = presets.resolvePreset(state, { characterId: gearUi.characterId, presetId: gearUi.presetId, characterIds: CHARACTER_LIST });
+      const equippedIds = new Set(Object.values(current.slots || {}).filter(Boolean)); const presetIds = new Set();
+      Object.values(state.characters || {}).forEach((character) => character.presets?.forEach((preset) => Object.values(preset.slots || {}).forEach((gearId) => { if (gearId && !equippedIds.has(gearId)) presetIds.add(gearId); })));
+      return { equippedIds, presetIds };
+    } catch (_) { return { equippedIds: new Set(), presetIds: new Set() }; }
+  }
+  function gearAcquiredAtMs(value) {
+    if (Number.isSafeInteger(value) && value >= 0) return value;
+    if (typeof value !== 'string') return 0;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
   function gearStorageRemaining(entry, nowMs, ttlMs) {
     const remaining = Math.max(0, entry.enteredAtMs + ttlMs - nowMs);
@@ -4700,8 +4710,8 @@
     return { text: `残り${Math.ceil(hours / 24)}日`, urgent: false };
   }
   function gearStorageLoad() {
-    const { storage, domain } = gearModules();
-    return { state: storage.loadGearState(localStorage), storage, domain, equippedIds: gearStorageEquippedIds(), nowMs: Date.now() };
+    const { storage, domain } = gearModules(); const usage = gearStoragePresetUsage();
+    return { state: storage.loadGearState(localStorage), storage, domain, equippedIds: usage.equippedIds, presetIds: usage.presetIds, nowMs: Date.now() };
   }
   function gearStorageFilteredEntries(view) {
     const source = gearStorageUi.tab === 'tempBox' ? view.state.tempBox : view.state.inventory;
@@ -4722,8 +4732,8 @@
       if (gearStorageUi.sort === 'enhancement') return b.enhancementLevel - a.enhancementLevel || b.star - a.star || left.index - right.index;
       if (gearStorageUi.sort === 'slot') return (slotOrder.get(a.slotId) - slotOrder.get(b.slotId)) || left.index - right.index;
       if (gearStorageUi.sort === 'set') return (setOrder.get(a.setId) - setOrder.get(b.setId)) || left.index - right.index;
-      const aTime = gearStorageUi.tab === 'tempBox' ? left.entry.enteredAtMs : Date.parse(a.acquisition.acquiredAt) || 0;
-      const bTime = gearStorageUi.tab === 'tempBox' ? right.entry.enteredAtMs : Date.parse(b.acquisition.acquiredAt) || 0;
+      const aTime = gearStorageUi.tab === 'tempBox' ? left.entry.enteredAtMs : gearAcquiredAtMs(a.acquisition.acquiredAt);
+      const bTime = gearStorageUi.tab === 'tempBox' ? right.entry.enteredAtMs : gearAcquiredAtMs(b.acquisition.acquiredAt);
       return bTime - aTime || right.index - left.index;
     });
     return entries.map(({ entry }) => entry);
@@ -4737,7 +4747,9 @@
   }
   function gearStorageCardHtml(view, entry) {
     const gear = entry.gear; const slot = gearSlot(view.domain, gear.slotId); const set = gearSet(view.domain, gear.setId); const expiry = gearStorageUi.tab === 'tempBox' ? gearStorageRemaining(entry, view.nowMs, view.storage.TEMP_BOX_TTL_MS) : null;
-    return `<article class="gearStorageCard ${entry.favorite ? 'favorite' : ''}" data-gear-storage-card="${gearHtml(gear.gearId)}" data-rarity="${gearHtml(gear.rarityId)}"><span>${gearSlotMiniHtml(gear.slotId)}<i class="gearCrest" title="${gearHtml(set?.labelJa || gear.setId)}">${gearSetCrests[gear.setId] || '◆'}</i></span><button class="gearStorageCardMain" data-gear-storage-detail="${gearHtml(gear.gearId)}" type="button"><strong>${gearHtml(slot?.labelJa || gear.slotId)} · ${gearHtml(set?.labelJa || gear.setId)} ${gear.star}★ ${gearRarity(view.domain, gear.rarityId)}</strong><small>${gearHtml(gearOpLabel(view.domain, gear.mainOp.opId))} ${gearHtml(gearValue(gear.mainOp.value, gear.mainOp.unit))} · 強化 +${gear.enhancementLevel}${view.equippedIds.has(gear.gearId) ? '<span class="gearStorageBadge">装備中</span>' : ''}</small>${expiry ? `<span class="gearStorageExpiry ${expiry.urgent ? 'urgent' : ''}">${expiry.urgent ? '⚠ ' : ''}${expiry.text}</span>` : ''}</button><span class="gearStorageMarks"><button class="gearButton ${entry.favorite ? 'active' : ''}" data-gear-storage-favorite="${gearHtml(gear.gearId)}" type="button" aria-label="${entry.favorite ? 'お気に入り解除' : 'お気に入り登録'}" aria-pressed="${entry.favorite}">${entry.favorite ? '★' : '☆'}</button><button class="gearButton ${entry.locked ? 'active' : ''}" data-gear-storage-lock="${gearHtml(gear.gearId)}" type="button" aria-label="${entry.locked ? '保護解除' : 'Gearを保護'}" aria-pressed="${entry.locked}">${entry.locked ? '🔒' : '🔓'}</button></span></article>`;
+    const usageBadge = view.equippedIds.has(gear.gearId) ? '<span class="gearStorageBadge">装備中</span>' : view.presetIds.has(gear.gearId) ? '<span class="gearStorageBadge">プリセット登録</span>' : '';
+    const lockButton = gearStorageUi.tab === 'inventory' ? `<button class="gearButton ${entry.locked ? 'active' : ''}" data-gear-storage-lock="${gearHtml(gear.gearId)}" type="button" aria-label="${entry.locked ? '分解保護を解除' : '手動分解から保護'}" aria-pressed="${entry.locked}">${entry.locked ? '🔒' : '🔓'}</button>` : '';
+    return `<article class="gearStorageCard ${entry.favorite ? 'favorite' : ''}" data-gear-storage-card="${gearHtml(gear.gearId)}" data-rarity="${gearHtml(gear.rarityId)}"><span>${gearSlotMiniHtml(gear.slotId)}<i class="gearCrest" title="${gearHtml(set?.labelJa || gear.setId)}">${gearSetCrests[gear.setId] || '◆'}</i></span><button class="gearStorageCardMain" data-gear-storage-detail="${gearHtml(gear.gearId)}" type="button"><strong>${gearHtml(slot?.labelJa || gear.slotId)} · ${gearHtml(set?.labelJa || gear.setId)} ${gear.star}★ ${gearRarity(view.domain, gear.rarityId)}</strong><small>${gearHtml(gearOpLabel(view.domain, gear.mainOp.opId))} ${gearHtml(gearValue(gear.mainOp.value, gear.mainOp.unit))} · 強化 +${gear.enhancementLevel}${usageBadge}</small>${expiry ? `<span class="gearStorageExpiry ${expiry.urgent ? 'urgent' : ''}">${expiry.urgent ? '⚠ ' : ''}${expiry.text}</span>` : ''}</button><span class="gearStorageMarks"><button class="gearButton ${entry.favorite ? 'active' : ''}" data-gear-storage-favorite="${gearHtml(gear.gearId)}" type="button" aria-label="${entry.favorite ? 'お気に入り解除' : 'お気に入り登録'}" aria-pressed="${entry.favorite}">${entry.favorite ? '★' : '☆'}</button>${lockButton}</span></article>`;
   }
   function gearStorageDetailHtml(view, entry) {
     if (!entry) return '';
@@ -4745,7 +4757,8 @@
     const subs = gear.subOps.length ? gear.subOps.map((sub) => `${gearHtml(gearOpLabel(view.domain, sub.opId))} ${(sub.valueBp / 100).toFixed(2)}%`).join(' · ') : 'サブOPなし';
     const sourceId = gear.acquisition.sourceId;
     const source = sourceId === 'coop_boss' ? '協力ボス' : sourceId === 'cpu_battle' ? 'CPU BATTLE' : sourceId;
-    return `<div class="gearStorageDetailHeader"><h3>${gearSlotMiniHtml(gear.slotId)}${gearHtml(slot?.labelJa || gear.slotId)} · ${gearHtml(set?.labelJa || gear.setId)}</h3><button class="gearButton" data-gear-storage-detail-close type="button">閉じる</button></div><div class="gearStorageDetailGrid"><div><b>${gear.star}★ ${gearRarity(view.domain, gear.rarityId)}</b><br>強化 +${gear.enhancementLevel}</div><div><b>${gearHtml(gearOpLabel(view.domain, gear.mainOp.opId))}</b><br>${gearHtml(gearValue(gear.mainOp.value, gear.mainOp.unit))}</div></div><p class="gearStorageDetailSubs">${subs}<br>入手元：${gearHtml(source)}${expiry ? `<br>${expiry.urgent ? '⚠ ' : ''}${expiry.text}` : ''}</p><div class="gearStorageDetailActions"><span>${entry.favorite ? '★ お気に入り' : '☆ 通常'} · ${entry.locked ? '🔒 保護中' : '🔓 未保護'}</span>${gearStorageUi.tab === 'inventory' ? `<button class="gearButton gearButton--gold" data-gear-storage-workbench="${gearHtml(gear.gearId)}" type="button">装備画面で見る</button>` : ''}</div>`;
+    const protection = gearStorageUi.tab === 'inventory' ? ` · ${entry.locked ? '🔒 分解保護中' : '🔓 未保護'}` : ' · 期限保護なし';
+    return `<div class="gearStorageDetailHeader"><h3>${gearSlotMiniHtml(gear.slotId)}${gearHtml(slot?.labelJa || gear.slotId)} · ${gearHtml(set?.labelJa || gear.setId)}</h3><button class="gearButton" data-gear-storage-detail-close type="button">閉じる</button></div><div class="gearStorageDetailGrid"><div><b>${gear.star}★ ${gearRarity(view.domain, gear.rarityId)}</b><br>強化 +${gear.enhancementLevel}</div><div><b>${gearHtml(gearOpLabel(view.domain, gear.mainOp.opId))}</b><br>${gearHtml(gearValue(gear.mainOp.value, gear.mainOp.unit))}</div></div><p class="gearStorageDetailSubs">${subs}<br>入手元：${gearHtml(source)}${expiry ? `<br>${expiry.urgent ? '⚠ ' : ''}${expiry.text}` : ''}</p><div class="gearStorageDetailActions"><span>${entry.favorite ? '★ お気に入り' : '☆ 通常'}${protection}</span>${gearStorageUi.tab === 'inventory' ? `<button class="gearButton gearButton--gold" data-gear-storage-workbench="${gearHtml(gear.gearId)}" type="button">装備画面で見る</button>` : ''}</div>`;
   }
   function gearStorageRender() {
     if (!gearStorageUi.open) return false;
@@ -4754,6 +4767,7 @@
     const { state, storage, domain } = view; const pendingCount = gearPendingRewards(state).length;
     gearStorageSummaryEl.innerHTML = `<div class="gearStorageMeter ${gearStorageCapacityClass(state.inventory.length, storage.MAIN_INVENTORY_CAPACITY)}"><strong>${state.inventory.length} / ${storage.MAIN_INVENTORY_CAPACITY}</strong><span>INVENTORY</span></div><div class="gearStorageMeter ${gearStorageCapacityClass(state.tempBox.length, storage.TEMP_BOX_CAPACITY)}"><strong>${state.tempBox.length} / ${storage.TEMP_BOX_CAPACITY}</strong><span>TEMP BOX</span></div><div class="gearStorageMeter ${gearStorageCapacityClass(state.unclaimedRewards.length, storage.UNCLAIMED_REWARD_CAPACITY)}"><strong>${state.unclaimedRewards.length} / ${storage.UNCLAIMED_REWARD_CAPACITY}</strong><span>未受取報酬</span></div>`;
     document.querySelectorAll('[data-gear-storage-tab]').forEach((button) => { const active = button.dataset.gearStorageTab === gearStorageUi.tab; button.classList.toggle('active', active); button.setAttribute('aria-selected', String(active)); button.querySelector('b').textContent = String(state[button.dataset.gearStorageTab].length); });
+    document.getElementById('gearStorageTempPolicy').hidden = gearStorageUi.tab !== 'tempBox';
     document.querySelectorAll('[data-gear-storage-slot]').forEach((button) => button.classList.toggle('active', button.dataset.gearStorageSlot === gearStorageUi.slotId));
     gearStoragePendingEl.hidden = pendingCount === 0; gearStoragePendingEl.textContent = `未受取Gear報酬 ${pendingCount}件を見る`;
     const warning = gearStorageCapacityWarning(state, storage); gearStorageNoticeEl.textContent = gearStorageUi.notice || warning; gearStorageNoticeEl.className = `gearStorageNotice${gearStorageUi.noticeKind ? ` ${gearStorageUi.noticeKind}` : warning ? ' error' : ''}`;
