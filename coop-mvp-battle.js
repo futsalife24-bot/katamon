@@ -819,6 +819,9 @@
           if (recorded.newlyCompleted?.length) browserRoot.KatamonMvpShop?.notifyAchievements(recorded.newlyCompleted);
         }
         if (effectiveRecovery?.pending && resultSummary) resultSummary.gearRewardCount = effectiveRecovery.pending.reward.gears.length;
+        if (effectiveRecovery?.status === 'recovered' && effectiveRecovery.pending?.reward?.rewardId) {
+          browserRoot.KatamonGearDropReveal?.presentRewardId(effectiveRecovery.pending.reward.rewardId);
+        }
         resultActionsEl.classList.add('open');
         controlsEl.classList.add('results');
         updateOwnReady(false).catch(() => {});

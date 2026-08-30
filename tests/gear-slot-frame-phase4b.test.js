@@ -7,9 +7,9 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 let passed = 0;
 function test(name, fn) { fn(); passed += 1; console.log(`  ok ${name}`); }
 
-test('canonical 6部位を時計回りの固定positionへ割り当てる', () => {
+test('canonical 6部位を時計回りの記憶を保った左右3段positionへ割り当てる', () => {
   assert.deepEqual(gear.SLOT_IDS, ['barrel', 'armor', 'core', 'engine', 'sight', 'auxiliary']);
-  assert.match(html, /gearSlotFramePositions\s*=\s*Object\.freeze\(\{ barrel: 'north', armor: 'north-east', core: 'south-east', engine: 'south', sight: 'south-west', auxiliary: 'north-west' \}\)/);
+  assert.match(html, /gearSlotFramePositions\s*=\s*Object\.freeze\(\{ barrel: 'right-top', armor: 'right-middle', core: 'right-bottom', engine: 'left-bottom', sight: 'left-middle', auxiliary: 'left-top' \}\)/);
   assert.match(html, /data-frame-position=\"\$\{gearSlotFramePositions\[slot\.id\]\}\"/);
 });
 
@@ -44,7 +44,7 @@ test('inventoryとcomparisonは同じslot mini記号を再利用する', () => {
 test('小型Androidとreduced motionの表示契約を持つ', () => {
   assert.match(html, /@media \(max-width:400px\)/);
   assert.match(html, /@media \(max-width:340px\)/);
-  assert.match(html, /\.gearBuildStage\{min-height:326px\}/);
+  assert.match(html, /\.gearBuildStage\{min-height:272px\}/);
   assert.match(html, /@media \(prefers-reduced-motion:no-preference\)/);
   assert.match(html, /@keyframes gearSlotUpdatePulse/);
 });
