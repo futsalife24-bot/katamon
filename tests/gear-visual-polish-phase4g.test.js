@@ -11,6 +11,9 @@ test('Workbenchは左右3段の向きを保ち、Gear visualを装備として�
   assert.match(html, /\.gearSlot\[data-frame-position\^="right"\] \.gearSlotAsset\{right:auto;left:1px\}/);
   assert.match(html, /\.gearSlot\[data-frame-position\^="right"\] \.gearSlotContent\{[^}]*text-align:right/);
   assert.match(html, /gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearCandidateAsset'\)/);
+  for (const className of ['gearSlotSetName', 'gearSlotStars', 'gearSlotRarity', 'gearSlotLevel']) assert.match(html, new RegExp(className));
+  assert.match(html, /\.gearSlotStars,\.gearSlotLevel\{flex:0 0 auto;white-space:nowrap\}/);
+  assert.match(html, /\.gearSlotSetName,\.gearSlotRarity\{flex:1 1 auto;min-width:0/);
 });
 
 test('Storageは部位・rarity/star・set・強化・main OPを別階層で表示する', () => {

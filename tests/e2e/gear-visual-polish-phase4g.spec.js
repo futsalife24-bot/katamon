@@ -7,6 +7,7 @@ const MOBILE_VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 320, height: 640 },
 ];
+const WORKBENCH_VIEWPORTS = [...MOBILE_VIEWPORTS, { width: 1280, height: 900 }];
 
 async function assertPanelFits(page, selector, viewports = MOBILE_VIEWPORTS) {
   for (const viewport of viewports) {
@@ -41,7 +42,7 @@ async function assertPanelFits(page, selector, viewports = MOBILE_VIEWPORTS) {
 }
 
 async function assertWorkbenchSlotsDoNotOverlap(page) {
-  for (const viewport of MOBILE_VIEWPORTS) {
+  for (const viewport of WORKBENCH_VIEWPORTS) {
     await page.setViewportSize(viewport);
     const slots = await page.locator('.gearSlot').evaluateAll((nodes) => nodes.map((node) => {
       const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
@@ -52,6 +53,40 @@ async function assertWorkbenchSlotsDoNotOverlap(page) {
       expect(overlaps, `Workbench slot overlap ${first}/${second} at ${viewport.width}px`).toBe(false);
     }
   }
+}
+
+async function assertWorkbenchTextFits(page, testInfo) {
+  const reports = [];
+  for (const viewport of WORKBENCH_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    const metrics = await page.locator('.gearSlot.equipped').evaluateAll((nodes) => nodes.map((node) => {
+      const measure = (selector) => {
+        const element = node.querySelector(selector);
+        const rect = element.getBoundingClientRect();
+        return { text: element.textContent.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth };
+      };
+      const primary = measure('.gearSlotName'); const set = measure('.gearSlotSetName'); const stars = measure('.gearSlotStars');
+      const secondary = measure('.gearSlotEmpty'); const rarity = measure('.gearSlotRarity'); const level = measure('.gearSlotLevel');
+      const inside = (child, parent) => child.left >= parent.left - 1 && child.right <= parent.right + 1;
+      return { slotId: node.dataset.gearSlot, primary, set, stars, secondary, rarity, level, starsInside: inside(stars, primary), levelInside: inside(level, secondary) };
+    }));
+    expect(metrics, `Workbench equipped slot count at ${viewport.width}px`).toHaveLength(6);
+    for (const metric of metrics) {
+      expect(metric.set.scrollWidth, `${metric.slotId} Set名 truncation at ${viewport.width}px`).toBeLessThanOrEqual(metric.set.clientWidth);
+      expect(metric.stars.text, `${metric.slotId} ★ text at ${viewport.width}px`).toMatch(/^\d★$/);
+      expect(metric.stars.width, `${metric.slotId} ★ width at ${viewport.width}px`).toBeGreaterThan(0);
+      expect(metric.starsInside, `${metric.slotId} ★ clipping at ${viewport.width}px`).toBe(true);
+      expect(metric.rarity.scrollWidth, `${metric.slotId} rarity truncation at ${viewport.width}px`).toBeLessThanOrEqual(metric.rarity.clientWidth);
+      expect(metric.level.text, `${metric.slotId} enhancement text at ${viewport.width}px`).toMatch(/^\+\d+$/);
+      expect(metric.level.width, `${metric.slotId} enhancement width at ${viewport.width}px`).toBeGreaterThan(0);
+      expect(metric.levelInside, `${metric.slotId} enhancement clipping at ${viewport.width}px`).toBe(true);
+    }
+    reports.push({ viewport, metrics });
+    const maxSetOverflow = Math.max(...metrics.map((metric) => metric.set.scrollWidth - metric.set.clientWidth));
+    const maxRarityOverflow = Math.max(...metrics.map((metric) => metric.rarity.scrollWidth - metric.rarity.clientWidth));
+    console.log(`phase4g Workbench text ${viewport.width}x${viewport.height}: stars 6/6, levels 6/6, max Set overflow ${maxSetOverflow}px, max rarity overflow ${maxRarityOverflow}px`);
+  }
+  await testInfo.attach('phase4g-workbench-text-metrics.json', { body: Buffer.from(JSON.stringify(reports, null, 2)), contentType: 'application/json' });
 }
 
 async function seedVisualFixture(page) {
@@ -130,8 +165,9 @@ test('Gear主要6画面を製品品質の情報階層で表示し、mobile/deskt
   await expect(page.locator('.gearSlot.equipped .gearSlotAsset')).toHaveCount(6);
   await expect(page.locator('[data-gear-slot="barrel"] .gearAssetSilhouette')).toHaveJSProperty('naturalWidth', 256);
   await expect(page.locator('[data-gear-candidate="visual-barrel"] .gearCandidateAsset')).toBeVisible();
+  await assertWorkbenchTextFits(page, testInfo);
   await assertWorkbenchSlotsDoNotOverlap(page);
-  await assertPanelFits(page, '#gearWorkshopBox');
+  await assertPanelFits(page, '#gearWorkshopBox', WORKBENCH_VIEWPORTS);
   await page.setViewportSize({ width: 412, height: 915 });
   await page.screenshot({ path: testInfo.outputPath(`phase4g-workbench-${testInfo.project.name}.png`), fullPage: true });
 
