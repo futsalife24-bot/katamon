@@ -73,8 +73,8 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
   await expect(page.locator('.gearCharacterImage')).toBeVisible();
 
   const expectedPositions = {
-    barrel: 'north', armor: 'north-east', core: 'south-east',
-    engine: 'south', sight: 'south-west', auxiliary: 'north-west'
+    barrel: 'right-top', armor: 'right-middle', core: 'right-bottom',
+    engine: 'left-bottom', sight: 'left-middle', auxiliary: 'left-top'
   };
   for (const [slotId, position] of Object.entries(expectedPositions)) {
     await expect(page.locator(`[data-gear-slot="${slotId}"]`)).toHaveAttribute('data-frame-position', position);
@@ -82,18 +82,13 @@ test('6Pチーズ型Gear slotを位置で識別し、比較・装備・更新発
 
   const layout = await measureLayout();
   const byId = Object.fromEntries(layout.boxes.map((box) => [box.id, box]));
-  expect(Math.abs(byId.barrel.cx - layout.stage.cx)).toBeLessThan(4);
-  expect(byId.barrel.cy).toBeLessThan(layout.stage.cy);
-  expect(byId.armor.cx).toBeGreaterThan(layout.stage.cx);
-  expect(byId.armor.cy).toBeLessThan(layout.stage.cy);
-  expect(byId.core.cx).toBeGreaterThan(layout.stage.cx);
-  expect(byId.core.cy).toBeGreaterThan(layout.stage.cy);
-  expect(Math.abs(byId.engine.cx - layout.stage.cx)).toBeLessThan(4);
-  expect(byId.engine.cy).toBeGreaterThan(layout.stage.cy);
-  expect(byId.sight.cx).toBeLessThan(layout.stage.cx);
-  expect(byId.sight.cy).toBeGreaterThan(layout.stage.cy);
-  expect(byId.auxiliary.cx).toBeLessThan(layout.stage.cx);
-  expect(byId.auxiliary.cy).toBeLessThan(layout.stage.cy);
+  for (const slotId of ['auxiliary', 'sight', 'engine']) expect(byId[slotId].cx, `${slotId} is in left column`).toBeLessThan(layout.stage.cx);
+  for (const slotId of ['barrel', 'armor', 'core']) expect(byId[slotId].cx, `${slotId} is in right column`).toBeGreaterThan(layout.stage.cx);
+  expect(Math.abs(byId.auxiliary.cy - byId.barrel.cy)).toBeLessThan(4);
+  expect(Math.abs(byId.sight.cy - byId.armor.cy)).toBeLessThan(4);
+  expect(Math.abs(byId.engine.cy - byId.core.cy)).toBeLessThan(4);
+  expect(byId.auxiliary.cy).toBeLessThan(byId.sight.cy);
+  expect(byId.sight.cy).toBeLessThan(byId.engine.cy);
   expectClearLayout(layout, page.viewportSize().width);
 
   const initialViewport = page.viewportSize();
