@@ -4,7 +4,9 @@
 
 ## 現在の開発状態
 
-Gear Systemは **Phase 4GまでCOMPLETE**。PR #341〜#349でWorkbench、6部位slot、Drop Reveal、Inventory / TEMP BOX、強化、安全な手動分解、6 silhouette × 8 set emblemの合成素材、各画面への素材接続、Visual Polishをmasterへ統合した。Gear Domain、Storage、Preset、Reward、Combat、ONLINE authorityは既存contractを維持している。
+Gear Systemは **Phase 4HまでCOMPLETE**。PR #341〜#354でWorkbench、6部位slot、Drop Reveal、Inventory / TEMP BOX、強化、安全な手動分解、6 silhouette × 8 set emblemの合成素材、各画面への素材接続、Visual Polish、Workbench slot再設計とresponsive closureをmasterへ統合した。Gear Domain、Storage、Preset、Reward、Combat、ONLINE authorityは既存contractを維持している。
+
+PR #355では装備中Gearの詳細導線、水平照準ガイド、CPU連勝終了確認、サウンドテスト音量追従を統合した。Phase 3D-8D、ONLINE/Firebase、Gear authority / balanceは変更していない。
 
 Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
@@ -21,7 +23,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は **v2.0.151-gear-phase4-complete**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は **v2.0.152-gameplay-ux-priority-fixes**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 
@@ -290,8 +292,8 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在のテスト基準
 
-- PR #349 headとmerge後master `85c54ba` でGitHub Stage Studio `test` / `mobile-e2e`、Content Studio verification、Pages build / deployが成功している。
-- Phase 4A〜4Gは各PhaseのNode targeted、Android Chromium、focused WebKitを通過済み。release closureではcache version、更新履歴、文書上限、APP_SHELLだけを変更境界として再確認する。
+- PR #355 head `84ed1a9` とmerge後master `3ac49c2` でGitHub Stage Studio `test` / `mobile-e2e`、Content Studio verification、Pages build / deployが成功している。
+- Phase 4A〜4Hは各PhaseのNode targeted、Android Chromium、focused WebKitを通過済み。PR #350は現行BUILD/CACHEを変更せず、現在地文書だけを正本化する。
 - full regressionの正本はGitHub clean runnerとし、固定件数をこの文書へ重複転記しない。失敗時は対象workflowとhead SHAで追跡する。
 - 3D-8Dの自動reconnect / recovery回帰はgreenだが、production A〜K matrixは未完了なのでCOMPLETE扱いにしない。
 
