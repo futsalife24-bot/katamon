@@ -123,6 +123,8 @@ test('Workbench socketを6角度で等距離配置し、最悪ケースでも全
   await page.waitForTimeout(400);
   await seedWorstCase(page);
   await page.evaluate(() => globalThis.__gearPhase4HTest.openWorkbench());
+  const loadedWorkbenchFonts = await page.evaluate(async () => (await document.fonts.load('400 10px "RocknRoll One"', '補機 猛攻')).length);
+  expect(loadedWorkbenchFonts, 'Workbench canonical font loaded').toBeGreaterThan(0);
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator('.gearSlot')).toHaveCount(6);
   await expect(page.locator('[data-gear-slot="auxiliary"] .gearSlotPart')).toHaveText('補機 +12');
