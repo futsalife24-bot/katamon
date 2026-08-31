@@ -974,6 +974,15 @@ const HOOK = `
         titleButton: { ...layout.titleButton, shift: resultButtonShift() },
       };
     },
+    cpuGearSettlementConfirmForTest: () => ({
+      open: typeof cpuGearVoluntarySettlementConfirmOpen !== 'undefined' && cpuGearVoluntarySettlementConfirmOpen,
+      busy: typeof cpuGearResultActionInFlight === 'function' ? cpuGearResultActionInFlight() : null,
+      yesButton: typeof cpuGearSettlementConfirmYesBtn === 'undefined' ? null : { ...cpuGearSettlementConfirmYesBtn, shift: resultButtonShift() },
+      noButton: typeof cpuGearSettlementConfirmNoBtn === 'undefined' ? null : { ...cpuGearSettlementConfirmNoBtn, shift: resultButtonShift() },
+    }),
+    openCpuGearSettlementConfirmForTest: () => openCpuGearVoluntarySettlementConfirm(cpuGearResultLayout()),
+    closeCpuGearSettlementConfirmForTest: () => { cpuGearVoluntarySettlementConfirmOpen = false; },
+    trajectoryPreviewDurationForTest: (vx0, vy0, gravity) => trajectoryPreviewDuration(vx0, vy0, gravity),
     cpuGearPendingSettlementLayoutForTest: () => {
       const layout = typeof cpuGearPendingSettlementLayout === 'function' ? cpuGearPendingSettlementLayout() : null;
       if (!layout) return null;

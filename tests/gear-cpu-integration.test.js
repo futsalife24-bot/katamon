@@ -663,6 +663,28 @@ function createUnclaimedFullGateState() {
     assert.ok(kt.drawnText().includes('いま負けた場合: 品質10'));
   });
 
+  await test('報酬を受け取って連勝終了は確認を挟み、キャンセル時はrunと報酬を変更しない', () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    kt.setStreak(9);
+    assert.equal(finishByDefeat('e1'), 'player');
+    assert.equal(kt.cpuGearSettlementConfirmForTest().busy, false);
+    assert.equal(kt.openCpuGearSettlementConfirmForTest(), true);
+    const confirm = kt.cpuGearSettlementConfirmForTest();
+    assert.equal(confirm.open, true);
+    assert.equal(kt.cpuGearRunStateForTest().state, 'active');
+    assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.length, 0);
+    kt.resetDrawnText();
+    kt.render();
+    assert.ok(kt.drawnText().includes('報酬を受け取って連勝を終了しますか？'));
+    assert.ok(kt.drawnText().includes('受取後は連勝が0に戻ります。この操作は取り消せません。'));
+    kt.closeCpuGearSettlementConfirmForTest();
+    assert.equal(kt.cpuGearSettlementConfirmForTest().open, false);
+    assert.equal(kt.cpuGearRunStateForTest().state, 'active');
+    assert.equal(kt.streak(), 10);
+    assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.length, 0);
+  });
+
   await test('勝利直後にタイトルへ戻ってもnative CPU lock待ちのpeakと次戦suspendが確定してから遷移する', async () => {
     resetFixture();
     const restoreImmediate = installImmediateWebLocks();

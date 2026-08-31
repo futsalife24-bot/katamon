@@ -857,10 +857,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.150-firebase-reentry-activation-retry-fix';
+  const BUILD_ID = 'v2.0.152-gameplay-ux-priority-fixes';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.152', date: '2026/08/31', summary: 'Gear詳細導線・水平照準・連勝終了確認・おまけ音量を修正' },
     { version: 'v2.0.150', date: '2026/08/30', summary: 'ONLINE再入場中の一時的な起動例外から自動復帰を修正' },
     { version: 'v2.0.149', date: '2026/08/29', summary: 'ONLINE再入場の一時通信失敗からの自動復帰を修正' },
     { version: 'v2.0.148', date: '2026/08/29', summary: 'ONLINE再入場の旧GUEST document lease引継ぎを修正' },
@@ -1219,7 +1220,13 @@
     }
     if (soundTestAudio) {
       const track = SOUND_TEST_TRACKS[soundTestCurrent];
-      soundTestAudio.volume = track ? track.volume * bgmGain : 0;
+      const target = track ? track.volume * bgmGain : 0;
+      if (soundTestGain) {
+        soundTestAudio.volume = 1;
+        soundTestGain.gain.value = target;
+      } else {
+        soundTestAudio.volume = target;
+      }
     }
     if (sfxMasterGain) sfxMasterGain.gain.value = SFX_MASTER_BASE * sfxGain;
   }
@@ -1231,7 +1238,8 @@
   let stageBgmGain = null;
   let roomBgmGain = null;
   let bonusBgmGain = null;
-  let bgmSourceNodes = { title: null, stage: null, room: null, bonus: null };
+  let soundTestGain = null;
+  let bgmSourceNodes = { title: null, stage: null, room: null, bonus: null, soundTest: null };
   let mediaVolumeSupported = true;
   // iOS/iPadOSは volume を代入しても音量に反映されない。
   // 厄介なことにバージョンによっては「値は保持して読み戻せるが音は変わらない」ため、
@@ -1301,6 +1309,28 @@
       stageBgmGain = null;
       roomBgmGain = null;
       bonusBgmGain = null;
+    }
+  }
+
+  // サウンドテストは画面を開くまでaudio要素を作らないため、通常BGMとは別に遅延接続する。
+  // iOSではHTMLMediaElement.volumeが音へ反映されないので、この経路が無いと設定音量を無視する。
+  function ensureSoundTestGraph() {
+    if (mediaVolumeSupported || !soundTestAudio) return;
+    try {
+      const ac = getAudioCtx();
+      if (!soundTestGain) { soundTestGain = ac.createGain(); soundTestGain.connect(ac.destination); }
+      if (!bgmSourceNodes.soundTest) {
+        bgmSourceNodes.soundTest = ac.createMediaElementSource(soundTestAudio);
+        bgmSourceNodes.soundTest.connect(soundTestGain);
+      }
+      if (ac.state === 'suspended') {
+        const resumed = ac.resume();
+        if (resumed && typeof resumed.catch === 'function') resumed.catch(() => {});
+      }
+      applyAudioVolumes();
+    } catch (err) {
+      // 音量制御の接続だけが失敗しても、サウンドテスト自体は従来経路で再生できる。
+      soundTestGain = null;
     }
   }
 
@@ -1627,11 +1657,12 @@
       soundTestAudio.preload = 'auto';
       soundTestAudio.loop = true;
     }
+    soundTestCurrent = index;
+    ensureSoundTestGraph();
     soundTestAudio.pause();
     soundTestAudio.src = track.src;
-    soundTestAudio.volume = bgmAudible() ? track.volume * volumeCurve(bgmVolume) : 0;
+    applyAudioVolumes();
     soundTestAudio.load();
-    soundTestCurrent = index;
     const result = soundTestAudio.play();
     const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
     promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = soundTestAudio; });
@@ -4714,7 +4745,12 @@
     const candidates = gearState.inventory.map((entry) => entry.gear).filter((gear) => gear.slotId === gearUi.slotId).sort((a, b) => b.star - a.star || b.enhancementLevel - a.enhancementLevel);
     gearCandidatesEl.innerHTML = candidates.length ? candidates.map((gear) => { const predicted = combat ? gearModules().combat.calculateGearCombat({ loadout: gearCandidateLoadout(state, gearUi.slotId, gear), ...characterBattleBaseStats(gearUi.characterId) }) : null; const isCurrent = current?.gearId === gear.gearId; return `<button class="gearCandidate ${isCurrent ? 'current' : ''}" data-gear-candidate="${gearHtml(gear.gearId)}" type="button"><span class="gearCandidateMarks">${gearAssetVisualHtml(gear.slotId, gear.setId, 'gearCandidateAsset')}</span><span><strong>${gearHtml(gearSet(domain, gear.setId)?.labelJa || gear.setId)} ${gear.star}★ ${gearRarity(domain, gear.rarityId)}</strong><small>${gearHtml(selectedSlot?.labelJa || '')} · ${gearHtml(gearOpLabel(domain, gear.mainOp.opId))} ${gearValue(gear.mainOp.value, gear.mainOp.unit)} · 強化 +${gear.enhancementLevel}</small></span>${gearDiff(combat.effectiveAttack, predicted.effectiveAttack)}</button>`; }).join('') : `<div class="gearEmpty">${gearHtml(selectedSlot?.labelJa || '')}に装備できるGearはまだありません。CPU BATTLEや協力ボスでGearを集めると、ここで比較できます。</div>`;
     const compared = candidates.find((gear) => gear.gearId === gearUi.comparisonGearId);
-    if (!compared || compared.gearId === current?.gearId) { gearCompareEl.hidden = true; return; }
+    if (!compared) { gearCompareEl.hidden = true; return; }
+    if (compared.gearId === current?.gearId) {
+      gearCompareEl.hidden = false;
+      gearCompareEl.innerHTML = `<div class="gearCompareTitle">${gearSlotMiniHtml(gearUi.slotId)}装備中のGear · ${gearHtml(selectedSlot?.labelJa || '')}</div><div class="gearCompareSet">${gearHtml(gearSet(domain, current.setId)?.labelJa || current.setId)} SET · ${current.star}★ · 強化 +${current.enhancementLevel}</div><div class="gearCompareActions"><button class="gearButton gearButton--gold" data-gear-current-detail="${gearHtml(current.gearId)}" type="button">所持品で詳細を見る</button></div>`;
+      return;
+    }
     const predictedLoadout = gearCandidateLoadout(state, gearUi.slotId, compared); const nextAggregate = domain.aggregateLoadout(predictedLoadout); const nextCombat = gearModules().combat.calculateGearCombat({ loadout: predictedLoadout, ...characterBattleBaseStats(gearUi.characterId) });
     const setBefore = Object.entries(aggregate.setCounts).filter(([, count]) => count).map(([id, count]) => `${gearSet(domain, id)?.labelJa || id} ${count}/4`).join(' · ') || 'なし'; const setAfter = Object.entries(nextAggregate.setCounts).filter(([, count]) => count).map(([id, count]) => `${gearSet(domain, id)?.labelJa || id} ${count}/4`).join(' · ') || 'なし';
     gearCompareEl.hidden = false; gearCompareEl.innerHTML = `<div class="gearCompareTitle">${gearSlotMiniHtml(gearUi.slotId)}CURRENT → NEW · ${gearHtml(selectedSlot?.labelJa || '')}</div><div class="gearCompareGrid"><div><b>現在</b>HP ${combat.maxHp} / ATK ${Math.round(combat.effectiveAttack)} / DEF ${Math.round(combat.effectiveDefense)}</div><div><b>装備後</b>HP ${nextCombat.maxHp} ${gearDiff(combat.maxHp, nextCombat.maxHp)}<br>ATK ${Math.round(nextCombat.effectiveAttack)} ${gearDiff(combat.effectiveAttack, nextCombat.effectiveAttack)}<br>DEF ${Math.round(nextCombat.effectiveDefense)} ${gearDiff(combat.effectiveDefense, nextCombat.effectiveDefense)}</div></div><div class="gearCompareSet">SET: ${gearHtml(setBefore)} → ${gearHtml(setAfter)}</div><div class="gearCompareActions"><button class="gearButton" data-gear-unequip="${gearUi.slotId}" type="button" ${current ? '' : 'disabled'}>装備を外す</button><button class="gearButton gearButton--gold" data-gear-equip="${gearHtml(compared.gearId)}" type="button">このGearを装備</button></div>`;
@@ -4751,7 +4787,7 @@
     document.getElementById('gearPresetSave').addEventListener('click', () => { gearUi.status = '現在の装備はこのプリセットへ保存されています。'; gearRender(); });
     gearBuildStageEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-slot]'); if (!button) return; gearUi.slotId = button.dataset.gearSlot; gearUi.comparisonGearId = null; gearUi.status = ''; gearRender(); });
     gearCandidatesEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-candidate]'); if (!button) return; gearUi.comparisonGearId = button.dataset.gearCandidate; gearRender(); });
-    gearCompareEl.addEventListener('click', (event) => { const equip = event.target.closest('[data-gear-equip]'); const unequip = event.target.closest('[data-gear-unequip]'); if (equip && gearUi.slotId) gearMutateSlot(gearUi.slotId, equip.dataset.gearEquip); if (unequip) gearMutateSlot(unequip.dataset.gearUnequip, null); });
+    gearCompareEl.addEventListener('click', (event) => { const equip = event.target.closest('[data-gear-equip]'); const unequip = event.target.closest('[data-gear-unequip]'); const detail = event.target.closest('[data-gear-current-detail]'); if (equip && gearUi.slotId) gearMutateSlot(gearUi.slotId, equip.dataset.gearEquip); else if (unequip) gearMutateSlot(unequip.dataset.gearUnequip, null); else if (detail) { closeGearWorkshop(); openGearStorageForGear(detail.dataset.gearCurrentDetail); } });
   }
 
   // ===== Gear Storage / TEMP BOX =====
@@ -4971,6 +5007,16 @@
   }
   async function openGearStorage() {
     if (isOnline?.()) return false; closeGearWorkshop(); gearStorageUi.open = true; gearStorageUi.tab = 'inventory'; gearStorageUi.selectedGearId = null; gearStorageUi.visibleLimit = 60; gearStorageUi.mutationBlocked = false; gearStorageUi.notice = ''; gearStorageUi.noticeKind = ''; gearStorageEl.classList.add('open'); gearStorageEl.setAttribute('aria-hidden', 'false'); gearStorageRender(); await gearStorageRecoverThenMaintain(); return true;
+  }
+  async function openGearStorageForGear(gearId) {
+    const opened = await openGearStorage();
+    if (!opened) return false;
+    const entry = gearModules().storage.loadGearState(localStorage).inventory.find((candidate) => candidate.gear.gearId === gearId);
+    if (!entry) { gearStorageUi.notice = '対象Gearは既に移動した可能性があります。'; gearStorageUi.noticeKind = 'error'; gearStorageRender(); return false; }
+    gearStorageUi.selectedGearId = gearId;
+    gearStorageRender();
+    requestAnimationFrame(() => gearStorageDetailEl.scrollIntoView?.({ block: 'center', behavior: 'smooth' }));
+    return true;
   }
   function closeGearStorage() { if (gearEnhanceUi.busy || gearDismantleUi.busy) return false; closeGearEnhance(); closeGearDismantle(); gearStorageUi.open = false; gearStorageEl.classList.remove('open'); gearStorageEl.setAttribute('aria-hidden', 'true'); return true; }
   function gearStorageOpenWorkbench() { closeGearStorage(); return openGearWorkshop(); }
@@ -9252,6 +9298,7 @@
   let cpuGearTerminalSettlementDeferred = false;
   let cpuGearTerminalSettlementOutcome = null;
   let cpuGearTerminalSettlementPreparationPromise = null;
+  let cpuGearVoluntarySettlementConfirmOpen = false;
   let cpuGearAllowActiveRunReplacement = false;
   // Volatile only: the exact active CPU run and official suspend that a
   // "start new" confirmation displayed. It is never a blanket delete permit.
@@ -18779,11 +18826,13 @@
 
   // 水平付近では「発射高度へ戻るまでの時間」がほぼ0になるため、時間だけで
   // ガイド長を決めると点が発射位置に固まる。角度に関係なく最低限の距離を見せる。
-  const TRAJECTORY_PREVIEW_MIN_DISTANCE = 100;
-  const TRAJECTORY_PREVIEW_MAX_MIN_TIME = 0.45;
+  const TRAJECTORY_PREVIEW_MIN_DISTANCE = 180;
+  const TRAJECTORY_PREVIEW_MAX_MIN_TIME = 0.7;
   function trajectoryPreviewDuration(vx0, vy0, gravity = GRAVITY) {
     const normalPreviewTime = estimateFlightTime(vx0, vy0, gravity) * 0.2;
     const speed = Math.max(1, Math.hypot(vx0, vy0));
+    // 水平へ戻した時も通常の射撃強度なら180pxを見せる。ごく弱い射撃だけは
+    // 画面下まで不自然に伸びないよう時間上限を残し、入力強度に応じた短さを許す。
     const minimumVisibleTime = Math.min(
       TRAJECTORY_PREVIEW_MAX_MIN_TIME,
       TRAJECTORY_PREVIEW_MIN_DISTANCE / speed
@@ -21977,6 +22026,8 @@
   const continueBtn = { x: VW / 2, y: VH / 2 + 72, w: 210, h: 46 };
   const resultTitleBtn = { x: VW / 2, y: VH / 2 + 132, w: 210, h: 42 };
   const cpuGearSettlementBtn = { x: VW / 2, y: VH / 2 + 142, w: 250, h: 44 };
+  const cpuGearSettlementConfirmYesBtn = { x: VW / 2 + 100, y: VH / 2 + 58, w: 174, h: 44 };
+  const cpuGearSettlementConfirmNoBtn = { x: VW / 2 - 100, y: VH / 2 + 58, w: 174, h: 44 };
   // 結果画面を閉じた後でも、pending entitlement はタイトルのCPU入口から
   // 同じ小さな精算パネルへ戻れる。倉庫UIやGearカードを先取りしない。
   const cpuGearPendingSettlementBtn = { x: VW / 2, y: VH / 2 + 128, w: 260, h: 46 };
@@ -22037,6 +22088,35 @@
       settlementButton: { ...cpuGearPendingSettlementBtn },
       backButton: { ...cpuGearPendingSettlementBackBtn },
     };
+  }
+
+  function drawCpuGearVoluntarySettlementConfirm(layout) {
+    if (!cpuGearVoluntarySettlementConfirmOpen || !layout?.voluntary) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(2, 5, 8, 0.86)';
+    ctx.fillRect(0, 0, VW, VH);
+    drawIronPlate(VW / 2, VH / 2 - 18, 440, 236, {
+      cut: 17, lineWidth: 3, edge: '#f1bd70', glow: 'rgba(255,176,70,.35)',
+      rivets: true, rivetInset: 18, rivetRadius: 4,
+    });
+    drawOutlinedText('報酬を受け取って連勝を終了しますか？', VW / 2, VH / 2 - 78, {
+      font: `900 19px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
+    });
+    drawOutlinedText(`最高 ${layout.preview.peakStreak}連勝の報酬を確定します`, VW / 2, VH / 2 - 42, {
+      font: `900 13px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+    });
+    drawOutlinedText('受取後は連勝が0に戻ります。この操作は取り消せません。', VW / 2, VH / 2 - 16, {
+      font: `900 11px ${UI_FONT_HEAVY}`, color: '#ffb79f', lineWidth: 3
+    });
+    drawResultButton(cpuGearSettlementConfirmNoBtn, 'まだ続ける', false);
+    drawResultButton(cpuGearSettlementConfirmYesBtn, '受け取って終了', true);
+    ctx.restore();
+  }
+
+  function openCpuGearVoluntarySettlementConfirm(layout) {
+    if (!layout?.voluntary || cpuGearResultActionInFlight()) return false;
+    cpuGearVoluntarySettlementConfirmOpen = true;
+    return true;
   }
 
   function cpuGearTerminalSettlementRetryLayout() {
@@ -22649,6 +22729,7 @@
         isOnline()
       );
     }
+    drawCpuGearVoluntarySettlementConfirm(cpuGearLayout);
     ctx.restore();
   }
 
@@ -26165,11 +26246,20 @@
       if (cpuGearLayout) {
         const shiftedPoint = { x: p0.x, y: p0.y - shift };
         const cpuGearResultBusy = cpuGearResultActionInFlight();
+        if (cpuGearVoluntarySettlementConfirmOpen) {
+          if (hitRect(shiftedPoint, cpuGearSettlementConfirmNoBtn)) cpuGearVoluntarySettlementConfirmOpen = false;
+          else if (hitRect(shiftedPoint, cpuGearSettlementConfirmYesBtn)) {
+            cpuGearVoluntarySettlementConfirmOpen = false;
+            requestCpuGearSettlement('voluntary');
+          }
+          return;
+        }
         if (!cpuGearResultBusy && hitRect(shiftedPoint, cpuGearLayout.settlementButton)) {
           // requestCpuGearSettlement installs explicit success/failure handlers
           // and a shared in-flight promise; a double tap never creates a second
           // intent, queue attempt, or cleanup.
-          requestCpuGearSettlement(cpuGearLayout.pending ? cpuGearLayout.state.settlementIntent.outcome : 'voluntary');
+          if (cpuGearLayout.voluntary) openCpuGearVoluntarySettlementConfirm(cpuGearLayout);
+          else requestCpuGearSettlement(cpuGearLayout.state.settlementIntent.outcome);
           return;
         }
         if (!cpuGearResultBusy && cpuGearLayout.continueButton && hitRect(shiftedPoint, cpuGearLayout.continueButton)) {
