@@ -7,6 +7,9 @@
 
   const MAX_GEARS_PER_REWARD = 5;
   const GEAR_TRANSACTION_STORAGE_KEY = 'katamon_gear_txn_v1';
+  const TARGETED_BOX_SOURCE_ID = 'targeted_box';
+  const TARGETED_BOX_REQUEST_ID_MAX_LENGTH = 64;
+  const TARGETED_BOX_ENTROPY_MAX_LENGTH = 128;
   // Every persistence wrapper uses this one namespace.  Web Locks are shared
   // between tabs of the same origin, so a load -> pure operation -> save is
   // one critical section instead of a lost-update window.
@@ -69,6 +72,11 @@
     if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-preset-storage.js');
     if (root && root.KatamonGearPresetStorage) return root.KatamonGearPresetStorage;
     fail('PRESET_STORAGE_UNAVAILABLE', 'KatamonGearPresetStorage must be available before dismantling Gear');
+  }
+  function resolveTransactions() {
+    if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-transactions.js');
+    if (root && root.KatamonGearTransactions) return root.KatamonGearTransactions;
+    fail('GEAR_TRANSACTIONS_UNAVAILABLE', 'KatamonGearTransactions must be available before opening a targeted box');
   }
   function canonicalState(rawState) {
     const api = resolveStorageApi();
@@ -256,6 +264,120 @@
     return { allowed: reasons.length === 0, reasons };
   }
 
+  function highestTargetedBoxQualityProfileId(rawFoundationState) {
+    if (!isPlainRecord(rawFoundationState) || !isPlainRecord(rawFoundationState.boss)
+      || !Array.isArray(rawFoundationState.boss.unlockedDifficulties)) {
+      fail('INVALID_FOUNDATION_GEAR_ENTITLEMENT', 'foundation boss progression is unavailable');
+    }
+    const unlocked = new Set(rawFoundationState.boss.unlockedDifficulties);
+    if (unlocked.has('extreme')) return 'coop-extreme';
+    if (unlocked.has('hard')) return 'coop-hard';
+    if (unlocked.has('normal')) return 'coop-normal';
+    fail('TARGETED_BOX_QUALITY_NOT_UNLOCKED', 'a cooperative boss difficulty must be unlocked first');
+  }
+  function canonicalTargetedBoxRequest(rawRequest) {
+    if (!isPlainRecord(rawRequest)) fail('INVALID_TARGETED_BOX_REQUEST', 'targeted box request must be a plain object');
+    const allowed = new Set(['requestId', 'kind', 'slotId', 'setId', 'createdAtMs']);
+    const keys = Reflect.ownKeys(rawRequest);
+    if (keys.some((key) => typeof key !== 'string' || !allowed.has(key))) fail('INVALID_TARGETED_BOX_REQUEST', 'targeted box request contains unknown fields');
+    const requestId = assertNonEmptyString(rawRequest.requestId, 'requestId');
+    if (requestId.length > TARGETED_BOX_REQUEST_ID_MAX_LENGTH) fail('INVALID_TARGETED_BOX_REQUEST_ID', 'requestId is too long');
+    const kind = assertNonEmptyString(rawRequest.kind, 'kind');
+    const request = { requestId, kind, createdAtMs: assertNow(rawRequest.createdAtMs) };
+    if (hasOwn(rawRequest, 'slotId')) request.slotId = rawRequest.slotId;
+    if (hasOwn(rawRequest, 'setId')) request.setId = rawRequest.setId;
+    return request;
+  }
+  function canonicalTargetedBoxSelection(rawRequest) {
+    if (!isPlainRecord(rawRequest)) fail('INVALID_TARGETED_BOX_REQUEST', 'targeted box request must be a plain object');
+    const allowed = new Set(['requestId', 'kind', 'slotId', 'setId', 'createdAtMs']);
+    const keys = Reflect.ownKeys(rawRequest);
+    if (keys.some((key) => typeof key !== 'string' || !allowed.has(key))) fail('INVALID_TARGETED_BOX_REQUEST', 'targeted box request contains unknown fields');
+    const request = { kind: assertNonEmptyString(rawRequest.kind, 'kind'), createdAtMs: assertNow(rawRequest.createdAtMs) };
+    if (hasOwn(rawRequest, 'requestId')) {
+      request.requestId = assertNonEmptyString(rawRequest.requestId, 'requestId');
+      if (request.requestId.length > TARGETED_BOX_REQUEST_ID_MAX_LENGTH) fail('INVALID_TARGETED_BOX_REQUEST_ID', 'requestId is too long');
+    }
+    if (hasOwn(rawRequest, 'slotId')) request.slotId = rawRequest.slotId;
+    if (hasOwn(rawRequest, 'setId')) request.setId = rawRequest.setId;
+    return request;
+  }
+  function targetedBoxSourceDetail(request, quote) {
+    const sourceDetail = {
+      kind: quote.kind,
+      qualityProfileId: quote.constraints.qualityProfileId,
+      requestId: request.requestId,
+    };
+    if (hasOwn(quote.constraints, 'setId')) sourceDetail.setId = quote.constraints.setId;
+    if (hasOwn(quote.constraints, 'slotId')) sourceDetail.slotId = quote.constraints.slotId;
+    return sourceDetail;
+  }
+  function secureTargetedBoxToken(label) {
+    if (root && root.crypto && typeof root.crypto.randomUUID === 'function') return `${label}:${root.crypto.randomUUID()}`;
+    fail('TARGETED_BOX_CRYPTO_UNAVAILABLE', 'secure random UUID support is required to open a targeted box');
+  }
+  function openTargetedBox(rawState, rawRequest, qualityProfileId, rawEntropySeed) {
+    const state = canonicalState(rawState);
+    const request = canonicalTargetedBoxRequest(rawRequest);
+    const entropySeed = assertNonEmptyString(rawEntropySeed, 'entropySeed');
+    if (entropySeed.length > TARGETED_BOX_ENTROPY_MAX_LENGTH) fail('INVALID_TARGETED_BOX_ENTROPY', 'entropySeed is too long');
+    const domain = resolveDomain();
+    const constraints = { qualityProfileId };
+    if (hasOwn(request, 'slotId')) constraints.slotId = request.slotId;
+    if (hasOwn(request, 'setId')) constraints.setId = request.setId;
+    let quote;
+    try { quote = domain.getTargetedBoxQuote(request.kind, constraints); } catch (error) {
+      fail(error && error.code ? error.code : 'INVALID_TARGETED_BOX_REQUEST', error && error.message, error);
+    }
+    const qualityProfile = Object.values(domain.COOP_BOSS_QUALITY_PROFILES).find((entry) => entry.id === quote.constraints.qualityProfileId);
+    if (!qualityProfile) fail('TARGETED_BOX_QUALITY_PROFILE_UNAVAILABLE', 'targeted box quality profile is unavailable');
+    const rewardId = `targeted-box:${request.requestId}`;
+    const gearId = `targeted-gear:${request.requestId}`;
+    const sourceDetail = targetedBoxSourceDetail(request, quote);
+    const ledger = assertV2Ledger(state);
+    if (ledgerHas(ledger, rewardId)) return { nextState: state, duplicate: true, opened: false, quote, reward: null, spentBlueprintShards: 0 };
+    const pending = findPending(state, rewardId);
+    if (pending) {
+      if (pending.sourceId !== TARGETED_BOX_SOURCE_ID || JSON.stringify(pending.sourceDetail) !== JSON.stringify(sourceDetail)) {
+        fail('DUPLICATE_REWARD_MISMATCH', `rewardId ${rewardId} already exists with different targeted-box parameters`);
+      }
+      return { nextState: state, duplicate: true, opened: false, quote, reward: pending, spentBlueprintShards: 0 };
+    }
+    const gate = getGearRewardGate(state);
+    if (!gate.allowed) fail('TARGETED_BOX_REWARD_GATE_BLOCKED', `targeted box cannot open: ${gate.reasons.join(',')}`);
+    if (state.resources.blueprintShards < quote.blueprintShards) fail('INSUFFICIENT_BLUEPRINT_SHARDS', 'not enough blueprint shards to open this targeted box');
+    let gear;
+    try {
+      gear = domain.createGear({
+        gearId,
+        generationSeed: `targeted-box:${entropySeed}:generation`,
+        enhancementSeed: `targeted-box:${entropySeed}:enhancement`,
+        sourceId: TARGETED_BOX_SOURCE_ID,
+        sourceDetail,
+        acquiredAt: request.createdAtMs,
+        qualityProfile,
+        setProfile: domain.GEAR_SET_PROFILES.uniform,
+        slotId: quote.constraints.slotId,
+        setId: quote.constraints.setId,
+      });
+    } catch (error) {
+      fail(error && error.code ? error.code : 'TARGETED_BOX_GENERATION_FAILED', error && error.message, error);
+    }
+    const reward = canonicalReward({ rewardId, sourceId: TARGETED_BOX_SOURCE_ID, sourceDetail, createdAtMs: request.createdAtMs, gears: [gear], blueprintShards: 0 });
+    const queued = queueUnclaimedReward(state, reward);
+    if (!queued.queued) {
+      return { ...queued, opened: false, quote, reward, spentBlueprintShards: 0 };
+    }
+    const nextState = canonicalState({
+      ...queued.nextState,
+      resources: {
+        powder: queued.nextState.resources.powder,
+        blueprintShards: state.resources.blueprintShards - quote.blueprintShards,
+      },
+    });
+    return { ...queued, nextState, opened: true, quote, reward, spentBlueprintShards: quote.blueprintShards };
+  }
+
   function setStoredGearMetadata(rawState, gearId, rawPatch) {
     const state = canonicalState(rawState);
     const id = assertGearId(gearId);
@@ -414,10 +536,34 @@
       return result;
     });
   }
+  async function persistOpenTargetedBox(request, storage, options) {
+    const commonJs = typeof module === 'object' && module.exports;
+    if (commonJs && options && Reflect.ownKeys(options).some((key) => !['lockManager', 'testEntropySeed'].includes(key))) {
+      fail('INVALID_PERSIST_OPTIONS', 'targeted box persistence options contain unknown fields');
+    }
+    const lockOptions = commonJs && options
+      ? { lockManager: options.lockManager }
+      : options;
+    return withGearStorageLock(storage, lockOptions, () => {
+      const api = resolveStorageApi();
+      const foundation = resolveTransactions().loadStrictFoundationState(storage).state;
+      const qualityProfileId = highestTargetedBoxQualityProfileId(foundation);
+      const selection = canonicalTargetedBoxSelection(request);
+      const requestId = selection.requestId || secureTargetedBoxToken('box');
+      const entropySeed = commonJs && options && options.testEntropySeed
+        ? assertNonEmptyString(options.testEntropySeed, 'testEntropySeed') : secureTargetedBoxToken('roll');
+      const current = api.loadGearState(storage);
+      const result = openTargetedBox(current, { ...selection, requestId }, qualityProfileId, entropySeed);
+      if (result.opened) result.nextState = api.saveGearState(result.nextState, storage);
+      return result;
+    });
+  }
 
   return Object.freeze({
     GearRewardsError, MAX_GEARS_PER_REWARD, GEAR_TRANSACTION_STORAGE_KEY, GEAR_MUTATION_LOCK_NAME,
+    TARGETED_BOX_SOURCE_ID, TARGETED_BOX_REQUEST_ID_MAX_LENGTH, TARGETED_BOX_ENTROPY_MAX_LENGTH,
     queueUnclaimedReward, claimUnclaimedReward, runStorageMaintenance, getGearRewardGate, setStoredGearMetadata, dismantleInventoryGear,
-    persistQueueReward, persistClaimReward, persistStorageMaintenance, persistSetGearEntryMetadata, persistDismantleInventoryGear,
+    highestTargetedBoxQualityProfileId, openTargetedBox,
+    persistQueueReward, persistClaimReward, persistStorageMaintenance, persistSetGearEntryMetadata, persistDismantleInventoryGear, persistOpenTargetedBox,
   });
 });

@@ -81,7 +81,7 @@ test('WAL pending中はmetadataをfail closedしGear Storageを変更しない',
 });
 test('TEMP countdownはenteredAtMsとcanonical TTLだけから表示する', () => { assert.match(html, /entry\.enteredAtMs \+ ttlMs - nowMs/); assert.match(html, /残り\$\{hours\}時間/); assert.match(html, /hours <= 6/); });
 test('TEMP BOXはlockedでも期限保護を示さずlock toggleを出さない', () => {
-  assert.match(html, /保護設定に関係なく、期限を過ぎたGearは自動分解されます/); assert.match(html, /gearStorageUi\.tab === 'inventory' \? `<button[^`]+data-gear-storage-lock/); assert.match(html, /' · 期限保護なし'/);
+  assert.match(html, /保護設定に関係なく、期限を過ぎたGearは自動分解されます/); assert.match(html, /gearStorageUi\.tab === 'inventory' \? `<button[^`]+data-gear-storage-lock/); assert.match(html, /⏱ 期限保護なし/);
   assert.match(html, /rewards\.persistStorageMaintenance/); assert.doesNotMatch(html, /entry\.locked[^\n]+TEMP_BOX_TTL_MS|TEMP_BOX_TTL_MS[^\n]+entry\.locked/);
 });
 test('装備中はcurrent character/presetだけで他presetを区別する', () => {

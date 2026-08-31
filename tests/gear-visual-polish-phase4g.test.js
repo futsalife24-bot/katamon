@@ -25,6 +25,25 @@ test('Storageは部位・rarity/star・set・強化・main OPを別階層で表�
   assert.match(html, /gearStorageQuality[^`]+gearRarity\(view\.domain, gear\.rarityId\)[^`]+gear\.star/);
 });
 
+test('Storage詳細はGear identity・状態・操作を独立した階層で表示する', () => {
+  for (const className of [
+    'gearStorageDetailHero',
+    'gearStorageDetailIdentity',
+    'gearStorageDetailBadges',
+    'gearStorageDetailStat',
+    'gearStorageDetailStatus',
+    'gearStorageDetailBlockReason',
+  ]) assert.match(html, new RegExp(className));
+  assert.match(html, /装備・比較へ/);
+  assert.match(html, /強化する/);
+  assert.match(html, /分解する/);
+  assert.match(html, /お気に入り未登録/);
+  assert.match(html, /分解保護なし/);
+  assert.doesNotMatch(html, /authority側/);
+  assert.match(html, /\.gearStorageDetail\{position:relative/);
+  assert.match(html, /\.gearStorageDetailActionButtons>\.gearButton--danger\{grid-column:1\/-1\}/);
+});
+
 test('Drop・Enhance・Dismantleは同じ合成素材で対象Gearのidentityを保つ', () => {
   assert.match(html, /gearAssetVisualHtml\(checked\.slotId, checked\.setId, 'gearDropCardAsset'\)/);
   assert.match(html, /gearDropSlot\.active \.gearDropAsset\{width:59px;height:59px/);
@@ -38,4 +57,4 @@ test('visual-only変更は既存authority writerを追加・置換しない', ()
   assert.doesNotMatch(html, /48[^\n]*(gear|Gear)[^\n]*(image|画像)/);
 });
 
-console.log(`gear-visual-polish-phase4g: ${passed}/4 passed`);
+console.log(`gear-visual-polish-phase4g: ${passed}/5 passed`);
