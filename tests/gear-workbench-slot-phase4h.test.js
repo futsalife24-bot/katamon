@@ -52,6 +52,7 @@ test('2行表示・補機前提・authority境界を維持する', () => {
   assert.match(html, /<em>\+\$\{gear\.enhancementLevel\}<\/em>/);
   assert.match(html, /<i>★\$\{gear\.star\}<\/i>/);
   assert.match(html, /\.gearSlotPart,\.gearSlotName \{[^}]*font-family:"RocknRoll One",sans-serif; font-weight:400; font-synthesis:none;/);
+  assert.equal((html.match(/\.gearSlotPart,\.gearSlotName\{letter-spacing:-\.05em\}/g) || []).length, 1);
   assert.doesNotMatch(html, /補助機構/);
   assert.equal((html.match(/globalThis\.KatamonGearStorageUi = Object\.freeze/g) || []).length, 1);
   assert.equal((html.match(/globalThis\.KatamonGearDropReveal = Object\.freeze/g) || []).length, 1);
