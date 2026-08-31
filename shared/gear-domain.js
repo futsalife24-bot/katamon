@@ -79,7 +79,7 @@
     { id: 'core', labelJa: 'コア', mainKind: 'fixed', mainOpIds: ['flat_defense'] },
     { id: 'engine', labelJa: '動力', mainKind: 'variable', mainOpIds: ['attack_pct', 'hp_pct', 'defense_pct', 'max_fuel', 'knockback_power', 'knockback_resistance'] },
     { id: 'sight', labelJa: '照準', mainKind: 'variable', mainOpIds: ['attack_pct', 'hp_pct', 'defense_pct', 'crit_rate', 'crit_damage'] },
-    { id: 'auxiliary', labelJa: '補助機構', mainKind: 'variable', mainOpIds: ['attack_pct', 'hp_pct', 'defense_pct', 'blast_power', 'status_resistance', 'heal_power', 'shield_power'] },
+    { id: 'auxiliary', labelJa: '補機', mainKind: 'variable', mainOpIds: ['attack_pct', 'hp_pct', 'defense_pct', 'blast_power', 'status_resistance', 'heal_power', 'shield_power'] },
   ]);
   const SLOT_IDS = deepFreeze(SLOTS.map((entry) => entry.id));
   const SLOT_BY_ID = new Map(SLOTS.map((entry) => [entry.id, entry]));
