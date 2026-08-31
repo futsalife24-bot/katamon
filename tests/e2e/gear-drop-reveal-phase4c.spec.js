@@ -105,11 +105,24 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
   await expect(page.locator('#gearPendingRewards')).toBeHidden();
   for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) await expectLayout(viewport);
   await page.screenshot({ path: testInfo.outputPath('gear-drop-reveal-phase4c-claimed.png'), fullPage: true });
+  await page.evaluate(() => {
+    globalThis.__gearDropSawBarrelHighlight = false;
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[data-gear-slot="barrel"].updated')) {
+        globalThis.__gearDropSawBarrelHighlight = true;
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  });
   await page.locator('#gearDropWorkbench').click();
   await expect(page.locator('#gearDropReveal')).not.toHaveClass(/open/);
+  await expect(page.locator('#gearGuide')).toHaveClass(/open/);
+  await page.locator('.gearGuideHeader [data-gear-guide-skip]').dispatchEvent('click');
+  await expect(page.locator('#gearGuide')).not.toHaveClass(/open/);
   await expect(page.locator('#gearWorkshop')).toHaveClass(/open/);
   await expect(page.locator('[data-gear-slot="barrel"]')).toHaveClass(/selected/);
-  await expect(page.locator('[data-gear-slot="barrel"]')).toHaveClass(/updated/);
+  await expect.poll(() => page.evaluate(() => globalThis.__gearDropSawBarrelHighlight)).toBe(true);
   await expect(page.locator('[data-gear-candidate="drop-barrel"]')).toBeVisible();
   expect(await page.evaluate((before) => localStorage.getItem(globalThis.KatamonGearStorage.GEAR_STORAGE_KEY) === before, storedBefore)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('gear-drop-reveal-phase4c.png'), fullPage: true });

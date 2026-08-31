@@ -584,6 +584,10 @@
   .gearLoadoutControls { display:grid; grid-template-columns:1fr auto; gap:8px; margin:10px 0; }.gearSelect{width:100%;padding:0 8px}.gearStatus{min-height:18px;margin:0 2px 8px;color:#f5ce84;font-size:11px}.gearStatus.error{color:#ff9f86}.gearInventory{border-top:2px solid rgba(199,131,53,.55);padding-top:11px}.gearInventory h3{display:flex;align-items:center;margin:0 0 3px;color:#ffe2a1;font:400 16px var(--katamon-font-display)}.gearInventoryNote{margin:0 0 8px;color:#c8c4b7;font-size:10px}.gearCandidates{display:grid;gap:8px}.gearCandidate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;width:100%;min-height:68px;padding:8px;text-align:left;color:#fff5dc;border:1px solid #815a31;border-radius:8px;background:linear-gradient(135deg,#263941,#111c21);cursor:pointer}.gearCandidateMarks{display:grid;place-items:center}.gearCandidate.current{border-color:#ffd24a;box-shadow:inset 0 0 0 1px rgba(255,219,125,.42)}.gearCandidate strong{display:block;font-size:12px}.gearCandidate small{display:block;color:#d6c4a6;font-size:10px}.gearDiff{font-size:11px;font-weight:900}.gearDiff.up{color:#80ec99}.gearDiff.down{color:#ff9c86}.gearEmpty{padding:17px 10px;color:#d2d2c8;text-align:center;border:1px dashed #80603e;border-radius:8px;font-size:12px}.gearCompare{position:sticky;bottom:0;margin-top:12px;padding:11px;border:2px solid #c78335;border-radius:10px;background:linear-gradient(180deg,rgba(54,69,72,.98),rgba(9,16,20,.99));box-shadow:0 -5px 20px rgba(0,0,0,.38)}.gearCompare[hidden]{display:none}.gearCompareTitle{display:flex;align-items:center;color:#ffe2a1;font-weight:900;font-size:12px}.gearCompareGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}.gearCompareGrid div{padding:6px;border-radius:6px;background:rgba(2,7,9,.55);font-size:11px}.gearCompareGrid b{display:block;color:#d5ad73;font-size:9px}.gearCompareSet{color:#ffd45a;font-size:10px}.gearCompareActions{display:flex;gap:8px}.gearCompareActions .gearButton{flex:1}
   .gearPendingRewards{display:flex;align-items:center;justify-content:space-between;width:100%;margin:0 0 10px;padding:8px 11px;text-align:left}.gearPendingRewards b{display:inline-grid;place-items:center;min-width:25px;height:25px;padding:0 5px;color:#201204;border-radius:999px;background:#ffd45b}.gearPendingRewards[hidden]{display:none}
   .gearSectionNav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.gearSectionNav .gearButton.active{color:#251506;border-color:#ffe18a;background:linear-gradient(#ffe3a0,#c27a29);font-weight:900}
+  .gearHeaderActions{display:flex;align-items:center;gap:7px}.gearGuideOpen{min-width:42px;padding-inline:9px;font-weight:900}
+  #gearGuide{position:fixed;inset:0;z-index:140;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));color:#fff5dc;background:rgba(2,5,7,.9);font-family:var(--katamon-font-ui)}#gearGuide.open{display:flex}.gearGuidePanel{width:min(460px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:16px 14px 14px;border:2px solid #c99245;border-radius:15px;background:linear-gradient(160deg,#3a4a4b,#111c21 56%,#060b0e);box-shadow:inset 0 0 0 3px rgba(44,27,13,.72),0 18px 45px rgba(0,0,0,.72)}.gearGuideKicker{margin:0;color:#d8a950;font:900 9px var(--katamon-font-ui);letter-spacing:.18em}.gearGuideHeader{display:flex;align-items:start;justify-content:space-between;gap:10px}.gearGuideHeader h2{margin:3px 0 0;color:#ffe3a0;font:400 22px var(--katamon-font-display)}.gearGuideProgress{margin:5px 0 11px;color:#cdbd9b;font-size:10px}.gearGuideBody{min-height:300px}.gearGuideLead{margin:0 0 11px;color:#fff2cc;font-size:12px;line-height:1.65}.gearGuideSlots{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}.gearGuideSlot{display:flex;align-items:center;gap:8px;min-width:0;padding:8px;border:1px solid #73532e;border-radius:9px;background:linear-gradient(145deg,#293d40,#101a1f)}.gearGuideSlot b{display:block;color:#ffe09a;font-size:12px}.gearGuideSlot small{display:block;color:#c8b995;font-size:9px}.gearGuideSlot .gearAssetVisual{width:48px;height:48px}.gearGuidePreset{margin-top:10px;padding:10px;border:1px solid #9a6c35;border-radius:9px;background:rgba(7,14,17,.72)}.gearGuidePreset strong{color:#ffe09a}.gearGuidePreset p{margin:4px 0 0;color:#d7cbb3;font-size:10px;line-height:1.55}.gearGuideSetGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearGuideSetCard{padding:10px;border:1px solid #76532e;border-radius:10px;background:rgba(6,13,16,.72)}.gearGuideSetCard strong{display:flex;align-items:center;gap:7px;color:#ffe2a1;font-size:13px}.gearGuideSetCard p{margin:6px 0 0;color:#d5c9b2;font-size:10px;line-height:1.55}.gearGuideSetBadge{display:inline-grid;place-items:center;width:30px;height:30px;color:#2a1605;border-radius:50%;background:#e3b65e;font-size:15px}.gearGuideAxes{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.gearGuideAxis{padding:8px;border-radius:8px;background:#101c21;color:#cdbd9b;font-size:9px}.gearGuideAxis b{display:block;margin-bottom:3px;color:#fff0bc;font-size:12px}.gearGuideMilestones{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.gearGuideMilestone{padding:9px 3px;text-align:center;border:1px solid #956831;border-radius:8px;background:#17272b;color:#ffe09a;font-weight:900}.gearGuideResourceFlow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:7px;margin:9px 0}.gearGuideResourceFlow div{padding:9px;text-align:center;border-radius:8px;background:rgba(4,10,13,.65);font-size:10px}.gearGuideResourceFlow b{display:block;color:#ffe09a;font-size:13px}.gearGuideRules{display:grid;gap:6px;margin:10px 0 0}.gearGuideRule{padding:8px 9px;color:#ddd1b8;border-left:3px solid #b98039;background:rgba(12,21,24,.72);font-size:10px;line-height:1.5}.gearGuideRule.warn{color:#ffd2c5;border-color:#c6533c}.gearGuideActions{display:grid;grid-template-columns:auto 1fr 1fr;gap:7px;margin-top:13px}.gearGuideDots{display:flex;justify-content:center;gap:6px;margin:8px 0 0}.gearGuideDot{width:7px;height:7px;border-radius:50%;background:#5d574b}.gearGuideDot.active{background:#ffd166;box-shadow:0 0 7px rgba(255,209,102,.55)}
+  @media(max-width:360px){.gearGuidePanel{padding:12px 10px}.gearGuideBody{min-height:286px}.gearGuideSlot{padding:6px;gap:5px}.gearGuideSlot .gearAssetVisual{width:40px;height:40px}.gearGuideSetGrid{gap:6px}.gearGuideActions{grid-template-columns:1fr 1fr}.gearGuideActions [data-gear-guide-skip]{grid-column:1/-1;grid-row:2}.gearGuideHeader h2{font-size:19px}}
+  @media(prefers-reduced-motion:reduce){#gearGuide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
   #gearStorage{position:fixed;inset:0;z-index:28;display:none;color:#fff5dc;background:linear-gradient(rgba(3,7,10,.78),rgba(3,7,10,.94)),url("assets/wall.jpg") center/cover;font-family:var(--katamon-font-ui)}#gearStorage.open{display:flex;justify-content:center}#gearStorageBox{width:min(100%,680px);height:100%;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;padding:calc(12px + env(safe-area-inset-top)) 12px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(57,69,70,.99),rgba(17,27,31,.99) 42%,rgba(5,10,13,.99));border-inline:2px solid rgba(199,131,53,.65)}
   .gearStorageSummary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:11px 0}.gearStorageMeter{padding:9px 6px;text-align:center;border:1px solid #835b31;border-radius:9px;background:linear-gradient(150deg,#2c4043,#101b20);box-shadow:inset 0 0 13px rgba(0,0,0,.42)}.gearStorageMeter strong{display:block;color:#ffe09a;font-size:16px}.gearStorageMeter span{display:block;margin-top:2px;color:#c8b995;font-size:9px}.gearStorageMeter.warn{border-color:#d2a12e}.gearStorageMeter.full{border-color:#d7553d}.gearStorageMeter.full strong{color:#ff9c83}
   .gearStorageTabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px}.gearStorageTab{position:relative}.gearStorageTab b{margin-left:5px}.gearStorageTab.active{color:#211206;border-color:#ffd24a;background:linear-gradient(#ffe195,#bd7424);font-weight:900}
@@ -719,7 +723,7 @@
 <!-- 装備変更は既存Gear domain/storageを読むだけのガレージ画面。戦闘Canvasの常時描画には参加しない。 -->
 <div id="gearWorkshop" aria-hidden="true">
   <main id="gearWorkshopBox" role="dialog" aria-modal="true" aria-labelledby="gearWorkshopTitle">
-    <header class="gearHeader"><h2 id="gearWorkshopTitle">GEAR WORKBENCH</h2><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></header>
+    <header class="gearHeader"><h2 id="gearWorkshopTitle">GEAR WORKBENCH</h2><div class="gearHeaderActions"><button id="gearWorkshopGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button class="gearButton active" type="button" aria-current="page">装備</button><button id="gearOpenStorage" class="gearButton" type="button">所持品</button></nav>
     <div class="gearCharacterBar"><button id="gearCharacterPrev" class="gearButton" type="button" aria-label="前のCATAMON">‹</button><div id="gearCharacterName" class="gearCharacterName"></div><button id="gearCharacterNext" class="gearButton" type="button" aria-label="次のCATAMON">›</button></div>
     <section id="gearBuildStage" class="gearBuildStage" aria-label="現在のGear装備"></section>
@@ -734,7 +738,7 @@
 </div>
 <div id="gearStorage" aria-hidden="true">
   <main id="gearStorageBox" role="dialog" aria-modal="true" aria-labelledby="gearStorageTitle">
-    <header class="gearHeader"><h2 id="gearStorageTitle">GEAR STORAGE</h2><button id="gearStorageClose" class="gearButton" type="button">GARAGEへ戻る</button></header>
+    <header class="gearHeader"><h2 id="gearStorageTitle">GEAR STORAGE</h2><div class="gearHeaderActions"><button id="gearStorageGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearStorageClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button id="gearStorageOpenWorkshop" class="gearButton" type="button">装備</button><button class="gearButton active" type="button" aria-current="page">所持品</button></nav>
     <section id="gearStorageSummary" class="gearStorageSummary" aria-label="Gear保管数"></section>
     <section id="gearStorageResources" class="gearResourceBar" aria-label="Gear資源"></section>
@@ -752,8 +756,15 @@
     <section id="gearStorageDetail" class="gearStorageDetail" hidden aria-live="polite"></section>
   </main>
 </div>
-<div id="gearEnhanceOverlay" class="gearActionOverlay" aria-hidden="true"><section class="gearActionPanel" role="dialog" aria-modal="true" aria-labelledby="gearEnhanceTitle"><header class="gearActionHeader"><h2 id="gearEnhanceTitle">GEAR ENHANCE</h2><button class="gearButton" data-gear-enhance-close type="button">閉じる</button></header><div id="gearEnhanceContent"></div><p id="gearEnhanceStatus" class="gearActionStatus" aria-live="polite"></p></section></div>
+<div id="gearEnhanceOverlay" class="gearActionOverlay" aria-hidden="true"><section class="gearActionPanel" role="dialog" aria-modal="true" aria-labelledby="gearEnhanceTitle"><header class="gearActionHeader"><h2 id="gearEnhanceTitle">GEAR ENHANCE</h2><div class="gearHeaderActions"><button class="gearButton gearGuideOpen" data-gear-enhance-guide type="button" aria-label="Gearガイドを開く">？</button><button class="gearButton" data-gear-enhance-close type="button">閉じる</button></div></header><div id="gearEnhanceContent"></div><p id="gearEnhanceStatus" class="gearActionStatus" aria-live="polite"></p></section></div>
 <div id="gearDismantleOverlay" class="gearActionOverlay" aria-hidden="true"><section class="gearActionPanel danger" role="dialog" aria-modal="true" aria-labelledby="gearDismantleTitle"><header class="gearActionHeader"><h2 id="gearDismantleTitle">GEAR DISMANTLE</h2><button class="gearButton" data-gear-dismantle-close type="button">閉じる</button></header><div id="gearDismantleContent"></div><p id="gearDismantleStatus" class="gearActionStatus" aria-live="polite"></p></section></div>
+<div id="gearGuide" aria-hidden="true">
+  <section class="gearGuidePanel" role="dialog" aria-modal="true" aria-labelledby="gearGuideTitle">
+    <header class="gearGuideHeader"><div><p class="gearGuideKicker">GARAGE MANUAL</p><h2 id="gearGuideTitle">GEAR QUICK GUIDE</h2></div><button class="gearButton" data-gear-guide-skip type="button">スキップ</button></header>
+    <p id="gearGuideProgress" class="gearGuideProgress"></p><div id="gearGuideContent" class="gearGuideBody"></div><div id="gearGuideDots" class="gearGuideDots" aria-hidden="true"></div>
+    <div class="gearGuideActions"><button class="gearButton" data-gear-guide-skip type="button">閉じる</button><button id="gearGuidePrev" class="gearButton" type="button">戻る</button><button id="gearGuideNext" class="gearButton gearButton--gold" type="button">次へ</button></div>
+  </section>
+</div>
 <div id="gearTargetedBoxOverlay" class="gearActionOverlay" aria-hidden="true"><section class="gearActionPanel" role="dialog" aria-modal="true" aria-labelledby="gearTargetedBoxTitle"><header class="gearActionHeader"><h2 id="gearTargetedBoxTitle">TARGETED GEAR BOX</h2><button class="gearButton" data-gear-targeted-box-close type="button">閉じる</button></header><p class="gearTargetedBoxLead">設計片を使い、狙う部位・セットを指定してGearを1個製作します。★・rarity・OPは開封時に抽選されます。</p><div id="gearTargetedBoxBalance" class="gearTargetedBoxBalance"></div><div id="gearTargetedBoxKinds" class="gearTargetedBoxKinds" role="group" aria-label="指定方法"><button class="gearButton gearTargetedBoxKind active" data-gear-targeted-kind="slot" type="button">部位指定<small>100片</small></button><button class="gearButton gearTargetedBoxKind" data-gear-targeted-kind="set" type="button">セット指定<small>100片</small></button><button class="gearButton gearTargetedBoxKind" data-gear-targeted-kind="slot_set" type="button">部位＋セット<small>300片</small></button></div><div class="gearTargetedBoxControls"><label id="gearTargetedSlotControl" class="gearTargetedBoxControl">狙う部位<select id="gearTargetedSlot" class="gearSelect"></select></label><label id="gearTargetedSetControl" class="gearTargetedBoxControl" hidden>狙うセット<select id="gearTargetedSet" class="gearSelect"></select></label></div><div id="gearTargetedBoxQuote" class="gearTargetedBoxQuote"></div><p id="gearTargetedBoxStatus" class="gearActionStatus" aria-live="polite"></p><div class="gearTargetedBoxActions"><button class="gearButton" data-gear-targeted-box-close type="button">キャンセル</button><button id="gearTargetedBoxConfirm" class="gearButton gearButton--gold" type="button">この内容で製作</button></div></section></div>
 <div id="gearDropReveal" aria-hidden="true">
   <section class="gearDropPanel" role="dialog" aria-modal="true" aria-labelledby="gearDropTitle">
@@ -863,10 +874,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.153-gear-targeted-box';
+  const BUILD_ID = 'v2.0.154-gear-quick-guide';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.154', date: '2026/09/01', summary: '初回Gear向け3ページガイドと常設ヘルプを追加' },
     { version: 'v2.0.153', date: '2026/08/31', summary: '設計片で部位・セットを指定できるGear BOXを追加' },
     { version: 'v2.0.152', date: '2026/08/31', summary: 'Gear詳細導線・水平照準・連勝終了確認・おまけ音量を修正' },
     { version: 'v2.0.150', date: '2026/08/30', summary: 'ONLINE再入場中の一時的な起動例外から自動復帰を修正' },
@@ -4682,6 +4694,58 @@
     const emblem = gearSetEmblemAssets[setId] || '';
     return `<span class="gearAssetVisual ${gearHtml(variant)}" data-gear-asset-slot="${gearHtml(slotId)}" data-gear-asset-set="${gearHtml(setId)}" style="--gear-emblem-x:${x}%;--gear-emblem-y:${y}%;--gear-emblem-w:${width}%" aria-hidden="true"><img class="gearAssetSilhouette" src="${gearHtml(visual.silhouette)}" alt="">${emblem ? `<img class="gearAssetEmblem" src="${gearHtml(emblem)}" alt="">` : ''}</span>`;
   }
+  // Gear Guide is presentation-only. Its first-time trigger is runtime-local and
+  // never writes a flag into Gear Storage, reward state, presets, or Foundation.
+  const gearGuideEl = document.getElementById('gearGuide');
+  const gearGuideContentEl = document.getElementById('gearGuideContent');
+  const gearGuideProgressEl = document.getElementById('gearGuideProgress');
+  const gearGuideDotsEl = document.getElementById('gearGuideDots');
+  const gearGuidePrevEl = document.getElementById('gearGuidePrev');
+  const gearGuideNextEl = document.getElementById('gearGuideNext');
+  const gearGuideUi = { page: 0, onComplete: null };
+  function gearGuidePageHtml(page) {
+    const domain = gearModules().domain;
+    if (page === 0) {
+      return `<p class="gearGuideLead">Gearは6つの部位へ装備します。位置とシルエットはいつも同じです。</p><div class="gearGuideSlots">${domain.SLOTS.map((slot) => `<div class="gearGuideSlot" data-gear-guide-slot="${gearHtml(slot.id)}">${gearAssetVisualHtml(slot.id, '', 'gearGuideAsset')}<span><b>${gearHtml(slot.labelJa)}</b><small>${gearHtml(gearSlotFramePositions[slot.id])}</small></span></div>`).join('')}</div><div class="gearGuidePreset"><strong>PRESET 1 / 2 / 3</strong><p>CATAMONごとに3組を自動保存。用途に合わせてワンタップで装備構成を切り替えられます。</p></div>`;
+    }
+    if (page === 1) {
+      return `<p class="gearGuideLead">同じ紋章のGearを揃えると、2個・4個でセット効果が発動します。</p><div class="gearGuideSetGrid"><div class="gearGuideSetCard"><strong><span class="gearGuideSetBadge">${gearSetCrests.assault}</span>2 SET</strong><p>最初のセット効果が発動。Workbenchの紋章と発動表示で確認できます。</p></div><div class="gearGuideSetCard"><strong><span class="gearGuideSetBadge">${gearSetCrests.assault}</span>4 SET</strong><p>上位のセット効果が発動。比較画面では増減も先に確認できます。</p></div></div><div class="gearGuideAxes"><div class="gearGuideAxis"><b>SET = 紋章</b>猛攻・生命・堅守など、ビルドの役割を表します。</div><div class="gearGuideAxis"><b>RARITY / ★</b>レアリティは金属の質、★はGearそのものの品質です。</div></div>`;
+    }
+    return `<p class="gearGuideLead">強化はCoinとPowderを使い、+3ごとにサブOPの節目を迎えます。</p><div class="gearGuideMilestones">${[3, 6, 9, 12].map((level) => `<div class="gearGuideMilestone">+${level}</div>`).join('')}</div><div class="gearGuideResourceFlow"><div><b>COIN</b>強化に使用</div><span>＋</span><div><b>POWDER</b>強化に使用</div></div><div class="gearGuideRules"><div class="gearGuideRule">効率低下は黄色の「↓」で表示。表示済みの最終能力を見て比較できます。</div><div class="gearGuideRule">🔒 分解保護を付けたGearは、手動分解できません。</div><div class="gearGuideRule warn">TEMP BOXは期限を過ぎると自動分解。分解保護では期限を止められません。</div></div>`;
+  }
+  function gearGuideRender() {
+    if (!gearGuideEl || !gearGuideContentEl) return false;
+    const page = Math.max(0, Math.min(2, gearGuideUi.page)); gearGuideUi.page = page;
+    gearGuideProgressEl.textContent = `${page + 1} / 3 · ${['装備とプリセット', 'セットと品質', '強化と保管'][page]}`;
+    gearGuideContentEl.innerHTML = gearGuidePageHtml(page);
+    gearGuideDotsEl.innerHTML = [0, 1, 2].map((index) => `<span class="gearGuideDot${index === page ? ' active' : ''}"></span>`).join('');
+    gearGuidePrevEl.disabled = page === 0;
+    gearGuideNextEl.textContent = page === 2 ? 'わかった' : '次へ';
+    return true;
+  }
+  function openGearGuide(options = {}) {
+    if (!gearGuideEl) return false;
+    gearGuideUi.page = 0; gearGuideUi.onComplete = typeof options.onComplete === 'function' ? options.onComplete : null;
+    gearGuideEl.classList.add('open'); gearGuideEl.setAttribute('aria-hidden', 'false'); gearGuideRender();
+    requestAnimationFrame(() => gearGuideNextEl?.focus());
+    return true;
+  }
+  function closeGearGuide() {
+    if (!gearGuideEl?.classList.contains('open')) return false;
+    const onComplete = gearGuideUi.onComplete; gearGuideUi.onComplete = null;
+    gearGuideEl.classList.remove('open'); gearGuideEl.setAttribute('aria-hidden', 'true');
+    if (onComplete) onComplete();
+    return true;
+  }
+  if (gearGuideEl && gearGuidePrevEl && gearGuideNextEl) {
+    gearGuidePrevEl.addEventListener('click', () => { if (gearGuideUi.page > 0) { gearGuideUi.page -= 1; gearGuideRender(); } });
+    gearGuideNextEl.addEventListener('click', () => { if (gearGuideUi.page < 2) { gearGuideUi.page += 1; gearGuideRender(); } else closeGearGuide(); });
+    gearGuideEl.querySelectorAll('[data-gear-guide-skip]').forEach((button) => button.addEventListener('click', closeGearGuide));
+    document.getElementById('gearWorkshopGuide')?.addEventListener('click', () => openGearGuide());
+    document.getElementById('gearStorageGuide')?.addEventListener('click', () => openGearGuide());
+    document.querySelector('[data-gear-enhance-guide]')?.addEventListener('click', () => openGearGuide());
+  }
+  globalThis.KatamonGearGuide = Object.freeze({ open: openGearGuide, close: closeGearGuide });
   function gearHighlightSlot(slotId, durationMs = 900) {
     if (!gearSlotFramePositions[slotId]) return false;
     gearUi.highlightSlotId = slotId;
@@ -5144,7 +5208,7 @@
   const gearDropCloseBtn = document.getElementById('gearDropClose');
   const gearDropWorkbenchBtn = document.getElementById('gearDropWorkbench');
   const gearDropSeenRewardIds = new Set();
-  const gearDropUi = { rewardId: null, reward: null, index: 0, claiming: false, claimed: false, claimResult: null, error: '' };
+  const gearDropUi = { rewardId: null, reward: null, index: 0, claiming: false, claimed: false, claimResult: null, offerFirstGuide: false, error: '' };
   function gearPendingRewards(state) { return Array.isArray(state?.unclaimedRewards) ? state.unclaimedRewards.filter((reward) => Array.isArray(reward.gears) && reward.gears.length > 0) : []; }
   function gearUpdatePendingRewardButton(state) {
     if (!gearPendingRewardsEl || !gearPendingRewardCountEl) return;
@@ -5230,7 +5294,7 @@
     if (!gearDropRevealEl || (!allowSeen && gearDropSeenRewardIds.has(rewardId))) return false;
     const reward = gearDropCanonicalReward(rewardId);
     if (!reward || !Array.isArray(reward.gears) || reward.gears.length === 0) return false;
-    gearDropUi.rewardId = reward.rewardId; gearDropUi.reward = reward; gearDropUi.index = 0; gearDropUi.claiming = false; gearDropUi.claimed = false; gearDropUi.claimResult = null; gearDropUi.error = '';
+    gearDropUi.rewardId = reward.rewardId; gearDropUi.reward = reward; gearDropUi.index = 0; gearDropUi.claiming = false; gearDropUi.claimed = false; gearDropUi.claimResult = null; gearDropUi.offerFirstGuide = false; gearDropUi.error = '';
     gearDropRevealEl.classList.add('open'); gearDropRevealEl.setAttribute('aria-hidden', 'false');
     gearDropSeenRewardIds.add(reward.rewardId);
     gearDropRender();
@@ -5246,10 +5310,13 @@
     if (gearDropUi.claiming || gearDropUi.claimed || !gearDropUi.reward || gearDropUi.index < gearDropUi.reward.gears.length - 1) return false;
     gearDropUi.claiming = true; gearDropUi.error = ''; gearDropRender();
     try {
-      const { rewards } = gearModules();
+      const { rewards, storage } = gearModules();
+      const beforeClaim = storage.loadGearState(localStorage);
+      const wasFirstPhysicalGear = beforeClaim.inventory.length + beforeClaim.tempBox.length === 0;
       await rewards.persistClaimReward(gearDropUi.reward.rewardId, Date.now(), localStorage);
       const readback = gearDropClaimReadback(gearDropUi.reward);
       gearDropUi.claimed = true; gearDropUi.claimResult = { placedInventoryGearIds: readback.placedInventoryGearIds, placedTempGearIds: readback.placedTempGearIds };
+      gearDropUi.offerFirstGuide = wasFirstPhysicalGear && readback.placedInventoryGearIds.length + readback.placedTempGearIds.length > 0;
       gearUpdatePendingRewardButton(readback.state);
       gearStorageRefreshIfOpen();
       return true;
@@ -5258,14 +5325,20 @@
   }
   function closeGearDropReveal() {
     gearDropRevealEl?.classList.remove('open'); gearDropRevealEl?.setAttribute('aria-hidden', 'true');
-    gearDropUi.rewardId = null; gearDropUi.reward = null; gearDropUi.index = 0; gearDropUi.claiming = false; gearDropUi.claimed = false; gearDropUi.claimResult = null; gearDropUi.error = '';
+    gearDropUi.rewardId = null; gearDropUi.reward = null; gearDropUi.index = 0; gearDropUi.claiming = false; gearDropUi.claimed = false; gearDropUi.claimResult = null; gearDropUi.offerFirstGuide = false; gearDropUi.error = '';
     gearUpdatePendingRewardButton();
   }
   if (gearDropRevealEl && gearDropNextBtn && gearDropClaimBtn && gearDropWorkbenchBtn) {
     gearDropCloseBtn.addEventListener('click', closeGearDropReveal);
     gearDropNextBtn.addEventListener('click', () => { if (!gearDropUi.reward || gearDropUi.index >= gearDropUi.reward.gears.length - 1) return; gearDropUi.index += 1; gearDropRender(); });
     gearDropClaimBtn.addEventListener('click', claimPresentedGearReward);
-    gearDropWorkbenchBtn.addEventListener('click', () => { if (!gearDropUi.claimed) return; const slotId = gearDropWorkbenchBtn.dataset.gearDropSlot; closeGearDropReveal(); if (slotId) openGearWorkshopForSlot(slotId); else openGearWorkshop(); });
+    gearDropWorkbenchBtn.addEventListener('click', () => {
+      if (!gearDropUi.claimed) return;
+      const slotId = gearDropWorkbenchBtn.dataset.gearDropSlot; const offerGuide = gearDropUi.offerFirstGuide;
+      closeGearDropReveal();
+      const openDestination = () => { if (slotId) openGearWorkshopForSlot(slotId); else openGearWorkshop(); };
+      if (offerGuide) openGearGuide({ onComplete: openDestination }); else openDestination();
+    });
     gearPendingRewardsEl?.addEventListener('click', presentFirstPendingGearReward);
   }
   globalThis.KatamonGearDropReveal = Object.freeze({ presentRewardId: presentGearRewardId, presentPendingReward: presentFirstPendingGearReward });
