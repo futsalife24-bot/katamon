@@ -1,35 +1,40 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-08-29 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-08-31 / GitHub正本: `futsalife24-bot/katamon` の `master`
 
 ## 現在の開発状態
 
-Gear ONLINE Phase 3D-8Bは**正式COMPLETE**。PR #331を通常mergeしたmaster `bfa5f8576a78759c91cc2561f6aea2a9f8886ff2` を正本とし、B2本人・席・lease復元、B3A append-only Recovery Plan、B3B1 deterministic replay、B3B2 verified boundaryのlive activation / SSE handoffまで完了。
+Gear Systemは **Phase 4HまでCOMPLETE**。PR #341〜#354でWorkbench、6部位slot、Drop Reveal、Inventory / TEMP BOX、強化、安全な手動分解、6 silhouette × 8 set emblemの合成素材、各画面への素材接続、Visual Polish、Workbench slot再設計とresponsive closureをmasterへ統合した。Gear Domain、Storage、Preset、Reward、Combat、ONLINE authorityは既存contractを維持している。
 
-現在は **Phase 3D-8C Live Firebase Ordering / Rematch Contract**。3D-8D（実Firebase・複数プロファイル/実端末のcross-device E2Eとrollout audit）は未着手。正本に存在しない3D-8B3B3は新設しない。
+PR #355では装備中Gearの詳細導線、水平照準ガイド、CPU連勝終了確認、サウンドテスト音量追従を統合した。Phase 3D-8D、ONLINE/Firebase、Gear authority / balanceは変更していない。
+
+Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
 ## 現在の最優先タスク
 
-1. **Phase 3D-8C Live Firebase Ordering / Rematch Contract**
-   - 通常live receiverのmove / fire / state ordering、push-key/action duplicate、terminal-before-fire、1v1/2v2 rematch、new-round resetをproduction pathで固定する。
-2. **Phase 3D-8D Cross-device E2E / Rollout Audit**
-   - 8C merge後に実Firebase・複数クライアントで最終受入を行う。Firebase Rules/Consoleや手動public deployは別途明示承認なしに変更しない。
+1. **Phase 3D-8D Production Acceptance**
+   - 安定した独立clientを用意できた時だけ、A〜K matrixのproduction受入を再開する。Firebase Rules/Console、protocol/wire/schema、手動Pages deployは変更しない。
+2. **Gear UIの既知presentation残件**
+   - 320px幅のPresetプレートと、分解確認に残る開発者向け「authority側」文言は別のpresentation-only PRで扱う。
+3. **既存GitHub残件**
+   - Issue #4（オンラインHPバーの瞬間的な表示ずれ）、Issue #6（ランキング最大3件とcharacter列のGAS本番反映）、Issue #8（3D-8D完了後にclose判定）を保持する。
 
-以降の概略: 3D-8D、3E remaining modes/balance/full regression、Phase 4 Gear UI、Phase 5 UX/transfer/polish。
+3D-8D完了後の概略はPhase 3E remaining modes / balance / full regression。Phase 4 Gear UIの新機能追加は行わず、必要な場合だけ小さなpresentation修正へ限定する。
 
 ## 現在の公開版
 
-- アプリ内BUILD正本は **v2.0.143**。master push時の既存GitHub Pages自動workflowと、Firebase Rules/Console変更・手動public releaseは別管理とする。Phase 3D-8Cではdeployしない。
+- アプリ内BUILD / PWA cache正本は **v2.0.152-gameplay-ux-priority-fixes**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 
-現在の最優先は上記のPhase 3D-0。以下は番号順の着手を意味しない既存backlogであり、各項目は **1PR・1目的** で進める。
+以下は最優先順ではない。着手時にmaster actualと既存Issue / PRを再監査し、原則 **1PR・1目的** で進める。
 
-1. 不要なリセット重複を整理する（現状の意図を確認してから）。
-2. 読込・描画の軽量化: Service Workerの重複入口削除、ヘリコプター画像の同等品質WebP化、地形縁の局所再描画、静止UI/遠景/矩形のキャッシュ、アイドル時30fps、地形キャンバス高さ縮小、DEAD LINEの軽量発光。
-3. 通信量改善: 対戦開始時だけ地形基底を配り、以後は差分化する。移動同期を0.25秒・8pxにする。公開部屋の一覧を作成日時順最大24件へ絞る。
-4. ランキングの不正行を非表示にできる列を追加する。HMACは使わない。
-5. チュートリアル/CPU/キャラクター/オンライン導線の、下記「確定済みゲーム仕様」を実装する。
+1. 汎用素材ZIPのrepo actual照合と、採用 / 保留 / 不採用台帳。Gear固有のPhase 4F素材ライブラリとは分けて扱う。
+2. Openのstacked Draft PR #265〜#276と旧docs PR #83を、現masterへ統合済み・代替済み・継続のどれかへ整理する。監査前にmergeやbranch削除をしない。
+3. GitHub ActionsのNode.js 20 deprecated annotationを、機能変更と分離したCI保守として扱う。
+4. 公開部屋一覧の単独読込失敗を「0件」として扱わず、部屋作成 / 部屋ID入室を維持したまま再試行案内へ切り分ける。作成日時順の最大24件取得は実装済み。
+5. ランキングの不正行を非表示にできる列を追加する。HMACは使わない。
+6. チュートリアル/CPU/キャラクター/オンライン導線の、下記「確定済みゲーム仕様」を実装する。
 
 ## 確定済みゲーム仕様
 
@@ -287,9 +292,10 @@ Gear ONLINE Phase 3D-8Bは**正式COMPLETE**。PR #331を通常mergeしたmaster
 
 ## 現在のテスト基準
 
-- 直近フル実行の内訳: 文書上限 1、Seat 40、Regression 401、Result 93、Loopback 103、Stage3 467、Lobby 7、Back 14、Ranking 5、未定義走査 2、App Shell整合 3、キャッシュ契約 2、Stage 53（合計1,191）。ボスCPU開始条件の回帰1件を追加。以後は増減理由と実測件数を記録する。
-- loopbacktest中継数の基準: **38 / 64 / 83 / 61 / 48**。
-- 本体E2EはAndroid Chromiumでタイトル・CPU開始・演習・チュートリアルを通し、pageerror 0件を確認する。現行ローカル環境のMobile WebKitは本体canvas読込前にブラウザがクラッシュするため、この1件はスキップする。Stage Studioの既存WebKit E2Eは維持する。
+- PR #355 head `84ed1a9` とmerge後master `3ac49c2` でGitHub Stage Studio `test` / `mobile-e2e`、Content Studio verification、Pages build / deployが成功している。
+- Phase 4A〜4Hは各PhaseのNode targeted、Android Chromium、focused WebKitを通過済み。PR #350は現行BUILD/CACHEを変更せず、現在地文書だけを正本化する。
+- full regressionの正本はGitHub clean runnerとし、固定件数をこの文書へ重複転記しない。失敗時は対象workflowとhead SHAで追跡する。
+- 3D-8Dの自動reconnect / recovery回帰はgreenだが、production A〜K matrixは未完了なのでCOMPLETE扱いにしない。
 
 ## 更新ルール
 
