@@ -15,9 +15,9 @@ function makeGear(gearId, slotId, setId = 'assault') {
 test('6部位はGear Domainの正本をそのまま画面へ配置する', () => {
   assert.deepEqual(gear.SLOT_IDS, ['barrel', 'armor', 'core', 'engine', 'sight', 'auxiliary']);
   assert.match(html, /domain\.SLOTS\.map/);
-  assert.match(html, /data-gear-slot=\"\$\{slot\.id\}\"/);
-  assert.match(html, /gearSlotGlyphs\[slot\.id\]/);
-  assert.match(html, /data-slot=\"\$\{slot\.id\}\"/);
+  assert.match(html, /data-gear-slot=\"\$\{gearHtml\(slot\.id\)\}\"/);
+  assert.match(html, /const gearSlotGlyphs = Object\.freeze/);
+  assert.match(html, /data-slot=\"\$\{gearHtml\(slot\.id\)\}\"/);
 });
 test('比較はcanonical aggregate/combatを使い、独自set判定を持たない', () => {
   assert.match(html, /domain\.aggregateLoadout\(loadout\)/);

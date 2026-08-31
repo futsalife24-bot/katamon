@@ -22,14 +22,14 @@ test('6部位と8セットを完成画像にせず、runtime素材として合�
 });
 
 test('Workbench、Storage、Drop Revealは同じ部位/セット合成ヘルパーを使う', () => {
-  assert.match(html, /gearAssetVisualHtml\(slot\.id, gear\?\.setId \|\| '', 'gearSlotAsset'\)/);
+  assert.match(html, /gearAssetVisualHtml\(slot\.id, gear\?\.setId \|\| '', 'gearSlotEmblem'\)/);
   assert.match(html, /gearAssetVisualHtml\(gear\.slotId, gear\.setId, 'gearStorageAsset'\)/);
   assert.match(html, /gearAssetVisualHtml\(slot\.id, activeGear\?\.setId \|\| '', 'gearDropAsset'\)/);
   assert.equal(manifest.sharedFrameAuthority, 'index.html#gearSlotFrameSvg');
 });
 
 test('既存フレーム、レアリティ、Gear authorityを置き換えない', () => {
-  assert.match(html, /function gearSlotFrameSvg\(slotId\)/);
+  assert.match(html, /function gearSlotFrameSvg\(slotId, variant = ''\)/);
   assert.match(html, /data-rarity="\$\{gearHtml\(gear\.rarityId\)\}"/);
   assert.doesNotMatch(html, /persistClaimReward\([^)]*gearAsset/);
   assert.doesNotMatch(html, /enhanceStoredGearAtomic\([^)]*gearAsset/);

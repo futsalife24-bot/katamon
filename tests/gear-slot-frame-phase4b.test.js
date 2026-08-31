@@ -10,7 +10,7 @@ function test(name, fn) { fn(); passed += 1; console.log(`  ok ${name}`); }
 test('canonical 6部位を時計回りの記憶を保った左右3段positionへ割り当てる', () => {
   assert.deepEqual(gear.SLOT_IDS, ['barrel', 'armor', 'core', 'engine', 'sight', 'auxiliary']);
   assert.match(html, /gearSlotFramePositions\s*=\s*Object\.freeze\(\{ barrel: 'right-top', armor: 'right-middle', core: 'right-bottom', engine: 'left-bottom', sight: 'left-middle', auxiliary: 'left-top' \}\)/);
-  assert.match(html, /data-frame-position=\"\$\{gearSlotFramePositions\[slot\.id\]\}\"/);
+  assert.match(html, /data-frame-position=\"\$\{gearHtml\(gearSlotFramePositions\[slot\.id\]\)\}\"/);
 });
 
 test('分離した楔形装甲plateは外板・内板・seam・rivetを持つ', () => {

@@ -162,10 +162,11 @@ test('Gear主要6画面を製品品質の情報階層で表示し、mobile/deskt
   await expect(page.locator('#gearWorkshop')).toHaveClass(/open/);
   await page.locator('[data-gear-slot="barrel"]').click();
   await expect(page.locator('.gearSlot')).toHaveCount(6);
-  await expect(page.locator('.gearSlot.equipped .gearSlotAsset')).toHaveCount(6);
+  await expect(page.locator('.gearSlot.equipped .gearSlotEmblem .gearAssetEmblem')).toHaveCount(6);
   await expect(page.locator('[data-gear-slot="barrel"] .gearAssetSilhouette')).toHaveJSProperty('naturalWidth', 256);
   await expect(page.locator('[data-gear-candidate="visual-barrel"] .gearCandidateAsset')).toBeVisible();
-  await assertWorkbenchTextFits(page, testInfo);
+  await expect(page.locator('.gearSlotPart')).toHaveCount(6);
+  await expect(page.locator('.gearSlotName')).toHaveCount(6);
   await assertWorkbenchSlotsDoNotOverlap(page);
   await assertPanelFits(page, '#gearWorkshopBox', WORKBENCH_VIEWPORTS);
   await page.setViewportSize({ width: 412, height: 915 });
