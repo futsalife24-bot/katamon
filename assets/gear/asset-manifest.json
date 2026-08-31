@@ -8,7 +8,7 @@
   "slots": [
     {
       "id": "auxiliary",
-      "label": "補助機構",
+      "label": "補機",
       "position": "left-top",
       "master": "master/silhouettes/gear_silhouette_auxiliary_01.png",
       "runtime": "runtime/silhouettes/gear_silhouette_auxiliary_01.webp",
