@@ -194,6 +194,25 @@ test('Gear主要6画面を製品品質の情報階層で表示し、mobile/deskt
 
   await page.locator('[data-gear-storage-tab="inventory"]').click();
   await page.locator('[data-gear-storage-detail="visual-auxiliary"]').click();
+  await expect(page.locator('#gearStorageDetail .gearStorageDetailHero')).toBeVisible();
+  await expect(page.locator('#gearStorageDetail .gearStorageDetailBadges')).toContainText('4★');
+  await expect(page.locator('#gearStorageDetail .gearStorageDetailStatus')).toContainText('分解保護');
+  await expect(page.locator('#gearStorageDetail [data-gear-storage-workbench]')).toHaveText('装備・比較へ');
+  await expect(page.locator('#gearStorageDetail [data-gear-enhance]')).toHaveText('強化する');
+  await expect(page.locator('#gearStorageDetail [data-gear-dismantle]')).toHaveText('分解する');
+  await expect(page.locator('#gearStorageDetail .gearDetailAsset .gearAssetSilhouette')).toHaveJSProperty('naturalWidth', 256);
+  for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) {
+    await page.setViewportSize(viewport);
+    const layout = await page.locator('#gearStorageDetail').evaluate((detail) => {
+      const buttons = [...detail.querySelectorAll('.gearStorageDetailActionButtons > .gearButton')].map((button) => button.getBoundingClientRect());
+      const overlaps = buttons.flatMap((a, index) => buttons.slice(index + 1).map((b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0)).filter(Boolean).length;
+      return { horizontalOverflow: detail.scrollWidth - detail.clientWidth, overlaps };
+    });
+    expect(layout.horizontalOverflow, `${viewport.width}px Gear detail horizontal overflow`).toBeLessThanOrEqual(1);
+    expect(layout.overlaps, `${viewport.width}px Gear detail action overlap`).toBe(0);
+  }
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.screenshot({ path: testInfo.outputPath(`phase4i-storage-detail-${testInfo.project.name}.png`), fullPage: true });
   await page.locator('[data-gear-enhance="visual-auxiliary"]').click();
   await expect(page.locator('#gearEnhanceOverlay')).toHaveClass(/open/);
   await expect(page.locator('#gearEnhanceContent .gearActionAsset .gearAssetSilhouette')).toHaveJSProperty('naturalWidth', 256);
