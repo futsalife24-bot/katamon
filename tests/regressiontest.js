@@ -2910,9 +2910,9 @@ kt.setLocalSeat('p1');
     soundLabel && soundSub && /16px/.test(soundLabel.font)
       && soundLabel.y <= b.soundTest.y - 15 && soundSub.y <= b.soundTest.y + 10,
     JSON.stringify({ soundLabel, soundSub, button: b.soundTest }));
-  check('GARAGEにはショップ・実績・Gear・サウンドテストを表示する',
-    ['ショップ', '実績', 'GEAR', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
-    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'GEAR', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
+  check('GARAGEにはショップ・実績・LOADOUT・サウンドテストを表示する',
+    ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
+    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
   kt.setTitleMenuPageForTest(0);
 
   // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
@@ -2922,9 +2922,10 @@ kt.setLocalSeat('p1');
     'assets/title-mode-board.webp',
     'assets/title-shield-button.webp',
     'assets/title-hanging-sign.webp',
-    'assets/title-parchment-button.webp'
+    'assets/title-parchment-button.webp',
+    'assets/gear/ui/runtime/gear_title_menu_frame_01.webp'
   ];
-  check('タイトルが提供された4種類の木板UI素材を使う',
+  check('タイトルが既存4素材とLOADOUT専用メカニカル枠を使う',
     !!woodUi && expectedWoodAssets.every(src => (
       Object.values(woodUi.assets).includes(src)
         && require('fs').existsSync(require('path').join(__dirname, '..', src))
@@ -2934,9 +2935,9 @@ kt.setLocalSeat('p1');
     const expectedKinds = {
       cpu: 'parchment', online: 'parchment',
       tutorial: 'parchment', free: 'parchment',
-      ranking: 'hangingSign', shop: 'parchment', achievements: 'parchment', gear: 'parchment', soundTest: 'shield'
+      ranking: 'hangingSign', shop: 'parchment', achievements: 'parchment', gear: 'loadoutFrame', soundTest: 'shield'
     };
-    check('BATTLEとGARAGEが既存の羊皮紙・吊り看板・緑盾を役割別に再利用する',
+    check('BATTLEとGARAGEが既存素材とLOADOUT専用枠を役割別に使う',
       Object.entries(expectedKinds).every(([role, asset]) => (
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),

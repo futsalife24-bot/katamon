@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.157-gear-preset-plate-mobile-fix';
+const CACHE_VERSION = 'katamon-pwa-v2.0.159-loadout-lab-ui';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -15,6 +15,8 @@ const ASSET_REFRESH = [
   { path: './assets/characters/runtime/paladier.webp', revision: 'v2.0.139-right-facing' },
   { path: './assets/characters/master/nyan-tank.png', revision: 'v2.0.139-right-facing' },
   { path: './assets/characters/runtime/nyan-tank.webp', revision: 'v2.0.139-right-facing' },
+  { path: './assets/gear/ui/runtime/gear_title_menu_frame_01.webp', revision: 'v2.0.159-loadout-lab-ui' },
+  { path: './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp', revision: 'v2.0.159-loadout-lab-ui' },
 ];
 const APP_SHELL = [
   './index.html',
@@ -83,6 +85,8 @@ const CORE_ASSETS = [
   './assets/title-shield-button.webp',
   './assets/title-hanging-sign.webp',
   './assets/title-parchment-button.webp',
+  './assets/gear/ui/runtime/gear_title_menu_frame_01.webp',
+  './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
   './assets/wall.jpg',
   './assets/intro-cannonball.png',
   './assets/battle-start-logo.png',
