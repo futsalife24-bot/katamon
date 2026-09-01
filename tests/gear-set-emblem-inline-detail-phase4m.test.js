@@ -34,10 +34,19 @@ test('枠内2行は部位・強化とセット・星を別要素にして重要�
   assert.match(html, /\.gearSlotName \{ color:#fff5dc; font-size:11\.6px/);
 });
 
+test('Presetプレートは名前と装備数を分離し小型画面でも装備数を隠さない', () => {
+  assert.match(html, /class="gearCharacterPlateName"/);
+  assert.match(html, /class="gearCharacterPlateCount"/);
+  assert.match(html, /class="gearCharacterPlateEquipped"/);
+  assert.match(html, /\.gearCharacterPlateCount \{ flex:0 0 auto/);
+  assert.match(html, /\.gearCharacterPlate\{width:38%;max-width:112px/);
+  assert.match(html, /\.gearCharacterPlateEquipped\{display:none\}/);
+});
+
 test('セット説明の開閉はruntime表示状態だけを変更する', () => {
   const listener = html.slice(html.indexOf("gearSummaryEl.addEventListener('click'"), html.indexOf("gearCandidatesEl.addEventListener('click'"));
   assert.match(listener, /gearUi\.setDetailOpen\s*=\s*!gearUi\.setDetailOpen/);
   assert.doesNotMatch(listener, /localStorage|save|persist|mutate|transaction/i);
 });
 
-console.log(`Gear set emblem inline detail Phase 4M: ${passed}/4 passed`);
+console.log(`Gear set emblem inline detail Phase 4M: ${passed}/5 passed`);
