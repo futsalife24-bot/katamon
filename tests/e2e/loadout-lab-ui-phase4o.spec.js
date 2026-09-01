@@ -40,6 +40,7 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     const imageStatus = await page.evaluate(async () => Promise.all([
       'assets/gear/ui/runtime/gear_title_menu_frame_01.webp',
       'assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
+      'assets/gear/ui/runtime/gear_lab_control_frame_01.png',
     ].map((src) => new Promise((resolve) => { const image = new Image(); image.onload = () => resolve([src, image.naturalWidth, image.naturalHeight]); image.onerror = () => resolve([src, 0, 0]); image.src = src; }))));
     expect(imageStatus.every(([, width, height]) => width > 0 && height > 0)).toBe(true);
 
@@ -56,7 +57,9 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     await expect(page.locator('#loadoutStylePanel')).toContainText('真鍮アイコン');
     await expect(page.locator('#loadoutStylePanel')).toContainText('琥珀砲弾');
     await page.locator('[data-loadout-equip="shell-amber"]').click();
-    expect(await page.evaluate(() => globalThis.KatamonCoopMvp.loadState().equipment.cosmetics.projectile)).toBe('shell-amber');
+    await expect.poll(
+      () => page.evaluate(() => globalThis.KatamonCoopMvp.loadState().equipment.cosmetics.projectile)
+    ).toBe('shell-amber');
 
     await page.locator('[data-loadout-page="profile"]').click();
     await expect(page.locator('#loadoutProfilePanel')).toBeVisible();
@@ -69,6 +72,21 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
       boxOverflow: box.scrollWidth - box.clientWidth,
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       backgroundImage: getComputedStyle(box).backgroundImage,
+      controlFrame: getComputedStyle(document.getElementById('gearWorkshopClose')).borderImageSource,
+      titleVisible: (() => {
+        const title = document.getElementById('gearWorkshopTitle');
+        const header = title.closest('.gearHeader');
+        const titleRect = title.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const style = getComputedStyle(title);
+        return title.textContent.trim() === 'CATAMON LAB'
+          && style.textOverflow !== 'ellipsis'
+          && style.webkitLineClamp === 'none'
+          && titleRect.left >= headerRect.left - 1
+          && titleRect.right <= headerRect.right + 1
+          && titleRect.top >= headerRect.top - 1
+          && titleRect.bottom <= headerRect.bottom + 1;
+      })(),
       badControls: [...box.querySelectorAll('button,select')].filter((control) => {
         const rect = control.getBoundingClientRect(); const style = getComputedStyle(control);
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && (rect.left < -1 || rect.right > innerWidth + 1);
@@ -78,6 +96,8 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     expect(layout.documentOverflow).toBeLessThanOrEqual(0);
     expect(layout.backgroundImage).toContain('rgba(22, 34, 37, 0.62)');
     expect(layout.backgroundImage).toContain('gear_workbench_lab_background_01.webp');
+    expect(layout.controlFrame).toContain('gear_lab_control_frame_01.png');
+    expect(layout.titleVisible).toBe(true);
     expect(layout.badControls).toEqual([]);
     expect(errors).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`loadout-lab-${viewport.width}.png`), fullPage: true });
