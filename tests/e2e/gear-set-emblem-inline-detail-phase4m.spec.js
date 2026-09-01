@@ -127,7 +127,7 @@ test('紋章タップでDomain準拠のセット効果を表示し、6枠の2行
   await seedFixture(page);
   await page.evaluate(() => globalThis.__gearPhase4MTest.openWorkbench());
   await page.evaluate(() => document.fonts.ready);
-  for (const file of ['gear_emblem_assault_02.png', 'gear_emblem_critical_02.png', 'gear_emblem_laststand_02.png']) {
+  for (const file of ['gear_emblem_assault_02.webp', 'gear_emblem_critical_02.webp', 'gear_emblem_laststand_02.webp']) {
     const emblem = page.locator(`.gearAssetEmblem[src$="${file}"]`).first();
     await expect(emblem).toHaveJSProperty('naturalWidth', 256);
   }

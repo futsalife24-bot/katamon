@@ -56,13 +56,13 @@
     }
   ],
   "sets": [
-    { "id": "assault", "label": "猛攻", "master": "master/emblems/gear_emblem_assault_02.png", "runtime": "runtime/emblems/gear_emblem_assault_02.png" },
+    { "id": "assault", "label": "猛攻", "master": "master/emblems/gear_emblem_assault_02.png", "runtime": "runtime/emblems/gear_emblem_assault_02.webp" },
     { "id": "life", "label": "生命", "master": "master/emblems/gear_emblem_life_01.png", "runtime": "runtime/emblems/gear_emblem_life_01.webp" },
     { "id": "fortify", "label": "堅守", "master": "master/emblems/gear_emblem_fortify_01.png", "runtime": "runtime/emblems/gear_emblem_fortify_01.webp" },
-    { "id": "critical", "label": "会心", "master": "master/emblems/gear_emblem_critical_02.png", "runtime": "runtime/emblems/gear_emblem_critical_02.png" },
+    { "id": "critical", "label": "会心", "master": "master/emblems/gear_emblem_critical_02.png", "runtime": "runtime/emblems/gear_emblem_critical_02.webp" },
     { "id": "blast", "label": "爆砕", "master": "master/emblems/gear_emblem_blast_01.png", "runtime": "runtime/emblems/gear_emblem_blast_01.webp" },
     { "id": "impact", "label": "衝撃", "master": "master/emblems/gear_emblem_impact_01.png", "runtime": "runtime/emblems/gear_emblem_impact_01.webp" },
     { "id": "rescue", "label": "救援", "master": "master/emblems/gear_emblem_rescue_01.png", "runtime": "runtime/emblems/gear_emblem_rescue_01.webp" },
-    { "id": "last_stand", "label": "背水", "master": "master/emblems/gear_emblem_laststand_02.png", "runtime": "runtime/emblems/gear_emblem_laststand_02.png" }
+    { "id": "last_stand", "label": "背水", "master": "master/emblems/gear_emblem_laststand_02.png", "runtime": "runtime/emblems/gear_emblem_laststand_02.webp" }
   ]
 }

@@ -24,9 +24,9 @@ test('タイトルLOADOUTを大型化しMUSIC ROOMと非重複の配置にする
 
 test('猛攻・会心・背水はv2紋章へ差し替え、他5セットと合成方式を維持する', () => {
   const expected = {
-    assault: 'runtime/emblems/gear_emblem_assault_02.png',
-    critical: 'runtime/emblems/gear_emblem_critical_02.png',
-    last_stand: 'runtime/emblems/gear_emblem_laststand_02.png',
+    assault: 'runtime/emblems/gear_emblem_assault_02.webp',
+    critical: 'runtime/emblems/gear_emblem_critical_02.webp',
+    last_stand: 'runtime/emblems/gear_emblem_laststand_02.webp',
   };
   for (const [setId, runtime] of Object.entries(expected)) {
     const set = manifest.sets.find((entry) => entry.id === setId);
