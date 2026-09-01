@@ -2652,7 +2652,7 @@ kt.setLocalSeat('p1');
     after.includes('VS') && !before.includes('VS'), after.join('/'));
 }
 
-// v124: 1vs1の空きに出す「役割・HP・必殺技」。実際に描かれた文字で確かめる。
+// 1vs1の空きに出す「HP・必殺技」。型ラベルは全画面から廃止したため描かない。
 // 2vs2は窓が狭いので出さない。出すと顔と重なって両方読めなくなる。
 {
   const shown = (fmt) => {
@@ -2666,8 +2666,8 @@ kt.setLocalSeat('p1');
     return { defs, drawn: kt.drawnText() };
   };
   const one = shown('1v1');
-  check('1vs1では役割・HP・必殺技が実際に描かれる',
-    one.defs.every(d => one.drawn.includes(d.role)
+  check('1vs1では型を出さずHP・必殺技が実際に描かれる',
+    one.defs.every(d => !one.drawn.includes(d.role)
       && one.drawn.includes(`HP ${d.maxHp}`)
       && one.drawn.includes(d.special)),
     one.defs.map(d => d.role + '/' + d.maxHp + '/' + d.special).join(' ') + ' drawn=' + one.drawn.join('/'));
