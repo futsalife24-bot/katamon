@@ -12,6 +12,8 @@ assert.match(html, /gear: \{ asset: 'loadoutFrame'/,
   'LOADOUTだけ専用のメカニカルフレームを使う');
 assert.match(html, /gear_title_menu_frame_01\.webp/);
 assert.match(html, /gear_workbench_lab_background_01\.webp/);
+assert.match(html, /border-image-source:url\("assets\/gear\/ui\/runtime\/gear_lab_control_frame_01\.png"\)/,
+  'LABのボタンとタブは共通9-sliceメカフレームを使う');
 assert.match(html, /@media \(max-width:620px\)\{#gearWorkshopBox\{background-image:linear-gradient\(180deg,rgba\(22,34,37,\.62\),rgba\(8,17,21,\.72\) 46%,rgba\(3,8,11,\.86\)\)/,
   'スマホでは研究室背景を隠しすぎない専用オーバーレイを使う');
 assert.match(html, /<h2 id="gearWorkshopTitle">CATAMON LAB<\/h2>/);
@@ -33,9 +35,12 @@ for (const asset of [
   'assets/gear/ui/master/gear_workbench_lab_background_01.png',
   'assets/gear/ui/runtime/gear_title_menu_frame_01.webp',
   'assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
+  'assets/gear/ui/master/gear_lab_control_frame_01.png',
+  'assets/gear/ui/runtime/gear_lab_control_frame_01.png',
 ]) assert.ok(fs.existsSync(path.join(root, asset)), `${asset} が必要`);
 
 assert.match(worker, /gear_title_menu_frame_01\.webp/);
 assert.match(worker, /gear_workbench_lab_background_01\.webp/);
+assert.match(worker, /gear_lab_control_frame_01\.png/);
 
 console.log('LOADOUT / CATAMON LAB UI: title・navigation・existing authority・assets (18/18 passed)');
