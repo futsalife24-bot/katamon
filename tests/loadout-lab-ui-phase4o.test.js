@@ -12,6 +12,8 @@ assert.match(html, /gear: \{ asset: 'loadoutFrame'/,
   'LOADOUTだけ専用のメカニカルフレームを使う');
 assert.match(html, /gear_title_menu_frame_01\.webp/);
 assert.match(html, /gear_workbench_lab_background_01\.webp/);
+assert.match(html, /@media \(max-width:620px\)\{#gearWorkshopBox\{background-image:linear-gradient\(180deg,rgba\(22,34,37,\.62\),rgba\(8,17,21,\.72\) 46%,rgba\(3,8,11,\.86\)\)/,
+  'スマホでは研究室背景を隠しすぎない専用オーバーレイを使う');
 assert.match(html, /<h2 id="gearWorkshopTitle">CATAMON LAB<\/h2>/);
 
 for (const page of ['gear', 'weapon', 'style', 'profile']) {

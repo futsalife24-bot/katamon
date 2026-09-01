@@ -68,6 +68,7 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     const layout = await page.locator('#gearWorkshopBox').evaluate((box) => ({
       boxOverflow: box.scrollWidth - box.clientWidth,
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      backgroundImage: getComputedStyle(box).backgroundImage,
       badControls: [...box.querySelectorAll('button,select')].filter((control) => {
         const rect = control.getBoundingClientRect(); const style = getComputedStyle(control);
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && (rect.left < -1 || rect.right > innerWidth + 1);
@@ -75,6 +76,8 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     }));
     expect(layout.boxOverflow).toBeLessThanOrEqual(0);
     expect(layout.documentOverflow).toBeLessThanOrEqual(0);
+    expect(layout.backgroundImage).toContain('rgba(22, 34, 37, 0.62)');
+    expect(layout.backgroundImage).toContain('gear_workbench_lab_background_01.webp');
     expect(layout.badControls).toEqual([]);
     expect(errors).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`loadout-lab-${viewport.width}.png`), fullPage: true });
