@@ -22,9 +22,12 @@ test('Gear Quick Guideは§22準拠の3ページを持つ', () => {
 });
 
 test('6部位と既存visual helperを再利用し新しいGear正本を作らない', () => {
-  assert.match(html, /domain\.SLOTS\.map\(\(slot\) => `<div class="gearGuideSlot"/);
+  assert.match(html, /gearGuideSlotOrder\.map\(\(slotId\) => domain\.SLOTS\.find/);
+  assert.match(html, /\['auxiliary', 'barrel', 'sight', 'armor', 'engine', 'core'\]/);
   assert.match(html, /gearAssetVisualHtml\(slot\.id, '', 'gearGuideAsset'\)/);
-  assert.match(html, /gearSlotFramePositions\[slot\.id\]/);
+  assert.match(html, /gearGuidePositionLabels\[slot\.id\]/);
+  assert.match(html, /slot\.mainKind === 'fixed'/);
+  assert.match(html, /'ランダム'/);
   assert.doesNotMatch(html, /const gearGuideSlots\s*=/);
 });
 

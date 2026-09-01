@@ -2904,15 +2904,15 @@ kt.setLocalSeat('p1');
   kt.resetDrawnText();
   kt.render();
   const garageText = kt.drawnTextDetails();
-  const soundLabel = garageText.find(entry => entry.text === 'サウンドテスト');
-  const soundSub = garageText.find(entry => entry.text === '全BGMを試聴');
-  check('GARAGEのサウンドテストは既存の緑盾内へ収まる文字サイズを使う',
-    soundLabel && soundSub && /16px/.test(soundLabel.font)
+  const soundLabel = garageText.find(entry => entry.text === 'MUSIC ROOM');
+  const soundSub = garageText.find(entry => entry.text === 'BGMコレクション');
+  check('GARAGEのMUSIC ROOMは既存の緑盾内へ収まる文字サイズを使う',
+    soundLabel && soundSub && /13px/.test(soundLabel.font)
       && soundLabel.y <= b.soundTest.y - 15 && soundSub.y <= b.soundTest.y + 10,
     JSON.stringify({ soundLabel, soundSub, button: b.soundTest }));
-  check('GARAGEにはショップ・実績・LOADOUT・サウンドテストを表示する',
-    ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'サウンドテスト'].every(label => garageText.some(entry => entry.text === label)),
-    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'サウンドテスト', 'CPU BATTLE'].includes(entry.text))));
+  check('GARAGEにはショップ・実績・LOADOUT・MUSIC ROOMを表示する',
+    ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'MUSIC ROOM', 'BGMコレクション'].every(label => garageText.some(entry => entry.text === label)),
+    JSON.stringify(garageText.filter(entry => ['ショップ', '実績', 'LOADOUT', '装備・装飾を管理', 'MUSIC ROOM', 'BGMコレクション', 'CPU BATTLE'].includes(entry.text))));
   kt.setTitleMenuPageForTest(0);
 
   // v168: 提供された木板・盾・吊り看板・羊皮紙を、タイトルの押せる枠として使う。
@@ -2942,8 +2942,9 @@ kt.setLocalSeat('p1');
         woodUi.imageRects[role] && woodUi.imageRects[role].asset === asset
       )),
       JSON.stringify(woodUi.imageRects));
-    check('GARAGE下段はGearを左、サウンドテストの緑盾を右へ分けて置く',
-      woodUi.imageRects.gear.x < kt.viewW() / 2
+    check('GARAGE下段はLOADOUTを中央へ大型化し、MUSIC ROOMの緑盾を右下へ分けて置く',
+      woodUi.imageRects.gear.x === kt.viewW() / 2
+        && woodUi.imageRects.gear.w >= 300
         && woodUi.imageRects.soundTest.x > kt.viewW() / 2
         && woodUi.imageRects.gear.y <= woodUi.imageRects.soundTest.y
         && !rectsOverlap(woodUi.buttons.gear, woodUi.buttons.soundTest),

@@ -5,11 +5,14 @@ gear_silhouette_engine_01,silhouette,engine,,flywheel exhaust and low powerplant
 gear_silhouette_barrel_01,silhouette,barrel,,wide muzzle and short reinforced cannon,clear at 64px,A,adopt
 gear_silhouette_armor_01,silhouette,armor,,broad layered defensive plate,clear at 64px,A,adopt
 gear_silhouette_core_01,silhouette,core,,contained luminous central reactor,clear at 64px,A,adopt
-gear_emblem_assault_01,emblem,,assault,forward spearhead and fangs,distinct at 27px,A,adopt
+gear_emblem_assault_01,emblem,,assault,symmetric wing and spear legacy,too similar to critical and last stand,C,replaced
+gear_emblem_assault_02,emblem,,assault,horizontal charging arrowhead and jaw blades,distinct at 27px,A,adopt
 gear_emblem_life_01,emblem,,life,heart reservoir and leaves,distinct at 27px,A,adopt
 gear_emblem_fortify_01,emblem,,fortify,castle shield and riveted wall,distinct at 27px,A,adopt
-gear_emblem_critical_01,emblem,,critical,split crystal and precision needle,distinct at 27px,A,adopt
+gear_emblem_critical_01,emblem,,critical,symmetric crystal and spear legacy,too similar to assault,C,replaced
+gear_emblem_critical_02,emblem,,critical,circular scope ring and precision reticle,distinct at 27px,A,adopt
 gear_emblem_blast_01,emblem,,blast,pressure orb and radial vents,distinct at 27px,A,adopt
 gear_emblem_impact_01,emblem,,impact,piston springs and anvil plate,distinct at 27px,A,adopt
 gear_emblem_rescue_01,emblem,,rescue,repair wrench and life capsule,distinct at 27px,A,adopt
-gear_emblem_laststand_01,emblem,,last_stand,fractured overdrive core and clamps,distinct at 27px,A,adopt
+gear_emblem_laststand_01,emblem,,last_stand,symmetric winged overdrive core legacy,too similar to assault,C,replaced
+gear_emblem_laststand_02,emblem,,last_stand,asymmetric broken reactor ring and emergency clamps,distinct at 27px,A,adopt

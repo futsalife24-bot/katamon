@@ -569,7 +569,7 @@
   .gearSocketWell { fill:#1d2b2e; stroke:rgba(255,235,183,.22); stroke-width:1.2; }
   .gearAssetVisual.gearSlotEmblem { position:absolute; z-index:4; left:50%; top:50%; width:25px; height:25px; transform:translate(-50%,-50%) rotate(var(--frame-angle)) translateX(calc(-1 * var(--socket-r))) rotate(calc(-1 * var(--frame-angle))); pointer-events:none; }
   .gearSlotEmblem .gearAssetSilhouette { display:none; }
-  .gearSlotEmblem .gearAssetEmblem { left:50%; top:50%; width:100%; height:auto; transform:translate(-50%,-50%); filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
+  .gearSlotEmblem .gearAssetEmblem { left:50%; top:50%; width:100%; height:auto; transform:translate(-50%,-50%); filter:brightness(1.24) saturate(1.12) drop-shadow(0 1px 2px rgba(0,0,0,.78)); }
   .gearSlotContent { position:absolute; z-index:2; display:flex; min-width:0; flex-direction:column; justify-content:center; overflow:hidden; padding:0; border-radius:0; background:none; box-shadow:none; transform:none; text-align:left; pointer-events:none; }
   .gearSlot[data-frame-position="left-top"] .gearSlotContent,.gearSlot[data-frame-position="left-bottom"] .gearSlotContent { inset:28px 25px 28px 33px; }
   .gearSlot[data-frame-position="left-middle"] .gearSlotContent { inset:28px 22px 28px 29px; }
@@ -614,15 +614,16 @@
   .gearSlot.selected .gearSlotFrameOuter:not(.gearSocketRing){fill:#8b612c;stroke:#ffe18b;filter:drop-shadow(0 0 7px rgba(255,207,77,.95))}
   .gearSlot.updated .gearSlotFrameOuter:not(.gearSocketRing){stroke:#fff3b2;filter:drop-shadow(0 0 9px #ffd24a)}
   .gearCrest { display:inline-grid; place-items:center; width:17px; height:17px; flex:0 0 auto; color:#1a1007; border:1px solid rgba(255,244,190,.7); border-radius:50%; background:#e5a24c; font:900 10px/1 sans-serif; }
-  .gearAssetVisual{--gear-emblem-x:50%;--gear-emblem-y:72%;--gear-emblem-w:28%;position:relative;display:inline-block;flex:0 0 auto;width:42px;height:42px;isolation:isolate;pointer-events:none}.gearAssetSilhouette,.gearAssetEmblem{position:absolute;display:block;object-fit:contain;image-rendering:auto}.gearAssetSilhouette{inset:0;width:100%;height:100%;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}.gearAssetEmblem{z-index:1;left:var(--gear-emblem-x);top:var(--gear-emblem-y);width:var(--gear-emblem-w);height:auto;transform:translate(-50%,-50%);filter:drop-shadow(0 1px 1px rgba(0,0,0,.75))}.gearStorageAsset{width:56px;height:56px;padding:3px;border:1px solid rgba(199,143,67,.38);border-radius:10px;background:radial-gradient(circle,rgba(76,101,99,.34),rgba(4,10,13,.5) 72%);box-shadow:inset 0 0 10px rgba(0,0,0,.5)}.gearCandidateAsset{width:50px;height:50px}.gearDetailAsset{width:54px;height:54px;padding:3px;border:1px solid rgba(199,143,67,.38);border-radius:10px;background:rgba(3,9,12,.46)}.gearActionAsset{width:66px;height:66px}.gearDropAsset{width:43px;height:43px}.gearDropSlot.active .gearDropAsset{width:59px;height:59px;filter:drop-shadow(0 0 7px rgba(255,210,74,.72))}.gearDropCardAsset{width:62px;height:62px}.gearAssetVisual[data-gear-asset-set=""] .gearAssetEmblem{display:none}
+  .gearAssetVisual{--gear-emblem-x:50%;--gear-emblem-y:72%;--gear-emblem-w:28%;position:relative;display:inline-block;flex:0 0 auto;width:42px;height:42px;isolation:isolate;pointer-events:none}.gearAssetSilhouette,.gearAssetEmblem{position:absolute;display:block;object-fit:contain;image-rendering:auto}.gearAssetSilhouette{inset:0;width:100%;height:100%;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}.gearAssetEmblem{z-index:1;left:var(--gear-emblem-x);top:var(--gear-emblem-y);width:var(--gear-emblem-w);height:auto;transform:translate(-50%,-50%);filter:brightness(1.24) saturate(1.12) drop-shadow(0 1px 1px rgba(0,0,0,.65))}.gearStorageAsset{width:56px;height:56px;padding:3px;border:1px solid rgba(199,143,67,.38);border-radius:10px;background:radial-gradient(circle,rgba(76,101,99,.34),rgba(4,10,13,.5) 72%);box-shadow:inset 0 0 10px rgba(0,0,0,.5)}.gearCandidateAsset{width:50px;height:50px}.gearDetailAsset{width:54px;height:54px;padding:3px;border:1px solid rgba(199,143,67,.38);border-radius:10px;background:rgba(3,9,12,.46)}.gearActionAsset{width:66px;height:66px}.gearDropAsset{width:43px;height:43px}.gearDropSlot.active .gearDropAsset{width:59px;height:59px;filter:drop-shadow(0 0 7px rgba(255,210,74,.72))}.gearDropCardAsset{width:62px;height:62px}.gearAssetVisual[data-gear-asset-set=""] .gearAssetEmblem{display:none}
   .gearSlotMini { display:inline-grid; place-items:center; width:27px; height:24px; margin-right:5px; color:#ffe5a6; vertical-align:middle; clip-path:polygon(0 12%,70% 0,100% 50%,70% 100%,0 88%,14% 50%); background:linear-gradient(135deg,#90622f,#293a3d 48%,#101b20); box-shadow:inset 0 0 0 2px rgba(255,213,124,.45); font:900 12px/1 sans-serif; }
   .gearSummary { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:10px 0; }.gearSummary.detail{display:block}.gearStat { min-height:48px; padding:6px 7px; border:1px solid rgba(195,128,54,.65); border-radius:7px; background:rgba(7,15,19,.66); }.gearStat b{display:block;color:#fff4d6;font-size:15px}.gearStat small{display:block;color:#d6ad73;font-size:10px}.gearStat.soft b{color:#ffd35b}.gearStat.hard b{color:#ff8c76}.gearCapNote{display:block;font-size:9px;color:#ffd35b}.gearInlineDetail{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;min-height:112px;padding:10px;border:1px solid #b77a36;border-radius:10px;background:linear-gradient(145deg,rgba(42,61,64,.98),rgba(7,14,18,.98));box-shadow:inset 0 0 18px rgba(0,0,0,.42)}.gearInlineDetail.empty{align-items:center;border-style:dashed}.gearInlineDetailVisual{display:flex;flex-direction:column;align-items:center;gap:5px}.gearInlineDetailAsset{width:72px;height:72px;padding:4px;border:1px solid rgba(221,169,92,.48);border-radius:11px;background:radial-gradient(circle,rgba(88,116,110,.38),rgba(3,9,12,.58) 72%)}.gearInlineSetButton{display:grid;grid-template-columns:24px auto;align-items:center;gap:4px;min-height:32px;padding:3px 6px;color:#ffe6aa;border:1px solid #8c6332;border-radius:999px;background:linear-gradient(#314247,#111d22);font:400 8px var(--katamon-font-ui);cursor:pointer}.gearInlineSetButton[aria-expanded="true"]{color:#211406;border-color:#ffe08b;background:linear-gradient(#ffe49e,#c27d2d);box-shadow:0 0 8px rgba(255,205,91,.38)}.gearInlineSetEmblem{display:block;width:24px;height:24px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}.gearInlineDetailBody{min-width:0}.gearInlineDetailHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.gearInlineDetailIdentity{min-width:0}.gearInlineDetailPart{display:block;color:#d8ad73;font-size:10px}.gearInlineDetailTitle{display:block;overflow:hidden;color:#fff0c9;font-size:15px;text-overflow:ellipsis;white-space:nowrap}.gearInlineDetailBadges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.gearInlineDetailBadge{padding:2px 6px;color:#e3d4b6;border:1px solid #745633;border-radius:999px;background:#152327;font-size:9px;white-space:nowrap}.gearInlineDetailBadge.quality{color:#ffda70;border-color:#b78336}.gearInlineDetailMain{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:7px;margin-top:7px;padding:7px 8px;border-radius:7px;background:rgba(2,8,10,.58)}.gearInlineDetailMain span{color:#cba66f;font-size:9px}.gearInlineDetailMain b{overflow:hidden;color:#fff4d5;font-size:12px;text-align:right;text-overflow:ellipsis;white-space:nowrap}.gearInlineDetailSubs{margin:6px 0 0;color:#cfd2c8;font-size:9px;line-height:1.45}.gearInlineDetailHint{display:block;margin-top:5px;color:#d7b879;font-size:9px}.gearInlineSetEffects{grid-column:1/-1;margin-top:7px;padding:7px;border:1px solid rgba(224,172,87,.62);border-radius:8px;background:rgba(3,9,12,.66)}.gearInlineSetEffectsHeader{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#ffe2a1;font-size:10px}.gearInlineSetEffectsHeader span{color:#c8b999;font-size:9px}.gearInlineSetEffectRow{display:grid;grid-template-columns:42px minmax(0,1fr);gap:6px;margin-top:5px;padding:5px 6px;border-radius:6px;background:rgba(25,38,41,.78);color:#cbd0c5;font-size:9px;line-height:1.4}.gearInlineSetEffectRow b{color:#d8ad73}.gearInlineSetEffectRow.active{box-shadow:inset 2px 0 #ffd45b;color:#fff0c7}.gearInlineSetEffectRow.active b{color:#ffd45b}.gearInlineSetEffectState{display:block;margin-top:2px;color:#9eacaa;font-size:8px}.gearInlineDetailEmptyTitle{display:block;color:#fff0c9;font-size:14px}.gearInlineDetailEmptyCopy{margin:5px 0 0;color:#cfd2c8;font-size:10px;line-height:1.55}.gearSetPanel { margin:8px 0 14px; padding:9px; border:1px solid rgba(192,128,53,.6); border-radius:8px; background:rgba(9,16,19,.66); }.gearSetTitle{font-size:11px;color:#d8ad73}.gearSetRows{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gearSetChip{display:flex;gap:5px;align-items:center;padding:4px 6px;border:1px solid #80572e;border-radius:999px;background:#1b2a2d;font-size:10px}.gearSetChip.active{border-color:#ffd24a;color:#fff0b0}.gearSetHint{margin-top:6px;color:#cbd2cb;font-size:10px}
   .gearLoadoutControls { display:grid; grid-template-columns:1fr auto; gap:8px; margin:10px 0; }.gearSelect{width:100%;padding:0 8px}.gearStatus{min-height:18px;margin:0 2px 8px;color:#f5ce84;font-size:11px}.gearStatus.error{color:#ff9f86}.gearInventory{border-top:2px solid rgba(199,131,53,.55);padding-top:11px}.gearInventory h3{display:flex;align-items:center;margin:0 0 3px;color:#ffe2a1;font:400 16px var(--katamon-font-display)}.gearInventoryNote{margin:0 0 8px;color:#c8c4b7;font-size:10px}.gearCandidates{display:grid;gap:8px}.gearCandidate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;width:100%;min-height:68px;padding:8px;text-align:left;color:#fff5dc;border:1px solid #815a31;border-radius:8px;background:linear-gradient(135deg,#263941,#111c21);cursor:pointer}.gearCandidateMarks{display:grid;place-items:center}.gearCandidate.current{border-color:#ffd24a;box-shadow:inset 0 0 0 1px rgba(255,219,125,.42)}.gearCandidate strong{display:block;font-size:12px}.gearCandidate small{display:block;color:#d6c4a6;font-size:10px}.gearDiff{font-size:11px;font-weight:900}.gearDiff.up{color:#80ec99}.gearDiff.down{color:#ff9c86}.gearEmpty{padding:17px 10px;color:#d2d2c8;text-align:center;border:1px dashed #80603e;border-radius:8px;font-size:12px}.gearCompare{position:sticky;bottom:0;margin-top:12px;padding:11px;border:2px solid #c78335;border-radius:10px;background:linear-gradient(180deg,rgba(54,69,72,.98),rgba(9,16,20,.99));box-shadow:0 -5px 20px rgba(0,0,0,.38)}.gearCompare[hidden]{display:none}.gearCompareTitle{display:flex;align-items:center;color:#ffe2a1;font-weight:900;font-size:12px}.gearCompareGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:7px 0}.gearCompareGrid div{padding:6px;border-radius:6px;background:rgba(2,7,9,.55);font-size:11px}.gearCompareGrid b{display:block;color:#d5ad73;font-size:9px}.gearCompareSet{color:#ffd45a;font-size:10px}.gearCompareActions{display:flex;gap:8px}.gearCompareActions .gearButton{flex:1}
   .gearPendingRewards{display:flex;align-items:center;justify-content:space-between;width:100%;margin:0 0 10px;padding:8px 11px;text-align:left}.gearPendingRewards b{display:inline-grid;place-items:center;min-width:25px;height:25px;padding:0 5px;color:#201204;border-radius:999px;background:#ffd45b}.gearPendingRewards[hidden]{display:none}
   .gearSectionNav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.gearSectionNav .gearButton.active{color:#251506;border-color:#ffe18a;background:linear-gradient(#ffe3a0,#c27a29);font-weight:900}
-  .gearHeaderActions{display:flex;align-items:center;gap:7px}.gearGuideOpen{min-width:42px;padding-inline:9px;font-weight:900}
-  #gearGuide{position:fixed;inset:0;z-index:140;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));color:#fff5dc;background:rgba(2,5,7,.9);font-family:var(--katamon-font-ui)}#gearGuide.open{display:flex}.gearGuidePanel{width:min(460px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:16px 14px 14px;border:2px solid #c99245;border-radius:15px;background:linear-gradient(160deg,#3a4a4b,#111c21 56%,#060b0e);box-shadow:inset 0 0 0 3px rgba(44,27,13,.72),0 18px 45px rgba(0,0,0,.72)}.gearGuideKicker{margin:0;color:#d8a950;font:900 9px var(--katamon-font-ui);letter-spacing:.18em}.gearGuideHeader{display:flex;align-items:start;justify-content:space-between;gap:10px}.gearGuideHeader h2{margin:3px 0 0;color:#ffe3a0;font:400 22px var(--katamon-font-display)}.gearGuideProgress{margin:5px 0 11px;color:#cdbd9b;font-size:10px}.gearGuideBody{min-height:300px}.gearGuideLead{margin:0 0 11px;color:#fff2cc;font-size:12px;line-height:1.65}.gearGuideSlots{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}.gearGuideSlot{display:flex;align-items:center;gap:8px;min-width:0;padding:8px;border:1px solid #73532e;border-radius:9px;background:linear-gradient(145deg,#293d40,#101a1f)}.gearGuideSlot b{display:block;color:#ffe09a;font-size:12px}.gearGuideSlot small{display:block;color:#c8b995;font-size:9px}.gearGuideSlot .gearAssetVisual{width:48px;height:48px}.gearGuidePreset{margin-top:10px;padding:10px;border:1px solid #9a6c35;border-radius:9px;background:rgba(7,14,17,.72)}.gearGuidePreset strong{color:#ffe09a}.gearGuidePreset p{margin:4px 0 0;color:#d7cbb3;font-size:10px;line-height:1.55}.gearGuideSetGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearGuideSetCard{padding:10px;border:1px solid #76532e;border-radius:10px;background:rgba(6,13,16,.72)}.gearGuideSetCard strong{display:flex;align-items:center;gap:7px;color:#ffe2a1;font-size:13px}.gearGuideSetCard p{margin:6px 0 0;color:#d5c9b2;font-size:10px;line-height:1.55}.gearGuideSetBadge{display:inline-grid;place-items:center;width:30px;height:30px;color:#2a1605;border-radius:50%;background:#e3b65e;font-size:15px}.gearGuideAxes{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.gearGuideAxis{padding:8px;border-radius:8px;background:#101c21;color:#cdbd9b;font-size:9px}.gearGuideAxis b{display:block;margin-bottom:3px;color:#fff0bc;font-size:12px}.gearGuideMilestones{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.gearGuideMilestone{padding:9px 3px;text-align:center;border:1px solid #956831;border-radius:8px;background:#17272b;color:#ffe09a;font-weight:900}.gearGuideResourceFlow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:7px;margin:9px 0}.gearGuideResourceFlow div{padding:9px;text-align:center;border-radius:8px;background:rgba(4,10,13,.65);font-size:10px}.gearGuideResourceFlow b{display:block;color:#ffe09a;font-size:13px}.gearGuideRules{display:grid;gap:6px;margin:10px 0 0}.gearGuideRule{padding:8px 9px;color:#ddd1b8;border-left:3px solid #b98039;background:rgba(12,21,24,.72);font-size:10px;line-height:1.5}.gearGuideRule.warn{color:#ffd2c5;border-color:#c6533c}.gearGuideActions{display:grid;grid-template-columns:auto 1fr 1fr;gap:7px;margin-top:13px}.gearGuideDots{display:flex;justify-content:center;gap:6px;margin:8px 0 0}.gearGuideDot{width:7px;height:7px;border-radius:50%;background:#5d574b}.gearGuideDot.active{background:#ffd166;box-shadow:0 0 7px rgba(255,209,102,.55)}
-  @media(max-width:360px){.gearGuidePanel{padding:12px 10px}.gearGuideBody{min-height:286px}.gearGuideSlot{padding:6px;gap:5px}.gearGuideSlot .gearAssetVisual{width:40px;height:40px}.gearGuideSetGrid{gap:6px}.gearGuideActions{grid-template-columns:1fr 1fr}.gearGuideActions [data-gear-guide-skip]{grid-column:1/-1;grid-row:2}.gearGuideHeader h2{font-size:19px}.gearCharacterPlate{width:38%;max-width:112px;padding-inline:7px;gap:3px}.gearCharacterPlateEquipped{display:none}}
+  .gearHeaderActions{display:flex;align-items:center;gap:7px}.gearGuideOpen{min-width:42px;padding-inline:9px;font-weight:900}.gearBackButton{display:grid;place-items:center;min-width:124px;line-height:1.05}.gearBackButton span{display:block;white-space:nowrap}.gearInlineSetEmblem{filter:brightness(1.24) saturate(1.12) drop-shadow(0 1px 2px rgba(0,0,0,.65))}.gearInlineSetEffectNote{margin:6px 0 0;padding:6px 7px;color:#ffe5a6;border-left:3px solid #d24d40;background:rgba(76,22,24,.38);font-size:9px;line-height:1.45}
+  #gearGuide{position:fixed;inset:0;z-index:140;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));color:#fff5dc;background:rgba(2,5,7,.9);font-family:var(--katamon-font-ui)}#gearGuide.open{display:flex}.gearGuidePanel{width:min(460px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:16px 14px 14px;border:2px solid #c99245;border-radius:15px;background:linear-gradient(160deg,#3a4a4b,#111c21 56%,#060b0e);box-shadow:inset 0 0 0 3px rgba(44,27,13,.72),0 18px 45px rgba(0,0,0,.72)}.gearGuideKicker{margin:0;color:#d8a950;font:900 9px var(--katamon-font-ui);letter-spacing:.18em}.gearGuideHeader{display:flex;align-items:start;justify-content:space-between;gap:10px}.gearGuideHeader h2{margin:3px 0 0;color:#ffe3a0;font:400 22px var(--katamon-font-display)}.gearGuideProgress{margin:5px 0 11px;color:#cdbd9b;font-size:10px}.gearGuideBody{min-height:300px}.gearGuideLead{margin:0 0 11px;color:#fff2cc;font-size:12px;line-height:1.65}.gearGuideSlots{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}.gearGuideSlot{display:flex;align-items:center;gap:8px;min-width:0;padding:8px;border:1px solid #73532e;border-radius:9px;background:linear-gradient(145deg,#293d40,#101a1f)}.gearGuideSlotText{min-width:0}.gearGuideSlot b{display:block;color:#ffe09a;font-size:12px}.gearGuideSlot small{display:block;color:#c8b995;font-size:9px}.gearGuideSlotMain{display:inline-block;margin-top:3px;padding:1px 5px;color:#fff0c4;border:1px solid rgba(218,165,83,.5);border-radius:999px;background:#172428;font-size:9px;white-space:nowrap}.gearGuideSlot .gearAssetVisual{width:48px;height:48px}.gearGuidePreset{margin-top:10px;padding:10px;border:1px solid #9a6c35;border-radius:9px;background:rgba(7,14,17,.72)}.gearGuidePreset strong{color:#ffe09a}.gearGuidePreset p{margin:4px 0 0;color:#d7cbb3;font-size:10px;line-height:1.55}.gearGuideSetGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearGuideSetCard{padding:10px;border:1px solid #76532e;border-radius:10px;background:rgba(6,13,16,.72)}.gearGuideSetCard strong{display:flex;align-items:center;gap:7px;color:#ffe2a1;font-size:13px}.gearGuideSetCard p{margin:6px 0 0;color:#d5c9b2;font-size:10px;line-height:1.55}.gearGuideSetBadge{display:inline-grid;place-items:center;width:30px;height:30px;color:#2a1605;border-radius:50%;background:#e3b65e;font-size:15px}.gearGuideAxes{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.gearGuideAxis{padding:8px;border-radius:8px;background:#101c21;color:#cdbd9b;font-size:9px}.gearGuideAxis b{display:block;margin-bottom:3px;color:#fff0bc;font-size:12px}.gearGuideMilestones{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.gearGuideMilestone{padding:9px 3px;text-align:center;border:1px solid #956831;border-radius:8px;background:#17272b;color:#ffe09a;font-weight:900}.gearGuideResourceFlow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:7px;margin:9px 0}.gearGuideResourceFlow div{padding:9px;text-align:center;border-radius:8px;background:rgba(4,10,13,.65);font-size:10px}.gearGuideResourceFlow b{display:block;color:#ffe09a;font-size:13px}.gearGuideRules{display:grid;gap:6px;margin:10px 0 0}.gearGuideRule{padding:8px 9px;color:#ddd1b8;border-left:3px solid #b98039;background:rgba(12,21,24,.72);font-size:10px;line-height:1.5}.gearGuideRule.warn{color:#ffd2c5;border-color:#c6533c}.gearGuideActions{display:grid;grid-template-columns:auto 1fr 1fr;gap:7px;margin-top:13px}.gearGuideDots{display:flex;justify-content:center;gap:6px;margin:8px 0 0}.gearGuideDot{width:7px;height:7px;border-radius:50%;background:#5d574b}.gearGuideDot.active{background:#ffd166;box-shadow:0 0 7px rgba(255,209,102,.55)}
+  .gearGuideHeader>[data-gear-guide-skip]{white-space:nowrap}
+  @media(max-width:360px){.gearGuidePanel{padding:12px 10px}.gearGuideBody{min-height:286px}.gearGuideSlot{padding:6px;gap:5px}.gearGuideSlot .gearAssetVisual{width:40px;height:40px}.gearGuideSetGrid{gap:6px}.gearGuideActions{grid-template-columns:1fr 1fr}.gearGuideActions [data-gear-guide-skip]{grid-column:1/-1;grid-row:2}.gearGuideHeader h2{font-size:19px}.gearGuideHeader>[data-gear-guide-skip]{padding-inline:5px;font-size:12px}.gearCharacterPlate{width:38%;max-width:112px;padding-inline:7px;gap:3px}.gearCharacterPlateEquipped{display:none}}
   @media(prefers-reduced-motion:reduce){#gearGuide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
   #gearStorage{position:fixed;inset:0;z-index:28;display:none;color:#fff5dc;background:linear-gradient(rgba(3,7,10,.78),rgba(3,7,10,.94)),url("assets/wall.jpg") center/cover;font-family:var(--katamon-font-ui)}#gearStorage.open{display:flex;justify-content:center}#gearStorageBox{width:min(100%,680px);height:100%;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;padding:calc(12px + env(safe-area-inset-top)) 12px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(57,69,70,.99),rgba(17,27,31,.99) 42%,rgba(5,10,13,.99));border-inline:2px solid rgba(199,131,53,.65)}
   .gearStorageSummary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:11px 0}.gearStorageMeter{padding:9px 6px;text-align:center;border:1px solid #835b31;border-radius:9px;background:linear-gradient(150deg,#2c4043,#101b20);box-shadow:inset 0 0 13px rgba(0,0,0,.42)}.gearStorageMeter strong{display:block;color:#ffe09a;font-size:16px}.gearStorageMeter span{display:block;margin-top:2px;color:#c8b995;font-size:9px}.gearStorageMeter.warn{border-color:#d2a12e}.gearStorageMeter.full{border-color:#d7553d}.gearStorageMeter.full strong{color:#ff9c83}
@@ -787,7 +788,7 @@
 <!-- 装備変更は既存Gear domain/storageを読むだけのガレージ画面。戦闘Canvasの常時描画には参加しない。 -->
 <div id="gearWorkshop" aria-hidden="true">
   <main id="gearWorkshopBox" role="dialog" aria-modal="true" aria-labelledby="gearWorkshopTitle">
-    <header class="gearHeader"><div class="loadoutLabTitle"><span class="loadoutLabKicker">LOADOUT FACILITY</span><h2 id="gearWorkshopTitle">CATAMON LAB</h2></div><div class="gearHeaderActions"><button id="gearWorkshopGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
+    <header class="gearHeader"><div class="loadoutLabTitle"><span class="loadoutLabKicker">LOADOUT FACILITY</span><h2 id="gearWorkshopTitle">CATAMON LAB</h2></div><div class="gearHeaderActions"><button id="gearWorkshopGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearWorkshopClose" class="gearButton gearBackButton" type="button"><span>GARAGEへ</span><span>戻る</span></button></div></header>
     <nav id="loadoutLabNav" class="loadoutLabNav" aria-label="装備管理メニュー"><button class="loadoutLabTab active" data-loadout-page="gear" type="button" aria-current="page">GEAR<span>ギア装備</span></button><button class="loadoutLabTab" data-loadout-page="weapon" type="button">WEAPON<span>武装</span></button><button class="loadoutLabTab" data-loadout-page="style" type="button">STYLE<span>装飾</span></button><button class="loadoutLabTab" data-loadout-page="profile" type="button">PROFILE<span>記録</span></button></nav>
     <section id="loadoutGearPanel" class="loadoutLabPanel" data-loadout-panel="gear">
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button class="gearButton active" type="button" aria-current="page">装備</button><button id="gearOpenStorage" class="gearButton" type="button">所持品</button></nav>
@@ -808,7 +809,7 @@
 </div>
 <div id="gearStorage" aria-hidden="true">
   <main id="gearStorageBox" role="dialog" aria-modal="true" aria-labelledby="gearStorageTitle">
-    <header class="gearHeader"><h2 id="gearStorageTitle">GEAR STORAGE</h2><div class="gearHeaderActions"><button id="gearStorageGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearStorageClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
+    <header class="gearHeader"><h2 id="gearStorageTitle">GEAR STORAGE</h2><div class="gearHeaderActions"><button id="gearStorageGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearStorageClose" class="gearButton gearBackButton" type="button"><span>GARAGEへ</span><span>戻る</span></button></div></header>
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button id="gearStorageOpenWorkshop" class="gearButton" type="button">装備</button><button class="gearButton active" type="button" aria-current="page">所持品</button></nav>
     <section id="gearStorageSummary" class="gearStorageSummary" aria-label="Gear保管数"></section>
     <section id="gearStorageResources" class="gearResourceBar" aria-label="Gear資源"></section>
@@ -1771,7 +1772,7 @@
       cut: 14, lineWidth: 2.5, rivets: true, rivetInset: 18, rivetRadius: 3,
       fill: 'rgba(17, 27, 34, 0.98)', edge: UI.brass
     });
-    drawOutlinedText('サウンドテスト', soundTestModal.x, soundTestModal.y - 315, {
+    drawOutlinedText('MUSIC ROOM', soundTestModal.x, soundTestModal.y - 315, {
       font: `900 22px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5
     });
     drawOutlinedText('聴きたい曲を選んでください', soundTestModal.x, soundTestModal.y - 291, {
@@ -4728,14 +4729,14 @@
     core: Object.freeze({ socket: [50, 73, 28], silhouette: 'assets/gear/runtime/silhouettes/gear_silhouette_core_01.webp' })
   });
   const gearSetEmblemAssets = Object.freeze({
-    assault: 'assets/gear/runtime/emblems/gear_emblem_assault_01.webp',
+    assault: 'assets/gear/runtime/emblems/gear_emblem_assault_02.png',
     life: 'assets/gear/runtime/emblems/gear_emblem_life_01.webp',
     fortify: 'assets/gear/runtime/emblems/gear_emblem_fortify_01.webp',
-    critical: 'assets/gear/runtime/emblems/gear_emblem_critical_01.webp',
+    critical: 'assets/gear/runtime/emblems/gear_emblem_critical_02.png',
     blast: 'assets/gear/runtime/emblems/gear_emblem_blast_01.webp',
     impact: 'assets/gear/runtime/emblems/gear_emblem_impact_01.webp',
     rescue: 'assets/gear/runtime/emblems/gear_emblem_rescue_01.webp',
-    last_stand: 'assets/gear/runtime/emblems/gear_emblem_laststand_01.webp'
+    last_stand: 'assets/gear/runtime/emblems/gear_emblem_laststand_02.png'
   });
   const gearUi = { open: false, labPage: 'gear', labBusy: false, labStatus: '', characterId: CHARACTER_LIST[0], presetId: 'preset1', slotId: null, comparisonGearId: null, highlightSlotId: null, setDetailOpen: false, busy: false, status: '' };
   let gearSlotHighlightTimer = null;
@@ -4842,10 +4843,14 @@
   const gearGuidePrevEl = document.getElementById('gearGuidePrev');
   const gearGuideNextEl = document.getElementById('gearGuideNext');
   const gearGuideUi = { page: 0, onComplete: null };
+  const gearGuideSlotOrder = Object.freeze(['auxiliary', 'barrel', 'sight', 'armor', 'engine', 'core']);
+  const gearGuidePositionLabels = Object.freeze({ auxiliary: '左上', barrel: '右上', sight: '左中', armor: '右中', engine: '左下', core: '右下' });
+  const gearGuideFixedMainLabels = Object.freeze({ barrel: '攻撃', armor: 'HP', core: '防御' });
   function gearGuidePageHtml(page) {
     const domain = gearModules().domain;
     if (page === 0) {
-      return `<p class="gearGuideLead">Gearは6つの部位へ装備します。位置とシルエットはいつも同じです。</p><div class="gearGuideSlots">${domain.SLOTS.map((slot) => `<div class="gearGuideSlot" data-gear-guide-slot="${gearHtml(slot.id)}">${gearAssetVisualHtml(slot.id, '', 'gearGuideAsset')}<span><b>${gearHtml(slot.labelJa)}</b><small>${gearHtml(gearSlotFramePositions[slot.id])}</small></span></div>`).join('')}</div><div class="gearGuidePreset"><strong>PRESET 1 / 2 / 3</strong><p>CATAMONごとに3組を自動保存。用途に合わせてワンタップで装備構成を切り替えられます。</p></div>`;
+      const slots = gearGuideSlotOrder.map((slotId) => domain.SLOTS.find((slot) => slot.id === slotId)).filter(Boolean);
+      return `<p class="gearGuideLead">Gearは6つの部位へ装備します。ガイドもWorkbenchと同じ左右3段の並びです。</p><div class="gearGuideSlots">${slots.map((slot) => `<div class="gearGuideSlot" data-gear-guide-slot="${gearHtml(slot.id)}">${gearAssetVisualHtml(slot.id, '', 'gearGuideAsset')}<span class="gearGuideSlotText"><b>${gearHtml(slot.labelJa)}</b><small>${gearHtml(gearGuidePositionLabels[slot.id])}</small><em class="gearGuideSlotMain">メイン：${gearHtml(slot.mainKind === 'fixed' ? gearGuideFixedMainLabels[slot.id] : 'ランダム')}</em></span></div>`).join('')}</div><div class="gearGuidePreset"><strong>PRESET 1 / 2 / 3</strong><p>CATAMONごとに3組を自動保存。用途に合わせてワンタップで装備構成を切り替えられます。</p></div>`;
     }
     if (page === 1) {
       return `<p class="gearGuideLead">同じ紋章のGearを揃えると、2個・4個でセット効果が発動します。</p><div class="gearGuideSetGrid"><div class="gearGuideSetCard"><strong><span class="gearGuideSetBadge">${gearSetCrests.assault}</span>2 SET</strong><p>最初のセット効果が発動。Workbenchの紋章と発動表示で確認できます。</p></div><div class="gearGuideSetCard"><strong><span class="gearGuideSetBadge">${gearSetCrests.assault}</span>4 SET</strong><p>上位のセット効果が発動。比較画面では増減も先に確認できます。</p></div></div><div class="gearGuideAxes"><div class="gearGuideAxis"><b>SET = 紋章</b>猛攻・生命・堅守など、ビルドの役割を表します。</div><div class="gearGuideAxis"><b>RARITY / ★</b>レアリティは金属の質、★はGearそのものの品質です。</div></div>`;
@@ -4933,7 +4938,7 @@
     if (effect.effectId === 'direct_hit_damage_taken_reduction') return `砲弾を直接受けた時、被ダメージ-${(effect.valueBp / 100).toFixed(0)}%`;
     if (effect.effectId === 'ally_recovery_next_attack') return `自分以外の味方を実回復・実シールドした時、対象の次の攻撃${gearSetPercent(effect.valueBp)}`;
     if (effect.effectId === 'low_hp_attack') return `HP50%以下で攻撃${gearSetPercent(effect.valueBp)}`;
-    if (effect.effectId === 'damage_taken_next_attack') return `相手の攻撃で実ダメージを受けた後、次の攻撃${gearSetPercent(effect.valueBp)}。HP${(effect.hpThresholdBp / 100).toFixed(0)}%以下なら${gearSetPercent(effect.lowHpValueBp)}`;
+    if (effect.effectId === 'damage_taken_next_attack') return `相手の攻撃で実ダメージを受けた後、次の攻撃${gearSetPercent(effect.valueBp)}。被弾後HP${(effect.hpThresholdBp / 100).toFixed(0)}%以下なら${gearSetPercent(effect.lowHpValueBp)}へ上書き（重複なし）`;
     return '条件を満たすと追加効果';
   }
   function gearSetEffectText(effect) {
@@ -4948,7 +4953,8 @@
       const status = active ? '発動中' : `あと${threshold - count}部位`;
       return `<div class="gearInlineSetEffectRow ${active ? 'active' : ''}" data-gear-inline-set-threshold="${threshold}"><b>${threshold} SET<span class="gearInlineSetEffectState">${status}</span></b><span>${gearHtml(gearSetEffectText(set.effects[threshold]))}</span></div>`;
     }).join('');
-    return `<section id="gearInlineSetEffects" class="gearInlineSetEffects" aria-label="${gearHtml(set.labelJa)}セット効果"><div class="gearInlineSetEffectsHeader"><b>${gearHtml(set.labelJa)} SET</b><span>${count}/4 装備</span></div>${rows}</section>`;
+    const note = set.id === 'last_stand' ? '<p class="gearInlineSetEffectNote">HP50%以下では2SETの攻撃+10%と、4SETの次攻撃+15%が別の補正として両方有効です。</p>' : '';
+    return `<section id="gearInlineSetEffects" class="gearInlineSetEffects" aria-label="${gearHtml(set.labelJa)}セット効果"><div class="gearInlineSetEffectsHeader"><b>${gearHtml(set.labelJa)} SET</b><span>${count}/4 装備</span></div>${rows}${note}</section>`;
   }
   function gearInlineDetailHtml(state, slotId) {
     const slot = gearSlot(state.domain, slotId);
@@ -7777,8 +7783,8 @@
     ranking: { asset: 'hangingSign', x: 270, y: 787, w: 220, h: 139 },
     shop: { asset: 'parchment', x: 270, y: 548, w: 301, h: 82 },
     achievements: { asset: 'parchment', x: 270, y: 643, w: 301, h: 82 },
-    gear: { asset: 'loadoutFrame', x: 169, y: 735, w: 189, h: 52 },
-    soundTest: { asset: 'shield', x: 395, y: 792, w: 146, h: 131 }
+    gear: { asset: 'loadoutFrame', x: 270, y: 727, w: 301, h: 82 },
+    soundTest: { asset: 'shield', x: 395, y: 829, w: 130, h: 116 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
   const titleOnlineBtn = { x: 270, y: 619, w: 283, h: 63 };
@@ -7787,8 +7793,8 @@
   const titleRankingBtn = { x: 270, y: 829, w: 204, h: 47 };
   const titleShopBtn = { x: 270, y: 548, w: 283, h: 63 };
   const titleAchievementsBtn = { x: 270, y: 643, w: 283, h: 63 };
-  const titleGearBtn = { x: 169, y: 735, w: 175, h: 43 };
-  const titleSoundTestBtn = { x: 395, y: 792, w: 116, h: 92 };
+  const titleGearBtn = { x: 270, y: 727, w: 283, h: 63 };
+  const titleSoundTestBtn = { x: 395, y: 829, w: 102, h: 80 };
   const titleMenuLeftBtn = { x: 32, y: 690, w: 56, h: 66 };
   const titleMenuRightBtn = { x: 508, y: 690, w: 56, h: 66 };
   const titleBattleTabBtn = { x: 218, y: 476, w: 96, h: 32 };
@@ -7825,7 +7831,7 @@
         Object.freeze({ id: 'shop', image: 'shop', button: titleShopBtn, label: 'ショップ', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'achievements', image: 'achievements', button: titleAchievementsBtn, label: '実績', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'gear', image: 'gear', button: titleGearBtn, label: 'LOADOUT', sub: '装備・装飾を管理', kind: 'loadout' }),
-        Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'サウンドテスト', kind: 'shield' })
+        Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'MUSIC ROOM', sub: 'BGMコレクション', kind: 'shield' })
       ])
     })
   ]);
@@ -17169,8 +17175,7 @@
     if (kind === 'shield') {
       ctx.strokeStyle = '#123f3d';
       ctx.fillStyle = '#fff3ce';
-      // 「サウンドテスト」も盾の内側へ収める。短い旧ラベルの大きさは維持する。
-      const shieldLabelSize = Array.from(label).length >= 6 ? 16 : 21;
+      const shieldLabelSize = Array.from(label).length >= 8 ? 13 : 21;
       ctx.font = `400 ${shieldLabelSize}px ${UI_FONT_DISPLAY}`;
       ctx.lineWidth = 5;
       ctx.strokeText(label, button.x, button.y - 18);
@@ -17196,15 +17201,15 @@
     } else if (kind === 'loadout') {
       ctx.strokeStyle = '#080c0d';
       ctx.fillStyle = '#ffe6a2';
-      ctx.font = `400 17px ${UI_FONT_DISPLAY}`;
+      ctx.font = `400 24px ${UI_FONT_DISPLAY}`;
       ctx.lineWidth = 4;
-      ctx.strokeText(label, button.x, button.y - 6);
-      ctx.fillText(label, button.x, button.y - 6);
-      ctx.font = `900 9px ${UI_FONT_HEAVY}`;
+      ctx.strokeText(label, button.x, button.y - 9);
+      ctx.fillText(label, button.x, button.y - 9);
+      ctx.font = `900 11px ${UI_FONT_HEAVY}`;
       ctx.lineWidth = 3;
-      ctx.strokeText(sub, button.x, button.y + 11);
+      ctx.strokeText(sub, button.x, button.y + 15);
       ctx.fillStyle = '#e9d2a1';
-      ctx.fillText(sub, button.x, button.y + 11);
+      ctx.fillText(sub, button.x, button.y + 15);
     } else {
       const compact = kind === 'parchmentSmall';
       const labelY = compact ? button.y - 6 : button.y - 9;
@@ -17396,7 +17401,7 @@
     if (item.id === 'shop') return 'カタコインで交換';
     if (item.id === 'achievements') return '達成記録と報酬';
     if (item.id === 'gear') return '装備・装飾を管理';
-    if (item.id === 'soundTest') return '全BGMを試聴';
+    if (item.id === 'soundTest') return 'BGMコレクション';
     return '';
   }
 

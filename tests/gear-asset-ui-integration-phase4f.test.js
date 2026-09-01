@@ -17,8 +17,8 @@ test('6部位と8セットを完成画像にせず、runtime素材として合�
     assert.ok(fs.existsSync(path.join(root, 'assets', 'gear', set.runtime)), `${set.id} emblem runtime exists`);
     assert.match(html, new RegExp(`${set.id}: '${runtimePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `${set.id} UI mapping matches manifest`);
   }
-  assert.match(html, /last_stand: 'assets\/gear\/runtime\/emblems\/gear_emblem_laststand_01\.webp'/);
-  assert.doesNotMatch(html, /gear_emblem_\$\{setId\}_01\.webp/);
+  assert.match(html, /last_stand: 'assets\/gear\/runtime\/emblems\/gear_emblem_laststand_02\.png'/);
+  assert.doesNotMatch(html, /gear_emblem_\$\{setId\}_\d+\.(?:webp|png)/);
 });
 
 test('Workbench、Storage、Drop Revealは同じ部位/セット合成ヘルパーを使う', () => {

@@ -15,7 +15,7 @@ function paeth(a, b, c) {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
-function inspectRgbaPng(filePath) {
+function inspectRgbaPng(filePath, expectedSize = manifest.masterSizePx) {
   const data = fs.readFileSync(filePath);
   assert.equal(data.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   let offset = 8;
@@ -41,7 +41,7 @@ function inspectRgbaPng(filePath) {
     offset += length + 12;
   }
   assert.equal(width, height, `${filePath} must be square`);
-  assert.equal(width, manifest.masterSizePx, `${filePath} unexpected master size`);
+  assert.equal(width, expectedSize, `${filePath} unexpected size`);
   assert.equal(bitDepth, 8, `${filePath} must use 8-bit channels`);
   assert.equal(colorType, 6, `${filePath} must be RGBA`);
 
@@ -96,9 +96,13 @@ for (const entry of [...manifest.slots, ...manifest.sets]) {
   assert.equal(fs.existsSync(masterPath), true, `${entry.id} master missing`);
   assert.equal(fs.existsSync(runtimePath), true, `${entry.id} runtime missing`);
   inspectRgbaPng(masterPath);
-  const webp = fs.readFileSync(runtimePath);
-  assert.equal(webp.subarray(0, 4).toString('ascii'), 'RIFF');
-  assert.equal(webp.subarray(8, 12).toString('ascii'), 'WEBP');
+  if (path.extname(runtimePath).toLowerCase() === '.png') {
+    inspectRgbaPng(runtimePath, manifest.runtimeSizePx);
+  } else {
+    const webp = fs.readFileSync(runtimePath);
+    assert.equal(webp.subarray(0, 4).toString('ascii'), 'RIFF');
+    assert.equal(webp.subarray(8, 12).toString('ascii'), 'WEBP');
+  }
 }
 
 for (const slot of manifest.slots) {

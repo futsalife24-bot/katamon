@@ -21,7 +21,7 @@ async function seedFixture(page) {
       ['phase4m-engine', 'engine', 'impact', 'rare', 3],
       ['phase4m-barrel', 'barrel', 'assault', 'normal', 1],
       ['phase4m-armor', 'armor', 'assault', 'epic', 9],
-      ['phase4m-core', 'core', 'fortify', 'legend', 6],
+      ['phase4m-core', 'core', 'last_stand', 'legend', 6],
     ];
     const make = ([gearId, slotId, setId, rarityId, level]) => {
       const base = domain.createGear({
@@ -127,6 +127,10 @@ test('紋章タップでDomain準拠のセット効果を表示し、6枠の2行
   await seedFixture(page);
   await page.evaluate(() => globalThis.__gearPhase4MTest.openWorkbench());
   await page.evaluate(() => document.fonts.ready);
+  for (const file of ['gear_emblem_assault_02.png', 'gear_emblem_critical_02.png', 'gear_emblem_laststand_02.png']) {
+    const emblem = page.locator(`.gearAssetEmblem[src$="${file}"]`).first();
+    await expect(emblem).toHaveJSProperty('naturalWidth', 256);
+  }
 
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize(viewport);
@@ -160,6 +164,12 @@ test('紋章タップでDomain準拠のセット効果を表示し、6枠の2行
     await button.click();
     await expect(page.locator('.gearInlineSetEffects')).toHaveCount(0);
   }
+
+  await page.setViewportSize(VIEWPORTS[0]);
+  await page.locator('[data-gear-slot="core"]').click();
+  await page.locator('.gearInlineSetButton').click();
+  await expect(page.locator('[data-gear-inline-set-threshold="4"]')).toContainText('上書き（重複なし）');
+  await expect(page.locator('.gearInlineSetEffectNote')).toContainText('別の補正として両方有効');
 
   if (testInfo.project.name.includes('chromium')) {
     await page.setViewportSize(VIEWPORTS[0]);
