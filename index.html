@@ -287,6 +287,7 @@
   #onlineLobby.browse-mode:not(.in-room) #onlineRoomInput, #onlineLobby.browse-mode:not(.in-room) #onlineRoomHint, #onlineLobby.browse-mode:not(.in-room) #onlineJoin { display: block; }
   #onlineLobby:not(.in-room) #onlineQuick, #onlineLobby:not(.in-room) #onlineCodeToggle { display: none; }
   #onlineRoomList { display: flex; flex-direction: column; gap: 6px; max-height: 196px; overflow-y: auto; text-align: left; }
+  .onlineRoomListError { padding:8px; color:#ffd4c8; border-left:3px solid #cf674e; background:rgba(87,26,18,.34); line-height:1.5; }
   .onlineRoomRow { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px; border: 1px solid rgba(199,131,53,.52); border-radius: 4px; background: rgba(0,0,0,.25); }
   .onlineRoomRow strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ffe2a1; font-size: 13px; }
   .onlineRoomRow small { color: #aebbc5; font-size: 11px; }
@@ -881,10 +882,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.157-gear-preset-plate-mobile-fix';
+  const BUILD_ID = 'v2.0.158-public-room-listing-resilience';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.158', date: '2026/09/01', summary: '公開部屋0件と一覧通信失敗を分け、作成・部屋ID入室を維持' },
     { version: 'v2.0.157', date: '2026/09/01', summary: '小型画面でもPreset名と装備数を読み取れるようGear表示を改善' },
     { version: 'v2.0.156', date: '2026/09/01', summary: 'Gear詳細からセット効果を確認できる紋章ボタンと枠内表示を改善' },
     { version: 'v2.0.155', date: '2026/09/01', summary: 'WorkbenchでGear詳細と能力表示をその場で切替可能に改善' },
@@ -14747,9 +14749,7 @@
     return rows.slice(0, OPEN_INDEX_MAX_CANDIDATES);
   }
   async function readOpenRooms(auth, format, now) {
-    let listing = null;
-    try { listing = await firebaseRequest('open', auth, { query: { orderBy: '"createdAt"', limitToFirst: OPEN_INDEX_MAX_CANDIDATES * 2 } }); }
-    catch (_) { return []; } // 一覧が読めなくても、自分で部屋を作れば対戦はできる
+    const listing = await firebaseRequest('open', auth, { query: { orderBy: '"createdAt"', limitToFirst: OPEN_INDEX_MAX_CANDIDATES * 2 } });
     return pickOpenCandidates(listing, auth.uid, format, now);
   }
   function publicRoomName(value) {
@@ -14772,11 +14772,19 @@
       item.append(title, detail, join); onlineRoomListEl.appendChild(item);
     });
   }
+  function renderOpenRoomListFailure() {
+    if (!onlineRoomListEl) return;
+    onlineRoomListEl.textContent = '';
+    const error = document.createElement('small');
+    error.className = 'onlineRoomListError';
+    error.textContent = '公開部屋の一覧だけ読み込めませんでした。部屋を作るか、部屋IDで入室できます。更新すると再試行します。';
+    onlineRoomListEl.appendChild(error);
+  }
   async function refreshOpenRoomList() {
     if (onlineLobbyBusy || online) return;
     setOnlineLobbyBusy(true); onlineLobbyStatus('公開部屋を読み込んでいます…');
     try { const auth = await ensureFirebaseAuth(); const rows = await readOpenRooms(auth, onlineBrowseFormat, firebaseServerNow(auth)); renderOpenRoomList(rows); onlineLobbyStatus(`${rows.length}件の公開部屋を表示しています。`); }
-    catch (_) { onlineLobbyStatus('部屋一覧を読み込めませんでした。通信を確認して更新してください。'); }
+    catch (_) { renderOpenRoomListFailure(); onlineLobbyStatus('公開部屋の一覧通信に失敗しました。更新で再試行できます。'); }
     finally { setOnlineLobbyBusy(false); }
   }
   async function joinFirebaseRoomFromBrowser(code) {
@@ -14814,7 +14822,11 @@
     const auth = await ensureFirebaseAuth();
     const now = firebaseServerNow(auth);
     // 1. 待っている部屋を順に当たる。満室・対戦中・消滅済みはここで自然に外れる。
-    for (const candidate of await readOpenRooms(auth, wanted, now)) {
+    // 公開一覧だけ落ちても部屋作成は止めない。作成後の掲載失敗も下段で同じく吸収する。
+    let candidates = [];
+    try { candidates = await readOpenRooms(auth, wanted, now); }
+    catch (_) { candidates = []; }
+    for (const candidate of candidates) {
       let joined = null;
       try { joined = await claimFirebaseRoom(candidate.code, ['e1']); }
       catch (_) { continue; } // 競り負け・満室・期限切れ。次の候補へ
