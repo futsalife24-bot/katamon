@@ -41,7 +41,7 @@ function inspectRgbaPng(filePath) {
     offset += length + 12;
   }
   assert.equal(width, height, `${filePath} must be square`);
-  assert.equal(width, manifest.masterSizePx, `${filePath} unexpected master size`);
+  assert.equal(width, manifest.masterSizePx, `${filePath} unexpected size`);
   assert.equal(bitDepth, 8, `${filePath} must use 8-bit channels`);
   assert.equal(colorType, 6, `${filePath} must be RGBA`);
 
@@ -79,6 +79,19 @@ function inspectRgbaPng(filePath) {
   assert.equal(maxAlpha, 255, `${filePath} must contain opaque pixels`);
 }
 
+function inspectLosslessWebp(filePath) {
+  const data = fs.readFileSync(filePath);
+  assert.equal(data.subarray(0, 4).toString('ascii'), 'RIFF', `${filePath} must be RIFF`);
+  assert.equal(data.subarray(8, 12).toString('ascii'), 'WEBP', `${filePath} must be WebP`);
+  assert.equal(data.subarray(12, 16).toString('ascii'), 'VP8L', `${filePath} must be lossless WebP`);
+  assert.equal(data[20], 0x2f, `${filePath} must have a valid VP8L signature`);
+  const dimensions = data.readUInt32LE(21);
+  const width = (dimensions & 0x3fff) + 1;
+  const height = ((dimensions >>> 14) & 0x3fff) + 1;
+  assert.equal(width, manifest.runtimeSizePx, `${filePath} unexpected width`);
+  assert.equal(height, manifest.runtimeSizePx, `${filePath} unexpected height`);
+}
+
 assert.equal(manifest.composition, 'shared_frame_plus_slot_silhouette_plus_set_emblem');
 assert.equal(manifest.completedCombinationImages, 0);
 assert.equal(manifest.slots.length, 6);
@@ -96,9 +109,8 @@ for (const entry of [...manifest.slots, ...manifest.sets]) {
   assert.equal(fs.existsSync(masterPath), true, `${entry.id} master missing`);
   assert.equal(fs.existsSync(runtimePath), true, `${entry.id} runtime missing`);
   inspectRgbaPng(masterPath);
-  const webp = fs.readFileSync(runtimePath);
-  assert.equal(webp.subarray(0, 4).toString('ascii'), 'RIFF');
-  assert.equal(webp.subarray(8, 12).toString('ascii'), 'WEBP');
+  assert.equal(path.extname(runtimePath).toLowerCase(), '.webp', `${entry.id} runtime must be WebP`);
+  inspectLosslessWebp(runtimePath);
 }
 
 for (const slot of manifest.slots) {
