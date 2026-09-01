@@ -582,6 +582,13 @@
   .gearSlotName { color:#fff5dc; font-size:11.6px; }
   .gearSlotName i { flex:0 0 auto; color:#ffd45b; font-style:normal; font-weight:400; white-space:nowrap; }
   .gearSlot.empty .gearSlotName { color:#9fb2b1; }
+  .gearSlot.empty:not(.selected):not(.updated) { filter:grayscale(.82) saturate(.28) brightness(.74) drop-shadow(0 5px 4px rgba(0,0,0,.52)); }
+  .gearSlot.empty:not(.selected):not(.updated) .gearSlotFrameOuter { fill:#465052; stroke:#89918e; }
+  .gearSlot.empty:not(.selected):not(.updated) .gearSlotFrameInner { fill:#1d282b; stroke:rgba(205,215,211,.2); }
+  .gearSlot.empty:not(.selected):not(.updated) .gearSlotFrameRivet { fill:#848b87; stroke:#303735; }
+  .gearSlot.empty:not(.selected):not(.updated) .gearSocketWell { fill:#152024; stroke:rgba(205,215,211,.18); }
+  .gearSlot.empty:not(.selected):not(.updated) .gearSlotFrameArt { opacity:.07; }
+  .gearSlot.empty:not(.selected):not(.updated):active { filter:grayscale(.7) saturate(.36) brightness(.88) drop-shadow(0 3px 3px rgba(0,0,0,.48)); }
   .gearSlot[data-set="assault"]{--set-ring:#e03c3c;--set-well:#4a2426}
   .gearSlot[data-set="life"]{--set-ring:#3fb05f;--set-well:#1d4430}
   .gearSlot[data-set="fortify"]{--set-ring:#2f7fd0;--set-well:#19364f}
@@ -4823,7 +4830,17 @@
   const gearRarity = (domain, id) => domain.RARITIES.find((entry) => entry.id === id)?.labelJa || id;
   const gearSet = (domain, id) => domain.SETS.find((entry) => entry.id === id) || null;
   const gearSlot = (domain, id) => domain.SLOTS.find((entry) => entry.id === id) || null;
-  const gearOpLabel = (domain, opId) => [...domain.SUB_OPS, { id: 'flat_attack', labelJa: '攻撃' }, { id: 'flat_hp', labelJa: 'HP' }, { id: 'flat_defense', labelJa: '防御' }, { id: 'max_fuel', labelJa: '最大燃料' }].find((entry) => entry.id === opId)?.labelJa || opId;
+  // 数値ステータス名は、戦闘HUDですでに使っている英語表記へ統一する。
+  // 説明文中の「次の攻撃」「回復する」などは日本語の文章であり、数値ラベルとは分けて扱う。
+  const gearStatusLabels = Object.freeze({
+    flat_attack: 'ATK', flat_hp: 'HP', flat_defense: 'DEF',
+    attack_pct: 'ATK', hp_pct: 'HP', defense_pct: 'DEF',
+    crit_rate: 'CRIT', crit_damage: 'CRIT DMG', blast_power: 'BLAST',
+    knockback_power: 'KNOCKBACK', knockback_resistance: 'KB RESIST',
+    status_resistance: 'STATUS RESIST', heal_power: 'HEAL', received_heal: 'RECEIVED HEAL',
+    shield_power: 'SHIELD', received_shield: 'RECEIVED SHIELD', max_fuel: 'MAX FUEL'
+  });
+  const gearOpLabel = (_domain, opId) => gearStatusLabels[opId] || opId;
   const gearValue = (value, unit) => unit === 'flat' ? String(Math.round(value)) : `+${(value / 100).toFixed(value % 100 ? 2 : 0)}%`;
   function gearCharacterAsset(characterId) {
     const def = CHARACTERS[characterId] || {};
@@ -4856,7 +4873,7 @@
   const gearGuideUi = { page: 0, onComplete: null };
   const gearGuideSlotOrder = Object.freeze(['auxiliary', 'barrel', 'sight', 'armor', 'engine', 'core']);
   const gearGuidePositionLabels = Object.freeze({ auxiliary: '左上', barrel: '右上', sight: '左中', armor: '右中', engine: '左下', core: '右下' });
-  const gearGuideFixedMainLabels = Object.freeze({ barrel: '攻撃', armor: 'HP', core: '防御' });
+  const gearGuideFixedMainLabels = Object.freeze({ barrel: 'ATK', armor: 'HP', core: 'DEF' });
   function gearGuidePageHtml(page) {
     const domain = gearModules().domain;
     if (page === 0) {
@@ -4927,8 +4944,8 @@
     const c = state.combat; const caps = state.aggregate.softCaps;
     return [
       ['HP', c.maxHp, ''], ['ATK', Math.round(c.effectiveAttack), ''], ['DEF', Math.round(c.effectiveDefense), ''],
-      ['FUEL', c.maxFuel, ''], ['会心', `${(c.critRateBp / 100).toFixed(0)}%`, caps.critRate], ['爆風', `${(c.blastPowerBp / 100).toFixed(0)}%`, caps.blastPower],
-      ['耐性', `${(c.statusResistanceBp / 100).toFixed(0)}%`, caps.statusResistance], ['盾', `×${c.shieldMultiplier.toFixed(2)}`, caps.shieldPower], ['回復', `×${c.healingMultiplier.toFixed(2)}`, caps.healPower]
+      ['FUEL', c.maxFuel, ''], ['CRIT', `${(c.critRateBp / 100).toFixed(0)}%`, caps.critRate], ['BLAST', `${(c.blastPowerBp / 100).toFixed(0)}%`, caps.blastPower],
+      ['RESIST', `${(c.statusResistanceBp / 100).toFixed(0)}%`, caps.statusResistance], ['SHIELD', `×${c.shieldMultiplier.toFixed(2)}`, caps.shieldPower], ['HEAL', `×${c.healingMultiplier.toFixed(2)}`, caps.healPower]
     ];
   }
   function gearCapClass(cap) { return cap?.overflowBp > 0 ? 'soft' : ''; }
@@ -4941,7 +4958,7 @@
     });
     return rows.length ? `<div class="gearSetTitle">SET EFFECT — そろえるほど強くなる</div><div class="gearSetRows">${rows.join('')}</div>` : `<div class="gearSetTitle">SET EFFECT</div><div class="gearSetHint">同じ紋章を2部位・4部位そろえるとセット効果が発動します。</div>`;
   }
-  const gearSetStatLabels = Object.freeze({ attackPctBp: '攻撃', hpPctBp: 'HP', defensePctBp: '防御', critRateBp: '会心率', critDamageBp: '会心ダメージ', blastPowerBp: '爆風威力', blastRangeBp: '爆風範囲', knockbackPowerBp: 'ノックバック威力', knockbackResistanceBp: 'ノックバック耐性', healPowerBp: '回復効果', shieldPowerBp: 'シールド効果' });
+  const gearSetStatLabels = Object.freeze({ attackPctBp: 'ATK', hpPctBp: 'HP', defensePctBp: 'DEF', critRateBp: 'CRIT', critDamageBp: 'CRIT DMG', blastPowerBp: 'BLAST', blastRangeBp: 'BLAST RANGE', knockbackPowerBp: 'KNOCKBACK', knockbackResistanceBp: 'KB RESIST', healPowerBp: 'HEAL', shieldPowerBp: 'SHIELD' });
   const gearSetPercent = (valueBp) => `${valueBp >= 0 ? '+' : ''}${(valueBp / 100).toFixed(valueBp % 100 ? 2 : 0)}%`;
   function gearSetConditionalText(effect) {
     if (effect.effectId === 'direct_hit_outgoing_damage') return `砲弾を直接命中させた時、与ダメージ${gearSetPercent(effect.valueBp)}`;
