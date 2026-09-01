@@ -25,6 +25,7 @@
 <link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-hanging-sign.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-parchment-button.webp" type="image/webp" fetchpriority="high">
+<link rel="preload" as="image" href="assets/gear/ui/runtime/gear_title_menu_frame_01.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="font" href="assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
 <link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="assets/characters/runtime/dirano.webp" type="image/webp">
@@ -87,7 +88,7 @@
     background:
       radial-gradient(circle at 50% 42%, rgba(5, 12, 15, .2), rgba(2, 5, 10, .9) 70%),
       url("assets/wall.jpg") center / cover;
-    z-index: 20;
+    z-index: 150;
     padding: 16px;
   }
   #nameOverlay.open { display: flex; }
@@ -501,12 +502,40 @@
   }
 
   /* Gearは戦闘Canvasを止めずに扱える、ガレージ内のDOMワークベンチ。 */
-  #gearWorkshop { position:fixed; inset:0; z-index:27; display:none; color:#fff5dc; background:linear-gradient(rgba(3,7,10,.78),rgba(3,7,10,.94)),url("assets/wall.jpg") center/cover; }
+  #gearWorkshop { position:fixed; inset:0; z-index:27; display:none; color:#fff5dc; background:linear-gradient(180deg,rgba(3,7,9,.58),rgba(3,7,9,.82)),url("assets/gear/ui/runtime/gear_workbench_lab_background_01.webp") center/cover; }
   #gearWorkshop.open { display:flex; justify-content:center; }
-  #gearWorkshopBox { width:min(100%,620px); height:100%; overflow:auto; overscroll-behavior:contain; box-sizing:border-box; padding:calc(12px + env(safe-area-inset-top)) 12px calc(22px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(52,67,73,.98),rgba(16,26,31,.99) 46%,rgba(5,10,13,.99)); border-inline:2px solid rgba(199,131,53,.65); }
+  #gearWorkshopBox { width:min(100%,620px); height:100%; overflow:auto; overscroll-behavior:contain; box-sizing:border-box; padding:calc(12px + env(safe-area-inset-top)) 12px calc(22px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(31,45,48,.84),rgba(10,19,23,.91) 46%,rgba(3,8,11,.96)),url("assets/gear/ui/runtime/gear_workbench_lab_background_01.webp") center top/cover; border-inline:2px solid rgba(199,131,53,.72); box-shadow:0 0 34px rgba(0,0,0,.72),inset 0 0 48px rgba(3,8,10,.25); backdrop-filter:blur(1.5px); }
   .gearHeader { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 2px 12px; border-bottom:2px solid #b87a33; }
   .gearHeader > .gearButton { flex:0 0 auto; white-space:nowrap; }
   .gearHeader h2 { margin:0; color:#ffe2a1; font:400 clamp(19px,5vw,26px)/1.1 var(--katamon-font-display); letter-spacing:.08em; text-shadow:0 2px 0 #160b04; }
+  .loadoutLabTitle { min-width:0; }
+  .loadoutLabKicker { display:block; margin:0 0 3px; color:#aabdb8; font:900 8px/1 var(--katamon-font-ui); letter-spacing:.2em; }
+  .loadoutLabNav { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin:10px 0 8px; padding:5px; border:1px solid rgba(182,126,55,.62); border-radius:9px; background:rgba(4,11,14,.78); box-shadow:inset 0 0 15px rgba(0,0,0,.52); }
+  .loadoutLabTab { min-width:0; min-height:46px; padding:5px 3px; color:#b9c4bf; border:1px solid #4c5d5f; border-radius:5px; background:linear-gradient(#25363a,#101b20); font:900 9px/1.15 var(--katamon-font-ui); letter-spacing:.04em; cursor:pointer; }
+  .loadoutLabTab span { display:block; margin-top:3px; color:#8e9c99; font-size:7px; font-weight:400; letter-spacing:0; }
+  .loadoutLabTab.active { color:#211407; border-color:#ffe08a; background:linear-gradient(#ffe6a1,#bd7c2d); box-shadow:0 0 9px rgba(255,202,84,.34); }
+  .loadoutLabTab.active span { color:#664218; }
+  .loadoutLabPanel[hidden] { display:none !important; }
+  .loadoutLabIntro { margin:8px 2px 10px; color:#c7d1cb; font-size:10px; line-height:1.5; }
+  .loadoutLabShelf { display:grid; gap:8px; }
+  .loadoutLabGroupTitle { margin:12px 2px 6px; color:#e6bd75; font-size:10px; letter-spacing:.1em; }
+  .loadoutItem { display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:9px; min-height:72px; padding:8px; border:1px solid rgba(160,110,49,.68); border-radius:8px; background:linear-gradient(145deg,rgba(42,57,59,.96),rgba(8,15,18,.96)); box-shadow:inset 0 0 14px rgba(0,0,0,.42); }
+  .loadoutItem.equipped { border-color:#f3c65d; box-shadow:inset 4px 0 #eab64e,inset 0 0 14px rgba(0,0,0,.42); }
+  .loadoutItemIcon { display:grid; place-items:center; width:50px; height:50px; color:#ffe49d; border:1px solid #79552d; border-radius:50%; background:radial-gradient(circle,#40575a 0 24%,#18282d 26% 54%,#080f13 57%); font-size:23px; box-shadow:inset 0 0 0 3px rgba(204,145,65,.16); }
+  .loadoutItemBody { min-width:0; }
+  .loadoutItemBody strong { display:block; overflow:hidden; color:#fff0c9; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+  .loadoutItemBody small { display:block; margin-top:4px; color:#b9c5c0; font-size:9px; line-height:1.45; }
+  .loadoutItemState { display:block; margin-top:4px; color:#d8a95e; font-size:8px; font-weight:900; }
+  .loadoutItem .gearButton { min-width:72px; padding-inline:8px; font-size:10px; }
+  .loadoutLabEmpty { padding:24px 14px; color:#b8c3bf; border:1px dashed #6b5639; border-radius:8px; background:rgba(4,10,13,.68); font-size:11px; line-height:1.6; text-align:center; }
+  .loadoutProfileCard { padding:13px; border:1px solid #9b6b32; border-radius:9px; background:linear-gradient(145deg,rgba(42,57,59,.96),rgba(7,14,18,.96)); }
+  .loadoutProfileName { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(190,133,62,.38); }
+  .loadoutProfileName b { overflow:hidden; color:#ffe4a6; font-size:18px; text-overflow:ellipsis; white-space:nowrap; }
+  .loadoutProfileStats { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:10px; }
+  .loadoutProfileStat { padding:9px 5px; border:1px solid #536264; border-radius:6px; background:#081116; text-align:center; }
+  .loadoutProfileStat b { display:block; color:#ffd66f; font-size:16px; }
+  .loadoutProfileStat small { color:#aebbb7; font-size:8px; }
+  .loadoutShopLink { width:100%; margin-top:10px; }
   .gearButton, .gearSelect { min-height:44px; box-sizing:border-box; color:#fff5dc; border:2px solid #b77a36; border-radius:6px; background:linear-gradient(#4b5d63,#142229); font:400 13px var(--katamon-font-ui); }
   .gearButton { padding:8px 12px; cursor:pointer; }
   .gearButton:active, .gearCandidate:active { transform:translateY(2px); filter:brightness(1.13); }
@@ -611,6 +640,7 @@
   @media(max-width:400px){.gearStorageDetail{padding:11px 9px}.gearStorageDetailGrid{grid-template-columns:1fr 1fr}.gearStorageDetailActionButtons{grid-template-columns:1fr 1fr}}
   @media(max-width:340px){.gearStorageTools{grid-template-columns:1fr}.gearStorageTools select:last-child{grid-column:auto}.gearStorageCard{grid-template-columns:auto minmax(0,1fr)}.gearStorageMarks{grid-column:1/-1;flex-direction:row}.gearStorageMarks .gearButton{flex:1}.gearStorageSummary{grid-template-columns:1fr 1fr}.gearStorageSummary .gearStorageMeter:last-child{grid-column:1/-1}}
   @media (max-width:400px){#gearWorkshopBox{padding-inline:8px}.gearBuildStage{min-height:272px}.gearBuildStage::before{width:232px;height:190px}.gearBuildStage::after{width:136px;height:136px}.gearSlot{--socket-r:38px;width:98px;height:74px}.gearSlotEmblem{width:20px;height:20px}.gearSlot[data-set-state="two"] .gearSlotEmblem,.gearSlot[data-set-state="four"] .gearSlotEmblem{width:23px;height:23px}.gearSlot[data-frame-position="left-top"] .gearSlotContent,.gearSlot[data-frame-position="left-bottom"] .gearSlotContent{inset:22px 24px 22px 31px}.gearSlot[data-frame-position="left-middle"] .gearSlotContent{inset:22px 24px 22px 27px}.gearSlot[data-frame-position="right-top"] .gearSlotContent,.gearSlot[data-frame-position="right-bottom"] .gearSlotContent{inset:22px 31px 22px 24px}.gearSlot[data-frame-position="right-middle"] .gearSlotContent{inset:22px 27px 22px 24px}.gearSlotPart,.gearSlotName{letter-spacing:-.05em}.gearSlotPart{font-size:8.8px}.gearSlotName{font-size:9.4px}.gearCharacterImage{width:118px;height:118px}.gearSummary{gap:5px}.gearStat{padding:5px}.gearStat b{font-size:13px}}
+  @media (max-width:400px){.gearHeader{padding-bottom:7px}.gearHeader h2{font-size:16px;letter-spacing:.03em;white-space:nowrap}.loadoutLabKicker{font-size:6px;letter-spacing:.12em}.gearHeaderActions{gap:4px}.gearHeaderActions .gearButton{min-height:36px;padding:5px 7px;font-size:10px}.gearHeaderActions .gearGuideOpen{min-width:36px}.loadoutLabNav{gap:2px;margin:5px 0 4px;padding:3px}.loadoutLabTab{min-height:32px;font-size:8px}.loadoutLabTab span{display:none}.gearSectionNav{gap:5px;margin:5px 0}.gearSectionNav .gearButton{min-height:38px;padding-block:5px}.loadoutItem{grid-template-columns:46px minmax(0,1fr) auto;gap:7px}.loadoutItemIcon{width:44px;height:44px}.loadoutItem .gearButton{min-width:64px;padding-inline:6px}.loadoutProfileName{align-items:flex-start;flex-direction:column}.loadoutProfileName .gearButton{width:100%}}
 
   /* 保存済み報酬を見せるだけのDrop Reveal。6P配置はWorkbenchと同じ正本を使う。 */
   #gearDropReveal{position:fixed;inset:0;z-index:110;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));color:#fff5dc;background:radial-gradient(circle at 50% 42%,rgba(91,67,31,.4),rgba(2,5,7,.94) 70%);font-family:var(--katamon-font-ui)}
@@ -730,7 +760,9 @@
 <!-- 装備変更は既存Gear domain/storageを読むだけのガレージ画面。戦闘Canvasの常時描画には参加しない。 -->
 <div id="gearWorkshop" aria-hidden="true">
   <main id="gearWorkshopBox" role="dialog" aria-modal="true" aria-labelledby="gearWorkshopTitle">
-    <header class="gearHeader"><h2 id="gearWorkshopTitle">GEAR WORKBENCH</h2><div class="gearHeaderActions"><button id="gearWorkshopGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
+    <header class="gearHeader"><div class="loadoutLabTitle"><span class="loadoutLabKicker">LOADOUT FACILITY</span><h2 id="gearWorkshopTitle">CATAMON LAB</h2></div><div class="gearHeaderActions"><button id="gearWorkshopGuide" class="gearButton gearGuideOpen" type="button" aria-label="Gearガイドを開く">？</button><button id="gearWorkshopClose" class="gearButton" type="button">GARAGEへ戻る</button></div></header>
+    <nav id="loadoutLabNav" class="loadoutLabNav" aria-label="装備管理メニュー"><button class="loadoutLabTab active" data-loadout-page="gear" type="button" aria-current="page">GEAR<span>ギア装備</span></button><button class="loadoutLabTab" data-loadout-page="weapon" type="button">WEAPON<span>武装</span></button><button class="loadoutLabTab" data-loadout-page="style" type="button">STYLE<span>装飾</span></button><button class="loadoutLabTab" data-loadout-page="profile" type="button">PROFILE<span>記録</span></button></nav>
+    <section id="loadoutGearPanel" class="loadoutLabPanel" data-loadout-panel="gear">
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button class="gearButton active" type="button" aria-current="page">装備</button><button id="gearOpenStorage" class="gearButton" type="button">所持品</button></nav>
     <div class="gearCharacterBar"><button id="gearCharacterPrev" class="gearButton" type="button" aria-label="前のCATAMON">‹</button><div id="gearCharacterName" class="gearCharacterName"></div><button id="gearCharacterNext" class="gearButton" type="button" aria-label="次のCATAMON">›</button></div>
     <section id="gearBuildStage" class="gearBuildStage" aria-label="現在のGear装備"></section>
@@ -741,6 +773,10 @@
     <button id="gearPendingRewards" class="gearButton gearPendingRewards" type="button" hidden><span>未受取Gear報酬を見る</span><b id="gearPendingRewardCount">0</b></button>
     <section class="gearInventory" aria-labelledby="gearInventoryTitle"><h3 id="gearInventoryTitle">部位を選んで装備する</h3><p id="gearInventoryNote" class="gearInventoryNote">部位スロットをタップすると候補を比較できます。</p><div id="gearCandidates" class="gearCandidates"></div></section>
     <section id="gearCompare" class="gearCompare" hidden aria-live="polite"></section>
+    </section>
+    <section id="loadoutWeaponPanel" class="loadoutLabPanel" data-loadout-panel="weapon" hidden><p class="loadoutLabIntro">購入済みのサブウェポンと協力支援弾を点検・装備します。購入はショップ、装備変更はこの研究室で行います。</p><div id="loadoutWeaponShelf"></div></section>
+    <section id="loadoutStylePanel" class="loadoutLabPanel" data-loadout-panel="style" hidden><p class="loadoutLabIntro">所持している砲弾・着弾・ロビー装飾を管理します。外観だけが変わり、性能には影響しません。</p><div id="loadoutStyleShelf"></div></section>
+    <section id="loadoutProfilePanel" class="loadoutLabPanel" data-loadout-panel="profile" hidden><p class="loadoutLabIntro">プレイヤー名と、この端末に保存された対人戦績を確認します。</p><div id="loadoutProfileContent"></div></section>
   </main>
 </div>
 <div id="gearStorage" aria-hidden="true">
@@ -881,10 +917,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.157-gear-preset-plate-mobile-fix';
+  const BUILD_ID = 'v2.0.159-loadout-lab-ui';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.159', date: '2026/09/01', summary: 'LOADOUTとCATAMON LABでGear・武装・装飾・記録の導線を統合' },
     { version: 'v2.0.157', date: '2026/09/01', summary: '小型画面でもPreset名と装備数を読み取れるようGear表示を改善' },
     { version: 'v2.0.156', date: '2026/09/01', summary: 'Gear詳細からセット効果を確認できる紋章ボタンと枠内表示を改善' },
     { version: 'v2.0.155', date: '2026/09/01', summary: 'WorkbenchでGear詳細と能力表示をその場で切替可能に改善' },
@@ -3910,7 +3947,14 @@
       highPriority: true,
       onReady: () => { titleWoodUiReady++; },
       onFailed: () => { titleWoodUiFailed++; }
-    })
+    }),
+    loadoutFrame: (() => {
+      const image = new Image();
+      image.onload = () => { titleWoodUiReady++; };
+      image.onerror = () => { titleWoodUiFailed++; };
+      image.src = 'assets/gear/ui/runtime/gear_title_menu_frame_01.webp';
+      return image;
+    })()
   };
   function areTitleWoodUiImagesReady() {
     return Object.values(titleWoodUiImages).every(image => image.complete && image.naturalWidth > 0);
@@ -4664,10 +4708,66 @@
     rescue: 'assets/gear/runtime/emblems/gear_emblem_rescue_01.webp',
     last_stand: 'assets/gear/runtime/emblems/gear_emblem_laststand_01.webp'
   });
-  const gearUi = { open: false, characterId: CHARACTER_LIST[0], presetId: 'preset1', slotId: null, comparisonGearId: null, highlightSlotId: null, setDetailOpen: false, busy: false, status: '' };
+  const gearUi = { open: false, labPage: 'gear', labBusy: false, labStatus: '', characterId: CHARACTER_LIST[0], presetId: 'preset1', slotId: null, comparisonGearId: null, highlightSlotId: null, setDetailOpen: false, busy: false, status: '' };
   let gearSlotHighlightTimer = null;
 
   const gearHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  const loadoutLabPages = Object.freeze(['gear', 'weapon', 'style', 'profile']);
+  const loadoutItemGlyphs = Object.freeze({ barrier: '◎', impact: '✹', drill: '◆', 'rescue-kit': '⚕', 'healing-kit': '✚', 'debuff-grenade': '⬢', 'icon-brass': '✥', 'shell-amber': '➤', 'impact-cyan': '✦' });
+  function loadoutOwnedItemHtml(item, state) {
+    const shop = globalThis.KatamonMvpShop;
+    const equipped = shop?.isEquipped?.(state, item) === true;
+    const description = shop?.DESCRIPTIONS?.[item.id] || '購入済みの装備です。';
+    return `<article class="loadoutItem${equipped ? ' equipped' : ''}" data-loadout-item="${gearHtml(item.id)}"><span class="loadoutItemIcon" aria-hidden="true">${gearHtml(loadoutItemGlyphs[item.id] || '◆')}</span><div class="loadoutItemBody"><strong>${gearHtml(item.label)}</strong><small>${gearHtml(description)}</small><span class="loadoutItemState">${equipped ? '装備中' : '所持済み'}</span></div><button class="gearButton${equipped ? '' : ' gearButton--gold'}" data-loadout-equip="${gearHtml(item.id)}" type="button" ${equipped || gearUi.labBusy ? 'disabled' : ''}>${equipped ? '装備中' : '装備する'}</button></article>`;
+  }
+  function loadoutCollectionHtml(items, state, emptyCopy, showShopLink = true) {
+    const owned = items.filter((item) => state.inventory?.[item.id] === true);
+    const shopLink = showShopLink ? '<button class="gearButton loadoutShopLink" data-loadout-shop type="button">ショップで装備を追加する</button>' : '';
+    if (!owned.length) return `<div class="loadoutLabEmpty">${gearHtml(emptyCopy)}</div>${shopLink}`;
+    return `<div class="loadoutLabShelf">${owned.map((item) => loadoutOwnedItemHtml(item, state)).join('')}</div>${shopLink}`;
+  }
+  function renderLoadoutLabPage() {
+    const foundation = globalThis.KatamonCoopMvp;
+    const weaponShelf = document.getElementById('loadoutWeaponShelf');
+    const styleShelf = document.getElementById('loadoutStyleShelf');
+    const profile = document.getElementById('loadoutProfileContent');
+    if (!foundation || !weaponShelf || !styleShelf || !profile) return;
+    let state;
+    try { state = foundation.loadState(); }
+    catch (_) {
+      const error = '<div class="loadoutLabEmpty">装備データを安全に読み込めませんでした。タイトルへ戻って、もう一度お試しください。</div>';
+      weaponShelf.innerHTML = error; styleShelf.innerHTML = error; profile.innerHTML = error; return;
+    }
+    if (gearUi.labPage === 'weapon') {
+      weaponShelf.innerHTML = `${gearUi.labStatus ? `<p class="gearStatus">${gearHtml(gearUi.labStatus)}</p>` : ''}<h3 class="loadoutLabGroupTitle">SUB WEAPON</h3>${loadoutCollectionHtml(foundation.SUBWEAPONS, state, '所持しているサブウェポンはまだありません。', false)}<h3 class="loadoutLabGroupTitle">SUPPORT ORDNANCE</h3>${loadoutCollectionHtml(foundation.COOP_ITEMS, state, '所持している協力支援弾はまだありません。')}`;
+    } else if (gearUi.labPage === 'style') {
+      styleShelf.innerHTML = `${gearUi.labStatus ? `<p class="gearStatus">${gearHtml(gearUi.labStatus)}</p>` : ''}${loadoutCollectionHtml(foundation.COSMETICS, state, '所持している装飾はまだありません。')}`;
+    } else if (gearUi.labPage === 'profile') {
+      const counts = battleRecord?.total || { wins: 0, losses: 0, draws: 0 };
+      const matches = Number(counts.wins || 0) + Number(counts.losses || 0) + Number(counts.draws || 0);
+      profile.innerHTML = `<section class="loadoutProfileCard"><div class="loadoutProfileName"><div><span class="loadoutLabKicker">PLAYER CALLSIGN</span><b>${gearHtml(localPlayerName() || '未設定')}</b></div><button class="gearButton" data-loadout-name type="button">名前を変更</button></div><div class="loadoutProfileStats"><div class="loadoutProfileStat"><b>${matches}</b><small>対人戦</small></div><div class="loadoutProfileStat"><b>${Number(counts.wins || 0)}</b><small>勝利</small></div><div class="loadoutProfileStat"><b>${state.wallet?.coins || 0}</b><small>カタコイン</small></div></div><p class="loadoutLabIntro">戦績はこの端末だけに保存され、対戦相手へ送信されません。</p></section>`;
+    }
+  }
+  function setLoadoutLabPage(page) {
+    if (!loadoutLabPages.includes(page)) return false;
+    gearUi.labPage = page; gearUi.labStatus = '';
+    document.querySelectorAll('[data-loadout-page]').forEach((button) => { const active = button.dataset.loadoutPage === page; button.classList.toggle('active', active); if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
+    document.querySelectorAll('[data-loadout-panel]').forEach((panel) => { panel.hidden = panel.dataset.loadoutPanel !== page; });
+    if (page === 'gear') gearRender(); else renderLoadoutLabPage();
+    document.getElementById('gearWorkshopBox')?.scrollTo?.({ top: 0, behavior: 'smooth' });
+    return true;
+  }
+  async function equipLoadoutItem(itemId) {
+    if (gearUi.labBusy || !globalThis.KatamonMvpShop?.equipLocked) return;
+    gearUi.labBusy = true; gearUi.labStatus = '装備状態を安全に更新中…'; renderLoadoutLabPage();
+    try {
+      const result = await globalThis.KatamonMvpShop.equipLocked(itemId);
+      if (!result?.equipped) throw new Error('LOADOUT_EQUIP_REJECTED');
+      syncSelectedSubweapon(); syncActiveCosmetics();
+      gearUi.labStatus = `${result.item.label}を装備しました。`;
+    } catch (_) { gearUi.labStatus = '装備を安全に更新できませんでした。'; }
+    finally { gearUi.labBusy = false; renderLoadoutLabPage(); }
+  }
   const gearModules = () => {
     const domain = globalThis.KatamonGearDomain;
     const storage = globalThis.KatamonGearStorage;
@@ -4889,7 +4989,7 @@
     catch (error) { gearUi.status = error?.code === 'PENDING_GEAR_TRANSACTION_EXISTS' ? 'Gear取引を復旧中です。少し待ってからお試しください。' : '装備を安全に更新できませんでした。'; }
     finally { gearUi.busy = false; gearRender(); }
   }
-  function openGearWorkshop() { if (isOnline?.()) return false; gearUi.open = true; gearUi.status = ''; gearUi.slotId = null; gearUi.comparisonGearId = null; gearUi.highlightSlotId = null; gearUi.setDetailOpen = false; gearWorkshopEl.classList.add('open'); gearWorkshopEl.setAttribute('aria-hidden', 'false'); gearRender(); return true; }
+  function openGearWorkshop() { if (isOnline?.()) return false; gearUi.open = true; gearUi.status = ''; gearUi.slotId = null; gearUi.comparisonGearId = null; gearUi.highlightSlotId = null; gearUi.setDetailOpen = false; gearWorkshopEl.classList.add('open'); gearWorkshopEl.setAttribute('aria-hidden', 'false'); setLoadoutLabPage('gear'); return true; }
   function openGearWorkshopForSlot(slotId) {
     if (!gearSlotFramePositions[slotId] || !openGearWorkshop()) return false;
     gearUi.slotId = slotId;
@@ -4917,6 +5017,13 @@
     gearSummaryEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-inline-set]'); if (!button || !gearUi.slotId) return; gearUi.setDetailOpen = !gearUi.setDetailOpen; gearRender(); });
     gearCandidatesEl.addEventListener('click', (event) => { const button = event.target.closest('[data-gear-candidate]'); if (!button) return; gearUi.comparisonGearId = button.dataset.gearCandidate; gearRender(); });
     gearCompareEl.addEventListener('click', (event) => { const equip = event.target.closest('[data-gear-equip]'); const unequip = event.target.closest('[data-gear-unequip]'); const detail = event.target.closest('[data-gear-current-detail]'); if (equip && gearUi.slotId) gearMutateSlot(gearUi.slotId, equip.dataset.gearEquip); else if (unequip) gearMutateSlot(unequip.dataset.gearUnequip, null); else if (detail) { closeGearWorkshop(); openGearStorageForGear(detail.dataset.gearCurrentDetail); } });
+    document.getElementById('loadoutLabNav').addEventListener('click', (event) => { const button = event.target.closest('[data-loadout-page]'); if (button) setLoadoutLabPage(button.dataset.loadoutPage); });
+    gearWorkshopEl.addEventListener('click', (event) => {
+      const equip = event.target.closest('[data-loadout-equip]');
+      if (equip) { equipLoadoutItem(equip.dataset.loadoutEquip); return; }
+      if (event.target.closest('[data-loadout-shop]')) { closeGearWorkshop(); globalThis.KatamonMvpShop?.openShop?.(); return; }
+      if (event.target.closest('[data-loadout-name]')) openNameDialog(() => renderLoadoutLabPage(), { title: 'プレイヤー名を変更', note: '12文字まで。CPU BATTLEとONLINE BATTLEで使用します。' });
+    });
   }
 
   // ===== Gear Storage / TEMP BOX =====
@@ -7641,7 +7748,7 @@
     ranking: { asset: 'hangingSign', x: 270, y: 787, w: 220, h: 139 },
     shop: { asset: 'parchment', x: 270, y: 548, w: 301, h: 82 },
     achievements: { asset: 'parchment', x: 270, y: 643, w: 301, h: 82 },
-    gear: { asset: 'parchment', x: 169, y: 735, w: 189, h: 52 },
+    gear: { asset: 'loadoutFrame', x: 169, y: 735, w: 189, h: 52 },
     soundTest: { asset: 'shield', x: 395, y: 792, w: 146, h: 131 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
@@ -7688,7 +7795,7 @@
       items: Object.freeze([
         Object.freeze({ id: 'shop', image: 'shop', button: titleShopBtn, label: 'ショップ', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'achievements', image: 'achievements', button: titleAchievementsBtn, label: '実績', kind: 'parchmentLarge' }),
-        Object.freeze({ id: 'gear', image: 'gear', button: titleGearBtn, label: 'GEAR', sub: '装備・セット効果', kind: 'parchmentSmall' }),
+        Object.freeze({ id: 'gear', image: 'gear', button: titleGearBtn, label: 'LOADOUT', sub: '装備・装飾を管理', kind: 'loadout' }),
         Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'サウンドテスト', kind: 'shield' })
       ])
     })
@@ -17057,6 +17164,18 @@
       ctx.strokeText(sub, button.x, button.y + 12);
       ctx.fillStyle = '#235f59';
       ctx.fillText(sub, button.x, button.y + 12);
+    } else if (kind === 'loadout') {
+      ctx.strokeStyle = '#080c0d';
+      ctx.fillStyle = '#ffe6a2';
+      ctx.font = `400 17px ${UI_FONT_DISPLAY}`;
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, button.x, button.y - 6);
+      ctx.fillText(label, button.x, button.y - 6);
+      ctx.font = `900 9px ${UI_FONT_HEAVY}`;
+      ctx.lineWidth = 3;
+      ctx.strokeText(sub, button.x, button.y + 11);
+      ctx.fillStyle = '#e9d2a1';
+      ctx.fillText(sub, button.x, button.y + 11);
     } else {
       const compact = kind === 'parchmentSmall';
       const labelY = compact ? button.y - 6 : button.y - 9;
@@ -17247,6 +17366,7 @@
     if (item.id === 'ranking') return '連勝記録';
     if (item.id === 'shop') return 'カタコインで交換';
     if (item.id === 'achievements') return '達成記録と報酬';
+    if (item.id === 'gear') return '装備・装飾を管理';
     if (item.id === 'soundTest') return '全BGMを試聴';
     return '';
   }
