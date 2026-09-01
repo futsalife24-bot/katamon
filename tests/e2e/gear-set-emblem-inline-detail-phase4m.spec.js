@@ -81,6 +81,18 @@ async function measure(page) {
     }
     const detail = box.querySelector('.gearInlineDetail')?.getBoundingClientRect();
     const effects = box.querySelector('.gearInlineSetEffects')?.getBoundingClientRect();
+    const plate = box.querySelector('.gearCharacterPlate');
+    const plateRect = plate?.getBoundingClientRect();
+    const plateName = plate?.querySelector('.gearCharacterPlateName');
+    const plateNameRect = plateName?.getBoundingClientRect();
+    const plateCount = plate?.querySelector('.gearCharacterPlateCount');
+    const plateCountRect = plateCount?.getBoundingClientRect();
+    const plateEquipped = plate?.querySelector('.gearCharacterPlateEquipped');
+    const bottomSlots = slots.filter((slot) => slot.id === 'engine' || slot.id === 'core');
+    const plateContentRect = plateNameRect && plateCountRect ? {
+      left: Math.min(plateNameRect.left, plateCountRect.left), right: Math.max(plateNameRect.right, plateCountRect.right),
+      top: Math.min(plateNameRect.top, plateCountRect.top), bottom: Math.max(plateNameRect.bottom, plateCountRect.bottom),
+    } : null;
     return {
       slots,
       overlaps,
@@ -88,6 +100,11 @@ async function measure(page) {
       boxOverflow: box.scrollWidth - box.clientWidth,
       detailHorizontalInsideViewport: Boolean(detail && detail.left >= -1 && detail.right <= innerWidth + 1),
       effectsInsideCard: Boolean(detail && effects && effects.left >= detail.left - 1 && effects.right <= detail.right + 1),
+      plateNameHeadroom: plateName ? plateNameRect.width - naturalWidth(plateName) : -999,
+      plateCountHeadroom: plateCount ? plateCountRect.width - naturalWidth(plateCount) : -999,
+      plateCountInside: Boolean(plateRect && plateCountRect && plateCountRect.left >= plateRect.left - 1 && plateCountRect.right <= plateRect.right + 1),
+      plateContentClear: Boolean(plateContentRect && bottomSlots.every(({ rect }) => Math.min(plateContentRect.right, rect.right) - Math.max(plateContentRect.left, rect.left) <= 1)),
+      plateEquippedVisible: Boolean(plateEquipped && getComputedStyle(plateEquipped).display !== 'none'),
     };
   });
 }
@@ -134,6 +151,11 @@ test('紋章タップでDomain準拠のセット効果を表示し、6枠の2行
     expect(report.boxOverflow, `${viewport.width}px workshop overflow`).toBeLessThanOrEqual(0);
     expect(report.detailHorizontalInsideViewport, `${viewport.width}px detail horizontal viewport`).toBe(true);
     expect(report.effectsInsideCard, `${viewport.width}px effects card`).toBe(true);
+    expect(report.plateNameHeadroom, `${viewport.width}px preset name truncation`).toBeGreaterThanOrEqual(-0.5);
+    expect(report.plateCountHeadroom, `${viewport.width}px equipped count truncation`).toBeGreaterThanOrEqual(-0.5);
+    expect(report.plateCountInside, `${viewport.width}px equipped count inside plate`).toBe(true);
+    if (viewport.width <= 360) expect(report.plateContentClear, `${viewport.width}px plate text clear of bottom slots`).toBe(true);
+    expect(report.plateEquippedVisible, `${viewport.width}px responsive EQUIPPED label`).toBe(viewport.width > 360);
     console.log(`phase4m ${viewport.width}x${viewport.height}: part ${viewport.partPx}px, set ${viewport.namePx}px, truncation/overlap/overflow 0`);
     await button.click();
     await expect(page.locator('.gearInlineSetEffects')).toHaveCount(0);
