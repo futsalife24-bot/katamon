@@ -23,12 +23,12 @@ test('旧horizontal asset/content規則を残さず幾何insetを正本にする
   assert.doesNotMatch(html, /padding:2px 5px 2px (31|46)px/);
   assert.doesNotMatch(html, /\.gearSlotAsset\{/);
   for (const token of [
-    'inset:30px 27px 30px 35px',
-    'inset:30px 35px 30px 27px',
-    'inset:23px 25px 23px 32px',
-    'inset:23px 32px 23px 25px',
-    'inset:19px 24px 19px 30px',
-    'inset:19px 30px 19px 24px',
+    'inset:28px 25px 28px 33px',
+    'inset:28px 33px 28px 25px',
+    'inset:22px 24px 22px 31px',
+    'inset:22px 31px 22px 24px',
+    'inset:18px 23px 18px 29px',
+    'inset:18px 29px 18px 23px',
   ]) assert.match(html, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
@@ -49,6 +49,8 @@ test('セットは色相、レアリティは金属で分離する', () => {
 test('2行表示・補機前提・authority境界を維持する', () => {
   assert.match(html, /class="gearSlotPart"/);
   assert.match(html, /class="gearSlotName"/);
+  assert.match(html, /class="gearSlotPartLabel"/);
+  assert.match(html, /class="gearSlotSetLabel"/);
   assert.match(html, /<em>\+\$\{gear\.enhancementLevel\}<\/em>/);
   assert.match(html, /<i>★\$\{gear\.star\}<\/i>/);
   assert.match(html, /\.gearSlotPart,\.gearSlotName \{[^}]*font-family:"RocknRoll One",sans-serif; font-weight:400; font-synthesis:none;/);
