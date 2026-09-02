@@ -3575,14 +3575,14 @@
     kyoryu: {
       key: 'kyoryu', name: 'ディラノ', asset: 'dirano', role: 'バランス型', roleEn: 'BALANCE',
       desc: '弾道ガイドが長く、風にも少し強い。初めてでも扱いやすい王道タイプ。',
-      selectStats: [3, 3, 3], specialDesc: '高威力・大爆風の万能砲撃', selectFlavor: '高威力・大爆風の砲弾を放つ',
+      selectStats: [3, 3, 3], specialDesc: '通常弾より広い爆風の万能砲撃', selectFlavor: '通常弾より広い爆風の砲弾を放つ',
       maxHp: 100, blastMul: 1.0, windMul: 0.9, fuelMul: 1.0, velScaleMul: 1.0, guideMul: 1.15, specialVelocityMul: 1.0, tBias: 1.0,
       color: '#76d64b', special: '強化砲弾'
     },
     medama: {
       key: 'medama', name: 'アイボルト', asset: 'eyebolt', role: 'トリッキー型', roleEn: 'TRICKY',
       desc: '風に強い軽快な弾とバインドスピットで相手の移動を封じる。読み合いで翻弄する技巧派。',
-      selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じるバインドスピット', selectFlavor: '命中相手を2手番、行動不能にする',
+      selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じるバインドスピット', selectFlavor: '命中相手の移動を2手番封じる',
       maxHp: 90, blastMul: 0.9, windMul: 0.75, fuelMul: 1.1, velScaleMul: 1.05, empRadius: 90, specialVelocityMul: 1.0, tBias: 0.9,
       color: '#ffd24a', special: 'バインドスピット',
       // 可視下端の透明余白ぶんだけ描画を下げ、物理足元へ合わせる。
@@ -3614,7 +3614,7 @@
     nisenmono: {
       key: 'nisenmono', name: 'オベリスク', asset: 'obelisk', role: '防御型', roleEn: 'GUARD',
       desc: '圧倒的な耐久で戦線を支える石像戦車。重く遅いが風には強い。',
-      selectStats: [5, 3, 1], specialDesc: '地形を壊さず敵を貫通し、壁で反射するプリズムビーム。反射か射程の限界で爆発する', selectFlavor: '反射する貫通レーザーで敵を射抜く',
+      selectStats: [5, 3, 1], specialDesc: '地形を壊さず地形や障害物で反射し、4回目の衝突か射程限界で爆発するプリズムビーム', selectFlavor: '壁で反射するレーザーで敵を射抜く',
       maxHp: 140, blastMul: 1.0, windMul: 0.55, fuelMul: 0.72, velScaleMul: 0.9, specialVelocityMul: 1.8, tBias: 1.2,
       color: '#a7aab8', special: 'プリズムビーム'
     },
@@ -3648,7 +3648,7 @@
     hamulton: {
       key: 'hamulton', name: 'ハムルトン', asset: 'hamulton', role: '妨害型', roleEn: 'CONTROL',
       desc: '巨大グローブ砲で、相手の狙いをかく乱する戦略型戦車。雲から逃げる判断を迫る。',
-      selectStats: [3, 3, 4], specialDesc: '着弾地点に3敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。', selectFlavor: 'まさかの一発で、狙いを見失わせる雲を残す',
+      selectStats: [3, 3, 4], specialDesc: '着弾地点に2敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。', selectFlavor: 'まさかの一発で、狙いを見失わせる雲を残す',
       maxHp: 92, blastMul: 0.95, windMul: 0.9, fuelMul: 1.1, velScaleMul: 1.0, guideMul: 1.0, specialVelocityMul: 1.0, tBias: 1.0,
       color: '#f0bd4f', special: 'まさかのホウヒ',
       imageCrop: { sx: 0.14, sy: 0.27, sw: 0.75, sh: 0.47 },
@@ -3659,14 +3659,14 @@
     mocchario: {
       key: 'mocchario', name: 'モッチャリオ', asset: 'mocchario', role: '砲撃型', roleEn: 'CANNON',
       desc: '口から高火力砲を放つ重量級。機動力を捨てて爆風で制圧する。',
-      selectStats: [4, 4, 2], specialDesc: '大爆風の高威力レーザー砲', selectFlavor: '大爆風のレーザー砲を発射',
+      selectStats: [4, 4, 2], specialDesc: '通常弾より広い爆風のレーザー砲', selectFlavor: '通常弾より広い爆風のレーザー砲を発射',
       maxHp: 110, blastMul: 1.25, windMul: 1.05, fuelMul: 0.85, velScaleMul: 0.92, specialVelocityMul: 1.1, tBias: 1.15,
       color: '#ff84aa', special: 'さくら砲'
     },
     mecha: {
       key: 'mecha', name: 'クロムギア', asset: 'chrome-gear', role: '斉射型', roleEn: 'SALVO',
       desc: '三連装砲を備えた機械戦車。まとまった弾幕で確実に削り取る。',
-      selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に高速斉射', selectFlavor: '3発の高速弾を狭い扇状に連射',
+      selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に斉射', selectFlavor: '3発の砲弾を狭い扇状に斉射',
       maxHp: 98, blastMul: 0.95, windMul: 0.8, fuelMul: 1.0, velScaleMul: 1.1, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#e8d48a', special: '三連装砲'
     },
@@ -3687,14 +3687,14 @@
     kishi: {
       key: 'kishi', name: 'パラディエ', asset: 'paladier', role: '重装型', roleEn: 'FORTRESS',
       desc: '盾と大槍で固めた白銀の重装戦車。鈍いが硬く、一撃が重い。',
-      selectStats: [5, 4, 2], specialDesc: '自分のHPを15払い超高威力の一撃', selectFlavor: 'HPを15払って、超高威力の一撃',
+      selectStats: [5, 4, 2], specialDesc: '自滅しない範囲でHPを最大15消費し、超高威力の一撃', selectFlavor: 'HPを最大15消費して、超高威力の一撃',
       maxHp: 132, blastMul: 1.15, windMul: 0.65, fuelMul: 0.8, velScaleMul: 0.88, specialVelocityMul: 1.0, tBias: 1.2,
       color: '#f2c94c', special: '最終奥義'
     },
     neko: {
       key: 'neko', name: 'にゃんタンク', asset: 'nyan-tank', role: '翻弄型', roleEn: 'TRICK',
       desc: '肉球砲を構えた身軽な猫戦車。逃げ回りながら相手の足を止める。',
-      selectStats: [2, 3, 5], specialDesc: '大爆風で吹き飛ばし次の手番をスキップ', selectFlavor: '大爆風で吹き飛ばし、次の手番をスキップ',
+      selectStats: [2, 3, 5], specialDesc: 'EMPで内側20・外側10ダメージを与え、次の手番をスキップ', selectFlavor: 'EMPでダメージを与え、次の手番をスキップ',
       maxHp: 80, blastMul: 0.85, windMul: 1.0, fuelMul: 1.35, velScaleMul: 1.18, empRadius: 110, specialVelocityMul: 1.0, tBias: 0.85,
       color: '#ffe14d', special: '猫だまし爆弾'
     },
@@ -3710,7 +3710,7 @@
     coolKai: {
       key: 'coolKai', name: 'クール=カイ', asset: 'cool-kai', role: 'ネタ連射型', roleEn: 'GAG SALVO',
       desc: '小さいおにぎりを47発も投げる規格外のネタキャラ。1発6ダメージで地形も削る。',
-      selectStats: [3, 2, 5], specialDesc: '手燭の油で作った47個の握り飯を配ってやる。', selectFlavor: '大きめの微バラツキで握り飯を47発一斉発射',
+      selectStats: [3, 2, 5], specialDesc: '1発6ダメージの握り飯を47発連射し、発射後は次の5手番移動できない', selectFlavor: '握り飯を47発連射し、次の5手番は移動不可',
       maxHp: 66, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。
