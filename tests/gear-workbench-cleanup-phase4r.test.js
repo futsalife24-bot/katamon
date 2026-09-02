@@ -30,7 +30,7 @@ test('能力サマリーはラベル→値の1行構成で高さを圧縮する'
 });
 
 test('StorageのボタンとselectはLAB共通フレームを使う', () => {
-  assert.match(html, /#gearStorage \.gearButton,#gearStorage \.gearSelect\{border:8px solid transparent/);
+  assert.match(html, /#gearStorage \.gearButton,#gearStorage \.gearSelect,#gearStorage \.loadoutLabTab\{border:8px solid transparent/);
   assert.match(html, /#gearStorage \.gearButton--gold,#gearStorage \.gearButton\.active/);
   assert.match(html, /#gearStorageBox\{position:relative;background-image:[^}]+gear_workbench_lab_background_01\.webp/);
 });
