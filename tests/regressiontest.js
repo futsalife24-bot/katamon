@@ -499,27 +499,39 @@ for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
 
 // v208: キャラ選択の必殺技説明は雰囲気文ではなく、実際の性能を短く示す。
 const EXPECTED_SPECIAL_FLAVORS = {
-  kyoryu: '高威力・大爆風の砲弾を放つ',
+  kyoryu: '通常弾より広い爆風の砲弾を放つ',
   medama: '命中相手を2手番、行動不能にする',
   iwa: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
   tori: '着弾から左右へ炎が広がり、6×3回ダメージ',
   barugerukan: 'マーキング弾を放ち、着弾地点へ機銃掃射',
-  nisenmono: '反射する貫通レーザーで敵を射抜く',
+  nisenmono: '壁で反射するレーザーで敵を射抜く',
   burumutan: '与えたダメージ分、自分のHPを回復',
   sumoeru: '敵の近くで炸裂し、8方向へ中小弾を放つ',
   doRednote: '着弾後、相手に向かって地雷針が追尾する',
-  mocchario: '大爆風のレーザー砲を発射',
+  mocchario: '通常弾より広い爆風のレーザー砲を発射',
   mecha: '3発の高速弾を狭い扇状に連射',
   akuma: '風と重力を無視して直進し、直接ダメージ',
   jinba: '地面着弾後、中・小・小の連続爆発で掘進',
   kishi: 'HPを15払って、超高威力の一撃',
-  neko: '大爆風で吹き飛ばし、次の手番をスキップ',
+  neko: 'EMPでダメージを与え、次の手番をスキップ',
   shinigami: '着弾地点の真下へ、縦穴を掘る'
 };
 for (const [key, flavor] of Object.entries(EXPECTED_SPECIAL_FLAVORS)) {
   check(`${kt.character(key).name}の必殺技説明は性能を示す`,
     kt.character(key).selectFlavor === flavor,
     kt.character(key).selectFlavor);
+}
+const EXPECTED_CORRECTED_SPECIAL_DESCRIPTIONS = {
+  kyoryu: '通常弾より広い爆風の万能砲撃',
+  nisenmono: '地形を壊さず壁で反射するプリズムビーム。反射か射程の限界で爆発する',
+  hamulton: '着弾地点に2敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。',
+  mocchario: '通常弾より広い爆風のレーザー砲',
+  neko: 'EMPで内側20・外側10ダメージを与え、次の手番をスキップ'
+};
+for (const [key, description] of Object.entries(EXPECTED_CORRECTED_SPECIAL_DESCRIPTIONS)) {
+  check(`${kt.character(key).name}の必殺技詳細は実挙動と一致する`,
+    kt.character(key).specialDesc === description,
+    kt.character(key).specialDesc);
 }
 
 // v119: 対戦開始時のVSカットイン。通常のターン交代カットインとは
@@ -1368,10 +1380,10 @@ check('花火の接近信管は発射者と同じ陣営には反応しない',
 // ===== v221: オベリスクの必殺を反射するプリズムビームへ更新 =====
 check('オベリスクの必殺技名は「プリズムビーム」',
   kt.character('nisenmono').special === 'プリズムビーム', kt.character('nisenmono').special);
-check('プリズムビームは地形を壊さず敵を貫通する反射レーザー',
+check('プリズムビームの説明は地形非破壊と反射を示し、未実装の敵貫通をうたわない',
   kt.character('nisenmono').specialDesc.includes('地形を壊さず')
     && kt.character('nisenmono').specialDesc.includes('反射')
-    && kt.character('nisenmono').specialDesc.includes('貫通'),
+    && !kt.character('nisenmono').specialDesc.includes('貫通'),
   kt.character('nisenmono').specialDesc);
 kt.startBattle('nisenmono');
 kt.disableCpuForTest();
