@@ -45,13 +45,19 @@ for (const item of manifest.items) {
 const source = fs.readFileSync(path.join(repoRoot, 'coop-mvp-shop.js'), 'utf8');
 const game = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
 assert.match(source, /class="mvp-item-art"/);
-assert.match(source, /class="mvp-preview mvp-effect-preview/, '商品画像だけでなく戦闘効果の実演面を表示する');
-assert.match(source, /data-preview-scene=/, '商品ごとの効果演出を識別する');
+assert.match(source, /class="mvp-preview mvp-product-preview/, '商品一覧では正式商品画像を表示する');
+assert.match(source, /class="mvp-preview mvp-live-battle-preview/, '詳細では実Battle描画のプレビュー面を表示する');
+assert.match(source, /data-live-battle-preview=/, '商品ごとの実Battleプレビューを識別する');
 assert.match(source, /data-preview-replay/, 'ユーザーが効果を再生し直せる');
-assert.match(source, /prefers-reduced-motion:reduce/, '演出はreduced motionへ配慮する');
 assert.doesNotMatch(source, /class="mvp-orb"/);
 assert.match(source, /loading="lazy" decoding="async"/);
 assert.match(game, /shop\?\.assetPath\?\.\(item\)/);
 assert.doesNotMatch(game, /loadoutItemGlyphs/);
+assert.match(game, /globalThis\.KatamonWorkshopBattlePreview = Object\.freeze/);
+assert.match(game, /launchSubweaponShot\(player/);
+assert.match(game, /launchCoopItemShot\(player/);
+assert.match(game, /copyWorkshopBattlePreviewTo/);
+assert.match(game, /const sourceScale = canvas\.width \/ VW;/, '高DPI端末でも戦場の論理座標を正しく切り抜く');
+assert.match(game, /if \(workshopBattlePreview\) return;/);
 
 console.log('Workshop assets Phase 5A: 9 master PNG + 9 lossless WebP PASS');

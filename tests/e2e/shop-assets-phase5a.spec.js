@@ -12,7 +12,10 @@ const VIEWPORTS = [
 test('ショップ9商品の正式画像・詳細・responsiveを検証する', async ({ page }, testInfo) => {
   test.setTimeout(90000);
   const errors = [];
-  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  page.on('pageerror', (error) => {
+    errors.push(`pageerror: ${error.message}`);
+    console.log(`shop-assets pageerror: ${error.message}\n${error.stack || ''}`);
+  });
   page.on('console', (message) => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); });
 
   await page.goto('/index.html?shop-assets-phase5a=1');
@@ -24,8 +27,7 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
     await expect(page.locator('#mvpCollection')).toHaveClass(/open/);
     await expect(page.locator('.mvp-card')).toHaveCount(9);
     await expect(page.locator('.mvp-card .mvp-item-art')).toHaveCount(9);
-    await expect(page.locator('.mvp-card .mvp-effect-preview')).toHaveCount(9);
-    await expect(page.locator('.mvp-card [data-preview-replay]')).toHaveCount(9);
+    await expect(page.locator('.mvp-card .mvp-product-preview')).toHaveCount(9);
     await page.locator('.mvp-scroll').evaluate((scroll) => { scroll.scrollTop = scroll.scrollHeight; });
     await page.locator('.mvp-scroll').evaluate((scroll) => { scroll.scrollTop = 0; });
     const layout = await page.evaluate(async () => {
@@ -36,7 +38,6 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
       return {
         imageSizes: images.map((image) => [image.naturalWidth, image.naturalHeight]),
       imageSources: images.map((image) => new URL(image.currentSrc, location.href).pathname),
-        previewScenes: [...document.querySelectorAll('.mvp-card .mvp-effect-preview')].map((preview) => preview.dataset.previewScene),
         documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         panelOverflow: document.querySelector('.mvp-panel').scrollWidth - document.querySelector('.mvp-panel').clientWidth,
         controlsOutside: cards.filter((card) => {
@@ -48,7 +49,6 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
     });
     expect(layout.imageSizes, `${viewport.width}px runtime dimensions`).toEqual(Array(9).fill([256, 256]));
     expect(new Set(layout.imageSources).size, `${viewport.width}px distinct item images`).toBe(9);
-    expect(new Set(layout.previewScenes).size, `${viewport.width}px all item effect scenes`).toBe(9);
     expect(layout.documentOverflow, `${viewport.width}px document overflow`).toBeLessThanOrEqual(0);
     expect(layout.panelOverflow, `${viewport.width}px panel overflow`).toBeLessThanOrEqual(0);
     expect(layout.controlsOutside, `${viewport.width}px card control overflow`).toBe(0);
@@ -69,16 +69,52 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
   console.log('shop-assets detail: barrier clicked');
   await expect(page.locator('#mvpPurchaseDialog')).toHaveClass(/open/);
   console.log('shop-assets detail: dialog open');
-  const detailImage = page.locator('.mvp-dialog-card .mvp-item-art');
-  await expect(detailImage).toHaveAttribute('src', 'assets/shop/runtime/items/shop_item_barrier_01.webp');
-  await expect.poll(() => detailImage.evaluate((image) => [image.naturalWidth, image.naturalHeight])).toEqual([256, 256]);
-  const detailPreview = page.locator('.mvp-dialog-card .mvp-effect-preview');
-  await expect(detailPreview).toHaveAttribute('data-preview-scene', 'barrier');
+  const detailPreview = page.locator('.mvp-dialog-card .mvp-live-battle-preview');
+  await expect(detailPreview).toHaveAttribute('data-live-battle-preview', 'barrier');
+  await expect.poll(() => page.evaluate(() => globalThis.KatamonWorkshopBattlePreview?.activeItemId?.())).toBe('barrier');
+  const previewCanvas = detailPreview.locator('canvas');
+  await expect(previewCanvas).toHaveAttribute('width', '540');
+  await expect(previewCanvas).toHaveAttribute('height', '304');
+  await expect.poll(() => previewCanvas.evaluate((canvas) => {
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let visible = 0;
+    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 0) visible += 1;
+    return visible;
+  })).toBeGreaterThan(10000);
+  await page.waitForTimeout(1200);
   await detailPreview.locator('[data-preview-replay]').click();
-  await expect.poll(() => detailPreview.locator('.mvp-demo-shot').evaluate((node) => getComputedStyle(node).animationName)).toContain('mvp-shot');
-  console.log('shop-assets detail: image decoded');
+  await page.waitForTimeout(1200);
+  await expect.poll(() => page.evaluate(() => globalThis.KatamonWorkshopBattlePreview?.activeItemId?.())).toBe('barrier');
+  console.log('shop-assets detail: live Battle canvas rendered');
   await page.locator('.mvp-dialog-card').screenshot({ path: testInfo.outputPath('shop-barrier-detail-412.png') });
+  await page.locator('#mvpCollection').evaluate((overlay) => { overlay.style.visibility = 'hidden'; });
+  await page.locator('#game').screenshot({ path: testInfo.outputPath('shop-barrier-source-canvas.png') });
+  await page.locator('#mvpCollection').evaluate((overlay) => { overlay.style.visibility = ''; });
   console.log('shop-assets detail: screenshot done');
+  await page.locator('.mvp-dialog-card [data-action="cancel"]').click();
+  await expect.poll(() => page.evaluate(() => globalThis.KatamonWorkshopBattlePreview?.activeItemId?.())).toBe(null);
+
+  const remainingPreviewIds = [
+    'impact', 'drill', 'rescue-kit', 'healing-kit',
+    'debuff-grenade', 'icon-brass', 'shell-amber', 'impact-cyan'
+  ];
+  for (const itemId of remainingPreviewIds) {
+    console.log(`shop-assets live preview: ${itemId}`);
+    await page.locator(`[data-preview="${itemId}"]`).click();
+    await expect.poll(() => page.evaluate(() => globalThis.KatamonWorkshopBattlePreview?.activeItemId?.())).toBe(itemId);
+    await page.waitForTimeout(850);
+    const liveCanvas = page.locator('.mvp-dialog-card [data-live-battle-preview] canvas');
+    await expect.poll(() => liveCanvas.evaluate((canvas) => {
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let nonBlack = 0;
+      for (let index = 0; index < pixels.length; index += 64) {
+        if (pixels[index] + pixels[index + 1] + pixels[index + 2] > 24) nonBlack += 1;
+      }
+      return nonBlack;
+    }), { message: `${itemId} Battle preview must render pixels` }).toBeGreaterThan(100);
+    await page.locator('.mvp-dialog-card [data-action="cancel"]').click();
+    await expect.poll(() => page.evaluate(() => globalThis.KatamonWorkshopBattlePreview?.activeItemId?.())).toBe(null);
+  }
   expect(errors).toEqual([]);
   await page.close({ runBeforeUnload: false });
 });
