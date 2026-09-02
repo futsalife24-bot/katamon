@@ -16,7 +16,7 @@
     'rescue-kit': '1試合1回。ダウンした仲間を最大HP30%で戦線へ戻す救助弾。',
     'healing-kit': '生存中の他の仲間を最大HP30%回復する弾。',
     'debuff-grenade': '次の1ラウンドだけボスへの全ダメージを1.25倍。',
-    'icon-brass': 'ロビーの自分表示へ添える真鍮の砲兵章。性能差なし。',
+    'icon-brass': 'バトル中の自分ステータス枠へ添える真鍮の砲兵章。性能差なし。',
     'shell-amber': '通常砲弾を琥珀色へ替える外観。性能差なし。',
     'impact-cyan': '着弾の光を蒼色へ替える外観。性能差なし。',
   });
@@ -41,7 +41,7 @@
     'rescue-kit': Object.freeze({ id: 'rescue', cue: 'DOWN → HP 30%で救助' }),
     'healing-kit': Object.freeze({ id: 'healing', cue: '仲間のHPを 30%回復' }),
     'debuff-grenade': Object.freeze({ id: 'debuff', cue: '1 ROUND　全ダメージ ×1.25' }),
-    'icon-brass': Object.freeze({ id: 'icon', cue: 'ロビーの自分表示に装着' }),
+    'icon-brass': Object.freeze({ id: 'icon', cue: 'バトル中の自分表示に装着' }),
     'shell-amber': Object.freeze({ id: 'amber', cue: '通常砲弾の外観を変更' }),
     'impact-cyan': Object.freeze({ id: 'cyan', cue: '着弾の光を蒼色へ変更' }),
   });
@@ -156,7 +156,8 @@
 
   function previewMarkup(item) {
     const scene = previewScene(item);
-    return `<figure class="mvp-preview mvp-live-battle-preview ${previewKind(item)}" data-live-battle-preview="${item.id}" data-preview-scene="${scene.id}" aria-label="${item.label}の実戦プレビュー">
+    const previewLabel = item.id === 'icon-brass' ? 'バトル中の装着位置' : '実戦効果';
+    return `<figure class="mvp-preview mvp-live-battle-preview ${previewKind(item)}" data-live-battle-preview="${item.id}" data-preview-scene="${scene.id}" aria-label="${item.label}の${previewLabel}プレビュー">
       <canvas width="540" height="304" aria-hidden="true"></canvas>
       <figcaption class="mvp-preview-cue">${scene.cue}</figcaption><button class="mvp-preview-replay" type="button" data-preview-replay aria-label="${item.label}の効果をもう一度再生">↻</button>
     </figure>`;

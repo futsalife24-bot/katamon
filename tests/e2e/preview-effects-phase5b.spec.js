@@ -107,9 +107,21 @@ test('ショップ9商品は実戦効果が対象へ発生し、必殺技は全�
       return expectation.value === true ? value === true : Number(value) >= expectation.min;
     }, `${itemId} must show a launched, targeted effect`).catch(async (error) => {
       const state = await page.evaluate(() => globalThis.KatamonWorkshopBattlePreview.inspect());
-      throw new Error(`${error.message}\n${itemId} evidence: ${JSON.stringify(state)}`);
+      throw new Error(`${error.message}\n${itemId} evidence: ${JSON.stringify(state)}\npage errors: ${JSON.stringify(errors)}`);
     });
     const evidence = await page.evaluate(() => globalThis.KatamonWorkshopBattlePreview.inspect().evidence);
+    const framing = await page.evaluate(() => globalThis.KatamonWorkshopBattlePreview.inspect().framing);
+    expect(framing.zoom, `${itemId} stays substantially closer than the former far view`).toBeGreaterThanOrEqual(0.78);
+    expect(framing.zoom, `${itemId} never exceeds the game camera maximum`).toBeLessThanOrEqual(1);
+    if (itemId !== 'icon-brass') {
+      expect(framing.units, `${itemId} shows shooter and effect target`).toHaveLength(2);
+      for (const unit of framing.units) {
+        expect(unit.x, `${itemId} ${unit.id} left safe margin`).toBeGreaterThanOrEqual(63.9);
+        expect(unit.x, `${itemId} ${unit.id} right safe margin`).toBeLessThanOrEqual(476.1);
+        expect(unit.y - 360, `${itemId} ${unit.id} stays above the detail caption`).toBeGreaterThanOrEqual(15);
+        expect(unit.y - 360, `${itemId} ${unit.id} stays above the detail caption`).toBeLessThanOrEqual(190);
+      }
+    }
     if (itemId !== 'icon-brass') {
       expect(evidence.launched, `${itemId} launched`).toBe(true);
       expect(evidence.hit, `${itemId} hit a valid target`).toBe(true);
@@ -148,6 +160,14 @@ test('ショップ9商品は実戦効果が対象へ発生し、必殺技は全�
       throw new Error(`${error.message}\n${key} evidence: ${JSON.stringify(state)}`);
     });
     const evidence = await page.evaluate(() => globalThis.KatamonSpecialDemo.inspect().evidence);
+    const framing = await page.evaluate(() => globalThis.KatamonSpecialDemo.inspect().framing);
+    expect(framing.zoom, `${key} stays substantially closer than the former far view`).toBeGreaterThanOrEqual(0.78);
+    expect(framing.zoom, `${key} never exceeds the game camera maximum`).toBeLessThanOrEqual(1);
+    expect(framing.units, `${key} shows attacker and dummy`).toHaveLength(2);
+    for (const unit of framing.units) {
+      expect(unit.x, `${key} ${unit.id} left safe margin`).toBeGreaterThanOrEqual(63.9);
+      expect(unit.x, `${key} ${unit.id} right safe margin`).toBeLessThanOrEqual(476.1);
+    }
     expect(evidence.launched, `${key} launched`).toBe(true);
     expect(evidence.hit, `${key} hit the dummy`).toBe(true);
     expect(evidence.specialSignals, `${key} special signal`).toEqual(expect.arrayContaining([expect.any(String)]));

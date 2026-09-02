@@ -966,10 +966,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.165-preview-effect-readability';
+  const BUILD_ID = 'v2.0.166-preview-framing-polish';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.166', date: '2026/09/02', summary: 'ショップ・必殺技プレビューを見やすく寄せ、真鍮アイコンの装着場所を明確化' },
     { version: 'v2.0.165', date: '2026/09/02', summary: 'ショップ全9商品と全キャラ必殺技のプレビューを確実に命中・発動する展示へ改善' },
     { version: 'v2.0.164', date: '2026/09/02', summary: 'ショップのプレビューを実際のバトル画面と戦闘エフェクトへ刷新' },
     { version: 'v2.0.163', date: '2026/09/02', summary: 'ショップ9商品の戦闘エフェクトプレビューを追加' },
@@ -8422,6 +8423,55 @@
     );
   }
 
+  function capturePreviewCameraState() {
+    return {
+      zoom: cameraZoom, distanceSetting: cameraDistanceSetting,
+      x: cameraX, y: cameraY, targetX: cameraTargetX, targetY: cameraTargetY,
+    };
+  }
+
+  function restorePreviewCameraState(state) {
+    if (!state) return;
+    cameraZoom = state.zoom;
+    cameraDistanceSetting = state.distanceSetting;
+    cameraX = state.x;
+    cameraY = state.y;
+    cameraTargetX = state.targetX;
+    cameraTargetY = state.targetY;
+  }
+
+  function previewFocusUnits() {
+    if (workshopBattlePreview) {
+      const target = workshopPreviewTargetUnit(workshopBattlePreview.itemId);
+      return target && target !== player ? [player, target] : [player, cpu];
+    }
+    return specialDemo ? [player, cpu] : [];
+  }
+
+  // 64pxの見切れ防止域に、同一フレーム内のknockback移動ぶん8pxを加える。
+  const PREVIEW_SIDE_SAFE_MARGIN = 72;
+  // 展示では端末に保存された通常戦のズーム値を使わない。両者を安全域へ残したまま
+  // 最大まで寄せ、ノックバック中だけ必要量ぶん引いて見切れを防ぐ固定カメラにする。
+  function focusActivePreviewCamera() {
+    const pair = previewFocusUnits();
+    if (pair.length !== 2) return false;
+    const span = Math.max(1, Math.abs(pair[1].x - pair[0].x));
+    const safeZoom = (VW - PREVIEW_SIDE_SAFE_MARGIN * 2) / span;
+    cameraZoom = clampCameraZoom(Math.min(MAX_CAMERA_ZOOM, safeZoom));
+    cameraDistanceSetting = null;
+    focusCameraOn((pair[0].x + pair[1].x) / 2, true, Math.min(pair[0].y, pair[1].y));
+    return true;
+  }
+
+  function previewFramingState() {
+    const pair = previewFocusUnits();
+    return {
+      zoom: cameraZoom,
+      viewportWidth: VW,
+      units: pair.map(unit => ({ id: unit.id, x: worldToScreenX(unit.x), y: worldToScreenY(unit.y) })),
+    };
+  }
+
   function specialDemoTargetPoint(key) {
     const direction = Math.sign(cpu.x - player.x) || 1;
     // 地面から始まる技はダミー本体へ吸われる前に、足元の少し手前へ着弾させる。
@@ -8527,7 +8577,10 @@
       key,
       elapsed: 0,
       launched: false,
-      restore: { battleMode, playerCharacter: player.character, cpuCharacter: cpu.character, winStreak, runStats: { ...runStats } }
+      restore: {
+        battleMode, playerCharacter: player.character, cpuCharacter: cpu.character,
+        winStreak, runStats: { ...runStats }, camera: capturePreviewCameraState(),
+      }
     };
     battleMode = 'demo';
     setMatchFormat('1v1');
@@ -8563,7 +8616,7 @@
       initialPlayerHp: player.hp, initialCraterCount: craterHistory.length,
     };
     faceAllUnitsTowardOpponents();
-    focusCameraOn((player.x + cpu.x) / 2, true, Math.min(player.y, cpu.y));
+    focusActivePreviewCamera();
     syncBgm();
     return true;
   }
@@ -8578,6 +8631,7 @@
     winStreak = restore.winStreak;
     runStats = restore.runStats;
     resetTransientBattleState();
+    restorePreviewCameraState(restore.camera);
     gamePhase = 'select';
     syncBgm();
   }
@@ -8658,14 +8712,16 @@
     workshopPreviewPositionUnit(player, STAGE_W * 0.34);
     workshopPreviewPositionUnit(cpu, STAGE_W * 0.62);
     if (allyItem) {
-      workshopPreviewPositionUnit(ally2, STAGE_W * 0.60);
-      workshopPreviewPositionUnit(foe2, STAGE_W * 0.82);
+      // 回復対象と無関係な敵を展示窓の外へ置き、味方2体だけを大きく読ませる。
+      workshopPreviewPositionUnit(ally2, STAGE_W * 0.62);
+      workshopPreviewPositionUnit(cpu, STAGE_W * 0.90);
+      workshopPreviewPositionUnit(foe2, STAGE_W * 0.96);
       ally2.hp = itemId === 'rescue-kit' ? 0 : Math.max(1, Math.floor(ally2.maxHp * 0.42));
       ally2.grounded = true;
     }
     if (itemId === 'debuff-grenade') {
       units.splice(0, units.length, player, coopBossUnit);
-      coopBossUnit.x = STAGE_W * 0.66;
+      coopBossUnit.x = STAGE_W * 0.62;
       coopBossUnit.y = groundYAt(coopBossUnit.x) - UNIT_RADIUS;
       coopBossUnit.hp = 2200;
       coopBossUnit.maxHp = 2200;
@@ -8693,10 +8749,7 @@
       initialTargetHp: target.hp, initialTargetX: target.x,
       initialPlayerHp: player.hp, initialCraterCount: craterHistory.length,
     };
-    focusCameraOn(itemId === 'debuff-grenade'
-      ? (player.x + coopBossUnit.x) / 2
-      : allyItem ? (player.x + ally2.x) / 2 : (player.x + cpu.x) / 2,
-    true, Math.min(player.y, allyItem ? ally2.y : cpu.y));
+    focusActivePreviewCamera();
     faceAllUnitsTowardOpponents();
     syncBgm();
     return true;
@@ -8714,8 +8767,8 @@
         playerCharacter: player.character, cpuCharacter: cpu.character,
         allyCharacter: ally2.character, foeCharacter: foe2.character,
         winStreak, runStats: { ...runStats }, selectedSubweapon,
-        activeCosmetics: { ...activeCosmetics }
-      }
+        activeCosmetics: { ...activeCosmetics }, camera: capturePreviewCameraState(),
+      },
     };
     return prepareWorkshopBattlePreviewScene();
   }
@@ -8736,6 +8789,7 @@
     runStats = restore.runStats;
     selectedSubweapon = restore.selectedSubweapon;
     activeCosmetics = restore.activeCosmetics;
+    restorePreviewCameraState(restore.camera);
     syncBgm();
   }
 
@@ -8755,7 +8809,8 @@
       player.subweapon = itemId;
       player.subweaponUsesLeft = 1;
       const targetPoint = itemId === 'drill'
-        ? { x: target.x - 34, y: groundYAt(target.x - 34) - 2 }
+        // 掘削穴を2体の間へ置き、地形破壊を見せながら右のダミーを落下させない。
+        ? { x: target.x - 112, y: groundYAt(target.x - 112) - 2 }
         : unitAnchor(target);
       const aim = previewAimVelocity(player, targetPoint, { t: 0.76 });
       launchSubweaponShot(player, anchor, aim.vx0, aim.vy0, itemId);
@@ -8776,6 +8831,9 @@
   function updateWorkshopBattlePreview(dt) {
     const preview = workshopBattlePreview;
     if (!preview) return;
+    // WebKitでは重い戦場初期化の境界で、次のRAFが展示用evidence確定前の状態を
+    // 観測することがある。未完成フレームを成功・失敗判定へ通さず次へ送る。
+    if (!preview.evidence) return;
     preview.elapsed += dt;
     if (preview.phase === 0 && preview.elapsed >= 0.42) {
       preview.phase = 1;
@@ -8787,6 +8845,7 @@
       launchShot(cpu, unitAnchor(cpu), aim.vx0, aim.vy0, false, false, false);
     }
     updateWorkshopPreviewEvidence();
+    if (!preview.evidence) return;
     // 成功結果を1秒以上読ませる。万一成立しなくても上限で安全に再試行する。
     if ((preview.evidence.complete && preview.elapsed >= 3.5) || preview.elapsed >= 6.2) {
       prepareWorkshopBattlePreviewScene();
@@ -8800,7 +8859,9 @@
     const iconPreview = workshopBattlePreview.itemId === 'icon-brass';
     // Battle canvasの中央戦場帯だけを切り抜く。空だけでなく、実キャラ・弾道・着弾を
     // 商品詳細の小窓へ常に収める（タイトル用Canvasの論理解像度は540×960）。
-    const sourceY = iconPreview ? 0 : 340;
+    // 戦場帯を20px下から切り出し、キャラと着弾を小窓内の上側へ持ち上げる。
+    // 下端の説明帯へ主役が沈まず、空の占有も増やさない。
+    const sourceY = iconPreview ? 0 : 360;
     const sourceH = iconPreview ? 270 : 304;
     const sourceScale = canvas.width / VW;
     targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
@@ -8835,6 +8896,7 @@
       projectileCount: projectiles.length,
       craterCount: craterHistory.length,
       activeCosmetics: { ...activeCosmetics },
+      framing: previewFramingState(),
     } : null,
   });
 
@@ -8857,6 +8919,7 @@
       evidence: { ...specialDemo.evidence },
       units: units.map(previewUnitState),
       projectileCount: projectiles.length,
+      framing: previewFramingState(),
       craterCount: craterHistory.length,
     } : null,
   });
@@ -28395,7 +28458,9 @@
     simTimeMs += physicsSteps * PHYSICS_DT * 1000;
 
     // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
-    if (projectiles.length) {
+    if (battleMode === 'demo' && (workshopBattlePreview || specialDemo)) {
+      focusActivePreviewCamera();
+    } else if (projectiles.length) {
       const target = centerCameraOn(projectiles[0].x);
       const targetY = centerCameraYOn(projectiles[0].y);
       cameraX += (target - cameraX) * Math.min(1, dt * 5);
