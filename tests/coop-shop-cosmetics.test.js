@@ -55,14 +55,14 @@ assert.match(source, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/,
   '9商品をタブなし3×3グリッドへ並べる');
 assert.match(source, /max-width:480px.*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/s,
   'スマホでは説明と価格を読める2列へ広げる');
-assert.match(source, /max-width:480px.*\.mvp-card\{min-height:250px.*\.mvp-card p\{font-size:10px;min-height:72px/s,
-  'スマホの長い説明文と価格を重ねない高さを確保する');
+assert.match(source, /max-width:480px.*\.mvp-card\{min-height:304px.*\.mvp-card p\{font-size:10px;min-height:72px/s,
+  'スマホの商品画像・長い説明文・価格を重ねない高さを確保する');
 assert.match(source, /\.mvp-foot\{height:58px.*<footer class="mvp-foot"><button class="mvp-close"/s,
   '閉じるボタンを商品カードへ重ねず、独立した黒鉄フッターへ置く');
 assert.doesNotMatch(source, /refund|返品する|返金/u, '返品機能を作らない');
 assert.match(source, /価格:<\/b>.*現在残高:/s, '購入前に価格と現在残高を同じ確認画面へ出す');
 assert.match(source, /購入完了.*装備する/s, '購入後に装備する／あとでを表示する');
-assert.match(source, /\.mvp-price\{position:absolute;left:8px;bottom:49px/,
+assert.match(source, /\.mvp-price\{position:absolute;left:9px;bottom:49px/,
   '価格・所持・装備状態を商品ボタンの上へ常時表示する');
 assert.match(source, /mvp-achievements/, '18実績は切替・ソートなしの簡易一覧1枚');
 assert.match(source, /ゴーストタップ.*pointerEvents = 'none'/s,

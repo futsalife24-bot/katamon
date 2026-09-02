@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "library": "catamon-workshop-items",
+  "masterSizePx": 1254,
+  "runtimeSizePx": 256,
+  "runtimeFormat": "lossless-webp",
+  "items": [
+    { "id": "barrier", "category": "subweapon", "label": "バリア", "master": "master/items/shop_item_barrier_01.png", "runtime": "runtime/items/shop_item_barrier_01.webp", "design": "cyan shield projector with honeycomb field" },
+    { "id": "impact", "category": "subweapon", "label": "衝撃弾", "master": "master/items/shop_item_impact_01.png", "runtime": "runtime/items/shop_item_impact_01.webp", "design": "blunt compression shell with amber piston ring" },
+    { "id": "drill", "category": "subweapon", "label": "掘削弾", "master": "master/items/shop_item_drill_01.png", "runtime": "runtime/items/shop_item_drill_01.webp", "design": "wide conical drill mechanism with orange drive core" },
+    { "id": "rescue-kit", "category": "coop", "label": "救助弾", "master": "master/items/shop_item_rescue_01.png", "runtime": "runtime/items/shop_item_rescue_01.webp", "design": "green cross rescue projector on stable support feet" },
+    { "id": "healing-kit", "category": "coop", "label": "回復弾", "master": "master/items/shop_item_healing_01.png", "runtime": "runtime/items/shop_item_healing_01.webp", "design": "turquoise healing capsule with restorative flow core" },
+    { "id": "debuff-grenade", "category": "coop", "label": "弱体化弾", "master": "master/items/shop_item_debuff_01.png", "runtime": "runtime/items/shop_item_debuff_01.webp", "design": "purple weakening grenade held by three locking claws" },
+    { "id": "icon-brass", "category": "cosmetic", "label": "真鍮アイコン", "master": "master/items/shop_item_icon_brass_01.png", "runtime": "runtime/items/shop_item_icon_brass_01.webp", "design": "round brass artillery medallion with cyan jewel" },
+    { "id": "shell-amber", "category": "cosmetic", "label": "琥珀砲弾", "master": "master/items/shop_item_shell_amber_01.png", "runtime": "runtime/items/shop_item_shell_amber_01.webp", "design": "transparent amber honeycomb projectile shell" },
+    { "id": "impact-cyan", "category": "cosmetic", "label": "蒼光着弾", "master": "master/items/shop_item_impact_cyan_01.png", "runtime": "runtime/items/shop_item_impact_cyan_01.webp", "design": "cyan crystalline impact burst in a brass aperture" }
+  ]
+}

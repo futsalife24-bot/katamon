@@ -48,6 +48,10 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     await expect(page.locator('#loadoutWeaponPanel')).toBeVisible();
     await expect(page.locator('#loadoutWeaponPanel')).toContainText('バリア');
     await expect(page.locator('#loadoutWeaponPanel')).toContainText('衝撃弾');
+    await expect(page.locator('#loadoutWeaponPanel .loadoutItemIcon img')).toHaveCount(3);
+    await expect.poll(() => page.locator('#loadoutWeaponPanel .loadoutItemIcon img').evaluateAll(
+      (images) => images.map((image) => [image.naturalWidth, image.naturalHeight])
+    )).toEqual(Array(3).fill([256, 256]));
     await page.locator('[data-loadout-equip="impact"]').click();
     await expect(page.locator('[data-loadout-item="impact"]')).toContainText('装備中');
     expect(await page.evaluate(() => globalThis.KatamonCoopMvp.loadState().equipment.subweapon)).toBe('impact');
@@ -56,6 +60,7 @@ for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }
     await expect(page.locator('#loadoutStylePanel')).toBeVisible();
     await expect(page.locator('#loadoutStylePanel')).toContainText('真鍮アイコン');
     await expect(page.locator('#loadoutStylePanel')).toContainText('琥珀砲弾');
+    await expect(page.locator('#loadoutStylePanel .loadoutItemIcon img')).toHaveCount(2);
     await page.locator('[data-loadout-equip="shell-amber"]').click();
     await expect.poll(
       () => page.evaluate(() => globalThis.KatamonCoopMvp.loadState().equipment.cosmetics.projectile)
