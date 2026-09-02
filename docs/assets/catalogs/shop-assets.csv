@@ -1,0 +1,10 @@
+asset_id,item_id,category,design_feature,small_size_visibility,self_rating,status
+shop_item_barrier_01,barrier,subweapon,cyan shield projector with honeycomb field,clear at 64px,A,adopt
+shop_item_impact_01,impact,subweapon,blunt compression shell with amber piston ring,clear at 64px,A,adopt
+shop_item_drill_01,drill,subweapon,wide conical drill mechanism with orange drive core,clear at 64px,A,adopt
+shop_item_rescue_01,rescue-kit,coop,green cross rescue projector on stable support feet,clear at 64px,A,adopt
+shop_item_healing_01,healing-kit,coop,turquoise healing capsule with restorative flow core,clear at 64px,A,adopt
+shop_item_debuff_01,debuff-grenade,coop,purple weakening grenade held by three locking claws,clear at 64px,A,adopt
+shop_item_icon_brass_01,icon-brass,cosmetic,round brass artillery medallion with cyan jewel,clear at 48px,A,adopt
+shop_item_shell_amber_01,shell-amber,cosmetic,transparent amber honeycomb projectile shell,clear at 64px,A,adopt
+shop_item_impact_cyan_01,impact-cyan,cosmetic,cyan crystalline impact burst in a brass aperture,clear at 48px,A,adopt

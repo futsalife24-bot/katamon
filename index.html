@@ -521,7 +521,8 @@
   .loadoutLabGroupTitle { margin:12px 2px 6px; color:#e6bd75; font-size:10px; letter-spacing:.1em; }
   .loadoutItem { display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:9px; min-height:72px; padding:8px; border:1px solid rgba(160,110,49,.68); border-radius:8px; background:linear-gradient(145deg,rgba(42,57,59,.96),rgba(8,15,18,.96)); box-shadow:inset 0 0 14px rgba(0,0,0,.42); }
   .loadoutItem.equipped { border-color:#f3c65d; box-shadow:inset 4px 0 #eab64e,inset 0 0 14px rgba(0,0,0,.42); }
-  .loadoutItemIcon { display:grid; place-items:center; width:50px; height:50px; color:#ffe49d; border:1px solid #79552d; border-radius:50%; background:radial-gradient(circle,#40575a 0 24%,#18282d 26% 54%,#080f13 57%); font-size:23px; box-shadow:inset 0 0 0 3px rgba(204,145,65,.16); }
+  .loadoutItemIcon { display:grid; place-items:center; width:50px; height:50px; overflow:hidden; color:#ffe49d; border:1px solid #79552d; border-radius:8px; background:radial-gradient(circle,#40575a 0 24%,#18282d 36% 58%,#080f13 72%); font-size:23px; box-shadow:inset 0 0 0 3px rgba(204,145,65,.16); }
+  .loadoutItemIcon img { display:block; width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 2px 2px #000a); }
   .loadoutItemBody { min-width:0; }
   .loadoutItemBody strong { display:block; overflow:hidden; color:#fff0c9; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
   .loadoutItemBody small { display:block; margin-top:4px; color:#b9c5c0; font-size:9px; line-height:1.45; }
@@ -965,10 +966,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.161-loadout-lab-ui-chrome';
+  const BUILD_ID = 'v2.0.162-workshop-assets';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.162', date: '2026/09/02', summary: 'ショップ9商品へ正式装備画像を追加しLOADOUT表示と統一' },
     { version: 'v2.0.161', date: '2026/09/01', summary: 'CATAMON LABの操作枠と情報プレートを研究設備デザインへ統一' },
     { version: 'v2.0.160', date: '2026/09/01', summary: 'スマホ版CATAMON LABの研究室背景を見やすく調整' },
     { version: 'v2.0.159', date: '2026/09/01', summary: 'LOADOUTとCATAMON LABでGear・武装・装飾・記録の導線を統合' },
@@ -4762,12 +4764,13 @@
 
   const gearHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const loadoutLabPages = Object.freeze(['gear', 'weapon', 'style', 'profile']);
-  const loadoutItemGlyphs = Object.freeze({ barrier: '◎', impact: '✹', drill: '◆', 'rescue-kit': '⚕', 'healing-kit': '✚', 'debuff-grenade': '⬢', 'icon-brass': '✥', 'shell-amber': '➤', 'impact-cyan': '✦' });
   function loadoutOwnedItemHtml(item, state) {
     const shop = globalThis.KatamonMvpShop;
     const equipped = shop?.isEquipped?.(state, item) === true;
     const description = shop?.DESCRIPTIONS?.[item.id] || '購入済みの装備です。';
-    return `<article class="loadoutItem${equipped ? ' equipped' : ''}" data-loadout-item="${gearHtml(item.id)}"><span class="loadoutItemIcon" aria-hidden="true">${gearHtml(loadoutItemGlyphs[item.id] || '◆')}</span><div class="loadoutItemBody"><strong>${gearHtml(item.label)}</strong><small>${gearHtml(description)}</small><span class="loadoutItemState">${equipped ? '装備中' : '所持済み'}</span></div><button class="gearButton${equipped ? '' : ' gearButton--gold'}" data-loadout-equip="${gearHtml(item.id)}" type="button" ${equipped || gearUi.labBusy ? 'disabled' : ''}>${equipped ? '装備中' : '装備する'}</button></article>`;
+    const asset = shop?.assetPath?.(item) || '';
+    const icon = asset ? `<img src="${gearHtml(asset)}" alt="" width="256" height="256" loading="lazy" decoding="async">` : '◆';
+    return `<article class="loadoutItem${equipped ? ' equipped' : ''}" data-loadout-item="${gearHtml(item.id)}"><span class="loadoutItemIcon" aria-hidden="true">${icon}</span><div class="loadoutItemBody"><strong>${gearHtml(item.label)}</strong><small>${gearHtml(description)}</small><span class="loadoutItemState">${equipped ? '装備中' : '所持済み'}</span></div><button class="gearButton${equipped ? '' : ' gearButton--gold'}" data-loadout-equip="${gearHtml(item.id)}" type="button" ${equipped || gearUi.labBusy ? 'disabled' : ''}>${equipped ? '装備中' : '装備する'}</button></article>`;
   }
   function loadoutCollectionHtml(items, state, emptyCopy, showShopLink = true) {
     const owned = items.filter((item) => state.inventory?.[item.id] === true);
