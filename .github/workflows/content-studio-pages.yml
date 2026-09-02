@@ -7,6 +7,7 @@ on:
       - 'tools/content-studio/**'
       - 'index.html'
       - 'sw.js'
+      - 'coop-mvp-shop.js'
       - 'generated/**'
       - 'assets/**'
       - 'game-custom-stages.css'
