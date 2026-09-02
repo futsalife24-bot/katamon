@@ -10,7 +10,9 @@ const VIEWPORTS = [
 ];
 
 test('ショップ9商品の正式画像・詳細・responsiveを検証する', async ({ page }, testInfo) => {
-  test.setTimeout(90000);
+  // WebKit needs extra headroom now that all nine cards replay the live Battle
+  // canvas instead of a static image. Keep the assertions and dwell time intact.
+  test.setTimeout(180000);
   const errors = [];
   page.on('pageerror', (error) => {
     errors.push(`pageerror: ${error.message}`);
