@@ -3582,7 +3582,7 @@
     medama: {
       key: 'medama', name: 'アイボルト', asset: 'eyebolt', role: 'トリッキー型', roleEn: 'TRICKY',
       desc: '風に強い軽快な弾とバインドスピットで相手の移動を封じる。読み合いで翻弄する技巧派。',
-      selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じるバインドスピット', selectFlavor: '命中相手を2手番、行動不能にする',
+      selectStats: [2, 3, 4], specialDesc: '地形を削らず移動を2手封じるバインドスピット', selectFlavor: '命中相手の移動を2手番封じる',
       maxHp: 90, blastMul: 0.9, windMul: 0.75, fuelMul: 1.1, velScaleMul: 1.05, empRadius: 90, specialVelocityMul: 1.0, tBias: 0.9,
       color: '#ffd24a', special: 'バインドスピット',
       // 可視下端の透明余白ぶんだけ描画を下げ、物理足元へ合わせる。
@@ -3614,7 +3614,7 @@
     nisenmono: {
       key: 'nisenmono', name: 'オベリスク', asset: 'obelisk', role: '防御型', roleEn: 'GUARD',
       desc: '圧倒的な耐久で戦線を支える石像戦車。重く遅いが風には強い。',
-      selectStats: [5, 3, 1], specialDesc: '地形を壊さず壁で反射するプリズムビーム。反射か射程の限界で爆発する', selectFlavor: '壁で反射するレーザーで敵を射抜く',
+      selectStats: [5, 3, 1], specialDesc: '地形を壊さず地形や障害物で反射し、4回目の衝突か射程限界で爆発するプリズムビーム', selectFlavor: '壁で反射するレーザーで敵を射抜く',
       maxHp: 140, blastMul: 1.0, windMul: 0.55, fuelMul: 0.72, velScaleMul: 0.9, specialVelocityMul: 1.8, tBias: 1.2,
       color: '#a7aab8', special: 'プリズムビーム'
     },
@@ -3666,7 +3666,7 @@
     mecha: {
       key: 'mecha', name: 'クロムギア', asset: 'chrome-gear', role: '斉射型', roleEn: 'SALVO',
       desc: '三連装砲を備えた機械戦車。まとまった弾幕で確実に削り取る。',
-      selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に高速斉射', selectFlavor: '3発の高速弾を狭い扇状に連射',
+      selectStats: [3, 4, 3], specialDesc: '3発を狭い扇状に斉射', selectFlavor: '3発の砲弾を狭い扇状に斉射',
       maxHp: 98, blastMul: 0.95, windMul: 0.8, fuelMul: 1.0, velScaleMul: 1.1, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#e8d48a', special: '三連装砲'
     },
@@ -3687,7 +3687,7 @@
     kishi: {
       key: 'kishi', name: 'パラディエ', asset: 'paladier', role: '重装型', roleEn: 'FORTRESS',
       desc: '盾と大槍で固めた白銀の重装戦車。鈍いが硬く、一撃が重い。',
-      selectStats: [5, 4, 2], specialDesc: '自分のHPを15払い超高威力の一撃', selectFlavor: 'HPを15払って、超高威力の一撃',
+      selectStats: [5, 4, 2], specialDesc: '自滅しない範囲でHPを最大15消費し、超高威力の一撃', selectFlavor: 'HPを最大15消費して、超高威力の一撃',
       maxHp: 132, blastMul: 1.15, windMul: 0.65, fuelMul: 0.8, velScaleMul: 0.88, specialVelocityMul: 1.0, tBias: 1.2,
       color: '#f2c94c', special: '最終奥義'
     },
@@ -3710,7 +3710,7 @@
     coolKai: {
       key: 'coolKai', name: 'クール=カイ', asset: 'cool-kai', role: 'ネタ連射型', roleEn: 'GAG SALVO',
       desc: '小さいおにぎりを47発も投げる規格外のネタキャラ。1発6ダメージで地形も削る。',
-      selectStats: [3, 2, 5], specialDesc: '手燭の油で作った47個の握り飯を配ってやる。', selectFlavor: '大きめの微バラツキで握り飯を47発一斉発射',
+      selectStats: [3, 2, 5], specialDesc: '1発6ダメージの握り飯を47発連射し、発射後は次の5手番移動できない', selectFlavor: '握り飯を47発連射し、次の5手番は移動不可',
       maxHp: 66, blastMul: 0.92, windMul: 1.0, fuelMul: 1.05, velScaleMul: 1.0, specialVelocityMul: 1.0, tBias: 0.95,
       color: '#d9e4ff', special: 'Amour 握り飯',
       // 元素材の透明余白を除いて、他キャラと同じ「見えている絵」の大きさに揃える。

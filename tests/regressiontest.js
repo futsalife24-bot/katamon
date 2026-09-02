@@ -500,7 +500,7 @@ for (const [key, specialName] of Object.entries(EXPECTED_SPECIAL_NAMES)) {
 // v208: キャラ選択の必殺技説明は雰囲気文ではなく、実際の性能を短く示す。
 const EXPECTED_SPECIAL_FLAVORS = {
   kyoryu: '通常弾より広い爆風の砲弾を放つ',
-  medama: '命中相手を2手番、行動不能にする',
+  medama: '命中相手の移動を2手番封じる',
   iwa: '通常弾の1.5倍で破壊し、相手を吹き飛ばす',
   tori: '着弾から左右へ炎が広がり、6×3回ダメージ',
   barugerukan: 'マーキング弾を放ち、着弾地点へ機銃掃射',
@@ -508,14 +508,19 @@ const EXPECTED_SPECIAL_FLAVORS = {
   burumutan: '与えたダメージ分、自分のHPを回復',
   sumoeru: '敵の近くで炸裂し、8方向へ中小弾を放つ',
   doRednote: '着弾後、相手に向かって地雷針が追尾する',
+  hamulton: 'まさかの一発で、狙いを見失わせる雲を残す',
   mocchario: '通常弾より広い爆風のレーザー砲を発射',
-  mecha: '3発の高速弾を狭い扇状に連射',
+  mecha: '3発の砲弾を狭い扇状に斉射',
   akuma: '風と重力を無視して直進し、直接ダメージ',
   jinba: '地面着弾後、中・小・小の連続爆発で掘進',
-  kishi: 'HPを15払って、超高威力の一撃',
+  kishi: 'HPを最大15消費して、超高威力の一撃',
   neko: 'EMPでダメージを与え、次の手番をスキップ',
-  shinigami: '着弾地点の真下へ、縦穴を掘る'
+  shinigami: '着弾地点の真下へ、縦穴を掘る',
+  coolKai: '握り飯を47発連射し、次の5手番は移動不可'
 };
+check('プレイアブル18体すべての必殺技説明を固定している',
+  JSON.stringify(Object.keys(EXPECTED_SPECIAL_FLAVORS).sort()) === JSON.stringify(kt.chars().slice().sort()),
+  JSON.stringify({ expected: Object.keys(EXPECTED_SPECIAL_FLAVORS).sort(), actual: kt.chars().slice().sort() }));
 for (const [key, flavor] of Object.entries(EXPECTED_SPECIAL_FLAVORS)) {
   check(`${kt.character(key).name}の必殺技説明は性能を示す`,
     kt.character(key).selectFlavor === flavor,
@@ -523,10 +528,14 @@ for (const [key, flavor] of Object.entries(EXPECTED_SPECIAL_FLAVORS)) {
 }
 const EXPECTED_CORRECTED_SPECIAL_DESCRIPTIONS = {
   kyoryu: '通常弾より広い爆風の万能砲撃',
-  nisenmono: '地形を壊さず壁で反射するプリズムビーム。反射か射程の限界で爆発する',
+  medama: '地形を削らず移動を2手封じるバインドスピット',
+  nisenmono: '地形を壊さず地形や障害物で反射し、4回目の衝突か射程限界で爆発するプリズムビーム',
   hamulton: '着弾地点に2敵手番ぶん残る黄色クリーム雲。触れている間は照準数値が消え、ガイドが半分になる。',
   mocchario: '通常弾より広い爆風のレーザー砲',
-  neko: 'EMPで内側20・外側10ダメージを与え、次の手番をスキップ'
+  mecha: '3発を狭い扇状に斉射',
+  kishi: '自滅しない範囲でHPを最大15消費し、超高威力の一撃',
+  neko: 'EMPで内側20・外側10ダメージを与え、次の手番をスキップ',
+  coolKai: '1発6ダメージの握り飯を47発連射し、発射後は次の5手番移動できない'
 };
 for (const [key, description] of Object.entries(EXPECTED_CORRECTED_SPECIAL_DESCRIPTIONS)) {
   check(`${kt.character(key).name}の必殺技詳細は実挙動と一致する`,
@@ -1667,10 +1676,10 @@ const coolKaiMoveLock = kt.turnEffectForTest(kt.seat());
 const coolKaiRotations = coolKaiProjectiles.map(p => p.coolKaiRotation);
 const coolKaiAngles = coolKaiProjectiles.map(p => Math.atan2(p.vy, p.vx));
 const coolKaiUniqueAngles = new Set(coolKaiAngles.map(angle => angle.toFixed(4)));
-check('クールカイの必殺は小さいおにぎりを47発生成する',
+check('クールカイの必殺は1発6ダメージの握り飯を47発連射する',
   kt.character('coolKai').name === 'クール=カイ'
     && kt.character('coolKai').special === 'Amour 握り飯'
-    && kt.character('coolKai').specialDesc === '手燭の油で作った47個の握り飯を配ってやる。'
+    && kt.character('coolKai').specialDesc === '1発6ダメージの握り飯を47発連射し、発射後は次の5手番移動できない'
     && kt.character('coolKai').maxHp === 66
     && coolKaiProjectiles.length === 47
     && coolKaiSpecialIndex === 46
