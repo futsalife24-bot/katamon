@@ -118,6 +118,7 @@
   let dialogActionBusy = false;
   let toastTimer = 0;
   let toastCleanupTimer = 0;
+  let livePreviewFrame = 0;
 
   function styleText() {
     return `
@@ -131,6 +132,7 @@
       .mvp-effect-preview{background:linear-gradient(180deg,#1a3238 0 62%,#18271e 62% 70%,#0a1011 70%);cursor:pointer}.mvp-effect-preview .mvp-item-art{position:absolute;z-index:1;left:5px;top:5px;width:42px;height:42px;padding:3px;border:1px solid #b88b46;border-radius:5px;background:#0b1518e8;transform:none}.mvp-preview-title{position:absolute;z-index:3;left:51px;top:7px;right:31px;color:#f9e7b8;font-size:8px;font-weight:900;letter-spacing:.08em;text-shadow:0 1px #000}.mvp-preview-cue{position:absolute;z-index:4;left:7px;right:7px;bottom:5px;overflow:hidden;color:#f5d98d;font-size:8px;font-weight:900;letter-spacing:.02em;text-align:center;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #000}.mvp-effect-preview .mvp-preview-replay{position:absolute;z-index:5;left:auto;right:5px;top:5px;bottom:auto;width:23px;height:23px;min-height:0;padding:0;border:1px solid #bc9049;border-radius:50%;background:#14252a;color:#ffe4a3;font-size:12px;line-height:1;cursor:pointer}.mvp-preview-replay:focus-visible{outline:2px solid #fff0ac;outline-offset:1px}.mvp-demo-unit{position:absolute;z-index:2;bottom:26px;width:17px;height:17px;border:2px solid #d7d2b6;border-radius:48% 48% 42% 42%;background:linear-gradient(135deg,#7cae84,#25483c);box-shadow:0 4px 0 #0007}.mvp-demo-unit::after{content:'';position:absolute;left:4px;top:3px;width:4px;height:4px;border-radius:50%;background:#fff0a4;box-shadow:6px 0 #fff0a4}.mvp-demo-ally{left:30%}.mvp-demo-target{right:24%;background:linear-gradient(135deg,#b55c43,#542722)}.mvp-demo-boss{right:18%;bottom:23px;width:27px;height:23px;border-radius:45% 45% 35% 35%;background:linear-gradient(135deg,#82608e,#291d35);border-color:#d5b5f2}.mvp-demo-boss::after{content:'BOSS';position:absolute;left:-5px;top:5px;color:#ffe9f7;font-size:6px;font-weight:900}.mvp-demo-shot{position:absolute;z-index:3;left:39%;bottom:33px;width:7px;height:7px;border-radius:50%;background:#ffc45b;box-shadow:0 0 9px 3px #ffae3d;animation:mvp-shot 3.1s ease-in-out infinite}.mvp-demo-impact{position:absolute;z-index:3;right:26%;bottom:27px;width:8px;height:8px;border:2px solid #ffd26b;border-radius:50%;opacity:0;animation:mvp-impact 3.1s ease-out infinite}.mvp-demo-shield{position:absolute;z-index:3;left:calc(30% - 11px);bottom:18px;width:39px;height:39px;border:2px solid #76e5e0;border-radius:50%;opacity:0;box-shadow:0 0 12px #53e7e0;animation:mvp-shield 3.1s ease-out infinite}.mvp-demo-beam{position:absolute;z-index:3;left:calc(30% + 4px);bottom:25px;width:9px;height:50px;background:linear-gradient(0deg,#5ef1aa00,#6af6b5c8,#d4ffe6);opacity:0;transform:translateY(12px);animation:mvp-beam 3.1s ease-in-out infinite}.mvp-demo-plus{position:absolute;z-index:4;left:calc(30% + 2px);bottom:52px;color:#dbffe6;font-size:22px;font-weight:900;opacity:0;animation:mvp-plus 3.1s ease-in-out infinite}.mvp-demo-drill{position:absolute;z-index:3;left:39%;bottom:32px;width:20px;height:9px;border:2px solid #edc16a;border-radius:8px 2px 2px 8px;background:repeating-linear-gradient(90deg,#80521b 0 3px,#f0b64d 3px 6px);transform-origin:center;animation:mvp-drill 3.1s linear infinite}.mvp-demo-crater{position:absolute;z-index:3;right:20%;bottom:23px;width:34px;height:9px;border-top:3px dashed #b37a42;border-radius:50%;opacity:0;animation:mvp-crater 3.1s ease-out infinite}.mvp-demo-debuff{position:absolute;z-index:3;right:15%;bottom:17px;width:42px;height:42px;border:2px solid #d692ff;border-radius:50%;box-shadow:0 0 15px #9d55ea;opacity:0;animation:mvp-debuff 3.1s ease-out infinite}.mvp-effect-preview .mvp-demo-unit,.mvp-effect-preview .mvp-demo-shot,.mvp-effect-preview .mvp-demo-impact,.mvp-effect-preview .mvp-demo-shield,.mvp-effect-preview .mvp-demo-beam,.mvp-effect-preview .mvp-demo-plus,.mvp-effect-preview .mvp-demo-drill,.mvp-effect-preview .mvp-demo-crater,.mvp-effect-preview .mvp-demo-debuff{display:none}.mvp-scene-barrier .mvp-demo-ally,.mvp-scene-barrier .mvp-demo-shield,.mvp-scene-impact .mvp-demo-ally,.mvp-scene-impact .mvp-demo-target,.mvp-scene-impact .mvp-demo-shot,.mvp-scene-impact .mvp-demo-impact,.mvp-scene-drill .mvp-demo-ally,.mvp-scene-drill .mvp-demo-target,.mvp-scene-drill .mvp-demo-drill,.mvp-scene-drill .mvp-demo-crater,.mvp-scene-rescue .mvp-demo-ally,.mvp-scene-rescue .mvp-demo-beam,.mvp-scene-rescue .mvp-demo-plus,.mvp-scene-healing .mvp-demo-ally,.mvp-scene-healing .mvp-demo-target,.mvp-scene-healing .mvp-demo-beam,.mvp-scene-healing .mvp-demo-plus,.mvp-scene-healing .mvp-demo-impact,.mvp-scene-debuff .mvp-demo-ally,.mvp-scene-debuff .mvp-demo-boss,.mvp-scene-debuff .mvp-demo-shot,.mvp-scene-debuff .mvp-demo-debuff,.mvp-scene-icon .mvp-demo-ally,.mvp-scene-icon .mvp-demo-shield,.mvp-scene-amber .mvp-demo-ally,.mvp-scene-amber .mvp-demo-target,.mvp-scene-amber .mvp-demo-shot,.mvp-scene-amber .mvp-demo-impact,.mvp-scene-cyan .mvp-demo-ally,.mvp-scene-cyan .mvp-demo-target,.mvp-scene-cyan .mvp-demo-shot,.mvp-scene-cyan .mvp-demo-impact{display:block}.mvp-scene-impact .mvp-demo-target{animation:mvp-knockback 3.1s ease-out infinite}.mvp-scene-rescue .mvp-demo-ally{background:#465658;border-color:#8a9895;animation:mvp-revive 3.1s ease-out infinite}.mvp-scene-healing .mvp-demo-target{background:linear-gradient(135deg,#80c991,#2d6346);border-color:#a9f6bf}.mvp-scene-healing .mvp-demo-beam{left:calc(76% - 4px)}.mvp-scene-healing .mvp-demo-plus{left:calc(76% - 6px)}.mvp-scene-healing .mvp-demo-impact{right:auto;left:calc(76% - 9px);border-color:#6cf0a0;box-shadow:0 0 12px #60eba0;animation:mvp-heal 3.1s ease-out infinite}.mvp-scene-debuff .mvp-demo-shot{background:#d282ff;box-shadow:0 0 10px 3px #a556e9}.mvp-scene-icon .mvp-demo-ally{left:50%;transform:translateX(-50%)}.mvp-scene-icon .mvp-demo-shield{left:calc(50% - 19px);border-color:#f0bd54;animation:mvp-shield 3.1s ease-out infinite}.mvp-scene-amber .mvp-demo-shot{background:#ffad39;box-shadow:0 0 10px 3px #f48a1d}.mvp-scene-cyan .mvp-demo-shot{background:#6ff0ff;box-shadow:0 0 10px 3px #33cce7}.mvp-scene-cyan .mvp-demo-impact{border-color:#7df4ff;box-shadow:0 0 14px #36d9f3}.mvp-effect-preview.is-replaying *{animation-delay:0s!important}.mvp-dialog-card .mvp-effect-preview{height:190px}.mvp-dialog-card .mvp-effect-preview .mvp-item-art{width:58px;height:58px}.mvp-dialog-card .mvp-preview-title{left:70px;top:11px;font-size:11px}.mvp-dialog-card .mvp-preview-cue{bottom:9px;font-size:11px}.mvp-dialog-card .mvp-demo-unit{bottom:39px;transform:scale(1.35);transform-origin:bottom}.mvp-dialog-card .mvp-demo-ally{left:31%}.mvp-dialog-card .mvp-demo-target{right:25%}.mvp-dialog-card .mvp-demo-boss{bottom:35px;transform:scale(1.35);transform-origin:bottom}.mvp-dialog-card .mvp-demo-shot{left:41%;bottom:51px;transform:scale(1.35)}.mvp-dialog-card .mvp-demo-impact{right:28%;bottom:42px;transform:scale(1.45)}.mvp-dialog-card .mvp-demo-shield{left:calc(31% - 15px);bottom:27px;transform:scale(1.4);transform-origin:bottom}.mvp-dialog-card .mvp-demo-beam{left:calc(31% + 5px);bottom:35px;transform:scale(1.3);transform-origin:bottom}.mvp-dialog-card .mvp-demo-plus{left:calc(31% + 2px);bottom:78px}.mvp-dialog-card .mvp-demo-drill{left:41%;bottom:50px;transform:scale(1.35);transform-origin:center}.mvp-dialog-card .mvp-demo-crater{right:22%;bottom:35px;transform:scale(1.4);transform-origin:bottom}.mvp-dialog-card .mvp-demo-debuff{right:17%;bottom:27px;transform:scale(1.4);transform-origin:bottom}
       @keyframes mvp-shot{0%,18%{transform:translateX(-20px);opacity:0}28%,56%{opacity:1}69%,100%{transform:translateX(58px);opacity:0}}@keyframes mvp-impact{0%,57%{transform:scale(.2);opacity:0}67%{opacity:1}85%,100%{transform:scale(4);opacity:0}}@keyframes mvp-shield{0%,18%{transform:scale(.5);opacity:0}30%,57%{opacity:.95}80%,100%{transform:scale(1.38);opacity:0}}@keyframes mvp-beam{0%,28%{opacity:0;transform:translateY(12px)}40%,63%{opacity:.9;transform:translateY(0)}78%,100%{opacity:0;transform:translateY(-8px)}}@keyframes mvp-plus{0%,38%{opacity:0;transform:translateY(8px)}48%,63%{opacity:1}82%,100%{opacity:0;transform:translateY(-10px)}}@keyframes mvp-drill{0%,17%{transform:translateX(-22px) rotate(0);opacity:0}28%,59%{opacity:1}68%,100%{transform:translateX(58px) rotate(760deg);opacity:0}}@keyframes mvp-crater{0%,57%{opacity:0;transform:scale(.2)}68%,83%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1.4)}}@keyframes mvp-debuff{0%,53%{opacity:0;transform:scale(.2)}65%{opacity:1;transform:scale(1)}83%,100%{opacity:0;transform:scale(1.35)}}@keyframes mvp-knockback{0%,60%{transform:translateX(0)}74%,88%{transform:translateX(16px)}100%{transform:translateX(0)}}@keyframes mvp-revive{0%,36%{transform:translateY(5px) rotate(75deg);filter:grayscale(1)}50%,82%{transform:translateY(0) rotate(0);filter:grayscale(0)}100%{transform:translateY(0)}}@keyframes mvp-heal{0%,38%{transform:scale(.2);opacity:0}50%,72%{opacity:1}100%{transform:scale(3.6);opacity:0}}
       @media(prefers-reduced-motion:reduce){.mvp-effect-preview *{animation:none!important}.mvp-demo-shot,.mvp-demo-impact,.mvp-demo-shield{opacity:.8}.mvp-demo-beam,.mvp-demo-plus,.mvp-demo-drill,.mvp-demo-crater,.mvp-demo-debuff{display:none}}
+      .mvp-live-battle-preview{background:#05090b}.mvp-live-battle-preview::before{display:none}.mvp-live-battle-preview canvas{display:block;width:100%;height:100%;background:#05090b}.mvp-live-battle-preview .mvp-preview-cue{padding:3px 5px;border-radius:3px;background:#071014d9}.mvp-live-battle-preview .mvp-preview-replay{position:absolute;z-index:5;right:7px;top:7px;width:30px;height:30px;min-height:0;padding:0;border:1px solid #d3a34d;border-radius:50%;background:#102127e8;color:#ffe6a5;font-size:15px;line-height:1}.mvp-live-battle-preview.is-unavailable::after{content:'戦闘プレビューを準備できません';display:grid;place-items:center;position:absolute;inset:0;color:#f3d69b;font-size:11px;background:#091114}
       .mvp-dialog{position:absolute;z-index:4;inset:0;display:none;align-items:center;justify-content:center;padding:22px;background:#020507dc}.mvp-dialog.open{display:flex}.mvp-dialog-card{width:min(430px,100%);padding:20px;border:2px solid #c8953e;background:linear-gradient(#26353a,#0b1215);box-shadow:0 14px 40px #000;text-align:center}.mvp-dialog-card h3{margin:0 0 10px;color:#ffd66f}.mvp-dialog-card .mvp-preview{height:190px;margin-bottom:12px}.mvp-dialog-card p{font-size:12px;line-height:1.5}.mvp-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.mvp-dialog-actions button{min-height:44px;border:1px solid #b8873c;background:#17262c;color:#fbe7bd;font-weight:900}.mvp-dialog-actions .primary{background:#bd7b25;color:#fff8df;border-color:#ffd66f}
       .mvp-achievements{display:grid;gap:7px}.mvp-achievement{display:grid;grid-template-columns:1fr auto;gap:3px 10px;padding:10px;border:1px solid #4e6065;background:#0b1418}.mvp-achievement.done{border-color:#bd9145;background:linear-gradient(90deg,#272016,#0b1418 48%)}.mvp-achievement strong{color:#f6e4bb;font-size:13px}.mvp-achievement em{color:#d5a650;font-size:10px;font-style:normal}.mvp-achievement p{grid-column:1/-1;margin:2px 0;color:#b7c2bd;font-size:10px}.mvp-achievement span{font-size:10px}.mvp-toast{position:fixed;z-index:170;left:50%;top:18px;visibility:hidden;opacity:0;pointer-events:none;transform:translate(-50%,calc(-100% - 32px));min-width:230px;max-width:calc(100% - 24px);padding:10px 14px;border:1px solid #e1ae50;background:#101a1ef2;color:#ffe5a5;text-align:center;font-weight:900;transition:transform .22s,opacity .22s,visibility 0s linear .22s}.mvp-toast.show{visibility:visible;opacity:1;transform:translate(-50%,0);transition:transform .22s,opacity .22s}.mvp-toast[hidden],.mvp-toast:empty{display:none}
       @media(max-width:480px){.mvp-panel{height:98vh}.mvp-head h2{font-size:17px}.mvp-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.mvp-card{min-height:304px;padding:8px 7px}.mvp-card h3{font-size:12px}.mvp-card p{font-size:10px;min-height:72px}.mvp-card button{left:6px;right:6px;font-size:10px}.mvp-preview{height:112px}.mvp-dialog-card .mvp-preview{height:180px}}
@@ -146,29 +148,45 @@
       </section></div><div class="mvp-toast" id="mvpAchievementToast" role="status" hidden></div>`;
   }
 
+  function productPreviewMarkup(item) {
+    return `<figure class="mvp-preview mvp-product-preview ${previewKind(item)}" aria-label="${item.label}の商品画像">
+      <img class="mvp-item-art" src="${assetPath(item)}" alt="${item.label}" width="256" height="256" loading="lazy" decoding="async">
+    </figure>`;
+  }
+
   function previewMarkup(item) {
-    const src = assetPath(item);
     const scene = previewScene(item);
-    return `<figure class="mvp-preview mvp-effect-preview mvp-scene-${scene.id} ${previewKind(item)}" data-preview-scene="${scene.id}" aria-label="${item.label}の戦闘効果プレビュー">
-      <img class="mvp-item-art" src="${src}" alt="${item.label}" width="256" height="256" loading="lazy" decoding="async">
-      <span class="mvp-preview-title" aria-hidden="true">EFFECT PREVIEW</span>
-      <span class="mvp-demo-unit mvp-demo-ally" aria-hidden="true"></span><span class="mvp-demo-unit mvp-demo-target" aria-hidden="true"></span><span class="mvp-demo-unit mvp-demo-boss" aria-hidden="true"></span>
-      <span class="mvp-demo-shot" aria-hidden="true"></span><span class="mvp-demo-impact" aria-hidden="true"></span><span class="mvp-demo-shield" aria-hidden="true"></span><span class="mvp-demo-beam" aria-hidden="true"></span><span class="mvp-demo-plus" aria-hidden="true">+</span><span class="mvp-demo-drill" aria-hidden="true"></span><span class="mvp-demo-crater" aria-hidden="true"></span><span class="mvp-demo-debuff" aria-hidden="true"></span>
+    return `<figure class="mvp-preview mvp-live-battle-preview ${previewKind(item)}" data-live-battle-preview="${item.id}" data-preview-scene="${scene.id}" aria-label="${item.label}の実戦プレビュー">
+      <canvas width="540" height="304" aria-hidden="true"></canvas>
       <figcaption class="mvp-preview-cue">${scene.cue}</figcaption><button class="mvp-preview-replay" type="button" data-preview-replay aria-label="${item.label}の効果をもう一度再生">↻</button>
     </figure>`;
   }
 
-  function bindPreviewReplay(container) {
-    container.querySelectorAll('[data-preview-replay]').forEach((button) => button.addEventListener('click', (event) => {
+  function stopLiveBattlePreview() {
+    if (livePreviewFrame) root.cancelAnimationFrame(livePreviewFrame);
+    livePreviewFrame = 0;
+    root.KatamonWorkshopBattlePreview?.stop?.();
+  }
+
+  function bindPreviewReplay(container, item) {
+    stopLiveBattlePreview();
+    const preview = container.querySelector('[data-live-battle-preview]');
+    const targetCanvas = preview?.querySelector('canvas');
+    const bridge = root.KatamonWorkshopBattlePreview;
+    if (!preview || !targetCanvas || !bridge?.start?.(item.id)) {
+      preview?.classList.add('is-unavailable');
+      return;
+    }
+    const mirrorFrame = () => {
+      bridge.copyTo?.(targetCanvas);
+      livePreviewFrame = root.requestAnimationFrame(mirrorFrame);
+    };
+    mirrorFrame();
+    preview.querySelector('[data-preview-replay]')?.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const preview = button.closest('.mvp-effect-preview');
-      if (!preview) return;
-      preview.classList.remove('is-replaying');
-      void preview.offsetWidth;
-      preview.classList.add('is-replaying');
-      window.setTimeout(() => preview.classList.remove('is-replaying'), 80);
-    }));
+      bridge.restart?.();
+    });
   }
 
   function renderShop() {
@@ -182,11 +200,10 @@
       const equipped = owned && isEquipped(state, item);
       const price = item.price === 0 ? '初期所持' : `${item.price} 🪙`;
       return `<article class="mvp-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}" data-item="${item.id}">
-        <span class="mvp-cat">${CATEGORY_LABELS[categoryOf(item)]}</span><h3>${item.label}</h3>${previewMarkup(item)}
+        <span class="mvp-cat">${CATEGORY_LABELS[categoryOf(item)]}</span><h3>${item.label}</h3>${productPreviewMarkup(item)}
         <p>${DESCRIPTIONS[item.id]}</p><span class="mvp-price ${owned ? 'mvp-owned' : ''}">${equipped ? '装備中' : owned ? '所持済み' : price}</span>
         <button type="button" data-preview="${item.id}">${owned ? (equipped ? 'プレビュー' : '装備 / プレビュー') : '確認 / プレビュー'}</button></article>`;
     }).join('')}</div>`;
-    bindPreviewReplay(body);
     body.querySelectorAll('[data-preview]').forEach((button) => button.addEventListener('click', () => openItem(button.dataset.preview)));
   }
 
@@ -208,7 +225,7 @@
     const card = document.getElementById('mvpPurchaseCard');
     const owned = state.inventory[item.id] === true;
     card.innerHTML = `<h3>${item.label}</h3>${previewMarkup(item)}<p>${DESCRIPTIONS[item.id]}</p><p><b>価格:</b> ${item.price === 0 ? '初期所持' : `${item.price} 🪙`}<br><b>現在残高:</b> ${state.wallet.coins} 🪙</p><div class="mvp-dialog-actions"><button type="button" data-action="cancel">あとで</button><button type="button" class="primary" data-action="${owned ? 'equip' : 'buy'}">${owned ? '装備する' : '購入する'}</button></div>`;
-    bindPreviewReplay(card);
+    bindPreviewReplay(card, item);
     card.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDialogAction(button.dataset.action)));
     dialog.classList.add('open');
   }
@@ -216,7 +233,11 @@
   async function handleDialogAction(action) {
     const dialog = document.getElementById('mvpPurchaseDialog');
     if (dialogActionBusy) return;
-    if (action === 'cancel') { dialog.classList.remove('open'); return; }
+    if (action === 'cancel') {
+      stopLiveBattlePreview();
+      dialog.classList.remove('open');
+      return;
+    }
     dialogActionBusy = true;
     dialog.querySelectorAll('button').forEach((button) => { button.disabled = true; });
     try {
@@ -229,7 +250,7 @@
         const item = result.item;
         const card = document.getElementById('mvpPurchaseCard');
         card.innerHTML = `<h3>購入完了</h3>${previewMarkup(item)}<p>${item.label}を永久アンロックしました。</p><p>残高 ${result.state.wallet.coins} 🪙</p><div class="mvp-dialog-actions"><button type="button" data-action="cancel">あとで</button><button type="button" class="primary" data-action="equip">装備する</button></div>`;
-        bindPreviewReplay(card);
+        bindPreviewReplay(card, item);
         card.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDialogAction(button.dataset.action)));
         renderShop();
         return;
@@ -237,6 +258,7 @@
       if (action === 'equip') {
         const result = await equipLocked(selectedItemId);
         if (result.equipped) showToast(`${result.item.label}を装備しました`);
+        stopLiveBattlePreview();
         dialog.classList.remove('open');
         renderShop();
       }
@@ -252,6 +274,7 @@
     if (!mounted) mount();
     const overlay = document.getElementById('mvpCollection');
     if (!overlay) return false;
+    stopLiveBattlePreview();
     document.getElementById('mvpPurchaseDialog').classList.remove('open');
     if (mode === 'achievements') renderAchievements(); else renderShop();
     // Canvasのpointerdownから開くため、同じ指のpointerupが直下の商品を押す「ゴーストタップ」を遮断する。
@@ -264,6 +287,8 @@
   function close() {
     const overlay = root?.document?.getElementById('mvpCollection');
     if (!overlay) return;
+    stopLiveBattlePreview();
+    root.document.getElementById('mvpPurchaseDialog')?.classList.remove('open');
     overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true');
   }
 

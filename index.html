@@ -966,10 +966,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.163-workshop-effect-preview';
+  const BUILD_ID = 'v2.0.164-workshop-live-battle-preview';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.164', date: '2026/09/02', summary: 'ショップのプレビューを実際のバトル画面と戦闘エフェクトへ刷新' },
     { version: 'v2.0.163', date: '2026/09/02', summary: 'ショップ9商品の戦闘エフェクトプレビューを追加' },
     { version: 'v2.0.162', date: '2026/09/02', summary: 'ショップ9商品へ正式装備画像を追加しLOADOUT表示と統一' },
     { version: 'v2.0.161', date: '2026/09/01', summary: 'CATAMON LABの操作枠と情報プレートを研究設備デザインへ統一' },
@@ -1994,6 +1995,7 @@
 
   function playTone(freq, duration, type, peakGain, freqEnd, delay, attack) {
     if (firebaseBattleReplayActive()) return;
+    if (workshopBattlePreview) return;
     if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
@@ -2012,6 +2014,7 @@
 
   function playFilteredNoise(duration, peakGain, filterType, frequency, delay, attack, q) {
     if (firebaseBattleReplayActive()) return;
+    if (workshopBattlePreview) return;
     if (!sfxAudible()) return;
     const ac = getAudioCtx();
     const startAt = ac.currentTime + (delay || 0);
@@ -2087,6 +2090,7 @@
   }
   function playNormalImpactSound(sampleGain = NORMAL_IMPACT_SOUND_GAIN) {
     if (firebaseBattleReplayActive()) return;
+    if (workshopBattlePreview) return;
     if (!sfxAudible()) return;
     if (!normalImpactBuffer) {
       // 読み込みが間に合わない初回や取得失敗でも、着弾が無音にはならない。
@@ -7796,6 +7800,9 @@
   // キャラ選択の「詳細」から開く、通信なし・操作なしの必殺技お試し戦場。
   // 本戦のVS開始演出、BGM、戦績、中断保存とは完全に切り離す。
   let specialDemo = null;
+  // ショップの商品詳細からだけ起動する、実Battle描画の小窓プレビュー。
+  // 本番の発射・着弾・回復処理を使い、保存・戦績・通信からは切り離す。
+  let workshopBattlePreview = null;
   const specialDemoCloseBtn = { x: VW - 66, y: 38, w: 104, h: 36 };
   const specialDemoReplayBtn = { x: VW / 2, y: VH - 48, w: 176, h: 38 };
   const COOP_MVP_FEATURE_ENABLED = globalThis.KatamonCoopMvp?.isFeatureEnabled(
@@ -8417,6 +8424,182 @@
     gamePhase = 'select';
     syncBgm();
   }
+
+  const WORKSHOP_BATTLE_PREVIEW_IDS = Object.freeze([
+    'barrier', 'impact', 'drill', 'rescue-kit', 'healing-kit',
+    'debuff-grenade', 'icon-brass', 'shell-amber', 'impact-cyan'
+  ]);
+
+  function workshopPreviewPositionUnit(unit, x) {
+    unit.x = x;
+    initUnitOnGround(unit);
+    unit.vy = 0;
+    unit.knockbackVx = 0;
+    unit.grounded = true;
+  }
+
+  function prepareWorkshopBattlePreviewScene() {
+    const preview = workshopBattlePreview;
+    if (!preview) return false;
+    const itemId = preview.itemId;
+    const allyItem = itemId === 'rescue-kit' || itemId === 'healing-kit';
+    battleMode = 'demo';
+    setMatchFormat(allyItem ? '2v2' : '1v1');
+    player.character = 'sumoeru';
+    cpu.character = 'kyoryu';
+    ally2.character = 'hamulton';
+    foe2.character = 'barugerukan';
+    gamePhase = 'battle';
+    resetMatch(false);
+    cutIn = null;
+    battleIntroPending = false;
+    awaitingResolve = false;
+    workshopPreviewPositionUnit(player, STAGE_W * 0.28);
+    workshopPreviewPositionUnit(cpu, STAGE_W * 0.68);
+    if (allyItem) {
+      workshopPreviewPositionUnit(ally2, STAGE_W * 0.55);
+      workshopPreviewPositionUnit(foe2, STAGE_W * 0.86);
+      ally2.hp = itemId === 'rescue-kit' ? 0 : Math.max(1, Math.floor(ally2.maxHp * 0.42));
+      ally2.grounded = true;
+    }
+    if (itemId === 'debuff-grenade') {
+      units.splice(0, units.length, player, coopBossUnit);
+      coopBossUnit.x = STAGE_W * 0.76;
+      coopBossUnit.y = groundYAt(coopBossUnit.x) - UNIT_RADIUS;
+      coopBossUnit.hp = 2200;
+      coopBossUnit.maxHp = 2200;
+      coopBossUnit.team = 'cpu';
+      coopBossUnit.vulnerabilityTurns = 0;
+      coopBossUnit.bossState = createCoopBossLiveState(2200, 'normal');
+      coopBossUnit.grounded = true;
+      coopBossUnit.vy = 0;
+      coopBossUnit.knockbackVx = 0;
+    }
+    activeCosmetics = {
+      icon: itemId === 'icon-brass' ? 'icon-brass' : null,
+      projectile: itemId === 'shell-amber' ? 'shell-amber' : null,
+      impact: itemId === 'impact-cyan' ? 'impact-cyan' : null,
+    };
+    preview.elapsed = 0;
+    preview.phase = 0;
+    focusCameraOn(itemId === 'debuff-grenade'
+      ? (player.x + coopBossUnit.x) / 2
+      : allyItem ? (player.x + ally2.x) / 2 : (player.x + cpu.x) / 2,
+    true, Math.min(player.y, allyItem ? ally2.y : cpu.y));
+    faceAllUnitsTowardOpponents();
+    syncBgm();
+    return true;
+  }
+
+  function startWorkshopBattlePreview(itemId) {
+    if (!WORKSHOP_BATTLE_PREVIEW_IDS.includes(itemId)) return false;
+    if (workshopBattlePreview) closeWorkshopBattlePreview();
+    workshopBattlePreview = {
+      itemId,
+      elapsed: 0,
+      phase: 0,
+      restore: {
+        gamePhase, battleMode, matchFormat,
+        playerCharacter: player.character, cpuCharacter: cpu.character,
+        allyCharacter: ally2.character, foeCharacter: foe2.character,
+        winStreak, runStats: { ...runStats }, selectedSubweapon,
+        activeCosmetics: { ...activeCosmetics }
+      }
+    };
+    return prepareWorkshopBattlePreviewScene();
+  }
+
+  function closeWorkshopBattlePreview() {
+    if (!workshopBattlePreview) return;
+    const restore = workshopBattlePreview.restore;
+    workshopBattlePreview = null;
+    resetTransientBattleState();
+    setMatchFormat(restore.matchFormat);
+    player.character = restore.playerCharacter;
+    cpu.character = restore.cpuCharacter;
+    ally2.character = restore.allyCharacter;
+    foe2.character = restore.foeCharacter;
+    battleMode = restore.battleMode;
+    gamePhase = restore.gamePhase;
+    winStreak = restore.winStreak;
+    runStats = restore.runStats;
+    selectedSubweapon = restore.selectedSubweapon;
+    activeCosmetics = restore.activeCosmetics;
+    syncBgm();
+  }
+
+  function launchWorkshopBattlePreviewEffect() {
+    const preview = workshopBattlePreview;
+    if (!preview) return;
+    const itemId = preview.itemId;
+    const target = itemId === 'rescue-kit' || itemId === 'healing-kit'
+      ? ally2 : itemId === 'debuff-grenade' ? coopBossUnit : cpu;
+    const direction = Math.sign(target.x - player.x) || 1;
+    const anchor = unitAnchor(player);
+    if (itemId === 'barrier') {
+      player.subweapon = 'barrier';
+      player.subweaponUsesLeft = 1;
+      launchSubweaponShot(player, anchor, 0, 0, 'barrier');
+      return;
+    }
+    if (itemId === 'impact' || itemId === 'drill') {
+      player.subweapon = itemId;
+      player.subweaponUsesLeft = 1;
+      launchSubweaponShot(player, anchor, direction * 430, -78, itemId);
+      return;
+    }
+    if (COOP_ITEM_IDS.includes(itemId)) {
+      player.coopItem = itemId;
+      player.coopItemUsesLeft = coopItemUsesPerMatch(itemId);
+      launchCoopItemShot(player, anchor, direction * 430, -70, itemId);
+      return;
+    }
+    if (itemId === 'icon-brass') return;
+    launchShot(player, anchor, direction * 430, -78, false, false, false);
+  }
+
+  function updateWorkshopBattlePreview(dt) {
+    const preview = workshopBattlePreview;
+    if (!preview) return;
+    preview.elapsed += dt;
+    if (preview.phase === 0 && preview.elapsed >= 0.42) {
+      preview.phase = 1;
+      launchWorkshopBattlePreviewEffect();
+    }
+    if (preview.itemId === 'barrier' && preview.phase === 1 && preview.elapsed >= 1.08) {
+      preview.phase = 2;
+      const direction = Math.sign(player.x - cpu.x) || -1;
+      launchShot(cpu, unitAnchor(cpu), direction * 430, -72, false, false, false);
+    }
+    if (preview.elapsed >= 4.4) prepareWorkshopBattlePreviewScene();
+  }
+
+  function copyWorkshopBattlePreviewTo(targetCanvas) {
+    if (!workshopBattlePreview || !(targetCanvas instanceof HTMLCanvasElement)) return false;
+    const targetCtx = targetCanvas.getContext('2d');
+    if (!targetCtx) return false;
+    const iconPreview = workshopBattlePreview.itemId === 'icon-brass';
+    // Battle canvasの中央戦場帯だけを切り抜く。空だけでなく、実キャラ・弾道・着弾を
+    // 商品詳細の小窓へ常に収める（タイトル用Canvasの論理解像度は540×960）。
+    const sourceY = iconPreview ? 0 : 340;
+    const sourceH = iconPreview ? 270 : 304;
+    const sourceScale = canvas.width / VW;
+    targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+    targetCtx.drawImage(
+      canvas,
+      0, sourceY * sourceScale, VW * sourceScale, sourceH * sourceScale,
+      0, 0, targetCanvas.width, targetCanvas.height
+    );
+    return true;
+  }
+
+  globalThis.KatamonWorkshopBattlePreview = Object.freeze({
+    start: startWorkshopBattlePreview,
+    restart: prepareWorkshopBattlePreviewScene,
+    copyTo: copyWorkshopBattlePreviewTo,
+    stop: closeWorkshopBattlePreview,
+    activeItemId: () => workshopBattlePreview?.itemId || null,
+  });
 
   // CPU BATTLEの連戦用。直前と同じ顔ぶれ・地形種別を続けず、毎試合の新鮮さを保つ。
   // 完全ランダムの中でも直前の候補だけは外し、同じ見た目が偶然続いて固定に感じるのを防ぐ。
@@ -26120,6 +26303,11 @@
 
     // UIレイヤー(スクリーン固定)
     drawDeadLine();
+    if (workshopBattlePreview) {
+      if (workshopBattlePreview.itemId === 'icon-brass') drawUnitPanels();
+      ctx.restore();
+      return;
+    }
     if (specialDemo) {
       drawSpecialDemoOverlay();
       drawSpecialFlash();
@@ -27920,6 +28108,8 @@
     if (gamePhase !== 'battle') return;
     if (menuOpen) return; // メニュー表示中はゲーム進行を止める
 
+    if (workshopBattlePreview) updateWorkshopBattlePreview(dt);
+
     if (specialDemo) {
       specialDemo.elapsed += dt;
       // 画面へ切り替わった直後に少しだけ間を置き、キャラと的を見てから必殺を出す。
@@ -28365,6 +28555,7 @@
   function updateAfterPhysics(dt) {
     // デモは1発だけを見せる。CPUの反撃・手番交代・通信・戦績へ進ませない。
     if (specialDemo) return;
+    if (workshopBattlePreview) return;
     // 移動(この端末の手番のみ・燃料制・長押しボタン)
     const me = localUnit();
     if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {
