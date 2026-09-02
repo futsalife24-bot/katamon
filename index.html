@@ -966,10 +966,11 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.164-workshop-live-battle-preview';
+  const BUILD_ID = 'v2.0.165-preview-effect-readability';
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.165', date: '2026/09/02', summary: 'ショップ全9商品と全キャラ必殺技のプレビューを確実に命中・発動する展示へ改善' },
     { version: 'v2.0.164', date: '2026/09/02', summary: 'ショップのプレビューを実際のバトル画面と戦闘エフェクトへ刷新' },
     { version: 'v2.0.163', date: '2026/09/02', summary: 'ショップ9商品の戦闘エフェクトプレビューを追加' },
     { version: 'v2.0.162', date: '2026/09/02', summary: 'ショップ9商品へ正式装備画像を追加しLOADOUT表示と統一' },
@@ -8378,6 +8379,146 @@
     return { x: card.x + card.w / 2 - 37, y: card.y - card.h / 2 + 70, w: 52, h: 19 };
   }
 
+  // 商品・必殺のプレビューは「同じ操作なら毎回同じ成功例」を見せる展示室である。
+  // rolling指定だけでは地形生成のnoiseや浮島が残るため、デモ中だけ平坦な地形へ揃える。
+  // 本戦の地形生成・物理・命中処理は一切変えず、実際の発射口へ渡す初期条件だけを固定する。
+  function prepareDeterministicPreviewTerrain() {
+    currentPattern = 'rolling';
+    currentBridge = null;
+    // FLOOR_Yは「地面なし」の番兵値なので使わない。死線より十分上へ
+    // 実在する平面を置き、展示中のダミーが開始直後に場外判定されるのを防ぐ。
+    const previewFloorY = DEAD_LINE_Y - 126;
+    currentSegments = Array.from({ length: TERRAIN_COLS }, () => [[previewFloorY, TERRAIN_BOTTOM_Y]]);
+    craterHistory = [];
+    buildTerrainMask(currentSegments, false);
+    rescanColumnsFromGrid(0, TERRAIN_COLS - 1);
+    rebuildTerrainRim();
+    minimapTerrainDirty = true;
+    startOnIsland = false;
+    wind = { dir: 1, strength: 0 };
+  }
+
+  function previewUnitState(unit) {
+    return unit ? {
+      id: unit.id, hp: unit.hp, maxHp: unit.maxHp, x: unit.x, y: unit.y,
+      moveLockTurns: unit.moveLockTurns || 0,
+      actionSkipTurns: unit.actionSkipTurns || 0,
+      barrierActive: unit.subweaponBarrierActive === true,
+      vulnerabilityTurns: unit.vulnerabilityTurns || 0,
+    } : null;
+  }
+
+  function previewAimVelocity(shooter, targetPoint, options = {}) {
+    const anchor = unitAnchor(shooter);
+    const distance = Math.abs(targetPoint.x - anchor.x);
+    const t = options.t || Math.min(1.15, Math.max(0.72, distance / 360));
+    return perfectAimVelocity(
+      anchor,
+      targetPoint,
+      t,
+      options.gravityMul == null ? 1 : options.gravityMul,
+      options.windMul == null ? 1 : options.windMul,
+      options.launchSpeedMul == null ? 1 : options.launchSpeedMul
+    );
+  }
+
+  function specialDemoTargetPoint(key) {
+    const direction = Math.sign(cpu.x - player.x) || 1;
+    // 地面から始まる技はダミー本体へ吸われる前に、足元の少し手前へ着弾させる。
+    if (['tori', 'doRednote', 'jinba', 'shinigami'].includes(key)) {
+      const x = cpu.x - direction * 38;
+      return { x, y: groundYAt(x) - 2 };
+    }
+    return unitAnchor(cpu);
+  }
+
+  function specialDemoAimVelocity(key) {
+    const def = CHARACTERS[key];
+    const profile = shotPhysicsProfile(def, true, false);
+    let gravityMul = profile.gravityMul;
+    let windMul = profile.windMul;
+    if (key === 'tori' || key === 'mecha' || key === 'hamulton') {
+      gravityMul = 1;
+      windMul = 1;
+    }
+    if (key === 'nisenmono' || key === 'akuma') {
+      gravityMul = 0;
+      windMul = 0;
+    }
+    return previewAimVelocity(player, specialDemoTargetPoint(key), {
+      gravityMul,
+      windMul,
+      launchSpeedMul: def.specialVelocityMul || 1,
+      t: key === 'coolKai' ? 0.92 : 0.78,
+    });
+  }
+
+  function updateSpecialDemoEvidence() {
+    if (!specialDemo?.evidence) return;
+    const evidence = specialDemo.evidence;
+    evidence.launched ||= specialDemo.launched === true;
+    evidence.maxProjectiles = Math.max(evidence.maxProjectiles, projectiles.length);
+    evidence.targetDamaged ||= cpu.hp < evidence.initialTargetHp;
+    evidence.knockbackPx = Math.max(evidence.knockbackPx, Math.abs(cpu.x - evidence.initialTargetX));
+    evidence.craterAdded = Math.max(evidence.craterAdded, craterHistory.length - evidence.initialCraterCount);
+    evidence.moveLockTurns = Math.max(evidence.moveLockTurns, cpu.moveLockTurns || 0);
+    evidence.actionSkipTurns = Math.max(evidence.actionSkipTurns, cpu.actionSkipTurns || 0);
+    evidence.creamClouds = Math.max(evidence.creamClouds, creamClouds.length);
+    evidence.groundFlames = Math.max(evidence.groundFlames, groundFlames.length);
+    evidence.barucopters = Math.max(evidence.barucopters, barucopters.length);
+    evidence.empRings = Math.max(evidence.empRings, empRings.length);
+    evidence.lightningBeams = Math.max(evidence.lightningBeams, lightningBeams.length);
+    evidence.scorpionSpikes = Math.max(evidence.scorpionSpikes, scorpionRailSpikeBursts.length);
+    evidence.prismSeen ||= projectiles.some(projectile => projectile.prismBeam);
+    evidence.fireworkSeen ||= projectiles.some(projectile => projectile.firework || projectile.fireworkShard);
+    evidence.deathGateSeen ||= projectiles.some(projectile => projectile.deathGateMarker || projectile.deathGateScythe);
+    evidence.dSmashSeen ||= projectiles.some(projectile => projectile.dSmash || projectile.dSmashDrilling);
+    evidence.playerHealed ||= player.hp > evidence.initialPlayerHp;
+    evidence.playerHpCost ||= player.hp < evidence.initialPlayerHp;
+    evidence.selfMoveLock = Math.max(evidence.selfMoveLock, player.moveLockTurns || 0);
+    const completeByKey = {
+      kyoryu: evidence.targetDamaged,
+      medama: evidence.moveLockTurns >= 2,
+      iwa: evidence.targetDamaged && evidence.knockbackPx >= 4,
+      tori: evidence.groundFlames > 0 && evidence.targetDamaged,
+      barugerukan: evidence.barucopters > 0 && evidence.targetDamaged,
+      nisenmono: evidence.prismSeen && evidence.targetDamaged,
+      burumutan: evidence.targetDamaged && evidence.playerHealed,
+      sumoeru: evidence.fireworkSeen && evidence.targetDamaged,
+      doRednote: evidence.scorpionSpikes > 0,
+      hamulton: evidence.creamClouds > 0,
+      mocchario: evidence.targetDamaged,
+      mecha: evidence.maxProjectiles >= 3 && evidence.targetDamaged,
+      akuma: evidence.lightningBeams > 0 && evidence.targetDamaged,
+      jinba: evidence.dSmashSeen && evidence.craterAdded >= 3,
+      kishi: evidence.playerHpCost && evidence.targetDamaged,
+      neko: evidence.actionSkipTurns >= 1,
+      shinigami: evidence.deathGateSeen && evidence.craterAdded > 0,
+      coolKai: evidence.maxProjectiles >= 47 && evidence.selfMoveLock >= 6 && evidence.targetDamaged,
+    };
+    evidence.complete = completeByKey[specialDemo.key] === true;
+    evidence.hit ||= evidence.complete;
+    const signals = [];
+    if (evidence.targetDamaged) signals.push('target-damaged');
+    if (evidence.knockbackPx >= 4) signals.push('knockback');
+    if (evidence.craterAdded > 0) signals.push('terrain-carved');
+    if (evidence.moveLockTurns > 0) signals.push('move-lock');
+    if (evidence.actionSkipTurns > 0) signals.push('action-skip');
+    if (evidence.creamClouds > 0) signals.push('cream-cloud');
+    if (evidence.groundFlames > 0) signals.push('ground-flame');
+    if (evidence.barucopters > 0) signals.push('barucopter');
+    if (evidence.lightningBeams > 0) signals.push('lightning');
+    if (evidence.scorpionSpikes > 0) signals.push('scorpion-rail');
+    if (evidence.prismSeen) signals.push('prism');
+    if (evidence.fireworkSeen) signals.push('firework');
+    if (evidence.deathGateSeen) signals.push('death-gate');
+    if (evidence.dSmashSeen) signals.push('d-smash');
+    if (evidence.playerHealed) signals.push('drain-heal');
+    if (evidence.playerHpCost) signals.push('self-hp-cost');
+    if (evidence.selfMoveLock >= 6) signals.push('self-move-lock');
+    evidence.specialSignals = signals;
+  }
+
   function startSpecialDemo(key) {
     const def = CHARACTERS[key];
     if (!def || !isCharacterUnlocked(key)) return false;
@@ -8397,14 +8538,30 @@
     winStreak = 0;
     runStats = { damageDealt: 0, shots: 0 };
     resetMatch(false);
+    prepareDeterministicPreviewTerrain();
     // resetMatchが通常対戦向けに入れる開始カットインを、デモでは表示しない。
     cutIn = null;
     battleIntroPending = false;
     player.specialCharge = SPECIAL_CHARGE_MAX;
-    player.x = STAGE_W * 0.29;
-    cpu.x = STAGE_W * 0.71;
+    player.x = STAGE_W * 0.34;
+    cpu.x = STAGE_W * 0.62;
     initUnitOnGround(player);
     initUnitOnGround(cpu);
+    // 多段技も途中でダミーを倒して演出が途切れない耐久へ固定する。
+    cpu.maxHp = Math.max(cpu.maxHp, 600);
+    cpu.hp = cpu.maxHp;
+    if (key === 'burumutan') player.hp = Math.max(1, Math.floor(player.maxHp * 0.38));
+    specialDemo.evidence = {
+      complete: false, launched: false, hit: false, specialSignals: [],
+      maxProjectiles: 0, targetDamaged: false, knockbackPx: 0,
+      craterAdded: 0, moveLockTurns: 0, actionSkipTurns: 0, creamClouds: 0,
+      groundFlames: 0, barucopters: 0, empRings: 0, lightningBeams: 0,
+      scorpionSpikes: 0, prismSeen: false, fireworkSeen: false,
+      deathGateSeen: false, dSmashSeen: false, playerHealed: false,
+      playerHpCost: false, selfMoveLock: 0,
+      initialTargetHp: cpu.hp, initialTargetX: cpu.x,
+      initialPlayerHp: player.hp, initialCraterCount: craterHistory.length,
+    };
     faceAllUnitsTowardOpponents();
     focusCameraOn((player.x + cpu.x) / 2, true, Math.min(player.y, cpu.y));
     syncBgm();
@@ -8438,6 +8595,49 @@
     unit.grounded = true;
   }
 
+  function workshopPreviewTargetUnit(itemId) {
+    return itemId === 'rescue-kit' || itemId === 'healing-kit'
+      ? ally2 : itemId === 'debuff-grenade' ? coopBossUnit : cpu;
+  }
+
+  function updateWorkshopPreviewEvidence() {
+    if (!workshopBattlePreview?.evidence) return;
+    const preview = workshopBattlePreview;
+    const evidence = preview.evidence;
+    const target = workshopPreviewTargetUnit(preview.itemId);
+    evidence.launched ||= preview.itemId !== 'icon-brass' && preview.phase > 0;
+    evidence.maxProjectiles = Math.max(evidence.maxProjectiles, projectiles.length);
+    evidence.barrierActivated ||= player.subweaponBarrierActive === true;
+    evidence.barrierConsumed ||= evidence.barrierActivated && player.subweaponBarrierActive !== true;
+    evidence.targetDamaged ||= target.hp < evidence.initialTargetHp;
+    evidence.knockbackPx = Math.max(evidence.knockbackPx, Math.abs(target.x - evidence.initialTargetX));
+    evidence.craterAdded = Math.max(evidence.craterAdded, craterHistory.length - evidence.initialCraterCount);
+    evidence.rescuedHp = Math.max(evidence.rescuedHp, preview.itemId === 'rescue-kit' ? target.hp : 0);
+    evidence.healedHp = Math.max(evidence.healedHp, preview.itemId === 'healing-kit'
+      ? target.hp - evidence.initialTargetHp : 0);
+    evidence.weakenedTurns = Math.max(evidence.weakenedTurns, target.vulnerabilityTurns || 0);
+    evidence.iconVisible ||= activeCosmetics.icon === 'icon-brass';
+    evidence.amberProjectile ||= activeCosmetics.projectile === 'shell-amber' && projectiles.length > 0;
+    evidence.cyanImpact ||= activeCosmetics.impact === 'impact-cyan'
+      && particles.some(particle => particle.color === '#8ff7ff' || particle.color === '#3dbbd8');
+    const completeByItem = {
+      barrier: evidence.barrierActivated && evidence.barrierConsumed && player.hp < evidence.initialPlayerHp,
+      impact: evidence.targetDamaged && evidence.knockbackPx >= 4,
+      drill: evidence.craterAdded > 0,
+      'rescue-kit': evidence.rescuedHp === Math.ceil(target.maxHp * 0.3),
+      'healing-kit': evidence.healedHp === Math.min(
+        target.maxHp - evidence.initialTargetHp,
+        Math.ceil(target.maxHp * 0.3)
+      ),
+      'debuff-grenade': evidence.weakenedTurns >= 5,
+      'icon-brass': evidence.iconVisible,
+      'shell-amber': evidence.amberProjectile && evidence.targetDamaged,
+      'impact-cyan': evidence.cyanImpact && evidence.targetDamaged,
+    };
+    evidence.complete = completeByItem[preview.itemId] === true;
+    evidence.hit ||= evidence.complete;
+  }
+
   function prepareWorkshopBattlePreviewScene() {
     const preview = workshopBattlePreview;
     if (!preview) return false;
@@ -8451,20 +8651,21 @@
     foe2.character = 'barugerukan';
     gamePhase = 'battle';
     resetMatch(false);
+    prepareDeterministicPreviewTerrain();
     cutIn = null;
     battleIntroPending = false;
     awaitingResolve = false;
-    workshopPreviewPositionUnit(player, STAGE_W * 0.28);
-    workshopPreviewPositionUnit(cpu, STAGE_W * 0.68);
+    workshopPreviewPositionUnit(player, STAGE_W * 0.34);
+    workshopPreviewPositionUnit(cpu, STAGE_W * 0.62);
     if (allyItem) {
-      workshopPreviewPositionUnit(ally2, STAGE_W * 0.55);
-      workshopPreviewPositionUnit(foe2, STAGE_W * 0.86);
+      workshopPreviewPositionUnit(ally2, STAGE_W * 0.60);
+      workshopPreviewPositionUnit(foe2, STAGE_W * 0.82);
       ally2.hp = itemId === 'rescue-kit' ? 0 : Math.max(1, Math.floor(ally2.maxHp * 0.42));
       ally2.grounded = true;
     }
     if (itemId === 'debuff-grenade') {
       units.splice(0, units.length, player, coopBossUnit);
-      coopBossUnit.x = STAGE_W * 0.76;
+      coopBossUnit.x = STAGE_W * 0.66;
       coopBossUnit.y = groundYAt(coopBossUnit.x) - UNIT_RADIUS;
       coopBossUnit.hp = 2200;
       coopBossUnit.maxHp = 2200;
@@ -8482,6 +8683,16 @@
     };
     preview.elapsed = 0;
     preview.phase = 0;
+    const target = workshopPreviewTargetUnit(itemId);
+    preview.evidence = {
+      complete: false, launched: false, hit: false, maxProjectiles: 0,
+      barrierActivated: false, barrierConsumed: false,
+      targetDamaged: false, knockbackPx: 0, craterAdded: 0, rescuedHp: 0,
+      healedHp: 0, weakenedTurns: 0, iconVisible: false,
+      amberProjectile: false, cyanImpact: false,
+      initialTargetHp: target.hp, initialTargetX: target.x,
+      initialPlayerHp: player.hp, initialCraterCount: craterHistory.length,
+    };
     focusCameraOn(itemId === 'debuff-grenade'
       ? (player.x + coopBossUnit.x) / 2
       : allyItem ? (player.x + ally2.x) / 2 : (player.x + cpu.x) / 2,
@@ -8532,9 +8743,7 @@
     const preview = workshopBattlePreview;
     if (!preview) return;
     const itemId = preview.itemId;
-    const target = itemId === 'rescue-kit' || itemId === 'healing-kit'
-      ? ally2 : itemId === 'debuff-grenade' ? coopBossUnit : cpu;
-    const direction = Math.sign(target.x - player.x) || 1;
+    const target = workshopPreviewTargetUnit(itemId);
     const anchor = unitAnchor(player);
     if (itemId === 'barrier') {
       player.subweapon = 'barrier';
@@ -8545,17 +8754,23 @@
     if (itemId === 'impact' || itemId === 'drill') {
       player.subweapon = itemId;
       player.subweaponUsesLeft = 1;
-      launchSubweaponShot(player, anchor, direction * 430, -78, itemId);
+      const targetPoint = itemId === 'drill'
+        ? { x: target.x - 34, y: groundYAt(target.x - 34) - 2 }
+        : unitAnchor(target);
+      const aim = previewAimVelocity(player, targetPoint, { t: 0.76 });
+      launchSubweaponShot(player, anchor, aim.vx0, aim.vy0, itemId);
       return;
     }
     if (COOP_ITEM_IDS.includes(itemId)) {
       player.coopItem = itemId;
       player.coopItemUsesLeft = coopItemUsesPerMatch(itemId);
-      launchCoopItemShot(player, anchor, direction * 430, -70, itemId);
+      const aim = previewAimVelocity(player, unitAnchor(target), { t: 0.76 });
+      launchCoopItemShot(player, anchor, aim.vx0, aim.vy0, itemId);
       return;
     }
     if (itemId === 'icon-brass') return;
-    launchShot(player, anchor, direction * 430, -78, false, false, false);
+    const aim = previewAimVelocity(player, unitAnchor(target), { t: 0.76 });
+    launchShot(player, anchor, aim.vx0, aim.vy0, false, false, false);
   }
 
   function updateWorkshopBattlePreview(dt) {
@@ -8568,10 +8783,14 @@
     }
     if (preview.itemId === 'barrier' && preview.phase === 1 && preview.elapsed >= 1.08) {
       preview.phase = 2;
-      const direction = Math.sign(player.x - cpu.x) || -1;
-      launchShot(cpu, unitAnchor(cpu), direction * 430, -72, false, false, false);
+      const aim = previewAimVelocity(cpu, unitAnchor(player), { t: 0.76 });
+      launchShot(cpu, unitAnchor(cpu), aim.vx0, aim.vy0, false, false, false);
     }
-    if (preview.elapsed >= 4.4) prepareWorkshopBattlePreviewScene();
+    updateWorkshopPreviewEvidence();
+    // 成功結果を1秒以上読ませる。万一成立しなくても上限で安全に再試行する。
+    if ((preview.evidence.complete && preview.elapsed >= 3.5) || preview.elapsed >= 6.2) {
+      prepareWorkshopBattlePreviewScene();
+    }
   }
 
   function copyWorkshopBattlePreviewTo(targetCanvas) {
@@ -8593,12 +8812,53 @@
     return true;
   }
 
+  function advanceActivePreviewForTest(seconds = 0.25) {
+    if (battleMode !== 'demo' || (!workshopBattlePreview && !specialDemo)) return false;
+    const frameCount = Math.ceil(Math.min(2, Math.max(0, Number(seconds) || 0)) * 60);
+    for (let frame = 0; frame < frameCount; frame++) update(1 / 60);
+    return true;
+  }
+
   globalThis.KatamonWorkshopBattlePreview = Object.freeze({
     start: startWorkshopBattlePreview,
     restart: prepareWorkshopBattlePreviewScene,
     copyTo: copyWorkshopBattlePreviewTo,
     stop: closeWorkshopBattlePreview,
     activeItemId: () => workshopBattlePreview?.itemId || null,
+    advanceForTest: advanceActivePreviewForTest,
+    inspect: () => workshopBattlePreview ? {
+      itemId: workshopBattlePreview.itemId,
+      phase: workshopBattlePreview.phase,
+      elapsed: workshopBattlePreview.elapsed,
+      evidence: { ...workshopBattlePreview.evidence },
+      units: units.map(previewUnitState),
+      projectileCount: projectiles.length,
+      craterCount: craterHistory.length,
+      activeCosmetics: { ...activeCosmetics },
+    } : null,
+  });
+
+  globalThis.KatamonSpecialDemo = Object.freeze({
+    start: startSpecialDemo,
+    restart: () => {
+      if (!specialDemo) return false;
+      const key = specialDemo.key;
+      closeSpecialDemo();
+      return startSpecialDemo(key);
+    },
+    stop: closeSpecialDemo,
+    keys: () => CHARACTER_LIST.slice(),
+    characters: () => CHARACTER_LIST.slice(),
+    advanceForTest: advanceActivePreviewForTest,
+    inspect: () => specialDemo ? {
+      key: specialDemo.key,
+      elapsed: specialDemo.elapsed,
+      launched: specialDemo.launched,
+      evidence: { ...specialDemo.evidence },
+      units: units.map(previewUnitState),
+      projectileCount: projectiles.length,
+      craterCount: craterHistory.length,
+    } : null,
   });
 
   // CPU BATTLEの連戦用。直前と同じ顔ぶれ・地形種別を続けず、毎試合の新鮮さを保つ。
@@ -28112,11 +28372,12 @@
 
     if (specialDemo) {
       specialDemo.elapsed += dt;
+      updateSpecialDemoEvidence();
       // 画面へ切り替わった直後に少しだけ間を置き、キャラと的を見てから必殺を出す。
       if (!specialDemo.launched && specialDemo.elapsed >= 0.42) {
         specialDemo.launched = true;
-        const dx = cpu.x - player.x;
-        launchShot(player, unitAnchor(player), Math.sign(dx || 1) * 640, -185, true, false, false);
+        const aim = specialDemoAimVelocity(specialDemo.key);
+        launchShot(player, unitAnchor(player), aim.vx0, aim.vy0, true, false, false);
         awaitingResolve = true;
       }
       // 長い技も見せ切れる時間を確保し、放置しても選択画面へ安全に戻す。
