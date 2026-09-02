@@ -24,6 +24,8 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
     await expect(page.locator('#mvpCollection')).toHaveClass(/open/);
     await expect(page.locator('.mvp-card')).toHaveCount(9);
     await expect(page.locator('.mvp-card .mvp-item-art')).toHaveCount(9);
+    await expect(page.locator('.mvp-card .mvp-effect-preview')).toHaveCount(9);
+    await expect(page.locator('.mvp-card [data-preview-replay]')).toHaveCount(9);
     await page.locator('.mvp-scroll').evaluate((scroll) => { scroll.scrollTop = scroll.scrollHeight; });
     await page.locator('.mvp-scroll').evaluate((scroll) => { scroll.scrollTop = 0; });
     const layout = await page.evaluate(async () => {
@@ -33,7 +35,8 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
       const cards = [...document.querySelectorAll('.mvp-card')];
       return {
         imageSizes: images.map((image) => [image.naturalWidth, image.naturalHeight]),
-        imageSources: images.map((image) => new URL(image.currentSrc, location.href).pathname),
+      imageSources: images.map((image) => new URL(image.currentSrc, location.href).pathname),
+        previewScenes: [...document.querySelectorAll('.mvp-card .mvp-effect-preview')].map((preview) => preview.dataset.previewScene),
         documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         panelOverflow: document.querySelector('.mvp-panel').scrollWidth - document.querySelector('.mvp-panel').clientWidth,
         controlsOutside: cards.filter((card) => {
@@ -45,6 +48,7 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
     });
     expect(layout.imageSizes, `${viewport.width}px runtime dimensions`).toEqual(Array(9).fill([256, 256]));
     expect(new Set(layout.imageSources).size, `${viewport.width}px distinct item images`).toBe(9);
+    expect(new Set(layout.previewScenes).size, `${viewport.width}px all item effect scenes`).toBe(9);
     expect(layout.documentOverflow, `${viewport.width}px document overflow`).toBeLessThanOrEqual(0);
     expect(layout.panelOverflow, `${viewport.width}px panel overflow`).toBeLessThanOrEqual(0);
     expect(layout.controlsOutside, `${viewport.width}px card control overflow`).toBe(0);
@@ -68,6 +72,10 @@ test('ショップ9商品の正式画像・詳細・responsiveを検証する', 
   const detailImage = page.locator('.mvp-dialog-card .mvp-item-art');
   await expect(detailImage).toHaveAttribute('src', 'assets/shop/runtime/items/shop_item_barrier_01.webp');
   await expect.poll(() => detailImage.evaluate((image) => [image.naturalWidth, image.naturalHeight])).toEqual([256, 256]);
+  const detailPreview = page.locator('.mvp-dialog-card .mvp-effect-preview');
+  await expect(detailPreview).toHaveAttribute('data-preview-scene', 'barrier');
+  await detailPreview.locator('[data-preview-replay]').click();
+  await expect.poll(() => detailPreview.locator('.mvp-demo-shot').evaluate((node) => getComputedStyle(node).animationName)).toContain('mvp-shot');
   console.log('shop-assets detail: image decoded');
   await page.locator('.mvp-dialog-card').screenshot({ path: testInfo.outputPath('shop-barrier-detail-412.png') });
   console.log('shop-assets detail: screenshot done');

@@ -8,6 +8,11 @@ const shop = require('../coop-mvp-shop.js');
 assert.equal(foundation.SHOP_ITEMS.length, 9);
 assert.deepEqual(foundation.SHOP_ITEMS.map((item) => item.price), [100, 200, 200, 0, 100, 200, 100, 150, 200]);
 assert.equal(Object.keys(shop.DESCRIPTIONS).length, 9);
+assert.deepEqual(Object.keys(shop.PREVIEW_SCENES), foundation.SHOP_ITEMS.map((item) => item.id),
+  '全商品に購入判断用のeffect previewを持たせる');
+assert.equal(shop.previewScene({ id: 'barrier' }).cue, '被弾時　ダメージ -50%');
+assert.equal(shop.previewScene({ id: 'debuff-grenade' }).cue, '1 ROUND　全ダメージ ×1.25');
+assert.equal(shop.previewScene({ id: 'unknown' }).id, 'none');
 assert.match(shop.DESCRIPTIONS['rescue-kit'], /1試合1回/, '救助弾の説明へ使用回数を明記');
 
 let state = foundation.createDefaultState();
