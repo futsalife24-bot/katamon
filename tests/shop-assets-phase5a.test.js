@@ -45,6 +45,10 @@ for (const item of manifest.items) {
 const source = fs.readFileSync(path.join(repoRoot, 'coop-mvp-shop.js'), 'utf8');
 const game = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
 assert.match(source, /class="mvp-item-art"/);
+assert.match(source, /class="mvp-preview mvp-effect-preview/, '商品画像だけでなく戦闘効果の実演面を表示する');
+assert.match(source, /data-preview-scene=/, '商品ごとの効果演出を識別する');
+assert.match(source, /data-preview-replay/, 'ユーザーが効果を再生し直せる');
+assert.match(source, /prefers-reduced-motion:reduce/, '演出はreduced motionへ配慮する');
 assert.doesNotMatch(source, /class="mvp-orb"/);
 assert.match(source, /loading="lazy" decoding="async"/);
 assert.match(game, /shop\?\.assetPath\?\.\(item\)/);
