@@ -14,26 +14,15 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="preload" as="image" href="assets/loading-emblem.webp" type="image/webp" fetchpriority="high">
-<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">
-<link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">
-<link rel="preload" as="image" href="assets/battle-start-logo.png" fetchpriority="high">
-<link rel="preload" as="video" href="assets/battle-start-logo.mp4" type="video/mp4">
 <link rel="preload" as="image" href="assets/title-background-logo-start.jpg" type="image/jpeg" fetchpriority="high">
-<link rel="preload" as="image" href="assets/title-background-logo-end.jpg" type="image/jpeg" fetchpriority="high">
-<link rel="preload" as="video" href="assets/title-background-logo-transition.mp4" type="video/mp4">
 <link rel="preload" as="image" href="assets/title-mode-board.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-shield-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-hanging-sign.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-parchment-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/gear/ui/runtime/gear_title_menu_frame_01.webp" type="image/webp" fetchpriority="high">
-<link rel="preload" as="font" href="assets/fonts/rocknroll-one-regular.ttf" type="font/ttf" crossorigin>
 <link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
-<link rel="preload" as="image" href="assets/characters/runtime/dirano.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/characters/runtime/eyebolt.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/characters/runtime/gorocca.webp" type="image/webp">
-<link rel="preload" as="image" href="assets/characters/runtime/fenice.webp" type="image/webp">
-<link rel="preload" as="audio" href="assets/title-bgm.mp3" type="audio/mpeg">
-<link rel="stylesheet" href="assets/fonts/katamon-fonts.css">
+<link id="katamonFontFaces" rel="stylesheet" href="assets/fonts/katamon-fonts.css" media="print">
+<style>@font-face{font-family:"Reggae One";src:url("assets/fonts/reggae-one-display.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}</style>
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
   html, body {
@@ -884,11 +873,9 @@
     </div>
   </div>
 </div>
-<audio id="titleBgm" preload="auto">
-  <source src="assets/title-bgm.mp3" type="audio/mpeg">
-</audio>
+<audio id="titleBgm" preload="none"></audio>
 <audio id="stageBgm" preload="auto"></audio>
-<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>
+<audio id="roomBgm" preload="none" loop></audio>
 <!-- おまけ曲の再生用。全曲の先読みは起動ローダー側で行う。 -->
 <audio id="bonusBgm" preload="none"></audio>
 
@@ -959,14 +946,16 @@
   };
   // 通常UIはRocknRoll One、短い大見出しと演出だけReggae Oneを使う。
   // どちらもRegular 400を1ファイルだけ内蔵し、太さはCanvas側で必要な時だけ合成する。
-  const UI_FONT = '"RocknRoll One", "Yu Gothic UI", sans-serif';
-  const UI_FONT_HEAVY = '"RocknRoll One", "Yu Gothic UI", sans-serif';
-  const UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif';
+  let UI_FONT = '"Yu Gothic UI", sans-serif';
+  let UI_FONT_HEAVY = '"Yu Gothic UI", sans-serif';
+  let UI_FONT_DISPLAY = '"Reggae One", "Yu Gothic UI", sans-serif';
 
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.166-preview-framing-polish';
+  const BUILD_ID = 'v2.0.167-progressive-precache';
+  // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
+  // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
@@ -1466,9 +1455,146 @@
   let titleStartTimeout = null;
   let titleStartPending = false;
   let titleStartFailed = false;
-  // BGMはバックグラウンドで先読みする。端末によっては全曲バッファリング通知が来ないため、
-  // ロード完了条件には含めず、TAP後に実際の再生開始とタイトル遷移を同期する。
-  titleBgm.load();
+  let progressivePrecacheScheduled = false;
+  let progressiveTier3aScheduled = false;
+  let progressiveTier3bScheduled = false;
+  const FIRST_PAINT_CACHE_ASSETS = Object.freeze([
+    'assets/title-background-logo-start.jpg',
+    'assets/title-mode-board.webp',
+    'assets/gear/ui/runtime/gear_title_menu_frame_01.webp',
+    'assets/loading-emblem.webp',
+    'assets/title-shield-button.webp',
+    'assets/title-hanging-sign.webp',
+    'assets/title-parchment-button.webp',
+    'assets/fonts/reggae-one-display.woff2'
+  ]);
+
+  function requestPrecacheTier(tier) {
+    if (!('serviceWorker' in navigator)) return;
+    const post = (worker) => worker?.postMessage({ type: 'KATAMON_PRECACHE_TIER', tier });
+    if (navigator.serviceWorker.controller) {
+      post(navigator.serviceWorker.controller);
+      return;
+    }
+    navigator.serviceWorker.ready.then(registration => {
+      post(navigator.serviceWorker.controller || registration.active);
+    }).catch(() => {});
+  }
+
+  // The first paint already loaded these resources through the page. Copy the
+  // fresh HTTP-cache response into the persistent asset cache after SW control
+  // rather than making install fetch them a second time.
+  async function persistFirstPaintAssets() {
+    const cache = await caches.open('katamon-assets-v1').catch(() => null);
+    if (!cache) return;
+    for (const asset of FIRST_PAINT_CACHE_ASSETS) {
+      try {
+        if (await cache.match(asset)) continue;
+      // Never turn a title asset into a second network request just to seed
+      // CacheStorage. If the browser no longer has the page response, the
+      // normal asset fetch path remains the safe fallback.
+        const response = await fetch(asset, { cache: 'only-if-cached', mode: 'same-origin' });
+          if (response.ok && response.headers.get('X-Katamon-Cache-Miss') !== '1') {
+            await cache.put(asset, response.clone());
+          }
+      } catch (_) { /* this title asset keeps its normal HTTP-cache fallback */ }
+    }
+  }
+
+  function scheduleIdle(callback, timeout) {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2000));
+    idle(callback, { timeout });
+  }
+
+  function scheduleProgressivePrecache() {
+    if (progressivePrecacheScheduled) return;
+    progressivePrecacheScheduled = true;
+    scheduleIdle(() => requestPrecacheTier(2), 5000);
+  }
+
+  // T2 is already in the SW cache at this point. Decode only visual assets;
+  // gameplay audio follows in T3a.
+  function primeTier2Decode() {
+    const fontFaces = document.getElementById('katamonFontFaces');
+    if (fontFaces) fontFaces.media = 'all';
+    UI_FONT = '"RocknRoll One", "Yu Gothic UI", sans-serif';
+    UI_FONT_HEAVY = '"RocknRoll One", "Yu Gothic UI", sans-serif';
+    UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif';
+    ensureBattleStartLogoImage();
+    ensureBattleHudAssets();
+    ensureVsPlateAssets();
+    const images = [battleStartLogoImage, ...Object.values(battleHudImages)];
+    Promise.allSettled(images.map(image => image?.decode?.())).catch(() => {});
+  }
+
+  // Media-element `load()` uses Range requests, which bypass the asset cache
+  // so seek/loop semantics stay intact. Decode the already cached bytes here
+  // instead; playback keeps its existing media-element path.
+  function warmCachedAudio(src) {
+    // Some embedded WebKit contexts expose neither AudioContext constructor.
+    // This is only a best-effort predecode; the existing <audio> playback path
+    // remains available there.
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (typeof AudioContextConstructor !== 'function') return;
+    caches.open('katamon-assets-v1')
+      .then(cache => cache.match(src))
+      .then(response => response?.arrayBuffer())
+      .then(bytes => {
+        const context = getAudioCtx();
+        return bytes && context ? context.decodeAudioData(bytes.slice(0)) : null;
+      })
+      .catch(() => {});
+  }
+
+  function scheduleTier3aPrecache() {
+    if (progressiveTier3aScheduled) return;
+    progressiveTier3aScheduled = true;
+    scheduleIdle(() => requestPrecacheTier('3a'), 30000);
+  }
+
+  function scheduleTier3bPrecache() {
+    if (progressiveTier3bScheduled) return;
+    const conn = navigator.connection;
+    const frugal = conn && (conn.saveData === true
+      || conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g');
+    if (frugal) return;
+    progressiveTier3bScheduled = true;
+    scheduleIdle(() => requestPrecacheTier('3b'), 45000);
+  }
+
+  function primeTier3aDecode() {
+    const sources = [
+      'assets/room-bgm.mp3',
+      ...Object.values(STAGE_BGM_SOURCES)
+    ];
+    const prime = () => sources.forEach(warmCachedAudio);
+    // Safari permits Web Audio construction only from a user gesture.  Prime
+    // immediately where possible, otherwise retain the exact same warm-up for
+    // the next interaction instead of throwing during an idle SW callback.
+    if (navigator.userActivation?.isActive) {
+      prime();
+    } else {
+      window.addEventListener('pointerdown', prime, { once: true, passive: true });
+    }
+  }
+  function ensureTitleBgmSource() {
+    if (titleBgm.src) return titleBgm;
+    titleBgm.src = 'assets/title-bgm.mp3';
+    titleBgm.load();
+    return titleBgm;
+  }
+
+  async function hydrateCachedMediaSource(media, assetPath) {
+    if (!media || media.src) return media;
+    try {
+      const cache = await caches.open('katamon-assets-v1');
+      const response = await cache.match(assetPath);
+      if (!response) return media;
+      media.src = URL.createObjectURL(await response.blob());
+      media.load();
+    } catch (_) { /* normal source assignment remains the fallback */ }
+    return media;
+  }
   function clearTitleBgmLoopTimer() {
     if (titleBgmLoopTimer === null) return;
     clearTimeout(titleBgmLoopTimer);
@@ -1476,6 +1602,7 @@
   }
   function playTitleBgm(restart = false) {
     if (!bgmAudible()) return Promise.resolve();
+    ensureTitleBgmSource();
     if (restart) {
       clearTitleBgmLoopTimer();
       titleBgm.pause();
@@ -1510,12 +1637,12 @@
     titleStartPending = false;
     titleStartFailed = failed;
     if (gamePhase === 'press') gamePhase = 'title';
+    scheduleProgressivePrecache();
   }
   function enterTitleFromTap() {
     if (titleStartPending) return;
     // 最初のタップ(確実なユーザー操作)のうちにWebAudio経路を用意しておく
     ensureBgmGraph();
-    primeFirstBattleMedia();
     primeNormalImpactSound();
     primeSpecialCutinSound();
     primeCoolKaiSpecialVoice();
@@ -1574,7 +1701,7 @@
   function primeFirstBattleMedia() {
     if (firstBattleMediaPrimed) return;
     firstBattleMediaPrimed = true;
-    if (typeof battleStartLogoVideo !== 'undefined') warmMediaElement(battleStartLogoVideo);
+    if (typeof battleStartLogoVideo !== 'undefined') warmMediaElement(ensureBattleStartLogoVideo());
   }
   let stageBgmTheme = null;
   let stageBgmRestoreTimer = null;
@@ -1601,6 +1728,12 @@
   // ルーム専用BGM。ループはaudio要素のloop属性任せ(タイトル曲のようなギャップ付きループは不要)。
   const roomBgm = document.getElementById('roomBgm');
   roomBgm.volume = ROOM_BGM_BASE_VOLUME;
+  function ensureRoomBgmSource() {
+    if (roomBgm.src) return roomBgm;
+    roomBgm.src = 'assets/room-bgm.mp3';
+    roomBgm.load();
+    return roomBgm;
+  }
   // タイトルの「おまけ」ボタンで鳴らす曲。曲が終わると次の曲へ自動で切り替える。
   // srcは押されるまで入れない。タイトル表示のために数MBを先読みさせないため。
   const bonusBgm = document.getElementById('bonusBgm');
@@ -1712,6 +1845,7 @@
   // 場面では絶対に鳴らないようにするため(既存のplayTitleBgm/playStageBgmと同じ防御)。
   function playRoomBgm() {
     if (!bgmAudible() || !roomScreenOpen()) return;
+    ensureRoomBgmSource();
     const result = roomBgm.play();
     const promise = result && typeof result.then === 'function' ? result : Promise.resolve();
     promise.then(() => { bgmRetryTarget = null; }, () => { bgmRetryTarget = roomBgm; });
@@ -3939,7 +4073,13 @@
   titleIntroVideo.playsInline = true;
   titleIntroVideo.loop = false;
   titleIntroVideo.poster = 'assets/title-background-logo-start.jpg';
-  titleIntroVideo.src = 'assets/title-background-logo-transition.mp4';
+  let titleIntroVideoLoaded = false;
+  function ensureTitleIntroVideo() {
+    if (titleIntroVideoLoaded || titleIntroVideo.src) return titleIntroVideo;
+    titleIntroVideoLoaded = true;
+    hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4');
+    return titleIntroVideo;
+  }
   titleIntroVideo.addEventListener('playing', () => {
     if (titleIntroStarted) titleIntroPhase = 'video';
   });
@@ -3951,7 +4091,6 @@
     titleIntroVideoFailed = true;
     if (titleIntroStarted) titleIntroPhase = 'end';
   });
-  titleIntroVideo.load();
 
   function titleIntroVideoReady() {
     return !titleIntroVideoFailed && titleIntroVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
@@ -3959,10 +4098,16 @@
   }
 
   function startTitleIntroSequence() {
+    ensureTitleIntroVideo();
+    ensureWallBreakAssets();
     titleIntroStarted = true;
     titleIntroPhase = 'start';
     titleIntroVideo.pause();
     try { titleIntroVideo.currentTime = 0; } catch (_) { /* メタデータ待ちでも始点画像は表示できる */ }
+    if (!titleIntroVideo.src) {
+      titleIntroPhase = 'end';
+      return false;
+    }
     if (titleIntroVideoFailed) {
       titleIntroPhase = 'end';
       return false;
@@ -4031,21 +4176,39 @@
     foe2: [[0.148, 0.173, 0.444, 0.827], [0.463, 0.173, 0.773, 0.821]]
   };
   const vsPlateImages = {};
+  const VS_PLATE_FILES = Object.freeze({
+    ally1: 'vs-plate-ally-1', foe1: 'vs-plate-foe-1',
+    ally2: 'vs-plate-ally-2', foe2: 'vs-plate-foe-2', badge: 'vs-badge'
+  });
   for (const [key, file] of [
     ['ally1', 'vs-plate-ally-1'], ['foe1', 'vs-plate-foe-1'],
     ['ally2', 'vs-plate-ally-2'], ['foe2', 'vs-plate-foe-2'], ['badge', 'vs-badge']
   ]) {
     const img = new Image();
     img.decoding = 'async';
-    img.src = `assets/${file}.png`;
     vsPlateImages[key] = img;
+  }
+  let vsPlateAssetsLoaded = false;
+  function ensureVsPlateAssets() {
+    if (vsPlateAssetsLoaded) return;
+    vsPlateAssetsLoaded = true;
+    Object.entries(VS_PLATE_FILES).forEach(([key, file]) => {
+      vsPlateImages[key].src = `assets/${file}.png`;
+    });
   }
   function vsPlateReady(img) { return !!(img && img.complete && img.naturalWidth > 0); }
 
   const battleStartLogoImage = new Image();
   battleStartLogoImage.decoding = 'async';
-  battleStartLogoImage.src = 'assets/battle-start-logo.png';
+  let battleStartLogoImageLoaded = false;
+  function ensureBattleStartLogoImage() {
+    if (battleStartLogoImageLoaded) return battleStartLogoImage;
+    battleStartLogoImageLoaded = true;
+    battleStartLogoImage.src = 'assets/battle-start-logo.png';
+    return battleStartLogoImage;
+  }
   function battleStartLogoReady() {
+    ensureBattleStartLogoImage();
     return battleStartLogoImage.complete && battleStartLogoImage.naturalWidth > 0;
   }
   // メロニキ提供の戦況HUD素材。動的な文字・ゲージはCanvasで重ね、枠だけを画像に任せる。
@@ -4074,18 +4237,25 @@
       leftX: 0.17, centerX: 0.50, rightX: 0.82, contentY: 0.56
     })
   });
-  for (const [key, file] of Object.entries({
+  const BATTLE_HUD_FILES = Object.freeze({
     ally: 'v3/player-card-ally.png',
     enemy: 'v3/player-card-enemy.png',
     roundWind: 'wind-console-round.webp',
     minimap: 'minimap-frame.png',
     turn: 'v3/turn-ribbon.png'
-  })) {
+  });
+  let battleHudAssetsLoaded = false;
+  function ensureBattleHudAssets() {
+    if (battleHudAssetsLoaded) return;
+    battleHudAssetsLoaded = true;
+    for (const [key, file] of Object.entries(BATTLE_HUD_FILES)) {
     battleHudImages[key].decoding = 'async';
     battleHudImages[key].fetchPriority = 'high';
     battleHudImages[key].src = `assets/ui/battle-hud/${file}`;
   }
+  }
   function drawBattleHudAsset(image, x, y, w, h, crop = null) {
+    ensureBattleHudAssets();
     if (!image || !image.complete || image.naturalWidth <= 0) return false;
     if (crop) ctx.drawImage(image, crop.x, crop.y, crop.w, crop.h, x, y, w, h);
     else ctx.drawImage(image, x, y, w, h);
@@ -4100,9 +4270,16 @@
   battleStartLogoVideo.defaultPlaybackRate = 1.3;
   battleStartLogoVideo.loop = false;
   battleStartLogoVideo.addEventListener('ended', () => battleStartLogoVideo.pause());
-  battleStartLogoVideo.src = 'assets/battle-start-logo.mp4';
-  battleStartLogoVideo.load();
+  let battleStartLogoVideoLoaded = false;
+  function ensureBattleStartLogoVideo() {
+    if (battleStartLogoVideoLoaded) return battleStartLogoVideo;
+    battleStartLogoVideoLoaded = true;
+    battleStartLogoVideo.src = 'assets/battle-start-logo.mp4';
+    battleStartLogoVideo.load();
+    return battleStartLogoVideo;
+  }
   function battleStartLogoVideoReady() {
+    ensureBattleStartLogoVideo();
     return battleStartLogoVideo.readyState >= 2
       && battleStartLogoVideo.videoWidth > 0 && battleStartLogoVideo.videoHeight > 0;
   }
@@ -4120,6 +4297,7 @@
     return true;
   }
   function startBattleStartLogoVideo() {
+    ensureBattleStartLogoVideo();
     battleStartLogoVideo.currentTime = 0;
     battleStartLogoVideo.playbackRate = 1.3;
     const play = battleStartLogoVideo.play();
@@ -4202,8 +4380,14 @@
   const coopBossImages = { phase1: new Image(), phase2: new Image() };
   coopBossImages.phase1.decoding = 'async';
   coopBossImages.phase2.decoding = 'async';
-  coopBossImages.phase1.src = 'assets/bosses/runtime/fortress-tank.webp';
-  coopBossImages.phase2.src = 'assets/bosses/runtime/fortress-tank-phase2.webp';
+  let coopBossImagesLoaded = false;
+  function ensureCoopBossImages() {
+    if (coopBossImagesLoaded) return coopBossImages;
+    coopBossImagesLoaded = true;
+    coopBossImages.phase1.src = 'assets/bosses/runtime/fortress-tank.webp';
+    coopBossImages.phase2.src = 'assets/bosses/runtime/fortress-tank-phase2.webp';
+    return coopBossImages;
+  }
 
   function isCoopBossUnit(u) { return !!u && u.id === COOP_BOSS_UNIT_ID; }
   function coopBossRect(u) {
@@ -18448,15 +18632,20 @@
   const wallImage = new Image();
   wallImage.fetchPriority = 'high';
   wallImage.onload = () => { wallImageReady = true; wallPieces = null; };
-  wallImage.src = 'assets/wall.jpg';
+  const introBallImage = new Image();
+  let wallBreakAssetsLoaded = false;
+  function ensureWallBreakAssets() {
+    if (wallBreakAssetsLoaded) return;
+    wallBreakAssetsLoaded = true;
+    wallImage.src = 'assets/wall.jpg';
+    introBallImage.src = 'assets/intro-cannonball.png';
+  }
   function wallArtReady() { return wallImageReady && wallImage.naturalWidth > 0; }
   // 撃ち込む砲弾の絵(ユーザー提供素材)。壁と同じく**待ち合わせには入れない**。
   // 間に合わなければ手描きの鉄球で出す。1回きりの演出のために起動を遅らせない。
   let introBallImageReady = false;
-  const introBallImage = new Image();
   introBallImage.fetchPriority = 'high';
   introBallImage.onload = () => { introBallImageReady = true; };
-  introBallImage.src = 'assets/intro-cannonball.png';
   function introBallArtReady() { return introBallImageReady && introBallImage.naturalWidth > 0; }
   // 画面いっぱいに覆う(cover)ための、画面座標→画像座標の対応。
   function wallArtMapping() {
@@ -21457,6 +21646,7 @@
   }
 
   function drawCoopBossUnit(u) {
+    ensureCoopBossImages();
     const rect = coopBossRect(u);
     const image = u.phase >= 2 ? coopBossImages.phase2 : coopBossImages.phase1;
     drawCoopBossIdleMotion(u, rect, false);
@@ -24268,6 +24458,7 @@
   // 砲弾1本を描く。窓の中にキャラの顔と名前を入れる。
   // mirror=true は相手陣営。素材の先端は右向きなので、反転して中央へ向ける。
   function drawVsPlate(entries, mirror, slideX, flash, layout = null) {
+    ensureVsPlateAssets();
     const two = entries.length > 1;
     const img = vsPlateImages[mirror ? (two ? 'foe2' : 'foe1') : (two ? 'ally2' : 'ally1')];
     const slots = VS_PLATE_SLOTS[mirror ? (two ? 'foe2' : 'foe1') : (two ? 'ally2' : 'ally1')];
@@ -24388,6 +24579,7 @@
   // 窓1つぶん。顔は窓を埋める大きさに切り出し、はみ出した分は窓で切る。
   function drawVsPlateFace(entry, rect, mirror, anchor) {
     const bossEntry = entry?.id === COOP_BOSS_UNIT_ID;
+    if (bossEntry) ensureCoopBossImages();
     const def = entry && CHARACTERS[entry.character];
     const img = bossEntry ? coopBossImages.phase1 : entry && charImages[entry.character];
     const ready = img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && (bossEntry || def);
@@ -24583,6 +24775,7 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(24, 186, VW - 48, 488);
 
+    ensureCoopBossImages();
     const image = coopBossImages.phase2;
     ctx.save();
     ctx.translate(VW + 260 - slide * 290, 420);
@@ -29033,11 +29226,29 @@
   if ('serviceWorker' in navigator
       && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.addEventListener('message', event => {
-      if (event.data?.type !== 'KATAMON_UPDATE_READY') return;
-      queueGameUpdateReload(event.data.build);
+      if (event.data?.type === 'KATAMON_UPDATE_READY') {
+        queueGameUpdateReload(event.data.build);
+        return;
+      }
+      if (event.data?.type === 'KATAMON_PRECACHE_TIER_DONE' && event.data.tier === 2) {
+        hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4');
+        primeTier2Decode();
+        scheduleTier3aPrecache();
+        return;
+      }
+      if (event.data?.type === 'KATAMON_PRECACHE_TIER_DONE' && event.data.tier === '3a') {
+        primeTier3aDecode();
+        scheduleTier3bPrecache();
+      }
     });
     window.addEventListener('load', () => {
+      navigator.storage?.persist?.().catch(() => {});
       navigator.serviceWorker.register(`./sw.js?build=${BUILD_ID}`, { updateViaCache: 'none' }).catch(() => {});
+      navigator.serviceWorker.ready.then(() => Promise.all([
+        hydrateCachedMediaSource(titleBgm, './assets/title-bgm.mp3'),
+        hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4'),
+        persistFirstPaintAssets()
+      ])).catch(() => {});
     });
   }
   function assertCustomStageBattlePolicy(stage) {

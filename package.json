@@ -17,6 +17,7 @@
     "test:undef": "node tests/undef-scan.js",
     "test:app-shell": "node tests/app-shell-test.js",
     "test:cache-version": "node tests/cache-version-test.js",
+    "test:e2e:progressive-precache": "playwright test tests/e2e/progressive-precache.spec.js --project=android-chromium-portrait-touch --project=iphone-webkit-portrait-touch",
     "test:coop-foundation": "node tests/coop-mvp-foundation.test.js",
     "test:coop-room": "node tests/coop-room-lobby.test.js",
     "test:coop-round": "node tests/coop-round-protocol.test.js",
