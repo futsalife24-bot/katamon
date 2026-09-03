@@ -959,6 +959,7 @@
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.167', date: '2026/09/03', summary: '初回ロードを段階化し、タイトル表示とオフライン準備を軽量化' },
     { version: 'v2.0.166', date: '2026/09/02', summary: 'ショップ・必殺技プレビューを見やすく寄せ、真鍮アイコンの装着場所を明確化' },
     { version: 'v2.0.165', date: '2026/09/02', summary: 'ショップ全9商品と全キャラ必殺技のプレビューを確実に命中・発動する展示へ改善' },
     { version: 'v2.0.164', date: '2026/09/02', summary: 'ショップのプレビューを実際のバトル画面と戦闘エフェクトへ刷新' },
@@ -4074,10 +4075,14 @@
   titleIntroVideo.loop = false;
   titleIntroVideo.poster = 'assets/title-background-logo-start.jpg';
   let titleIntroVideoLoaded = false;
+  let titleIntroVideoHydration = null;
   function ensureTitleIntroVideo() {
     if (titleIntroVideoLoaded || titleIntroVideo.src) return titleIntroVideo;
     titleIntroVideoLoaded = true;
-    hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4');
+    titleIntroVideoHydration = hydrateCachedMediaSource(
+      titleIntroVideo,
+      './assets/title-background-logo-transition.mp4'
+    );
     return titleIntroVideo;
   }
   titleIntroVideo.addEventListener('playing', () => {
@@ -4097,19 +4102,9 @@
       && titleIntroVideo.videoWidth > 0 && titleIntroVideo.videoHeight > 0;
   }
 
-  function startTitleIntroSequence() {
-    ensureTitleIntroVideo();
-    ensureWallBreakAssets();
-    titleIntroStarted = true;
-    titleIntroPhase = 'start';
-    titleIntroVideo.pause();
-    try { titleIntroVideo.currentTime = 0; } catch (_) { /* メタデータ待ちでも始点画像は表示できる */ }
-    if (!titleIntroVideo.src) {
-      titleIntroPhase = 'end';
-      return false;
-    }
-    if (titleIntroVideoFailed) {
-      titleIntroPhase = 'end';
+  function playTitleIntroVideoWhenReady() {
+    if (!titleIntroStarted || !titleIntroVideo.src || titleIntroVideoFailed) {
+      if (titleIntroStarted && titleIntroVideoFailed) titleIntroPhase = 'end';
       return false;
     }
     try {
@@ -4120,12 +4115,26 @@
           titleIntroPhase = 'end';
         });
       }
+      return true;
     } catch (_) {
       titleIntroVideoFailed = true;
       titleIntroPhase = 'end';
       return false;
     }
-    return true;
+  }
+
+  function startTitleIntroSequence() {
+    ensureTitleIntroVideo();
+    ensureWallBreakAssets();
+    titleIntroStarted = true;
+    titleIntroPhase = 'start';
+    titleIntroVideo.pause();
+    try { titleIntroVideo.currentTime = 0; } catch (_) { /* メタデータ待ちでも始点画像は表示できる */ }
+    if (!titleIntroVideo.src) {
+      titleIntroVideoHydration?.then(() => playTitleIntroVideoWhenReady());
+      return true;
+    }
+    return playTitleIntroVideoWhenReady();
   }
   // メロニキ提供の透過素材。元の4096x5150 PNGは余白が大きいため、見える範囲だけを
   // 同じ縦横比で切り出したWebPへ軽量化して使う。黒い余白を画像の一部として扱わないこと。
@@ -27835,6 +27844,7 @@
     // 地形・使用キャラが確定した直後に、この対戦の1曲だけを準備する。
     // この後のVSカットイン中に読み込みが進むため、ゲーム開始を待たせない。
     if (battleMode !== 'demo') primeStageBgm(currentThemeKey);
+    if (battleMode !== 'demo') primeFirstBattleMedia();
     simTimeMs = 0;
     for (const u of units) applyCharacter(u, u.character);
     // Only the local human unit of a fresh offline CPU match receives the
@@ -29231,7 +29241,8 @@
         return;
       }
       if (event.data?.type === 'KATAMON_PRECACHE_TIER_DONE' && event.data.tier === 2) {
-        hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4');
+        hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4')
+          .then(() => playTitleIntroVideoWhenReady());
         primeTier2Decode();
         scheduleTier3aPrecache();
         return;

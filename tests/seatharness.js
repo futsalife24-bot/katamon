@@ -869,12 +869,17 @@ const HOOK = `
       for (const key of Object.keys(vsPlateImages)) vsPlateImages[key] = null;
     },
     // v123: 砲弾ネームプレートのVSカットイン
-    vsPlate: () => ({
-      slots: JSON.parse(JSON.stringify(VS_PLATE_SLOTS)),
-      srcs: Object.fromEntries(Object.entries(vsPlateImages).map(([k, img]) => [k, img.src.split('/').pop()])),
-      flySec: VS_FLY_SEC, exitSec: VS_EXIT_SEC, plateW: VS_PLATE_W, tilt: VS_TILT, duration: MATCHUP_CUTIN_DURATION,
-      faces: JSON.parse(JSON.stringify(MATCHUP_FACES))
-    }),
+    vsPlate: () => {
+      // Production keeps these T2 plates lazy. The inspection helper resolves
+      // the same path before reading their source contract.
+      ensureVsPlateAssets();
+      return {
+        slots: JSON.parse(JSON.stringify(VS_PLATE_SLOTS)),
+        srcs: Object.fromEntries(Object.entries(vsPlateImages).map(([k, img]) => [k, img.src.split('/').pop()])),
+        flySec: VS_FLY_SEC, exitSec: VS_EXIT_SEC, plateW: VS_PLATE_W, tilt: VS_TILT, duration: MATCHUP_CUTIN_DURATION,
+        faces: JSON.parse(JSON.stringify(MATCHUP_FACES))
+      };
+    },
     forceWinner: (team) => { winner = team; matchOver = true; },
     // ---- v126: チュートリアル ----
     startTutorialForTest: () => startTutorial(),
