@@ -518,7 +518,9 @@ function check(name, value) {
   const htmlForAudio = readRepoFile('index.html');
   check('online entry and every lobby screen use the approved Lobby Remix asset',
     fileHash('assets/room-bgm.mp3') === '77eea099dfc3'
-      && htmlForAudio.includes('<audio id="roomBgm" preload="none" loop src="assets/room-bgm.mp3"></audio>'));
+      && htmlForAudio.includes('<audio id="roomBgm" preload="none" loop></audio>')
+      && htmlForAudio.includes("function ensureRoomBgmSource()")
+      && htmlForAudio.includes("roomBgm.src = 'assets/room-bgm.mp3';"));
   // v145: 通常弾の着弾音は外部URLを直接再生せず、同梱した指定素材をWebAudioで鳴らす。
   // キャッシュ一覧から外すと、ホーム画面追加後のオフライン対戦だけ昔の合成音へ戻ってしまう。
   let thirdPartyAudio = '';
@@ -639,13 +641,13 @@ function check(name, value) {
       && /function drawBarucopters\(\)[\s\S]*?const img = getBarucopterImage\(\);[\s\S]*?const h = 294;/.test(htmlForAudio),
     '透過を直した専用ヘリ画像を遅延読込し、従来の3倍で表示すること');
   // 先読みも webp を指していないと、webp と png を二重に取りに行くことになる。
-  check('the preload hints use the compact startup assets',
+  check('the preload hints contain only the T0 title gate assets',
     htmlForAudio.includes('<link rel="preload" as="image" href="assets/loading-emblem.webp" type="image/webp"')
-    && ['start', 'end'].every(point =>
-      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/title-background-logo-${point}.jpg" type="image/jpeg"`))
-    && htmlForAudio.includes('<link rel="preload" as="video" href="assets/title-background-logo-transition.mp4" type="video/mp4">')
-    && ['dirano', 'eyebolt', 'gorocca', 'fenice'].every(stem =>
-      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/characters/runtime/${stem}.webp" type="image/webp"`))
+    && htmlForAudio.includes('<link rel="preload" as="image" href="assets/title-background-logo-start.jpg" type="image/jpeg"')
+    && ['title-mode-board.webp', 'title-shield-button.webp', 'title-hanging-sign.webp', 'title-parchment-button.webp'].every(asset =>
+      htmlForAudio.includes(`<link rel="preload" as="image" href="assets/${asset}" type="image/webp"`))
+    && !htmlForAudio.includes('<link rel="preload" as="image" href="assets/title-background-logo-end.jpg"')
+    && !htmlForAudio.includes('<link rel="preload" as="video" href="assets/title-background-logo-transition.mp4"')
     && !/rel="preload" as="image" href="assets\/(?:characters\/master\/)?(?:loading-emblem|dirano|eyebolt|gorocca|fenice)\.png/.test(htmlForAudio));
   // ロビーのエンブレムはDOMの<img>。JSを通らないので picture で振り分ける。
   check('the lobby emblem falls back through <picture>',

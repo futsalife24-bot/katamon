@@ -83,7 +83,8 @@ check('ロード中は項目数ではなく0〜100%ゲージとランダムキ�
     && indexHtml.includes('const progressBarY = VH / 2 + 170'),
   'progress character loader missing');
 check('対戦開始前に必要な1曲だけとロゴ動画を準備する',
-  indexHtml.includes('rel="preload" as="video"')
+  !indexHtml.includes('rel="preload" as="video"')
+    && indexHtml.includes('hydrateCachedMediaSource(titleIntroVideo,')
     && indexHtml.includes('battleStartLogoVideo.load()')
     && indexHtml.includes('function primeFirstBattleMedia()')
     && indexHtml.includes('primeFirstBattleMedia();')
@@ -3116,8 +3117,9 @@ kt.resizeForTest(540, 960, 1);
 const titleIntro = kt.titleIntroInfo();
 check('タイトルは石壁タップから始点・動画・終点の3素材を順番に使う',
   titleIntro.start.endsWith('assets/title-background-logo-start.jpg')
-    && titleIntro.video.endsWith('assets/title-background-logo-transition.mp4')
     && titleIntro.end.endsWith('assets/title-background-logo-end.jpg')
+    // The T2 video source is attached asynchronously from Cache Storage.
+    && indexHtml.includes("hydrateCachedMediaSource(titleIntroVideo, './assets/title-background-logo-transition.mp4')")
     && /startTitleIntroSequence\(\);[\s\S]{0,120}enterTitleFromTap\(\);/.test(indexHtml),
   JSON.stringify(titleIntro));
 check('タイトル背景を端末時刻で朝昼夕夜へ切り替えない',

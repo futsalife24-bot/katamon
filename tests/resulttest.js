@@ -333,16 +333,19 @@ check('崩れている最中は組み直さない',
 // 読み込み中はずっと出ている。128枚を毎フレーム貼る意味がない。
 check('崩していない間は1枚で描く',
   /if \(!breakState && wallPiecesUseArt\) \{[\s\S]{0,300}ctx\.drawImage\(wallImage, map\.offX, map\.offY,/.test(html));
-check('壁の絵を先読みし、オフラインでも出せるようにしている',
-  html.includes('<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">')
+check('壁の絵をT2で準備し、必要な時だけ読み込む',
+  html.includes("function ensureWallBreakAssets()")
+  && html.includes("wallImage.src = 'assets/wall.jpg';")
+  && !html.includes('<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">')
   && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/wall.jpg'"));
 
 // 撃ち込む砲弾の絵(v128でユーザー提供素材へ差し替え)。
 // 参照だけ書いてファイルを入れ忘れると、実機では何も出ないまま静かに壊れる。
 const introBallPath = require('path').join(__dirname, '..', 'assets', 'intro-cannonball.png');
 check('砲弾の素材ファイルが実在する', require('fs').existsSync(introBallPath));
-check('砲弾の絵を先読みし、オフラインでも出せるようにしている',
-  html.includes('<link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">')
+check('砲弾の絵をT2で準備し、必要な時だけ読み込む',
+  html.includes("introBallImage.src = 'assets/intro-cannonball.png';")
+  && !html.includes('<link rel="preload" as="image" href="assets/intro-cannonball.png" fetchpriority="high">')
   && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/intro-cannonball.png'"));
 check('砲弾は絵で描く',
   /if \(introBallArtReady\(\)\) \{[\s\S]{0,260}ctx\.drawImage\(introBallImage, x - radius, y - radius, radius \* 2, radius \* 2\);/.test(html));

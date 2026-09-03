@@ -623,12 +623,10 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
     });
     expect(persistedStillHeld).toBe(true);
 
-    const releasedForReplacement = await ownerPage.evaluate(async () => {
-      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
-      await new Promise(resolve => setTimeout(resolve, 50));
-      return !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive');
-    });
-    expect(releasedForReplacement).toBe(true);
+    await ownerPage.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
+    await expect.poll(async () => ownerPage.evaluate(async () => (
+      !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive')
+    )), { timeout: 2000 }).toBe(true);
     await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
