@@ -395,7 +395,11 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(studioApp, /if \(!saved \|\| state\.dirty \|\| !durable\)/);
   assert.match(studioApp, /shareFailed = true[\s\S]{0,180}blobDownload\(file, file\.name\)/);
   assert.doesNotMatch(serviceWorker, /ignoreSearch\s*:\s*true/);
-  assert.match(serviceWorker, /cache\.addAll\(APP_SHELL\.map\(asset => new Request\(asset, \{ cache: 'reload' \}\)\)\)/);
+  // The app shell must preserve the browser HTTP cache on first visit.  Asset
+  // revisions remain the only intentional reload path.
+  assert.match(serviceWorker, /function precacheAppShell\(cache\)/);
+  assert.match(serviceWorker, /function fetchAndCachePrecacheAsset\(cache, request\)[\s\S]{0,520}cache:\s*'default'/);
+  assert.match(serviceWorker, /function refreshRevisionedAssets\(cache\)[\s\S]{0,520}cache:\s*'reload'/);
 
   assert.match(manager, /listCustom\(\)/);
   assert.match(manager, /putCustom\(migrated\)/);
@@ -441,11 +445,15 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(fontCss, /font-family:\s*"Reggae One"/);
   assert.match(fontCss, /--katamon-font-ui:\s*"RocknRoll One"/);
   assert.match(fontCss, /--katamon-font-display:\s*"Reggae One"/);
-  assert.match(html, /const UI_FONT = '"RocknRoll One"/);
-  assert.match(html, /const UI_FONT_DISPLAY = '"Reggae One"/);
+  // T0 intentionally renders with a system fallback; the canonical faces are
+  // applied once the non-blocking font stylesheet is ready.
+  assert.match(html, /let UI_FONT = '"Yu Gothic UI", sans-serif'/);
+  assert.match(html, /UI_FONT = '"RocknRoll One", "Yu Gothic UI", sans-serif'/);
+  assert.match(html, /let UI_FONT_DISPLAY = '"Reggae One", "Yu Gothic UI", sans-serif'/);
+  assert.match(html, /UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif'/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
-  assert.match(serviceWorker, /assets\/fonts\/reggae-one-display\.woff2/);
+  assert.match(html, /rel="preload" as="font" href="assets\/fonts\/reggae-one-display\.woff2"/);
   assert.match(serviceWorker, /assets\/exit-confirm-stay-v2\.png/);
   assert.match(serviceWorker, /assets\/exit-confirm-exit-v2\.png/);
   assert.doesNotMatch(serviceWorker, /exit-confirm-(frame|stay|exit)\.png/);
