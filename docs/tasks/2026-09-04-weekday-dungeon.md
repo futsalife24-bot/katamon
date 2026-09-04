@@ -1,9 +1,10 @@
 # Task: 曜日ダンジョン（既存BATTLE統合版）
 
-- 状態: 自動検証完了・公開準備中（v1公開済み仕様を互換維持して再設計）
+- 状態: 完了・公開済み（PR #384、v1公開済み仕様を互換維持して再設計）
 - 更新日: 2026-09-05（JST）
 - 対象ブランチ: `feat/weekday-battle-redesign-20260905`
 - 起点: `origin/master` `a28f383b715d9f81c04f6d74c0e9965ae31b9bd0`
+- 公開実績: merge commit `0e033a128fd291ae2ecea085c45cdfb1ad5f8057`、GitHub Pages run `33910978605`成功、公開BUILD / PWA cache `v2.0.174-weekday-battle-dungeon`
 
 ## 目的
 
@@ -71,7 +72,7 @@
 - [x] Garage入口、Battle mode、平坦地形、中央1キャラ、雲で覆う6ゾーンHUDを既存Canvasへ統合する。
 - [x] FIRE前commit/readback、飛翔、着弾reveal、queue/ledger、復旧/戻るを既存Battle lifecycleと接続する。
 - [x] 通常CPU/ONLINE/GOALからの隔離、Android Backの既存Battleメニュー経路、`R`無効化、reduced motion分岐を実装上確認する。
-- [ ] unit・静的契約・Chromium/Mobile WebKit E2E・既存回帰を実行し、PR、master統合、Pages公開実値を確認する（自動検証は完了、PR・公開確認を継続中）。
+- [x] unit・静的契約・Chromium/Mobile WebKit E2E・既存回帰を実行し、PR #384、master統合、Pages公開実値を確認する。
 
 ## テスト観点
 
@@ -88,4 +89,4 @@
 - 中央1キャラから6つの雲を狙い、対応部位のHUDを見ながら、命中した雲だけが結果として開く。
 - 一日一射、FIRE前durable commit、再読込復旧、v1公開済みattempt互換、multi-tab/queue/ledgerの安全性を満たす。
 - 外れは粉末3、命中は対応部位Gearで、通常CPU/ONLINE/GOALに影響しない。
-- 自動テストとブラウザE2Eを通し、PR統合後にGitHub Pagesの公開versionを実値で確認する。実機GOAL QAは別タスクとして未開始のまま維持する。
+- 自動テストとブラウザE2Eを通し、PR #384統合後にGitHub Pagesの公開versionを実値で確認済み。実機GOAL QAは別タスクとして未開始のまま維持する。

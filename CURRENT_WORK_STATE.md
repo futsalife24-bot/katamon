@@ -35,7 +35,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.174-weekday-battle-dungeon**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は **v2.0.174-weekday-battle-dungeon**。PR #384をmerge commit `0e033a128fd291ae2ecea085c45cdfb1ad5f8057`でmasterへ統合し、GitHub Pages run `33910978605`のbuild / deploy成功後、公開`index.html`と`sw.js`の双方から同versionを取得確認済み。手動Pages deployは行っておらず、Firebase Rules/Consoleも変更していない。
 
 ## Backlog / 保留タスク
 
