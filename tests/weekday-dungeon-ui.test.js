@@ -5,117 +5,92 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+const weekdayDomain = require(path.join(root, 'shared/gear-weekday-dungeon.js'));
 
-function pngDimensions(buffer) {
-  assert.equal(buffer.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-}
-
-function jpegDimensions(buffer) {
-  assert.equal(buffer.readUInt16BE(0), 0xffd8);
-  let offset = 2;
-  while (offset + 8 < buffer.length) {
-    if (buffer[offset] !== 0xff) { offset += 1; continue; }
-    const marker = buffer[offset + 1];
-    offset += 2;
-    if (marker === 0xd8 || marker === 0xd9) continue;
-    const length = buffer.readUInt16BE(offset);
-    const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
-    if (isStartOfFrame) return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
-    offset += length;
-  }
-  assert.fail('weekday dungeon runtime JPEG has no Start Of Frame marker');
+function sourceAfter(marker) {
+  const start = html.indexOf(marker);
+  assert.ok(start >= 0, `missing source marker: ${marker}`);
+  return html.slice(start);
 }
 
 const checks = [
-  ['weekday overlay exposes the stable controls and 540x720 canvas', () => {
-    for (const id of ['weekdayDungeon', 'weekdayDungeonCanvas', 'weekdayDungeonOpen', 'weekdayDungeonClose', 'weekdayDungeonFire', 'weekdayDungeonSlotChoices', 'weekdayDungeonSlotInstruction', 'weekdayDungeonAimAngle', 'weekdayDungeonAimPower', 'weekdayDungeonAimReadout', 'weekdayDungeonStatus']) {
-      assert.match(html, new RegExp(`id="${id}"`));
-    }
-    assert.match(html, /id="weekdayDungeonCanvas"[^>]*width="540"[^>]*height="720"/);
-  }],
-  ['Sunday selection is visible and narrow touch targets use a 2 by 3 grid', () => {
-    assert.match(html, /id="weekdayDungeonSlotInstruction"[^>]*>日曜日は報酬にしたい部位/);
-    assert.match(html, /aria-describedby="weekdayDungeonSlotInstruction"/);
-    assert.match(html, /@media\(max-width:380px\)\{[\s\S]*?\.weekdayDungeonSlotChoices\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-    assert.match(html, /\.weekdayDungeonSlotChoice\{min-width:0;min-height:44px/);
-    assert.match(html, /@media\(max-width:380px\)\{[\s\S]*?\.weekdayDungeonSlotChoice\{min-height:44px/);
-    assert.match(html, /\.weekdayDungeonActions \.gearButton\{min-height:44px\}/);
-  }],
-  ['aim is keyboard-accessible with live readable values and disabled state', () => {
-    assert.match(html, /id="weekdayDungeonAimAngle" type="range" min="10" max="80"/);
-    assert.match(html, /id="weekdayDungeonAimPower" type="range" min="28" max="120"/);
-    assert.match(html, /id="weekdayDungeonAimReadout"[^>]*>角度 45°・強さ 84/);
-    assert.match(html, /function weekdayDungeonSyncAimControls\(/);
-    assert.match(html, /weekdayDungeonAimControlsEl\.disabled = !editable/);
-    assert.match(html, /weekdayDungeonAimAngleEl\?\.addEventListener\('input', adjustAimFromControls\)/);
-    assert.match(html, /weekdayDungeonAimPowerEl\?\.addEventListener\('input', adjustAimFromControls\)/);
-  }],
-  ['dialog keeps focus contained, returns it on close, and honors Escape while busy', () => {
-    assert.match(html, /function weekdayDungeonHandleKeydown\(event\)/);
-    assert.match(html, /event\.key === 'Escape'/);
-    assert.match(html, /document\.addEventListener\('keydown', weekdayDungeonHandleKeydown\)/);
-    assert.match(html, /function weekdayDungeonFocusableElements\(\)/);
-    assert.match(html, /returnFocus && document\.contains\(returnFocus\)\) returnFocus\.focus\(\)/);
-    assert.match(html, /closeWeekdayDungeon\(force = false, restoreFocus = true\)/);
-  }],
-  ['Garage has a dedicated weekday dungeon card and entry button', () => {
+  ['Garage keeps the weekday entry, while the old portrait overlay is gone', () => {
     assert.match(html, /id="gearWeekdayDungeonCard"/);
     assert.match(html, /id="gearWeekdayDungeonEntry"/);
-    assert.match(html, /id="weekdayDungeon"/);
+    for (const obsoleteId of [
+      'weekdayDungeon', 'weekdayDungeonCanvas', 'weekdayDungeonClose', 'weekdayDungeonFire',
+      'weekdayDungeonSlotChoices', 'weekdayDungeonAimAngle', 'weekdayDungeonAimPower',
+      'weekdayDungeonAimReadout',
+    ]) assert.doesNotMatch(html, new RegExp(`id="${obsoleteId}"`));
+    assert.doesNotMatch(html, /weekdayDungeonEnsureBackground|weekdayDungeonAnimate|weekdayDungeonSyncAimControls/);
   }],
-  ['weekday dungeon uses the vault runtime art and source label', () => {
-    assert.match(html, /assets\/weekday-dungeon\/runtime\/weekday_dungeon_vault_01\.jpg/);
-    assert.match(html, /WEEKDAY DUNGEON/);
-    assert.ok(fs.existsSync(path.join(root, 'assets/weekday-dungeon/runtime/weekday_dungeon_vault_01.jpg')),
-      'weekday dungeon runtime background must be checked in');
+  ['weekday play uses the existing Battle canvas and a dedicated battle mode', () => {
+    assert.match(html, /<canvas id="game"[^>]*data-testid="battle-canvas"/);
+    assert.match(html, /battleMode\s*=\s*['"]weekday['"]/);
+    assert.match(html, /function weekdayDungeonBattleActive\(/);
+    assert.match(html, /function computeLaunchVelocity\(/);
+    assert.match(html, /function fireProjectile\(/);
+    assert.match(html, /weekdayDungeonBattleActive\(\)[\s\S]{0,500}?computeLaunchVelocity|computeLaunchVelocity[\s\S]{0,1500}?weekdayDungeonBattle/);
+    assert.match(html, /fireProjectile\([\s\S]{0,700}?weekdayDungeon/);
   }],
-  ['weekday background starts loading only on the first dungeon open while cache registration remains intact', () => {
-    const loader = html.indexOf('function weekdayDungeonEnsureBackground()');
-    assert.ok(loader > 0, 'background loader is required');
-    assert.doesNotMatch(html.slice(0, loader), /weekdayDungeonBackground\.src\s*=/);
-    assert.match(html.slice(loader), /weekdayDungeonUi\.backgroundRequested = true;[\s\S]*?weekdayDungeonBackground\.src = weekdayDungeonCanvas\.dataset\.background/);
-    assert.match(html, /weekdayDungeonEnsureBackground\(\);/);
+  ['weekday arena is a calm one-player flat battlefield', () => {
+    assert.deepEqual(weekdayDomain.BATTLE_PLAYFIELD, { width: 1440, height: 720, centerX: 720, groundY: 510, projectileStartAboveGround: 16, minX: -30, maxX: 1470 });
+    assert.match(html, /const groundY = domain\.BATTLE_PLAYFIELD\.groundY/);
+    assert.match(html, /groundY\s*!==\s*weekdayDungeonBattleField\.groundY/);
+    assert.match(html, /wind\s*=\s*\{ dir: 0, strength: 0 \}/);
+    const weekdaySection = sourceAfter('function weekdayDungeonBattleActive(');
+    assert.match(weekdaySection, /player|p1/);
+    assert.match(weekdaySection, /kyoryu/);
+    assert.match(weekdaySection, /flat|groundY|terrain/i);
+    assert.match(html, /drawWeekdayDungeonClouds\(\);[\s\S]{0,300}?drawUnit\(localUnit\(\)\)/,
+      '中央キャラは雲の前景に描いて必ず視認できるようにしてください。');
   }],
-  ['generated master stays portrait and runtime is optimized to 720x1280', () => {
-    const master = fs.readFileSync(path.join(root, 'assets/weekday-dungeon/master/weekday_dungeon_vault_01.png'));
-    const runtime = fs.readFileSync(path.join(root, 'assets/weekday-dungeon/runtime/weekday_dungeon_vault_01.jpg'));
-    const masterSize = pngDimensions(master);
-    assert.ok(masterSize.width >= 900 && masterSize.height >= 1600 && masterSize.height > masterSize.width);
-    assert.deepEqual(jpegDimensions(runtime), { width: 720, height: 1280 });
-    assert.ok(runtime.length <= 400 * 1024, `runtime background is too large: ${runtime.length} bytes`);
+  ['a release just outside the Battle cancel circle is canonicalized into the durable shot range', () => {
+    const fnStart = html.indexOf('  function weekdayDungeonCanonicalShot(');
+    const fnEnd = html.indexOf('  function weekdayDungeonLaunchDurableAttempt(', fnStart);
+    assert.ok(fnStart >= 0 && fnEnd > fnStart, 'weekday canonical shot function must exist');
+    const build = new Function('FIRE_MIN_DRAG', 'MAX_DRAG', 'weekdayDungeonBattle', 'weekdayDungeonApis',
+      `${html.slice(fnStart, fnEnd)}\nreturn weekdayDungeonCanonicalShot;`);
+    const canonicalize = build(12, 130, { snapshot: { apis: { domain: weekdayDomain } } }, () => ({ domain: weekdayDomain }));
+    const shot = canonicalize(26.1, 0);
+    const magnitude = Math.hypot(shot.dragX, shot.dragY);
+    assert.ok(magnitude >= weekdayDomain.SHOT_LIMITS.minDrag);
+    assert.ok(magnitude <= weekdayDomain.SHOT_LIMITS.maxDrag);
+    assert.doesNotThrow(() => weekdayDomain.createAttempt({
+      dayInfo: weekdayDomain.getDayInfo({ nowMs: Date.UTC(2026, 8, 5) }),
+      shot,
+    }));
   }],
-  ['integration module scripts load before the inline app script', () => {
-    const firstInline = html.indexOf('<script>');
-    assert.ok(firstInline > 0, 'inline app script marker is required');
-    const modulePaths = [...html.matchAll(/<script[^>]+src="([^"]*weekday[^\"]*)"[^>]*><\/script>/gi)].map((match) => match[1]);
-    assert.ok(modulePaths.length >= 1, 'weekday integration must have an external module');
-    for (const modulePath of modulePaths) {
-      const external = html.indexOf(`src="${modulePath}"`);
-      assert.ok(external >= 0 && external < firstInline, `${modulePath} must precede inline app code`);
-      const sourcePath = path.join(root, modulePath.replace(/^\.\//, ''));
-      if (fs.existsSync(sourcePath)) {
-        const source = fs.readFileSync(sourcePath, 'utf8');
-        assert.doesNotMatch(source, /Firebase|firebase|ONLINE|online/i, `${modulePath} must remain local`);
-      }
-    }
+  ['all six reward lanes are drawn under opaque Hamilton clouds and only the hit lane can reveal', () => {
+    assert.match(html, /getZoneLayout\(/);
+    assert.match(html, /hamulton-cream-cloud-frames\.png/);
+    assert.match(html, /drawWeekdayDungeonTargets|weekdayDungeon.*Target/i);
+    assert.match(html, /drawWeekdayDungeon(?:Challenge)?Clouds|weekdayDungeon.*Cloud/i);
+    const cloudSection = sourceAfter('drawWeekdayDungeon');
+    assert.match(cloudSection, /globalAlpha\s*=\s*alpha/);
+    assert.match(cloudSection, /return 1/);
+    assert.match(html, /reveal(?:ed|ing)?(?:Zone|Cloud)|hit.*reveal|reveal.*hit/i);
   }],
-  ['weekday integration remains local and does not wire Firebase or ONLINE', () => {
-    const marker = html.indexOf('id="weekdayDungeon"');
-    const end = html.indexOf('<div id="gearDropReveal"', marker);
-    assert.ok(marker >= 0);
-    assert.ok(end > marker, 'weekday overlay must end before the shared reward reveal');
-    const section = html.slice(marker, end);
-    assert.doesNotMatch(section, /Firebase|firebase|ONLINE|online/i);
+  ['one-shot protection isolates normal match, ONLINE, GOAL and suspend paths', () => {
+    const checkMatch = sourceAfter('function checkMatchEnd(');
+    assert.match(checkMatch.slice(0, 600), /weekdayDungeonBattleActive\(\).*return/);
+    assert.match(html, /battleMode\s*!==\s*['"]weekday['"]/);
+    const weekdaySection = sourceAfter('function weekdayDungeonBattleActive(');
+    assert.match(weekdaySection, /isOnline|ONLINE|online/i);
+    assert.match(weekdaySection, /saveSuspendedMatch|suspend/i);
+    assert.match(weekdaySection, /戻る|GARAGE/);
   }],
-  ['production integration does not expose test-only control hooks', () => {
+  ['battle status is live-readable and reduced-motion stays immediate', () => {
+    assert.match(html, /aria-live="(?:polite|assertive)"[^>]*id="weekdayDungeon(?:Battle)?Status"|id="weekdayDungeon(?:Battle)?Status"[^>]*aria-live="(?:polite|assertive)"/);
+    assert.match(html, /prefers-reduced-motion:\s*reduce/);
+    assert.match(html, /reducedMotion|prefersReducedMotion/);
+  }],
+  ['production integration has no test-only weekday controls', () => {
     assert.doesNotMatch(html, /KatamonWeekdayDungeonUi|setAimForTest|fireForTest|resetAnimationForTest/);
   }],
-  ['service-worker cache eventually includes the weekday runtime art', () => {
-    assert.match(sw, /weekday_dungeon_vault_01\.jpg/);
-  }],
-  ['weekday animation still respects reduced-motion', () => {
-    assert.match(html, /weekdayDungeonAnimate[\s\S]*?prefers-reduced-motion: reduce/);
+  ['offline cache retains the reused cloud but excludes the retired portrait background', () => {
+    assert.match(sw, /hamulton-cream-cloud-frames\.png/);
+    assert.doesNotMatch(sw, /weekday_dungeon_vault_01\.jpg/);
   }],
 ];
 

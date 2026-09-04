@@ -14,6 +14,10 @@ const start = html.indexOf(startMarker);
 const end = html.indexOf(endMarker, start);
 if (start < 0 || end < 0) throw new Error('device back block not found');
 const deviceBackCode = html.slice(start, end);
+const canOpenMenuStart = html.indexOf('  function canOpenMenu()');
+const canOpenMenuEnd = html.indexOf('  function hitRect', canOpenMenuStart);
+if (canOpenMenuStart < 0 || canOpenMenuEnd < 0) throw new Error('canOpenMenu block not found');
+const canOpenMenuCode = html.slice(canOpenMenuStart, canOpenMenuEnd);
 
 class EventHost {
   constructor() { this.listeners = new Map(); }
@@ -77,18 +81,22 @@ function env(options) {
     '  let inputMode = null;',
     '  let inputPointerId = null;',
     '  let titleMenuCancelCount = 0;',
-    '  let weekdayDungeonCloseCount = 0;',
-    `  let weekdayDungeonUi = { open: ${options?.weekdayDungeonOpen ? 'true' : 'false'} };`,
+    '  let battleMode = initialBattleMode;',
+    '  let weekdayDungeonBattle = initialWeekdayPhase ? { phase: initialWeekdayPhase, attempt: null } : null;',
+    '  let aimState = null;',
+    '  let awaitingResolve = false;',
+    '  let cutIn = null;',
+    '  let matchOver = false;',
     '  const TITLE_MENU_BATTLE = 0;',
     '  const TITLE_MENU_GARAGE = 1;',
     '  function closeSoundTest() { soundTestOpen = false; }',
-    '  function closeWeekdayDungeon() { weekdayDungeonCloseCount++; weekdayDungeonUi.open = false; return true; }',
+    "  function weekdayDungeonBattleActive() { return battleMode === 'weekday' && gamePhase === 'battle' && !!weekdayDungeonBattle; }",
     '  function cancelTitleMenuGesture() { titleMenuCancelCount++; titleMenuGesture = null; inputMode = null; inputPointerId = null; return true; }',
     '  function titleMenuVisualPosition() { return titleMenuPage; }',
     '  function startTitleMenuTransition(page) { titleMenuPage = page; return true; }',
     ''
   ].join('\n');
-  return makeEnvironmentWithCode(options, declaration + deviceBackCode);
+  return makeEnvironmentWithCode(options, declaration + canOpenMenuCode + deviceBackCode);
 }
 
 function makeEnvironmentWithCode(options, code) {
@@ -96,6 +104,8 @@ function makeEnvironmentWithCode(options, code) {
   const phase = options?.phase || 'press';
   const initialTitlePage = options?.titleMenuPage ?? 0;
   const initialTitleGesture = !!options?.titleMenuGesture;
+  const initialBattleMode = options?.battleMode || 'normal';
+  const initialWeekdayPhase = options?.weekdayPhase || '';
   const roomOpen = !!options?.roomOpen;
   const windowStub = new EventHost();
   const timers = [];
@@ -164,19 +174,19 @@ function makeEnvironmentWithCode(options, code) {
   };
   const buildApi = new Function(
     'window', 'document', 'history', 'navigation', 'location', 'HTMLElement', 'requestAnimationFrame', 'setTimeout',
-    'playUiSound', 'saveAudioSettings', 'roomScreenOpen', 'canOpenMenu', 'initialPhase', 'initialTitlePage', 'initialTitleGesture',
+    'playUiSound', 'saveAudioSettings', 'roomScreenOpen', 'initialPhase', 'initialTitlePage', 'initialTitleGesture', 'initialBattleMode', 'initialWeekdayPhase',
     `${code}\nreturn {
       syncBackTrap,
       confirmDeviceExit,
       deviceBackConfirmOpen,
-      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog, titleMenuPage, titleMenuGesture, titleMenuCancelCount, weekdayDungeonOpen: weekdayDungeonUi.open, weekdayDungeonCloseCount })
+      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog, titleMenuPage, titleMenuGesture, titleMenuCancelCount, battleMode, weekdayPhase: weekdayDungeonBattle?.phase || '' })
     };`
   );
   const api = buildApi(
     windowStub, documentStub, historyStub, navigationStub, locationStub, HTMLElementStub,
     callback => callback(),
     callback => { timers.push(callback); return timers.length; },
-    () => {}, () => {}, () => roomOpen, () => true, phase, initialTitlePage, initialTitleGesture
+    () => {}, () => {}, () => roomOpen, phase, initialTitlePage, initialTitleGesture, initialBattleMode, initialWeekdayPhase
   );
   return {
     api, window: windowStub, history: historyStub, historyLog, elements, CloseWatcher: CloseWatcherStub,
@@ -323,13 +333,13 @@ check('バトル中の戻る要求は終了確認ではなく既存メニュー�
   assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
 });
 
-check('曜日ダンジョン中の戻る要求は一回で画面だけを閉じ、終了確認を出さない', () => {
-  const h = env({ phase: 'title', titleMenuPage: 1, weekdayDungeonOpen: true });
+check('曜日ダンジョン待機中の戻る要求は既存バトルメニューを開き、終了確認を出さない', () => {
+  const h = env({ phase: 'battle', battleMode: 'weekday', weekdayPhase: 'ready' });
   h.api.syncBackTrap();
   h.CloseWatcher.instances[0].requestBack(true);
-  assert.equal(h.api.state().weekdayDungeonOpen, false);
-  assert.equal(h.api.state().weekdayDungeonCloseCount, 1);
-  assert.equal(h.api.state().titleMenuPage, 1);
+  assert.equal(h.api.state().menuOpen, true);
+  assert.equal(h.api.state().battleMode, 'weekday');
+  assert.equal(h.api.state().weekdayPhase, 'ready');
   assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
 });
 

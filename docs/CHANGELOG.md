@@ -1,5 +1,12 @@
 # カタモン 変更履歴（アーカイブ）
 
+## v2.0.174 曜日ダンジョン既存BATTLE統合（2026-09-05）
+
+- 旧専用portrait Canvas・独自発射UIを廃止し、既存BATTLE `#game`、既存のドラッグ照準・弾道・FIRE・共通物理へ統合した。キャラはステージ中央に置き、通常CPUやONLINEの状態は持ち込まない。
+- 左右の近・中・遠に計6つの報酬zoneを配置し、既存の雲アセットで当たりマークを隠す。着弾したzoneだけ雲を開示し、当日の6部位を決定的に割り当てる。命中は対応部位Gear 1個、外れは粉末3個。
+- v1 fired attemptの復旧、同日複数タブ、Gear queue／ledger、保存再試行（WAL）の安全性を維持した。unit/static・既存回帰と、Mobile WebKit／Android ChromiumのPlaywright 12/12（各6件）を確認した。実機GOAL QAは開始せず、P0として別タスクに残す。
+- `BUILD_ID`と`CACHE_VERSION`は`v2.0.174-weekday-battle-dungeon`で一致させる。
+
 ## v2.0.173 曜日ダンジョン（2026-09-04）
 
 - GARAGEへJST 0時更新・1日1射の専用チャレンジを追加した。月〜土は砲身・装甲・コア・動力・照準・補機を順に固定し、日曜だけ6部位から選べる。
