@@ -142,7 +142,7 @@ test('紋章タップでDomain準拠のセット効果を表示し、6枠の2行
     await button.click();
     await expect(page.locator('.gearInlineSetEffects')).toBeVisible();
     await expect(button).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('[data-gear-inline-set-threshold="2"]')).toContainText('ATK+8%');
+    await expect(page.locator('[data-gear-inline-set-threshold="2"]')).toContainText('攻撃+8%');
     await expect(page.locator('[data-gear-inline-set-threshold="2"]')).toContainText('発動中');
     await expect(page.locator('[data-gear-inline-set-threshold="4"]')).toContainText('与ダメージ+12%');
     await expect(page.locator('[data-gear-inline-set-threshold="4"]')).toContainText('あと2部位');

@@ -10,6 +10,16 @@
   // must never create them from a clock or random device.
   const CPU_REWARD_RULES_VERSION = 1;
   const CPU_REWARD_SOURCE_ID = 'cpu_battle';
+  // Rare CPU encounters are an entirely separate, one-Gear drop.  Keeping
+  // this outside the streak settlement rule lets a rare win be retried and
+  // ledgered independently without changing normal streak entitlements.
+  const CPU_RARE_REWARD_SOURCE_ID = 'cpu_rare_drop';
+  const CPU_RARE_ENCOUNTER_RATE_PERCENT = 5;
+  const CPU_RARE_QUALITY_PROFILE = Object.freeze({
+    id: 'cpu-rare-star5-epic-v1',
+    starWeights: Object.freeze([{ id: 5, weight: 75 }, { id: 6, weight: 25 }]),
+    rarityWeights: Object.freeze([{ id: 'epic', weight: 70 }, { id: 'legend', weight: 25 }, { id: 'mythic', weight: 5 }]),
+  });
   const CPU_SETTLEMENT_OUTCOMES = Object.freeze(['voluntary', 'defeat', 'draw']);
   const CPU_REWARD_MILESTONES = Object.freeze([3, 5, 8, 10, 15, 20, 30, 50]);
 
@@ -57,6 +67,40 @@
     if (typeof module === 'object' && module.exports && typeof require === 'function') return require('./gear-domain.js');
     if (root && root.KatamonGearDomain) return root.KatamonGearDomain;
     fail('GEAR_DOMAIN_UNAVAILABLE', 'KatamonGearDomain must be loaded before CPU reward rules');
+  }
+  function assertMatchOrdinal(value, path = 'matchOrdinal') {
+    return assertNonNegativeSafeInteger(value, path);
+  }
+  function assertRareEncounter(rawEncounter) {
+    assertExactKeys(rawEncounter, ['encounterId', 'runId', 'matchOrdinal'], 'rare encounter');
+    const runId = assertNonEmptyString(rawEncounter.runId, 'rare encounter.runId');
+    const matchOrdinal = assertMatchOrdinal(rawEncounter.matchOrdinal, 'rare encounter.matchOrdinal');
+    const encounterId = assertNonEmptyString(rawEncounter.encounterId, 'rare encounter.encounterId');
+    const expected = `cpu:${runId}:rare:${matchOrdinal}`;
+    if (encounterId !== expected) fail('CPU_RARE_ENCOUNTER_ID_MISMATCH', 'rare encounter identity does not match run and match ordinal');
+    return Object.freeze({ encounterId: expected, runId, matchOrdinal });
+  }
+  function isCpuRareEncounterEligible(input) {
+    assertExactKeys(input, ['runId', 'matchOrdinal'], 'rare encounter input');
+    const runId = assertNonEmptyString(input.runId, 'rare encounter input.runId');
+    const matchOrdinal = assertMatchOrdinal(input.matchOrdinal, 'rare encounter input.matchOrdinal');
+    // Ordinal is zero-based: ordinal 3 is the fourth battle. Boss rounds are
+    // always excluded before consuming the deterministic encounter draw.
+    if (matchOrdinal < 3 || matchOrdinal % 10 === 0) return false;
+    const domain = resolveDomain();
+    return domain.createLabeledPrng({ seed: runId, label: 'cpu-rare-encounter-v1', context: { matchOrdinal } }).integer(0, 99) < CPU_RARE_ENCOUNTER_RATE_PERCENT;
+  }
+  function createCpuRareEncounter(input) {
+    assertExactKeys(input, ['runId', 'matchOrdinal'], 'rare encounter input');
+    const runId = assertNonEmptyString(input.runId, 'rare encounter input.runId');
+    const matchOrdinal = assertMatchOrdinal(input.matchOrdinal, 'rare encounter input.matchOrdinal');
+    if (!isCpuRareEncounterEligible({ runId, matchOrdinal })) return null;
+    return Object.freeze({ encounterId: `cpu:${runId}:rare:${matchOrdinal}`, runId, matchOrdinal });
+  }
+  function validateCpuRareEncounter(rawEncounter) {
+    const encounter = assertRareEncounter(rawEncounter);
+    if (!isCpuRareEncounterEligible({ runId: encounter.runId, matchOrdinal: encounter.matchOrdinal })) fail('CPU_RARE_ENCOUNTER_NOT_ELIGIBLE', 'rare encounter is not eligible under deterministic rules');
+    return encounter;
   }
   function assertOutcome(value) {
     if (!CPU_SETTLEMENT_OUTCOMES.includes(value)) fail('INVALID_CPU_SETTLEMENT_OUTCOME', 'outcome must be voluntary, defeat, or draw');
@@ -199,11 +243,43 @@
       blueprintShards: intent.blueprintShards,
     });
   }
+  function materializeCpuRareGearReward(input) {
+    assertExactKeys(input, ['encounter', 'createdAtMs'], 'rare reward input');
+    const encounter = validateCpuRareEncounter(input.encounter);
+    const createdAtMs = assertNonNegativeSafeInteger(input.createdAtMs, 'rare reward input.createdAtMs');
+    const domain = resolveDomain();
+    const rewardId = `${encounter.encounterId}:reward`;
+    const gearId = `${encounter.encounterId}:gear:0`;
+    let gear;
+    try {
+      gear = domain.createGear({
+        gearId,
+        generationSeed: `${gearId}:generation:v1`,
+        enhancementSeed: `${gearId}:enhancement:v1`,
+        sourceId: CPU_RARE_REWARD_SOURCE_ID,
+        sourceDetail: { encounterId: encounter.encounterId, runId: encounter.runId, matchOrdinal: encounter.matchOrdinal, rewardId, gearIndex: 0 },
+        acquiredAt: createdAtMs,
+        qualityProfile: CPU_RARE_QUALITY_PROFILE,
+        setProfile: domain.GEAR_SET_PROFILES.uniform,
+      });
+    } catch (error) {
+      fail(error && error.code ? error.code : 'CPU_RARE_GEAR_MATERIALIZATION_FAILED', 'could not materialize rare CPU reward gear', error);
+    }
+    return Object.freeze({
+      rewardId,
+      sourceId: CPU_RARE_REWARD_SOURCE_ID,
+      sourceDetail: { encounterId: encounter.encounterId, runId: encounter.runId, matchOrdinal: encounter.matchOrdinal },
+      createdAtMs,
+      gears: [gear],
+      blueprintShards: 0,
+    });
+  }
 
   return Object.freeze({
     GearCpuRewardsError,
-    CPU_REWARD_RULES_VERSION, CPU_REWARD_SOURCE_ID, CPU_SETTLEMENT_OUTCOMES, CPU_REWARD_MILESTONES,
+    CPU_REWARD_RULES_VERSION, CPU_REWARD_SOURCE_ID, CPU_RARE_REWARD_SOURCE_ID, CPU_RARE_ENCOUNTER_RATE_PERCENT, CPU_RARE_QUALITY_PROFILE, CPU_SETTLEMENT_OUTCOMES, CPU_REWARD_MILESTONES,
     resolveCpuRewardQuality, getCpuRewardGearCount, getCpuRewardBlueprintShards, getNextCpuRewardMilestone,
     previewCpuSettlement, createCpuSettlementIntent, validateCpuSettlementIntent, materializeCpuGearReward,
+    isCpuRareEncounterEligible, createCpuRareEncounter, validateCpuRareEncounter, materializeCpuRareGearReward,
   });
 });

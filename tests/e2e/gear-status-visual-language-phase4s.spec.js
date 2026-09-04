@@ -42,7 +42,7 @@ async function seedFixture(page) {
   });
 }
 
-test('未装備slotと英語status語彙を全幅で維持する', async ({ page }, testInfo) => {
+test('未装備slotと日本語status語彙を全幅で維持する', async ({ page }, testInfo) => {
   test.setTimeout(60000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
@@ -53,7 +53,7 @@ test('未装備slotと英語status語彙を全幅で維持する', async ({ page
   await seedFixture(page);
   await page.evaluate(() => globalThis.__gearPhase4STest.openWorkbench());
 
-  const expectedLabels = ['HP', 'ATK', 'DEF', 'FUEL', 'CRIT', 'BLAST', 'RESIST', 'SHIELD', 'HEAL'];
+  const expectedLabels = ['体力', '攻撃', '防御', '燃料', '会心', '爆発', '状態耐性', 'シールド', '回復'];
   await expect(page.locator('.gearSlot.empty')).toHaveCount(5);
   await expect(page.locator('.gearSlot.equipped')).toHaveCount(1);
 
@@ -92,6 +92,6 @@ test('未装備slotと英語status語彙を全幅で維持する', async ({ page
 
   const equippedSlot = page.locator('.gearSlot.equipped').first();
   await equippedSlot.click();
-  await expect(page.locator('.gearInlineDetailMain b')).toContainText(/^(ATK|HP|DEF|MAX FUEL|CRIT|BLAST|KNOCKBACK|KB RESIST|STATUS RESIST|HEAL|SHIELD)/);
+  await expect(page.locator('.gearInlineDetailMain b')).toContainText(/^(攻撃|体力|防御|最大燃料|会心率|爆発威力|吹き飛ばし|吹き飛ばし耐性|状態異常耐性|回復力|シールド力)/);
   expect(errors).toEqual([]);
 });

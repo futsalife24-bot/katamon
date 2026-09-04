@@ -138,6 +138,28 @@ test('0〜2の空精算もpure preview/intentは可能だがmaterialized envelop
   assert.equal(reward.gears.length, 0); assert.equal(reward.blueprintShards, 0);
   assert.equal(cpu.previewCpuSettlement({ peakStreak: 2, outcome: 'voluntary' }).hasReward, false);
 });
+test('希少CPU個体は4戦目以降の非ボス戦だけをrunId+ordinalから5%で決め、別報酬を安定生成する', () => {
+  const runId = 'rare-vector-20';
+  assert.equal(cpu.createCpuRareEncounter({ runId, matchOrdinal: 2 }), null, 'third battle is too early');
+  assert.equal(cpu.createCpuRareEncounter({ runId, matchOrdinal: 10 }), null, 'boss ordinal is always excluded');
+  const encounter = cpu.createCpuRareEncounter({ runId, matchOrdinal: 3 });
+  assert.deepEqual(encounter, { encounterId: 'cpu:rare-vector-20:rare:3', runId, matchOrdinal: 3 });
+  assert.deepEqual(cpu.validateCpuRareEncounter(JSON.parse(JSON.stringify(encounter))), encounter);
+  const first = cpu.materializeCpuRareGearReward({ encounter, createdAtMs: 3 });
+  const second = cpu.materializeCpuRareGearReward({ encounter, createdAtMs: 3 });
+  assert.deepEqual(second, first);
+  assert.equal(first.rewardId, 'cpu:rare-vector-20:rare:3:reward');
+  assert.equal(first.sourceId, 'cpu_rare_drop'); assert.equal(first.blueprintShards, 0);
+  assert.equal(first.gears.length, 1); assert.equal(first.gears[0].gearId, 'cpu:rare-vector-20:rare:3:gear:0');
+  assert.ok(first.gears[0].star >= 5); assert.ok(['epic', 'legend', 'mythic'].includes(first.gears[0].rarityId));
+  assert.equal(first.gears[0].acquisition.sourceId, 'cpu_rare_drop');
+  assert.equal(first.gears[0].acquisition.detail.matchOrdinal, 3);
+  assert.deepEqual(cpu.CPU_RARE_QUALITY_PROFILE.starWeights, [{ id: 5, weight: 75 }, { id: 6, weight: 25 }]);
+  assert.deepEqual(cpu.CPU_RARE_QUALITY_PROFILE.rarityWeights, [{ id: 'epic', weight: 70 }, { id: 'legend', weight: 25 }, { id: 'mythic', weight: 5 }]);
+  assert.deepEqual(gear.GEAR_SET_PROFILES.uniform.setWeights.map((entry) => entry.weight), Array(8).fill(1));
+  expectCode('CPU_RARE_ENCOUNTER_ID_MISMATCH', () => cpu.validateCpuRareEncounter({ ...encounter, encounterId: 'changed' }));
+  expectCode('CPU_RARE_ENCOUNTER_NOT_ELIGIBLE', () => cpu.validateCpuRareEncounter({ encounterId: `cpu:${runId}:rare:10`, runId, matchOrdinal: 10 }));
+});
 test('pure module never reads time/random/storage/DOM or game entrypoints', () => {
   const source = fs.readFileSync(require.resolve('../shared/gear-cpu-rewards.js'), 'utf8');
   ['Date.now', 'Math.random', 'crypto.', 'localStorage', 'document.', 'index.html'].forEach((forbidden) => assert.equal(source.includes(forbidden), false, forbidden));

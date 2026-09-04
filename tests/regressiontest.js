@@ -11,6 +11,8 @@ const canvas = h.canvas;
 const win = globalThis.window;
 const SEAT = h.SEAT;
 const indexHtml = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+const drawUnitSource = /function drawUnit\(u\) \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  function drawBattleHudBackdrop/.exec(indexHtml)?.[1] || '';
+const drawUnitImageNeedle = 'ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);';
 
 let pass = 0, fail = 0;
 const log = [];
@@ -174,17 +176,18 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
 }
 
 // v135: 通常弾は、キャラを替えても同じ引っぱり・同じ風なら同じ結果にする。
-// 必殺技と跳躍は通常弾ではないため、従来のキャラ固有値を残す。
+// v2.0.169: 放物線を描く砲弾型必殺も同じガイド・初速・風・重力へ揃える。
+// レーザー／直進固定の必殺と、砲弾ではない跳躍だけは固有物理を残す。
 {
   const normalProfiles = kt.chars().map(key => ({ key, ...kt.shotPhysicsProfileForTest(key, false, false) }));
   const commonNormal = normalProfiles.every(p =>
     p.blastMul === 1 && p.windMul === 1 && p.gravityMul === 1
       && p.velScaleMul === 1 && p.guideMul === 1 && p.tBias === 1);
-  check('全16キャラの通常弾は弾速・風・重力・爆風・狙い線・CPU弾道が共通',
+  check('全18キャラの通常弾は弾速・風・重力・爆風・狙い線・CPU弾道が共通',
     commonNormal, JSON.stringify(normalProfiles));
 
   const normalVelocities = kt.chars().map(key => ({ key, ...kt.launchVelocityForTest(key, 80, -60, false, false) }));
-  check('同じ引っぱりなら全16キャラの通常弾の初速が一致する',
+  check('同じ引っぱりなら全18キャラの通常弾の初速が一致する',
     normalVelocities.every(v => v.vx0 === normalVelocities[0].vx0 && v.vy0 === normalVelocities[0].vy0),
     JSON.stringify(normalVelocities));
 
@@ -241,7 +244,8 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
   kt.setCharactersForTest('kyoryu', 'kyoryu');
   kt.clearProjectilesForTest();
 
-  const normalTrajectorySpecials = ['tori', 'mecha'];
+  const straightOrLaserSpecials = ['nisenmono', 'mocchario', 'akuma'];
+  const normalTrajectorySpecials = kt.chars().filter(key => !straightOrLaserSpecials.includes(key));
   const characterProfilesStay = kt.chars().every(key => {
     const def = kt.character(key);
     const special = kt.shotPhysicsProfileForTest(key, true, false);
@@ -263,7 +267,8 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
       && jump.guideMul === (def.guideMul || 1)
       && jump.tBias === (def.tBias || 1);
   });
-  check('フェニーチェとクロムギアの必殺は通常弾と同じ物理で、全キャラの跳躍は固有の弾道値を残す', characterProfilesStay);
+  check('レーザー・直進系を除く全キャラの砲弾型必殺は通常弾物理で、跳躍と除外必殺は固有値を残す', characterProfilesStay,
+    JSON.stringify(kt.chars().map(key => ({ key, profile: kt.shotPhysicsProfileForTest(key, true, false) }))));
 
   const specialFlight = {};
   for (const key of normalTrajectorySpecials) {
@@ -272,14 +277,16 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
     specialFlight[key] = kt.projectileProfilesForTest();
   }
   kt.clearProjectilesForTest();
-  check('フェニーチェ必殺とクロムギア中央弾は通常弾と同じ初速・風・重力で飛ぶ',
-    specialFlight.tori.length === 1
-      && specialFlight.tori[0].vx === 120 && specialFlight.tori[0].vy === -80
-      && specialFlight.tori[0].windMul === 1 && specialFlight.tori[0].gravityMul === 1
-      && specialFlight.mecha.length === 3
-      && specialFlight.mecha[1].vx === 120 && specialFlight.mecha[1].vy === -80
-      && specialFlight.mecha.every(p => p.windMul === 1 && p.gravityMul === 1),
+  check('砲弾型必殺の実弾は固有効果を保ったまま通常弾と同じ風・重力を受ける',
+    normalTrajectorySpecials.every(key => specialFlight[key].length > 0
+      && specialFlight[key].every(projectile => projectile.windMul === 1 && projectile.gravityMul === 1)),
     JSON.stringify(specialFlight));
+  check('アスタウロスのDスマッシュは通常弾と同じ初速で発射し、着弾後の掘進だけを固有効果として残す',
+    specialFlight.jinba.length === 1
+      && specialFlight.jinba[0].vx === 120
+      && specialFlight.jinba[0].vy === -80
+      && specialFlight.jinba[0].dSmash === true,
+    JSON.stringify(specialFlight.jinba));
 }
 
 // v146: 通常弾そのものはv135で共通化したが、岩と騎士だけ被ダメージ軽減が残り、
@@ -287,7 +294,7 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
 // 防御補正と、実際に生成された通常弾の命中結果が全16キャラで同じことを確認する。
 {
   const defenseProfiles = kt.chars().map(key => ({ key, multiplier: kt.defenseMultiplierForTest(key) }));
-  check('全16キャラの防御補正は等倍で共通',
+  check('全18キャラの防御補正は等倍で共通',
     defenseProfiles.every(p => p.multiplier === 1), JSON.stringify(defenseProfiles));
 
   const originalPositions = ['p1', 'e1'].map(id => {
@@ -315,7 +322,7 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
     const u = kt.unitById(pos.id);
     u.x = pos.x; u.y = pos.y;
   }
-  check('同じ位置へ直撃した通常弾は全16キャラに同じ爆風と45ダメージ',
+  check('同じ位置へ直撃した通常弾は全18キャラに同じ爆風と45ダメージ',
     normalImpacts.every(hit => hit.detonated && hit.blastMul === 1 && hit.damage === 45),
     JSON.stringify(normalImpacts));
 }
@@ -398,7 +405,8 @@ check('BATTLE画面に全ユニットのデバフ名と残りターンを表示�
     JSON.stringify(phases));
   check('オーラはキャラ画像の背後から上向きに描く',
     indexHtml.includes('function drawSpecialAura(u, a)')
-      && /function drawUnit\(u\) \{[\s\S]{0,500}drawSpecialAura\(u, a\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(indexHtml),
+      && drawUnitSource.indexOf('drawSpecialAura(u, a);') >= 0
+      && drawUnitSource.indexOf('drawSpecialAura(u, a);') < drawUnitSource.indexOf(drawUnitImageNeedle),
     'drawSpecialAuraの描画順が見つかりません');
   const specialCutInSound = typeof kt.specialCutInSoundProfile === 'function'
     ? kt.specialCutInSoundProfile()
@@ -581,7 +589,8 @@ const dreadArrow = kt.character('doRednote');
     && html.includes('drawUnitHitCircle(u);'));
   check('判定の輪はキャラ画像より先に描く',
     // 両者の間には描画理由のコメントもある。文字数ではなく同じ drawUnit 内の順序を見る。
-    /function drawUnit\(u\) \{[\s\S]{0,500}drawUnitHitCircle\(u\);[\s\S]{0,1800}ctx\.drawImage\(img, imageRect\.sx, imageRect\.sy, imageRect\.sw, imageRect\.sh, -w \/ 2, UNIT_RADIUS - h \+ groundOffsetY, w, h\);/.test(html));
+    drawUnitSource.indexOf('drawUnitHitCircle(u);') >= 0
+      && drawUnitSource.indexOf('drawUnitHitCircle(u);') < drawUnitSource.indexOf(drawUnitImageNeedle));
   // 直撃の円はキャラの体に乗せる。u.y は足元から16pxしか上にないので、そのまま
   // 中心にすると見えている上半分に当たらない(実機で指摘)。
   check('直撃の円をキャラの体へ上げている',
@@ -1719,6 +1728,73 @@ check('演習のクールカイ表示も透明余白を切り出す',
   'drawFreeRowにキャラ画像の切り出しがありません');
 kt.clearProjectilesForTest();
 
+// 現HEADで最初からgreenになるcharacterization。報告された「クール=カイ必殺後、
+// フェニーチェの手番を越えると進行不能」を、修正を仮定せず実ターン境界と入力まで固定する。
+const coolKaiFeniceOriginalSeat = kt.seat();
+const coolKaiFeniceRestoreSnapshot = kt.snapshot();
+kt.startBattle('coolKai');
+settle();
+kt.setFlatTerrainForTest(420);
+kt.setCharactersForTest('coolKai', 'tori');
+kt.setLocalSeat('p1');
+kt.placeOnGround('p1', 300);
+kt.placeOnGround('e1', 1100);
+const coolKaiFeniceSnapshot = kt.snapshot();
+coolKaiFeniceSnapshot.winStreak = 19; // high tierなら、チャージ済みCPUは必殺を選ぶ
+coolKaiFeniceSnapshot.units.find(unit => unit.id === 'p1').specialCharge = 4;
+coolKaiFeniceSnapshot.units.find(unit => unit.id === 'e1').specialCharge = 4;
+kt.apply(coolKaiFeniceSnapshot);
+kt.clearProjectilesForTest();
+kt.fireForTest(320, -250, { unitId: 'p1', useSpecial: true });
+kt.setAwaitingResolveForTest(true);
+let coolKaiSalvoSeen = false;
+let feniceTurnSeen = false;
+let feniceSpecialSeen = false;
+for (let frame = 0; frame < 60 * 30; frame++) {
+  kt.step(1 / 60);
+  const state = kt.state();
+  const profiles = kt.projectileProfilesForTest();
+  coolKaiSalvoSeen ||= profiles.filter(projectile => projectile.owner === 'p1' && projectile.coolKaiOnigiri).length === 47;
+  feniceTurnSeen ||= state.turnCount === 1 && state.turnOrder[state.activeIndex] === 'e1';
+  feniceSpecialSeen ||= profiles.some(projectile => projectile.owner === 'e1' && projectile.groundFlame)
+    || kt.groundFlamesForTest().length > 0;
+  if (state.turnCount >= 2 && state.turnOrder[state.activeIndex] === 'p1'
+      && !state.awaitingResolve && !kt.hasCutIn()) break;
+}
+const coolKaiFeniceReturn = {
+  state: kt.state(),
+  hud: kt.hud(),
+  projectiles: kt.projectiles().length,
+  groundFlames: kt.groundFlamesForTest().length,
+  grounded: kt.units.every(unit => unit.grounded),
+  moveLockTurns: kt.turnEffectForTest('p1')?.moveLockTurns
+};
+check('クール=カイ必殺47発の解決後、チャージ済み高精度フェニーチェが必殺で応戦する',
+  coolKaiSalvoSeen && feniceTurnSeen && feniceSpecialSeen,
+  JSON.stringify({ coolKaiSalvoSeen, feniceTurnSeen, feniceSpecialSeen, return: coolKaiFeniceReturn }));
+check('フェニーチェ手番後は残留物理なしでクール=カイの射撃可能手番へ戻る',
+  coolKaiFeniceReturn.state.turnCount === 2
+    && coolKaiFeniceReturn.state.turnOrder[coolKaiFeniceReturn.state.activeIndex] === 'p1'
+    && coolKaiFeniceReturn.state.awaitingResolve === false
+    && coolKaiFeniceReturn.projectiles === 0
+    && coolKaiFeniceReturn.groundFlames === 0
+    && coolKaiFeniceReturn.grounded === true
+    && coolKaiFeniceReturn.moveLockTurns === 5
+    && coolKaiFeniceReturn.hud.fireActive === true
+    && coolKaiFeniceReturn.hud.moveActive === false,
+  JSON.stringify(coolKaiFeniceReturn));
+const coolKaiReturnFireButton = kt.fireBtn();
+const coolKaiReturnPointer = down(coolKaiReturnFireButton.x, coolKaiReturnFireButton.y);
+move(coolKaiReturnPointer, coolKaiReturnFireButton.x - 80, coolKaiReturnFireButton.y - 60);
+up(coolKaiReturnPointer, coolKaiReturnFireButton.x - 80, coolKaiReturnFireButton.y - 60);
+check('移動封印中でも中央FIREの実pointer操作で次の砲弾を発射できる',
+  kt.state().awaitingResolve === true && kt.projectiles().length > 0,
+  JSON.stringify({ state: kt.state(), projectiles: kt.projectileProfilesForTest() }));
+kt.clearProjectilesForTest();
+kt.setAwaitingResolveForTest(false);
+kt.apply(coolKaiFeniceRestoreSnapshot);
+kt.setLocalSeat(coolKaiFeniceOriginalSeat);
+
 // ===== v198: ドレッドアローは照準通りに刺さり、地表を這うスコーピオンレール =====
 const dreadNormalVelocity = kt.launchVelocityForTest('doRednote', 180, -96, false, false);
 const dreadSpecialShot = kt.fireSpecialImmediateForTest('doRednote', dreadNormalVelocity.vx0, dreadNormalVelocity.vy0);
@@ -1846,7 +1922,9 @@ check('Dスマッシュの爆発は中→小→小で隙間なく、従来の掘
     && dSmashCraters[0].r > dSmashCraters[1].r
     && dSmashCraters[1].r === dSmashCraters[2].r
     && dSmashPairsOverlap
-    && dSmashDrillCenterDistance >= dSmashConfig.stride * 2 - 0.1,
+    // 通常砲弾へ初速を統一すると着弾tick内の端数が変わる。掘進の52px×2は
+    // 維持し、固定刻みで生じる0.25px未満の積分差だけを許容する。
+    && dSmashDrillCenterDistance >= dSmashConfig.stride * 2 - 0.25,
   JSON.stringify({ config: dSmashConfig, centerDistance: dSmashDrillCenterDistance, craters: dSmashCraters }));
 check('Dスマッシュは着弾時の進行方向へ爆発しながら地中を掘り進む',
   dSmashCraters.length === 3

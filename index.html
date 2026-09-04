@@ -954,12 +954,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.168-title-wall-first-paint';
+  const BUILD_ID = 'v2.0.169-cpu-rare-trajectory-ja';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.169', date: '2026/09/04', summary: '希少CPU・Gear日本語表示・砲弾型必殺の弾道統一を追加' },
     { version: 'v2.0.168', date: '2026/09/04', summary: '最初のタップ前から正式な石壁を表示するよう修正' },
     { version: 'v2.0.167', date: '2026/09/03', summary: '初回ロードを段階化し、タイトル表示とオフライン準備を軽量化' },
     { version: 'v2.0.166', date: '2026/09/02', summary: 'ショップ・必殺技プレビューを見やすく寄せ、真鍮アイコンの装着場所を明確化' },
@@ -5037,15 +5038,15 @@
   const gearRarity = (domain, id) => domain.RARITIES.find((entry) => entry.id === id)?.labelJa || id;
   const gearSet = (domain, id) => domain.SETS.find((entry) => entry.id === id) || null;
   const gearSlot = (domain, id) => domain.SLOTS.find((entry) => entry.id === id) || null;
-  // 数値ステータス名は、戦闘HUDですでに使っている英語表記へ統一する。
+  // Gearの数値ステータス名は、表示面すべてでこの日本語表記へ統一する。
   // 説明文中の「次の攻撃」「回復する」などは日本語の文章であり、数値ラベルとは分けて扱う。
   const gearStatusLabels = Object.freeze({
-    flat_attack: 'ATK', flat_hp: 'HP', flat_defense: 'DEF',
-    attack_pct: 'ATK', hp_pct: 'HP', defense_pct: 'DEF',
-    crit_rate: 'CRIT', crit_damage: 'CRIT DMG', blast_power: 'BLAST',
-    knockback_power: 'KNOCKBACK', knockback_resistance: 'KB RESIST',
-    status_resistance: 'STATUS RESIST', heal_power: 'HEAL', received_heal: 'RECEIVED HEAL',
-    shield_power: 'SHIELD', received_shield: 'RECEIVED SHIELD', max_fuel: 'MAX FUEL'
+    flat_attack: '攻撃', flat_hp: '体力', flat_defense: '防御',
+    attack_pct: '攻撃', hp_pct: '体力', defense_pct: '防御',
+    crit_rate: '会心率', crit_damage: '会心ダメージ', blast_power: '爆発威力',
+    knockback_power: '吹き飛ばし', knockback_resistance: '吹き飛ばし耐性',
+    status_resistance: '状態異常耐性', heal_power: '回復力', received_heal: '被回復量',
+    shield_power: 'シールド力', received_shield: '被シールド量', max_fuel: '最大燃料'
   });
   const gearOpLabel = (_domain, opId) => gearStatusLabels[opId] || opId;
   const gearValue = (value, unit) => unit === 'flat' ? String(Math.round(value)) : `+${(value / 100).toFixed(value % 100 ? 2 : 0)}%`;
@@ -5080,7 +5081,7 @@
   const gearGuideUi = { page: 0, onComplete: null };
   const gearGuideSlotOrder = Object.freeze(['auxiliary', 'barrel', 'sight', 'armor', 'engine', 'core']);
   const gearGuidePositionLabels = Object.freeze({ auxiliary: '左上', barrel: '右上', sight: '左中', armor: '右中', engine: '左下', core: '右下' });
-  const gearGuideFixedMainLabels = Object.freeze({ barrel: 'ATK', armor: 'HP', core: 'DEF' });
+  const gearGuideFixedMainLabels = Object.freeze({ barrel: '攻撃', armor: '体力', core: '防御' });
   function gearGuidePageHtml(page) {
     const domain = gearModules().domain;
     if (page === 0) {
@@ -5150,9 +5151,9 @@
   function gearStatRows(state) {
     const c = state.combat; const caps = state.aggregate.softCaps;
     return [
-      ['HP', c.maxHp, ''], ['ATK', Math.round(c.effectiveAttack), ''], ['DEF', Math.round(c.effectiveDefense), ''],
-      ['FUEL', c.maxFuel, ''], ['CRIT', `${(c.critRateBp / 100).toFixed(0)}%`, caps.critRate], ['BLAST', `${(c.blastPowerBp / 100).toFixed(0)}%`, caps.blastPower],
-      ['RESIST', `${(c.statusResistanceBp / 100).toFixed(0)}%`, caps.statusResistance], ['SHIELD', `×${c.shieldMultiplier.toFixed(2)}`, caps.shieldPower], ['HEAL', `×${c.healingMultiplier.toFixed(2)}`, caps.healPower]
+      ['体力', c.maxHp, ''], ['攻撃', Math.round(c.effectiveAttack), ''], ['防御', Math.round(c.effectiveDefense), ''],
+      ['燃料', c.maxFuel, ''], ['会心', `${(c.critRateBp / 100).toFixed(0)}%`, caps.critRate], ['爆発', `${(c.blastPowerBp / 100).toFixed(0)}%`, caps.blastPower],
+      ['状態耐性', `${(c.statusResistanceBp / 100).toFixed(0)}%`, caps.statusResistance], ['シールド', `×${c.shieldMultiplier.toFixed(2)}`, caps.shieldPower], ['回復', `×${c.healingMultiplier.toFixed(2)}`, caps.healPower]
     ];
   }
   function gearCapClass(cap) { return cap?.overflowBp > 0 ? 'soft' : ''; }
@@ -5165,7 +5166,7 @@
     });
     return rows.length ? `<div class="gearSetTitle">SET EFFECT — そろえるほど強くなる</div><div class="gearSetRows">${rows.join('')}</div>` : `<div class="gearSetTitle">SET EFFECT</div><div class="gearSetHint">同じ紋章を2部位・4部位そろえるとセット効果が発動します。</div>`;
   }
-  const gearSetStatLabels = Object.freeze({ attackPctBp: 'ATK', hpPctBp: 'HP', defensePctBp: 'DEF', critRateBp: 'CRIT', critDamageBp: 'CRIT DMG', blastPowerBp: 'BLAST', blastRangeBp: 'BLAST RANGE', knockbackPowerBp: 'KNOCKBACK', knockbackResistanceBp: 'KB RESIST', healPowerBp: 'HEAL', shieldPowerBp: 'SHIELD' });
+  const gearSetStatLabels = Object.freeze({ attackPctBp: '攻撃', hpPctBp: '体力', defensePctBp: '防御', critRateBp: '会心率', critDamageBp: '会心ダメージ', blastPowerBp: '爆発威力', blastRangeBp: '爆発範囲', knockbackPowerBp: '吹き飛ばし', knockbackResistanceBp: '吹き飛ばし耐性', healPowerBp: '回復力', shieldPowerBp: 'シールド力' });
   const gearSetPercent = (valueBp) => `${valueBp >= 0 ? '+' : ''}${(valueBp / 100).toFixed(valueBp % 100 ? 2 : 0)}%`;
   function gearSetConditionalText(effect) {
     if (effect.effectId === 'direct_hit_outgoing_damage') return `砲弾を直接命中させた時、与ダメージ${gearSetPercent(effect.valueBp)}`;
@@ -5471,7 +5472,7 @@
     const gear = entry.gear; const slot = gearSlot(view.domain, gear.slotId); const set = gearSet(view.domain, gear.setId); const expiry = gearStorageUi.tab === 'tempBox' ? gearStorageRemaining(entry, view.nowMs, view.storage.TEMP_BOX_TTL_MS) : null;
     const subs = gear.subOps.length ? gear.subOps.map((sub) => `${gearHtml(gearOpLabel(view.domain, sub.opId))} ${(sub.valueBp / 100).toFixed(2)}%`).join(' · ') : 'サブOPなし';
     const sourceId = gear.acquisition.sourceId;
-    const source = sourceId === 'coop_boss' ? '協力ボス' : sourceId === 'cpu_battle' ? 'CPU BATTLE' : sourceId;
+    const source = sourceId === 'coop_boss' ? '協力ボス' : sourceId === 'cpu_rare_drop' ? 'CPU BATTLE（希少個体）' : sourceId === 'cpu_battle' ? 'CPU BATTLE' : sourceId;
     const referenced = view.equippedIds.has(gear.gearId) || view.presetIds.has(gear.gearId); const maxed = gear.enhancementLevel >= view.domain.MAX_ENHANCEMENT_LEVEL;
     const dismantleReason = entry.locked ? '分解保護を解除してください' : referenced ? 'プリセットから外してください' : '';
     const actions = gearStorageUi.tab === 'inventory' ? `<div class="gearStorageDetailActionButtons"><button class="gearButton" data-gear-storage-workbench="${gearHtml(gear.gearId)}" type="button">装備・比較へ</button><button class="gearButton gearButton--gold" data-gear-enhance="${gearHtml(gear.gearId)}" type="button" ${gearStorageUi.mutationBlocked || maxed ? 'disabled' : ''}>${maxed ? '最大強化済み' : '強化する'}</button><button class="gearButton gearButton--danger" data-gear-dismantle="${gearHtml(gear.gearId)}" type="button" ${gearStorageUi.mutationBlocked || dismantleReason ? 'disabled' : ''} title="${gearHtml(dismantleReason)}">分解する</button></div>` : '<div class="gearStorageTempActions">TEMP BOXのGearは強化・手動分解できません。空きを作ると保管庫の点検時にInventoryへ移動します。</div>';
@@ -5701,7 +5702,7 @@
       const currentRoute = inventoryIds.includes(checked.gearId) ? 'インベントリへ保存' : tempIds.includes(checked.gearId) ? 'TEMP BOXへ保管' : '';
       const routing = claimed ? `<p class="gearDropRouting">${gearHtml(currentRoute)} · インベントリ ${inventoryIds.length}件 / TEMP BOX ${tempIds.length}件</p>` : gearDropUi.error ? `<p class="gearDropRouting error">${gearHtml(gearDropUi.error)}</p>` : '';
       gearDropTitleEl.textContent = claimed ? 'GEAR GET!' : 'GEAR DROP!';
-      const sourceLabel = reward.sourceId === 'coop_boss' ? 'BOSS DROP' : reward.sourceId === 'targeted_box' ? 'TARGETED BOX' : 'CPU BATTLE REWARD';
+      const sourceLabel = reward.sourceId === 'coop_boss' ? 'BOSS DROP' : reward.sourceId === 'targeted_box' ? 'TARGETED BOX' : reward.sourceId === 'cpu_rare_drop' ? 'RARE DROP' : 'CPU BATTLE REWARD';
       gearDropProgressEl.textContent = `${gearDropUi.index + 1} / ${reward.gears.length} · ${sourceLabel}`;
       gearDropContentEl.innerHTML = `${gearDropMapHtml(domain, checked.slotId)}<article class="gearDropCard" data-rarity="${gearHtml(checked.rarityId)}" data-gear-drop-card="${gearHtml(checked.gearId)}"><div class="gearDropIdentity">${gearAssetVisualHtml(checked.slotId, checked.setId, 'gearDropCardAsset')}<span><strong>${gearHtml(slot?.labelJa || checked.slotId)} · ${gearHtml(set?.labelJa || checked.setId)}</strong><small><i class="gearCrest">${gearSetCrests[checked.setId] || '◆'}</i> ${gearHtml(set?.labelJa || checked.setId)} SET · 強化 +${checked.enhancementLevel}</small></span><span class="gearDropStars">${'★'.repeat(checked.star)}</span></div><div class="gearDropMainOp"><span>${gearHtml(rarity?.labelJa || checked.rarityId)}</span><b>${gearHtml(gearOpLabel(domain, checked.mainOp.opId))} ${gearHtml(gearValue(checked.mainOp.value, checked.mainOp.unit))}</b></div>${routing}</article>`;
       gearDropQueueEl.innerHTML = reward.gears.map((_entry, index) => `<span class="${index === gearDropUi.index ? 'current' : ''}"></span>`).join('');
@@ -5973,6 +5974,15 @@
     guideMul: 1,
     tBias: 1
   });
+  // 必殺の固有性は着弾後の効果・弾数・拡散へ残し、放物線砲弾のガイドと
+  // 発射物理は通常弾へ統一する。レーザーと無風・無重力の直進弾だけは除外する。
+  const NON_BALLISTIC_SPECIAL_KEYS = Object.freeze(['nisenmono', 'mocchario', 'akuma']);
+  function specialUsesNormalCannonballPhysics(def) {
+    if (!def || NON_BALLISTIC_SPECIAL_KEYS.includes(def.key)) return false;
+    const generatedProjectile = def.specialSkill?.projectile;
+    if (generatedProjectile) return Number(generatedProjectile.gravityMultiplier) > 0;
+    return true;
+  }
   const B_IMPACT_TERRAIN_BLAST_MUL = 1.5;
   const B_IMPACT_KNOCKBACK_SPEED = 80;
   // Gearで通常砲弾に追加するノックバックの基準。既存Impactサブ武器(160)
@@ -5984,9 +5994,7 @@
 
   function shotPhysicsProfile(def, useSpecial, useJump) {
     if (!useSpecial && !useJump) return NORMAL_SHOT_PROFILE;
-    // フェニーチェとクロムギアの必殺は、着弾後／三連の広がりだけが固有性能。
-    // 本体弾は狙い線どおりの通常弾物理に揃え、CPUの逆算にも同じ値を使う。
-    if (useSpecial && !useJump && (def.key === 'tori' || def.key === 'mecha')) return NORMAL_SHOT_PROFILE;
+    if (useSpecial && !useJump && specialUsesNormalCannonballPhysics(def)) return NORMAL_SHOT_PROFILE;
     return {
       blastMul: def.blastMul != null ? def.blastMul : 1,
       windMul: def.windMul != null ? def.windMul : 1,
@@ -6694,6 +6702,10 @@
     p.y = impactY;
     p.dSmashDrilling = true;
     p.pierce = true;
+    // 着弾後はその瞬間の進行方向を固有の掘進方向として固定する。
+    // 通常砲弾と同じ風・重力は着弾までに反映済みで、地中で再加速させない。
+    p.windMul = 0;
+    p.gravityMul = 0;
     p.travelDistance = 0;
     p.dSmashBlasts = 0;
     explodeDSmashDrill(p, impactX, impactY);
@@ -6707,10 +6719,11 @@
     const projectile = skill.projectile;
     const impact = skill.impact;
     const count = Math.max(1, Math.min(12, Math.round(Number(projectile.count) || 1)));
-    const speed = Math.max(0.1, Math.min(5, Number(projectile.speedMultiplier) || 1));
+    const normalCannonballPhysics = specialUsesNormalCannonballPhysics(def);
+    const speed = normalCannonballPhysics ? 1 : Math.max(0.1, Math.min(5, Number(projectile.speedMultiplier) || 1));
     const power = Math.max(0.05, Math.min(5, Number(projectile.power) || 1));
     const radius = Math.max(0.1, Math.min(5, Number(impact.radiusMultiplier) || 1));
-    const gravity = Math.max(0, Math.min(3, Number(projectile.gravityMultiplier)));
+    const gravity = normalCannonballPhysics ? 1 : Math.max(0, Math.min(3, Number(projectile.gravityMultiplier)));
     const knockback = Math.max(0, Math.min(500, Number(impact.knockback) || 0));
 
     if (skill.selfEffect && Number(skill.selfEffect.heal) > 0) {
@@ -6735,7 +6748,7 @@
       const velocity = rotateVec(vx0 * speed, vy0 * speed, spread);
       fireProjectile(owner, anchor, velocity.vx, velocity.vy, {
         blastMul: (def.blastMul || 1) * radius,
-        windMul: def.windMul != null ? def.windMul : 1,
+        windMul: normalCannonballPhysics ? 1 : (def.windMul != null ? def.windMul : 1),
         gravityMul: Number.isFinite(gravity) ? gravity : 1,
         damageMul: power,
         pierce: Number(projectile.penetrationCount) > 0,
@@ -6877,6 +6890,12 @@
     const nonDamagingSpecial = activateSpecial && (def.key === 'hamulton' || def.key === 'shinigami');
     if (!deferred && !activateJump && !nonDamagingSpecial) beginBattleGearAttackAction(unit);
     const shotProfile = shotPhysicsProfile(def, activateSpecial, activateJump);
+    const fireCharacterSpecialProjectile = (vx, vy, options = {}) => {
+      const normalized = specialUsesNormalCannonballPhysics(def)
+        ? { ...options, windMul: 1, gravityMul: 1 }
+        : options;
+      fireProjectile(owner, anchor, vx, vy, normalized);
+    };
 
     if (tutorialActive() && unit.id === 'p1' && !deferred) tutorial.stepShots++;
     if (activateJump && !deferred) unit.jumpAvailable = false;
@@ -6896,18 +6915,18 @@
       // 生成キャラクターの宣言的テンプレートは上で処理済み。
     } else if (activateSpecial && def.key === 'hamulton') {
       // 通常弾と同じ弾道で地点を指定し、着弾後だけ視界を遮る雲へ変える。直接ダメージは与えない。
-      fireProjectile(owner, anchor, vx0, vy0, { windMul: 1, gravityMul: 1, creamCloudMarker: true, noTerrain: true });
+      fireCharacterSpecialProjectile(vx0, vy0, { creamCloudMarker: true, noTerrain: true });
     } else if (activateSpecial && def.key === 'shinigami') {
       // 死神の必殺: 着弾は位置指定だけ。そこからDEAD LINEの鎌が真上へ進み、
       // 固定距離ぶんだけ地形を削る。印にも鎌にも直接ダメージはない。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         windMul: def.windMul,
         deathGateMarker: true,
         noTerrain: true
       });
     } else if (activateSpecial && def.key === 'medama') {
       // 目玉の必殺: 地形を削らず、着弾点から電磁波を放って移動を封じる。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
         emp: true,
@@ -6917,7 +6936,7 @@
       });
     } else if (activateSpecial && def.key === 'iwa') {
       // ゴーロッカの必殺: 爆風の威力は保ち、地形破壊だけ通常弾の1.5倍へ抑えて軽く吹き飛ばす。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul * 2.6,
         terrainBlastMul: B_IMPACT_TERRAIN_BLAST_MUL,
         knockbackSpeed: B_IMPACT_KNOCKBACK_SPEED,
@@ -6925,7 +6944,7 @@
       });
     } else if (activateSpecial && def.key === 'tori') {
       // フェニーチェの必殺: 本体弾は通常弾と同じ物理。着弾後だけ地面沿いの炎へ変わる。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: 1,
         windMul: 1,
         gravityMul: 1,
@@ -6933,17 +6952,17 @@
       });
     } else if (activateSpecial && def.key === 'kyoryu') {
       // 恐竜の必殺: 強化砲弾(バランス型らしい高威力・大爆風の一撃)
-      fireProjectile(owner, anchor, vx0, vy0, { blastMul: def.blastMul * 1.8, windMul: def.windMul });
+      fireCharacterSpecialProjectile(vx0, vy0, { blastMul: def.blastMul * 1.8, windMul: def.windMul });
     } else if (activateSpecial && def.key === 'barugerukan') {
       // バルゲルカンの必殺: まず通常の弾道で地点を指定し、着弾後に上空支援を呼ぶ。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         windMul: def.windMul,
         barucopterMarker: true,
         noTerrain: true
       });
     } else if (activateSpecial && def.key === 'nisenmono') {
       // オベリスクの必殺: 地形を壊さず、壁で反射しながら敵を貫通するプリズムビーム。
-      fireProjectile(owner, anchor, vx0 * 1.8, vy0 * 1.8, {
+      fireCharacterSpecialProjectile(vx0 * 1.8, vy0 * 1.8, {
         blastMul: def.blastMul * 1.2,
         windMul: 0,
         gravityMul: 0,
@@ -6953,7 +6972,7 @@
       });
     } else if (activateSpecial && def.key === 'burumutan') {
       // ブルームタンの必殺: 花弾が敵から実際に奪ったHPだけ、着弾時に発射者へ還元する。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
         gravityMul: def.gravityMul,
@@ -6962,26 +6981,26 @@
     } else if (activateSpecial && def.key === 'sumoeru') {
       // スモエルの必殺: 敵へ近づくと接近信管が作動し、8方向へ散る花火。
       // 接触・障害物・地形への着弾でも開き、手動起爆と頂点起爆は使わない。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
         firework: true
       });
     } else if (activateSpecial && def.key === 'doRednote') {
       // ドレッドアローの必殺: 照準どおりに毒針を刺し、地表を相手側へ這わせる。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul,
         windMul: def.windMul,
         scorpionRail: true
       });
     } else if (activateSpecial && def.key === 'mocchario') {
       // モッチャリオの必殺: 高火力・大爆風のレーザー砲
-      fireProjectile(owner, anchor, vx0 * 1.1, vy0 * 1.1, { blastMul: def.blastMul * 2.0, windMul: def.windMul });
+      fireCharacterSpecialProjectile(vx0 * 1.1, vy0 * 1.1, { blastMul: def.blastMul * 2.0, windMul: def.windMul });
     } else if (activateSpecial && def.key === 'mecha') {
       // クロムギアの必殺: 中央弾は通常弾と同じ物理、両脇だけを狭い扇状へ広げる。
       for (const deg of [-5, 0, 5]) {
         const v = rotateVec(vx0, vy0, deg);
-        fireProjectile(owner, anchor, v.vx, v.vy, { blastMul: def.blastMul * 0.85, windMul: 1 });
+        fireCharacterSpecialProjectile(v.vx, v.vy, { blastMul: def.blastMul * 0.85 });
       }
     } else if (activateSpecial && def.key === 'coolKai') {
       // クールカイの必殺: 握り飯をランダム角度へ、一定間隔で47発連射。
@@ -6989,7 +7008,7 @@
       for (let i = 0; i < COOL_KAI_ONIGIRI_SPREAD_DEGREES.length; i++) {
         const deg = COOL_KAI_ONIGIRI_SPREAD_DEGREES[i];
         const v = rotateVec(vx0, vy0, deg);
-        fireProjectile(owner, anchor, v.vx, v.vy, {
+        fireCharacterSpecialProjectile(v.vx, v.vy, {
           radius: 3,
           windMul: 1,
           gravityMul: 1,
@@ -7003,7 +7022,7 @@
       unit.moveLockTurns = Math.max(unit.moveLockTurns || 0, 6);
     } else if (activateSpecial && def.key === 'akuma') {
       // ルビデビの必殺: 風と重力を受けず直進する。相手・地面・空中障害物で止まり、爆発や地形破壊は起こさない。
-      fireProjectile(owner, anchor, vx0 * 2, vy0 * 2, {
+      fireCharacterSpecialProjectile(vx0 * 2, vy0 * 2, {
         blastMul: def.blastMul * 1.2,
         windMul: 0,
         gravityMul: 0,
@@ -7014,7 +7033,7 @@
       });
     } else if (activateSpecial && def.key === 'jinba') {
       // アスタウロスの必殺: 地面への着弾後、中→小→小の連続爆発で掘り進む突撃槍
-      fireProjectile(owner, anchor, vx0 * 1.3, vy0 * 1.3, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul * 1.9,
         windMul: def.windMul,
         dSmash: true
@@ -7026,14 +7045,14 @@
         unit.hp -= cost;
         spawnDamageText(unit.x, unit.y - UNIT_RADIUS - 10, cost);
       }
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul * 1.7,
         windMul: def.windMul,
         damageMul: 1.5
       });
     } else if (activateSpecial && def.key === 'neko') {
       // 猫の必殺: 大爆風を受けた者の次の手番を、移動だけでなく行動ごと飛ばす。
-      fireProjectile(owner, anchor, vx0, vy0, {
+      fireCharacterSpecialProjectile(vx0, vy0, {
         blastMul: def.blastMul * 1.5,
         windMul: def.windMul,
         emp: true,
@@ -7097,6 +7116,7 @@
   let winStreak = 0;     // 連勝数(CPU AIの精度に反映。負けると0に戻る)
   let isBossMatch = false; // 10連勝ごとの節目演出フラグ
   let bossBannerTimer = 0;
+  let cpuRareBannerTimer = 0;
 
   // ===== カットイン(対戦開始・ターン交代・タイムアップ演出) =====
   // 表示中はupdate()を早期returnさせてゲーム進行を止め、切り替わりを分かりやすくする
@@ -8694,7 +8714,7 @@
     return previewAimVelocity(player, specialDemoTargetPoint(key), {
       gravityMul,
       windMul,
-      launchSpeedMul: def.specialVelocityMul || 1,
+      launchSpeedMul: specialUsesNormalCannonballPhysics(def) ? 1 : (def.specialVelocityMul || 1),
       t: key === 'coolKai' ? 0.92 : 0.78,
     });
   }
@@ -9779,6 +9799,7 @@
         snapshot.cpuGearRuntimeEffectsState = cpuGearRuntimeEffectsState;
       }
     }
+    if (isCpuGearEligibleRun() && cpuRareEncounter !== null) snapshot.cpuRareEncounter = cpuRareEncounter;
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
     if (includeTerrain) {
@@ -10329,7 +10350,9 @@
     winStreak = data.winStreak;
     runStats = data.runStats;
     isBossMatch = data.isBossMatch;
+    cpuRareEncounter = restoreCpuRareEncounterFromSnapshot(data);
     bossBannerTimer = 0;
+    cpuRareBannerTimer = cpuRareEncounter ? MATCHUP_CUTIN_DURATION + 1.2 : 0;
     if (isOnline()) {
       // カメラは端末ごとの見やすさであり、相手のスナップショットで上書きしない。
       // 開始時・ターン境界では、左右の席に関係なく行動キャラを映す。
@@ -10461,6 +10484,12 @@
   let cpuGearRuntimeEffectsState = null;
   let pendingCpuGearRuntimeEffectsState = null;
   let cpuGearActiveAttackRuntime = null;
+  // This is match-local presentation/reward identity, never CPU stat or AI
+  // input.  A current suspend carries it only when the deterministic draw
+  // succeeded; old snapshots intentionally restore as non-rare.
+  let cpuRareEncounter = null;
+  let cpuRareRewardPromise = null;
+  let cpuRareRewardError = null;
 
   function cpuGearModules() {
     const domain = globalThis.KatamonGearDomain;
@@ -10477,6 +10506,30 @@
       throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
     }
     return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot, combat, battleRng };
+  }
+
+  function deriveCpuRareEncounterForCurrentMatch() {
+    if (!isCpuGearEligibleRun() || isBossMatch || !Number.isSafeInteger(winStreak) || winStreak < 0) return null;
+    const { cpuRewards, runStorage } = cpuGearModules();
+    const run = readCpuGearRunState();
+    if (!run || run.state !== runStorage.ACTIVE) return null;
+    return cpuRewards.createCpuRareEncounter({ runId: run.runId, matchOrdinal: winStreak });
+  }
+
+  function restoreCpuRareEncounterFromSnapshot(data) {
+    // A pre-feature snapshot never gains a rare encounter after reload.  This
+    // avoids retroactively changing an already-suspended battle.
+    if (!Object.prototype.hasOwnProperty.call(data, 'cpuRareEncounter')) return null;
+    if (!isCpuGearEligibleRun() || isBossMatch) throw Object.assign(new Error('CPU_RARE_SNAPSHOT_UNEXPECTED'), { code: 'CPU_RARE_SNAPSHOT_UNEXPECTED' });
+    const { cpuRewards, runStorage } = cpuGearModules();
+    const run = readCpuGearRunState();
+    if (!run || run.state !== runStorage.ACTIVE) throw Object.assign(new Error('CPU_RARE_SNAPSHOT_RUN_MISSING'), { code: 'CPU_RARE_SNAPSHOT_RUN_MISSING' });
+    const encounter = cpuRewards.validateCpuRareEncounter(data.cpuRareEncounter);
+    const expected = cpuRewards.createCpuRareEncounter({ runId: run.runId, matchOrdinal: data.winStreak });
+    if (!expected || JSON.stringify(encounter) !== JSON.stringify(expected)) {
+      throw Object.assign(new Error('CPU_RARE_SNAPSHOT_MISMATCH'), { code: 'CPU_RARE_SNAPSHOT_MISMATCH' });
+    }
+    return expected;
   }
 
   function cpuGearErrorCode(error) {
@@ -11850,6 +11903,56 @@
     });
   }
 
+  async function queueCpuRareRewardAfterWin() {
+    if (!cpuRareEncounter) return { skipped: true };
+    if (!localWon()) throw Object.assign(new Error('CPU_RARE_REWARD_NOT_A_WIN'), { code: 'CPU_RARE_REWARD_NOT_A_WIN' });
+    const { cpuRewards, rewards, runStorage, storage } = cpuGearModules();
+    const run = readCpuGearRunState();
+    if (!run || run.state !== runStorage.ACTIVE) throw Object.assign(new Error('CPU_RARE_RUN_NOT_ACTIVE'), { code: 'CPU_RARE_RUN_NOT_ACTIVE' });
+    const encounter = cpuRewards.validateCpuRareEncounter(cpuRareEncounter);
+    const expected = cpuRewards.createCpuRareEncounter({ runId: run.runId, matchOrdinal: encounter.matchOrdinal });
+    if (!expected || JSON.stringify(expected) !== JSON.stringify(encounter)
+        || !Number.isSafeInteger(winStreak) || encounter.matchOrdinal + 1 !== winStreak) {
+      throw Object.assign(new Error('CPU_RARE_ENCOUNTER_MISMATCH'), { code: 'CPU_RARE_ENCOUNTER_MISMATCH' });
+    }
+    // The durable body deliberately contains no wall-clock value.  An
+    // ambiguous localStorage read-back therefore retries byte-for-byte under
+    // the same rewardId and Gear id, letting the common ledger decide once.
+    const reward = cpuRewards.materializeCpuRareGearReward({ encounter, createdAtMs: encounter.matchOrdinal });
+    const queued = await rewards.persistQueueReward(reward, localStorage);
+    const state = storage.loadGearState(localStorage);
+    const pending = state.unclaimedRewards.some((entry) => entry.rewardId === reward.rewardId);
+    if (!pending && state.rewardLedger?.[reward.rewardId] !== true) {
+      throw Object.assign(new Error('CPU_RARE_REWARD_READBACK_MISMATCH'), { code: 'CPU_RARE_REWARD_READBACK_MISMATCH' });
+    }
+    return { reward, queued, alreadyClaimed: !pending };
+  }
+
+  function requestCpuRareRewardAfterWin() {
+    if (!cpuRareEncounter) return true;
+    if (cpuRareRewardPromise) return cpuRareRewardPromise;
+    let task;
+    try { task = Promise.resolve(queueCpuRareRewardAfterWin()); }
+    catch (error) { task = Promise.reject(error); }
+    cpuRareRewardPromise = task;
+    task.then((result) => {
+      cpuRareRewardError = null;
+      if (result?.reward?.rewardId && !result.alreadyClaimed) presentGearRewardId(result.reward.rewardId);
+    }, (error) => {
+      cpuRareRewardError = error;
+      setCpuGearStatus(error, '希少個体のGear報酬保存');
+    }).finally(() => {
+      if (cpuRareRewardPromise === task) cpuRareRewardPromise = null;
+    });
+    return task;
+  }
+
+  function retryCpuRareRewardAfterWin() {
+    if (!matchOver || !localWon() || !cpuRareEncounter || cpuRareRewardPromise) return false;
+    requestCpuRareRewardAfterWin();
+    return true;
+  }
+
   // Starting the next CPU round is a lifecycle mutation too: it writes the
   // legacy turn-start suspend and it must not pass a stale reward gate while
   // another tab has created a Gear WAL.  Keep the read/gate/reset/suspend
@@ -11858,7 +11961,8 @@
     return !!cpuGearSettlementPromise
       || !!cpuGearContinuePromise
       || !!cpuGearTerminalSettlementPreparationPromise
-      || !!cpuGearSuspendPromise;
+      || !!cpuGearSuspendPromise
+      || !!cpuRareRewardPromise;
   }
 
   function rejectCpuGearResultActionWhileBusy(action) {
@@ -20137,6 +20241,11 @@
       // a mutable streak.  A write failure blocks the next persistence action
       // but does not roll back this already-resolved match.
       recordCpuGearPeakAfterWin();
+      // This is deliberately independent from streak settlement.  A rare
+      // encounter adds one separately ledgered Gear only after victory; its
+      // promise keeps every result action blocked until queue/read-back or an
+      // explicit visible retry.
+      requestCpuRareRewardAfterWin();
     } else {
       lastRunStreak = winStreak;
       lastRunEfficiency = currentEfficiency();
@@ -20759,7 +20868,9 @@
     const straightAim = useSpecial && def.key === 'akuma';
     const aimWindMul = straightAim ? 0 : shotProfile.windMul;
     const aimGravityMul = straightAim ? 0 : shotProfile.gravityMul;
-    const launchSpeedMul = useSpecial ? (def.specialVelocityMul || 1) : 1;
+    const launchSpeedMul = useSpecial && !specialUsesNormalCannonballPhysics(def)
+      ? (def.specialVelocityMul || 1)
+      : 1;
     const { vx0, vy0 } = perfectAimVelocity(anchor, target, baseT, aimGravityMul, aimWindMul, launchSpeedMul);
     const jitter = tier.jitter;
     const vx = vx0 * (1 + (Math.random() * 2 - 1) * jitter);
@@ -21858,6 +21969,7 @@
     // 絵より先に描く。上に重ねるとキャラが霞む。
     drawUnitHitCircle(u);
     const isBossUnit = isBossMatch && u.team === 'cpu';
+    const isRareCpuUnit = cpuRareEncounter !== null && u.team === 'cpu';
     const img = u.character ? charImages[u.character] : null;
     const imgReady = img && img.complete && img.naturalWidth > 0;
     // 向きと反転の変換は共通関数だけを通す(直接式を書くと向き判定側と食い違う)。
@@ -21881,6 +21993,16 @@
       ctx.strokeStyle = '#ffd24a';
       ctx.lineWidth = 3;
       ctx.stroke();
+    }
+    if (isRareCpuUnit) {
+      ctx.beginPath();
+      ctx.arc(0, UNIT_RADIUS - h / 2, h / 2 + 13 + Math.sin(simTimeMs / 180) * 2, 0, Math.PI * 2);
+      ctx.strokeStyle = '#7ce8ff';
+      ctx.shadowColor = '#42bfe8';
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
     if (imgReady) {
@@ -21922,6 +22044,14 @@
       ctx.font = '400 11px ' + UI_FONT;
       ctx.textAlign = 'center';
       ctx.fillText('BOSS', a.x, imgTopAbs - 2);
+      ctx.restore();
+    }
+    if (isRareCpuUnit) {
+      ctx.save();
+      ctx.fillStyle = '#9cf3ff';
+      ctx.font = '900 10px ' + UI_FONT;
+      ctx.textAlign = 'center';
+      ctx.fillText('RARE', a.x, imgTopAbs - (isBossUnit ? 16 : 2));
       ctx.restore();
     }
 
@@ -23300,6 +23430,11 @@
     }
   }
 
+  function cpuRareRewardRetryLayout() {
+    if (!matchOver || !localWon() || !cpuRareEncounter || !cpuRareRewardError) return null;
+    return { retryButton: { ...cpuGearSettlementBtn, y: VH / 2 + 142 }, message: cpuGearUserMessage(cpuRareRewardError, '希少個体のGear報酬保存') };
+  }
+
   function cpuGearTerminalSettlementReadErrorLayout(options = {}) {
     // Every terminal normal-CPU Gear result is fail-closed while its durable
     // run record cannot be read or does not describe a legal result state.
@@ -23701,9 +23836,10 @@
     const draw = isDraw();
     const cpuGearLayout = cpuGearResultLayout();
     const cpuGearRetryLayout = cpuGearTerminalSettlementRetryLayout();
+    const cpuRareRetryLayout = cpuRareRewardRetryLayout();
     const cpuGearReadErrorLayout = cpuGearLayout ? null : cpuGearTerminalSettlementReadErrorLayout({ resultLayoutWasRead: true });
     const bandY = VH / 2 - 130;
-    const bandH = (cpuGearLayout ? cpuGearLayout.bandHeight : ((cpuGearRetryLayout || cpuGearReadErrorLayout) ? 385 : (won || draw ? 280 : 330))) + resultButtonShift();
+    const bandH = (cpuGearLayout ? cpuGearLayout.bandHeight : ((cpuGearRetryLayout || cpuRareRetryLayout || cpuGearReadErrorLayout) ? 385 : (won || draw ? 280 : 330))) + resultButtonShift();
     ctx.save();
     // 石版のような帯(上下を真鍮で締める)
     const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
@@ -23829,6 +23965,14 @@
         });
       }
     }
+    if (cpuRareRetryLayout) {
+      drawOutlinedText('RARE DROPの保存を再試行してください', VW / 2, VH / 2 + 70, {
+        font: `900 12px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
+      });
+      drawOutlinedText(cpuRareRetryLayout.message, VW / 2, VH / 2 + 91, {
+        font: `900 10px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
+      });
+    }
     if (cpuGearReadErrorLayout) {
       drawOutlinedText('未精算報酬の保存状態を確認できません', VW / 2, VH / 2 + 70, {
         font: `900 13px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
@@ -23859,6 +24003,8 @@
       drawResultButton(cpuGearReadErrorLayout.retryButton, '保存状態を再確認', true);
     } else if (cpuGearRetryLayout) {
       drawResultButton(cpuGearRetryLayout.retryButton, '報酬精算を再試行', true);
+    } else if (cpuRareRetryLayout) {
+      drawResultButton(cpuRareRetryLayout.retryButton, 'RARE DROPを再試行', true);
     } else if (cpuGearLayout) {
       const cpuGearResultBusy = cpuGearResultActionInFlight();
       if (cpuGearLayout.continueButton) drawResultButton(cpuGearLayout.continueButton, 'つぎのバトルへ', !cpuGearResultBusy);
@@ -24856,16 +25002,22 @@
   }
 
   function drawBossBanner() {
-    if (bossBannerTimer <= 0) return;
+    if (bossBannerTimer <= 0 && cpuRareBannerTimer <= 0) return;
+    const rare = bossBannerTimer <= 0;
     ctx.save();
-    const alpha = Math.min(1, bossBannerTimer / 0.5);
+    const alpha = Math.min(1, (rare ? cpuRareBannerTimer : bossBannerTimer) / 0.5);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(60,10,10,0.65)';
+    ctx.fillStyle = rare ? 'rgba(7,51,66,0.72)' : 'rgba(60,10,10,0.65)';
     ctx.fillRect(0, VH * 0.32, VW, 70);
-    ctx.fillStyle = '#ffd24a';
+    ctx.fillStyle = rare ? '#9cf3ff' : '#ffd24a';
     ctx.font = '400 26px ' + UI_FONT_DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText('強敵出現!', VW / 2, VH * 0.32 + 45);
+    ctx.fillText(rare ? '希少個体 出現!' : '強敵出現!', VW / 2, VH * 0.32 + 38);
+    if (rare) {
+      ctx.fillStyle = '#d5fbff';
+      ctx.font = '900 11px ' + UI_FONT_HEAVY;
+      ctx.fillText('勝利で RARE DROP（5★以上・エピック以上）', VW / 2, VH * 0.32 + 57);
+    }
     ctx.restore();
   }
 
@@ -27397,6 +27549,11 @@
         }
         return;
       }
+      const cpuRareRetryLayout = cpuRareRewardRetryLayout();
+      if (cpuRareRetryLayout) {
+        if (hitRect({ x: p0.x, y: p0.y - shift }, cpuRareRetryLayout.retryButton)) retryCpuRareRewardAfterWin();
+        return;
+      }
       const cpuGearLayout = cpuGearResultLayout();
       const cpuGearReadErrorLayout = cpuGearLayout ? null : cpuGearTerminalSettlementReadErrorLayout({ resultLayoutWasRead: true });
       if (cpuGearReadErrorLayout) {
@@ -27805,6 +27962,8 @@
     resetMvpTechniqueStats();
     // VS:CPUの10連勝ごとのボス戦は、中央が奈落になった専用の闘技場マップで行う。
     isBossMatch = battleMode === 'normal' && winStreak > 0 && winStreak % 10 === 0;
+    cpuRareEncounter = deriveCpuRareEncounterForCurrentMatch();
+    cpuRareRewardError = null;
     // 結果画面からの連戦だけ、相手と通常ステージ種別を次戦用に引き直す。
     // 初戦はキャラ選択直後の抽選を使い、演習・オンラインの選択内容は変えない。
     const nextCpuBattleTerrain = carrySpecialCharge ? prepareNextCpuBattleRound() : null;
@@ -27916,6 +28075,7 @@
     battleIntroPending = true;
     focusCameraOn(localUnit().x, true, localUnit().y);
     bossBannerTimer = isBossMatch ? 2.2 : 0;
+    cpuRareBannerTimer = cpuRareEncounter ? MATCHUP_CUTIN_DURATION + 1.2 : 0;
     startTurn();
     // Firebaseホストは、このあと開始スナップショットの保存・送信を待つ。その間も
     // ロビーの裏でgameLoopが進むので、closeOnlineLobby後に改めて表示する。
@@ -28701,6 +28861,7 @@
     // 演出系の更新はカットイン中も続ける(残り続けて画面に出っぱなしになるのを防ぐ)
     // 画面の揺れだけは update の先頭で減らす。ここは対戦中しか通らないため。
     if (bossBannerTimer > 0) bossBannerTimer = Math.max(0, bossBannerTimer - dt);
+    if (cpuRareBannerTimer > 0) cpuRareBannerTimer = Math.max(0, cpuRareBannerTimer - dt);
     if (specialAura) specialAura.timer = Math.max(0, specialAura.timer - dt);
     if (specialFlash.timer > 0) specialFlash.timer = Math.max(0, specialFlash.timer - dt);
     if (coopSalvoSpecialAura?.timer > 0) {
