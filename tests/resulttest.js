@@ -333,11 +333,13 @@ check('崩れている最中は組み直さない',
 // 読み込み中はずっと出ている。128枚を毎フレーム貼る意味がない。
 check('崩していない間は1枚で描く',
   /if \(!breakState && wallPiecesUseArt\) \{[\s\S]{0,300}ctx\.drawImage\(wallImage, map\.offX, map\.offY,/.test(html));
-check('壁の絵をT2で準備し、必要な時だけ読み込む',
+check('壁の絵を最初のタップ前から準備する',
   html.includes("function ensureWallBreakAssets()")
   && html.includes("wallImage.src = 'assets/wall.jpg';")
-  && !html.includes('<link rel="preload" as="image" href="assets/wall.jpg" fetchpriority="high">')
-  && require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8').includes("'./assets/wall.jpg'"));
+  && html.includes('<link rel="preload" as="image" href="assets/wall.jpg" type="image/jpeg" fetchpriority="high">')
+  && /FIRST_PAINT_CACHE_ASSETS[\s\S]*?'assets\/wall\.jpg'/.test(html)
+  && !/const TIER2_ASSETS = \[[\s\S]*?'\.\/assets\/wall\.jpg'[\s\S]*?\];/.test(
+    require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8')));
 
 // 撃ち込む砲弾の絵(v128でユーザー提供素材へ差し替え)。
 // 参照だけ書いてファイルを入れ忘れると、実機では何も出ないまま静かに壊れる。

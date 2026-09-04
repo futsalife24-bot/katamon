@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.167-progressive-precache';
+const CACHE_VERSION = 'katamon-pwa-v2.0.168-title-wall-first-paint';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -82,7 +82,6 @@ const TIER2_ASSETS = [
   './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
   './assets/gear/ui/runtime/gear_lab_control_frame_01.png',
   './assets/fonts/rocknroll-one-regular.ttf',
-  './assets/wall.jpg',
   './assets/favicon-32.png',
   './assets/apple-touch-icon.png',
   './assets/icon-192.png',
