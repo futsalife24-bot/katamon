@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.172-reward-summary-x-share';
+const EXPECTED_BUILD_ID = 'v2.0.173-weekday-dungeon';
 
 function tierBody(worker, tier) {
   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
@@ -48,6 +48,7 @@ function assertCacheVersionContract(html, worker) {
   assert.doesNotMatch(tierBody(worker, 2), /assets\/wall\.jpg/, '石壁をT2まで遅延してはいけません。');
   assert.match(tierBody(worker, 1), /title-bgm\.mp3/, 'T1にはタイトルBGMを含めてください。');
   assert.match(tierBody(worker, 2), /battle-start-logo\.mp4/, 'T2は最初にバトル開始動画を取得してください。');
+  assert.match(tierBody(worker, 2), /weekday_dungeon_vault_01\.jpg/, '曜日ダンジョン背景はオフライン準備のT2へ含めてください。');
   assert.match(tierBody(worker, '3A'), /stage-boss-arena\.mp3/, 'T3aにはゲーム成立用のステージBGMを含めてください。');
   assert.match(tierBody(worker, '3A'), /special-cutin-edm-zap\.mp3/, 'T3aにはゲーム中の効果音を含めてください。');
   assert.match(tierBody(worker, '3B'), /bonus-bgm-4\.mp3/, 'T3bには任意のおまけBGMを含めてください。');

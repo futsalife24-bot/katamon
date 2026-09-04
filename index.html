@@ -694,6 +694,18 @@
   @media(prefers-reduced-motion:no-preference){.gearDropPanel{animation:gearDropPanelIn .3s ease-out}.gearDropSlot.active .gearSlotFrame{animation:gearDropSlotPulse .8s ease-out 1}.gearDropCard{animation:gearDropCardIn .32s ease-out}@keyframes gearDropPanelIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}@keyframes gearDropCardIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes gearDropSlotPulse{0%{filter:brightness(.88)}45%{filter:brightness(1.45) drop-shadow(0 0 12px #ffd24a)}100%{filter:none}}}
   @media (max-width:340px){.gearBuildStage{min-height:246px}.gearSlot{--socket-r:34px;width:90px;height:66px}.gearSlotEmblem{width:18px;height:18px}.gearSlot[data-set-state="two"] .gearSlotEmblem,.gearSlot[data-set-state="four"] .gearSlotEmblem{width:21px;height:21px}.gearSlot[data-frame-position="left-top"] .gearSlotContent,.gearSlot[data-frame-position="left-bottom"] .gearSlotContent{inset:18px 23px 18px 29px}.gearSlot[data-frame-position="left-middle"] .gearSlotContent{inset:18px 24px 18px 25px}.gearSlot[data-frame-position="right-top"] .gearSlotContent,.gearSlot[data-frame-position="right-bottom"] .gearSlotContent{inset:18px 29px 18px 23px}.gearSlot[data-frame-position="right-middle"] .gearSlotContent{inset:18px 25px 18px 24px}.gearSlotPart{font-size:7.8px}.gearSlotName{font-size:8.4px}.gearCharacterImage{width:110px;height:110px}.gearInlineDetail{gap:7px;min-height:0;padding:8px}.gearInlineDetailAsset{width:60px;height:60px;padding:3px}.gearInlineSetButton{grid-template-columns:20px auto;min-height:28px;padding:2px 5px;font-size:7px}.gearInlineSetEmblem{width:20px;height:20px}.gearInlineDetailBadge{padding:1px 4px;font-size:8px}.gearInlineDetailMain{gap:5px;margin-top:5px;padding:5px 6px}.gearInlineDetailMain b{font-size:11px}.gearInlineDetailSubs{margin-top:4px;line-height:1.35}.gearInlineSetEffects{padding:6px}.gearInlineSetEffectRow{grid-template-columns:38px minmax(0,1fr);font-size:8px}.gearInlineDetailHint{display:none}}
   @media (prefers-reduced-motion:no-preference){.gearSlot,.gearCandidate,.gearButton{transition:transform .12s ease,filter .12s ease,box-shadow .16s ease}.gearSlot.updated{animation:gearSlotUpdatePulse .82s ease-out}@keyframes gearSlotUpdatePulse{0%{filter:brightness(1.55) drop-shadow(0 0 14px #ffd24a)}55%{filter:brightness(1.18) drop-shadow(0 0 9px rgba(255,210,74,.9))}100%{filter:drop-shadow(0 6px 5px rgba(0,0,0,.56))}}}
+  /* 1日1射の曜日ダンジョン。通常バトル状態とは分離したローカル専用オーバーレイ。 */
+  .gearWeekdayDungeonCard{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin:0 0 10px;padding:10px;border:1px solid rgba(214,169,77,.58);border-radius:11px;background:linear-gradient(135deg,rgba(39,55,57,.96),rgba(9,17,20,.96));box-shadow:inset 0 0 18px rgba(0,0,0,.38)}
+  .gearWeekdayDungeonMark{display:grid;place-items:center;width:43px;height:43px;color:#163132;border:2px solid #ffe180;border-radius:50%;background:radial-gradient(circle at 32% 28%,#efffdc,#83d2bf 48%,#2a665f);box-shadow:0 0 14px rgba(105,216,194,.32);font:900 20px/1 sans-serif}.gearWeekdayDungeonCopy{min-width:0}.gearWeekdayDungeonCopy strong{display:block;color:#fff0bc;font-size:13px;letter-spacing:.05em}.gearWeekdayDungeonCopy small{display:block;margin-top:2px;color:#bccec9;font-size:9px;line-height:1.45}.gearWeekdayDungeonCard.done{border-color:rgba(118,151,143,.42);filter:saturate(.8)}
+  #weekdayDungeon{position:fixed;inset:0;z-index:105;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));color:#fff4d2;background:rgba(1,5,7,.96);font-family:var(--katamon-font-ui)}
+  #weekdayDungeon.open{display:flex}.weekdayDungeonPanel{display:flex;flex-direction:column;width:min(540px,100%);max-height:100%;overflow:auto;border:2px solid #b48645;border-radius:14px;background:linear-gradient(160deg,#26383a,#071013 66%);box-shadow:inset 0 0 0 3px rgba(37,22,10,.72),0 20px 52px rgba(0,0,0,.78)}
+  .weekdayDungeonHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px 8px;border-bottom:1px solid rgba(207,163,77,.4)}.weekdayDungeonHeader .gearButton{min-height:44px}.weekdayDungeonKicker{margin:0;color:#82d4c2;font-size:9px;font-weight:900;letter-spacing:.22em}.weekdayDungeonHeader h2{margin:3px 0 0;color:#fff0b9;font:400 clamp(20px,6vw,28px)/1 var(--katamon-font-display);letter-spacing:.08em}.weekdayDungeonToday{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;color:#d9e7df;background:rgba(3,12,15,.78);font-size:10px}.weekdayDungeonToday strong{color:#ffe08a;font-size:12px}.weekdayDungeonSlotInstruction{margin:0;padding:7px 10px;color:#def2e9;border-bottom:1px solid rgba(126,206,186,.25);background:rgba(11,34,35,.76);font-size:10px;line-height:1.4;text-align:center}
+  .weekdayDungeonSlotChoices{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:7px 9px}.weekdayDungeonSlotChoice{min-width:0;min-height:44px;padding:6px 2px;color:#9fb2ae;border:1px solid #47615f;border-radius:7px;background:#101d20;font:900 9px/1.2 var(--katamon-font-ui)}.weekdayDungeonSlotChoice.active{color:#2a1a07;border-color:#ffdf88;background:linear-gradient(#fff0ae,#ce9540);box-shadow:0 0 10px rgba(255,211,105,.28)}.weekdayDungeonSlotChoice:disabled:not(.active){opacity:.48}
+  .weekdayDungeonAimControls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0;padding:8px 10px;border:0;border-top:1px solid rgba(207,163,77,.28);background:rgba(2,11,14,.62)}.weekdayDungeonAimControls legend{padding:0 3px;color:#82d4c2;font-size:10px;font-weight:900}.weekdayDungeonAimControl{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:5px;min-width:0;color:#dff5ec;font-size:10px;font-weight:900}.weekdayDungeonAimControl input{width:100%;min-width:0;height:44px;margin:0;accent-color:#f5c65e}.weekdayDungeonAimReadout{grid-column:1/-1;margin:0;color:#ffe59c;font-size:10px;font-weight:900;text-align:center}.weekdayDungeonAimHelp{grid-column:1/-1;margin:0;color:#bcd4cc;font-size:9px;line-height:1.35;text-align:center}
+  .weekdayDungeonStage{position:relative;width:100%;aspect-ratio:3/4;max-height:min(66vh,720px);overflow:hidden;background:#061013}.weekdayDungeonStage::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 34px rgba(0,0,0,.52)}#weekdayDungeonCanvas{display:block;width:100%;height:100%;touch-action:none}.weekdayDungeonHint{position:absolute;left:50%;bottom:10px;z-index:2;transform:translateX(-50%);max-width:86%;margin:0;padding:5px 10px;color:#ecf5e8;border:1px solid rgba(149,210,195,.4);border-radius:999px;background:rgba(3,12,15,.78);font-size:9px;text-align:center;pointer-events:none}
+  .weekdayDungeonFooter{padding:8px 10px 10px}.weekdayDungeonStatus{min-height:2.7em;margin:0 0 7px;color:#d9e7df;font-size:10px;line-height:1.35;text-align:center}.weekdayDungeonStatus.error{color:#ffb29e}.weekdayDungeonActions{display:grid;grid-template-columns:1fr 1.35fr;gap:8px}.weekdayDungeonActions .gearButton{min-height:44px}.weekdayDungeonFire{color:#261706!important;border-color:#ffe196!important;background:linear-gradient(#fff0ad,#d39637)!important;font-weight:900}.weekdayDungeonFire:disabled{color:#7f786b!important;border-color:#53605d!important;background:#253235!important;opacity:.72}
+  @media(max-width:380px){.gearWeekdayDungeonCard{grid-template-columns:auto 1fr;padding:8px}.gearWeekdayDungeonCard .gearButton{grid-column:1/-1}.weekdayDungeonPanel{border-radius:10px}.weekdayDungeonHeader{padding:7px 8px}.weekdayDungeonSlotChoices{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:7px}.weekdayDungeonSlotChoice{min-height:44px;padding:5px;font-size:11px}.weekdayDungeonToday{padding:5px 8px}.weekdayDungeonFooter{padding:6px 7px 7px}.weekdayDungeonActions .gearButton{min-height:44px}}
+  @media(max-width:340px){.weekdayDungeonActions .gearButton{font-size:10px}.weekdayDungeonFire{font-size:12px!important;white-space:nowrap}}
 </style>
 </head>
 <body>
@@ -805,6 +817,11 @@
     <nav class="gearSectionNav" aria-label="Gearメニュー"><button class="gearButton active" type="button" aria-current="page">装備</button><button id="gearOpenStorage" class="gearButton" type="button">所持品</button></nav>
     <section id="gearBuildStage" class="gearBuildStage" aria-label="現在のGear装備"></section>
     <section id="gearSummary" class="gearSummary" aria-label="装備後の主要能力" aria-live="polite"></section>
+    <section id="gearWeekdayDungeonCard" class="gearWeekdayDungeonCard" aria-labelledby="gearWeekdayDungeonTitle">
+      <span class="gearWeekdayDungeonMark" aria-hidden="true">◆</span>
+      <div id="weekdayDungeonOpen" class="gearWeekdayDungeonCopy"><strong id="gearWeekdayDungeonTitle">曜日ダンジョン</strong><small id="gearWeekdayDungeonSummary">本日の対象部位と挑戦状況を確認中です。</small></div>
+      <button id="gearWeekdayDungeonEntry" class="gearButton gearButton--gold" type="button">挑戦する</button>
+    </section>
     <section id="gearSetPanel" class="gearSetPanel" aria-label="セット効果"></section>
     <div class="gearLoadoutControls"><select id="gearPresetSelect" class="gearSelect" aria-label="Gearプリセット"></select><button id="gearPresetSave" class="gearButton" type="button">自動保存済み</button></div>
     <p id="gearWorkshopStatus" class="gearStatus" aria-live="polite"></p>
@@ -848,6 +865,26 @@
   </section>
 </div>
 <div id="gearTargetedBoxOverlay" class="gearActionOverlay" aria-hidden="true"><section class="gearActionPanel" role="dialog" aria-modal="true" aria-labelledby="gearTargetedBoxTitle"><header class="gearActionHeader"><h2 id="gearTargetedBoxTitle">TARGETED GEAR BOX</h2><button class="gearButton" data-gear-targeted-box-close type="button">閉じる</button></header><p class="gearTargetedBoxLead">設計片を使い、狙う部位・セットを指定してGearを1個製作します。★・rarity・OPは開封時に抽選されます。</p><div id="gearTargetedBoxBalance" class="gearTargetedBoxBalance"></div><div id="gearTargetedBoxKinds" class="gearTargetedBoxKinds" role="group" aria-label="指定方法"><button class="gearButton gearTargetedBoxKind active" data-gear-targeted-kind="slot" type="button">部位指定<small>100片</small></button><button class="gearButton gearTargetedBoxKind" data-gear-targeted-kind="set" type="button">セット指定<small>100片</small></button><button class="gearButton gearTargetedBoxKind" data-gear-targeted-kind="slot_set" type="button">部位＋セット<small>300片</small></button></div><div class="gearTargetedBoxControls"><label id="gearTargetedSlotControl" class="gearTargetedBoxControl">狙う部位<select id="gearTargetedSlot" class="gearSelect"></select></label><label id="gearTargetedSetControl" class="gearTargetedBoxControl" hidden>狙うセット<select id="gearTargetedSet" class="gearSelect"></select></label></div><div id="gearTargetedBoxQuote" class="gearTargetedBoxQuote"></div><p id="gearTargetedBoxStatus" class="gearActionStatus" aria-live="polite"></p><div class="gearTargetedBoxActions"><button class="gearButton" data-gear-targeted-box-close type="button">キャンセル</button><button id="gearTargetedBoxConfirm" class="gearButton gearButton--gold" type="button">この内容で製作</button></div></section></div>
+<div id="weekdayDungeon" aria-hidden="true">
+  <section class="weekdayDungeonPanel" role="dialog" aria-modal="true" aria-labelledby="weekdayDungeonTitle">
+    <header class="weekdayDungeonHeader"><div><p class="weekdayDungeonKicker">WEEKDAY DUNGEON</p><h2 id="weekdayDungeonTitle">霧深き歯車庫</h2></div><button id="weekdayDungeonClose" class="gearButton" type="button">GARAGEへ戻る</button></header>
+    <div class="weekdayDungeonToday"><span>一日一射・JST 0時更新</span><strong id="weekdayDungeonToday">本日の部位</strong></div>
+    <p id="weekdayDungeonSlotInstruction" class="weekdayDungeonSlotInstruction" hidden>日曜日は報酬にしたい部位を6つから1つ選んでください。</p>
+    <div id="weekdayDungeonSlotChoices" class="weekdayDungeonSlotChoices" role="group" aria-label="日曜日の報酬部位" aria-describedby="weekdayDungeonSlotInstruction"></div>
+    <div class="weekdayDungeonStage">
+      <canvas id="weekdayDungeonCanvas" width="540" height="720" data-background="assets/weekday-dungeon/runtime/weekday_dungeon_vault_01.jpg" aria-label="曜日ダンジョンの照準画面" aria-describedby="weekdayDungeonAimHelp weekdayDungeonAimReadout"></canvas>
+      <p id="weekdayDungeonHint" class="weekdayDungeonHint">画面をなぞって照準を決め、FIREで砲撃</p>
+    </div>
+    <fieldset id="weekdayDungeonAimControls" class="weekdayDungeonAimControls" aria-describedby="weekdayDungeonAimHelp weekdayDungeonAimReadout">
+      <legend>キーボード照準</legend>
+      <label class="weekdayDungeonAimControl" for="weekdayDungeonAimAngle">角度 <input id="weekdayDungeonAimAngle" type="range" min="10" max="80" step="1" value="45"></label>
+      <label class="weekdayDungeonAimControl" for="weekdayDungeonAimPower">強さ <input id="weekdayDungeonAimPower" type="range" min="28" max="120" step="1" value="84"></label>
+      <output id="weekdayDungeonAimReadout" class="weekdayDungeonAimReadout" for="weekdayDungeonAimAngle weekdayDungeonAimPower">角度 45°・強さ 84</output>
+      <p id="weekdayDungeonAimHelp" class="weekdayDungeonAimHelp">スライダーの左右キーで角度と強さを調整できます。画面をなぞる操作も使えます。</p>
+    </fieldset>
+    <footer class="weekdayDungeonFooter"><p id="weekdayDungeonStatus" class="weekdayDungeonStatus" aria-live="polite">WEEKDAY DUNGEONを準備中です。</p><div class="weekdayDungeonActions"><button id="weekdayDungeonExit" class="gearButton" type="button">あとで挑戦</button><button id="weekdayDungeonFire" class="gearButton weekdayDungeonFire" type="button">FIRE — 今日の一射</button></div></footer>
+  </section>
+</div>
 <div id="gearDropReveal" aria-hidden="true">
   <section class="gearDropPanel" role="dialog" aria-modal="true" aria-labelledby="gearDropTitle">
     <p id="gearDropKicker" class="gearDropKicker">GEAR REWARD</p>
@@ -892,6 +929,8 @@
 <script src="shared/gear-storage.js"></script>
 <script src="shared/gear-rewards.js"></script>
 <script src="shared/gear-transactions.js"></script>
+<script src="shared/gear-weekday-dungeon.js"></script>
+<script src="shared/gear-weekday-dungeon-storage.js"></script>
 <script src="shared/gear-cpu-rewards.js"></script>
 <script src="shared/gear-cpu-run-storage.js"></script>
 <script src="shared/gear-coop-rewards.js"></script>
@@ -955,12 +994,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.172-reward-summary-x-share';
+  const BUILD_ID = 'v2.0.173-weekday-dungeon';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.173', date: '2026/09/04', summary: '一日一射の曜日ダンジョンと部位別Gear報酬を追加' },
     { version: 'v2.0.172', date: '2026/09/04', summary: 'CPU報酬の素材内訳・結果共有・素材のみ受取を追加' },
     { version: 'v2.0.171', date: '2026/09/04', summary: 'CPU BATTLEへ回復・必殺チャージ・Gear資源箱を追加' },
     { version: 'v2.0.170', date: '2026/09/04', summary: 'CPU連勝精算でGear粉末・設計片を獲得できる導線を追加' },
@@ -5261,6 +5301,7 @@
     gearPresetSelectEl.innerHTML = characterState.presets.map((entry) => `<option value="${entry.presetId}" ${entry.presetId === gearUi.presetId ? 'selected' : ''}>${gearHtml(entry.name)}</option>`).join('');
     gearStatusEl.textContent = gearUi.status; gearStatusEl.className = `gearStatus${gearUi.status.startsWith('装備') || gearUi.status.startsWith('保存') ? '' : gearUi.status ? ' error' : ''}`;
     gearUpdatePendingRewardButton(gearState);
+    weekdayDungeonRenderEntry();
     if (!gearUi.slotId) { gearInventoryTitleEl.textContent = '部位を選んで装備する'; gearCandidatesEl.innerHTML = '<div class="gearEmpty">中央のCATAMONを囲む6部位から、確認したい装備スロットを選んでください。</div>'; gearCompareEl.hidden = true; return; }
     const selectedSlot = gearSlot(domain, gearUi.slotId); const current = gearCurrentGear(state, gearUi.slotId);
     gearInventoryTitleEl.innerHTML = `${gearSlotMiniHtml(gearUi.slotId)}${gearHtml(selectedSlot?.labelJa || '')}のGearを選ぶ`;
@@ -5726,6 +5767,7 @@
     return reward.sourceId === 'coop_boss' ? 'BOSS DROP'
       : reward.sourceId === 'targeted_box' ? 'TARGETED BOX'
       : reward.sourceId === 'cpu_rare_drop' ? 'RARE DROP'
+      : reward.sourceId === 'weekday_dungeon' ? 'WEEKDAY DUNGEON'
       : 'CPU BATTLE REWARD';
   }
   function gearDropRenderMaterialReward(reward) {
@@ -5846,6 +5888,648 @@
     gearPendingRewardsEl?.addEventListener('click', presentFirstPendingGearReward);
   }
   globalThis.KatamonGearDropReveal = Object.freeze({ presentRewardId: presentGearRewardId, presentPendingReward: presentFirstPendingGearReward });
+
+  // ===== 曜日ダンジョン（ローカル専用・一日一射） =====
+  // 通常バトルのturn/snapshot/CPU連勝へ参加させず、専用Canvasと専用保存状態だけで完結させる。
+  const weekdayDungeonSlotLabels = Object.freeze({ barrel: '砲身', armor: '装甲', core: 'コア', engine: '動力', sight: '照準', auxiliary: '補機' });
+  const weekdayDungeonWeekLabels = Object.freeze(['日', '月', '火', '水', '木', '金', '土']);
+  const weekdayDungeonEl = document.getElementById('weekdayDungeon');
+  const weekdayDungeonCanvas = document.getElementById('weekdayDungeonCanvas');
+  const weekdayDungeonCtx = weekdayDungeonCanvas?.getContext('2d') || null;
+  const weekdayDungeonTodayEl = document.getElementById('weekdayDungeonToday');
+  const weekdayDungeonSlotInstructionEl = document.getElementById('weekdayDungeonSlotInstruction');
+  const weekdayDungeonChoicesEl = document.getElementById('weekdayDungeonSlotChoices');
+  const weekdayDungeonStatusEl = document.getElementById('weekdayDungeonStatus');
+  const weekdayDungeonHintEl = document.getElementById('weekdayDungeonHint');
+  const weekdayDungeonAimControlsEl = document.getElementById('weekdayDungeonAimControls');
+  const weekdayDungeonAimAngleEl = document.getElementById('weekdayDungeonAimAngle');
+  const weekdayDungeonAimPowerEl = document.getElementById('weekdayDungeonAimPower');
+  const weekdayDungeonAimReadoutEl = document.getElementById('weekdayDungeonAimReadout');
+  const weekdayDungeonFireEl = document.getElementById('weekdayDungeonFire');
+  const weekdayDungeonEntryCardEl = document.getElementById('gearWeekdayDungeonCard');
+  const weekdayDungeonEntryEl = document.getElementById('gearWeekdayDungeonEntry');
+  const weekdayDungeonSummaryEl = document.getElementById('gearWeekdayDungeonSummary');
+  const weekdayDungeonBackground = typeof Image === 'function' ? new Image() : null;
+  const weekdayDungeonUi = {
+    open: false, busy: false, selectedSlotId: null, aim: { angle: 45, power: 84 },
+    notice: '', noticeKind: '', animation: null, animationFrame: 0, pointerId: null, lastResult: null,
+    backgroundRequested: false, returnFocus: null, returnToGearWorkshop: false
+  };
+  if (weekdayDungeonBackground && weekdayDungeonCanvas) {
+    weekdayDungeonBackground.decoding = 'async';
+    weekdayDungeonBackground.addEventListener('load', () => weekdayDungeonDraw());
+  }
+
+  // 164KBの背景はPWA Tier 2に残すが、使わない起動ではネットワークにもdecodeにも参加させない。
+  function weekdayDungeonEnsureBackground() {
+    if (!weekdayDungeonBackground || !weekdayDungeonCanvas || weekdayDungeonUi.backgroundRequested) return;
+    weekdayDungeonUi.backgroundRequested = true;
+    weekdayDungeonBackground.src = weekdayDungeonCanvas.dataset.background || 'assets/weekday-dungeon/runtime/weekday_dungeon_vault_01.jpg';
+  }
+
+  function weekdayDungeonApis() {
+    const domain = globalThis.KatamonGearWeekdayDungeon;
+    const storage = globalThis.KatamonGearWeekdayDungeonStorage;
+    if (!domain || !storage) throw Object.assign(new Error('WEEKDAY_DUNGEON_MODULES_UNAVAILABLE'), { code: 'WEEKDAY_DUNGEON_MODULES_UNAVAILABLE' });
+    const gear = gearModules();
+    return { domain, storage, gear };
+  }
+
+  function weekdayDungeonSnapshot(nowMs = Date.now()) {
+    const apis = weekdayDungeonApis();
+    const dayInfo = apis.domain.getDayInfo({ nowMs: Math.max(0, Math.floor(nowMs)) });
+    const state = apis.storage.loadWeekdayDungeonState(localStorage);
+    const active = state.activeAttempt;
+    const todaysAttempt = active && active.dayIndex === dayInfo.dayIndex ? active : null;
+    const recoverableAttempt = active && active.phase === 'fired' ? active : null;
+    const hasFiredToday = dayInfo.dayIndex <= state.maxConsumedDayIndex;
+    const available = dayInfo.dayIndex > state.maxConsumedDayIndex && !recoverableAttempt;
+    return { apis, dayInfo, state, active, todaysAttempt, recoverableAttempt, hasFiredToday, available };
+  }
+
+  function weekdayDungeonSelectedSlot(snapshot) {
+    if (snapshot.todaysAttempt) return snapshot.todaysAttempt.slotId;
+    if (!snapshot.dayInfo.isSunday) return snapshot.dayInfo.fixedSlotId;
+    if (snapshot.apis.domain.WEEKDAY_SLOT_IDS.includes(weekdayDungeonUi.selectedSlotId)) return weekdayDungeonUi.selectedSlotId;
+    return snapshot.apis.domain.WEEKDAY_SLOT_IDS[0];
+  }
+
+  function weekdayDungeonSlotName(slotId) {
+    return weekdayDungeonSlotLabels[slotId] || slotId || '部位未選択';
+  }
+
+  function weekdayDungeonSyncAimControls(snapshot = null) {
+    const limits = snapshot?.apis?.domain?.AIM_LIMITS;
+    if (limits) {
+      weekdayDungeonAimAngleEl?.setAttribute('min', String(limits.angleMin));
+      weekdayDungeonAimAngleEl?.setAttribute('max', String(limits.angleMax));
+      weekdayDungeonAimPowerEl?.setAttribute('min', String(limits.powerMin));
+      weekdayDungeonAimPowerEl?.setAttribute('max', String(limits.powerMax));
+    }
+    const editable = Boolean(snapshot?.available && !weekdayDungeonUi.busy);
+    if (weekdayDungeonAimControlsEl) weekdayDungeonAimControlsEl.disabled = !editable;
+    if (weekdayDungeonAimAngleEl) {
+      weekdayDungeonAimAngleEl.value = String(weekdayDungeonUi.aim.angle);
+      weekdayDungeonAimAngleEl.disabled = !editable;
+    }
+    if (weekdayDungeonAimPowerEl) {
+      weekdayDungeonAimPowerEl.value = String(weekdayDungeonUi.aim.power);
+      weekdayDungeonAimPowerEl.disabled = !editable;
+    }
+    if (weekdayDungeonAimReadoutEl) weekdayDungeonAimReadoutEl.textContent = '角度 ' + weekdayDungeonUi.aim.angle + '°・強さ ' + weekdayDungeonUi.aim.power;
+  }
+
+  function weekdayDungeonSetAim(angle, power, snapshot = null) {
+    try {
+      const limits = snapshot?.apis?.domain?.AIM_LIMITS || weekdayDungeonApis().domain.AIM_LIMITS;
+      weekdayDungeonUi.aim = {
+        angle: Math.max(limits.angleMin, Math.min(limits.angleMax, Math.round(Number(angle) || limits.angleMin))),
+        power: Math.max(limits.powerMin, Math.min(limits.powerMax, Math.round(Number(power) || limits.powerMin)))
+      };
+      weekdayDungeonUi.lastResult = null;
+      weekdayDungeonSyncAimControls(snapshot);
+      weekdayDungeonDraw();
+      return { ...weekdayDungeonUi.aim };
+    } catch (_) { return null; }
+  }
+
+  function weekdayDungeonErrorCopy(error) {
+    const code = error && error.code;
+    if (code === 'UNCLAIMED_REWARD_CAPACITY_EXCEEDED') return '未受取報酬がいっぱいです。先にGEAR報酬を受け取ってください。';
+    if (code === 'WEEKDAY_DUNGEON_REWARD_GATE_BLOCKED') return error.message || 'GEAR保管庫に空きを作ってから挑戦してください。';
+    if (code === 'PENDING_GEAR_TRANSACTION_EXISTS') return 'Gear取引を復旧中です。完了後にもう一度お試しください。';
+    if (code === 'STORAGE_LOCK_UNAVAILABLE' || code === 'STORAGE_LOCK_FAILED' || code === 'WEEKDAY_DUNGEON_LOCK_UNAVAILABLE'
+      || code === 'WEEKDAY_DUNGEON_LOCK_INVALID_HANDLE' || code === 'WEEKDAY_DUNGEON_LOCK_CALLBACK_NOT_EXECUTED'
+      || code === 'WEEKDAY_DUNGEON_LOCK_REQUEST_FAILED') return '安全な保存ロックを使えません。ブラウザを更新してもう一度お試しください。';
+    if (code === 'WEEKDAY_DUNGEON_FIRE_DAY_MISMATCH') return 'JST 0時を越えて曜日が変わりました。本日の部位で照準を決め直してください。';
+    if (code === 'WEEKDAY_DUNGEON_RECOVERY_REQUIRED') return '前回の一射を先に復旧します。再射撃は行いません。';
+    if (code === 'WEEKDAY_DUNGEON_STORAGE_AMBIGUOUS_WRITE') return '保存結果を確認中です。再射撃せず、入口から同じ一射を復旧してください。';
+    if (code === 'WEEKDAY_DUNGEON_ALREADY_CONSUMED') return '本日の一射は別の画面ですでに確定しています。';
+    if (code === 'INVALID_WEEKDAY_DUNGEON_STORAGE' || code === 'INVALID_WEEKDAY_DUNGEON_STATE') return '曜日ダンジョンの保存データを安全に読めませんでした。';
+    return '安全に保存できませんでした。挑戦記録が残っている場合は、入口から報酬を復旧できます。';
+  }
+
+  function weekdayDungeonCardState() {
+    try {
+      const snapshot = weekdayDungeonSnapshot();
+      const slotId = weekdayDungeonSelectedSlot(snapshot);
+      if (snapshot.recoverableAttempt) return { snapshot, slotId, copy: '保存済みの一射から報酬を復旧できます。', label: '報酬を復旧', attention: true, done: false };
+      if (snapshot.available) return { snapshot, slotId, copy: weekdayDungeonSlotName(slotId) + 'の日・命中で対象Gear、失敗でも粉末3', label: '挑戦する', attention: true, done: false };
+      if (snapshot.state.maxConsumedDayIndex > snapshot.dayInfo.dayIndex) return { snapshot, slotId, copy: '端末時計が前回の挑戦日より前です。日付をご確認ください。', label: '時計を確認', attention: false, done: true };
+      return { snapshot, slotId, copy: '本日の一射は完了済みです。次はJST 0時に更新。', label: '本日完了', attention: false, done: true };
+    } catch (error) {
+      return { snapshot: null, slotId: null, copy: weekdayDungeonErrorCopy(error), label: '確認できません', attention: false, done: true };
+    }
+  }
+
+  function weekdayDungeonRenderEntry() {
+    if (!weekdayDungeonEntryCardEl || !weekdayDungeonEntryEl || !weekdayDungeonSummaryEl) return false;
+    const view = weekdayDungeonCardState();
+    weekdayDungeonSummaryEl.textContent = view.copy;
+    weekdayDungeonEntryEl.textContent = view.label;
+    weekdayDungeonEntryEl.disabled = !view.snapshot || (!view.snapshot.available && !view.snapshot.recoverableAttempt);
+    weekdayDungeonEntryCardEl.classList.toggle('done', view.done);
+    return true;
+  }
+
+  function weekdayDungeonTitleSub() {
+    const view = weekdayDungeonTitleView();
+    if (!view.snapshot) return '保存状態を確認できません';
+    if (view.snapshot.recoverableAttempt) return '報酬を復旧できます';
+    if (view.snapshot.available) return weekdayDungeonSlotName(view.slotId) + '・本日挑戦可';
+    if (view.snapshot.state.maxConsumedDayIndex > view.snapshot.dayInfo.dayIndex) return '端末の日付を確認';
+    return '本日挑戦済み';
+  }
+
+  function weekdayDungeonTitleHighlighted() {
+    const view = weekdayDungeonTitleView();
+    return Boolean(view.snapshot && (view.snapshot.available || view.snapshot.recoverableAttempt));
+  }
+
+  let weekdayDungeonTitleViewCache = null;
+  function weekdayDungeonTitleView() {
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    if (weekdayDungeonTitleViewCache && now - weekdayDungeonTitleViewCache.at < 750) return weekdayDungeonTitleViewCache.view;
+    const view = weekdayDungeonCardState();
+    weekdayDungeonTitleViewCache = { at: now, view };
+    return view;
+  }
+
+  function weekdayDungeonPreview(snapshot) {
+    const domain = snapshot.apis.domain;
+    const attempt = snapshot.recoverableAttempt || snapshot.todaysAttempt || domain.createAttempt({
+      dayInfo: snapshot.dayInfo,
+      slotId: weekdayDungeonSelectedSlot(snapshot),
+      aim: { angle: weekdayDungeonUi.aim.angle, power: weekdayDungeonUi.aim.power }
+    });
+    return domain.resolveAttempt(attempt);
+  }
+
+  function weekdayDungeonDrawCover(g, image) {
+    if (!image || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return false;
+    const scale = Math.max(540 / image.naturalWidth, 720 / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    g.drawImage(image, (540 - width) / 2, (720 - height) / 2, width, height);
+    return true;
+  }
+
+  function weekdayDungeonDrawTarget(g, result, slotId) {
+    const target = result.target;
+    const pulse = weekdayDungeonUi.open ? 0.5 + Math.sin(Date.now() / 260) * 0.12 : 0.5;
+    g.save();
+    g.translate(target.x, target.y);
+    g.fillStyle = 'rgba(4,18,20,0.66)';
+    g.strokeStyle = 'rgba(255,225,125,0.92)';
+    g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, target.radius, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.strokeStyle = 'rgba(112,225,203,' + pulse + ')';
+    g.lineWidth = 3;
+    g.beginPath(); g.arc(0, 0, target.radius * 0.61, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.moveTo(-target.radius - 13, 0); g.lineTo(target.radius + 13, 0); g.moveTo(0, -target.radius - 13); g.lineTo(0, target.radius + 13); g.stroke();
+    g.fillStyle = '#fff0a8';
+    g.strokeStyle = '#160e05';
+    g.lineWidth = 4;
+    g.font = '900 15px ' + UI_FONT_HEAVY;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.strokeText(weekdayDungeonSlotName(slotId), 0, 1);
+    g.fillText(weekdayDungeonSlotName(slotId), 0, 1);
+    g.restore();
+  }
+
+  function weekdayDungeonDrawTrajectory(g, result) {
+    g.save();
+    g.fillStyle = 'rgba(191,244,226,0.72)';
+    const maxTime = Math.min(1900, result.trajectory[result.trajectory.length - 1]?.timeMs || 0);
+    result.trajectory.forEach((point, index) => {
+      if (point.timeMs > maxTime || index % 4 !== 0 || point.x < 0 || point.x > 540 || point.y < 0 || point.y > 720) return;
+      const radius = index % 12 === 0 ? 3.2 : 2;
+      g.globalAlpha = Math.max(0.25, 0.86 - point.timeMs / 2700);
+      g.beginPath(); g.arc(point.x, point.y, radius, 0, Math.PI * 2); g.fill();
+    });
+    g.restore();
+  }
+
+  function weekdayDungeonDrawCatamon(g, result) {
+    const origin = result.attempt ? weekdayDungeonApis().domain.PLAYFIELD : { originX: 96, originY: 636 };
+    const image = charImages[gearUi.characterId];
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.7)';
+    g.shadowBlur = 12;
+    if (image && image.complete && image.naturalWidth > 0) {
+      const scale = Math.min(116 / image.naturalWidth, 116 / image.naturalHeight);
+      const width = image.naturalWidth * scale;
+      const height = image.naturalHeight * scale;
+      g.drawImage(image, origin.originX - width * 0.62, origin.originY - height * 0.69, width, height);
+    } else {
+      g.fillStyle = '#32484a'; g.strokeStyle = '#d0a45d'; g.lineWidth = 3;
+      g.beginPath(); g.arc(origin.originX - 25, origin.originY - 23, 34, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
+    const radians = result.attempt.angle * Math.PI / 180;
+    g.strokeStyle = '#ffe094'; g.lineWidth = 8; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(origin.originX - 8, origin.originY + 2); g.lineTo(origin.originX + Math.cos(radians) * 42, origin.originY - Math.sin(radians) * 42); g.stroke();
+    g.strokeStyle = '#3b2511'; g.lineWidth = 3; g.stroke();
+    g.restore();
+  }
+
+  function weekdayDungeonAnimationPoint(result) {
+    const animation = weekdayDungeonUi.animation;
+    if (!animation || animation.result !== result) return null;
+    const elapsed = Math.max(0, performance.now() - animation.startedAt);
+    const progress = Math.min(1, elapsed / animation.duration);
+    const timeMs = animation.flightTimeMs * progress;
+    let point = result.trajectory[0];
+    for (const candidate of result.trajectory) {
+      if (candidate.timeMs > timeMs) break;
+      point = candidate;
+    }
+    return { x: point.x, y: point.y, progress };
+  }
+
+  function weekdayDungeonDraw() {
+    if (!weekdayDungeonCtx || !weekdayDungeonCanvas) return false;
+    const g = weekdayDungeonCtx;
+    g.clearRect(0, 0, 540, 720);
+    if (!weekdayDungeonDrawCover(g, weekdayDungeonBackground)) {
+      const fallback = g.createLinearGradient(0, 0, 0, 720);
+      fallback.addColorStop(0, '#17393a'); fallback.addColorStop(1, '#050b0e');
+      g.fillStyle = fallback; g.fillRect(0, 0, 540, 720);
+    }
+    const shade = g.createLinearGradient(0, 0, 0, 720);
+    shade.addColorStop(0, 'rgba(0,8,10,0.12)'); shade.addColorStop(0.62, 'rgba(0,8,10,0.14)'); shade.addColorStop(1, 'rgba(0,4,6,0.58)');
+    g.fillStyle = shade; g.fillRect(0, 0, 540, 720);
+    let snapshot; let result;
+    try {
+      snapshot = weekdayDungeonSnapshot();
+      result = weekdayDungeonUi.animation?.result || weekdayDungeonUi.lastResult || weekdayDungeonPreview(snapshot);
+    } catch (_) {
+      g.fillStyle = '#fff0b9'; g.font = '900 16px ' + UI_FONT_HEAVY; g.textAlign = 'center';
+      g.fillText('DUNGEON DATA UNAVAILABLE', 270, 360);
+      return false;
+    }
+    weekdayDungeonDrawTarget(g, result, result.attempt.slotId);
+    if (!weekdayDungeonUi.animation && snapshot.available) weekdayDungeonDrawTrajectory(g, result);
+    weekdayDungeonDrawCatamon(g, result);
+    const projectile = weekdayDungeonAnimationPoint(result);
+    if (projectile) {
+      g.save();
+      g.shadowColor = '#fff5b5'; g.shadowBlur = 18; g.fillStyle = '#fff0a0';
+      g.beginPath(); g.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2); g.fill();
+      g.restore();
+    } else if (weekdayDungeonUi.lastResult) {
+      const impact = weekdayDungeonUi.lastResult.impact;
+      g.save(); g.strokeStyle = weekdayDungeonUi.lastResult.hit ? '#8dffe3' : '#ff9a77'; g.lineWidth = 5; g.globalAlpha = 0.78;
+      g.beginPath(); g.arc(impact.x, impact.y, weekdayDungeonUi.lastResult.hit ? 31 : 20, 0, Math.PI * 2); g.stroke();
+      g.restore();
+    }
+    g.save();
+    g.fillStyle = 'rgba(2,10,12,0.72)'; g.fillRect(12, 12, 152, 42);
+    g.strokeStyle = 'rgba(224,177,91,0.66)'; g.strokeRect(12, 12, 152, 42);
+    g.fillStyle = '#dff7eb'; g.font = '900 11px ' + UI_FONT_HEAVY; g.textAlign = 'left';
+    g.fillText('ANGLE ' + result.attempt.angle + '°', 22, 29); g.fillText('POWER ' + result.attempt.power, 22, 46);
+    g.restore();
+    return true;
+  }
+
+  function weekdayDungeonRender() {
+    weekdayDungeonRenderEntry();
+    if (!weekdayDungeonEl || !weekdayDungeonChoicesEl || !weekdayDungeonFireEl) return false;
+    let snapshot;
+    try { snapshot = weekdayDungeonSnapshot(); }
+    catch (error) {
+      weekdayDungeonStatusEl.textContent = weekdayDungeonErrorCopy(error);
+      weekdayDungeonFireEl.disabled = true;
+      weekdayDungeonChoicesEl.innerHTML = '';
+      weekdayDungeonDraw();
+      return false;
+    }
+    const domain = snapshot.apis.domain;
+    weekdayDungeonUi.selectedSlotId = weekdayDungeonSelectedSlot(snapshot);
+    const locked = !snapshot.available || weekdayDungeonUi.busy || !snapshot.dayInfo.isSunday;
+    weekdayDungeonChoicesEl.innerHTML = domain.WEEKDAY_SLOT_IDS.map((slotId) => {
+      const active = slotId === weekdayDungeonUi.selectedSlotId;
+      return '<button class="weekdayDungeonSlotChoice' + (active ? ' active' : '') + '" data-weekday-dungeon-slot="' + slotId + '" type="button" aria-pressed="' + active + '"' + (locked || !snapshot.dayInfo.isSunday ? ' disabled' : '') + '>' + weekdayDungeonSlotName(slotId) + '</button>';
+    }).join('');
+    const weekdayLabel = weekdayDungeonWeekLabels[snapshot.dayInfo.weekday] + '曜日';
+    weekdayDungeonTodayEl.textContent = weekdayLabel + (snapshot.dayInfo.isSunday ? ' · 選択中: ' : ' · 固定部位: ') + weekdayDungeonSlotName(weekdayDungeonUi.selectedSlotId);
+    if (weekdayDungeonSlotInstructionEl) {
+      weekdayDungeonSlotInstructionEl.hidden = !snapshot.dayInfo.isSunday;
+      weekdayDungeonSlotInstructionEl.textContent = snapshot.dayInfo.isSunday
+        ? (snapshot.available ? '日曜日は報酬にしたい部位を6つから1つ選んでください。現在は「' + weekdayDungeonSlotName(weekdayDungeonUi.selectedSlotId) + '」です。' : '日曜日の報酬部位は「' + weekdayDungeonSlotName(weekdayDungeonUi.selectedSlotId) + '」でした。')
+        : weekdayLabel + 'は「' + weekdayDungeonSlotName(weekdayDungeonUi.selectedSlotId) + '」固定です。';
+    }
+    const rollback = snapshot.state.maxConsumedDayIndex > snapshot.dayInfo.dayIndex;
+    const canRecover = Boolean(snapshot.recoverableAttempt);
+    weekdayDungeonFireEl.disabled = weekdayDungeonUi.busy || (!snapshot.available && !canRecover);
+    weekdayDungeonFireEl.textContent = weekdayDungeonUi.busy ? '安全に保存中…' : canRecover ? '報酬保存を再試行' : snapshot.available ? 'FIRE — 今日の一射' : rollback ? '端末の日付を確認' : '本日は挑戦済み';
+    let copy = '';
+    if (weekdayDungeonUi.notice) copy = weekdayDungeonUi.notice;
+    else if (canRecover) copy = '一射は端末へ保存済みです。再射撃せず、同じ結果から報酬だけを復旧します。';
+    else if (snapshot.available) copy = '命中で' + weekdayDungeonSlotName(weekdayDungeonUi.selectedSlotId) + 'Gearを1個。外しても粉末3個を獲得できます。';
+    else if (rollback) copy = '端末時計が前回の挑戦日より前です。日付を戻しても挑戦回数は増えません。';
+    else copy = '本日の一射と報酬保存は完了しています。次回はJST 0時に更新されます。';
+    weekdayDungeonStatusEl.textContent = copy;
+    weekdayDungeonStatusEl.classList.toggle('error', weekdayDungeonUi.noticeKind === 'error');
+    weekdayDungeonHintEl.textContent = snapshot.available ? '画面をなぞって照準を決め、FIREで砲撃' : canRecover ? 'FIREは再発射せず、保存済み報酬だけを復旧します' : '本日の挑戦は完了済みです';
+    weekdayDungeonSyncAimControls(snapshot);
+    weekdayDungeonDraw();
+    return true;
+  }
+
+  function weekdayDungeonPreflight(snapshot, reward) {
+    const gearState = snapshot.apis.gear.storage.loadGearState(localStorage);
+    const known = gearState.unclaimedRewards.some((entry) => entry.rewardId === reward.rewardId) || gearState.rewardLedger?.[reward.rewardId] === true;
+    if (known) return true;
+    const gate = snapshot.apis.gear.rewards.getGearRewardGate(gearState);
+    if (gate.reasons.includes('unclaimed_full')) throw Object.assign(new Error('未受取報酬がいっぱいです。先に受け取ってください。'), { code: 'UNCLAIMED_REWARD_CAPACITY_EXCEEDED' });
+    if (reward.gears.length > 0 && gate.reasons.includes('physical_storage_full')) {
+      throw Object.assign(new Error('インベントリとTEMP BOXがいっぱいです。命中Gearを保存できる空きを作ってください。'), { code: 'WEEKDAY_DUNGEON_REWARD_GATE_BLOCKED' });
+    }
+    return true;
+  }
+
+  function weekdayDungeonVerifyQueued(snapshot, rewardId) {
+    const gearState = snapshot.apis.gear.storage.loadGearState(localStorage);
+    const pending = gearState.unclaimedRewards.some((reward) => reward.rewardId === rewardId);
+    const claimed = gearState.rewardLedger?.[rewardId] === true;
+    if (!pending && !claimed) throw Object.assign(new Error('WEEKDAY_DUNGEON_QUEUE_READBACK_MISMATCH'), { code: 'WEEKDAY_DUNGEON_QUEUE_READBACK_MISMATCH' });
+    return { gearState, pending, claimed };
+  }
+
+  async function weekdayDungeonPersistReward(attempt) {
+    const snapshot = weekdayDungeonSnapshot();
+    const reward = snapshot.apis.domain.materializeReward(attempt, snapshot.apis.gear.domain);
+    await snapshot.apis.gear.rewards.persistQueueReward(reward, localStorage);
+    const verified = weekdayDungeonVerifyQueued(snapshot, reward.rewardId);
+    await snapshot.apis.storage.markQueued(attempt, localStorage);
+    const readBack = snapshot.apis.storage.loadWeekdayDungeonState(localStorage);
+    if (!readBack.activeAttempt || readBack.activeAttempt.attemptId !== attempt.attemptId || readBack.activeAttempt.phase !== 'queued') {
+      throw Object.assign(new Error('WEEKDAY_DUNGEON_STATE_READBACK_MISMATCH'), { code: 'WEEKDAY_DUNGEON_STATE_READBACK_MISMATCH' });
+    }
+    gearUpdatePendingRewardButton(verified.gearState);
+    gearStorageRefreshIfOpen();
+    return { reward, verified };
+  }
+
+  function weekdayDungeonAnimate(result, skipAnimation) {
+    weekdayDungeonUi.lastResult = null;
+    if (skipAnimation || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      weekdayDungeonUi.animation = null; weekdayDungeonUi.lastResult = result; weekdayDungeonDraw(); return Promise.resolve();
+    }
+    const lastTime = result.trajectory[result.trajectory.length - 1]?.timeMs || 900;
+    const flightTimeMs = result.hit ? Math.max(240, result.resultTimeMs) : Math.min(1800, lastTime);
+    const duration = Math.min(1450, Math.max(650, flightTimeMs * 0.72));
+    weekdayDungeonUi.animation = { result, startedAt: performance.now(), duration, flightTimeMs };
+    return new Promise((resolve) => {
+      const frame = () => {
+        weekdayDungeonDraw();
+        if (!weekdayDungeonUi.animation || performance.now() - weekdayDungeonUi.animation.startedAt >= weekdayDungeonUi.animation.duration) {
+          weekdayDungeonUi.animation = null;
+          weekdayDungeonUi.animationFrame = 0;
+          weekdayDungeonUi.lastResult = result;
+          weekdayDungeonDraw();
+          resolve();
+          return;
+        }
+        weekdayDungeonUi.animationFrame = requestAnimationFrame(frame);
+      };
+      weekdayDungeonUi.animationFrame = requestAnimationFrame(frame);
+    });
+  }
+
+  async function weekdayDungeonRecoverAttempt(attempt) {
+    if (weekdayDungeonUi.busy || !attempt) return { accepted: false };
+    weekdayDungeonUi.busy = true;
+    weekdayDungeonUi.notice = '保存済みの一射から報酬を復旧しています。';
+    weekdayDungeonUi.noticeKind = '';
+    weekdayDungeonRender();
+    try {
+      const persisted = await weekdayDungeonPersistReward(attempt);
+      weekdayDungeonUi.notice = persisted.verified.claimed ? '報酬はすでに受取済みです。' : '報酬を安全に復旧しました。';
+      weekdayDungeonUi.noticeKind = '';
+      weekdayDungeonUi.busy = false;
+      weekdayDungeonRender();
+      closeWeekdayDungeon(true, false);
+      if (persisted.verified.pending) presentGearRewardId(persisted.reward.rewardId, true);
+      return { accepted: true, rewardQueued: true, hit: persisted.reward.gears.length > 0 };
+    } catch (error) {
+      weekdayDungeonUi.notice = weekdayDungeonErrorCopy(error);
+      weekdayDungeonUi.noticeKind = 'error';
+      weekdayDungeonUi.busy = false;
+      weekdayDungeonRender();
+      return { accepted: false, rewardQueued: false, error: error?.code || 'WEEKDAY_DUNGEON_RECOVERY_FAILED' };
+    }
+  }
+
+  async function fireWeekdayDungeon() {
+    if (weekdayDungeonUi.busy) return { accepted: false };
+    let snapshot;
+    try { snapshot = weekdayDungeonSnapshot(); }
+    catch (error) {
+      weekdayDungeonUi.notice = weekdayDungeonErrorCopy(error); weekdayDungeonUi.noticeKind = 'error'; weekdayDungeonRender();
+      return { accepted: false, error: error?.code || 'WEEKDAY_DUNGEON_UNAVAILABLE' };
+    }
+    if (snapshot.recoverableAttempt) return weekdayDungeonRecoverAttempt(snapshot.recoverableAttempt);
+    if (!snapshot.available) return { accepted: false };
+    let attempt; let preview;
+    try {
+      attempt = snapshot.apis.domain.createAttempt({
+        dayInfo: snapshot.dayInfo,
+        slotId: weekdayDungeonSelectedSlot(snapshot),
+        aim: { angle: weekdayDungeonUi.aim.angle, power: weekdayDungeonUi.aim.power }
+      });
+      preview = snapshot.apis.domain.resolveAttempt(attempt);
+      weekdayDungeonPreflight(snapshot, snapshot.apis.domain.materializeReward(attempt, snapshot.apis.gear.domain));
+    } catch (error) {
+      weekdayDungeonUi.notice = weekdayDungeonErrorCopy(error); weekdayDungeonUi.noticeKind = 'error'; weekdayDungeonRender();
+      return { accepted: false, error: error?.code || 'WEEKDAY_DUNGEON_PREFLIGHT_FAILED' };
+    }
+    weekdayDungeonUi.busy = true;
+    weekdayDungeonUi.notice = '今日の一射を端末へ確定しています。';
+    weekdayDungeonUi.noticeKind = '';
+    weekdayDungeonRender();
+    try {
+      const committed = await snapshot.apis.storage.commitAttempt(attempt, localStorage, { nowMs: Date.now() });
+      const durable = committed.attempt;
+      const readBack = snapshot.apis.storage.loadWeekdayDungeonState(localStorage);
+      if (!readBack.activeAttempt || readBack.activeAttempt.attemptId !== durable.attemptId || readBack.activeAttempt.angle !== durable.angle || readBack.activeAttempt.power !== durable.power) {
+        throw Object.assign(new Error('WEEKDAY_DUNGEON_COMMIT_READBACK_MISMATCH'), { code: 'WEEKDAY_DUNGEON_COMMIT_READBACK_MISMATCH' });
+      }
+      preview = snapshot.apis.domain.resolveAttempt(durable);
+      weekdayDungeonUi.notice = '一射を確定しました。砲弾を発射！';
+      weekdayDungeonRender();
+      await weekdayDungeonAnimate(preview, false);
+      weekdayDungeonUi.notice = preview.hit ? '命中！ 対象部位のGearを保存しています。' : '霧へ消えた…粉末3個を保存しています。';
+      weekdayDungeonRender();
+      const persisted = await weekdayDungeonPersistReward(durable);
+      weekdayDungeonUi.notice = preview.hit ? '命中報酬を安全に保存しました。' : '再挑戦用の粉末を安全に保存しました。';
+      weekdayDungeonUi.noticeKind = '';
+      weekdayDungeonUi.busy = false;
+      weekdayDungeonRender();
+      closeWeekdayDungeon(true, false);
+      if (persisted.verified.pending) presentGearRewardId(persisted.reward.rewardId, true);
+      return { accepted: true, rewardQueued: true, hit: preview.hit };
+    } catch (error) {
+      weekdayDungeonUi.animation = null;
+      if (weekdayDungeonUi.animationFrame) cancelAnimationFrame(weekdayDungeonUi.animationFrame);
+      weekdayDungeonUi.animationFrame = 0;
+      weekdayDungeonUi.notice = weekdayDungeonErrorCopy(error);
+      weekdayDungeonUi.noticeKind = 'error';
+      weekdayDungeonUi.busy = false;
+      weekdayDungeonRender();
+      let consumed = false;
+      try { consumed = Boolean(weekdayDungeonSnapshot().recoverableAttempt); } catch (_) {}
+      return { accepted: consumed, rewardQueued: false, error: error?.code || 'WEEKDAY_DUNGEON_FIRE_FAILED' };
+    }
+  }
+
+  function openWeekdayDungeon() {
+    if (!weekdayDungeonEl || isOnline?.()) return false;
+    const activeElement = document.activeElement;
+    weekdayDungeonUi.returnFocus = activeElement && typeof activeElement.focus === 'function' ? activeElement : null;
+    weekdayDungeonUi.returnToGearWorkshop = Boolean(gearUi.open && weekdayDungeonUi.returnFocus && gearWorkshopEl?.contains(weekdayDungeonUi.returnFocus));
+    let snapshot = null;
+    try {
+      snapshot = weekdayDungeonSnapshot();
+      weekdayDungeonUi.notice = '';
+      weekdayDungeonUi.noticeKind = '';
+    } catch (error) {
+      weekdayDungeonUi.notice = weekdayDungeonErrorCopy(error); weekdayDungeonUi.noticeKind = 'error';
+    }
+    if (gearUi.open) closeGearWorkshop();
+    weekdayDungeonUi.open = true;
+    weekdayDungeonUi.lastResult = null;
+    weekdayDungeonEnsureBackground();
+    weekdayDungeonEl.classList.add('open');
+    weekdayDungeonEl.setAttribute('aria-hidden', 'false');
+    weekdayDungeonRender();
+    requestAnimationFrame(() => document.getElementById('weekdayDungeonClose')?.focus());
+    const recoverable = snapshot?.recoverableAttempt || null;
+    if (recoverable && !weekdayDungeonUi.busy) void weekdayDungeonRecoverAttempt(recoverable);
+    return true;
+  }
+
+  function closeWeekdayDungeon(force = false, restoreFocus = true) {
+    if (!weekdayDungeonEl || (weekdayDungeonUi.busy && !force)) {
+      if (weekdayDungeonUi.busy) {
+        weekdayDungeonUi.notice = '一射と報酬を保存中です。完了するまで少しお待ちください。';
+        weekdayDungeonRender();
+      }
+      return false;
+    }
+    weekdayDungeonUi.open = false;
+    weekdayDungeonUi.pointerId = null;
+    weekdayDungeonEl.classList.remove('open');
+    weekdayDungeonEl.setAttribute('aria-hidden', 'true');
+    weekdayDungeonRenderEntry();
+    const returnFocus = weekdayDungeonUi.returnFocus;
+    const returnToGearWorkshop = weekdayDungeonUi.returnToGearWorkshop;
+    weekdayDungeonUi.returnFocus = null;
+    weekdayDungeonUi.returnToGearWorkshop = false;
+    if (restoreFocus) {
+      if (returnToGearWorkshop && !gearUi.open) openGearWorkshop();
+      requestAnimationFrame(() => {
+        if (returnFocus && document.contains(returnFocus)) returnFocus.focus();
+        else weekdayDungeonEntryEl?.focus();
+      });
+    }
+    return true;
+  }
+
+  function weekdayDungeonAimFromPointer(event) {
+    if (!weekdayDungeonCanvas || weekdayDungeonUi.busy) return false;
+    let snapshot;
+    try { snapshot = weekdayDungeonSnapshot(); } catch (_) { return false; }
+    if (!snapshot.available) return false;
+    const rect = weekdayDungeonCanvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    const x = (event.clientX - rect.left) * 540 / rect.width;
+    const y = (event.clientY - rect.top) * 720 / rect.height;
+    const dx = Math.max(20, x - snapshot.apis.domain.PLAYFIELD.originX);
+    const dy = snapshot.apis.domain.PLAYFIELD.originY - y;
+    const limits = snapshot.apis.domain.AIM_LIMITS;
+    const angle = Math.max(limits.angleMin, Math.min(limits.angleMax, Math.round(Math.atan2(dy, dx) * 180 / Math.PI)));
+    const power = Math.max(limits.powerMin, Math.min(limits.powerMax, Math.round(Math.hypot(dx, dy) / 3.2)));
+    return Boolean(weekdayDungeonSetAim(angle, power, snapshot));
+  }
+
+  function weekdayDungeonFocusableElements() {
+    if (!weekdayDungeonEl) return [];
+    return Array.from(weekdayDungeonEl.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'))
+      .filter((element) => element.getAttribute('aria-hidden') !== 'true' && !element.hidden);
+  }
+
+  function weekdayDungeonHandleKeydown(event) {
+    if (!weekdayDungeonUi.open) return;
+    if (event.key === 'Escape') {
+      // 保存中は閉じず、戻る操作が背面の画面へ漏れないようここで止める。
+      event.preventDefault();
+      event.stopPropagation();
+      closeWeekdayDungeon();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = weekdayDungeonFocusableElements();
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !weekdayDungeonEl.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !weekdayDungeonEl.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  if (weekdayDungeonEl && weekdayDungeonCanvas && weekdayDungeonFireEl) {
+    weekdayDungeonEntryEl?.addEventListener('click', openWeekdayDungeon);
+    document.getElementById('weekdayDungeonClose')?.addEventListener('click', () => closeWeekdayDungeon());
+    document.getElementById('weekdayDungeonExit')?.addEventListener('click', () => closeWeekdayDungeon());
+    weekdayDungeonFireEl.addEventListener('click', () => { void fireWeekdayDungeon(); });
+    // FIRE直後に操作要素がdisabledになってフォーカスがbodyへ戻っても、
+    // dialogが開いている間のTab/Escapeを背面へ漏らさない。
+    document.addEventListener('keydown', weekdayDungeonHandleKeydown);
+    const adjustAimFromControls = () => {
+      if (weekdayDungeonUi.busy) return;
+      let snapshot;
+      try { snapshot = weekdayDungeonSnapshot(); } catch (_) { return; }
+      if (!snapshot.available) return;
+      weekdayDungeonSetAim(weekdayDungeonAimAngleEl?.value, weekdayDungeonAimPowerEl?.value, snapshot);
+    };
+    weekdayDungeonAimAngleEl?.addEventListener('input', adjustAimFromControls);
+    weekdayDungeonAimPowerEl?.addEventListener('input', adjustAimFromControls);
+    weekdayDungeonChoicesEl?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-weekday-dungeon-slot]');
+      if (!button || button.disabled) return;
+      weekdayDungeonUi.selectedSlotId = button.dataset.weekdayDungeonSlot;
+      weekdayDungeonUi.lastResult = null;
+      weekdayDungeonRender();
+      requestAnimationFrame(() => weekdayDungeonChoicesEl.querySelector('[data-weekday-dungeon-slot="' + weekdayDungeonUi.selectedSlotId + '"]')?.focus());
+    });
+    weekdayDungeonCanvas.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      if (!weekdayDungeonAimFromPointer(event)) return;
+      weekdayDungeonUi.pointerId = event.pointerId;
+      weekdayDungeonCanvas.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    weekdayDungeonCanvas.addEventListener('pointermove', (event) => {
+      if (weekdayDungeonUi.pointerId !== event.pointerId) return;
+      weekdayDungeonAimFromPointer(event);
+      event.preventDefault();
+    });
+    const releaseAim = (event) => {
+      if (weekdayDungeonUi.pointerId !== event.pointerId) return;
+      weekdayDungeonUi.pointerId = null;
+      weekdayDungeonCanvas.releasePointerCapture?.(event.pointerId);
+    };
+    weekdayDungeonCanvas.addEventListener('pointerup', releaseAim);
+    weekdayDungeonCanvas.addEventListener('pointercancel', releaseAim);
+  }
+  weekdayDungeonRenderEntry();
 
   function applyCharacter(u, key) {
     const def = CHARACTERS[key];
@@ -8111,6 +8795,7 @@
     shop: { asset: 'parchment', x: 270, y: 548, w: 301, h: 82 },
     achievements: { asset: 'parchment', x: 270, y: 643, w: 301, h: 82 },
     gear: { asset: 'loadoutFrame', x: 270, y: 727, w: 301, h: 82 },
+    weekdayDungeon: { asset: 'parchment', x: 145, y: 829, w: 189, h: 52 },
     soundTest: { asset: 'shield', x: 395, y: 829, w: 130, h: 116 }
   };
   const titleVsCpuBtn = { x: 270, y: 538, w: 283, h: 63 };
@@ -8121,6 +8806,7 @@
   const titleShopBtn = { x: 270, y: 548, w: 283, h: 63 };
   const titleAchievementsBtn = { x: 270, y: 643, w: 283, h: 63 };
   const titleGearBtn = { x: 270, y: 727, w: 283, h: 63 };
+  const titleWeekdayDungeonBtn = { x: 145, y: 829, w: 175, h: 43 };
   const titleSoundTestBtn = { x: 395, y: 829, w: 102, h: 80 };
   const titleMenuLeftBtn = { x: 32, y: 690, w: 56, h: 66 };
   const titleMenuRightBtn = { x: 508, y: 690, w: 56, h: 66 };
@@ -8158,6 +8844,7 @@
         Object.freeze({ id: 'shop', image: 'shop', button: titleShopBtn, label: 'ショップ', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'achievements', image: 'achievements', button: titleAchievementsBtn, label: '実績', kind: 'parchmentLarge' }),
         Object.freeze({ id: 'gear', image: 'gear', button: titleGearBtn, label: 'LOADOUT', sub: '装備・装飾を管理', kind: 'loadout' }),
+        Object.freeze({ id: 'weekdayDungeon', image: 'weekdayDungeon', button: titleWeekdayDungeonBtn, label: '曜日迷宮', kind: 'parchmentSmall' }),
         Object.freeze({ id: 'soundTest', image: 'soundTest', button: titleSoundTestBtn, label: 'MUSIC ROOM', sub: 'BGMコレクション', kind: 'shield' })
       ])
     })
@@ -18937,13 +19624,15 @@
     if (item.id === 'shop') return 'カタコインで交換';
     if (item.id === 'achievements') return '達成記録と報酬';
     if (item.id === 'gear') return '装備・装飾を管理';
+    if (item.id === 'weekdayDungeon') return weekdayDungeonTitleSub();
     if (item.id === 'soundTest') return 'BGMコレクション';
     return '';
   }
 
   function titleMenuItemHighlighted(item) {
     return (item.id === 'cpu' && hasSuspendedSave)
-      || (item.id === 'tutorial' && tutorialIsRecommended());
+      || (item.id === 'tutorial' && tutorialIsRecommended())
+      || (item.id === 'weekdayDungeon' && weekdayDungeonTitleHighlighted());
   }
 
   function drawTitleMenuHeader(pageIndex) {
@@ -27969,6 +28658,7 @@
       return true;
     }
     if (itemId === 'gear') return openGearWorkshop();
+    if (itemId === 'weekdayDungeon') return openWeekdayDungeon();
     if (itemId === 'shop' && COOP_MVP_FEATURE_ENABLED) {
       return globalThis.KatamonMvpShop?.openShop?.() === true;
     }
@@ -29354,6 +30044,11 @@
     if (gamePhase === 'title') {
       // 戻る操作でDOM確認を出す前に、背面のCanvasタップ候補を必ず破棄する。
       cancelTitleMenuGesture(false);
+      if (weekdayDungeonUi.open) {
+        closeWeekdayDungeon();
+        playUiSound();
+        return;
+      }
       if (soundTestOpen) {
         closeSoundTest();
         playUiSound();

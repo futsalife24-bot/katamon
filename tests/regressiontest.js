@@ -2081,7 +2081,7 @@ check('タイトルはBATTLEとGARAGEの意味別2ページへ分かれる',
       key: 'battle', items: ['cpu', 'online', 'tutorial', 'free', 'ranking']
     })
     && JSON.stringify(titleMenuInfo.pages[1]) === JSON.stringify({
-      key: 'garage', items: ['shop', 'achievements', 'gear', 'soundTest']
+      key: 'garage', items: ['shop', 'achievements', 'gear', 'weekdayDungeon', 'soundTest']
     }),
   JSON.stringify(titleMenuInfo.pages));
 check('タイトルスライドは250〜400msで、短いスワイプを戻す閾値を持つ',
@@ -2089,7 +2089,7 @@ check('タイトルスライドは250〜400msで、短いスワイプを戻す�
     && titleMenuInfo.swipeThreshold >= 50 && titleMenuInfo.swipeThreshold <= 80,
   JSON.stringify(titleMenuInfo));
 const battleTitleBtns = [btns.cpu, btns.online, btns.tutorial, btns.free, btns.ranking];
-const garageTitleBtns = [btns.shop, btns.achievements, btns.gear, btns.soundTest];
+const garageTitleBtns = [btns.shop, btns.achievements, btns.gear, btns.weekdayDungeon, btns.soundTest];
 check('各ページ内のボタンと左右矢印は重ならない',
   [battleTitleBtns, garageTitleBtns].every(pageButtons => pageButtons.every((button, index) => (
     pageButtons.slice(index + 1).every(other => !rectsOverlap(button, other))
@@ -3070,7 +3070,7 @@ kt.setLocalSeat('p1');
         && woodUi.imageRects.ranking.y - woodUi.imageRects.ranking.h / 2
           <= woodUi.imageRects.tutorial.y + woodUi.imageRects.tutorial.h / 2 + 12,
       JSON.stringify({ ranking: woodUi.imageRects.ranking, tutorial: woodUi.imageRects.tutorial }));
-    check('BATTLEは対戦5項目、GARAGEは管理4項目の順で、更新ボタンは木枠外へ固定する',
+    check('BATTLEは対戦5項目、GARAGEは管理5項目の順で、更新ボタンは木枠外へ固定する',
       woodUi.buttons.cpu.y < woodUi.buttons.online.y
         && woodUi.buttons.online.y < woodUi.buttons.tutorial.y
         && woodUi.buttons.tutorial.y === woodUi.buttons.free.y
@@ -3079,7 +3079,9 @@ kt.setLocalSeat('p1');
         && woodUi.buttons.ranking.y > woodUi.buttons.tutorial.y
         && woodUi.buttons.shop.y < woodUi.buttons.achievements.y
         && woodUi.buttons.achievements.y < woodUi.buttons.gear.y
-        && woodUi.buttons.gear.y < woodUi.buttons.soundTest.y
+        && woodUi.buttons.gear.y < woodUi.buttons.weekdayDungeon.y
+        && woodUi.buttons.weekdayDungeon.y === woodUi.buttons.soundTest.y
+        && woodUi.buttons.weekdayDungeon.x < woodUi.buttons.soundTest.x
         && woodUi.buttons.update.y - woodUi.buttons.update.h / 2 > woodUi.board.y + woodUi.board.h,
       JSON.stringify({ board: woodUi.board, buttons: woodUi.buttons }));
     const pageButtonGroups = woodUi.pages.map(page => page.items.map(item => woodUi.buttons[item.id]));

@@ -14,6 +14,8 @@ node tests/loopbacktest.js
 node tests/stage3test.js
 npm run test:stage
 npm run test:battle-item-assets
+npm run test:weekday-dungeon
+npm run test:e2e:weekday-dungeon
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -33,6 +35,9 @@ npm run test:battle-item-assets
 | `stage-battle-items.test.js` | CPU BATTLEのステージアイテム抽選・出現間隔・当たり判定・効果・資源上限をpure moduleで確認する |
 | `stage-battle-items-runtime.test.js` | 実ゲームharnessでturn 2出現、砲弾/接触取得、snapshot再開、資源エスクローと精算を確認する |
 | `battle-item-assets.test.js` | 3種のmaster/runtime画像、透明度、lossless WebP、manifest、PWA Tier 2登録を確認する |
+| `gear-weekday-dungeon.test.js` | JST曜日、日曜選択、決定弾道、1日1射、時計巻戻し、Web Lock、保存復旧、Gear／粉末報酬を確認する |
+| `weekday-dungeon-ui.test.js` | GARAGE入口、専用Canvas、生成master/runtime背景、module読込順、PWA cache、ONLINE分離を確認する |
+| `e2e/weekday-dungeon.spec.js` | Mobile WebKit／Android Chromiumで命中受取、外れ復旧、2射目拒否、320×568配置を確認する |
 
 ## 注意
 
