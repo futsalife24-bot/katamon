@@ -10,6 +10,8 @@ PR #355では装備中Gearの詳細導線、水平照準ガイド、CPU連勝終
 
 PR #378まではmasterへ統合・Pages公開済み。PR #379では、通常CPU 1v1へ決定的な5%の希少個体と勝利時の追加Gear報酬を追加し、Gearのユーザー向け能力表示を日本語化した。レーザー・直進固定系を除く15キャラの砲弾型必殺は通常砲弾と同じ初速・風・重力へ統一し、弾数と着弾後の固有効果は維持する。クール=カイ→フェニーチェの進行停止報告は自動再現できず、移動禁止5手中も射撃可能な現行境界を回帰テストへ固定した。
 
+PR #380では、通常CPU 1v1の連勝精算へGear粉末と設計片の獲得ルートを追加した。3連勝から両素材を付与し、20・30・50連勝の既存設計片報酬は維持する。Gear保存形式はv3へ移行し、公開済みv1/v2保存データ、旧CPU未精算報酬、旧協力報酬は素材0の権利として後方互換を保つ。受取はGear・粉末・設計片を一括で確定し、二重加算・競合・上限超過時の部分反映を防止する。
+
 Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
 ## 現在の最優先タスク
@@ -25,7 +27,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.169-cpu-rare-trajectory-ja**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.170-gear-resource-rewards**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 

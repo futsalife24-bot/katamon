@@ -70,7 +70,7 @@ function validState() {
   state.tempBox.push({ gear: makeGear('temp-a'), locked: true, favorite: false, enteredAtMs: 123456789 });
   state.unclaimedRewards.push({
     rewardId: 'reward-a', sourceId: 'coop_boss', sourceDetail: { bossId: 'fortress' }, createdAtMs: 123456790,
-    gears: [makeGear('reward-a')], blueprintShards: 4,
+    gears: [makeGear('reward-a')], powder: 6, blueprintShards: 4,
   });
   state.resources = { powder: 12, blueprintShards: 34 };
   return state;
@@ -79,16 +79,23 @@ function validV1State() {
   const state = validState();
   state.storageSchemaVersion = 1;
   delete state.rewardLedger;
+  state.unclaimedRewards.forEach((reward) => { delete reward.powder; });
+  return state;
+}
+function validV2State() {
+  const state = validState();
+  state.storageSchemaVersion = 2;
+  state.unclaimedRewards.forEach((reward) => { delete reward.powder; });
   return state;
 }
 function assertOtherKeysUnchanged(storage, before) {
   Object.entries(before).forEach(([key, value]) => assert.equal(storage.getItem(key), value, `${key} must remain untouched`));
 }
 
-test('main v2 and reveal v1 default states have exact independent shapes and fresh references', () => {
+test('main v3 and reveal v1 default states have exact independent shapes and fresh references', () => {
   const first = storageApi.createDefaultGearStorageState();
   const second = storageApi.createDefaultGearStorageState();
-  assert.deepEqual(first, { storageSchemaVersion: 2, inventory: [], tempBox: [], unclaimedRewards: [], rewardLedger: {}, resources: { powder: 0, blueprintShards: 0 } });
+  assert.deepEqual(first, { storageSchemaVersion: 3, inventory: [], tempBox: [], unclaimedRewards: [], rewardLedger: {}, resources: { powder: 0, blueprintShards: 0 } });
   assert.notEqual(first, second);
   assert.notEqual(first.resources, second.resources);
   const revealFirst = storageApi.createDefaultRevealHistoryState();
@@ -106,31 +113,36 @@ test('valid state encode/decode and storage round trips preserve canonical state
   const reveal = { schemaVersion: 1, viewedThroughLevelByGearId: { 'old-gear': 3, 'new-gear': 12 } };
   assert.deepEqual(storageApi.loadRevealHistory((storageApi.saveRevealHistory(reveal, storage), storage)), reveal);
 });
-test('storage schema v2 round-trips production-calibrated fixed slots without injected tuning', () => {
+test('storage schema v3 round-trips production-calibrated fixed slots without injected tuning', () => {
   const state = storageApi.createDefaultGearStorageState();
   ['barrel', 'armor', 'core'].forEach((slotId, index) => {
     state.inventory.push({ gear: makeGear(`storage-fixed-${slotId}`, { slotId, star: index + 4, rarityId: 'rare' }), locked: false, favorite: false });
   });
   const restored = storageApi.decodeGearStorageState(storageApi.encodeGearStorageState(state));
-  assert.equal(restored.storageSchemaVersion, 2);
+  assert.equal(restored.storageSchemaVersion, 3);
   assert.deepEqual(restored.inventory.map((entry) => entry.gear.mainOp), [
     { opId: 'flat_attack', unit: 'flat', value: 2, finalValue: 9 },
     { opId: 'flat_hp', unit: 'flat', value: 2, finalValue: 10 },
     { opId: 'flat_defense', unit: 'flat', value: 3, finalValue: 12 },
   ]);
 });
-test('migration strictly validates v1 before converting it to v2 and accepts canonical v2', () => {
+test('migration strictly validates v1/v2 before converting them to v3 and accepts canonical v3', () => {
   const state = validState();
-  assert.equal(storageApi.migrateGearStorageState(state).storageSchemaVersion, 2);
+  assert.equal(storageApi.migrateGearStorageState(state).storageSchemaVersion, 3);
   const v1 = validV1State();
   const migrated = storageApi.migrateGearStorageState(v1);
-  assert.equal(migrated.storageSchemaVersion, 2);
+  assert.equal(migrated.storageSchemaVersion, 3);
   assert.deepEqual(migrated.rewardLedger, {});
   assert.deepEqual(migrated.inventory, v1.inventory);
   assert.deepEqual(migrated.tempBox, v1.tempBox);
-  assert.deepEqual(migrated.unclaimedRewards, v1.unclaimedRewards);
+  assert.deepEqual(migrated.unclaimedRewards, v1.unclaimedRewards.map((reward) => ({ ...reward, powder: 0 })));
   assert.deepEqual(migrated.resources, v1.resources);
   assert.deepEqual(v1, validV1State(), 'migration must not mutate v1 input');
+  const v2 = validV2State();
+  const migratedV2 = storageApi.migrateGearStorageState(v2);
+  assert.equal(migratedV2.storageSchemaVersion, 3);
+  assert.equal(migratedV2.unclaimedRewards[0].powder, 0);
+  assert.deepEqual(v2, validV2State(), 'migration must not mutate v2 input');
   const invalidV1 = validV1State();
   invalidV1.resources.coins = 0;
   expectCode('UNKNOWN_STORAGE_FIELD', () => storageApi.migrateGearStorageState(invalidV1));
@@ -141,7 +153,7 @@ test('migration strictly validates v1 before converting it to v2 and accepts can
   expectCode('UNSUPPORTED_REVEAL_STORAGE_VERSION', () => storageApi.migrateRevealHistoryState({ schemaVersion: 0, viewedThroughLevelByGearId: {} }));
   expectCode('UNSUPPORTED_FUTURE_REVEAL_STORAGE_VERSION', () => storageApi.migrateRevealHistoryState({ schemaVersion: 999, viewedThroughLevelByGearId: {} }));
 });
-test('v1 migration accepts only reward shapes supported by v2 and preserves rejected raw bytes', () => {
+test('v1 migration accepts only reward shapes supported by v3 and preserves rejected raw bytes', () => {
   const rewardFor = (sourceId, count) => ({
     rewardId: `v1-${sourceId}-${count}`,
     sourceId,
@@ -180,16 +192,16 @@ test('first run alone returns default; malformed, null, array and empty/object v
   expectCode('UNSUPPORTED_FUTURE_STORAGE_VERSION', () => storageApi.loadGearState(storage));
   assert.equal(storage.getItem(storageApi.GEAR_STORAGE_KEY), JSON.stringify({ storageSchemaVersion: 999 }), 'future data must remain raw and untouched');
 });
-test('loading valid v1 migrates in memory only and an explicit save persists the v2 envelope', () => {
+test('loading valid v1 migrates in memory only and an explicit save persists the v3 envelope', () => {
   const rawV1 = JSON.stringify(validV1State());
   const storage = new FakeStorage({ [storageApi.GEAR_STORAGE_KEY]: rawV1 });
   const loaded = storageApi.loadGearState(storage);
-  assert.equal(loaded.storageSchemaVersion, 2);
+  assert.equal(loaded.storageSchemaVersion, 3);
   assert.deepEqual(loaded.rewardLedger, {});
   assert.equal(storage.getItem(storageApi.GEAR_STORAGE_KEY), rawV1);
   assert.equal(storage.setCalls.length, 0, 'load must not rewrite v1 data');
   storageApi.saveGearState(loaded, storage);
-  assert.equal(JSON.parse(storage.getItem(storageApi.GEAR_STORAGE_KEY)).storageSchemaVersion, 2);
+  assert.equal(JSON.parse(storage.getItem(storageApi.GEAR_STORAGE_KEY)).storageSchemaVersion, 3);
 });
 test('getItem errors and unavailable storage fail instead of pretending first run', () => {
   const storage = new FakeStorage();
@@ -231,9 +243,9 @@ test('capacity boundaries are strict for inventory, temp box and unclaimed rewar
   temp.tempBox.push({ gear: makeGear('temp-51'), locked: false, favorite: false, enteredAtMs: 50 });
   expectCode('TEMP_BOX_CAPACITY_EXCEEDED', () => storageApi.migrateGearStorageState(temp));
   const rewards = storageApi.createDefaultGearStorageState();
-  rewards.unclaimedRewards = Array.from({ length: 10 }, (_, index) => ({ rewardId: `reward-${index}`, sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: index, gears: [], blueprintShards: 0 }));
+  rewards.unclaimedRewards = Array.from({ length: 10 }, (_, index) => ({ rewardId: `reward-${index}`, sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: index, gears: [], powder: 0, blueprintShards: 0 }));
   assert.equal(storageApi.migrateGearStorageState(rewards).unclaimedRewards.length, 10);
-  rewards.unclaimedRewards.push({ rewardId: 'reward-11', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 11, gears: [], blueprintShards: 0 });
+  rewards.unclaimedRewards.push({ rewardId: 'reward-11', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 11, gears: [], powder: 0, blueprintShards: 0 });
   expectCode('UNCLAIMED_REWARD_CAPACITY_EXCEEDED', () => storageApi.migrateGearStorageState(rewards));
 });
 test('reward gear caps are strict: CPU and unknown sources allow five, coop boss allows three, and zero remains valid', () => {
@@ -243,7 +255,7 @@ test('reward gear caps are strict: CPU and unknown sources allow five, coop boss
     sourceDetail: null,
     createdAtMs: 0,
     gears: Array.from({ length: gearCount }, (_, index) => makeGear(`cap-${sourceId}-${gearCount}-${index}`)),
-    blueprintShards: 0,
+    powder: 0, blueprintShards: 0,
   });
   [['cpu_battle', 5], ['future_source', 5], ['cpu_battle', 0]].forEach(([sourceId, gearCount]) => {
     const state = storageApi.createDefaultGearStorageState();
@@ -294,10 +306,10 @@ test('gearId and rewardId are globally unique across every storage container', (
   state.tempBox[0].gear = clone(state.inventory[0].gear);
   expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state));
   const rewardDuplicate = validState();
-  rewardDuplicate.unclaimedRewards.push({ rewardId: 'reward-b', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 1, gears: [clone(rewardDuplicate.inventory[0].gear)], blueprintShards: 0 });
+  rewardDuplicate.unclaimedRewards.push({ rewardId: 'reward-b', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 1, gears: [clone(rewardDuplicate.inventory[0].gear)], powder: 0, blueprintShards: 0 });
   expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(rewardDuplicate));
   const rewardIds = validState();
-  rewardIds.unclaimedRewards.push({ rewardId: 'reward-a', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 1, gears: [], blueprintShards: 0 });
+  rewardIds.unclaimedRewards.push({ rewardId: 'reward-a', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 1, gears: [], powder: 0, blueprintShards: 0 });
   expectCode('DUPLICATE_REWARD_ID', () => storageApi.migrateGearStorageState(rewardIds));
 });
 test('Phase 1 domain validation rejects forged gear, initial-sub corruption, future gear versions and added generation seed', () => {
@@ -325,6 +337,8 @@ test('resources, metadata, timestamps and source detail are strict JSON/safe-int
   const favorite = validState(); favorite.tempBox[0].favorite = 1; expectCode('INVALID_BOOLEAN', () => storageApi.migrateGearStorageState(favorite));
   const entered = validState(); entered.tempBox[0].enteredAtMs = -1; expectCode('INVALID_NON_NEGATIVE_SAFE_INTEGER', () => storageApi.migrateGearStorageState(entered));
   const created = validState(); created.unclaimedRewards[0].createdAtMs = Infinity; expectCode('INVALID_NON_NEGATIVE_SAFE_INTEGER', () => storageApi.migrateGearStorageState(created));
+  [-1, 1.5, NaN, Infinity].forEach((value) => { const state = validState(); state.unclaimedRewards[0].powder = value; expectCode('INVALID_NON_NEGATIVE_SAFE_INTEGER', () => storageApi.migrateGearStorageState(state)); });
+  const missingRewardPowder = validState(); delete missingRewardPowder.unclaimedRewards[0].powder; expectCode('UNKNOWN_STORAGE_FIELD', () => storageApi.migrateGearStorageState(missingRewardPowder));
   const badDetail = validState(); badDetail.unclaimedRewards[0].sourceDetail = () => {}; expectCode('INVALID_JSON_DATA', () => storageApi.migrateGearStorageState(badDetail));
   const cyclic = validState(); cyclic.unclaimedRewards[0].sourceDetail = {}; cyclic.unclaimedRewards[0].sourceDetail.self = cyclic.unclaimedRewards[0].sourceDetail; expectCode('CYCLIC_JSON_DATA', () => storageApi.migrateGearStorageState(cyclic));
 });
@@ -437,7 +451,7 @@ test('maximum fixture with 500 inventory, 50 temp and 10 multi-gear rewards stay
   state.tempBox = Array.from({ length: 50 }, (_, index) => ({ gear: nextGear('temp'), locked: index % 2 === 0, favorite: false, enteredAtMs: index }));
   state.unclaimedRewards = Array.from({ length: 10 }, (_, rewardIndex) => ({
     rewardId: `reward-${rewardIndex}`, sourceId: 'cpu_battle', sourceDetail: { index: rewardIndex }, createdAtMs: rewardIndex,
-    gears: Array.from({ length: 5 }, (_, gearIndex) => nextGear(`reward-${rewardIndex}-${gearIndex}`)), blueprintShards: rewardIndex,
+    gears: Array.from({ length: 5 }, (_, gearIndex) => nextGear(`reward-${rewardIndex}-${gearIndex}`)), powder: rewardIndex, blueprintShards: rewardIndex,
   }));
   state.resources = { powder: 999999, blueprintShards: 888888 };
   const serialized = storageApi.encodeGearStorageState(state);
@@ -461,6 +475,7 @@ test('maximum fixture with 500 inventory, 50 temp and 10 multi-gear rewards stay
   ['temp box accepts a strict true favorite boolean', () => { const state = validState(); state.tempBox[0].favorite = true; assert.equal(storageApi.migrateGearStorageState(state).tempBox[0].favorite, true); }],
   ['temp box accepts the largest safe entered timestamp', () => { const state = validState(); state.tempBox[0].enteredAtMs = Number.MAX_SAFE_INTEGER; assert.equal(storageApi.migrateGearStorageState(state).tempBox[0].enteredAtMs, Number.MAX_SAFE_INTEGER); }],
   ['reward accepts the largest safe created timestamp', () => { const state = validState(); state.unclaimedRewards[0].createdAtMs = Number.MAX_SAFE_INTEGER; assert.equal(storageApi.migrateGearStorageState(state).unclaimedRewards[0].createdAtMs, Number.MAX_SAFE_INTEGER); }],
+  ['reward accepts the largest safe powder count', () => { const state = validState(); state.unclaimedRewards[0].powder = Number.MAX_SAFE_INTEGER; assert.equal(storageApi.migrateGearStorageState(state).unclaimedRewards[0].powder, Number.MAX_SAFE_INTEGER); }],
   ['reward accepts the largest safe blueprint shards count', () => { const state = validState(); state.unclaimedRewards[0].blueprintShards = Number.MAX_SAFE_INTEGER; assert.equal(storageApi.migrateGearStorageState(state).unclaimedRewards[0].blueprintShards, Number.MAX_SAFE_INTEGER); }],
   ['reward accepts null source detail', () => { const state = validState(); state.unclaimedRewards[0].sourceDetail = null; assert.equal(storageApi.migrateGearStorageState(state).unclaimedRewards[0].sourceDetail, null); }],
   ['reward accepts scalar JSON source detail', () => { const state = validState(); state.unclaimedRewards[0].sourceDetail = 'normal'; assert.equal(storageApi.migrateGearStorageState(state).unclaimedRewards[0].sourceDetail, 'normal'); }],
@@ -471,7 +486,7 @@ test('maximum fixture with 500 inventory, 50 temp and 10 multi-gear rewards stay
   ['inventory duplicate is rejected within inventory', () => { const state = validState(); state.inventory.push({ gear: clone(state.inventory[0].gear), locked: false, favorite: false }); expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state)); }],
   ['temp box duplicate is rejected within temp box', () => { const state = validState(); state.tempBox.push({ gear: clone(state.tempBox[0].gear), locked: false, favorite: false, enteredAtMs: 0 }); expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state)); }],
   ['reward duplicate is rejected inside one reward', () => { const state = validState(); state.unclaimedRewards[0].gears.push(clone(state.unclaimedRewards[0].gears[0])); expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state)); }],
-  ['reward duplicate is rejected across rewards', () => { const state = validState(); state.unclaimedRewards.push({ rewardId: 'reward-b', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 0, gears: [clone(state.unclaimedRewards[0].gears[0])], blueprintShards: 0 }); expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state)); }],
+  ['reward duplicate is rejected across rewards', () => { const state = validState(); state.unclaimedRewards.push({ rewardId: 'reward-b', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 0, gears: [clone(state.unclaimedRewards[0].gears[0])], powder: 0, blueprintShards: 0 }); expectCode('DUPLICATE_GEAR_ID', () => storageApi.migrateGearStorageState(state)); }],
   ['reveal history accepts level 3', () => assert.equal(storageApi.migrateRevealHistoryState({ schemaVersion: 1, viewedThroughLevelByGearId: { g: 3 } }).viewedThroughLevelByGearId.g, 3)],
   ['reveal history accepts level 6', () => assert.equal(storageApi.migrateRevealHistoryState({ schemaVersion: 1, viewedThroughLevelByGearId: { g: 6 } }).viewedThroughLevelByGearId.g, 6)],
   ['reveal history accepts level 9', () => assert.equal(storageApi.migrateRevealHistoryState({ schemaVersion: 1, viewedThroughLevelByGearId: { g: 9 } }).viewedThroughLevelByGearId.g, 9)],
@@ -499,9 +514,9 @@ test('maximum fixture with 500 inventory, 50 temp and 10 multi-gear rewards stay
   ['storage source contains no clear repair operation', () => { const source = fs.readFileSync(require.resolve('../shared/gear-storage.js'), 'utf8'); assert.doesNotMatch(source, /\.clear\s*\(/); }],
   ['estimate reports UTF-16 bytes exactly as twice the JSON character count', () => assert.deepEqual(storageApi.estimateSerializedSize('abc'), { chars: 3, utf16Bytes: 6 })],
   ['reveal state may retain a gear id not held by main state', () => { const history = storageApi.migrateRevealHistoryState({ schemaVersion: 1, viewedThroughLevelByGearId: { dismantled: 9 } }); assert.equal(history.viewedThroughLevelByGearId.dismantled, 9); }],
-  ['storage version is distinct from gear schema version', () => { const state = storageApi.createDefaultGearStorageState(); assert.equal(state.storageSchemaVersion, 2); assert.equal(Object.hasOwn(state, 'schemaVersion'), false); }],
+  ['storage version is distinct from gear schema version', () => { const state = storageApi.createDefaultGearStorageState(); assert.equal(state.storageSchemaVersion, 3); assert.equal(Object.hasOwn(state, 'schemaVersion'), false); }],
   ['reveal version is distinct from main storage schema version field', () => { const state = storageApi.createDefaultRevealHistoryState(); assert.equal(state.schemaVersion, 1); assert.equal(Object.hasOwn(state, 'storageSchemaVersion'), false); }],
-  ['a valid zero-gear reward is preserved for future CPU shard rewards', () => { const state = storageApi.createDefaultGearStorageState(); state.unclaimedRewards.push({ rewardId: 'shards-only', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 0, gears: [], blueprintShards: 5 }); assert.deepEqual(storageApi.migrateGearStorageState(state).unclaimedRewards[0].gears, []); }],
+  ['a valid zero-gear reward is preserved for CPU material rewards', () => { const state = storageApi.createDefaultGearStorageState(); state.unclaimedRewards.push({ rewardId: 'materials-only', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 0, gears: [], powder: 10, blueprintShards: 5 }); assert.deepEqual(storageApi.migrateGearStorageState(state).unclaimedRewards[0].gears, []); }],
   ['storage validation does not synthesize an expiresAt field', () => { const state = validState(); const checked = storageApi.migrateGearStorageState(state); assert.equal(Object.hasOwn(checked.tempBox[0], 'expiresAtMs'), false); }],
   ['storage validation does not duplicate existing game coin state', () => { const state = validState(); assert.equal(Object.hasOwn(storageApi.migrateGearStorageState(state).resources, 'coins'), false); }],
   ['reveal history encoding is stable across key insertion order', () => {

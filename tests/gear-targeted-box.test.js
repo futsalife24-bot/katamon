@@ -86,7 +86,7 @@ test('不足・容量・invalid requestはstateを変更せずfail closedする'
   assert.deepEqual(insufficient, before);
   const full = state(1000);
   full.unclaimedRewards = Array.from({ length: storageApi.UNCLAIMED_REWARD_CAPACITY }, (_entry, index) => ({
-    rewardId: `pending-${index}`, sourceId: 'cpu_battle', sourceDetail: {}, createdAtMs: index, gears: [], blueprintShards: 0,
+    rewardId: `pending-${index}`, sourceId: 'cpu_battle', sourceDetail: {}, createdAtMs: index, gears: [], powder: 0, blueprintShards: 0,
   }));
   expectCode('TARGETED_BOX_REWARD_GATE_BLOCKED', () => open(full, request('full-a')));
   const physicalFull = state(1000);

@@ -102,7 +102,7 @@
   function rewardCanonicalEquals(left, right) {
     return stableJson(left) === stableJson(right);
   }
-  function assertV2Ledger(state) {
+  function assertRewardLedger(state) {
     if (!isPlainRecord(state.rewardLedger)) fail('INVALID_REWARD_LEDGER', 'rewardLedger must be a plain object');
     return state.rewardLedger;
   }
@@ -137,7 +137,7 @@
 
   function queueUnclaimedReward(rawState, rawReward) {
     const state = canonicalState(rawState);
-    const ledger = assertV2Ledger(state);
+    const ledger = assertRewardLedger(state);
     const incomingRewardId = readIncomingRewardId(rawReward);
     // A completed tombstone wins before inspecting retry payload content.  A
     // caller may retry after an ambiguous read-back with only stale metadata;
@@ -214,7 +214,7 @@
     const state = canonicalState(rawState);
     const id = assertNonEmptyString(rewardId, 'rewardId');
     const now = assertNow(nowMs);
-    const ledger = assertV2Ledger(state);
+    const ledger = assertRewardLedger(state);
     if (ledgerHas(ledger, id)) return { nextState: state, duplicate: true, claimed: false, expiredGearIds: [], movedGearIds: [] };
     const reward = findPending(state, id);
     if (!reward) fail('REWARD_NOT_FOUND', `rewardId ${id} is neither pending nor processed`);
@@ -226,6 +226,8 @@
     const physicalAvailable = (resolveStorageApi().MAIN_INVENTORY_CAPACITY - maintained.inventory.length)
       + (resolveStorageApi().TEMP_BOX_CAPACITY - maintained.tempBox.length);
     if (physicalAvailable < reward.gears.length) fail('CLAIM_CAPACITY_EXCEEDED', 'not enough inventory and TEMP BOX capacity for this claim');
+    const rewardPowderGained = reward.powder;
+    const powder = addSafe(maintained.resources.powder, rewardPowderGained, 'resources.powder');
     const blueprintShards = addSafe(maintained.resources.blueprintShards, reward.blueprintShards, 'resources.blueprintShards');
     const inventory = [...maintained.inventory];
     const tempBox = [...maintained.tempBox];
@@ -246,11 +248,12 @@
       tempBox,
       unclaimedRewards: pendingWithoutClaim,
       rewardLedger: cloneLedgerWith(maintained.rewardLedger, id),
-      resources: { powder: maintained.resources.powder, blueprintShards },
+      resources: { powder, blueprintShards },
     });
     return {
       nextState, duplicate: false, claimed: true, expiredGearIds: maintenance.expiredGearIds,
       movedGearIds: maintenance.movedGearIds, powderGained: maintenance.powderGained,
+      rewardPowderGained,
       blueprintShardsGained: maintenance.blueprintShardsGained, placedInventoryGearIds, placedTempGearIds,
     };
   }
@@ -334,7 +337,7 @@
     const rewardId = `targeted-box:${request.requestId}`;
     const gearId = `targeted-gear:${request.requestId}`;
     const sourceDetail = targetedBoxSourceDetail(request, quote);
-    const ledger = assertV2Ledger(state);
+    const ledger = assertRewardLedger(state);
     if (ledgerHas(ledger, rewardId)) return { nextState: state, duplicate: true, opened: false, quote, reward: null, spentBlueprintShards: 0 };
     const pending = findPending(state, rewardId);
     if (pending) {
@@ -363,7 +366,7 @@
     } catch (error) {
       fail(error && error.code ? error.code : 'TARGETED_BOX_GENERATION_FAILED', error && error.message, error);
     }
-    const reward = canonicalReward({ rewardId, sourceId: TARGETED_BOX_SOURCE_ID, sourceDetail, createdAtMs: request.createdAtMs, gears: [gear], blueprintShards: 0 });
+    const reward = canonicalReward({ rewardId, sourceId: TARGETED_BOX_SOURCE_ID, sourceDetail, createdAtMs: request.createdAtMs, gears: [gear], powder: 0, blueprintShards: 0 });
     const queued = queueUnclaimedReward(state, reward);
     if (!queued.queued) {
       return { ...queued, opened: false, quote, reward, spentBlueprintShards: 0 };

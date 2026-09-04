@@ -93,7 +93,7 @@ function addExpiredTempGear(storage, gearId) {
 function unclaimedGearStorage() {
   const state = gearStorage.createDefaultGearStorageState();
   state.resources.powder = 999;
-  state.unclaimedRewards.push({ rewardId: 'pending-reward', sourceId: 'cpu_battle', sourceDetail: { run: 1 }, createdAtMs: 1, gears: [makeGear('unclaimed-gear')], blueprintShards: 0 });
+  state.unclaimedRewards.push({ rewardId: 'pending-reward', sourceId: 'cpu_battle', sourceDetail: { run: 1 }, createdAtMs: 1, gears: [makeGear('unclaimed-gear')], powder: 0, blueprintShards: 0 });
   return new FakeStorage({ [gearStorage.GEAR_STORAGE_KEY]: gearStorage.encodeGearStorageState(state), [foundation.STORAGE_KEY]: foundationRaw(999) });
 }
 
@@ -168,7 +168,7 @@ test('exclusive lock is mandatory and concurrent public starts serialize without
   const mixed = seededStorage(); const mixedId = gearStorage.loadGearState(mixed).inventory[0].gear.gearId;
   await Promise.all([
     transactions.enhanceStoredGearAtomic({ transactionId: 'mixed-enhance', gearId: mixedId, targetLevel: 3, createdAtMs: 3, storage: mixed }),
-    rewards.persistQueueReward({ rewardId: 'mixed-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 3, gears: [], blueprintShards: 1 }, mixed),
+    rewards.persistQueueReward({ rewardId: 'mixed-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 3, gears: [], powder: 0, blueprintShards: 1 }, mixed),
   ]);
   const mixedState = gearStorage.loadGearState(mixed);
   assert.equal(mixedState.inventory[0].gear.enhancementLevel, 3);
@@ -288,14 +288,14 @@ test('committed cleanup failure blocks other mutations until cleanup recovery su
   await expectCode('FOUNDATION_PENDING_GEAR_TRANSACTION', () => mutateFoundationCoins(storage));
   await expectCode('PENDING_GEAR_TRANSACTION_EXISTS', () => rewards.persistQueueReward({
     rewardId: 'cleanup-blocked-reward', sourceId: 'cpu_battle', sourceDetail: null,
-    createdAtMs: 2, gears: [], blueprintShards: 1,
+    createdAtMs: 2, gears: [], powder: 0, blueprintShards: 1,
   }, storage));
   storage.throwRemove = null;
   await transactions.recoverPendingGearTransaction(storage);
   await mutateFoundationCoins(storage, 1);
   const queued = await rewards.persistQueueReward({
     rewardId: 'cleanup-resumed-reward', sourceId: 'cpu_battle', sourceDetail: null,
-    createdAtMs: 3, gears: [], blueprintShards: 1,
+    createdAtMs: 3, gears: [], powder: 0, blueprintShards: 1,
   }, storage);
   assert.equal(queued.queued, true);
   assert.equal(storage.getItem(transactions.GEAR_TRANSACTION_STORAGE_KEY), null);

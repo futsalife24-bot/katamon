@@ -113,7 +113,7 @@ test('0–2 intent is preserved for retry/cleanup but does not materialize a mea
   }));
   const reward = cpu.materializeCpuGearReward(pending.settlementIntent);
   assert.equal(reward.gears.length, 0);
-  assert.equal(reward.blueprintShards, 0);
+  assert.equal(reward.powder, 0); assert.equal(reward.blueprintShards, 0);
   assert.equal(cpu.previewCpuSettlement({ peakStreak: 2, outcome: 'voluntary' }).hasReward, false);
 });
 

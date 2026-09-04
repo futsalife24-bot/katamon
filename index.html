@@ -689,7 +689,7 @@
   .gearDropSlot{position:absolute;width:clamp(62px,19vw,72px);height:50px;color:#8f9b99;filter:grayscale(.75) brightness(.7);opacity:.62}.gearDropSlot .gearSlotFrame{inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px)}.gearDropSlotGlyph{position:absolute;z-index:2;inset:0;display:grid;place-items:center;font:900 17px/1 sans-serif;text-shadow:0 1px 0 #000}.gearDropSlot .gearDropAsset{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%)}.gearDropSlot[data-frame-position="left-top"]{left:0;top:0;--frame-angle:30deg}.gearDropSlot[data-frame-position="left-middle"]{left:0;top:50%;transform:translateY(-50%);--frame-angle:0deg}.gearDropSlot[data-frame-position="left-bottom"]{left:0;bottom:0;--frame-angle:330deg}.gearDropSlot[data-frame-position="right-top"]{right:0;top:0;--frame-angle:150deg}.gearDropSlot[data-frame-position="right-middle"]{right:0;top:50%;transform:translateY(-50%);--frame-angle:180deg}.gearDropSlot[data-frame-position="right-bottom"]{right:0;bottom:0;--frame-angle:210deg}
   .gearDropSlot.active{color:#fff0ac;filter:none;opacity:1}.gearDropSlot.active .gearSlotFrameOuter{fill:#99652c;stroke:#fff0a0;filter:drop-shadow(0 0 8px #ffd24a)}.gearDropSlot.active .gearSlotFrameInner{fill:#40575a}.gearDropSlotName{position:absolute;z-index:3;left:50%;top:100%;transform:translate(-50%,-2px);min-width:54px;padding:2px 5px;color:#fff1b5;border:1px solid #b47b35;border-radius:999px;background:#101c20;font-size:9px;white-space:nowrap}
   .gearDropCard{position:relative;margin:2px 0 9px;padding:11px;border:2px solid var(--drop-accent,#b98947);border-radius:11px;background:linear-gradient(145deg,rgba(26,41,45,.98),rgba(8,14,17,.98));box-shadow:inset 0 0 20px rgba(0,0,0,.45),0 0 16px var(--drop-glow,transparent);text-align:left}.gearDropCard[data-rarity="rare"]{--drop-accent:#66bce2;--drop-glow:rgba(83,175,221,.18)}.gearDropCard[data-rarity="epic"]{--drop-accent:#b084ee;--drop-glow:rgba(162,102,235,.22)}.gearDropCard[data-rarity="legend"]{--drop-accent:#ffb841;--drop-glow:rgba(255,177,46,.28)}.gearDropCard[data-rarity="mythic"]{--drop-accent:#ff7181;--drop-glow:rgba(255,77,101,.32)}
-  .gearDropIdentity{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px}.gearDropIdentity .gearSlotMini{margin:0;transform:scale(1.18)}.gearDropIdentity strong{display:block;color:#fff0c5;font-size:15px}.gearDropIdentity small{display:block;margin-top:2px;color:#ceb987;font-size:10px}.gearDropStars{color:#ffd45b;font-weight:900;white-space:nowrap}.gearDropMainOp{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding:8px;border:1px solid rgba(212,165,85,.42);border-radius:7px;background:rgba(3,8,10,.5);font-size:11px}.gearDropMainOp b{color:#ffdf8e}.gearDropRouting{margin:8px 0 0;padding:7px 9px;color:#ffe3a0;border:1px solid rgba(211,158,71,.52);border-radius:7px;background:rgba(15,25,28,.8);font-size:10px}.gearDropRouting.error{color:#ffae99;border-color:#a94c3b}.gearDropQueue{display:flex;justify-content:center;gap:5px;margin:7px 0}.gearDropQueue span{width:8px;height:8px;border:1px solid #9d7542;border-radius:50%;background:#172428}.gearDropQueue span.current{background:#ffd45b;box-shadow:0 0 7px #ffd45b}.gearDropActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearDropActions .gearButton{min-width:0}.gearDropActions .gearDropNext,.gearDropActions .gearDropClaim{grid-column:1/-1}.gearDropFallback{padding:16px;color:#ffe3a4;font-size:13px}
+  .gearDropIdentity{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px}.gearDropIdentity .gearSlotMini{margin:0;transform:scale(1.18)}.gearDropIdentity strong{display:block;color:#fff0c5;font-size:15px}.gearDropIdentity small{display:block;margin-top:2px;color:#ceb987;font-size:10px}.gearDropStars{color:#ffd45b;font-weight:900;white-space:nowrap}.gearDropMainOp{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding:8px;border:1px solid rgba(212,165,85,.42);border-radius:7px;background:rgba(3,8,10,.5);font-size:11px}.gearDropMainOp b{color:#ffdf8e}.gearDropRouting,.gearDropMaterials{margin:8px 0 0;padding:7px 9px;color:#ffe3a0;border:1px solid rgba(211,158,71,.52);border-radius:7px;background:rgba(15,25,28,.8);font-size:10px}.gearDropRouting.error{color:#ffae99;border-color:#a94c3b}.gearDropQueue{display:flex;justify-content:center;gap:5px;margin:7px 0}.gearDropQueue span{width:8px;height:8px;border:1px solid #9d7542;border-radius:50%;background:#172428}.gearDropQueue span.current{background:#ffd45b;box-shadow:0 0 7px #ffd45b}.gearDropActions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.gearDropActions .gearButton{min-width:0}.gearDropActions .gearDropNext,.gearDropActions .gearDropClaim{grid-column:1/-1}.gearDropFallback{padding:16px;color:#ffe3a4;font-size:13px}
   @media(max-width:340px){.gearDropPanel{padding-inline:9px}.gearDropMap{width:220px;height:160px}.gearDropSlot{width:62px;height:46px}.gearDropCardAsset{width:52px;height:52px}.gearDropIdentity{gap:6px}.gearDropIdentity strong{font-size:13px}.gearDropStars{font-size:12px}.gearDropActions{grid-template-columns:1fr}.gearDropActions .gearDropNext{grid-column:auto}}
   @media(prefers-reduced-motion:no-preference){.gearDropPanel{animation:gearDropPanelIn .3s ease-out}.gearDropSlot.active .gearSlotFrame{animation:gearDropSlotPulse .8s ease-out 1}.gearDropCard{animation:gearDropCardIn .32s ease-out}@keyframes gearDropPanelIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}@keyframes gearDropCardIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes gearDropSlotPulse{0%{filter:brightness(.88)}45%{filter:brightness(1.45) drop-shadow(0 0 12px #ffd24a)}100%{filter:none}}}
   @media (max-width:340px){.gearBuildStage{min-height:246px}.gearSlot{--socket-r:34px;width:90px;height:66px}.gearSlotEmblem{width:18px;height:18px}.gearSlot[data-set-state="two"] .gearSlotEmblem,.gearSlot[data-set-state="four"] .gearSlotEmblem{width:21px;height:21px}.gearSlot[data-frame-position="left-top"] .gearSlotContent,.gearSlot[data-frame-position="left-bottom"] .gearSlotContent{inset:18px 23px 18px 29px}.gearSlot[data-frame-position="left-middle"] .gearSlotContent{inset:18px 24px 18px 25px}.gearSlot[data-frame-position="right-top"] .gearSlotContent,.gearSlot[data-frame-position="right-bottom"] .gearSlotContent{inset:18px 29px 18px 23px}.gearSlot[data-frame-position="right-middle"] .gearSlotContent{inset:18px 25px 18px 24px}.gearSlotPart{font-size:7.8px}.gearSlotName{font-size:8.4px}.gearCharacterImage{width:110px;height:110px}.gearInlineDetail{gap:7px;min-height:0;padding:8px}.gearInlineDetailAsset{width:60px;height:60px;padding:3px}.gearInlineSetButton{grid-template-columns:20px auto;min-height:28px;padding:2px 5px;font-size:7px}.gearInlineSetEmblem{width:20px;height:20px}.gearInlineDetailBadge{padding:1px 4px;font-size:8px}.gearInlineDetailMain{gap:5px;margin-top:5px;padding:5px 6px}.gearInlineDetailMain b{font-size:11px}.gearInlineDetailSubs{margin-top:4px;line-height:1.35}.gearInlineSetEffects{padding:6px}.gearInlineSetEffectRow{grid-template-columns:38px minmax(0,1fr);font-size:8px}.gearInlineDetailHint{display:none}}
@@ -954,12 +954,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.169-cpu-rare-trajectory-ja';
+  const BUILD_ID = 'v2.0.170-gear-resource-rewards';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.170', date: '2026/09/04', summary: 'CPU連勝精算でGear粉末・設計片を獲得できる導線を追加' },
     { version: 'v2.0.169', date: '2026/09/04', summary: '希少CPU・Gear日本語表示・砲弾型必殺の弾道統一を追加' },
     { version: 'v2.0.168', date: '2026/09/04', summary: '最初のタップ前から正式な石壁を表示するよう修正' },
     { version: 'v2.0.167', date: '2026/09/03', summary: '初回ロードを段階化し、タイトル表示とオフライン準備を軽量化' },
@@ -5701,10 +5702,12 @@
       const inventoryIds = claimed?.placedInventoryGearIds || []; const tempIds = claimed?.placedTempGearIds || [];
       const currentRoute = inventoryIds.includes(checked.gearId) ? 'インベントリへ保存' : tempIds.includes(checked.gearId) ? 'TEMP BOXへ保管' : '';
       const routing = claimed ? `<p class="gearDropRouting">${gearHtml(currentRoute)} · インベントリ ${inventoryIds.length}件 / TEMP BOX ${tempIds.length}件</p>` : gearDropUi.error ? `<p class="gearDropRouting error">${gearHtml(gearDropUi.error)}</p>` : '';
+      const materials = gearDropUi.index === reward.gears.length - 1 && (reward.powder > 0 || reward.blueprintShards > 0)
+        ? `<p class="gearDropMaterials">同時報酬 · 粉末 +${reward.powder} / 設計片 +${reward.blueprintShards}</p>` : '';
       gearDropTitleEl.textContent = claimed ? 'GEAR GET!' : 'GEAR DROP!';
       const sourceLabel = reward.sourceId === 'coop_boss' ? 'BOSS DROP' : reward.sourceId === 'targeted_box' ? 'TARGETED BOX' : reward.sourceId === 'cpu_rare_drop' ? 'RARE DROP' : 'CPU BATTLE REWARD';
       gearDropProgressEl.textContent = `${gearDropUi.index + 1} / ${reward.gears.length} · ${sourceLabel}`;
-      gearDropContentEl.innerHTML = `${gearDropMapHtml(domain, checked.slotId)}<article class="gearDropCard" data-rarity="${gearHtml(checked.rarityId)}" data-gear-drop-card="${gearHtml(checked.gearId)}"><div class="gearDropIdentity">${gearAssetVisualHtml(checked.slotId, checked.setId, 'gearDropCardAsset')}<span><strong>${gearHtml(slot?.labelJa || checked.slotId)} · ${gearHtml(set?.labelJa || checked.setId)}</strong><small><i class="gearCrest">${gearSetCrests[checked.setId] || '◆'}</i> ${gearHtml(set?.labelJa || checked.setId)} SET · 強化 +${checked.enhancementLevel}</small></span><span class="gearDropStars">${'★'.repeat(checked.star)}</span></div><div class="gearDropMainOp"><span>${gearHtml(rarity?.labelJa || checked.rarityId)}</span><b>${gearHtml(gearOpLabel(domain, checked.mainOp.opId))} ${gearHtml(gearValue(checked.mainOp.value, checked.mainOp.unit))}</b></div>${routing}</article>`;
+      gearDropContentEl.innerHTML = `${gearDropMapHtml(domain, checked.slotId)}<article class="gearDropCard" data-rarity="${gearHtml(checked.rarityId)}" data-gear-drop-card="${gearHtml(checked.gearId)}"><div class="gearDropIdentity">${gearAssetVisualHtml(checked.slotId, checked.setId, 'gearDropCardAsset')}<span><strong>${gearHtml(slot?.labelJa || checked.slotId)} · ${gearHtml(set?.labelJa || checked.setId)}</strong><small><i class="gearCrest">${gearSetCrests[checked.setId] || '◆'}</i> ${gearHtml(set?.labelJa || checked.setId)} SET · 強化 +${checked.enhancementLevel}</small></span><span class="gearDropStars">${'★'.repeat(checked.star)}</span></div><div class="gearDropMainOp"><span>${gearHtml(rarity?.labelJa || checked.rarityId)}</span><b>${gearHtml(gearOpLabel(domain, checked.mainOp.opId))} ${gearHtml(gearValue(checked.mainOp.value, checked.mainOp.unit))}</b></div>${materials}${routing}</article>`;
       gearDropQueueEl.innerHTML = reward.gears.map((_entry, index) => `<span class="${index === gearDropUi.index ? 'current' : ''}"></span>`).join('');
       const atLast = gearDropUi.index >= reward.gears.length - 1;
       gearDropNextBtn.hidden = atLast || gearDropUi.claimed;
@@ -12106,7 +12109,9 @@
         : state.peakStreak;
       return {
         state,
-        preview: cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
+        preview: state.state === runStorage.SETTLEMENT_PENDING
+          ? cpuRewards.previewCpuSettlementIntent(state.settlementIntent)
+          : cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
       };
     } catch (error) {
       setCpuGearStatus(error, 'CPU BATTLE報酬の確認');
@@ -12260,7 +12265,7 @@
     });
     const intent = phaseA.intent;
     const reward = cpuRewards.materializeCpuGearReward(intent);
-    let queueResult = { skippedEmptyReward: reward.gears.length === 0 && reward.blueprintShards === 0 };
+    let queueResult = { skippedEmptyReward: reward.gears.length === 0 && reward.powder === 0 && reward.blueprintShards === 0 };
     // Phase B: the Phase 2B Gear writer owns its own common Gear lock.
     if (!phaseA.alreadyCleaned && !queueResult.skippedEmptyReward) {
       if (!canQueueCpuSettlement(intent)) {
@@ -23923,8 +23928,8 @@
       const lossPreview = cpuGearLayout.lossPreview;
       const previewStartY = (!won && !draw) ? VH / 2 + 92 : VH / 2 + 48;
       const qualityText = preview.highestQualityLocked
-        ? `報酬: 最高品質ロック / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`
-        : `報酬: 品質${preview.qualityTier} / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`;
+        ? `報酬: 最高品質ロック / Gear ${preview.gearCount}個 / 粉末 ${preview.powder} / 設計片 ${preview.blueprintShards}`
+        : `報酬: 品質${preview.qualityTier} / Gear ${preview.gearCount}個 / 粉末 ${preview.powder} / 設計片 ${preview.blueprintShards}`;
       drawOutlinedText(`現在 ${Math.max(0, winStreak)}連勝 / 最高 ${preview.peakStreak}連勝`, VW / 2, previewStartY, {
         font: `900 12px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
       });
@@ -23956,7 +23961,7 @@
       drawOutlinedText('報酬権利の保存を再試行してください', VW / 2, VH / 2 + 68, {
         font: `900 12px ${UI_FONT_HEAVY}`, color: '#ffb6a0', lineWidth: 3
       });
-      drawOutlinedText(`最高 ${preview.peakStreak}連勝 / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 + 86, {
+      drawOutlinedText(`最高 ${preview.peakStreak}連勝 / Gear ${preview.gearCount}個 / 粉末 ${preview.powder} / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 + 86, {
         font: `900 11px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
       });
       if (cpuGearStatusText) {
@@ -24073,7 +24078,7 @@
     drawOutlinedText(`最高 ${preview.peakStreak}連勝`, VW / 2, VH / 2 - 67, {
       font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 4
     });
-    drawOutlinedText(`${qualityText} / Gear ${preview.gearCount}個 / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 - 39, {
+    drawOutlinedText(`${qualityText} / Gear ${preview.gearCount}個 / 粉末 ${preview.powder} / 設計片 ${preview.blueprintShards}`, VW / 2, VH / 2 - 39, {
       font: `900 13px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3
     });
     if (preview.nextMilestone) {

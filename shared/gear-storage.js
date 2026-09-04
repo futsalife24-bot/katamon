@@ -9,9 +9,9 @@
   // decide rewards, inventory routing, expiry, transactions, or battle rules.
   const GEAR_STORAGE_KEY = 'katamon_gear_v1';
   // The storage key stays v1 for compatibility.  The envelope itself is
-  // independently versioned so Phase 2B can add a permanent reward tombstone
-  // without changing the browser key.
-  const GEAR_STORAGE_SCHEMA_VERSION = 2;
+  // independently versioned so reward tombstones and later material rewards
+  // can evolve without changing the browser key.
+  const GEAR_STORAGE_SCHEMA_VERSION = 3;
   const GEAR_REVEAL_STORAGE_KEY = 'katamon_gear_reveal_v1';
   const GEAR_REVEAL_SCHEMA_VERSION = 1;
   const MAIN_INVENTORY_CAPACITY = 500;
@@ -176,8 +176,11 @@
     return sourceId === 'coop_boss' ? COOP_BOSS_MAX_GEARS_PER_REWARD : MAX_GEARS_PER_REWARD;
   }
 
-  function validateReward(rawReward, path, enforceCurrentGearCap = true) {
-    assertExactKeys(rawReward, ['rewardId', 'sourceId', 'sourceDetail', 'createdAtMs', 'gears', 'blueprintShards'], path);
+  function validateReward(rawReward, path, enforceCurrentGearCap = true, rewardSchemaVersion = GEAR_STORAGE_SCHEMA_VERSION) {
+    const keys = rewardSchemaVersion >= 3
+      ? ['rewardId', 'sourceId', 'sourceDetail', 'createdAtMs', 'gears', 'powder', 'blueprintShards']
+      : ['rewardId', 'sourceId', 'sourceDetail', 'createdAtMs', 'gears', 'blueprintShards'];
+    assertExactKeys(rawReward, keys, path);
     if (!Array.isArray(rawReward.gears)) fail('INVALID_REWARD_GEARS', `${path}.gears must be an array`);
     assertDensePlainArray(rawReward.gears, `${path}.gears`);
     const sourceId = assertNonEmptyString(rawReward.sourceId, `${path}.sourceId`);
@@ -185,14 +188,16 @@
     if (enforceCurrentGearCap && rawReward.gears.length > gearLimit) {
       fail('REWARD_GEAR_CAP_EXCEEDED', `${path}.gears exceeds the ${gearLimit} gear cap for ${sourceId}`);
     }
-    return {
+    const reward = {
       rewardId: assertNonEmptyString(rawReward.rewardId, `${path}.rewardId`),
       sourceId,
       sourceDetail: cloneJsonLike(rawReward.sourceDetail, `${path}.sourceDetail`),
       createdAtMs: assertNonNegativeSafeInteger(rawReward.createdAtMs, `${path}.createdAtMs`),
       gears: rawReward.gears.map((gear, index) => validateStoredGear(gear, `${path}.gears[${index}]`)),
-      blueprintShards: assertNonNegativeSafeInteger(rawReward.blueprintShards, `${path}.blueprintShards`),
     };
+    if (rewardSchemaVersion >= 3) reward.powder = assertNonNegativeSafeInteger(rawReward.powder, `${path}.powder`);
+    reward.blueprintShards = assertNonNegativeSafeInteger(rawReward.blueprintShards, `${path}.blueprintShards`);
+    return reward;
   }
 
   function validateGlobalIds(state) {
@@ -234,7 +239,7 @@
       // Phase 2A v1 had no per-reward Gear cap. Validate that historical
       // envelope exactly as it was defined, then apply the approved v2
       // compatibility boundary explicitly in migrateV1ToV2().
-      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`, false)),
+      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`, false, 2)),
       resources: {
         powder: assertNonNegativeSafeInteger(rawState.resources.powder, 'resources.powder'),
         blueprintShards: assertNonNegativeSafeInteger(rawState.resources.blueprintShards, 'resources.blueprintShards'),
@@ -273,7 +278,7 @@
       storageSchemaVersion: 2,
       inventory: rawState.inventory.map((entry, index) => validateEntry(entry, `inventory[${index}]`, false)),
       tempBox: rawState.tempBox.map((entry, index) => validateEntry(entry, `tempBox[${index}]`, true)),
-      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`)),
+      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`, true, 2)),
       rewardLedger: validateRewardLedger(rawState.rewardLedger),
       resources: {
         powder: assertNonNegativeSafeInteger(rawState.resources.powder, 'resources.powder'),
@@ -304,6 +309,43 @@
     };
   }
 
+  function validateV3GearStorageState(rawState) {
+    assertExactKeys(rawState, ['storageSchemaVersion', 'inventory', 'tempBox', 'unclaimedRewards', 'rewardLedger', 'resources'], 'gear storage state');
+    if (rawState.storageSchemaVersion !== 3) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage state is not v3');
+    if (!Array.isArray(rawState.inventory)) fail('INVALID_INVENTORY', 'inventory must be an array');
+    if (!Array.isArray(rawState.tempBox)) fail('INVALID_TEMP_BOX', 'tempBox must be an array');
+    if (!Array.isArray(rawState.unclaimedRewards)) fail('INVALID_UNCLAIMED_REWARDS', 'unclaimedRewards must be an array');
+    assertDensePlainArray(rawState.inventory, 'inventory');
+    assertDensePlainArray(rawState.tempBox, 'tempBox');
+    assertDensePlainArray(rawState.unclaimedRewards, 'unclaimedRewards');
+    if (rawState.inventory.length > MAIN_INVENTORY_CAPACITY) fail('INVENTORY_CAPACITY_EXCEEDED', 'inventory exceeds capacity');
+    if (rawState.tempBox.length > TEMP_BOX_CAPACITY) fail('TEMP_BOX_CAPACITY_EXCEEDED', 'temp box exceeds capacity');
+    if (rawState.unclaimedRewards.length > UNCLAIMED_REWARD_CAPACITY) fail('UNCLAIMED_REWARD_CAPACITY_EXCEEDED', 'unclaimed rewards exceed capacity');
+    assertExactKeys(rawState.resources, ['powder', 'blueprintShards'], 'resources');
+    const state = {
+      storageSchemaVersion: 3,
+      inventory: rawState.inventory.map((entry, index) => validateEntry(entry, `inventory[${index}]`, false)),
+      tempBox: rawState.tempBox.map((entry, index) => validateEntry(entry, `tempBox[${index}]`, true)),
+      unclaimedRewards: rawState.unclaimedRewards.map((reward, index) => validateReward(reward, `unclaimedRewards[${index}]`, true, 3)),
+      rewardLedger: validateRewardLedger(rawState.rewardLedger),
+      resources: {
+        powder: assertNonNegativeSafeInteger(rawState.resources.powder, 'resources.powder'),
+        blueprintShards: assertNonNegativeSafeInteger(rawState.resources.blueprintShards, 'resources.blueprintShards'),
+      },
+    };
+    validateGlobalIds(state);
+    return state;
+  }
+
+  function migrateV2ToV3(rawState) {
+    const validatedV2 = validateV2GearStorageState(rawState);
+    return validateV3GearStorageState({
+      ...validatedV2,
+      storageSchemaVersion: 3,
+      unclaimedRewards: validatedV2.unclaimedRewards.map((reward) => ({ ...reward, powder: 0 })),
+    });
+  }
+
   function migrateGearStorageState(rawState) {
     if (!isPlainRecord(rawState)) fail('INVALID_STORAGE_STATE', 'gear storage state must be a plain object');
     assertOwnDataProperties(rawState, 'gear storage state');
@@ -311,8 +353,9 @@
     if (!Number.isSafeInteger(rawState.storageSchemaVersion)) fail('INVALID_STORAGE_SCHEMA_VERSION', 'gear storage schema version must be a safe integer');
     if (rawState.storageSchemaVersion > GEAR_STORAGE_SCHEMA_VERSION) fail('UNSUPPORTED_FUTURE_STORAGE_VERSION', 'gear storage is newer than this client');
     if (rawState.storageSchemaVersion < 1) fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage migration is not available for this version');
-    if (rawState.storageSchemaVersion === 1) return migrateV1ToV2(rawState);
-    if (rawState.storageSchemaVersion === 2) return validateV2GearStorageState(rawState);
+    if (rawState.storageSchemaVersion === 1) return migrateV2ToV3(migrateV1ToV2(rawState));
+    if (rawState.storageSchemaVersion === 2) return migrateV2ToV3(rawState);
+    if (rawState.storageSchemaVersion === 3) return validateV3GearStorageState(rawState);
     fail('UNSUPPORTED_STORAGE_VERSION', 'gear storage migration is not available for this version');
   }
 

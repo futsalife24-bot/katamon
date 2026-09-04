@@ -136,7 +136,7 @@ async function seedVisualFixture(page) {
     }
     presetStorage.save(presetState, localStorage, { characterIds: ['kyoryu'] });
     const drop = make(['visual-drop', 'barrel', 'last_stand', 'mythic', 6, 0]);
-    const queued = await rewards.persistQueueReward({ rewardId: 'visual-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4g' }, createdAtMs: Date.now(), gears: [drop], blueprintShards: 0 }, localStorage);
+    const queued = await rewards.persistQueueReward({ rewardId: 'visual-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4g' }, createdAtMs: Date.now(), gears: [drop], powder: 0, blueprintShards: 0 }, localStorage);
     if (!queued.queued) throw new Error('Phase 4G visual reward was not queued');
   });
 }

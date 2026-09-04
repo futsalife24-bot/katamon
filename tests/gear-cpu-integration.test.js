@@ -165,6 +165,7 @@ function createUnclaimedFullGateState() {
     sourceDetail: { fixture: 'unclaimed-full', index },
     createdAtMs: index,
     gears: [],
+    powder: 0,
     blueprintShards: 0,
   }));
   return state;
@@ -726,13 +727,22 @@ function createUnclaimedFullGateState() {
       assert.equal(result.intent.peakStreak, 20);
       assert.equal(result.intent.qualityProfileId, 'cpu-streak-15');
       assert.equal(result.reward.gears.length, 3);
+      assert.equal(result.reward.powder, 125);
       assert.equal(result.reward.blueprintShards, 30);
       assert.equal(kt.cpuGearRunStateForTest(), null);
       const state = gearStorage.loadGearState(storage);
       assert.equal(state.unclaimedRewards.length, 1);
       assert.equal(state.unclaimedRewards[0].rewardId, result.intent.rewardId);
       assert.equal(state.unclaimedRewards[0].gears.length, 3);
+      assert.equal(state.unclaimedRewards[0].powder, 125);
       assert.equal(state.unclaimedRewards[0].blueprintShards, 30);
+      const claimed = await globalThis.KatamonGearRewards.persistClaimReward(result.intent.rewardId, 999, storage);
+      assert.equal(claimed.claimed, true); assert.equal(claimed.rewardPowderGained, 125);
+      const claimedState = gearStorage.loadGearState(storage);
+      assert.equal(claimedState.resources.powder, 125); assert.equal(claimedState.resources.blueprintShards, 30);
+      assert.equal(claimedState.rewardLedger[result.intent.rewardId], true);
+      assert.equal((await globalThis.KatamonGearRewards.persistClaimReward(result.intent.rewardId, 1000, storage)).duplicate, true);
+      assert.equal(gearStorage.loadGearState(storage).resources.powder, 125);
     } finally { restoreLocks(); }
   });
 
@@ -746,9 +756,9 @@ function createUnclaimedFullGateState() {
         const result = await settleAndFlush('voluntary');
         assert.equal(result.intent.peakStreak, peakStreak);
         assert.equal(result.intent.gearCount, 0);
-        assert.equal(result.intent.blueprintShards, 0);
+        assert.equal(result.intent.powder, 0); assert.equal(result.intent.blueprintShards, 0);
         assert.equal(result.reward.gears.length, 0);
-        assert.equal(result.reward.blueprintShards, 0);
+        assert.equal(result.reward.powder, 0); assert.equal(result.reward.blueprintShards, 0);
         assert.equal(result.queueResult.skippedEmptyReward, true);
         assert.equal(kt.cpuGearRunStateForTest(), null);
         const state = gearStorage.loadGearState(storage);
@@ -951,7 +961,7 @@ function createUnclaimedFullGateState() {
       assert.equal(result.reward.rewardId, `${encounter.encounterId}:reward`);
       assert.equal(state.unclaimedRewards.filter((reward) => reward.rewardId === result.reward.rewardId).length, 1);
       const reward = state.unclaimedRewards.find((entry) => entry.rewardId === result.reward.rewardId);
-      assert.equal(reward.sourceId, 'cpu_rare_drop'); assert.equal(reward.blueprintShards, 0);
+      assert.equal(reward.sourceId, 'cpu_rare_drop'); assert.equal(reward.powder, 0); assert.equal(reward.blueprintShards, 0);
       assert.equal(reward.gears.length, 1); assert.ok(reward.gears[0].star >= 5);
       assert.ok(['epic', 'legend', 'mythic'].includes(reward.gears[0].rarityId));
       await kt.requestCpuRareRewardAfterWinForTest();

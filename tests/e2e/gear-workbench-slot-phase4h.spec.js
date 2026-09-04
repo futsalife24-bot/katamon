@@ -52,7 +52,7 @@ async function seedWorstCase(page) {
     presetStorage.save(presetState, localStorage, { characterIds: ['kyoryu'] });
     const drop = make(['phase4h-drop', 'barrel', 'last_stand', 'mythic', 0]);
     const queued = await rewards.persistQueueReward({
-      rewardId: 'phase4h-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4h' }, createdAtMs: Date.now(), gears: [drop], blueprintShards: 0,
+      rewardId: 'phase4h-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4h' }, createdAtMs: Date.now(), gears: [drop], powder: 0, blueprintShards: 0,
     }, localStorage);
     if (!queued.queued) throw new Error('Phase 4H reward was not queued');
   });

@@ -23,7 +23,7 @@ test('Gear Storageで500件Inventory・TEMP BOX・未受取を安全に管理で
       { gear: make('phase4d-temp-safe', 601, { slotId: 'core', rarityId: 'rare', star: 3, setId: 'fortify' }), locked: false, favorite: true, enteredAtMs: now - (24 * 60 * 60 * 1000) },
     ];
     const pendingGear = make('phase4d-pending', 700, { slotId: 'sight', rarityId: 'epic', star: 4, setId: 'critical' });
-    state.unclaimedRewards = [{ rewardId: 'phase4d-pending-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4d' }, createdAtMs: now, gears: [pendingGear], blueprintShards: 0 }];
+    state.unclaimedRewards = [{ rewardId: 'phase4d-pending-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'phase4d' }, createdAtMs: now, gears: [pendingGear], powder: 0, blueprintShards: 0 }];
     storage.saveGearState(state, localStorage);
     let presetState = presets.createInitialState(['kyoryu']);
     presetState = presets.setPresetSlot(presetState, { characterId: 'kyoryu', presetId: 'preset1', slotId: 'barrel', gearId: 'phase4d-focus', characterIds: ['kyoryu'] });

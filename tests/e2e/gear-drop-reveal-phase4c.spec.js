@@ -22,7 +22,7 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
       setProfile: { id: `drop:${setId}`, setWeights: [{ id: setId, weight: 1 }] }, slotId, setId,
     });
     const reward = { rewardId: 'drop-reveal-e2e', sourceId: 'cpu_battle', sourceDetail: { run: 'e2e' }, createdAtMs: 100,
-      gears: [make('drop-barrel', 'barrel', 'assault', 'legend', 5), make('drop-core', 'core', 'life', 'mythic', 6)], blueprintShards: 0 };
+      gears: [make('drop-barrel', 'barrel', 'assault', 'legend', 5), make('drop-core', 'core', 'life', 'mythic', 6)], powder: 10, blueprintShards: 5 };
     storage.saveGearState(storage.createDefaultGearStorageState(), localStorage);
     const queued = await rewards.persistQueueReward(reward, localStorage);
     if (!queued.queued) throw new Error('reward was not durably queued');
@@ -84,6 +84,7 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
   await expect(page.locator('#gearDropNext')).toBeHidden();
   await expect(page.locator('#gearDropClaim')).toBeVisible();
   await expect(page.locator('#gearDropWorkbench')).toBeHidden();
+  await expect(page.locator('.gearDropMaterials')).toContainText('同時報酬 · 粉末 +10 / 設計片 +5');
 
   expect(await page.evaluate(() => globalThis.KatamonGearDropReveal.presentRewardId('drop-reveal-e2e'))).toBe(false);
   expect(await page.evaluate((before) => localStorage.getItem(globalThis.KatamonGearStorage.GEAR_STORAGE_KEY) === before, storedBefore)).toBe(true);
@@ -99,9 +100,9 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
     const beforeDuplicate = state.inventory.filter((entry) => entry.gear.gearId.startsWith('drop-')).length;
     const duplicate = await rewards.persistClaimReward('drop-reveal-e2e', Date.now(), localStorage);
     const after = storage.loadGearState(localStorage);
-    return { pending: after.unclaimedRewards.length, ledger: after.rewardLedger['drop-reveal-e2e'], ids: after.inventory.map((entry) => entry.gear.gearId).filter((id) => id.startsWith('drop-')).sort(), beforeDuplicate, afterDuplicate: after.inventory.filter((entry) => entry.gear.gearId.startsWith('drop-')).length, duplicate: duplicate.duplicate };
+    return { pending: after.unclaimedRewards.length, ledger: after.rewardLedger['drop-reveal-e2e'], powder: after.resources.powder, blueprintShards: after.resources.blueprintShards, ids: after.inventory.map((entry) => entry.gear.gearId).filter((id) => id.startsWith('drop-')).sort(), beforeDuplicate, afterDuplicate: after.inventory.filter((entry) => entry.gear.gearId.startsWith('drop-')).length, duplicate: duplicate.duplicate };
   });
-  expect(claimed).toEqual({ pending: 0, ledger: true, ids: ['drop-barrel', 'drop-core'], beforeDuplicate: 2, afterDuplicate: 2, duplicate: true });
+  expect(claimed).toEqual({ pending: 0, ledger: true, powder: 10, blueprintShards: 5, ids: ['drop-barrel', 'drop-core'], beforeDuplicate: 2, afterDuplicate: 2, duplicate: true });
   await expect(page.locator('#gearPendingRewards')).toBeHidden();
   for (const viewport of [{ width: 412, height: 915 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) await expectLayout(viewport);
   await page.screenshot({ path: testInfo.outputPath('gear-drop-reveal-phase4c-claimed.png'), fullPage: true });
@@ -139,7 +140,7 @@ test('claim失敗はpendingを保ち、満杯inventoryでは既存authorityがTE
     const state = storage.createDefaultGearStorageState();
     state.inventory = Array.from({ length: storage.MAIN_INVENTORY_CAPACITY }, (_entry, index) => ({ gear: make(`temp-full-${index}`), locked: false, favorite: false }));
     storage.saveGearState(state, localStorage);
-    const reward = { rewardId: 'temp-route-reward', sourceId: 'cpu_battle', sourceDetail: { run: 'temp' }, createdAtMs: 300, gears: [make('temp-route-engine', 'engine')], blueprintShards: 0 };
+    const reward = { rewardId: 'temp-route-reward', sourceId: 'cpu_battle', sourceDetail: { run: 'temp' }, createdAtMs: 300, gears: [make('temp-route-engine', 'engine')], powder: 0, blueprintShards: 0 };
     await rewards.persistQueueReward(reward, localStorage);
     globalThis.KatamonGearDropReveal.presentRewardId(reward.rewardId);
     localStorage.setItem(rewards.GEAR_TRANSACTION_STORAGE_KEY, '{"pending":true}');
@@ -177,7 +178,7 @@ test('reduced motionでも同じ部位情報をanimationなしで読める', asy
     const domain = globalThis.KatamonGearDomain; const storage = globalThis.KatamonGearStorage;
     const gear = domain.createGear({ gearId: 'drop-close-engine', generationSeed: 'drop:close:g', enhancementSeed: 'drop:close:e', sourceId: 'cpu_battle', sourceDetail: null, acquiredAt: '2026-08-30T00:00:00Z', qualityProfile: { id: 'drop-close', starWeights: [{ id: 3, weight: 1 }], rarityWeights: [{ id: 'rare', weight: 1 }] }, setProfile: { id: 'drop-close-life', setWeights: [{ id: 'life', weight: 1 }] }, slotId: 'engine', setId: 'life' });
     storage.saveGearState(storage.createDefaultGearStorageState(), localStorage);
-    await globalThis.KatamonGearRewards.persistQueueReward({ rewardId: 'drop-close-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 200, gears: [gear], blueprintShards: 0 }, localStorage);
+    await globalThis.KatamonGearRewards.persistQueueReward({ rewardId: 'drop-close-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: 200, gears: [gear], powder: 0, blueprintShards: 0 }, localStorage);
     const raw = localStorage.getItem(storage.GEAR_STORAGE_KEY);
     globalThis.KatamonGearDropReveal.presentRewardId('drop-close-reward');
     return raw;

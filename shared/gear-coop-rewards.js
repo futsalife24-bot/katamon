@@ -47,7 +47,7 @@
           acquiredAt: intent.createdAtMs, qualityProfile, setProfile: api.GEAR_SET_PROFILES.fortress, minimumStar: index === 2 ? minimumStar(intent.difficulty) : undefined }));
       } catch (error) { fail(error?.code || 'COOP_GEAR_MATERIALIZATION_FAILED', 'could not materialize cooperative Gear reward', error); }
     }
-    return Object.freeze({ rewardId: intent.rewardId, sourceId: COOP_REWARD_SOURCE_ID, sourceDetail: { matchId: intent.matchId, eventId: intent.eventId, difficulty: intent.difficulty, firstClear: intent.firstClear }, createdAtMs: intent.createdAtMs, gears, blueprintShards: 0 });
+    return Object.freeze({ rewardId: intent.rewardId, sourceId: COOP_REWARD_SOURCE_ID, sourceDetail: { matchId: intent.matchId, eventId: intent.eventId, difficulty: intent.difficulty, firstClear: intent.firstClear }, createdAtMs: intent.createdAtMs, gears, powder: 0, blueprintShards: 0 });
   }
   return Object.freeze({ GearCoopRewardsError, COOP_REWARD_RULES_VERSION, COOP_REWARD_SOURCE_ID, DIFFICULTIES, minimumStar, createCoopSettlementIntent, materializeCoopGearReward });
 });
