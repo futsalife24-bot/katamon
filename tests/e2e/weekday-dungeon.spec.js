@@ -71,8 +71,13 @@ async function aimDungeonCanvas(page, hit) {
   const aim = await findAim(page, hit);
   expect(aim, `a deterministic ${hit ? 'hit' : 'miss'} aim must exist`).not.toBeNull();
   const point = await page.evaluate(({ angle, power }) => {
-    const field = globalThis.KatamonGearWeekdayDungeon.PLAYFIELD;
-    const radians = angle * Math.PI / 180;
+    const domain = globalThis.KatamonGearWeekdayDungeon;
+    const field = domain.PLAYFIELD;
+    // A minimum-angle result includes every pointer angle below the lower
+    // limit. Aim inside that clamped region so WebKit's integer touch-point
+    // rounding cannot turn the intended 10° into 11° on a narrow canvas.
+    const pointerAngle = angle === domain.AIM_LIMITS.angleMin ? angle - 2 : angle;
+    const radians = pointerAngle * Math.PI / 180;
     return {
       x: field.originX + Math.cos(radians) * power * 3.2,
       y: field.originY - Math.sin(radians) * power * 3.2,
