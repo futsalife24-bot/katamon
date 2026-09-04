@@ -1069,6 +1069,8 @@ const HOOK = `
     cpuGearStatusStateForTest: () => cpuGearStatusState ? JSON.parse(JSON.stringify(cpuGearStatusState)) : null,
     cpuGearShieldStateForTest: () => cpuGearShieldState ? JSON.parse(JSON.stringify(cpuGearShieldState)) : null,
     cpuGearRuntimeEffectsStateForTest: () => cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null,
+    cpuRareEncounterForTest: () => cpuRareEncounter ? JSON.parse(JSON.stringify(cpuRareEncounter)) : null,
+    requestCpuRareRewardAfterWinForTest: () => requestCpuRareRewardAfterWin(),
     setCpuGearRuntimeEffectsForTest: (effects) => {
       const p1 = unitById('p1'); const combat = cpuGearCombatForUnit(p1);
       if (!cpuGearRuntimeEffectsState || !combat) return null;
@@ -1992,6 +1994,7 @@ const HOOK = `
     loadSuspendedForTest: () => loadSuspendedMatch(),
     applySnapshotForTest: (data) => applySnapshot(data),
     buildSnapshotForTest: () => JSON.parse(JSON.stringify(buildSnapshot())),
+    resetMatchForTest: () => resetMatch(false),
     canvas
   };
   const __panelLog = [];

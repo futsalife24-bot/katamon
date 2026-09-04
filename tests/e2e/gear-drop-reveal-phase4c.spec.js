@@ -41,7 +41,7 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
   await expect(page.locator('.gearDropCard')).toHaveAttribute('data-rarity', 'legend');
   await expect(page.locator('.gearDropCard')).toContainText('猛攻');
   await expect(page.locator('.gearDropStars')).toHaveText('★★★★★');
-  await expect(page.locator('.gearDropCard')).toContainText('ATK');
+  await expect(page.locator('.gearDropCard')).toContainText('攻撃');
   await page.screenshot({ path: testInfo.outputPath('gear-drop-reveal-phase4c-reveal.png'), fullPage: true });
 
   const expectLayout = async (viewport) => {

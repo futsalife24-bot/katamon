@@ -136,13 +136,16 @@ process.on('message', (cmd) => {
       const queuedAfterInject = kt.onlineState().queued;
       let sawPending = false;
       let appliedWhilePending = false;
-      for (let i = 0; i < 240; i++) {
+      // 砲弾型必殺は通常弾と同じ速度・放物線になったため、演出込み4秒の
+      // 固定待ちでは遠距離着弾前に観測を切ってしまう。解決条件そのものを待つ。
+      for (let i = 0; i < 1200; i++) {
         if (kt.pending()) {
           sawPending = true;
           if (kt.onlineState().queued === 0) appliedWhilePending = true;
         }
         kt.step(1 / 60);
         kt.render();
+        if (!kt.pending() && kt.projectiles().length === 0 && kt.onlineState().queued === 0) break;
       }
       process.send({
         kind: 'probed', armed, pendingAfterFire, queuedAfterInject,

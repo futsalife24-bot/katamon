@@ -48,7 +48,7 @@ test('GARAGE戻るは意味のある2行へ固定し孤立改行を許さない'
 test('GuideはWorkbenchと同じ左右3段順で固定・可変メインを説明する', () => {
   assert.match(html, /\['auxiliary', 'barrel', 'sight', 'armor', 'engine', 'core'\]/);
   assert.match(html, /auxiliary: '左上', barrel: '右上', sight: '左中', armor: '右中', engine: '左下', core: '右下'/);
-  assert.match(html, /barrel: '攻撃', armor: 'HP', core: '防御'/);
+  assert.match(html, /barrel: '攻撃', armor: '体力', core: '防御'/);
   assert.match(html, /slot\.mainKind === 'fixed' \? gearGuideFixedMainLabels\[slot\.id\] : 'ランダム'/);
 });
 

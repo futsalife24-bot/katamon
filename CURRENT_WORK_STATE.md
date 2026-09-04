@@ -1,12 +1,14 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-08-31 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-09-04 / GitHub正本: `futsalife24-bot/katamon` の `master`
 
 ## 現在の開発状態
 
 Gear Systemは **Phase 4HまでCOMPLETE**。PR #341〜#354でWorkbench、6部位slot、Drop Reveal、Inventory / TEMP BOX、強化、安全な手動分解、6 silhouette × 8 set emblemの合成素材、各画面への素材接続、Visual Polish、Workbench slot再設計とresponsive closureをmasterへ統合した。Gear Domain、Storage、Preset、Reward、Combat、ONLINE authorityは既存contractを維持している。
 
 PR #355では装備中Gearの詳細導線、水平照準ガイド、CPU連勝終了確認、サウンドテスト音量追従を統合した。Phase 3D-8D、ONLINE/Firebase、Gear authority / balanceは変更していない。
+
+PR #378まではmasterへ統合・Pages公開済み。本変更では、通常CPU 1v1へ決定的な5%の希少個体と勝利時の追加Gear報酬を追加し、Gearのユーザー向け能力表示を日本語化した。レーザー・直進固定系を除く15キャラの砲弾型必殺は通常砲弾と同じ初速・風・重力へ統一し、弾数と着弾後の固有効果は維持する。クール=カイ→フェニーチェの進行停止報告は自動再現できず、移動禁止5手中も射撃可能な現行境界を回帰テストへ固定した。
 
 Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
@@ -23,7 +25,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は **v2.0.152-gameplay-ux-priority-fixes**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.169-cpu-rare-trajectory-ja**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 

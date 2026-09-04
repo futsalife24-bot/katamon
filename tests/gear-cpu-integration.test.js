@@ -921,6 +921,44 @@ function createUnclaimedFullGateState() {
     } finally { restoreLocks(); }
   });
 
+  await test('希少CPU勝利は通常連勝精算と別のstable rewardを一度だけqueue/read-backし、結果操作を完了まで止める', async () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    const run = kt.cpuGearRunStateForTest();
+    let encounter = null;
+    for (let ordinal = 3; ordinal < 100 && !encounter; ordinal += 1) {
+      encounter = globalThis.KatamonGearCpuRewards.createCpuRareEncounter({ runId: run.runId, matchOrdinal: ordinal });
+    }
+    assert.ok(encounter, 'a deterministic rare vector is required');
+    kt.setStreak(encounter.matchOrdinal);
+    kt.resetMatchForTest();
+    assert.deepEqual(kt.cpuRareEncounterForTest(), encounter, 'normal CPU match derives the rare descriptor');
+    const rareSnapshot = kt.buildSnapshotForTest();
+    assert.deepEqual(rareSnapshot.cpuRareEncounter, encounter, 'current suspend carries the derived descriptor');
+    const legacySnapshot = JSON.parse(JSON.stringify(rareSnapshot));
+    delete legacySnapshot.cpuRareEncounter;
+    kt.applySnapshotForTest(legacySnapshot);
+    assert.equal(kt.cpuRareEncounterForTest(), null, 'pre-feature snapshot stays non-rare');
+    kt.applySnapshotForTest(rareSnapshot);
+    assert.deepEqual(kt.cpuRareEncounterForTest(), encounter, 'current descriptor restores only after deterministic validation');
+    const restoreLocks = installImmediateWebLocks();
+    try {
+      assert.equal(finishByDefeat('e1'), 'player');
+      assert.equal(kt.cpuGearResultActionBusyForTest(), true, 'queue/read-back blocks result actions');
+      const result = await kt.requestCpuRareRewardAfterWinForTest();
+      await Promise.resolve();
+      const state = gearStorage.loadGearState(storage);
+      assert.equal(result.reward.rewardId, `${encounter.encounterId}:reward`);
+      assert.equal(state.unclaimedRewards.filter((reward) => reward.rewardId === result.reward.rewardId).length, 1);
+      const reward = state.unclaimedRewards.find((entry) => entry.rewardId === result.reward.rewardId);
+      assert.equal(reward.sourceId, 'cpu_rare_drop'); assert.equal(reward.blueprintShards, 0);
+      assert.equal(reward.gears.length, 1); assert.ok(reward.gears[0].star >= 5);
+      assert.ok(['epic', 'legend', 'mythic'].includes(reward.gears[0].rarityId));
+      await kt.requestCpuRareRewardAfterWinForTest();
+      assert.equal(gearStorage.loadGearState(storage).unclaimedRewards.filter((entry) => entry.rewardId === result.reward.rewardId).length, 1, 'same encounter cannot multiply');
+    } finally { restoreLocks(); }
+  });
+
   await test('free trainingはCPU Gear runを作らない', () => {
     resetFixture();
     kt.startFree();

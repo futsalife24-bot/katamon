@@ -32,9 +32,9 @@ test('初回claim後のGEARを見るから3ページGuideを経て同slot Workbe
   await expect(page.locator('[data-gear-guide-slot]').nth(3)).toHaveAttribute('data-gear-guide-slot', 'armor');
   await expect(page.locator('[data-gear-guide-slot]').nth(4)).toHaveAttribute('data-gear-guide-slot', 'engine');
   await expect(page.locator('[data-gear-guide-slot]').nth(5)).toHaveAttribute('data-gear-guide-slot', 'core');
-  await expect(page.locator('[data-gear-guide-slot="barrel"]')).toContainText('メイン：ATK');
-  await expect(page.locator('[data-gear-guide-slot="armor"]')).toContainText('メイン：HP');
-  await expect(page.locator('[data-gear-guide-slot="core"]')).toContainText('メイン：DEF');
+  await expect(page.locator('[data-gear-guide-slot="barrel"]')).toContainText('メイン：攻撃');
+  await expect(page.locator('[data-gear-guide-slot="armor"]')).toContainText('メイン：体力');
+  await expect(page.locator('[data-gear-guide-slot="core"]')).toContainText('メイン：防御');
   for (const slotId of ['auxiliary', 'sight', 'engine']) {
     await expect(page.locator(`[data-gear-guide-slot="${slotId}"]`)).toContainText('メイン：ランダム');
   }
