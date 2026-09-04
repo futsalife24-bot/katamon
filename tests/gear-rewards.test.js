@@ -54,6 +54,7 @@ function reward(rewardId, options = {}) {
     rewardId, sourceId: options.sourceId || 'cpu_battle', sourceDetail: options.sourceDetail === undefined ? { case: rewardId } : options.sourceDetail,
     createdAtMs: options.createdAtMs === undefined ? 100 : options.createdAtMs,
     gears: Array.from({ length: count }, (_unused, index) => makeGear(`${rewardId}-gear-${index}`, options)),
+    powder: options.powder || 0,
     blueprintShards: options.blueprintShards || 0,
   };
 }
@@ -91,9 +92,10 @@ test('claim routes reward gears inventory first then TEMP in original reward ord
   assert.equal(result.nextState.tempBox[0].enteredAtMs, 777); assert.equal(result.nextState.tempBox[0].locked, false); assert.equal(result.nextState.resources.blueprintShards, 7);
   assert.equal(result.nextState.unclaimedRewards.length, 0); assert.equal(result.nextState.rewardLedger['claim-route'], true);
 });
-test('claim is duplicate-safe, differentiates unknown id, and supports shard-only reward', () => {
-  const initial = state(); initial.unclaimedRewards = [reward('shards', { count: 0, blueprintShards: 12 })];
+test('claim is duplicate-safe, differentiates unknown id, and supports material-only reward', () => {
+  const initial = state(); initial.unclaimedRewards = [reward('shards', { count: 0, powder: 10, blueprintShards: 12 })];
   const first = rewards.claimUnclaimedReward(initial, 'shards', 2);
+  assert.equal(first.nextState.resources.powder, 10); assert.equal(first.rewardPowderGained, 10);
   assert.equal(first.nextState.resources.blueprintShards, 12);
   assert.equal(rewards.claimUnclaimedReward(first.nextState, 'shards', 3).duplicate, true);
   expectCode('REWARD_NOT_FOUND', () => rewards.claimUnclaimedReward(first.nextState, 'unknown', 3));
@@ -115,6 +117,8 @@ test('claim rejects invalid times and resource addition overflows without changi
   const initial = state(); initial.unclaimedRewards = [reward('overflow-shards', { count: 0, blueprintShards: 1 })]; initial.resources.blueprintShards = Number.MAX_SAFE_INTEGER;
   const before = clone(initial); expectCode('INTEGER_OVERFLOW', () => rewards.claimUnclaimedReward(initial, 'overflow-shards', 1)); assert.deepEqual(initial, before);
   expectCode('INVALID_NOW_MS', () => rewards.claimUnclaimedReward(state(), 'missing', -1));
+  const powderOverflow = state(); powderOverflow.unclaimedRewards = [reward('overflow-powder', { count: 0, powder: 1 })]; powderOverflow.resources.powder = Number.MAX_SAFE_INTEGER;
+  const powderBefore = clone(powderOverflow); expectCode('INTEGER_OVERFLOW', () => rewards.claimUnclaimedReward(powderOverflow, 'overflow-powder', 1)); assert.deepEqual(powderOverflow, powderBefore);
 });
 test('maintenance expires at exactly seven days, ignores clock rollback, yields no coin, and is idempotent', () => {
   const initial = state(); const item = gear.enhanceGear(makeGear('expire'), 3);
@@ -174,9 +178,9 @@ test('processed duplicate does not need a valid stale retry body beyond a safe r
   const result = rewards.queueUnclaimedReward(initial, { rewardId: 'already-done' });
   assert.equal(result.duplicateProcessed, true); assert.deepEqual(result.nextState, initial);
 });
-test('canonical queue comparison includes source, detail, time, gears, and shards', () => {
+test('canonical queue comparison includes source, detail, time, gears, powder, and shards', () => {
   const initial = rewards.queueUnclaimedReward(state(), reward('canonical-fields')).nextState;
-  ['sourceId', 'createdAtMs', 'blueprintShards'].forEach((field) => {
+  ['sourceId', 'createdAtMs', 'powder', 'blueprintShards'].forEach((field) => {
     const changed = clone(initial.unclaimedRewards[0]); changed[field] = field === 'sourceId' ? 'coop_boss' : changed[field] + 1;
     expectCode('REWARD_ID_CONFLICT', () => rewards.queueUnclaimedReward(initial, changed));
   });
@@ -186,9 +190,10 @@ test('canonical queue comparison includes source, detail, time, gears, and shard
 test('persistence wrappers use one injected exclusive lock and save successful state', async () => {
   const fake = new FakeStorage(); const locks = new ExclusiveLockManager(); const options = { lockManager: locks };
   assert.equal(rewards.GEAR_MUTATION_LOCK_NAME, 'katamon_gear_v1:mutation');
-  const queued = await rewards.persistQueueReward(reward('persist', { count: 0, blueprintShards: 2 }), fake, options);
+  const queued = await rewards.persistQueueReward(reward('persist', { count: 0, powder: 3, blueprintShards: 2 }), fake, options);
   assert.equal(queued.queued, true); assert.ok(fake.getItem(storageApi.GEAR_STORAGE_KEY));
   const claimed = await rewards.persistClaimReward('persist', 50, fake, options); assert.equal(claimed.claimed, true);
+  assert.equal(storageApi.loadGearState(fake).resources.powder, 3);
   assert.equal(storageApi.loadGearState(fake).resources.blueprintShards, 2);
   assert.equal((await rewards.persistStorageMaintenance(51, fake, options)).expiredGearIds.length, 0);
   assert.deepEqual(locks.requests.map((entry) => entry.name), [rewards.GEAR_MUTATION_LOCK_NAME, rewards.GEAR_MUTATION_LOCK_NAME, rewards.GEAR_MUTATION_LOCK_NAME]);
@@ -253,7 +258,7 @@ test('two concurrent queue actors retain both rewards through the same storage l
   assert.deepEqual(storageApi.loadGearState(fake).unclaimedRewards.map((entry) => entry.rewardId), ['actor-left', 'actor-right']);
 });
 test('concurrent claim and maintenance serialize without rolling back either result', async () => {
-  const initial = state(); initial.tempBox = [{ gear: makeGear('locked-expire'), locked: false, favorite: false, enteredAtMs: 0 }]; initial.unclaimedRewards = [reward('locked-claim', { count: 0, blueprintShards: 5 })];
+  const initial = state(); initial.tempBox = [{ gear: makeGear('locked-expire'), locked: false, favorite: false, enteredAtMs: 0 }]; initial.unclaimedRewards = [reward('locked-claim', { count: 0, powder: 7, blueprintShards: 5 })];
   const fake = new FakeStorage({ [storageApi.GEAR_STORAGE_KEY]: storageApi.encodeGearStorageState(initial) });
   const options = { lockManager: new ExclusiveLockManager() };
   await Promise.all([
@@ -262,6 +267,7 @@ test('concurrent claim and maintenance serialize without rolling back either res
   ]);
   const finalState = storageApi.loadGearState(fake);
   assert.equal(finalState.rewardLedger['locked-claim'], true); assert.equal(finalState.unclaimedRewards.length, 0); assert.equal(finalState.tempBox.length, 0);
+  assert.equal(finalState.resources.powder, 7 + gear.calculateDismantleYield(initial.tempBox[0].gear).powder);
   assert.equal(finalState.resources.blueprintShards, 5 + gear.calculateDismantleYield(initial.tempBox[0].gear).blueprintShards);
 });
 test('reward module is pure: no Date.now, random, or DOM coupling while Phase 2C connects its browser script', () => {

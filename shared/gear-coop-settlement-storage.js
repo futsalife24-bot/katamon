@@ -31,9 +31,10 @@
       || !Number.isSafeInteger(raw.foundationEvent.playerCount) || raw.foundationEvent.playerCount < 0 || raw.foundationEvent.playerCount > 4
       || !Number.isSafeInteger(raw.foundationEvent.aiCount) || raw.foundationEvent.aiCount < 0 || raw.foundationEvent.aiCount > 4
       || typeof raw.foundationEvent.allPartsDestroyed !== 'boolean' || typeof raw.foundationEvent.noDown !== 'boolean' || typeof raw.foundationEvent.deadLineWin !== 'boolean') fail('INVALID_COOP_FOUNDATION_EVENT', 'settlement foundation event is invalid');
-    const reward = gearStorage().decodeGearStorageState(JSON.stringify({ storageSchemaVersion: 2, inventory: [], tempBox: [], unclaimedRewards: [raw.reward], rewardLedger: {}, resources: { powder: 0, blueprintShards: 0 } })).unclaimedRewards[0];
+    const rewardStorageVersion = plain(raw.reward) && Object.prototype.hasOwnProperty.call(raw.reward, 'powder') ? 3 : 2;
+    const reward = gearStorage().decodeGearStorageState(JSON.stringify({ storageSchemaVersion: rewardStorageVersion, inventory: [], tempBox: [], unclaimedRewards: [raw.reward], rewardLedger: {}, resources: { powder: 0, blueprintShards: 0 } })).unclaimedRewards[0];
     const expectedReward = rewards().materializeCoopGearReward(intent);
-    if (!plain(raw.reward) || raw.reward.sourceId !== 'coop_boss' || raw.reward.blueprintShards !== 0 || stableJson(reward) !== stableJson(expectedReward)) fail('COOP_SETTLEMENT_REWARD_MISMATCH', 'settlement reward does not match immutable identity');
+    if (!plain(raw.reward) || raw.reward.sourceId !== 'coop_boss' || reward.powder !== 0 || reward.blueprintShards !== 0 || stableJson(reward) !== stableJson(expectedReward)) fail('COOP_SETTLEMENT_REWARD_MISMATCH', 'settlement reward does not match immutable identity');
     return { schemaVersion: SCHEMA_VERSION, matchId: intent.matchId, eventId: intent.eventId, difficulty: intent.difficulty, outcome: intent.outcome, firstClear: intent.firstClear, foundationEvent: clone(raw.foundationEvent), reward };
   }
   function load(target) { const s = storage(target, 'getItem'); let raw; try { raw = s.getItem(STORAGE_KEY); } catch (error) { fail('STORAGE_READ_FAILED', 'could not read cooperative settlement', error); } if (raw === null) return null; try { return validate(JSON.parse(raw)); } catch (error) { if (error instanceof GearCoopSettlementStorageError) throw error; fail('COOP_SETTLEMENT_PARSE_FAILED', 'cooperative settlement is malformed', error); } }

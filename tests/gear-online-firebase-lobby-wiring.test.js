@@ -111,7 +111,7 @@ function makeGear(gearId, slotId = 'barrel') {
 
 function saveGearState({ inventory = [], tempBox = [], unclaimedRewards = [] } = {}) {
   gearStorage.saveGearState({
-    storageSchemaVersion: 2,
+    storageSchemaVersion: 3,
     inventory: inventory.map((gear) => ({ gear, locked: false, favorite: false })),
     tempBox,
     unclaimedRewards,
@@ -412,7 +412,7 @@ test('READY capture fails closed for stale, TEMP, unclaimed, wrong-slot, duplica
   const cases = [
     ['stale', () => { saveGearState(); savePreset('kyoryu', item.gearId); }, 'GEAR_PRESET_MISSING_GEAR'],
     ['TEMP', () => { saveGearState({ tempBox: [{ gear: item, locked: false, favorite: false, enteredAtMs: 1 }] }); savePreset('kyoryu', item.gearId); }, 'GEAR_PRESET_MISSING_GEAR'],
-    ['unclaimed', () => { saveGearState({ unclaimedRewards: [{ rewardId: 'r1', sourceId: 'coop_boss', sourceDetail: { difficulty: 'normal' }, blueprintShards: 0, createdAtMs: 1, gears: [item] }] }); savePreset('kyoryu', item.gearId); }, 'GEAR_PRESET_MISSING_GEAR'],
+    ['unclaimed', () => { saveGearState({ unclaimedRewards: [{ rewardId: 'r1', sourceId: 'coop_boss', sourceDetail: { difficulty: 'normal' }, powder: 0, blueprintShards: 0, createdAtMs: 1, gears: [item] }] }); savePreset('kyoryu', item.gearId); }, 'GEAR_PRESET_MISSING_GEAR'],
     ['wrong slot', () => { const wrong = makeGear(item.gearId, 'armor'); saveGearState({ inventory: [wrong] }); savePreset('kyoryu', wrong.gearId); }, 'GEAR_PRESET_SLOT_MISMATCH'],
     ['duplicate', () => {
       saveGearState({ inventory: [item] });

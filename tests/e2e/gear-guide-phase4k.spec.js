@@ -16,7 +16,7 @@ test('初回claim後のGEARを見るから3ページGuideを経て同slot Workbe
       qualityProfile: { id: 'guide-quality', starWeights: [{ id: 4, weight: 1 }], rarityWeights: [{ id: 'epic', weight: 1 }] },
       setProfile: { id: 'guide-set', setWeights: [{ id: 'fortify', weight: 1 }] }, slotId: 'core', setId: 'fortify',
     });
-    await rewards.persistQueueReward({ rewardId: 'guide-first-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: Date.now(), gears: [gear], blueprintShards: 0 }, localStorage);
+    await rewards.persistQueueReward({ rewardId: 'guide-first-reward', sourceId: 'cpu_battle', sourceDetail: null, createdAtMs: Date.now(), gears: [gear], powder: 0, blueprintShards: 0 }, localStorage);
     globalThis.KatamonGearDropReveal.presentRewardId('guide-first-reward');
   });
   await page.locator('#gearDropClaim').click();

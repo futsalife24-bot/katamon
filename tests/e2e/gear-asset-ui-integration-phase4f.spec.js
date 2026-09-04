@@ -32,7 +32,7 @@ test('Workbench・Storage・Drop Revealは同じ部位シルエットとセッ�
     let presetState = presets.createInitialState(['kyoryu']);
     presetState = presets.setPresetSlot(presetState, { characterId: 'kyoryu', presetId: 'preset1', slotId: 'barrel', gearId: barrel.gearId, characterIds: ['kyoryu'] });
     presetStorage.save(presetState, localStorage, { characterIds: ['kyoryu'] });
-    const queued = await rewards.persistQueueReward({ rewardId: 'asset-ui-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'asset-ui' }, createdAtMs: Date.now(), gears: [dropBarrel], blueprintShards: 0 }, localStorage);
+    const queued = await rewards.persistQueueReward({ rewardId: 'asset-ui-reward', sourceId: 'cpu_battle', sourceDetail: { e2e: 'asset-ui' }, createdAtMs: Date.now(), gears: [dropBarrel], powder: 0, blueprintShards: 0 }, localStorage);
     if (!queued.queued) throw new Error('asset UI reward was not queued');
   });
 
