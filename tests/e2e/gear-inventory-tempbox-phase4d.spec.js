@@ -75,7 +75,7 @@ test('Gear Storageで500件Inventory・TEMP BOX・未受取を安全に管理で
   await expect(page.locator('#gearStorageNotice')).toContainText('TEMP BOXから1個をInventoryへ移動');
   expect(await page.evaluate(() => globalThis.KatamonGearStorage.loadGearState(localStorage).inventory.some((entry) => entry.gear.gearId === 'phase4d-temp-urgent'))).toBe(true);
 
-  await expect(page.locator('#gearStoragePending')).toContainText('未受取Gear報酬 1件');
+  await expect(page.locator('#gearStoragePending')).toContainText('未受取報酬 1件');
   await page.locator('#gearStoragePending').click();
   await expect(page.locator('#gearDropReveal')).toHaveClass(/open/);
   await expect(page.locator('.gearDropSlot.active')).toHaveAttribute('data-gear-drop-slot', 'sight');

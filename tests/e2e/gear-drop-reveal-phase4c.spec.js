@@ -130,6 +130,88 @@ test('canonical CPU Gear rewardを6P位置でrevealしWorkbenchの同slotへ案�
   expect(errors).toEqual([]);
 });
 
+test('Gear 0個の素材報酬も閉じて再表示し、一度だけ明示受取できる', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/index.html?gear-material-only-reward=1');
+  await page.waitForTimeout(500);
+  const before = await page.evaluate(async () => {
+    const storage = globalThis.KatamonGearStorage;
+    const rewards = globalThis.KatamonGearRewards;
+    storage.saveGearState(storage.createDefaultGearStorageState(), localStorage);
+    const reward = {
+      rewardId: 'material-only-e2e',
+      sourceId: 'cpu_battle',
+      sourceDetail: { outcome: 'defeat' },
+      createdAtMs: 400,
+      gears: [],
+      powder: 3,
+      blueprintShards: 1,
+    };
+    await rewards.persistQueueReward(reward, localStorage);
+    const state = storage.loadGearState(localStorage);
+    if (!globalThis.KatamonGearDropReveal.presentRewardId(reward.rewardId)) throw new Error('material reward did not open');
+    return {
+      inventory: state.inventory.length,
+      tempBox: state.tempBox.length,
+      powder: state.resources.powder,
+      blueprintShards: state.resources.blueprintShards,
+    };
+  });
+
+  await expect(page.locator('#gearDropReveal')).toHaveClass(/open/);
+  await expect(page.locator('#gearDropKicker')).toHaveText('MATERIAL REWARD');
+  await expect(page.locator('#gearDropTitle')).toHaveText('素材報酬');
+  await expect(page.locator('.gearDropMaterialValues')).toContainText('粉末 +3');
+  await expect(page.locator('.gearDropMaterialValues')).toContainText('設計片 +1');
+  await expect(page.locator('.gearDropSlot')).toHaveCount(0);
+  await expect(page.locator('#gearDropNext')).toBeHidden();
+  await expect(page.locator('#gearDropWorkbench')).toBeHidden();
+  await expect(page.locator('#gearDropClaim')).toBeVisible();
+  await page.locator('#gearDropClose').click();
+  await expect(page.locator('#gearDropReveal')).not.toHaveClass(/open/);
+  expect(await page.evaluate(() => globalThis.KatamonGearDropReveal.presentPendingReward())).toBe(true);
+  await expect(page.locator('#gearDropReveal')).toHaveClass(/open/);
+
+  await page.locator('#gearDropClaim').click();
+  await expect(page.locator('#gearDropTitle')).toHaveText('MATERIAL GET!');
+  await expect(page.locator('.gearDropRouting')).toContainText('粉末・設計片を受け取りました');
+  await expect(page.locator('#gearDropClaim')).toBeHidden();
+  await expect(page.locator('#gearDropWorkbench')).toBeHidden();
+  const claimed = await page.evaluate(async () => {
+    const storage = globalThis.KatamonGearStorage;
+    const rewards = globalThis.KatamonGearRewards;
+    const state = storage.loadGearState(localStorage);
+    const duplicate = await rewards.persistClaimReward('material-only-e2e', Date.now(), localStorage);
+    const after = storage.loadGearState(localStorage);
+    return {
+      pending: after.unclaimedRewards.length,
+      ledger: after.rewardLedger['material-only-e2e'],
+      inventory: after.inventory.length,
+      tempBox: after.tempBox.length,
+      powder: after.resources.powder,
+      blueprintShards: after.resources.blueprintShards,
+      duplicate: duplicate.duplicate,
+      stateBeforeDuplicate: state.resources,
+    };
+  });
+  expect(claimed).toEqual({
+    pending: 0,
+    ledger: true,
+    inventory: before.inventory,
+    tempBox: before.tempBox,
+    powder: before.powder + 3,
+    blueprintShards: before.blueprintShards + 1,
+    duplicate: true,
+    stateBeforeDuplicate: { powder: before.powder + 3, blueprintShards: before.blueprintShards + 1 },
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(page.locator('.gearDropMaterialCard')).toBeVisible();
+  expect(await page.locator('.gearDropPanel').evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('gear-material-only-reward.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
 test('claim失敗はpendingを保ち、満杯inventoryでは既存authorityがTEMP BOXへroutingする', async ({ page }) => {
   const errors = []; page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/index.html?gear-drop-reveal-phase4c-temp=1');

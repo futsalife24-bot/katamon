@@ -977,8 +977,18 @@ const HOOK = `
         continueButton: layout.continueButton ? { ...layout.continueButton, shift: resultButtonShift() } : null,
         settlementButton: { ...layout.settlementButton, shift: resultButtonShift() },
         titleButton: { ...layout.titleButton, shift: resultButtonShift() },
+        shareButton: layout.shareButton ? { ...layout.shareButton, shift: resultButtonShift() } : null,
       };
     },
+    cpuGearRewardBreakdownForTest: (preview) => ({ ...cpuGearRewardBreakdown(preview) }),
+    buildCpuResultSharePayloadForTest: (input) => ({ ...buildCpuResultSharePayload(input) }),
+    currentCpuResultSharePayloadForTest: () => {
+      const payload = currentCpuResultSharePayload();
+      return payload ? { ...payload } : null;
+    },
+    requestCpuResultShareForTest: (environment) => requestCpuResultShare(cpuGearResultLayout(), environment),
+    resultShareStateForTest: () => ({ status: resultShareStatusText, pending: !!resultSharePromise }),
+    resetResultShareStateForTest: () => resetResultShareState(),
     cpuGearSettlementConfirmForTest: () => ({
       open: typeof cpuGearVoluntarySettlementConfirmOpen !== 'undefined' && cpuGearVoluntarySettlementConfirmOpen,
       busy: typeof cpuGearResultActionInFlight === 'function' ? cpuGearResultActionInFlight() : null,

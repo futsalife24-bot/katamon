@@ -13,7 +13,7 @@ test('DropとWorkbenchはcanonical 6部位と同じ固定position正本を共有
   assert.match(html, /gearDropMapHtml\(domain, activeSlotId\)/);
   assert.match(html, /gearSlotFramePositions\[slot\.id\]/);
   assert.match(html, /gearSlotFrameSvg\(slot\.id\)/);
-  assert.match(html, /gearSlotMiniHtml\(checked\.slotId\)/);
+  assert.match(html, /gearAssetVisualHtml\(checked\.slotId, checked\.setId, 'gearDropCardAsset'\)/);
 });
 
 test('presentationはdurable unclaimed rewardIdを再読し、表示だけではstorageを変更しない', () => {
@@ -59,6 +59,15 @@ test('未受取報酬はWorkbenchから明示的に再表示でき、実routing�
   assert.match(html, /インベントリへ保存/);
   assert.match(html, /TEMP BOXへ保管/);
   assert.match(html, /inventoryGear \? 'GEARを見る' : '同じ部位を見る'/);
+});
+
+test('Gear 0個でも素材があれば同じ明示claim導線へ出し、空報酬は除外する', () => {
+  assert.match(html, /function gearRewardHasClaimableValue\(reward\)/);
+  assert.match(html, /reward\.gears\.length > 0 \|\| reward\.powder > 0 \|\| reward\.blueprintShards > 0/);
+  assert.match(html, /if \(reward\.gears\.length === 0\) return gearDropRenderMaterialReward\(reward\)/);
+  assert.match(html, /data-gear-material-reward=/);
+  assert.match(html, /粉末・設計片を受け取りました/);
+  assert.match(html, /gearDropWorkbenchBtn\.hidden = true/);
 });
 
 test('visual dedupeはruntime-localでstorage ledgerの意味を変えない', () => {
