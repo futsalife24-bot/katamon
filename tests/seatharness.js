@@ -107,6 +107,7 @@ const HOOK = `
         tutorial: { ...titleTutorialBtn }, free: { ...titleFreeBtn },
         ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn },
         achievements: { ...titleAchievementsBtn }, gear: { ...titleGearBtn },
+        weekdayDungeon: { ...titleWeekdayDungeonBtn },
         soundTest: { ...titleSoundTestBtn },
         update: { ...titleUpdateBtn }
       },
@@ -1812,6 +1813,7 @@ const HOOK = `
       tutorial: { ...titleTutorialBtn },
       ranking: { ...titleRankingBtn }, shop: { ...titleShopBtn }, achievements: { ...titleAchievementsBtn },
       gear: { ...titleGearBtn },
+      weekdayDungeon: { ...titleWeekdayDungeonBtn },
       soundTest: { ...titleSoundTestBtn }, update: { ...titleUpdateBtn },
       left: { ...titleMenuLeftBtn }, right: { ...titleMenuRightBtn },
       battleTab: { ...titleBattleTabBtn }, garageTab: { ...titleGarageTabBtn },

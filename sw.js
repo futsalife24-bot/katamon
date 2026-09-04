@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.172-reward-summary-x-share';
+const CACHE_VERSION = 'katamon-pwa-v2.0.173-weekday-dungeon';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -40,6 +40,8 @@ const APP_SHELL = [
   './shared/gear-storage.js',
   './shared/gear-rewards.js',
   './shared/gear-transactions.js',
+  './shared/gear-weekday-dungeon.js',
+  './shared/gear-weekday-dungeon-storage.js',
   './shared/gear-cpu-rewards.js',
   './shared/gear-cpu-run-storage.js',
   './shared/gear-coop-rewards.js',
@@ -81,6 +83,7 @@ const TIER2_ASSETS = [
   './assets/battle-items/runtime/items/battle_item_healing_01.webp',
   './assets/battle-items/runtime/items/battle_item_special_charge_01.webp',
   './assets/battle-items/runtime/items/battle_item_gear_resource_box_01.webp',
+  './assets/weekday-dungeon/runtime/weekday_dungeon_vault_01.jpg',
   './assets/bosses/runtime/fortress-tank.webp',
   './assets/bosses/runtime/fortress-tank-phase2.webp',
   './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',

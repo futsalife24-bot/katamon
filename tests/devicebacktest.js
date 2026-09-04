@@ -77,9 +77,12 @@ function env(options) {
     '  let inputMode = null;',
     '  let inputPointerId = null;',
     '  let titleMenuCancelCount = 0;',
+    '  let weekdayDungeonCloseCount = 0;',
+    `  let weekdayDungeonUi = { open: ${options?.weekdayDungeonOpen ? 'true' : 'false'} };`,
     '  const TITLE_MENU_BATTLE = 0;',
     '  const TITLE_MENU_GARAGE = 1;',
     '  function closeSoundTest() { soundTestOpen = false; }',
+    '  function closeWeekdayDungeon() { weekdayDungeonCloseCount++; weekdayDungeonUi.open = false; return true; }',
     '  function cancelTitleMenuGesture() { titleMenuCancelCount++; titleMenuGesture = null; inputMode = null; inputPointerId = null; return true; }',
     '  function titleMenuVisualPosition() { return titleMenuPage; }',
     '  function startTitleMenuTransition(page) { titleMenuPage = page; return true; }',
@@ -166,7 +169,7 @@ function makeEnvironmentWithCode(options, code) {
       syncBackTrap,
       confirmDeviceExit,
       deviceBackConfirmOpen,
-      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog, titleMenuPage, titleMenuGesture, titleMenuCancelCount })
+      state: () => ({ backTrapDepth, ignoringBackPop, exitBackSteps, menuOpen, soundPanelOpen, confirmDialog, titleMenuPage, titleMenuGesture, titleMenuCancelCount, weekdayDungeonOpen: weekdayDungeonUi.open, weekdayDungeonCloseCount })
     };`
   );
   const api = buildApi(
@@ -317,6 +320,16 @@ check('バトル中の戻る要求は終了確認ではなく既存メニュー�
   h.api.syncBackTrap();
   h.CloseWatcher.instances[0].requestBack(true);
   assert.equal(h.api.state().menuOpen, true);
+  assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
+});
+
+check('曜日ダンジョン中の戻る要求は一回で画面だけを閉じ、終了確認を出さない', () => {
+  const h = env({ phase: 'title', titleMenuPage: 1, weekdayDungeonOpen: true });
+  h.api.syncBackTrap();
+  h.CloseWatcher.instances[0].requestBack(true);
+  assert.equal(h.api.state().weekdayDungeonOpen, false);
+  assert.equal(h.api.state().weekdayDungeonCloseCount, 1);
+  assert.equal(h.api.state().titleMenuPage, 1);
   assert.equal(h.elements.get('deviceBackConfirm').classList.contains('open'), false);
 });
 
