@@ -138,6 +138,8 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
     }), { timeout: 30000 }).toBe(true);
     await expect.poll(() => cacheHas(page, '/assets/title-bgm.mp3'), { timeout: 30000 }).toBe(true);
     expect(await cacheHas(page, T2_SENTINEL)).toBe(false);
+    await expect.poll(() => requests.filter(request => request.pathname === '/assets/wall.jpg').length).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath('progressive-precache-wall-before-tap.png') });
     const titlePerformance = await collectTitlePerformance(page);
     const beforeTapBytes = bytesFor(requests);
     const beforeTapFiles = requests

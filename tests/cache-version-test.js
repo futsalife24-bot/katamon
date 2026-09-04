@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.167-progressive-precache';
+const EXPECTED_BUILD_ID = 'v2.0.168-title-wall-first-paint';
 
 function tierBody(worker, tier) {
   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
@@ -41,6 +41,11 @@ function assertCacheVersionContract(html, worker) {
   assert.doesNotMatch(appShell, /title-background-logo-start\.jpg/, 'T0素材をinstallで二重取得してはいけません。');
   assert.match(indexHtml, /FIRST_PAINT_CACHE_ASSETS/, 'T0素材はページ取得後に永続キャッシュへコピーしてください。');
   assert.match(indexHtml, /persistFirstPaintAssets/, 'T0素材の二重取得防止処理を維持してください。');
+  assert.match(indexHtml, /FIRST_PAINT_CACHE_ASSETS[\s\S]*?assets\/wall\.jpg/,
+    '最初のタップ前に表示する石壁をT0の永続キャッシュ対象へ含めてください。');
+  assert.doesNotMatch(appShell, /assets\/wall\.jpg/,
+    'ページpreload済みの石壁をSW installでも取得して二重化してはいけません。');
+  assert.doesNotMatch(tierBody(worker, 2), /assets\/wall\.jpg/, '石壁をT2まで遅延してはいけません。');
   assert.match(tierBody(worker, 1), /title-bgm\.mp3/, 'T1にはタイトルBGMを含めてください。');
   assert.match(tierBody(worker, 2), /battle-start-logo\.mp4/, 'T2は最初にバトル開始動画を取得してください。');
   assert.match(tierBody(worker, '3A'), /stage-boss-arena\.mp3/, 'T3aにはゲーム成立用のステージBGMを含めてください。');
