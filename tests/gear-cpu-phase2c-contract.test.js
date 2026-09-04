@@ -44,6 +44,7 @@ test('peak is monotonic across a legacy-style resume and produces the loss downg
   assert.equal(run.withPeakStreak(afterWin, 0).peakStreak, 15);
   const defeat = cpu.createCpuSettlementIntent({
     runId: afterWin.runId, peakStreak: afterWin.peakStreak, outcome: 'defeat', settlementCreatedAtMs: 700,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   });
   assert.equal(defeat.qualityProfileId, 'cpu-streak-10');
   assert.equal(defeat.gearCount, 2);
@@ -56,14 +57,17 @@ test('saved settlement intent is immutable across retry timestamps and retry out
   const state = run.createActiveCpuGearRun(runId(4), 20);
   const firstIntent = cpu.createCpuSettlementIntent({
     runId: state.runId, peakStreak: 20, outcome: 'defeat', settlementCreatedAtMs: 1234,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   });
   const pending = run.withSettlementIntent(state, firstIntent);
   assert.deepEqual(run.withSettlementIntent(pending, JSON.parse(JSON.stringify(firstIntent))), pending);
   const changedTimestamp = cpu.createCpuSettlementIntent({
     runId: state.runId, peakStreak: 20, outcome: 'defeat', settlementCreatedAtMs: 1235,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   });
   const changedOutcome = cpu.createCpuSettlementIntent({
     runId: state.runId, peakStreak: 20, outcome: 'voluntary', settlementCreatedAtMs: 1234,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   });
   expectCode('CPU_GEAR_SETTLEMENT_CONFLICT', () => run.withSettlementIntent(pending, changedTimestamp));
   // At 20 the quality is locked, but outcome is still part of the immutable
@@ -75,6 +79,7 @@ test('an intent survives JSON storage round-trip and materializes byte-for-byte 
   const state = run.createActiveCpuGearRun(runId(5), 50);
   const pending = run.withSettlementIntent(state, cpu.createCpuSettlementIntent({
     runId: state.runId, peakStreak: 50, outcome: 'defeat', settlementCreatedAtMs: 987654,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   }));
   const storage = createMemoryStorage();
   run.saveCpuGearRunState(pending, storage);
@@ -96,6 +101,7 @@ test('fixed deterministic CPU intent vectors eventually materialize all six prod
   for (let index = 1; index <= 160 && found.size < gear.SLOT_IDS.length; index += 1) {
     const reward = cpu.materializeCpuGearReward(cpu.createCpuSettlementIntent({
       runId: runId(index + 100), peakStreak: 50, outcome: 'voluntary', settlementCreatedAtMs: 1,
+      stageItemPowder: 0, stageItemBlueprintShards: 0,
     }));
     reward.gears.forEach((item) => {
       found.add(item.slotId);
@@ -110,6 +116,7 @@ test('0–2 intent is preserved for retry/cleanup but does not materialize a mea
   const state = run.createActiveCpuGearRun(runId(6), 2);
   const pending = run.withSettlementIntent(state, cpu.createCpuSettlementIntent({
     runId: state.runId, peakStreak: 2, outcome: 'voluntary', settlementCreatedAtMs: 0,
+    stageItemPowder: 0, stageItemBlueprintShards: 0,
   }));
   const reward = cpu.materializeCpuGearReward(pending.settlementIntent);
   assert.equal(reward.gears.length, 0);

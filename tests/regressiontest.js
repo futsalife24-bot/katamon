@@ -857,8 +857,10 @@ check('中断セーブが読める', !!loaded, 'null');
 check('セーブ形式が v4', loaded && loaded.v === 4, loaded && String(loaded.v));
 check('セーブが units 形式', !!(loaded && Array.isArray(loaded.units) && loaded.units.length === 2));
 
-// 別の試合を挟んで状態を汚してから復元する
-kt.startBattle();
+// 同じCPU runの別ラウンド相当へ状態を進めて汚してから復元する。
+// Stage item snapshotはrunIdでフェンスされるため、test-only fresh startで
+// active run自体を破棄すると本番ではあり得ない別runへの復元になってしまう。
+kt.resetMatchForTest();
 kt.apply(loaded);
 const after = {
   units: kt.units.map(u => ({ id: u.id, hp: u.hp, fuel: u.fuel, x: u.x, ch: u.character, sc: u.specialCharge })),
@@ -1732,6 +1734,9 @@ kt.clearProjectilesForTest();
 // フェニーチェの手番を越えると進行不能」を、修正を仮定せず実ターン境界と入力まで固定する。
 const coolKaiFeniceOriginalSeat = kt.seat();
 const coolKaiFeniceRestoreSnapshot = kt.snapshot();
+// 下の独立scenario開始はtest-only fresh runへ切り替わるため、終了後の汎用状態復元に
+// run専用stage item fieldを持ち越さない（本番resume経路の検証は専用suiteで行う）。
+delete coolKaiFeniceRestoreSnapshot.stageBattleItems;
 kt.startBattle('coolKai');
 settle();
 kt.setFlatTerrainForTest(420);
@@ -1741,6 +1746,9 @@ kt.placeOnGround('p1', 300);
 kt.placeOnGround('e1', 1100);
 const coolKaiFeniceSnapshot = kt.snapshot();
 coolKaiFeniceSnapshot.winStreak = 19; // high tierなら、チャージ済みCPUは必殺を選ぶ
+// このfixtureは連勝数だけを人工的に書き換える。run連動のstage item状態まで
+// 偽装せず、旧snapshot互換の「fieldなし」で本来の必殺進行だけを検査する。
+delete coolKaiFeniceSnapshot.stageBattleItems;
 coolKaiFeniceSnapshot.units.find(unit => unit.id === 'p1').specialCharge = 4;
 coolKaiFeniceSnapshot.units.find(unit => unit.id === 'e1').specialCharge = 4;
 kt.apply(coolKaiFeniceSnapshot);

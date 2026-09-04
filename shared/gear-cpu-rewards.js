@@ -8,8 +8,9 @@
   // CPU reward calculation is intentionally data-only.  Run identity and
   // settlement timestamps are supplied by the integration layer; this module
   // must never create them from a clock or random device.
-  const CPU_REWARD_RULES_VERSION = 2;
+  const CPU_REWARD_RULES_VERSION = 3;
   const LEGACY_CPU_REWARD_RULES_VERSION = 1;
+  const RESOURCE_CPU_REWARD_RULES_VERSION = 2;
   const CPU_REWARD_SOURCE_ID = 'cpu_battle';
   // Rare CPU encounters are an entirely separate, one-Gear drop.  Keeping
   // this outside the streak settlement rule lets a rare win be retried and
@@ -61,6 +62,11 @@
   const assertNonNegativeSafeInteger = (value, path) => {
     if (!Number.isSafeInteger(value) || value < 0) fail('INVALID_CPU_REWARD_INPUT', `${path} must be a non-negative safe integer`);
     return value;
+  };
+  const addSafe = (left, right, path) => {
+    const result = left + right;
+    if (!Number.isSafeInteger(result) || result < 0) fail('CPU_REWARD_TOTAL_OVERFLOW', `${path} exceeds the safe integer range`);
+    return result;
   };
   const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
@@ -129,7 +135,7 @@
     return 5;
   }
   function assertRewardRulesVersion(value) {
-    if (value === LEGACY_CPU_REWARD_RULES_VERSION || value === CPU_REWARD_RULES_VERSION) return value;
+    if (value === LEGACY_CPU_REWARD_RULES_VERSION || value === RESOURCE_CPU_REWARD_RULES_VERSION || value === CPU_REWARD_RULES_VERSION) return value;
     if (Number.isSafeInteger(value) && value > CPU_REWARD_RULES_VERSION) fail('UNSUPPORTED_FUTURE_CPU_REWARD_RULES_VERSION', 'settlement intent uses a newer CPU reward rules version');
     fail('UNSUPPORTED_CPU_REWARD_RULES_VERSION', 'settlement intent uses an unsupported CPU reward rules version');
   }
@@ -214,12 +220,20 @@
       qualityProfileId: preview.qualityProfileId,
       gearCount: preview.gearCount,
     };
-    if (version >= 2) intent.powder = preview.powder;
+    if (version >= RESOURCE_CPU_REWARD_RULES_VERSION) intent.powder = preview.powder;
     intent.blueprintShards = preview.blueprintShards;
+    if (version >= CPU_REWARD_RULES_VERSION) {
+      const stageItemPowder = assertNonNegativeSafeInteger(input.stageItemPowder, 'stageItemPowder');
+      const stageItemBlueprintShards = assertNonNegativeSafeInteger(input.stageItemBlueprintShards, 'stageItemBlueprintShards');
+      intent.powder = addSafe(preview.powder, stageItemPowder, 'powder');
+      intent.blueprintShards = addSafe(preview.blueprintShards, stageItemBlueprintShards, 'blueprintShards');
+      intent.stageItemPowder = stageItemPowder;
+      intent.stageItemBlueprintShards = stageItemBlueprintShards;
+    }
     return Object.freeze(intent);
   }
   function createCpuSettlementIntent(input) {
-    assertExactKeys(input, ['runId', 'peakStreak', 'outcome', 'settlementCreatedAtMs'], 'settlement intent input');
+    assertExactKeys(input, ['runId', 'peakStreak', 'outcome', 'settlementCreatedAtMs', 'stageItemPowder', 'stageItemBlueprintShards'], 'settlement intent input');
     return createCpuSettlementIntentForVersion(input, CPU_REWARD_RULES_VERSION);
   }
   function validateCpuSettlementIntent(rawIntent) {
@@ -227,7 +241,9 @@
     const versionDescriptor = Object.getOwnPropertyDescriptor(rawIntent, 'rewardRulesVersion');
     if (!versionDescriptor || !versionDescriptor.enumerable || !hasOwn(versionDescriptor, 'value')) fail('INVALID_CPU_REWARD_INPUT', 'settlement intent.rewardRulesVersion must be an enumerable data property');
     const version = assertRewardRulesVersion(versionDescriptor.value);
-    const keys = version >= 2
+    const keys = version >= CPU_REWARD_RULES_VERSION
+      ? ['rewardRulesVersion', 'runId', 'rewardId', 'settlementCreatedAtMs', 'peakStreak', 'outcome', 'qualityProfileId', 'gearCount', 'powder', 'blueprintShards', 'stageItemPowder', 'stageItemBlueprintShards']
+      : version >= RESOURCE_CPU_REWARD_RULES_VERSION
       ? ['rewardRulesVersion', 'runId', 'rewardId', 'settlementCreatedAtMs', 'peakStreak', 'outcome', 'qualityProfileId', 'gearCount', 'powder', 'blueprintShards']
       : ['rewardRulesVersion', 'runId', 'rewardId', 'settlementCreatedAtMs', 'peakStreak', 'outcome', 'qualityProfileId', 'gearCount', 'blueprintShards'];
     assertExactKeys(rawIntent, keys, 'settlement intent');
@@ -236,10 +252,14 @@
     const settlementCreatedAtMs = assertNonNegativeSafeInteger(rawIntent.settlementCreatedAtMs, 'settlement intent.settlementCreatedAtMs');
     const peakStreak = assertNonNegativeSafeInteger(rawIntent.peakStreak, 'settlement intent.peakStreak');
     const outcome = assertOutcome(rawIntent.outcome);
-    const expected = createCpuSettlementIntentForVersion({ runId, peakStreak, outcome, settlementCreatedAtMs }, version);
+    const expected = createCpuSettlementIntentForVersion({
+      runId, peakStreak, outcome, settlementCreatedAtMs,
+      stageItemPowder: version >= CPU_REWARD_RULES_VERSION ? rawIntent.stageItemPowder : undefined,
+      stageItemBlueprintShards: version >= CPU_REWARD_RULES_VERSION ? rawIntent.stageItemBlueprintShards : undefined,
+    }, version);
     if (rewardId !== expected.rewardId || rawIntent.qualityProfileId !== expected.qualityProfileId
       || rawIntent.gearCount !== expected.gearCount
-      || (version >= 2 && rawIntent.powder !== expected.powder)
+      || (version >= RESOURCE_CPU_REWARD_RULES_VERSION && rawIntent.powder !== expected.powder)
       || rawIntent.blueprintShards !== expected.blueprintShards) {
       fail('CPU_SETTLEMENT_INTENT_MISMATCH', 'settlement intent does not match the immutable CPU reward rules');
     }
@@ -247,7 +267,16 @@
   }
   function previewCpuSettlementIntent(rawIntent) {
     const intent = validateCpuSettlementIntent(rawIntent);
-    return previewCpuSettlementForRules({ peakStreak: intent.peakStreak, outcome: intent.outcome }, intent.rewardRulesVersion);
+    const preview = previewCpuSettlementForRules({ peakStreak: intent.peakStreak, outcome: intent.outcome }, intent.rewardRulesVersion);
+    if (intent.rewardRulesVersion < CPU_REWARD_RULES_VERSION) return preview;
+    return Object.freeze({
+      ...preview,
+      powder: intent.powder,
+      blueprintShards: intent.blueprintShards,
+      stageItemPowder: intent.stageItemPowder,
+      stageItemBlueprintShards: intent.stageItemBlueprintShards,
+      hasReward: preview.gearCount > 0 || intent.powder > 0 || intent.blueprintShards > 0,
+    });
   }
   function materializeCpuGearReward(rawIntent) {
     const intent = validateCpuSettlementIntent(rawIntent);
@@ -259,6 +288,9 @@
       peakStreak: intent.peakStreak,
       outcome: intent.outcome,
       qualityProfileId: intent.qualityProfileId,
+      ...(intent.rewardRulesVersion >= CPU_REWARD_RULES_VERSION
+        ? { stageItems: Object.freeze({ powder: intent.stageItemPowder, blueprintShards: intent.stageItemBlueprintShards }) }
+        : {}),
     });
     const gears = [];
     for (let index = 0; index < intent.gearCount; index += 1) {
@@ -288,7 +320,7 @@
       // top level, but hand its collection to the Phase 2B queue as a normal
       // dense array rather than a frozen runtime-only container.
       gears,
-      powder: intent.rewardRulesVersion >= 2 ? intent.powder : 0,
+      powder: intent.rewardRulesVersion >= RESOURCE_CPU_REWARD_RULES_VERSION ? intent.powder : 0,
       blueprintShards: intent.blueprintShards,
     });
   }

@@ -9,7 +9,12 @@
   // remains the battle snapshot; this key owns only a CPU reward run identity,
   // its peak, and a durable settlement entitlement.
   const CPU_GEAR_RUN_STORAGE_KEY = 'katamon_cpu_gear_run_v1';
-  const CPU_GEAR_RUN_SCHEMA_VERSION = 1;
+  const CPU_GEAR_RUN_SCHEMA_VERSION = 2;
+  const LEGACY_CPU_GEAR_RUN_SCHEMA_VERSION = 1;
+  const MAX_STAGE_RESOURCE_BOXES = 10;
+  const STAGE_ITEM_POWDER_PER_BOX = 3;
+  const MAX_STAGE_ITEM_POWDER = MAX_STAGE_RESOURCE_BOXES * STAGE_ITEM_POWDER_PER_BOX;
+  const MAX_STAGE_ITEM_BLUEPRINT_SHARDS = 1;
   // This lock owns the small CPU run identity/peak/intent state plus the
   // legacy CPU suspend lifecycle that is coupled to it.  It is intentionally
   // separate from the Gear Storage lock: settlement releases this lock before
@@ -53,6 +58,30 @@
   function assertPeak(value, path = 'peakStreak') {
     if (!Number.isSafeInteger(value) || value < 0) fail('INVALID_CPU_GEAR_RUN_PEAK', `${path} must be a non-negative safe integer`);
     return value;
+  }
+  function assertNonNegativeSafeInteger(value, path) {
+    if (!Number.isSafeInteger(value) || value < 0) fail('INVALID_CPU_GEAR_RUN_STATE', `${path} must be a non-negative safe integer`);
+    return value;
+  }
+  function zeroStageItemEscrow() {
+    return { powder: 0, blueprintShards: 0, matchOrdinal: null, claimedMask: 0 };
+  }
+  function cloneStageItemEscrow(value) {
+    assertExactDataKeys(value, ['powder', 'blueprintShards', 'matchOrdinal', 'claimedMask'], 'cpu gear run stage item escrow');
+    const powder = assertNonNegativeSafeInteger(value.powder, 'stageItemEscrow.powder');
+    const blueprintShards = assertNonNegativeSafeInteger(value.blueprintShards, 'stageItemEscrow.blueprintShards');
+    const matchOrdinal = value.matchOrdinal === null
+      ? null
+      : assertNonNegativeSafeInteger(value.matchOrdinal, 'stageItemEscrow.matchOrdinal');
+    const claimedMask = assertNonNegativeSafeInteger(value.claimedMask, 'stageItemEscrow.claimedMask');
+    if (powder > MAX_STAGE_ITEM_POWDER || powder % STAGE_ITEM_POWDER_PER_BOX !== 0
+        || blueprintShards > MAX_STAGE_ITEM_BLUEPRINT_SHARDS || claimedMask > 1) {
+      fail('INVALID_CPU_GEAR_RUN_STATE', 'stageItemEscrow exceeds the fixed stage resource contract');
+    }
+    return { powder, blueprintShards, matchOrdinal, claimedMask };
+  }
+  function isZeroStageItemEscrow(value) {
+    return value.powder === 0 && value.blueprintShards === 0 && value.matchOrdinal === null && value.claimedMask === 0;
   }
   function assertRunId(value) {
     if (typeof value !== 'string' || !RUN_ID_RE.test(value)) {
@@ -108,30 +137,50 @@
   }
 
   function validateCpuGearRunState(rawState) {
-    assertExactDataKeys(rawState, ['schemaVersion', 'runId', 'state', 'peakStreak', 'ownerSessionId', 'resumeClaim', 'settlementIntent'], 'cpu gear run state');
-    if (rawState.schemaVersion !== CPU_GEAR_RUN_SCHEMA_VERSION) {
-      if (Number.isSafeInteger(rawState.schemaVersion) && rawState.schemaVersion > CPU_GEAR_RUN_SCHEMA_VERSION) {
-        fail('UNSUPPORTED_FUTURE_CPU_GEAR_RUN_VERSION', 'CPU gear run state is newer than this client');
-      }
+    if (!isPlainRecord(rawState)) fail('INVALID_CPU_GEAR_RUN_STATE', 'cpu gear run state must be a plain object');
+    const versionDescriptor = Object.getOwnPropertyDescriptor(rawState, 'schemaVersion');
+    if (!versionDescriptor || !versionDescriptor.enumerable || !hasOwn(versionDescriptor, 'value')) {
+      fail('INVALID_CPU_GEAR_RUN_STATE', 'cpu gear run state.schemaVersion must be an enumerable data property');
+    }
+    const schemaVersion = versionDescriptor.value;
+    if (Number.isSafeInteger(schemaVersion) && schemaVersion > CPU_GEAR_RUN_SCHEMA_VERSION) {
+      fail('UNSUPPORTED_FUTURE_CPU_GEAR_RUN_VERSION', 'CPU gear run state is newer than this client');
+    }
+    if (schemaVersion !== LEGACY_CPU_GEAR_RUN_SCHEMA_VERSION && schemaVersion !== CPU_GEAR_RUN_SCHEMA_VERSION) {
       fail('UNSUPPORTED_CPU_GEAR_RUN_VERSION', 'CPU gear run state version is unsupported');
     }
+    const keys = schemaVersion === LEGACY_CPU_GEAR_RUN_SCHEMA_VERSION
+      ? ['schemaVersion', 'runId', 'state', 'peakStreak', 'ownerSessionId', 'resumeClaim', 'settlementIntent']
+      : ['schemaVersion', 'runId', 'state', 'peakStreak', 'ownerSessionId', 'resumeClaim', 'settlementIntent', 'stageItemEscrow'];
+    assertExactDataKeys(rawState, keys, 'cpu gear run state');
     const runId = assertRunId(rawState.runId);
     const peakStreak = assertPeak(rawState.peakStreak);
     const ownerSessionId = assertOwnerSessionId(rawState.ownerSessionId);
     const resumeClaim = cloneResumeClaim(rawState.resumeClaim);
+    const stageItemEscrow = schemaVersion === LEGACY_CPU_GEAR_RUN_SCHEMA_VERSION
+      ? zeroStageItemEscrow()
+      : cloneStageItemEscrow(rawState.stageItemEscrow);
     if (rawState.state !== ACTIVE && rawState.state !== SETTLEMENT_PENDING) {
       fail('INVALID_CPU_GEAR_RUN_STATUS', 'CPU gear run state must be active or settlement_pending');
     }
     if (rawState.state === ACTIVE) {
       if (rawState.settlementIntent !== null) fail('INVALID_CPU_GEAR_RUN_STATE', 'an active run must not contain a settlement intent');
-      return { schemaVersion: CPU_GEAR_RUN_SCHEMA_VERSION, runId, state: ACTIVE, peakStreak, ownerSessionId, resumeClaim, settlementIntent: null };
+      return { schemaVersion: CPU_GEAR_RUN_SCHEMA_VERSION, runId, state: ACTIVE, peakStreak, ownerSessionId, resumeClaim, settlementIntent: null, stageItemEscrow };
     }
     if (resumeClaim !== null) fail('INVALID_CPU_GEAR_RUN_STATE', 'a pending settlement must not contain a resume claim');
     const settlementIntent = cloneIntent(rawState.settlementIntent);
     if (settlementIntent.runId !== runId || settlementIntent.peakStreak !== peakStreak) {
       fail('CPU_GEAR_RUN_INTENT_MISMATCH', 'settlement intent must match the saved run identity and peak');
     }
-    return { schemaVersion: CPU_GEAR_RUN_SCHEMA_VERSION, runId, state: SETTLEMENT_PENDING, peakStreak, ownerSessionId, resumeClaim: null, settlementIntent };
+    if (settlementIntent.rewardRulesVersion < 3 && !isZeroStageItemEscrow(stageItemEscrow)) {
+      fail('CPU_GEAR_RUN_INTENT_MISMATCH', 'legacy settlement intents require a zero stage item escrow');
+    }
+    if (settlementIntent.rewardRulesVersion >= 3
+        && (settlementIntent.stageItemPowder !== stageItemEscrow.powder
+          || settlementIntent.stageItemBlueprintShards !== stageItemEscrow.blueprintShards)) {
+      fail('CPU_GEAR_RUN_INTENT_MISMATCH', 'settlement intent stage item totals must match the saved escrow');
+    }
+    return { schemaVersion: CPU_GEAR_RUN_SCHEMA_VERSION, runId, state: SETTLEMENT_PENDING, peakStreak, ownerSessionId, resumeClaim: null, settlementIntent, stageItemEscrow };
   }
 
   function createActiveCpuGearRun(runId, peakStreak = 0, ownerSessionId = null) {
@@ -143,6 +192,7 @@
       ownerSessionId,
       resumeClaim: null,
       settlementIntent: null,
+      stageItemEscrow: zeroStageItemEscrow(),
     });
   }
   function withPeakStreak(rawState, candidatePeakStreak) {
@@ -205,6 +255,72 @@
       fail('CPU_GEAR_RUN_INTENT_MISMATCH', 'settlement intent does not belong to the active run');
     }
     return validateCpuGearRunState({ ...state, state: SETTLEMENT_PENDING, settlementIntent });
+  }
+
+  function assertStageMatchOrdinal(value) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      fail('INVALID_CPU_STAGE_ITEM_MATCH', 'matchOrdinal must be a non-negative safe integer');
+    }
+    return value;
+  }
+  function reconcileStageItemEscrow(rawState, rawMatchOrdinal) {
+    const state = validateCpuGearRunState(rawState);
+    if (state.state !== ACTIVE) fail('CPU_STAGE_ITEM_RUN_NOT_ACTIVE', 'stage items can only mutate an active CPU run');
+    const matchOrdinal = assertStageMatchOrdinal(rawMatchOrdinal);
+    if (matchOrdinal < state.peakStreak) fail('STALE_CPU_STAGE_ITEM_MATCH', 'stage item pickup belongs to an older match');
+    if (matchOrdinal > state.peakStreak) fail('FUTURE_CPU_STAGE_ITEM_MATCH', 'stage item pickup belongs to a future match');
+    const previous = state.stageItemEscrow.matchOrdinal;
+    if (previous === matchOrdinal) return Object.freeze({ state, modified: false });
+    const nextState = validateCpuGearRunState({
+      ...state,
+      stageItemEscrow: { ...state.stageItemEscrow, matchOrdinal, claimedMask: 0 },
+    });
+    return Object.freeze({ state: nextState, modified: true });
+  }
+  function recordStageItemPickup(rawState, input) {
+    assertExactDataKeys(input, ['matchOrdinal', 'itemIndex', 'resourceBoxCount', 'collector', 'powder', 'blueprintShards'], 'cpu stage item pickup');
+    const matchOrdinal = assertStageMatchOrdinal(input.matchOrdinal);
+    if (input.resourceBoxCount !== 1 || input.itemIndex !== 0) {
+      fail('INVALID_CPU_STAGE_ITEM_PICKUP', 'the first release permits exactly one resource box per match');
+    }
+    if (input.collector !== 'player' && input.collector !== 'cpu') {
+      fail('INVALID_CPU_STAGE_ITEM_PICKUP', 'collector must be player or cpu');
+    }
+    const powder = assertNonNegativeSafeInteger(input.powder, 'cpu stage item pickup.powder');
+    const blueprintShards = assertNonNegativeSafeInteger(input.blueprintShards, 'cpu stage item pickup.blueprintShards');
+    const validPlayerGrant = (powder === STAGE_ITEM_POWDER_PER_BOX
+      && blueprintShards <= MAX_STAGE_ITEM_BLUEPRINT_SHARDS)
+      || (powder === 0 && blueprintShards === 0);
+    if ((input.collector === 'player' && !validPlayerGrant)
+        || (input.collector === 'cpu' && (powder !== 0 || blueprintShards !== 0))) {
+      fail('INVALID_CPU_STAGE_ITEM_PICKUP', 'pickup resources do not match the fixed stage item effect');
+    }
+    const reconciled = reconcileStageItemEscrow(rawState, matchOrdinal);
+    const state = reconciled.state;
+    const itemMask = 2 ** input.itemIndex;
+    const alreadyClaimed = Math.floor(state.stageItemEscrow.claimedMask / itemMask) % 2 === 1;
+    if (alreadyClaimed) return Object.freeze({ state, modified: false, credited: false });
+    let nextPowder = state.stageItemEscrow.powder;
+    let nextBlueprintShards = state.stageItemEscrow.blueprintShards;
+    if (input.collector === 'player') {
+      nextPowder += powder;
+      nextBlueprintShards += blueprintShards;
+      if (!Number.isSafeInteger(nextPowder) || !Number.isSafeInteger(nextBlueprintShards)
+          || nextPowder > MAX_STAGE_ITEM_POWDER
+          || nextBlueprintShards > MAX_STAGE_ITEM_BLUEPRINT_SHARDS) {
+        fail('CPU_STAGE_ITEM_ESCROW_LIMIT', 'stage item escrow exceeds the run resource limit');
+      }
+    }
+    const nextState = validateCpuGearRunState({
+      ...state,
+      stageItemEscrow: {
+        powder: nextPowder,
+        blueprintShards: nextBlueprintShards,
+        matchOrdinal,
+        claimedMask: state.stageItemEscrow.claimedMask + itemMask,
+      },
+    });
+    return Object.freeze({ state: nextState, modified: true, credited: input.collector === 'player' });
   }
 
   function resolveStorage(storage, method) {
@@ -307,6 +423,8 @@
     CPU_GEAR_RUN_STORAGE_KEY, CPU_GEAR_RUN_SCHEMA_VERSION, CPU_GEAR_RUN_LOCK_NAME, ACTIVE, SETTLEMENT_PENDING,
     createCryptoRunId, createCryptoOwnerSessionId, createCryptoSnapshotId, createActiveCpuGearRun,
     withPeakStreak, withOwnerSessionId, withResumeClaim, withResumeClaimOwner, completeResumeClaim, withSettlementIntent,
+    MAX_STAGE_RESOURCE_BOXES, STAGE_ITEM_POWDER_PER_BOX, MAX_STAGE_ITEM_POWDER, MAX_STAGE_ITEM_BLUEPRINT_SHARDS,
+    reconcileStageItemEscrow, reconcileStageItemEscrowForMatch: reconcileStageItemEscrow, recordStageItemPickup,
     validateCpuGearRunState, encodeCpuGearRunState, decodeCpuGearRunState,
     loadCpuGearRunState, saveCpuGearRunState, removeCpuGearRunState, withCpuGearRunLock,
   });

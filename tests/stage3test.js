@@ -625,10 +625,10 @@ function check(name, value) {
   }
   check('character images stay in sync with the build cache', charNg.length === 0, charNg.join(' / '));
   // v130: webp を先に読み、読めなかった時だけ同じ名前の png へ落とす。
-  check('the art loader asks for webp first and falls back to png',
+  check('the art loader asks for webp first, defaults to png fallback, and supports runtime-only art',
     /img\.src = `\$\{webpBase\}\.webp`;/.test(htmlForAudio)
     && /img\.src = `\$\{pngBase\}\.png`;/.test(htmlForAudio)
-    && htmlForAudio.includes('if (!triedPng) {'));
+    && htmlForAudio.includes('if (!triedPng && opts.pngFallback !== false) {'));
   check('character images rely on the build cache instead of per-asset query versions',
     !htmlForAudio.includes('CHARACTER_ASSET_VERSION') && !htmlForAudio.includes('?v='));
   // 落とし先の png を消すと、古い端末で絵が1枚も出なくなる。

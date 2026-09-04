@@ -1070,6 +1070,63 @@ const HOOK = `
     cpuGearShieldStateForTest: () => cpuGearShieldState ? JSON.parse(JSON.stringify(cpuGearShieldState)) : null,
     cpuGearRuntimeEffectsStateForTest: () => cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null,
     cpuRareEncounterForTest: () => cpuRareEncounter ? JSON.parse(JSON.stringify(cpuRareEncounter)) : null,
+    stageBattleItemsForTest: () => stageBattleItems ? cloneStageBattleItemsSnapshot(stageBattleItems) : null,
+    stageBattleItemPendingForTest: () => ({
+      itemId: stageBattleItemPendingId,
+      promise: !!stageBattleItemPickupPromise,
+    }),
+    stageBattleItemRetryForTest: () => ({
+      pending: !!stageBattleItemPickupRetry,
+      error: stageBattleItemPickupError?.code || null,
+    }),
+    forceStageBattleItemForTest: (kind, x, y, options = {}) => {
+      if (!stageBattleItems) return null;
+      const api = stageBattleItemApi();
+      const next = cloneStageBattleItemsSnapshot(stageBattleItems);
+      const ordinal = Number.isSafeInteger(options.spawnOrdinal)
+        ? options.spawnOrdinal
+        : next.nextSpawnOrdinal;
+      const spawnTurn = Number.isSafeInteger(options.spawnTurn) ? options.spawnTurn : turnCount;
+      next.nextSpawnOrdinal = Math.max(next.nextSpawnOrdinal, ordinal + 1);
+      if (next.spawnedCounts[kind] >= api.MATCH_CAPS[kind]) return null;
+      next.spawnedCounts[kind] += 1;
+      next.activeItem = api.createSpawnState({
+        runId: next.runId,
+        matchOrdinal: next.matchOrdinal,
+        spawnOrdinal: ordinal,
+        kind,
+        x: Math.max(0, Math.round(x)),
+        y: Math.max(0, Math.round(Number.isFinite(y) ? y : groundYAt(x) - STAGE_BATTLE_ITEM_GROUND_OFFSET)),
+        spawnTurn,
+      });
+      stageBattleItems = validateStageBattleItemsSnapshot(next);
+      return cloneStageBattleItemsSnapshot(stageBattleItems);
+    },
+    collectStageBattleItemByProjectileForTest: (ownerId, from, to, radius = 5) => {
+      const projectile = {
+        owner: ownerId,
+        x: to.x,
+        y: to.y,
+        radius,
+        gearDamageProfile: 'normal_cannonball',
+      };
+      return tryCollectStageBattleItemByProjectile(projectile, from.x, from.y);
+    },
+    collectStageBattleItemByUnitForTest: (unitId) => tryCollectStageBattleItemByUnit(unitById(unitId)),
+    landJumpOnStageBattleItemForTest: (unitId) => {
+      const item = stageBattleItems?.activeItem;
+      const unit = unitById(unitId);
+      if (!item || !unit) return null;
+      const projectile = { owner: unitId, jump: true, prevX: unit.x, prevY: unit.y, vx: 0, vy: 1 };
+      teleportOwnerToImpact(projectile, item.x, groundYAt(item.x), false, null);
+      return {
+        collected: stageBattleItems?.activeItem?.itemId !== item.itemId,
+        x: unit.x,
+        y: unit.y,
+        grounded: unit.grounded,
+      };
+    },
+    stageBattleItemTurnStartForTest: () => updateStageBattleItemsAtTurnStart(),
     requestCpuRareRewardAfterWinForTest: () => requestCpuRareRewardAfterWin(),
     setCpuGearRuntimeEffectsForTest: (effects) => {
       const p1 = unitById('p1'); const combat = cpuGearCombatForUnit(p1);

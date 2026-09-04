@@ -884,6 +884,7 @@
 <script src="shared/stage-storage.js"></script>
 <script src="shared/stage-repository.js"></script>
 <script src="shared/stage-zip.js"></script>
+<script src="shared/stage-battle-items.js"></script>
 <script src="./generated/content-studio-catalog.js"></script>
 <script src="coop-mvp-foundation.js"></script>
 <!-- Gear persistence is loaded before the game shell, but it does not fetch or preload any visual asset. -->
@@ -954,12 +955,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.170-gear-resource-rewards';
+  const BUILD_ID = 'v2.0.171-stage-battle-items';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.171', date: '2026/09/04', summary: 'CPU BATTLEへ回復・必殺チャージ・Gear資源箱を追加' },
     { version: 'v2.0.170', date: '2026/09/04', summary: 'CPU連勝精算でGear粉末・設計片を獲得できる導線を追加' },
     { version: 'v2.0.169', date: '2026/09/04', summary: '希少CPU・Gear日本語表示・砲弾型必殺の弾道統一を追加' },
     { version: 'v2.0.168', date: '2026/09/04', summary: '最初のタップ前から正式な石壁を表示するよう修正' },
@@ -1529,7 +1531,8 @@
     ensureBattleStartLogoImage();
     ensureBattleHudAssets();
     ensureVsPlateAssets();
-    const images = [battleStartLogoImage, ...Object.values(battleHudImages)];
+    ensureStageBattleItemImages();
+    const images = [battleStartLogoImage, ...Object.values(battleHudImages), ...Object.values(stageBattleItemImages)];
     Promise.allSettled(images.map(image => image?.decode?.())).catch(() => {});
   }
 
@@ -3975,7 +3978,7 @@
     let triedPng = false;
     img.onload = () => { if (opts.onReady) opts.onReady(); };
     img.onerror = () => {
-      if (!triedPng) {
+      if (!triedPng && opts.pngFallback !== false) {
         triedPng = true;
         img.src = `${pngBase}.png`;
         return;
@@ -3984,6 +3987,25 @@
     };
     img.src = `${webpBase}.webp`;
     return img;
+  }
+
+  // BATTLEアイテムは初回描画を止めないTier 2素材。試合中に未読込でも
+  // 固有シルエットのCanvas fallbackを描くため、見えない当たり判定にはならない。
+  const STAGE_BATTLE_ITEM_ASSET_STEMS = Object.freeze({
+    healing: 'battle_item_healing_01',
+    special_charge: 'battle_item_special_charge_01',
+    gear_resource: 'battle_item_gear_resource_box_01'
+  });
+  const stageBattleItemImages = {};
+  function ensureStageBattleItemImages() {
+    for (const [kind, stem] of Object.entries(STAGE_BATTLE_ITEM_ASSET_STEMS)) {
+      if (stageBattleItemImages[kind]) continue;
+      stageBattleItemImages[kind] = loadArtImage(stem, {
+        webpBase: `assets/battle-items/runtime/items/${stem}`,
+        pngFallback: false
+      });
+    }
+    return stageBattleItemImages;
   }
 
   // キャラ画像は全員「右向き原画」で統一し、戦闘中だけワールドの向きに合わせて反転する。
@@ -6277,6 +6299,7 @@
     if (u.id === localUnitId) focusCameraOn(u.x, true, u.y);
     faceUnitTowardOpponent(u);
     pushFloatText(u.x, u.y - UNIT_RADIUS - 12, '跳躍!', '#8ee7ff', 20);
+    if (u.grounded) tryCollectStageBattleItemByUnit(unitById(p.owner));
   }
 
   function rotateVec(vx, vy, deg) {
@@ -9803,6 +9826,9 @@
       }
     }
     if (isCpuGearEligibleRun() && cpuRareEncounter !== null) snapshot.cpuRareEncounter = cpuRareEncounter;
+    if (isStageBattleItemEligibleMatch() && stageBattleItems !== null) {
+      snapshot.stageBattleItems = cloneStageBattleItemsSnapshot(stageBattleItems);
+    }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
     // 基底地形へcratersを適用するため、変わらない480列・見た目メタデータを送らない。
     if (includeTerrain) {
@@ -10156,6 +10182,11 @@
     cpuGearTerminalSettlementPrepared = false;
     cpuGearTerminalSettlementDeferred = false;
     cpuGearTerminalSettlementOutcome = null;
+    stageBattleItems = null;
+    stageBattleItemPendingId = null;
+    stageBattleItemPickupPromise = null;
+    stageBattleItemPickupRetry = null;
+    stageBattleItemPickupError = null;
   }
 
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
@@ -10190,6 +10221,7 @@
     const restoredCpuGearStatusState = restoreCpuGearStatusState(data, options, restoredCpuGearSnapshot);
     const restoredCpuGearShieldState = restoreCpuGearShieldState(data, options, restoredCpuGearSnapshot);
     const restoredCpuGearRuntimeEffectsState = restoreCpuGearRuntimeEffectsState(data, options, restoredCpuGearSnapshot);
+    const restoredStageBattleItems = restoreStageBattleItemsFromSnapshot(data);
     battleMode = data.battleMode === 'coop' ? 'coop' : data.battleMode === 'free' ? 'free' : 'normal';
     selectedCustomStage = null;
     selectedCustomAdapter = null;
@@ -10354,6 +10386,8 @@
     runStats = data.runStats;
     isBossMatch = data.isBossMatch;
     cpuRareEncounter = restoreCpuRareEncounterFromSnapshot(data);
+    stageBattleItems = restoredStageBattleItems;
+    if (stageBattleItems) ensureStageBattleItemImages();
     bossBannerTimer = 0;
     cpuRareBannerTimer = cpuRareEncounter ? MATCHUP_CUTIN_DURATION + 1.2 : 0;
     if (isOnline()) {
@@ -10493,6 +10527,16 @@
   let cpuRareEncounter = null;
   let cpuRareRewardPromise = null;
   let cpuRareRewardError = null;
+  // 通常CPU 1vs1だけの試合内アイテム状態。ONLINEの共有snapshotとは完全に分離する。
+  const STAGE_BATTLE_ITEMS_SNAPSHOT_VERSION = 1;
+  const STAGE_BATTLE_ITEM_GROUND_OFFSET = 28;
+  let stageBattleItems = null;
+  let stageBattleItemPendingId = null;
+  let stageBattleItemPickupPromise = null;
+  // 資源箱はCPU runへ書けた時だけ消す。保存失敗時は同じitem identityと効果を
+  // 結果画面まで保持し、継続・精算・中断操作の先頭で自動再試行する。
+  let stageBattleItemPickupRetry = null;
+  let stageBattleItemPickupError = null;
 
   function cpuGearModules() {
     const domain = globalThis.KatamonGearDomain;
@@ -10509,6 +10553,528 @@
       throw new Error('GEAR_CPU_MODULES_UNAVAILABLE');
     }
     return { domain, storage, rewards, transactions, cpuRewards, runStorage, presets, battleSnapshot, combat, battleRng };
+  }
+
+  function stageBattleItemApi() {
+    const api = globalThis.KatamonStageBattleItems;
+    if (!api) throw Object.assign(new Error('STAGE_BATTLE_ITEMS_MODULE_UNAVAILABLE'), { code: 'STAGE_BATTLE_ITEMS_MODULE_UNAVAILABLE' });
+    return api;
+  }
+
+  function isStageBattleItemEligibleMatch() {
+    const api = globalThis.KatamonStageBattleItems;
+    if (!api?.isEligibleBattleMode) return false;
+    return api.isEligibleBattleMode({
+      offline: !isOnline(),
+      normalCpu: battleMode === 'normal',
+      oneVsOne: matchFormat === '1v1',
+      officialStage: !selectedCustomStage && currentPattern !== 'custom',
+      boss: isBossMatch === true,
+      online: isOnline(),
+      twoVsTwo: is2v2(),
+      free: battleMode === 'free',
+      tutorial: battleMode === 'tutorial',
+      demo: battleMode === 'demo',
+      custom: !!selectedCustomStage || currentPattern === 'custom'
+    });
+  }
+
+  function stageBattleItemExactRecord(value, keys, code) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+        || Object.getOwnPropertySymbols(value).length) {
+      throw Object.assign(new Error(code), { code });
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const actual = Object.keys(descriptors).sort();
+    const expected = keys.slice().sort();
+    if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+      throw Object.assign(new Error(code), { code });
+    }
+    for (const key of expected) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !descriptor.enumerable
+          || !Object.prototype.hasOwnProperty.call(descriptor, 'value') || descriptor.get || descriptor.set) {
+        throw Object.assign(new Error(code), { code });
+      }
+    }
+    return descriptors;
+  }
+
+  function validateStageBattleItemCounts(value) {
+    const api = stageBattleItemApi();
+    const descriptors = stageBattleItemExactRecord(value, api.ITEM_KINDS, 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED');
+    const counts = {};
+    for (const kind of api.ITEM_KINDS) {
+      const count = descriptors[kind].value;
+      if (!Number.isSafeInteger(count) || count < 0 || count > api.MATCH_CAPS[kind]) {
+        throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED' });
+      }
+      counts[kind] = count;
+    }
+    return Object.freeze(counts);
+  }
+
+  function validateStageBattleItemsSnapshot(value) {
+    const api = stageBattleItemApi();
+    const descriptors = stageBattleItemExactRecord(value, [
+      'version', 'runId', 'matchOrdinal', 'nextSpawnOrdinal',
+      'lastResolvedTurn', 'spawnedCounts', 'activeItem'
+    ], 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED');
+    const version = descriptors.version.value;
+    if (version !== STAGE_BATTLE_ITEMS_SNAPSHOT_VERSION) {
+      const code = Number.isSafeInteger(version) && version > STAGE_BATTLE_ITEMS_SNAPSHOT_VERSION
+        ? 'STAGE_BATTLE_ITEMS_SNAPSHOT_FUTURE_VERSION'
+        : 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED';
+      throw Object.assign(new Error(code), { code });
+    }
+    const runId = descriptors.runId.value;
+    const matchOrdinal = descriptors.matchOrdinal.value;
+    const nextSpawnOrdinal = descriptors.nextSpawnOrdinal.value;
+    const lastResolvedTurn = descriptors.lastResolvedTurn.value;
+    if (typeof runId !== 'string' || !runId || runId.length > 256
+        || !Number.isSafeInteger(matchOrdinal) || matchOrdinal < 0
+        || !Number.isSafeInteger(nextSpawnOrdinal) || nextSpawnOrdinal < 0
+        || (lastResolvedTurn !== null && (!Number.isSafeInteger(lastResolvedTurn) || lastResolvedTurn < 0))) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED' });
+    }
+    const spawnedCounts = validateStageBattleItemCounts(descriptors.spawnedCounts.value);
+    const spawnedCount = api.ITEM_KINDS.reduce((sum, kind) => sum + spawnedCounts[kind], 0);
+    if (spawnedCount > api.SPAWN_RULES.maxPerMatch || nextSpawnOrdinal < spawnedCount) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MALFORMED' });
+    }
+    const rawActive = descriptors.activeItem.value;
+    const activeItem = rawActive === null ? null : api.validateSpawnState(rawActive);
+    if (activeItem && (activeItem.runId !== runId || activeItem.matchOrdinal !== matchOrdinal)) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH' });
+    }
+    if (activeItem && (activeItem.spawnOrdinal !== nextSpawnOrdinal - 1
+        || spawnedCounts[activeItem.kind] < 1)) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH' });
+    }
+    return Object.freeze({
+      version, runId, matchOrdinal, nextSpawnOrdinal, lastResolvedTurn,
+      spawnedCounts, activeItem
+    });
+  }
+
+  function cloneStageBattleItemsSnapshot(value) {
+    const checked = validateStageBattleItemsSnapshot(value);
+    return {
+      version: checked.version,
+      runId: checked.runId,
+      matchOrdinal: checked.matchOrdinal,
+      nextSpawnOrdinal: checked.nextSpawnOrdinal,
+      lastResolvedTurn: checked.lastResolvedTurn,
+      spawnedCounts: { ...checked.spawnedCounts },
+      activeItem: checked.activeItem ? JSON.parse(stageBattleItemApi().serializeSpawnState(checked.activeItem)) : null
+    };
+  }
+
+  function createStageBattleItemsForRun(run) {
+    return validateStageBattleItemsSnapshot({
+      version: STAGE_BATTLE_ITEMS_SNAPSHOT_VERSION,
+      runId: run.runId,
+      matchOrdinal: winStreak,
+      nextSpawnOrdinal: 0,
+      lastResolvedTurn: null,
+      spawnedCounts: { healing: 0, special_charge: 0, gear_resource: 0 },
+      activeItem: null
+    });
+  }
+
+  function restoreStageBattleItemsFromSnapshot(data) {
+    const hasField = Object.prototype.hasOwnProperty.call(data, 'stageBattleItems');
+    // 旧snapshotへ途中からアイテムを足すと、再読込で抽選をやり直せる。fieldが無い試合は
+    // そのまま「アイテムなし」で完走させ、次の新規試合から有効にする。
+    if (!hasField) return null;
+    const expected = data.battleMode === 'normal' && data.matchFormat !== '2v2'
+      && !isOnline() && data.isBossMatch !== true && data.customStage == null && data.pattern !== 'custom';
+    if (!expected) throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_UNEXPECTED'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_UNEXPECTED' });
+    let restored = validateStageBattleItemsSnapshot(data.stageBattleItems);
+    const restoredTurn = Number(data.turnCount);
+    if (!Number.isSafeInteger(restoredTurn) || restoredTurn < 0
+        || (restored.lastResolvedTurn !== null && restored.lastResolvedTurn > restoredTurn)
+        || (restored.activeItem && (restored.activeItem.spawnTurn > restoredTurn
+          || restored.activeItem.expiresTurn <= restoredTurn
+          || (restored.lastResolvedTurn !== null
+            && restored.activeItem.spawnTurn - restored.lastResolvedTurn < stageBattleItemApi().SPAWN_RULES.cooldownTurns)))
+        || (!restored.activeItem && restored.nextSpawnOrdinal > 0 && restored.lastResolvedTurn === null)) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH' });
+    }
+    const { runStorage } = cpuGearModules();
+    const run = readCpuGearRunState();
+    if (!run || run.state !== runStorage.ACTIVE || restored.runId !== run.runId
+        || restored.matchOrdinal !== data.winStreak
+        || run.stageItemEscrow.matchOrdinal !== restored.matchOrdinal) {
+      throw Object.assign(new Error('STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH'), { code: 'STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH' });
+    }
+    // 資源箱のrun保存だけ成功し、古いturn-start snapshotが残ったcrash窓を閉じる。
+    // 現試合の資源箱は最大1個なのでmaskのbit 0がその一意な箱を表す。
+    if (restored.activeItem?.kind === 'gear_resource' && run.stageItemEscrow.claimedMask % 2 === 1) {
+      restored = validateStageBattleItemsSnapshot({
+        ...cloneStageBattleItemsSnapshot(restored),
+        lastResolvedTurn: Math.max(Number(data.turnCount) || 0, restored.lastResolvedTurn || 0),
+        activeItem: null
+      });
+    }
+    return restored;
+  }
+
+  function initializeStageBattleItemsForMatch() {
+    stageBattleItems = null;
+    stageBattleItemPendingId = null;
+    stageBattleItemPickupRetry = null;
+    stageBattleItemPickupError = null;
+    if (!isStageBattleItemEligibleMatch()) return false;
+    try {
+      const { runStorage } = cpuGearModules();
+      let run = assertCpuGearRunOwnedByThisSession(readCpuGearRunState(), { claimUnowned: true });
+      if (run.state !== runStorage.ACTIVE) {
+        throw Object.assign(new Error('CPU_STAGE_ITEM_RUN_NOT_ACTIVE'), { code: 'CPU_STAGE_ITEM_RUN_NOT_ACTIVE' });
+      }
+      const reconciled = runStorage.reconcileStageItemEscrow(run, winStreak);
+      if (reconciled.modified) run = runStorage.saveCpuGearRunState(reconciled.state, localStorage);
+      else run = reconciled.state;
+      stageBattleItems = createStageBattleItemsForRun(run);
+      ensureStageBattleItemImages();
+      return true;
+    } catch (error) {
+      // Stage items are additive. A stale/corrupt run must disable this feature
+      // for the match instead of breaking existing CPU/rare/boss game flows.
+      setCpuGearStatus(error, 'ステージアイテムの初期化');
+      stageBattleItems = null;
+      return false;
+    }
+  }
+
+  function stageBattleItemSpawnCandidates() {
+    const candidates = [];
+    for (let x = 96; x <= STAGE_W - 96; x += 48) {
+      const surface = groundYAt(x);
+      const y = Math.round(surface - STAGE_BATTLE_ITEM_GROUND_OFFSET);
+      if (!Number.isSafeInteger(y) || y < 0 || surface >= DEAD_LINE_Y - 8) continue;
+      if (!isSolidAt(x, surface + 1)) continue;
+      candidates.push({ x, y });
+    }
+    return candidates;
+  }
+
+  function stageBattleItemHasSupport(item) {
+    if (!item) return false;
+    const expectedSurface = item.y + STAGE_BATTLE_ITEM_GROUND_OFFSET;
+    const actualSurface = groundYBelow(item.x, expectedSurface);
+    return Number.isFinite(actualSurface) && actualSurface < DEAD_LINE_Y
+      && Math.abs(actualSurface - expectedSurface) <= 12;
+  }
+
+  function resolveActiveStageBattleItem(reason, text = '') {
+    const item = stageBattleItems?.activeItem;
+    if (!item) return false;
+    stageBattleItems = validateStageBattleItemsSnapshot({
+      ...cloneStageBattleItemsSnapshot(stageBattleItems),
+      lastResolvedTurn: turnCount,
+      activeItem: null
+    });
+    if (stageBattleItemPendingId === item.itemId) stageBattleItemPendingId = null;
+    if (text) pushFloatText(item.x, item.y - 24, text, reason === 'expired' ? '#b7c1c8' : '#ffe08a', 18);
+    return true;
+  }
+
+  function spawnStageBattleItemIfDue() {
+    if (!stageBattleItems || !isStageBattleItemEligibleMatch()) return false;
+    const api = stageBattleItemApi();
+    const spawnedCount = api.ITEM_KINDS.reduce((sum, kind) => sum + stageBattleItems.spawnedCounts[kind], 0);
+    if (!api.canAttemptSpawn({
+      turn: turnCount,
+      activeCount: stageBattleItems.activeItem ? 1 : 0,
+      spawnedCount,
+      lastResolvedTurn: stageBattleItems.lastResolvedTurn
+    })) return false;
+    const ordinal = stageBattleItems.nextSpawnOrdinal;
+    const kind = api.selectItemKind({
+      runId: stageBattleItems.runId,
+      matchOrdinal: stageBattleItems.matchOrdinal,
+      spawnOrdinal: ordinal,
+      currentStreak: winStreak,
+      spawnedCounts: { ...stageBattleItems.spawnedCounts }
+    });
+    const unitPositions = units.slice(0, 2).map(unit => ({ x: Math.max(0, Math.round(unit.x)), y: Math.max(0, Math.round(unit.y)) }));
+    const point = kind && unitPositions.length === 2 ? api.chooseSpawnPoint({
+      runId: stageBattleItems.runId,
+      matchOrdinal: stageBattleItems.matchOrdinal,
+      spawnOrdinal: ordinal,
+      stageWidth: Math.round(STAGE_W),
+      candidates: stageBattleItemSpawnCandidates(),
+      unitPositions
+    }) : null;
+    const nextBase = cloneStageBattleItemsSnapshot(stageBattleItems);
+    nextBase.nextSpawnOrdinal += 1;
+    if (!kind || !point) {
+      nextBase.lastResolvedTurn = turnCount;
+      stageBattleItems = validateStageBattleItemsSnapshot(nextBase);
+      return false;
+    }
+    nextBase.spawnedCounts[kind] += 1;
+    nextBase.activeItem = api.createSpawnState({
+      runId: stageBattleItems.runId,
+      matchOrdinal: stageBattleItems.matchOrdinal,
+      spawnOrdinal: ordinal,
+      kind,
+      x: point.x,
+      y: point.y,
+      spawnTurn: turnCount
+    });
+    stageBattleItems = validateStageBattleItemsSnapshot(nextBase);
+    return true;
+  }
+
+  function updateStageBattleItemsAtTurnStart() {
+    if (!stageBattleItems || !isStageBattleItemEligibleMatch()) return false;
+    const active = stageBattleItems.activeItem;
+    if (active && stageBattleItemPendingId !== active.itemId
+        && (turnCount >= active.expiresTurn || !stageBattleItemHasSupport(active))) {
+      resolveActiveStageBattleItem('expired', '消滅');
+    }
+    return spawnStageBattleItemIfDue();
+  }
+
+  function currentStageBattleItemResources(run) {
+    const escrow = run?.stageItemEscrow || { powder: 0, blueprintShards: 0 };
+    const api = stageBattleItemApi();
+    return {
+      boxesCollected: Math.min(api.RESOURCE_RULES.maxBoxesPerRun,
+        Math.floor(Math.max(0, escrow.powder) / api.RESOURCE_RULES.powderPerBox)),
+      powder: Math.max(0, escrow.powder),
+      blueprintShards: Math.min(api.RESOURCE_RULES.maxShardsPerRun, Math.max(0, escrow.blueprintShards))
+    };
+  }
+
+  function showStageBattleItemPickup(item, unit, effect, credited = true) {
+    let text = '';
+    let color = '#ffe08a';
+    if (item.kind === 'healing') {
+      text = `HP +${effect.healed}`;
+      color = '#78f0a1';
+    } else if (item.kind === 'special_charge') {
+      text = '必殺 +1';
+      color = '#7de9ff';
+    } else if (unit.team !== 'player') {
+      text = 'CPUが資源を奪取';
+      color = '#ff9d7c';
+    } else if (!credited) {
+      text = '取得済み';
+      color = '#c2cad0';
+    } else if (effect.powderGranted > 0 || effect.shardGranted > 0) {
+      text = `粉末 +${effect.powderGranted}${effect.shardGranted ? '・設計片 +1' : ''}`;
+      color = effect.shardGranted ? '#dca7ff' : '#ffc96e';
+    } else {
+      text = '資源箱 上限';
+      color = '#c2cad0';
+    }
+    pushFloatText(item.x, item.y - 28, text, color, item.kind === 'gear_resource' ? 17 : 20);
+  }
+
+  function stageBattleItemPickupPersistenceError(cause = null) {
+    return Object.assign(new Error('STAGE_BATTLE_ITEM_PICKUP_NOT_DURABLE'), {
+      code: 'STAGE_BATTLE_ITEM_PICKUP_NOT_DURABLE',
+      ...(cause ? { cause } : {})
+    });
+  }
+
+  function finishStageBattleItemResourcePickup(context, persisted) {
+    const { item, unitId, collector, effect } = context;
+    if (!persisted || stageBattleItems?.activeItem?.itemId !== item.itemId) {
+      if (stageBattleItemPendingId === item.itemId) stageBattleItemPendingId = null;
+      if (!persisted && stageBattleItems?.activeItem?.itemId === item.itemId) {
+        if (!stageBattleItemPickupError) {
+          stageBattleItemPickupError = stageBattleItemPickupPersistenceError();
+          setCpuGearStatus(stageBattleItemPickupError, 'ステージ資源箱の保存');
+        }
+        pushFloatText(item.x, item.y - 28,
+          matchOver ? '保存できません・結果で再試行' : '保存できません・再取得可', '#ff9b86', 15);
+      }
+      return false;
+    }
+    const unit = unitById(unitId) || { team: collector };
+    const recoveredFromError = !!stageBattleItemPickupError;
+    showStageBattleItemPickup(item, unit, effect, persisted.credited !== false);
+    resolveActiveStageBattleItem('pickup');
+    stageBattleItemPickupRetry = null;
+    stageBattleItemPickupError = null;
+    if (recoveredFromError) setCpuGearStatus(null);
+    return true;
+  }
+
+  function runStageBattleItemResourcePickup(context) {
+    const { item, collector, effect } = context;
+    if (stageBattleItemPickupPromise) return stageBattleItemPickupPromise;
+    if (stageBattleItemPendingId || !stageBattleItems || stageBattleItems.activeItem?.itemId !== item.itemId) return false;
+    stageBattleItemPendingId = item.itemId;
+    stageBattleItemPickupRetry = context;
+    const operation = () => {
+      const { runStorage } = cpuGearModules();
+      let run = assertCpuGearRunOwnedByThisSession(readCpuGearRunState(), { claimUnowned: true });
+      const recorded = runStorage.recordStageItemPickup(run, {
+        matchOrdinal: item.matchOrdinal,
+        itemIndex: 0,
+        resourceBoxCount: 1,
+        collector,
+        powder: effect.powderGranted,
+        blueprintShards: effect.shardGranted
+      });
+      if (recorded.modified) run = runStorage.saveCpuGearRunState(recorded.state, localStorage);
+      else run = recorded.state;
+      return { run, credited: recorded.credited, recorded: true };
+    };
+    const result = cpuGearRunLifecycle('ステージ資源箱の保存', operation);
+    if (!isThenable(result)) return finishStageBattleItemResourcePickup(context, result);
+    const task = Promise.resolve(result).then(
+      persisted => finishStageBattleItemResourcePickup(context, persisted),
+      error => {
+        stageBattleItemPickupError = stageBattleItemPickupPersistenceError(error);
+        setCpuGearStatus(error, 'ステージ資源箱の保存');
+        return finishStageBattleItemResourcePickup(context, false);
+      }
+    );
+    stageBattleItemPickupPromise = task;
+    task.finally(() => {
+      if (stageBattleItemPickupPromise === task) stageBattleItemPickupPromise = null;
+    }).catch(() => undefined);
+    return task;
+  }
+
+  function ensureStageBattleItemPickupDurable() {
+    if (stageBattleItemPickupPromise) return stageBattleItemPickupPromise;
+    if (!stageBattleItemPickupRetry) return true;
+    return runStageBattleItemResourcePickup(stageBattleItemPickupRetry);
+  }
+
+  function afterStageBattleItemPickupDurable(continuation) {
+    const ready = ensureStageBattleItemPickupDurable();
+    if (!isThenable(ready)) return ready ? continuation() : false;
+    return Promise.resolve(ready).then(saved => saved ? continuation() : false);
+  }
+
+  function persistStageBattleItemResourcePickup(item, unit, effect) {
+    const context = Object.freeze({
+      item,
+      unitId: unit.id,
+      collector: unit.team === 'player' ? 'player' : 'cpu',
+      effect
+    });
+    const result = runStageBattleItemResourcePickup(context);
+    if (!isThenable(result)) return result;
+    return true;
+  }
+
+  function applyStageBattleItemPickup(item, unit) {
+    if (!item || !unit || unit.hp <= 0 || matchOver || stageBattleItemPendingId) return false;
+    let run;
+    try { run = readCpuGearRunState(); }
+    catch (error) { setCpuGearStatus(error, 'ステージアイテムの確認'); return false; }
+    if (!run || run.runId !== item.runId || run.stageItemEscrow?.matchOrdinal !== item.matchOrdinal) return false;
+    let effect;
+    try {
+      effect = stageBattleItemApi().applyPickupEffect({
+        runId: item.runId,
+        matchOrdinal: item.matchOrdinal,
+        spawnOrdinal: item.spawnOrdinal,
+        kind: item.kind,
+        collectorType: unit.team === 'player' ? 'player' : 'cpu',
+        unit: { hp: Math.max(0, Math.round(unit.hp)), maxHp: Math.max(1, Math.round(unit.maxHp)), specialCharge: Math.max(0, Math.round(unit.specialCharge)) },
+        resources: currentStageBattleItemResources(run)
+      });
+    } catch (error) {
+      setCpuGearStatus(error, 'ステージアイテムの取得');
+      return false;
+    }
+    if (!effect.consumed) return false;
+    if (item.kind === 'gear_resource') return persistStageBattleItemResourcePickup(item, unit, effect);
+    unit.hp = effect.unit.hp;
+    unit.specialCharge = effect.unit.specialCharge;
+    showStageBattleItemPickup(item, unit, effect);
+    resolveActiveStageBattleItem('pickup');
+    return true;
+  }
+
+  function tryCollectStageBattleItemByProjectile(projectile, fromX, fromY) {
+    const item = stageBattleItems?.activeItem;
+    if (!item || stageBattleItemPendingId || matchOver
+        || projectile?.gearDamageProfile !== 'normal_cannonball') return false;
+    const owner = unitById(projectile.owner);
+    if (!owner || owner.hp <= 0) return false;
+    const sweep = stageBattleItemApi().segmentCircleSweep({
+      from: { x: Number(fromX), y: Number(fromY) },
+      to: { x: Number(projectile.x), y: Number(projectile.y) },
+      center: { x: item.x, y: item.y },
+      radius: stageBattleItemApi().SPAWN_RULES.pickupRadius + Math.max(0, Number(projectile.radius) || 0)
+    });
+    return sweep.hit ? applyStageBattleItemPickup(item, owner) : false;
+  }
+
+  function tryCollectStageBattleItemByUnit(unit) {
+    const item = stageBattleItems?.activeItem;
+    if (!item || !unit || stageBattleItemPendingId || matchOver || !unit.grounded) return false;
+    const radius = stageBattleItemApi().SPAWN_RULES.pickupRadius + UNIT_RADIUS;
+    return Math.hypot(unit.x - item.x, unit.y - item.y) <= radius
+      ? applyStageBattleItemPickup(item, unit)
+      : false;
+  }
+
+  function updateStageBattleItemSupport() {
+    const item = stageBattleItems?.activeItem;
+    if (!item || stageBattleItemPendingId || !isStageBattleItemEligibleMatch()) return false;
+    if (stageBattleItemHasSupport(item)) return false;
+    return resolveActiveStageBattleItem('expired', '足場消滅');
+  }
+
+  function drawStageBattleItemFallback(item, size) {
+    const half = size / 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 3;
+    if (item.kind === 'healing') {
+      ctx.fillStyle = '#1a6d52'; ctx.strokeStyle = '#e0bd63';
+      ctx.beginPath(); ctx.arc(0, 0, half * 0.78, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#d7fff0'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(-half * 0.32, 0); ctx.lineTo(half * 0.32, 0); ctx.moveTo(0, -half * 0.32); ctx.lineTo(0, half * 0.32); ctx.stroke();
+    } else if (item.kind === 'special_charge') {
+      ctx.fillStyle = '#28509d'; ctx.strokeStyle = '#d7a84f';
+      ctx.beginPath(); ctx.moveTo(0, -half * 0.82); ctx.lineTo(half * 0.62, 0); ctx.lineTo(0, half * 0.82); ctx.lineTo(-half * 0.62, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#8ff6ff'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(half * 0.12, -half * 0.48); ctx.lineTo(-half * 0.12, -half * 0.06); ctx.lineTo(half * 0.14, -half * 0.06); ctx.lineTo(-half * 0.12, half * 0.48); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#2b3034'; ctx.strokeStyle = '#d19a45';
+      ctx.fillRect(-half * 0.78, -half * 0.58, half * 1.56, half * 1.16);
+      ctx.strokeRect(-half * 0.78, -half * 0.58, half * 1.56, half * 1.16);
+      ctx.fillStyle = '#ef9144'; ctx.fillRect(-half * 0.14, -half * 0.3, half * 0.28, half * 0.6);
+      ctx.strokeStyle = '#8fdfff'; ctx.lineWidth = 3; ctx.strokeRect(-half * 0.48, -half * 0.28, half * 0.3, half * 0.56);
+    }
+  }
+
+  function drawStageBattleItem() {
+    const item = stageBattleItems?.activeItem;
+    if (!item || !isStageBattleItemEligibleMatch()) return;
+    const size = 58;
+    const bob = Math.sin(simTimeMs * 0.004 + item.spawnOrdinal) * 2.5;
+    const pulse = 0.72 + Math.sin(simTimeMs * 0.006 + item.spawnOrdinal) * 0.16;
+    const color = item.kind === 'healing' ? '80,255,175' : item.kind === 'special_charge' ? '95,225,255' : '255,181,83';
+    ctx.save();
+    ctx.translate(item.x, item.y + bob);
+    ctx.globalAlpha = stageBattleItemPendingId === item.itemId ? 0.52 : 1;
+    const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, size * 0.72);
+    halo.addColorStop(0, `rgba(${color},${pulse * 0.48})`);
+    halo.addColorStop(1, `rgba(${color},0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(0, 0, size * 0.72, 0, Math.PI * 2); ctx.fill();
+    const image = ensureStageBattleItemImages()[item.kind];
+    if (image?.complete && image.naturalWidth > 0) {
+      ctx.drawImage(image, -size / 2, -size / 2, size, size);
+    } else {
+      drawStageBattleItemFallback(item, size);
+    }
+    ctx.restore();
   }
 
   function deriveCpuRareEncounterForCurrentMatch() {
@@ -11890,6 +12456,10 @@
 
   function recordCpuGearPeakAfterWin() {
     if (!isCpuGearEligibleRun()) return true;
+    return afterStageBattleItemPickupDurable(() => recordCpuGearPeakAfterWinLocked());
+  }
+
+  function recordCpuGearPeakAfterWinLocked() {
     return cpuGearRunLifecycle('連勝記録', () => {
       // A full reward destination blocks the *next* reward-bearing battle,
       // but must never make us forget a win that already happened.
@@ -11965,7 +12535,8 @@
       || !!cpuGearContinuePromise
       || !!cpuGearTerminalSettlementPreparationPromise
       || !!cpuGearSuspendPromise
-      || !!cpuRareRewardPromise;
+      || !!cpuRareRewardPromise
+      || !!stageBattleItemPickupPromise;
   }
 
   function rejectCpuGearResultActionWhileBusy(action) {
@@ -11978,13 +12549,13 @@
 
   function continueCpuGearRunAfterWin() {
     if (cpuGearContinuePromise) return cpuGearContinuePromise;
-    if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
+    if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise || stageBattleItemPickupPromise) {
       return rejectCpuGearResultActionWhileBusy('CPU BATTLE継続');
     }
-    const continueAfterGearCapture = () => cpuGearRunLifecycle('CPU BATTLE継続', () => {
+    const continueAfterGearCapture = () => afterStageBattleItemPickupDurable(() => cpuGearRunLifecycle('CPU BATTLE継続', () => {
       // This recheck is required after acquiring the CPU lock.  A settlement
       // request can have started while this continue request was waiting.
-      if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise) {
+      if (cpuGearSettlementPromise || cpuGearTerminalSettlementPreparationPromise || stageBattleItemPickupPromise) {
         return rejectCpuGearResultActionWhileBusy('CPU BATTLE継続');
       }
       const { runStorage } = cpuGearModules();
@@ -12000,7 +12571,7 @@
       preparePendingCpuGearRuntimeEffectsState(state, winStreak);
       resetMatch(true);
       return true;
-    });
+    }));
     // A continued streak is a new match boundary. Capture first; never let a
     // changed/stale preset reset the board before its new snapshot is proven.
     const continued = withCapturedCpuBattleGear(player.character, continueAfterGearCapture);
@@ -12015,6 +12586,10 @@
 
   function prepareCpuGearSettlementForTerminalOutcome(outcome) {
     if (!isCpuGearEligibleRun()) return true;
+    return afterStageBattleItemPickupDurable(() => prepareCpuGearSettlementForTerminalOutcomeLocked(outcome));
+  }
+
+  function prepareCpuGearSettlementForTerminalOutcomeLocked(outcome) {
     return cpuGearRunLifecycle('CPU BATTLE報酬の確定', () => {
       if (!cpuGearPersistenceReady()) return false;
       // A settlement is allowed even when the physical reward gate is full:
@@ -12041,6 +12616,8 @@
         peakStreak: state.peakStreak,
         outcome,
         settlementCreatedAtMs: Date.now(),
+        stageItemPowder: state.stageItemEscrow.powder,
+        stageItemBlueprintShards: state.stageItemEscrow.blueprintShards,
       });
       state = runStorage.withSettlementIntent(state, intent);
       runStorage.saveCpuGearRunState(state, localStorage);
@@ -12107,11 +12684,22 @@
       const peakStreak = state.state === runStorage.ACTIVE && localWon()
         ? Math.max(state.peakStreak, Number.isSafeInteger(winStreak) ? winStreak : 0)
         : state.peakStreak;
+      const basePreview = state.state === runStorage.ACTIVE
+        ? cpuRewards.previewCpuSettlement({ peakStreak, outcome })
+        : null;
+      const activePreview = basePreview && {
+        ...basePreview,
+        powder: basePreview.powder + state.stageItemEscrow.powder,
+        blueprintShards: basePreview.blueprintShards + state.stageItemEscrow.blueprintShards,
+        stageItemPowder: state.stageItemEscrow.powder,
+        stageItemBlueprintShards: state.stageItemEscrow.blueprintShards,
+        hasReward: basePreview.hasReward || state.stageItemEscrow.powder > 0 || state.stageItemEscrow.blueprintShards > 0,
+      };
       return {
         state,
         preview: state.state === runStorage.SETTLEMENT_PENDING
           ? cpuRewards.previewCpuSettlementIntent(state.settlementIntent)
-          : cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
+          : activePreview,
       };
     } catch (error) {
       setCpuGearStatus(error, 'CPU BATTLE報酬の確認');
@@ -12221,6 +12809,11 @@
 
   async function settleCpuGearRun(outcome = 'voluntary') {
     if (!cpuGearPersistenceReady()) throw Object.assign(new Error('CPU_GEAR_PERSISTENCE_NOT_READY'), { code: 'CPU_GEAR_PERSISTENCE_NOT_READY' });
+    const stageItemPickupResult = ensureStageBattleItemPickupDurable();
+    const stageItemPickupReady = isThenable(stageItemPickupResult)
+      ? await stageItemPickupResult
+      : stageItemPickupResult;
+    if (!stageItemPickupReady) throw stageBattleItemPickupError || stageBattleItemPickupPersistenceError();
     if (cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
       throw Object.assign(new Error('CPU_GEAR_RESULT_ACTION_IN_PROGRESS'), { code: 'CPU_GEAR_RESULT_ACTION_IN_PROGRESS' });
     }
@@ -12254,6 +12847,8 @@
           peakStreak: state.peakStreak,
           outcome,
           settlementCreatedAtMs: Date.now(),
+          stageItemPowder: state.stageItemEscrow.powder,
+          stageItemBlueprintShards: state.stageItemEscrow.blueprintShards,
         });
         state = runStorage.withSettlementIntent(state, intent);
         state = runStorage.saveCpuGearRunState(state, localStorage);
@@ -20279,6 +20874,7 @@
     if (!isCoopBossUnit(acting)) acting.jumpAvailable = true;
     focusCameraOn(acting.x, false, acting.y);
     if (!firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
+    updateStageBattleItemsAtTurnStart();
     if (cpuGearSkipNextTurnStartSuspend) cpuGearSkipNextTurnStartSuspend = false;
     else saveCpuBattleAtTurnStart();
   }
@@ -23348,9 +23944,17 @@
     // any Gear: voluntary settlement quality now, and the deterministic
     // defeat-side quality if the next battle is lost.  This is a pure table
     // lookup only; no seed, Gear object, or future enhancement is previewed.
-    const lossPreview = voluntary
+    const lossBasePreview = voluntary
       ? cpuGearModules().cpuRewards.previewCpuSettlement({ peakStreak: detail.preview.peakStreak, outcome: 'defeat' })
       : null;
+    const lossPreview = lossBasePreview ? {
+      ...lossBasePreview,
+      powder: lossBasePreview.powder + detail.state.stageItemEscrow.powder,
+      blueprintShards: lossBasePreview.blueprintShards + detail.state.stageItemEscrow.blueprintShards,
+      stageItemPowder: detail.state.stageItemEscrow.powder,
+      stageItemBlueprintShards: detail.state.stageItemEscrow.blueprintShards,
+      hasReward: lossBasePreview.hasReward || detail.state.stageItemEscrow.powder > 0 || detail.state.stageItemEscrow.blueprintShards > 0,
+    } : null;
     const continueButton = voluntary ? { ...continueBtn, y: VH / 2 + 102 } : null;
     const settlementButton = {
       ...cpuGearSettlementBtn,
@@ -23423,10 +24027,18 @@
       // the retry will atomically persist rather than showing a stale lower
       // quality while the entitlement is waiting.
       const peakStreak = Math.max(state.peakStreak, Number.isSafeInteger(winStreak) ? winStreak : 0);
+      const basePreview = cpuRewards.previewCpuSettlement({ peakStreak, outcome });
       return {
         state,
         outcome,
-        preview: cpuRewards.previewCpuSettlement({ peakStreak, outcome }),
+        preview: {
+          ...basePreview,
+          powder: basePreview.powder + state.stageItemEscrow.powder,
+          blueprintShards: basePreview.blueprintShards + state.stageItemEscrow.blueprintShards,
+          stageItemPowder: state.stageItemEscrow.powder,
+          stageItemBlueprintShards: state.stageItemEscrow.blueprintShards,
+          hasReward: basePreview.hasReward || state.stageItemEscrow.powder > 0 || state.stageItemEscrow.blueprintShards > 0,
+        },
         retryButton: { ...cpuGearSettlementBtn, y: VH / 2 + 142 },
       };
     } catch (error) {
@@ -24116,15 +24728,15 @@
     // compare-and-delete, so leave the current result screen intact instead.
     if (isCpuGearEligibleRun()) {
       if (cpuGearSuspendPromise) return cpuGearSuspendPromise;
-      if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+      if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise || stageBattleItemPickupPromise) {
         return rejectCpuGearResultActionWhileBusy('CPU BATTLE中断');
       }
       // A win may still have its peak update waiting for the native CPU lock.
       // Queue this whole reset-and-suspend sequence behind it, then write the
       // next-round snapshot while we still own that same lock.  A title
       // transition is never allowed to outrun the durable peak/snapshot.
-      const suspendAfterGearCapture = () => cpuGearRunLifecycle('CPU BATTLE中断', () => {
-        if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise) {
+      const suspendAfterGearCapture = () => afterStageBattleItemPickupDurable(() => cpuGearRunLifecycle('CPU BATTLE中断', () => {
+        if (cpuGearSettlementPromise || cpuGearContinuePromise || cpuGearTerminalSettlementPreparationPromise || stageBattleItemPickupPromise) {
           return rejectCpuGearResultActionWhileBusy('CPU BATTLE中断');
         }
         const { runStorage } = cpuGearModules();
@@ -24166,7 +24778,7 @@
         } finally {
           cpuGearSkipNextTurnStartSuspend = false;
         }
-      });
+      }));
       // The voluntary suspend prepares the next CPU round before persisting
       // it, so that next round needs its own frozen snapshot too.
       const suspended = withCapturedCpuBattleGear(player.character, suspendAfterGearCapture);
@@ -26974,6 +27586,7 @@
     applyWorldCamera();
     drawTerrain();
     drawArenaObstacles();
+    drawStageBattleItem();
     drawBarucopters();
     drawProjectile();
     drawParticles();
@@ -28072,6 +28685,7 @@
     turnCount = 0;
     turnOrder = units.map(u => u.id);
     activeIndex = 0;
+    initializeStageBattleItemsForMatch();
     for (const u of units) { u.jumpAvailable = true; u.jumpShot = false; }
     // 前の試合の思考時間を持ち越さない。0のまま残ると、手番へ入った最初の1フレームで撃つ。
     cpuThinkTimer = 0;
@@ -29009,6 +29623,12 @@
         p.y += p.vy * dt;
       }
 
+      // 通常砲弾だけが拾える。高速弾でもすり抜けないよう、移動前後の線分で判定する。
+      // 取得しても砲弾は消さず、この後の通常のユニット・地形衝突へそのまま進める。
+      if (p.gearDamageProfile === 'normal_cannonball') {
+        tryCollectStageBattleItemByProjectile(p, prevX, prevY);
+      }
+
       if (p.prismBeam) {
         const stepX = p.x - prevX;
         const stepY = p.y - prevY;
@@ -29256,6 +29876,7 @@
     // デモは1発だけを見せる。CPUの反撃・手番交代・通信・戦績へ進ませない。
     if (specialDemo) return;
     if (workshopBattlePreview) return;
+    updateStageBattleItemSupport();
     // 移動(この端末の手番のみ・燃料制・長押しボタン)
     const me = localUnit();
     if (isLocalTurn() && me.moveLockTurns <= 0 && !awaitingResolve && !netInputLocked() && moveDir !== 0 && me.grounded && me.fuel > 0) {
@@ -29268,6 +29889,7 @@
       faceAllUnitsTowardOpponents();
       me.fuel -= moved;
       followGroundOrFall(me);
+      tryCollectStageBattleItemByUnit(me);
       // 移動中は一定間隔で位置を配信する。移動は立派な戦略なので相手にも見せる。
       if (moved > 0) moveSyncPending = true;
       moveSyncTimer += dt;
@@ -29307,6 +29929,7 @@
             cpuActor.fuel -= moved;
             cpuMoveRemaining -= moved;
             followGroundOrFall(cpuActor);
+            tryCollectStageBattleItemByUnit(cpuActor);
             if (moved > 0) moveSyncPending = true;
             if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り
           }
