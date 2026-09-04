@@ -9770,6 +9770,11 @@
   // 書くだけの薄い層で、オンライン対戦のターン境界の同期にもそのまま使える。
   function buildSnapshot(options = {}) {
     const includeTerrain = options.includeTerrain !== false;
+    // Stage battle items are local CPU suspend state, not part of the shared
+    // ONLINE snapshot protocol.  Callers must opt in only at the localStorage
+    // persistence boundary so an offline fixture/state can never leak them to
+    // a later Firebase or loopback start packet.
+    const includeStageBattleItems = options.includeStageBattleItems === true;
     const includeCustomStage = includeTerrain && !!(selectedCustomStage && (battleMode === 'free' || onlineCustomStageActive()));
     const snapshot = {
       v: SNAPSHOT_VERSION,
@@ -9826,7 +9831,7 @@
       }
     }
     if (isCpuGearEligibleRun() && cpuRareEncounter !== null) snapshot.cpuRareEncounter = cpuRareEncounter;
-    if (isStageBattleItemEligibleMatch() && stageBattleItems !== null) {
+    if (includeStageBattleItems && isStageBattleItemEligibleMatch() && stageBattleItems !== null) {
       snapshot.stageBattleItems = cloneStageBattleItemsSnapshot(stageBattleItems);
     }
     // 地形基底は開始時に一度だけ共有する。ターン境界stateは各端末が既に持つ同じ
@@ -9935,7 +9940,7 @@
     }
   }
 
-  function writeSuspendedMatchSnapshot(snapshot = buildSnapshot()) {
+  function writeSuspendedMatchSnapshot(snapshot = buildSnapshot({ includeStageBattleItems: true })) {
     // 対人戦は片方だけ中断しても再開できないので保存しない(復帰はStage 4の課題)。
     if (isOnline()) return false;
     const key = snapshot.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY;
@@ -9989,7 +9994,11 @@
       setCpuGearStatus(error, 'CPU BATTLE中断保存');
       return false;
     }
-    const snapshot = buildSnapshot({ cpuGearOwnerSessionId: ownerSessionId, cpuGearSnapshotId: snapshotId });
+    const snapshot = buildSnapshot({
+      cpuGearOwnerSessionId: ownerSessionId,
+      cpuGearSnapshotId: snapshotId,
+      includeStageBattleItems: true,
+    });
     const key = snapshot.customStage ? CUSTOM_SUSPEND_KEY : SUSPEND_KEY;
     const raw = JSON.stringify(snapshot);
     try {

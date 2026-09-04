@@ -31,6 +31,8 @@ test('turn timing, runtime pickup paths, durable resource escrow, and snapshot r
   assert.ok(kt.stageBattleItemsForTest().activeItem, 'snapshot fixture needs one active item');
   const spawnedSnapshot = kt.snapshot();
   assert.ok(spawnedSnapshot.stageBattleItems, 'local CPU suspend snapshot must include item state');
+  assert.equal(Object.hasOwn(kt.stageBattleItemWireSnapshotForTest(), 'stageBattleItems'), false,
+    'shared ONLINE/loopback snapshots must never carry local CPU stage item state');
   const forgedOrdinal = JSON.parse(JSON.stringify(spawnedSnapshot));
   forgedOrdinal.stageBattleItems.activeItem.spawnOrdinal += 1;
   assert.throws(() => kt.apply(forgedOrdinal), /STAGE_BATTLE_ITEMS_SNAPSHOT_MISMATCH|INVALID_BATTLE_ITEM_SPAWN_STATE/);

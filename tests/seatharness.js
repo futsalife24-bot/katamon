@@ -912,7 +912,7 @@ const HOOK = `
     tutorialLedge: () => ({ halfW: TUTORIAL_LEDGE_HALF_W, thickness: TUTORIAL_LEDGE_THICKNESS }),
     setTurnCountForTest: (n) => { turnCount = n; },
     // --- リグレッション用 ---
-    snapshot: () => buildSnapshot(),
+    snapshot: () => buildSnapshot({ includeStageBattleItems: true }),
     save: () => saveSuspendedMatch(),
     load: () => loadSuspendedMatch(),
     apply: (d) => applySnapshot(d),
@@ -1071,6 +1071,7 @@ const HOOK = `
     cpuGearRuntimeEffectsStateForTest: () => cpuGearRuntimeEffectsState ? JSON.parse(JSON.stringify(cpuGearRuntimeEffectsState)) : null,
     cpuRareEncounterForTest: () => cpuRareEncounter ? JSON.parse(JSON.stringify(cpuRareEncounter)) : null,
     stageBattleItemsForTest: () => stageBattleItems ? cloneStageBattleItemsSnapshot(stageBattleItems) : null,
+    stageBattleItemWireSnapshotForTest: () => JSON.parse(JSON.stringify(buildSnapshot())),
     stageBattleItemPendingForTest: () => ({
       itemId: stageBattleItemPendingId,
       promise: !!stageBattleItemPickupPromise,
@@ -2050,7 +2051,7 @@ const HOOK = `
     saveSuspendedForTest: () => saveSuspendedMatch(),
     loadSuspendedForTest: () => loadSuspendedMatch(),
     applySnapshotForTest: (data) => applySnapshot(data),
-    buildSnapshotForTest: () => JSON.parse(JSON.stringify(buildSnapshot())),
+    buildSnapshotForTest: () => JSON.parse(JSON.stringify(buildSnapshot({ includeStageBattleItems: true }))),
     resetMatchForTest: () => resetMatch(false),
     canvas
   };

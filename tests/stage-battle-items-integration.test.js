@@ -31,6 +31,13 @@ for (const needle of [
 const snapshotBlock = /function buildSnapshot\(options = \{\}\) \{[\s\S]*?\n  \}/.exec(html)?.[0] || '';
 assert.ok(snapshotBlock.includes('isStageBattleItemEligibleMatch()'),
   'battle item snapshot must be CPU-local eligible only');
+assert.ok(snapshotBlock.includes('options.includeStageBattleItems === true'),
+  'battle item snapshot must require an explicit local-suspend opt-in');
+assert.ok(html.includes('buildSnapshot({ includeStageBattleItems: true })'),
+  'legacy local suspend writer must opt in to battle item state');
+assert.match(html,
+  /cpuGearSnapshotId: snapshotId,\s*includeStageBattleItems: true,/,
+  'fenced CPU autosave must opt in to battle item state');
 assert.ok(!snapshotBlock.includes('isOnline() ||'),
   'snapshot integration must not widen the ONLINE wire path');
 
