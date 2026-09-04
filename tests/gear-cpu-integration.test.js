@@ -905,6 +905,65 @@ function createUnclaimedFullGateState() {
     } finally { restoreLocks(); }
   });
 
+  await test('素材のみ精算は未受取上限を守りつつ、InventoryとTEMP満杯でもqueue・claimできる', async () => {
+    resetFixture();
+    assert.equal(kt.startBattle(), true);
+    let run = runStorage.withPeakStreak(runStorage.loadCpuGearRunState(storage), 2);
+    run = runStorage.recordStageItemPickup(run, {
+      matchOrdinal: 2,
+      itemIndex: 0,
+      resourceBoxCount: 1,
+      collector: 'player',
+      powder: 3,
+      blueprintShards: 1,
+    }).state;
+    runStorage.saveCpuGearRunState(run, storage);
+    kt.setStreak(2);
+    assert.equal(finishByDefeat('p1'), 'cpu');
+    const intent = kt.cpuGearRunStateForTest().settlementIntent;
+
+    const gated = createFullPhysicalGateState();
+    gated.unclaimedRewards = createUnclaimedFullGateState().unclaimedRewards;
+    gearStorage.saveGearState(gated, storage);
+    const restoreLocks = installImmediateWebLocks();
+    try {
+      await assert.rejects(() => settleAndFlush('defeat'), (error) => error && error.code === 'CPU_GEAR_REWARD_GATE_BLOCKED');
+      assert.equal(kt.cpuGearRunStateForTest().state, 'settlement_pending', 'unclaimed cap remains authoritative');
+
+      const opened = gearStorage.loadGearState(storage);
+      opened.unclaimedRewards.pop();
+      gearStorage.saveGearState(opened, storage);
+
+      const result = await settleAndFlush('defeat');
+      assert.equal(result.intent.rewardId, intent.rewardId);
+      assert.equal(result.reward.gears.length, 0);
+      assert.equal(result.reward.powder, 3);
+      assert.equal(result.reward.blueprintShards, 1);
+      assert.equal(kt.cpuGearRunStateForTest(), null);
+
+      const queued = gearStorage.loadGearState(storage);
+      assert.equal(queued.inventory.length, 500);
+      assert.equal(queued.tempBox.length, 50);
+      assert.equal(queued.resources.powder, 0);
+      assert.equal(queued.resources.blueprintShards, 0);
+      assert.equal(queued.unclaimedRewards.filter((reward) => reward.rewardId === intent.rewardId).length, 1);
+
+      const claimed = await globalThis.KatamonGearRewards.persistClaimReward(intent.rewardId, 999, storage);
+      assert.equal(claimed.duplicate, false);
+      const afterClaim = gearStorage.loadGearState(storage);
+      assert.equal(afterClaim.inventory.length, 500, 'material-only claim never consumes Inventory');
+      assert.equal(afterClaim.tempBox.length, 50, 'material-only claim never consumes TEMP BOX');
+      assert.equal(afterClaim.resources.powder, 3);
+      assert.equal(afterClaim.resources.blueprintShards, 1);
+      assert.equal(afterClaim.rewardLedger[intent.rewardId], true);
+
+      assert.equal((await globalThis.KatamonGearRewards.persistClaimReward(intent.rewardId, 1000, storage)).duplicate, true);
+      const afterDuplicate = gearStorage.loadGearState(storage);
+      assert.equal(afterDuplicate.resources.powder, 3);
+      assert.equal(afterDuplicate.resources.blueprintShards, 1);
+    } finally { restoreLocks(); }
+  });
+
   await test('inventory500かつTEMP50満杯ではCPU精算intentを残し、物理空き後だけqueueする', async () => {
     resetFixture();
     assert.equal(kt.startBattle(), true);

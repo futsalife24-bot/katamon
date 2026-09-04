@@ -106,6 +106,15 @@ test('turn timing, runtime pickup paths, durable resource escrow, and snapshot r
     pending.settlementIntent.stageItemBlueprintShards,
     runAfterPickup.stageItemEscrow.blueprintShards
   );
+  const pendingLayout = kt.cpuGearPendingSettlementLayoutForTest();
+  const breakdown = kt.cpuGearRewardBreakdownForTest(pendingLayout.preview);
+  assert.equal(breakdown.stageItemPowder, 3);
+  assert.equal(breakdown.stageItemBlueprintShards, runAfterPickup.stageItemEscrow.blueprintShards);
+  assert.equal(breakdown.streakPowder + breakdown.stageItemPowder, pendingLayout.preview.powder);
+  assert.equal(
+    breakdown.streakBlueprintShards + breakdown.stageItemBlueprintShards,
+    pendingLayout.preview.blueprintShards
+  );
 });
 
 test('resource save failure stays retryable and blocks terminal settlement until the same pickup is durable', async () => {
