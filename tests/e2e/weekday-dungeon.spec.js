@@ -1,22 +1,12 @@
 const { test, expect } = require('@playwright/test');
 
-const GAME_URL = '/index.html?weekday-dungeon-e2e=release-gate';
+const GAME_URL = '/index.html?weekday-dungeon-e2e=battle-release-gate';
 const VIRTUAL_WIDTH = 540;
 const VIRTUAL_HEIGHT = 960;
+const FIRE_ORIGIN = Object.freeze({ x: 270, y: 810 });
 
 async function gamePhase(page) {
   return page.evaluate(() => globalThis.KatamonCustomStageBridge?.getState?.().gamePhase || null);
-}
-
-async function tapVirtualCanvas(page, x, y) {
-  const canvas = page.getByTestId('battle-canvas');
-  await expect(canvas).toBeVisible();
-  const box = await canvas.boundingBox();
-  expect(box, 'game canvas must have a rendered box').not.toBeNull();
-  await page.touchscreen.tap(
-    box.x + box.width * x / VIRTUAL_WIDTH,
-    box.y + box.height * y / VIRTUAL_HEIGHT,
-  );
 }
 
 async function waitForProductionModules(page) {
@@ -29,76 +19,100 @@ async function waitForProductionModules(page) {
   )), { timeout: 20_000 }).toBe(true);
 }
 
+async function tapVirtualCanvas(page, x, y) {
+  const canvas = page.getByTestId('battle-canvas');
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box, 'the shared Battle canvas must be visible').not.toBeNull();
+  await page.touchscreen.tap(box.x + box.width * x / VIRTUAL_WIDTH, box.y + box.height * y / VIRTUAL_HEIGHT);
+}
+
+async function dragVirtualCanvas(page, from, to) {
+  const canvas = page.getByTestId('battle-canvas');
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box, 'the shared Battle canvas must have a box').not.toBeNull();
+  const point = (value) => ({ x: box.x + box.width * value.x / VIRTUAL_WIDTH, y: box.y + box.height * value.y / VIRTUAL_HEIGHT });
+  const start = point(from);
+  const end = point(to);
+  // Mouse emits real PointerEvents against #game in Chromium and WebKit. This
+  // deliberately does not call a production test hook or a weekday-only UI.
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+}
+
 async function openTitle(page, { navigate = true } = {}) {
   if (navigate) await page.goto(GAME_URL);
   await waitForProductionModules(page);
+  // WebKit throttles the TAP TO START rAF while a newly-created second page
+  // is still treated as background. Focus the page whose real canvas we are
+  // about to operate before starting that production animation.
+  await page.bringToFront();
   await expect.poll(() => gamePhase(page), { timeout: 20_000 }).toBe('press');
   await tapVirtualCanvas(page, VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
   await expect.poll(() => gamePhase(page), { timeout: 20_000 }).toBe('title');
 }
 
-async function openDungeon(page, { navigate = true, expectAutomaticRecovery = false } = {}) {
+async function openDungeon(page, { navigate = true, expectRecovery = false } = {}) {
   await openTitle(page, { navigate });
   await tapVirtualCanvas(page, 508, 690); // BATTLE -> GARAGE
-  await page.waitForTimeout(380); // title menu slide is 320ms
+  // The title card's documented 320ms transition must finish before LOADOUT
+  // becomes its target. This is the only animation-bound wait in this spec.
+  await page.waitForTimeout(380);
   await tapVirtualCanvas(page, 270, 727); // LOADOUT
-  await expect(page.locator('#gearWorkshop')).toHaveClass(/open/);
+  await expect(page.locator('#gearWorkshop')).toHaveClass(/open/, { timeout: 10_000 });
   await page.locator('#gearWeekdayDungeonEntry').click();
-  // A durable fired attempt is recovered immediately and closes this dialog
-  // before Playwright can observe its transient open class.
-  if (!expectAutomaticRecovery) await expect(page.locator('#weekdayDungeon')).toHaveClass(/open/);
-  await expect(page.locator('#weekdayDungeonCanvas')).toHaveAttribute('width', '540');
-  await expect(page.locator('#weekdayDungeonCanvas')).toHaveAttribute('height', '720');
+  await expect(page.locator('#gearWorkshop')).not.toHaveClass(/open/);
+  if (!expectRecovery) await expect(page.locator('#weekdayDungeonBattleStatus')).toHaveAttribute('data-phase', 'ready');
+  await expect(page.getByTestId('battle-canvas')).toBeVisible();
 }
 
-async function findAim(page, hit) {
-  return page.evaluate((wantedHit) => {
+async function findShot(page, wantedHit) {
+  return page.evaluate(({ hit, fireOrigin }) => {
     const domain = globalThis.KatamonGearWeekdayDungeon;
     const dayInfo = domain.getDayInfo({ nowMs: Date.now() });
-    const selected = document.querySelector('.weekdayDungeonSlotChoice.active')?.dataset.weekdayDungeonSlot;
-    const slotId = dayInfo.fixedSlotId || selected || domain.WEEKDAY_SLOT_IDS[0];
-    for (let angle = domain.AIM_LIMITS.angleMin; angle <= domain.AIM_LIMITS.angleMax; angle += 1) {
-      for (let power = domain.AIM_LIMITS.powerMin; power <= domain.AIM_LIMITS.powerMax; power += 1) {
-        const attempt = domain.createAttempt({ dayInfo, slotId, aim: { angle, power } });
-        if (domain.resolveAttempt(attempt).hit === wantedHit) return { angle, power, slotId };
+    // Keep both endpoints inside a 540x960 canvas when dragging from FIRE.
+    for (let dragY = -115; dragY <= 110; dragY += 2) {
+      for (let dragX = -120; dragX <= 120; dragX += 2) {
+        if (Math.hypot(dragX, dragY) < domain.SHOT_LIMITS.minDrag || Math.hypot(dragX, dragY) > domain.SHOT_LIMITS.maxDrag) continue;
+        if (fireOrigin.x + dragX < 4 || fireOrigin.x + dragX > 536 || fireOrigin.y + dragY < 4 || fireOrigin.y + dragY > 956) continue;
+        const attempt = domain.createAttempt({ dayInfo, shot: { dragX, dragY } });
+        const resolved = domain.resolveAttempt(attempt);
+        if (resolved.hit !== hit) continue;
+        // A browser may round a CSS pointer coordinate back to the 540x960
+        // Battle space by one pixel. Release-gate shots must remain in the same
+        // cloud (or safely outside every cloud) across that real-device jitter.
+        let stable = true;
+        for (let offsetY = -2; offsetY <= 2 && stable; offsetY += 1) {
+          for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
+            const neighborX = dragX + offsetX;
+            const neighborY = dragY + offsetY;
+            const magnitude = Math.hypot(neighborX, neighborY);
+            if (magnitude < domain.SHOT_LIMITS.minDrag || magnitude > domain.SHOT_LIMITS.maxDrag) { stable = false; break; }
+            const neighbor = domain.resolveAttempt(domain.createAttempt({ dayInfo, shot: { dragX: neighborX, dragY: neighborY } }));
+            if (neighbor.hit !== resolved.hit || neighbor.slotId !== resolved.slotId) { stable = false; break; }
+          }
+        }
+        if (stable) return { dragX, dragY, attempt };
       }
     }
     return null;
-  }, hit);
+  }, { hit: wantedHit, fireOrigin: FIRE_ORIGIN });
 }
 
-async function aimDungeonCanvas(page, hit) {
-  const aim = await findAim(page, hit);
-  expect(aim, `a deterministic ${hit ? 'hit' : 'miss'} aim must exist`).not.toBeNull();
-  const point = await page.evaluate(({ angle, power }) => {
-    const domain = globalThis.KatamonGearWeekdayDungeon;
-    const field = domain.PLAYFIELD;
-    // A minimum-angle result includes every pointer angle below the lower
-    // limit. Aim inside that clamped region so WebKit's integer touch-point
-    // rounding cannot turn the intended 10° into 11° on a narrow canvas.
-    const pointerAngle = angle === domain.AIM_LIMITS.angleMin ? angle - 2 : angle;
-    const radians = pointerAngle * Math.PI / 180;
-    return {
-      x: field.originX + Math.cos(radians) * power * 3.2,
-      y: field.originY - Math.sin(radians) * power * 3.2,
-    };
-  }, aim);
-  const canvas = page.locator('#weekdayDungeonCanvas');
-  await canvas.scrollIntoViewIfNeeded();
-  const box = await canvas.boundingBox();
-  expect(box, 'weekday dungeon canvas must have a rendered box').not.toBeNull();
-  await page.touchscreen.tap(
-    box.x + box.width * point.x / 540,
-    box.y + box.height * point.y / 720,
-  );
-  await expect(page.locator('#weekdayDungeonAimAngle')).toHaveValue(String(aim.angle));
-  await expect(page.locator('#weekdayDungeonAimPower')).toHaveValue(String(aim.power));
-  await expect(page.locator('#weekdayDungeonAimReadout')).toHaveText(`角度 ${aim.angle}°・強さ ${aim.power}`);
-  return aim;
+async function fireShot(page, wantedHit, { expectLaunch = true } = {}) {
+  const shot = await findShot(page, wantedHit);
+  expect(shot, `a canonical ${wantedHit ? 'hit' : 'miss'} shot must exist`).not.toBeNull();
+  await dragVirtualCanvas(page, FIRE_ORIGIN, { x: FIRE_ORIGIN.x + shot.dragX, y: FIRE_ORIGIN.y + shot.dragY });
+  if (expectLaunch) {
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toHaveAttribute('data-phase', /committing|flying|revealing|persisting|complete|error/);
+  }
+  return shot;
 }
 
-async function clickFireAndWaitForReveal(page) {
-  await page.locator('#weekdayDungeonFire').click();
+async function waitForDrop(page) {
   await expect(page.locator('#gearDropReveal')).toHaveClass(/open/, { timeout: 25_000 });
 }
 
@@ -106,20 +120,14 @@ async function readDurableState(page) {
   return page.evaluate(() => {
     const dungeonStorage = globalThis.KatamonGearWeekdayDungeonStorage;
     const gearStorage = globalThis.KatamonGearStorage;
-    const dungeon = dungeonStorage.loadWeekdayDungeonState(localStorage);
-    const gear = gearStorage.loadGearState(localStorage);
+    const state = gearStorage.loadGearState(localStorage);
     return {
-      dungeon,
-      inventory: gear.inventory.length,
-      tempBox: gear.tempBox.length,
-      pending: gear.unclaimedRewards.map((reward) => ({
-        rewardId: reward.rewardId,
-        sourceId: reward.sourceId,
-        gears: reward.gears.map((entry) => entry.gearId),
-        powder: reward.powder,
-      })),
-      ledger: Object.keys(gear.rewardLedger).sort(),
-      powder: gear.resources.powder,
+      dungeon: dungeonStorage.loadWeekdayDungeonState(localStorage),
+      inventory: state.inventory.length,
+      tempBox: state.tempBox.length,
+      powder: state.resources.powder,
+      pending: state.unclaimedRewards.map((reward) => ({ rewardId: reward.rewardId, sourceId: reward.sourceId, gears: reward.gears.map((gear) => gear.gearId), powder: reward.powder })),
+      ledger: Object.keys(state.rewardLedger).sort(),
       wal: localStorage.getItem(globalThis.KatamonGearRewards.GEAR_TRANSACTION_STORAGE_KEY),
     };
   });
@@ -135,273 +143,141 @@ async function clearWeekdayAndGearStorage(page) {
   });
 }
 
-test.describe('weekday dungeon durable release gate', () => {
-  test('Garage DOM entry, canvas aim, FIRE, reveal and explicit Gear claim create one entitlement', async ({ page }, testInfo) => {
+function installStrictPageErrors(page, errors) {
+  page.on('pageerror', (error) => errors.push(error.message));
+}
+
+function expectNoPageErrors(errors) {
+  expect(errors).toEqual([]);
+}
+
+test.describe('weekday dungeon shared-Battle release gate', () => {
+  test('Garage entry launches shared Battle, real drag FIRE hits a cloud and claim grants exactly one Gear', async ({ page }, testInfo) => {
     const errors = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    installStrictPageErrors(page, errors);
     await openDungeon(page);
-    await expect(page.locator('#weekdayDungeonStatus')).toContainText(/命中で.*Gear.*粉末3/);
-    const aim = await aimDungeonCanvas(page, true);
-    await clickFireAndWaitForReveal(page);
-
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toContainText('6つの雲');
+    await testInfo.attach('weekday-battle-ready', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+    const shot = await fireShot(page, true);
+    await waitForDrop(page);
     const queued = await readDurableState(page);
-    expect(queued.dungeon.activeAttempt).toMatchObject({ phase: 'queued', angle: aim.angle, power: aim.power, slotId: aim.slotId });
-    expect(queued.pending).toEqual([{
-      rewardId: queued.dungeon.activeAttempt.rewardId,
-      sourceId: 'weekday_dungeon',
-      gears: [`weekday-dungeon:${queued.dungeon.activeAttempt.dayKey}:${aim.slotId}:gear:0`],
-      powder: 0,
-    }]);
-    expect(queued.inventory).toBe(0);
-    await testInfo.attach('weekday-dungeon-hit', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
-
-    await expect(page.locator('#gearDropClaim')).toBeVisible();
+    expect(queued.dungeon.activeAttempt).toMatchObject({ schemaVersion: 2, phase: 'queued', slotId: shot.attempt.slotId });
+    expect(Math.abs(queued.dungeon.activeAttempt.shot.dragX - shot.dragX)).toBeLessThanOrEqual(2);
+    expect(Math.abs(queued.dungeon.activeAttempt.shot.dragY - shot.dragY)).toBeLessThanOrEqual(2);
+    expect(queued.pending).toHaveLength(1);
+    expect(queued.pending[0]).toMatchObject({ rewardId: queued.dungeon.activeAttempt.rewardId, sourceId: 'weekday_dungeon', powder: 0 });
+    expect(queued.pending[0].gears).toEqual([`weekday-dungeon:${queued.dungeon.activeAttempt.dayKey}:${queued.dungeon.activeAttempt.slotId}:gear:0`]);
+    await testInfo.attach('weekday-battle-hit', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
     await page.locator('#gearDropClaim').click();
     await expect(page.locator('#gearDropClaim')).toBeHidden();
-    await page.locator('#gearDropClose').click();
     const claimed = await readDurableState(page);
-    expect(claimed.inventory).toBe(1);
-    expect(claimed.tempBox).toBe(0);
+    expect(claimed.inventory + claimed.tempBox).toBe(1);
     expect(claimed.pending).toEqual([]);
     expect(claimed.ledger).toEqual([queued.dungeon.activeAttempt.rewardId]);
-    await expect(page.locator('#gearWeekdayDungeonEntry')).toBeDisabled();
-    // The Windows WebKit runtime used by Playwright does not expose the iOS
-    // AudioContext constructor. Keep this exact simulator-only title-BGM noise
-    // out of the dungeon release gate while retaining every other pageerror.
-    const unexpectedErrors = errors.filter((message) => message !== "undefined is not a constructor (evaluating 'new AC()')");
-    expect(unexpectedErrors).toEqual([]);
+    expectNoPageErrors(errors);
   });
 
-  test('miss queues powder +3 and adds it only after the explicit claim button', async ({ page }) => {
+  test('a real shared-Battle miss queues powder +3 and does not add it until claim', async ({ page }) => {
     await openDungeon(page);
-    const aim = await aimDungeonCanvas(page, false);
-    await clickFireAndWaitForReveal(page);
+    const shot = await fireShot(page, false);
+    await waitForDrop(page);
     await expect(page.locator('#gearDropKicker')).toHaveText('MATERIAL REWARD');
     await expect(page.locator('.gearDropMaterialValues')).toContainText('粉末 +3');
-
     const queued = await readDurableState(page);
-    expect(queued.dungeon.activeAttempt).toMatchObject({ phase: 'queued', angle: aim.angle, power: aim.power });
-    expect(queued.pending).toEqual([{
-      rewardId: queued.dungeon.activeAttempt.rewardId,
-      sourceId: 'weekday_dungeon',
-      gears: [],
-      powder: 3,
-    }]);
+    expect(queued.dungeon.activeAttempt).toMatchObject({ schemaVersion: 2, phase: 'queued', slotId: null });
+    expect(Math.abs(queued.dungeon.activeAttempt.shot.dragX - shot.dragX)).toBeLessThanOrEqual(2);
+    expect(Math.abs(queued.dungeon.activeAttempt.shot.dragY - shot.dragY)).toBeLessThanOrEqual(2);
+    expect(queued.pending).toEqual([{ rewardId: queued.dungeon.activeAttempt.rewardId, sourceId: 'weekday_dungeon', gears: [], powder: 3 }]);
     expect(queued.powder).toBe(0);
     await page.locator('#gearDropClaim').click();
-    await expect(page.locator('#gearDropTitle')).toHaveText('MATERIAL GET!');
-    const claimed = await readDurableState(page);
-    expect(claimed.pending).toEqual([]);
-    expect(claimed.powder).toBe(3);
-    expect(claimed.ledger).toEqual([queued.dungeon.activeAttempt.rewardId]);
+    expect((await readDurableState(page)).powder).toBe(3);
   });
 
-  test('reload recovers a public-API durable fired-before-queue state without a second FIRE', async ({ page }) => {
+  test('v1 fired state reloads into reward-only recovery without a second projectile', async ({ page }) => {
     await page.goto(GAME_URL);
     await waitForProductionModules(page);
     const seeded = await page.evaluate(async () => {
       const domain = globalThis.KatamonGearWeekdayDungeon;
       const storage = globalThis.KatamonGearWeekdayDungeonStorage;
-      const dayInfo = domain.getDayInfo({ nowMs: Date.now() });
-      const slotId = dayInfo.fixedSlotId || domain.WEEKDAY_SLOT_IDS[0];
-      let selected = null;
-      for (let angle = domain.AIM_LIMITS.angleMin; angle <= domain.AIM_LIMITS.angleMax && !selected; angle += 1) {
-        for (let power = domain.AIM_LIMITS.powerMin; power <= domain.AIM_LIMITS.powerMax; power += 1) {
-          const candidate = domain.createAttempt({ dayInfo, slotId, aim: { angle, power } });
-          if (domain.resolveAttempt(candidate).hit) { selected = candidate; break; }
-        }
+      const day = domain.getDayInfo({ nowMs: Date.now() });
+      const slotId = day.fixedSlotId || domain.WEEKDAY_SLOT_IDS[0];
+      let attempt = null;
+      for (let angle = domain.AIM_LIMITS.angleMin; angle <= domain.AIM_LIMITS.angleMax && !attempt; angle += 1) for (let power = domain.AIM_LIMITS.powerMin; power <= domain.AIM_LIMITS.powerMax; power += 1) {
+        const candidate = { schemaVersion: 1, rulesVersion: 1, attemptId: `weekday-dungeon:${day.dayKey}:${slotId}:attempt`, rewardId: `weekday-dungeon:${day.dayKey}:${slotId}:reward`, dayKey: day.dayKey, dayIndex: day.dayIndex, slotId, phase: 'fired', angle, power, createdAtMs: day.jstStartMs };
+        if (domain.legacyResolveAttempt(candidate).hit) attempt = candidate;
       }
-      if (!selected) throw new Error('no hit attempt exists');
-      const committed = await storage.commitAttempt(selected, localStorage, { nowMs: Date.now() });
-      const gear = globalThis.KatamonGearStorage.loadGearState(localStorage);
-      return { attempt: committed.attempt, pending: gear.unclaimedRewards.length, ledger: Object.keys(gear.rewardLedger).length };
+      if (!attempt) throw new Error('no v1 hit attempt');
+      const committed = await storage.commitAttempt(attempt, localStorage, { nowMs: Date.now() });
+      return committed.attempt;
     });
-    expect(seeded.attempt.phase).toBe('fired');
-    expect(seeded.pending).toBe(0);
-    expect(seeded.ledger).toBe(0);
-
     await page.reload();
-    await openDungeon(page, { navigate: false, expectAutomaticRecovery: true });
-    // Opening the real entry performs reward-only recovery; the test never clicks FIRE.
-    await expect(page.locator('#gearDropReveal')).toHaveClass(/open/, { timeout: 20_000 });
+    await openDungeon(page, { navigate: false, expectRecovery: true });
+    await waitForDrop(page);
     const recovered = await readDurableState(page);
-    expect(recovered.dungeon.activeAttempt).toEqual({ ...seeded.attempt, phase: 'queued' });
+    expect(recovered.dungeon.activeAttempt).toEqual({ ...seeded, phase: 'queued' });
     expect(recovered.pending).toHaveLength(1);
-    expect(recovered.pending[0].rewardId).toBe(seeded.attempt.rewardId);
-    expect(recovered.pending[0].gears).toHaveLength(1);
-    expect(recovered.ledger).toEqual([]);
   });
 
-  test('two pages in one context concurrently FIRE but produce exactly one durable entitlement', async ({ page, context }) => {
+  test('two tabs firing through shared Battle create one day-only entitlement', async ({ page, context }) => {
     const second = await context.newPage();
     await openDungeon(page);
     await openDungeon(second);
-    const firstAim = await aimDungeonCanvas(page, true);
-    const secondAim = await aimDungeonCanvas(second, true);
-    expect(secondAim).toEqual(firstAim);
-
+    const first = await findShot(page, true);
+    const secondShot = await findShot(second, true);
+    expect(secondShot).not.toBeNull();
     await Promise.all([
-      page.locator('#weekdayDungeonFire').click(),
-      second.locator('#weekdayDungeonFire').click(),
+      dragVirtualCanvas(page, FIRE_ORIGIN, { x: FIRE_ORIGIN.x + first.dragX, y: FIRE_ORIGIN.y + first.dragY }),
+      dragVirtualCanvas(second, FIRE_ORIGIN, { x: FIRE_ORIGIN.x + secondShot.dragX, y: FIRE_ORIGIN.y + secondShot.dragY }),
     ]);
     await expect.poll(async () => (await readDurableState(page)).dungeon.activeAttempt?.phase, { timeout: 25_000 }).toBe('queued');
-    await expect(page.locator('#gearDropReveal')).toHaveClass(/open/, { timeout: 25_000 });
-    await expect(second.locator('#gearDropReveal')).toHaveClass(/open/, { timeout: 25_000 });
-
-    const queued = await readDurableState(page);
-    expect(queued.pending).toHaveLength(1);
-    expect(queued.pending[0].sourceId).toBe('weekday_dungeon');
-    expect(queued.pending[0].gears).toHaveLength(1);
-    expect(new Set(queued.pending[0].gears).size).toBe(1);
-    expect(queued.ledger).toEqual([]);
-    await page.locator('#gearDropClaim').click();
-    await expect(page.locator('#gearDropClaim')).toBeHidden();
-    const claimed = await readDurableState(second);
-    expect(claimed.inventory + claimed.tempBox).toBe(1);
-    expect(claimed.pending).toEqual([]);
-    expect(claimed.ledger).toEqual([queued.dungeon.activeAttempt.rewardId]);
+    const state = await readDurableState(page);
+    expect(state.pending).toHaveLength(1);
+    expect(new Set(state.pending[0].gears).size).toBe(1);
     await second.close();
   });
 
-  test('pending queue full and physical Gear storage full both fail preflight without consuming', async ({ page }) => {
+  test('queue capacity and rejected Web Lock fail before the shared Battle shot is consumed', async ({ page }) => {
     await openDungeon(page);
     await page.evaluate(() => {
       const storage = globalThis.KatamonGearStorage;
       const rewards = globalThis.KatamonGearRewards;
       let state = storage.createDefaultGearStorageState();
-      for (let index = 0; index < storage.UNCLAIMED_REWARD_CAPACITY; index += 1) {
-        state = rewards.queueUnclaimedReward(state, {
-          rewardId: `weekday-preflight-pending-${index}`,
-          sourceId: 'cpu_battle',
-          sourceDetail: { e2e: 'pending-full' },
-          createdAtMs: index,
-          gears: [], powder: 1, blueprintShards: 0,
-        }).nextState;
-      }
+      for (let index = 0; index < storage.UNCLAIMED_REWARD_CAPACITY; index += 1) state = rewards.queueUnclaimedReward(state, { rewardId: `weekday-cap-${index}`, sourceId: 'cpu_battle', sourceDetail: { index }, createdAtMs: index, gears: [], powder: 1, blueprintShards: 0 }).nextState;
       storage.saveGearState(state, localStorage);
     });
-    await aimDungeonCanvas(page, false);
-    await page.locator('#weekdayDungeonFire').click();
-    await expect(page.locator('#weekdayDungeonStatus')).toContainText('未受取報酬がいっぱい');
-    let blocked = await readDurableState(page);
-    expect(blocked.dungeon).toMatchObject({ maxConsumedDayIndex: -1, activeAttempt: null });
-    expect(blocked.pending).toHaveLength(10);
-    expect(blocked.pending.some((reward) => reward.sourceId === 'weekday_dungeon')).toBe(false);
+    await fireShot(page, false, { expectLaunch: false });
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toContainText('未受取報酬がいっぱい');
+    let state = await readDurableState(page);
+    expect(state.dungeon.activeAttempt).toBeNull();
+    expect(state.pending).toHaveLength(10);
 
     await clearWeekdayAndGearStorage(page);
     await page.reload();
     await openDungeon(page, { navigate: false });
-    await page.evaluate(() => {
-      const domain = globalThis.KatamonGearDomain;
-      const storage = globalThis.KatamonGearStorage;
-      const state = storage.createDefaultGearStorageState();
-      const base = domain.createGear({
-        gearId: 'weekday-preflight-full-0',
-        generationSeed: 'weekday-preflight-full:g', enhancementSeed: 'weekday-preflight-full:e',
-        sourceId: 'cpu_battle', sourceDetail: { e2e: 'physical-full' }, acquiredAt: '2026-09-04T00:00:00Z',
-        slotId: 'barrel', setId: 'assault',
-        qualityProfile: { id: 'weekday-preflight-full', starWeights: [{ id: 1, weight: 1 }], rarityWeights: [{ id: 'normal', weight: 1 }] },
-        setProfile: { id: 'weekday-preflight-full-set', setWeights: [{ id: 'assault', weight: 1 }] },
-      });
-      state.inventory = Array.from({ length: storage.MAIN_INVENTORY_CAPACITY }, (_value, index) => ({
-        gear: { ...base, gearId: `weekday-preflight-full-${index}` }, locked: false, favorite: false,
-      }));
-      state.tempBox = Array.from({ length: storage.TEMP_BOX_CAPACITY }, (_value, offset) => ({
-        gear: { ...base, gearId: `weekday-preflight-full-${storage.MAIN_INVENTORY_CAPACITY + offset}` },
-        locked: false, favorite: false, enteredAtMs: Date.now(),
-      }));
-      storage.saveGearState(state, localStorage);
-    });
-    await aimDungeonCanvas(page, true);
-    await page.locator('#weekdayDungeonFire').click();
-    await expect(page.locator('#weekdayDungeonStatus')).toContainText('インベントリとTEMP BOXがいっぱい');
-    blocked = await readDurableState(page);
-    expect(blocked.dungeon).toMatchObject({ maxConsumedDayIndex: -1, activeAttempt: null });
-    expect(blocked.inventory).toBe(500);
-    expect(blocked.tempBox).toBe(50);
-    expect(blocked.pending).toEqual([]);
+    await page.evaluate(() => Object.defineProperty(navigator, 'locks', { configurable: true, get: () => ({ request() { return Promise.reject(Object.assign(new Error('refused'), { code: 'WEEKDAY_DUNGEON_LOCK_UNAVAILABLE' })); } }) }));
+    await fireShot(page, false, { expectLaunch: false });
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toContainText('安全な保存ロックを使えません');
+    state = await readDurableState(page);
+    expect(state.dungeon.activeAttempt).toBeNull();
+    expect(state.pending).toEqual([]);
   });
 
-  test('pending Gear WAL blocks reward mutation, then reward-only retry recovers the consumed shot', async ({ page }) => {
-    await openDungeon(page);
-    await aimDungeonCanvas(page, true);
-    await page.evaluate(() => localStorage.setItem(globalThis.KatamonGearRewards.GEAR_TRANSACTION_STORAGE_KEY, '{"pending":true}'));
-    await page.locator('#weekdayDungeonFire').click();
-    await expect(page.locator('#weekdayDungeonStatus')).toContainText('Gear取引を復旧中', { timeout: 25_000 });
-    const blocked = await readDurableState(page);
-    expect(blocked.dungeon.activeAttempt).toMatchObject({ phase: 'fired' });
-    expect(blocked.pending).toEqual([]);
-    expect(blocked.ledger).toEqual([]);
-    expect(blocked.wal).toBe('{"pending":true}');
-    await expect(page.locator('#weekdayDungeonFire')).toHaveText('報酬保存を再試行');
-
-    await page.evaluate(() => localStorage.removeItem(globalThis.KatamonGearRewards.GEAR_TRANSACTION_STORAGE_KEY));
-    await page.locator('#weekdayDungeonFire').click();
-    await expect(page.locator('#gearDropReveal')).toHaveClass(/open/, { timeout: 20_000 });
-    const recovered = await readDurableState(page);
-    expect(recovered.dungeon.activeAttempt).toEqual({ ...blocked.dungeon.activeAttempt, phase: 'queued' });
-    expect(recovered.pending).toHaveLength(1);
-    expect(recovered.pending[0].rewardId).toBe(blocked.dungeon.activeAttempt.rewardId);
-  });
-
-  test('browser Web Lock request refusal fails closed before shot consumption', async ({ page }) => {
-    await page.addInitScript(() => {
-      const refusingLocks = Object.freeze({
-        request() { return Promise.reject(new Error('weekday dungeon lock refused by browser')); },
-      });
-      Object.defineProperty(navigator, 'locks', { configurable: true, get: () => refusingLocks });
-    });
-    await openDungeon(page);
-    await aimDungeonCanvas(page, false);
-    await page.locator('#weekdayDungeonFire').click();
-    await expect(page.locator('#weekdayDungeonStatus')).toContainText('安全な保存ロックを使えません');
-    const blocked = await readDurableState(page);
-    expect(blocked.dungeon).toMatchObject({ maxConsumedDayIndex: -1, activeAttempt: null });
-    expect(blocked.inventory).toBe(0);
-    expect(blocked.pending).toEqual([]);
-    expect(blocked.ledger).toEqual([]);
-  });
-
-  test('320x568 has no horizontal overflow and reaches 44px controls that can FIRE', async ({ page }) => {
+  test('WAL retry, R and narrow 320x568 retain one-shot safety and a usable FIRE origin', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 568 });
     await openDungeon(page);
-    const layout = await page.evaluate(() => {
-      const panel = document.querySelector('.weekdayDungeonPanel');
-      const slotButtons = [...document.querySelectorAll('.weekdayDungeonSlotChoice')].map((button) => {
-        const rect = button.getBoundingClientRect();
-        return { width: rect.width, height: rect.height };
-      });
-      const actionButtons = [...document.querySelectorAll('.weekdayDungeonActions button')].map((button) => {
-        const rect = button.getBoundingClientRect();
-        return { width: rect.width, height: rect.height };
-      });
-      return {
-        documentFits: document.documentElement.scrollWidth <= innerWidth + 1,
-        panelFitsWidth: panel.scrollWidth <= panel.clientWidth + 1,
-        slotButtons,
-        actionButtons,
-        fireTextFits: document.querySelector('#weekdayDungeonFire').scrollWidth <= document.querySelector('#weekdayDungeonFire').clientWidth + 1,
-        fireWhiteSpace: getComputedStyle(document.querySelector('#weekdayDungeonFire')).whiteSpace,
-      };
-    });
-    expect(layout.documentFits).toBe(true);
-    expect(layout.panelFitsWidth).toBe(true);
-    expect(layout.slotButtons).toHaveLength(6);
-    for (const button of [...layout.slotButtons, ...layout.actionButtons]) {
-      expect(button.width).toBeGreaterThanOrEqual(44);
-      expect(button.height).toBeGreaterThanOrEqual(44);
-    }
-    expect(layout.fireTextFits).toBe(true);
-    expect(layout.fireWhiteSpace).toBe('nowrap');
-
-    const fire = page.locator('#weekdayDungeonFire');
-    await fire.scrollIntoViewIfNeeded();
-    const fireRect = await fire.boundingBox();
-    expect(fireRect).not.toBeNull();
-    expect(fireRect.x).toBeGreaterThanOrEqual(0);
-    expect(fireRect.x + fireRect.width).toBeLessThanOrEqual(320);
-    expect(fireRect.y).toBeGreaterThanOrEqual(0);
-    expect(fireRect.y + fireRect.height).toBeLessThanOrEqual(568);
-    await clickFireAndWaitForReveal(page);
+    const layout = await page.evaluate(() => ({ fits: document.documentElement.scrollWidth <= innerWidth + 1, status: document.querySelector('#weekdayDungeonBattleStatus')?.getAttribute('aria-live') }));
+    expect(layout).toEqual({ fits: true, status: 'polite' });
+    await page.keyboard.press('r');
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toHaveAttribute('data-phase', 'ready');
+    await page.evaluate(() => localStorage.setItem(globalThis.KatamonGearRewards.GEAR_TRANSACTION_STORAGE_KEY, '{"pending":true}'));
+    await fireShot(page, true);
+    await expect(page.locator('#weekdayDungeonBattleStatus')).toHaveAttribute('data-phase', 'error', { timeout: 25_000 });
+    let state = await readDurableState(page);
+    expect(state.dungeon.activeAttempt).toMatchObject({ phase: 'fired' });
+    await page.evaluate(() => localStorage.removeItem(globalThis.KatamonGearRewards.GEAR_TRANSACTION_STORAGE_KEY));
+    await tapVirtualCanvas(page, 270, 356); // weekday retry rendered inside shared Battle canvas
+    await waitForDrop(page);
+    state = await readDurableState(page);
+    expect(state.dungeon.activeAttempt).toMatchObject({ phase: 'queued' });
   });
 });

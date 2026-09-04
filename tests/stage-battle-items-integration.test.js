@@ -7,7 +7,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 assert.match(html, /<script src="shared\/stage-battle-items\.js"><\/script>/,
   'pure stage battle item module must load before the inline game');
-assert.match(html, /const BUILD_ID = 'v2\.0\.173-weekday-dungeon'/,
+assert.match(html, /const BUILD_ID = 'v2\.0\.174-weekday-battle-dungeon'/,
   'index and service worker build IDs must advance together');
 
 for (const needle of [

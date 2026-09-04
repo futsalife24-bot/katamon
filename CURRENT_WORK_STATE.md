@@ -1,6 +1,6 @@
 # カタモン 現在作業状態
 
-最終更新: 2026-09-04 / GitHub正本: `futsalife24-bot/katamon` の `master`
+最終更新: 2026-09-05 / GitHub正本: `futsalife24-bot/katamon` の `master`
 
 ## 現在の開発状態
 
@@ -16,7 +16,9 @@ v2.0.171では、通常CPU 1v1・公式ステージ・非ボス戦へ回復、�
 
 v2.0.172では、CPU連勝精算の合計を「連勝報酬」と「資源箱（連戦累計）」へ分けて結果・未精算・保存再試行画面に表示し、通常CPU 1vs1・非ボス戦の結果をWeb ShareまたはXへ共有できる導線を追加した。共有文面は集計値と固定公開URLだけで生成し、名前・部屋ID・内部ID・seed・query/hashは含めない。Gear 0個で素材だけの未受取報酬も既存の明示claim、lock、台帳、読戻しを再利用して受け取れ、内容確定後の素材のみ精算は物理倉庫満杯でも未受取上限を守って保存できるよう修正した。保存schema、報酬テーブル、ONLINE/Firebase、実機GOAL QAは変更・実施していない。詳細は [`docs/tasks/2026-09-04-reward-summary-x-share.md`](docs/tasks/2026-09-04-reward-summary-x-share.md)。
 
-v2.0.173では、GARAGEへJST基準で1日1射の曜日ダンジョンを追加した。月〜土は砲身・装甲・コア・動力・照準・補機を順に固定し、日曜だけ6部位から選択できる。専用弾道で命中すれば対象部位Gear 1個、外しても粉末3個を既存の未受取報酬へ保存する。FIRE前は消費せず、FIRE時の専用Web Lock・読戻し・時計巻戻し防止と、Gearキュー・台帳の耐久確認を分離して、再読込や同日複数タブでも一射と報酬を失わない。専用背景は生成masterを720×1280 JPEGへ最適化してPWA Tier 2へ登録した。CPU連勝、希少個体、資源箱、通常戦闘、ONLINE/Firebase、実機GOAL QAは変更・実施していない。詳細は [`docs/tasks/2026-09-04-weekday-dungeon.md`](docs/tasks/2026-09-04-weekday-dungeon.md)。
+v2.0.173では、GARAGEへJST基準で1日1射の曜日ダンジョンを追加した。詳細は後続のv2.0.174再設計へ引き継いだ。
+
+v2.0.174では、専用portrait Canvas・独自発射を廃止し、既存BATTLE `#game`・既存FIRE・共通物理へ曜日ダンジョンを統合した。ステージ中央のディラノから左右の近・中・遠、計6つの雲で覆われたzoneを狙い、着弾zoneのみ雲を開示して当日の6部位報酬を決定する。外れは粉末3、命中は対応部位Gear 1個。v1 fired attemptの復旧、複数タブ、queue/ledger、保存再試行（WAL）の安全性を維持し、通常CPU・ONLINE/Firebase・GOALへは変更を波及させない。unit/static、既存回帰、Mobile WebKit／Android ChromiumのPlaywright **12/12**（各6件）は確認済み。実機GOAL QAは今回開始せずP0のまま保留する。詳細は [`docs/tasks/2026-09-04-weekday-dungeon.md`](docs/tasks/2026-09-04-weekday-dungeon.md)。
 
 Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
@@ -33,7 +35,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.173-weekday-dungeon**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.174-weekday-battle-dungeon**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 

@@ -35,9 +35,9 @@ npm run test:e2e:weekday-dungeon
 | `stage-battle-items.test.js` | CPU BATTLEのステージアイテム抽選・出現間隔・当たり判定・効果・資源上限をpure moduleで確認する |
 | `stage-battle-items-runtime.test.js` | 実ゲームharnessでturn 2出現、砲弾/接触取得、snapshot再開、資源エスクローと精算を確認する |
 | `battle-item-assets.test.js` | 3種のmaster/runtime画像、透明度、lossless WebP、manifest、PWA Tier 2登録を確認する |
-| `gear-weekday-dungeon.test.js` | JST曜日、日曜選択、決定弾道、1日1射、時計巻戻し、Web Lock、保存復旧、Gear／粉末報酬を確認する |
-| `weekday-dungeon-ui.test.js` | GARAGE入口、専用Canvas、生成master/runtime背景、module読込順、PWA cache、ONLINE分離を確認する |
-| `e2e/weekday-dungeon.spec.js` | Mobile WebKit／Android Chromiumで命中受取、外れ復旧、2射目拒否、320×568配置を確認する |
+| `gear-weekday-dungeon.test.js` | JST曜日、左右6zoneの日次配置、共通物理入力、1日1射、時計巻戻し、Web Lock、v1 fired復旧、Gear／粉末報酬を確認する |
+| `weekday-dungeon-ui.test.js` | GARAGE入口、既存BATTLE `#game`／FIRE統合、中央キャラ、雲で覆う6zone、PWA cache、ONLINE分離を確認する |
+| `e2e/weekday-dungeon.spec.js` | Mobile WebKit／Android Chromium各6件（計12/12）で、既存BATTLE操作、命中claim、外れ粉末3、v1復旧、multi-tab、queue／lock事前遮断、WAL再試行、320×568配置を確認する |
 
 ## 注意
 

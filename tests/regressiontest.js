@@ -740,7 +740,7 @@ check('ドレッドアローとクール=カイは透明余白を除いて大き
 check('キャラ選択の必殺技詳細はVSカットインなしの通信不要デモを開く',
   indexHtml.includes("function startSpecialDemo(key)")
     && indexHtml.includes("battleMode = 'demo';")
-    && indexHtml.includes("if (battleMode !== 'demo' && !(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();")
+    && indexHtml.includes("if (battleMode !== 'demo' && battleMode !== 'weekday' && !(isOnline() && online.kind === 'firebase')) showBattleStartCutIn();")
     && indexHtml.includes("if (battleMode !== 'demo') primeStageBgm(currentThemeKey);")
     && indexHtml.includes("if (specialDemo) return;")
     && indexHtml.includes("ctx.fillText('詳細 ▶'")

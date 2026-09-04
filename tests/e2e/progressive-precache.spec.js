@@ -9,9 +9,11 @@ const T3A_SENTINEL = '/assets/stage-boss-arena.mp3';
 const T3B_SENTINEL = '/assets/device-exit-seal.png';
 const T0_T1_LIMIT_BYTES = 11 * 1024 * 1024;
 const T3A_GAME_OFFLINE_LIMIT_BYTES = 45 * 1024 * 1024;
-// T3b keeps every optional sound-test, exit-confirmation, and master fallback
-// asset for a fully offline installation. Its actual one-pass payload is ~74MB.
-const T3B_FULL_OFFLINE_LIMIT_BYTES = 75 * 1024 * 1024;
+// T3b keeps every optional sound-test, exit-confirmation, master fallback, and
+// the shared high-quality weekday cloud for a fully offline installation. The
+// WebKit one-pass payload is currently ~75.6MiB after its allowed bootstrap
+// re-requests are excluded, so retain a narrow 76MiB regression ceiling.
+const T3B_FULL_OFFLINE_LIMIT_BYTES = 76 * 1024 * 1024;
 const CONTENT_TYPES = Object.freeze({
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8',
   '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8',
