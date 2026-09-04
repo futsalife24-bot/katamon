@@ -47,8 +47,8 @@ test('rarity・star・enhancement・recent・slot・set sortは表示だけで�
 test('recent sortはproduction CPU rewardのepoch millisecondsとISO文字列を正しく扱う', () => {
   const source = html.match(/function gearAcquiredAtMs\(value\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.ok(source); const acquiredAtMs = Function(`${source}; return gearAcquiredAtMs;`)();
-  const older = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-old', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000000000 })).gears[0];
-  const newer = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-new', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000005000 })).gears[0];
+  const older = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-old', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000000000, stageItemPowder: 0, stageItemBlueprintShards: 0 })).gears[0];
+  const newer = cpuRewards.materializeCpuGearReward(cpuRewards.createCpuSettlementIntent({ runId: 'phase4d-recent-new', peakStreak: 3, outcome: 'defeat', settlementCreatedAtMs: 1770000005000, stageItemPowder: 0, stageItemBlueprintShards: 0 })).gears[0];
   assert.equal(acquiredAtMs(older.acquisition.acquiredAt), 1770000000000); assert.equal(acquiredAtMs(newer.acquisition.acquiredAt), 1770000005000);
   assert.deepEqual([older, newer].sort((a, b) => acquiredAtMs(b.acquisition.acquiredAt) - acquiredAtMs(a.acquisition.acquiredAt)).map((gear) => gear.gearId), [newer.gearId, older.gearId]);
   assert.equal(acquiredAtMs('2026-08-30T00:00:00Z'), Date.parse('2026-08-30T00:00:00Z')); assert.equal(acquiredAtMs('invalid'), 0);

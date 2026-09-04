@@ -12,6 +12,8 @@ node tests/regressiontest.js e1
 node tests/resulttest.js
 node tests/loopbacktest.js
 node tests/stage3test.js
+npm run test:stage
+npm run test:battle-item-assets
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -28,6 +30,9 @@ node tests/stage3test.js
 | `loopbacktest.js` | オンライン対戦。host/guest を別プロセスで動かし、親が遅延とロスを注入して中継する(93項目) |
 | `stage3test.js` | Firebase Stage 3の部屋コード・SSE・commit/reveal・ルール文面をネットワークなしで確認する |
 | `lobbysimtest.js` | v3ロビーのコミット・公開を2人ぶん動かし、**メッセージの届く順**を変えて確かめる(7項目) |
+| `stage-battle-items.test.js` | CPU BATTLEのステージアイテム抽選・出現間隔・当たり判定・効果・資源上限をpure moduleで確認する |
+| `stage-battle-items-runtime.test.js` | 実ゲームharnessでturn 2出現、砲弾/接触取得、snapshot再開、資源エスクローと精算を確認する |
+| `battle-item-assets.test.js` | 3種のmaster/runtime画像、透明度、lossless WebP、manifest、PWA Tier 2登録を確認する |
 
 ## 注意
 

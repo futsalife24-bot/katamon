@@ -11,8 +11,8 @@ function test(name, fn) {
   catch (error) { console.error(`  NG   ${name}`); throw error; }
 }
 function expectCode(code, fn) { assert.throws(fn, (error) => error && error.code === code, `expected ${code}`); }
-function intent(runId, peakStreak, outcome = 'voluntary', settlementCreatedAtMs = 123456) {
-  return cpu.createCpuSettlementIntent({ runId, peakStreak, outcome, settlementCreatedAtMs });
+function intent(runId, peakStreak, outcome = 'voluntary', settlementCreatedAtMs = 123456, stageItemPowder = 0, stageItemBlueprintShards = 0) {
+  return cpu.createCpuSettlementIntent({ runId, peakStreak, outcome, settlementCreatedAtMs, stageItemPowder, stageItemBlueprintShards });
 }
 
 test('品質・個数・粉末・設計片・次節目の全境界を固定する', () => {
@@ -46,16 +46,40 @@ test('敗北・引き分けは15〜19だけ品質を10へ下げ、20以降は最
 test('settlement intentはrunId・最初のtimestampから安定し、規則外改ざんを拒否する', () => {
   const value = intent('run-a', 15, 'defeat', 999);
   assert.deepEqual(value, {
-    rewardRulesVersion: 2,
+    rewardRulesVersion: 3,
     runId: 'run-a', rewardId: 'cpu:run-a:settlement', settlementCreatedAtMs: 999,
-    peakStreak: 15, outcome: 'defeat', qualityProfileId: 'cpu-streak-10', gearCount: 2, powder: 90, blueprintShards: 25,
+    peakStreak: 15, outcome: 'defeat', qualityProfileId: 'cpu-streak-10', gearCount: 2,
+    powder: 90, blueprintShards: 25, stageItemPowder: 0, stageItemBlueprintShards: 0,
   });
   assert.deepEqual(cpu.validateCpuSettlementIntent(JSON.parse(JSON.stringify(value))), value);
   expectCode('CPU_SETTLEMENT_INTENT_MISMATCH', () => cpu.validateCpuSettlementIntent({ ...value, gearCount: 5 }));
-  expectCode('UNSUPPORTED_FUTURE_CPU_REWARD_RULES_VERSION', () => cpu.validateCpuSettlementIntent({ ...value, rewardRulesVersion: 3 }));
+  expectCode('UNSUPPORTED_FUTURE_CPU_REWARD_RULES_VERSION', () => cpu.validateCpuSettlementIntent({ ...value, rewardRulesVersion: 4 }));
   expectCode('UNSUPPORTED_CPU_REWARD_RULES_VERSION', () => cpu.validateCpuSettlementIntent({ ...value, rewardRulesVersion: 0 }));
   expectCode('INVALID_CPU_SETTLEMENT_OUTCOME', () => cpu.previewCpuSettlement({ peakStreak: 1, outcome: 'win' }));
-  expectCode('INVALID_CPU_REWARD_INPUT', () => cpu.createCpuSettlementIntent({ runId: '', peakStreak: 3, outcome: 'voluntary', settlementCreatedAtMs: 0 }));
+  expectCode('INVALID_CPU_REWARD_INPUT', () => cpu.createCpuSettlementIntent({ runId: '', peakStreak: 3, outcome: 'voluntary', settlementCreatedAtMs: 0, stageItemPowder: 0, stageItemBlueprintShards: 0 }));
+  expectCode('INVALID_CPU_REWARD_INPUT', () => cpu.createCpuSettlementIntent({ runId: 'missing-stage', peakStreak: 3, outcome: 'voluntary', settlementCreatedAtMs: 0 }));
+});
+test('v3はstage item素材をbase v2報酬へsafe-addし、intent改ざんとoverflowを拒否する', () => {
+  const powderOnly = intent('stage-powder', 5, 'voluntary', 1, 7, 0);
+  assert.equal(powderOnly.powder, 27); assert.equal(powderOnly.blueprintShards, 10);
+  const shardsOnly = intent('stage-shards', 5, 'voluntary', 1, 0, 4);
+  assert.equal(shardsOnly.powder, 20); assert.equal(shardsOnly.blueprintShards, 14);
+  const both = intent('stage-both', 5, 'voluntary', 1, 7, 4);
+  assert.equal(both.powder, 27); assert.equal(both.blueprintShards, 14);
+  assert.equal(both.stageItemPowder, 7); assert.equal(both.stageItemBlueprintShards, 4);
+  expectCode('CPU_SETTLEMENT_INTENT_MISMATCH', () => cpu.validateCpuSettlementIntent({ ...both, powder: 26 }));
+  expectCode('CPU_SETTLEMENT_INTENT_MISMATCH', () => cpu.validateCpuSettlementIntent({ ...both, stageItemBlueprintShards: 3 }));
+  expectCode('CPU_REWARD_TOTAL_OVERFLOW', () => intent('overflow', 50, 'voluntary', 1, Number.MAX_SAFE_INTEGER, 0));
+});
+test('公開済みv2 pending intentもcanonical bodyとmaterializationを変えない', () => {
+  const legacyV2 = {
+    rewardRulesVersion: 2, runId: 'legacy-v2', rewardId: 'cpu:legacy-v2:settlement', settlementCreatedAtMs: 11,
+    peakStreak: 5, outcome: 'voluntary', qualityProfileId: 'cpu-streak-5', gearCount: 1, powder: 20, blueprintShards: 10,
+  };
+  assert.deepEqual(cpu.validateCpuSettlementIntent(JSON.parse(JSON.stringify(legacyV2))), legacyV2);
+  const reward = cpu.materializeCpuGearReward(legacyV2);
+  assert.equal(reward.powder, 20); assert.equal(reward.blueprintShards, 10);
+  assert.deepEqual(reward.sourceDetail, { runId: 'legacy-v2', peakStreak: 5, outcome: 'voluntary', qualityProfileId: 'cpu-streak-5' });
 });
 test('公開済みv1 pending intentは旧報酬のまま検証・精算できる', () => {
   const legacy = {
@@ -79,12 +103,13 @@ test('symbol・accessor・non-enumerable fieldを静かに受理しない', () =
   expectCode('INVALID_CPU_REWARD_INPUT', () => cpu.previewCpuSettlement(nonEnumerableInput));
 });
 test('同じintentは完全に同一のreward envelopeとGearを再生成する', () => {
-  const value = intent('run-deterministic', 30, 'defeat', 777);
+  const value = intent('run-deterministic', 30, 'defeat', 777, 6, 3);
   const first = cpu.materializeCpuGearReward(value);
   const second = cpu.materializeCpuGearReward(JSON.parse(JSON.stringify(value)));
   assert.deepEqual(second, first);
   assert.equal(first.rewardId, 'cpu:run-deterministic:settlement');
-  assert.equal(first.sourceId, 'cpu_battle'); assert.equal(first.createdAtMs, 777); assert.equal(first.powder, 195); assert.equal(first.blueprintShards, 80);
+  assert.equal(first.sourceId, 'cpu_battle'); assert.equal(first.createdAtMs, 777); assert.equal(first.powder, 201); assert.equal(first.blueprintShards, 83);
+  assert.deepEqual(first.sourceDetail.stageItems, { powder: 6, blueprintShards: 3 });
   first.gears.forEach((item, index) => {
     assert.equal(item.gearId, `cpu:run-deterministic:gear:${index}`);
     assert.equal(item.enhancementSeed, `cpu:run-deterministic:gear:${index}:enhancement:v1`);

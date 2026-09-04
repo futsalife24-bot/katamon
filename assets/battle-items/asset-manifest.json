@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "library": "catamon-battle-items",
+  "masterSizePx": 1254,
+  "masterFormat": "png-rgba8",
+  "runtimeSizePx": 256,
+  "runtimeFormat": "lossless-webp",
+  "items": [
+    {
+      "id": "healing",
+      "label": "回復アイテム",
+      "purpose": "restore battle HP",
+      "master": "master/items/battle_item_healing_01.png",
+      "runtime": "runtime/items/battle_item_healing_01.webp"
+    },
+    {
+      "id": "special_charge",
+      "label": "必殺チャージ",
+      "purpose": "increase special charge",
+      "master": "master/items/battle_item_special_charge_01.png",
+      "runtime": "runtime/items/battle_item_special_charge_01.webp"
+    },
+    {
+      "id": "gear_resource",
+      "label": "Gear素材",
+      "purpose": "grant Gear powder and design fragments",
+      "master": "master/items/battle_item_gear_resource_box_01.png",
+      "runtime": "runtime/items/battle_item_gear_resource_box_01.webp"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ PR #378まではmasterへ統合・Pages公開済み。PR #379では、通常CPU 
 
 PR #380では、通常CPU 1v1の連勝精算へGear粉末と設計片の獲得ルートを追加した。3連勝から両素材を付与し、20・30・50連勝の既存設計片報酬は維持する。Gear保存形式はv3へ移行し、公開済みv1/v2保存データ、旧CPU未精算報酬、旧協力報酬は素材0の権利として後方互換を保つ。受取はGear・粉末・設計片を一括で確定し、二重加算・競合・上限超過時の部分反映を防止する。
 
+v2.0.171では、通常CPU 1v1・公式ステージ・非ボス戦へ回復、必殺チャージ、Gear資源箱の3種を追加した。turn 2以降に決定的に抽選し、通常砲弾・歩行・跳躍着地でプレイヤー/CPUの双方が取得できる。資源箱は2連勝以上で候補となり、プレイヤー取得時は粉末3と独立5%の設計片1をCPU runのエスクローへ即時保存して終了時の1件の報酬へ合算する。保存失敗時は同じ箱を保持し、継続・精算・中断の前に自動再試行して素材0の精算へ進ませない。ONLINE wire、Firebase Rules/Console、実機GOAL QAは変更・実施していない。詳細は [`docs/tasks/2026-09-04-stage-battle-items.md`](docs/tasks/2026-09-04-stage-battle-items.md)。
+
 Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / recovery修正をPR #333〜#340で統合済みだが、production acceptanceは安定した複数verification clientを維持できない外部検証条件により未完了。新しいコード障害が確定した状態ではない。
 
 ## 現在の最優先タスク
@@ -27,7 +29,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 
 ## 現在の公開版
 
-- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.170-gear-resource-rewards**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
+- アプリ内BUILD / PWA cache正本は、本変更のmaster統合後 **v2.0.171-stage-battle-items**。master push時のGitHub Pages自動workflowで配布し、手動Pages deployは行わない。Firebase Rules/Consoleは変更していない。
 
 ## Backlog / 保留タスク
 

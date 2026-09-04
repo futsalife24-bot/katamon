@@ -468,6 +468,9 @@ function installDeferredGearWriterLock() {
     // may be present during the old-run rebind recovery path.
     delete legacy.cpuGearRuntimeEffectsStateVersion;
     delete legacy.cpuGearRuntimeEffectsState;
+    // Stage items were added later as a run-fenced local snapshot field.
+    // A genuine ownerless legacy save must not carry that newer identity.
+    delete legacy.stageBattleItems;
     storage.setItem('katamon_suspend_v1', JSON.stringify(legacy));
     assert.equal(kt.clearCpuGearRunForTest(), true);
     kt.setPhase('title');

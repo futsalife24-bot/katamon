@@ -11,8 +11,8 @@ function expectCode(code, fn) { assert.throws(fn, (error) => error && error.code
 function validRunId(suffix = '00000000-0000-4000-8000-000000000001') { return `cpu-run:${suffix}`; }
 function validOwnerId(suffix = '00000000-0000-4000-8000-000000000001') { return `cpu-session:${suffix}`; }
 function active(peakStreak = 0, suffix, ownerSessionId = null) { return run.createActiveCpuGearRun(validRunId(suffix), peakStreak, ownerSessionId); }
-function intent(state, outcome = 'voluntary', at = 100) {
-  return cpu.createCpuSettlementIntent({ runId: state.runId, peakStreak: state.peakStreak, outcome, settlementCreatedAtMs: at });
+function intent(state, outcome = 'voluntary', at = 100, stageItemPowder = 0, stageItemBlueprintShards = 0) {
+  return cpu.createCpuSettlementIntent({ runId: state.runId, peakStreak: state.peakStreak, outcome, settlementCreatedAtMs: at, stageItemPowder, stageItemBlueprintShards });
 }
 function createStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -26,10 +26,37 @@ function createStorage(initial = {}) {
 
 test('新規active runはcrypto UUID・peak・null intentの厳格形を持つ', () => {
   const state = active(3);
-  assert.equal(state.schemaVersion, 1); assert.equal(state.state, run.ACTIVE);
+  assert.equal(state.schemaVersion, 2); assert.equal(state.state, run.ACTIVE);
   assert.equal(state.peakStreak, 3); assert.equal(state.settlementIntent, null);
   assert.equal(state.ownerSessionId, null);
+  assert.deepEqual(state.stageItemEscrow, { powder: 0, blueprintShards: 0, matchOrdinal: null, claimedMask: 0 });
   assert.match(state.runId, /^cpu-run:/);
+});
+test('公開済みv1は旧schemaを厳格検証してからv2 zero escrowへin-memory migrationする', () => {
+  const v1 = {
+    schemaVersion: 1, runId: validRunId(), state: run.ACTIVE, peakStreak: 8,
+    ownerSessionId: null, resumeClaim: null, settlementIntent: null,
+  };
+  const migrated = run.validateCpuGearRunState(v1);
+  assert.equal(migrated.schemaVersion, 2);
+  assert.deepEqual(migrated.stageItemEscrow, { powder: 0, blueprintShards: 0, matchOrdinal: null, claimedMask: 0 });
+  const encodedV1 = JSON.stringify(v1);
+  const storage = createStorage({ [run.CPU_GEAR_RUN_STORAGE_KEY]: encodedV1 });
+  assert.deepEqual(run.loadCpuGearRunState(storage), migrated);
+  assert.equal(storage.raw(run.CPU_GEAR_RUN_STORAGE_KEY), encodedV1, 'load migration must not rewrite persisted bytes');
+  expectCode('UNKNOWN_CPU_GEAR_RUN_FIELD', () => run.validateCpuGearRunState({ ...v1, surprise: true }));
+  const legacyIntent = {
+    rewardRulesVersion: 1, runId: v1.runId, rewardId: `cpu:${v1.runId}:settlement`, settlementCreatedAtMs: 10,
+    peakStreak: 8, outcome: 'voluntary', qualityProfileId: 'cpu-streak-8', gearCount: 1, blueprintShards: 0,
+  };
+  const pending = run.validateCpuGearRunState({ ...v1, state: run.SETTLEMENT_PENDING, settlementIntent: legacyIntent });
+  assert.deepEqual(pending.settlementIntent, legacyIntent);
+  assert.deepEqual(pending.stageItemEscrow, { powder: 0, blueprintShards: 0, matchOrdinal: null, claimedMask: 0 });
+  const v2Intent = {
+    rewardRulesVersion: 2, runId: v1.runId, rewardId: `cpu:${v1.runId}:settlement`, settlementCreatedAtMs: 11,
+    peakStreak: 8, outcome: 'voluntary', qualityProfileId: 'cpu-streak-8', gearCount: 1, powder: 30, blueprintShards: 15,
+  };
+  assert.deepEqual(run.validateCpuGearRunState({ ...v1, state: run.SETTLEMENT_PENDING, settlementIntent: v2Intent }).settlementIntent, v2Intent);
 });
 test('crypto.randomUUIDが無い環境は弱いfallbackを使わずfail closedする', () => {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
@@ -102,12 +129,64 @@ test('settlement pendingは同一intent retryだけを許し、新run/peak上書
   expectCode('CPU_GEAR_SETTLEMENT_PENDING', () => run.withPeakStreak(pending, 16));
   expectCode('CPU_GEAR_SETTLEMENT_CONFLICT', () => run.withSettlementIntent(pending, intent(state, 'voluntary')));
 });
+test('stage item escrowはordinalごとにmaskを更新し、同一item retryとCPU取得を二重加算しない', () => {
+  let state = active(3);
+  let pickup = run.recordStageItemPickup(state, { matchOrdinal: 3, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: 0 });
+  assert.equal(pickup.modified, true); assert.equal(pickup.credited, true);
+  state = pickup.state;
+  assert.deepEqual(state.stageItemEscrow, { powder: 3, blueprintShards: 0, matchOrdinal: 3, claimedMask: 1 });
+  pickup = run.recordStageItemPickup(state, { matchOrdinal: 3, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: 0 });
+  assert.equal(pickup.modified, false); assert.equal(pickup.credited, false); assert.deepEqual(pickup.state, state);
+  pickup = run.recordStageItemPickup(active(3), { matchOrdinal: 3, itemIndex: 0, resourceBoxCount: 1, collector: 'cpu', powder: 0, blueprintShards: 0 });
+  assert.equal(pickup.modified, true); assert.equal(pickup.credited, false);
+  assert.deepEqual(pickup.state.stageItemEscrow, { powder: 0, blueprintShards: 0, matchOrdinal: 3, claimedMask: 1 });
+});
+test('次ordinalはmaskだけresetして累計を保持し、stale/future/11箱目/不正付与を拒否する', () => {
+  let state = run.recordStageItemPickup(active(4), { matchOrdinal: 4, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: 1 }).state;
+  state = run.withPeakStreak(state, 5);
+  const advanced = run.reconcileStageItemEscrow(state, 5);
+  assert.equal(advanced.modified, true);
+  state = advanced.state;
+  assert.deepEqual(state.stageItemEscrow, { powder: 3, blueprintShards: 1, matchOrdinal: 5, claimedMask: 0 });
+  assert.equal(run.reconcileStageItemEscrow(state, 5).modified, false);
+  expectCode('STALE_CPU_STAGE_ITEM_MATCH', () => run.reconcileStageItemEscrow(state, 4));
+  expectCode('FUTURE_CPU_STAGE_ITEM_MATCH', () => run.reconcileStageItemEscrow(state, 6));
+  expectCode('INVALID_CPU_STAGE_ITEM_PICKUP', () => run.recordStageItemPickup(state, { matchOrdinal: 5, itemIndex: 1, resourceBoxCount: 2, collector: 'player', powder: 3, blueprintShards: 0 }));
+  expectCode('INVALID_CPU_STAGE_ITEM_PICKUP', () => run.recordStageItemPickup(state, { matchOrdinal: 5, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 1, blueprintShards: 0 }));
+  let capped = active(0);
+  for (let matchOrdinal = 0; matchOrdinal < run.MAX_STAGE_RESOURCE_BOXES; matchOrdinal += 1) {
+    if (matchOrdinal > 0) capped = run.withPeakStreak(capped, matchOrdinal);
+    capped = run.recordStageItemPickup(capped, { matchOrdinal, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: matchOrdinal === 0 ? 1 : 0 }).state;
+  }
+  assert.equal(capped.stageItemEscrow.powder, run.MAX_STAGE_ITEM_POWDER);
+  capped = run.withPeakStreak(capped, run.MAX_STAGE_RESOURCE_BOXES);
+  expectCode('CPU_STAGE_ITEM_ESCROW_LIMIT', () => run.recordStageItemPickup(capped, { matchOrdinal: run.MAX_STAGE_RESOURCE_BOXES, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: 0 }));
+  const pending = run.withSettlementIntent(state, intent(state, 'voluntary', 100, 3, 1));
+  expectCode('CPU_STAGE_ITEM_RUN_NOT_ACTIVE', () => run.reconcileStageItemEscrow(pending, 5));
+});
+test('v2 escrowはexact plain data schema、pending intentとの素材一致をfail closedで守る', () => {
+  const state = active(5);
+  expectCode('UNKNOWN_CPU_GEAR_RUN_FIELD', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: { ...state.stageItemEscrow, surprise: 1 } }));
+  expectCode('INVALID_CPU_GEAR_RUN_STATE', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: Object.create({ powder: 0, blueprintShards: 0, matchOrdinal: null, claimedMask: 0 }) }));
+  const accessor = { powder: 0, blueprintShards: 0, matchOrdinal: null };
+  Object.defineProperty(accessor, 'claimedMask', { enumerable: true, get: () => 0 });
+  expectCode('INVALID_CPU_GEAR_RUN_STATE', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: accessor }));
+  expectCode('INVALID_CPU_GEAR_RUN_STATE', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: { ...state.stageItemEscrow, powder: 1 } }));
+  expectCode('INVALID_CPU_GEAR_RUN_STATE', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: { ...state.stageItemEscrow, powder: 33 } }));
+  expectCode('INVALID_CPU_GEAR_RUN_STATE', () => run.validateCpuGearRunState({ ...state, stageItemEscrow: { ...state.stageItemEscrow, blueprintShards: 2 } }));
+  expectCode('UNSUPPORTED_FUTURE_CPU_GEAR_RUN_VERSION', () => run.validateCpuGearRunState({ ...state, schemaVersion: 3 }));
+  const collected = run.recordStageItemPickup(state, { matchOrdinal: 5, itemIndex: 0, resourceBoxCount: 1, collector: 'player', powder: 3, blueprintShards: 1 }).state;
+  const oldV2 = { rewardRulesVersion: 2, runId: collected.runId, rewardId: `cpu:${collected.runId}:settlement`, settlementCreatedAtMs: 1, peakStreak: 5, outcome: 'voluntary', qualityProfileId: 'cpu-streak-5', gearCount: 1, powder: 20, blueprintShards: 10 };
+  expectCode('CPU_GEAR_RUN_INTENT_MISMATCH', () => run.validateCpuGearRunState({ ...collected, state: run.SETTLEMENT_PENDING, settlementIntent: oldV2 }));
+  expectCode('CPU_GEAR_RUN_INTENT_MISMATCH', () => run.withSettlementIntent(collected, intent(collected, 'voluntary', 1, 3, 0)));
+  assert.equal(run.withSettlementIntent(collected, intent(collected, 'voluntary', 1, 3, 1)).state, run.SETTLEMENT_PENDING);
+});
 test('intent/run/peakの不一致、未知field、future schema、malformed rawはfail closedする', () => {
   const state = active(10);
   const pending = run.withSettlementIntent(state, intent(state));
   expectCode('CPU_GEAR_RUN_INTENT_MISMATCH', () => run.validateCpuGearRunState({ ...pending, peakStreak: 11 }));
   expectCode('UNKNOWN_CPU_GEAR_RUN_FIELD', () => run.validateCpuGearRunState({ ...state, surprise: true }));
-  expectCode('UNSUPPORTED_FUTURE_CPU_GEAR_RUN_VERSION', () => run.validateCpuGearRunState({ ...state, schemaVersion: 2 }));
+  expectCode('UNSUPPORTED_FUTURE_CPU_GEAR_RUN_VERSION', () => run.validateCpuGearRunState({ ...state, schemaVersion: 3 }));
   const storage = createStorage({ [run.CPU_GEAR_RUN_STORAGE_KEY]: '{' });
   expectCode('CPU_GEAR_RUN_JSON_PARSE_FAILED', () => run.loadCpuGearRunState(storage));
   assert.equal(storage.raw(run.CPU_GEAR_RUN_STORAGE_KEY), '{');
