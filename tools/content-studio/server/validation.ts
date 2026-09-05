@@ -1,3 +1,5 @@
+import { inflateSync } from 'node:zlib';
+import { publishedRevisionSchema } from '../src/domain/editing-checkpoint.js';
 import { parseBoundedJson } from '../src/domain/bounded-json.js';
 import { createHash } from 'node:crypto';
 
@@ -395,7 +397,14 @@ export function validateSubmission(raw: unknown, config: ServerConfig): Validate
       targetBaseSha:requiredString(r.targetBaseSha,'revalidation.targetBaseSha',40,/^[a-f0-9]{40}$/),
     };
   }
+  let sourceRevision: ValidatedBundle['sourceRevision'];
+  if (raw.sourceRevision !== undefined) {
+    const parsed=publishedRevisionSchema.safeParse(raw.sourceRevision);
+    if(!parsed.success)invalid('sourceRevision','公開元revisionが不正です。');
+    sourceRevision=parsed.data;
+  }
   const digest = createHash('sha256');
+  if(sourceRevision)digest.update(JSON.stringify(sourceRevision));
   if(revalidation)digest.update(JSON.stringify(revalidation));
   digest.update(`${bundleId}\0${generatorVersion}\0${id}\0${slug}\0${prBody}\0`);
   for (const file of [...files].sort((left, right) => left.path.localeCompare(right.path))) {
@@ -404,6 +413,7 @@ export function validateSubmission(raw: unknown, config: ServerConfig): Validate
   return {
     ...(typeof raw.recoveryBranch === 'string' ? { recoveryBranch: requiredString(raw.recoveryBranch, 'recoveryBranch', 150, /^studio\/add-character-[a-z0-9-]+$/) } : {}),
     revalidation,
+    sourceRevision,
     bundleId,
     generatorVersion,
     expectedBaseSha,
@@ -416,4 +426,40 @@ export function validateSubmission(raw: unknown, config: ServerConfig): Validate
 
 export function toSubmittedBundle(value: unknown): SubmittedBundle {
   return value as SubmittedBundle;
+}
+
+/** Checkpoint PNGs contain only raster/color chunks. Decode scanlines within a fixed limit to reject hidden RGB. */
+export function validateCheckpointPng(bytes:Buffer, expected:{width:number;height:number;sha256:string}, config:ServerConfig):void {
+  const dimensions=validateImage(bytes,'image/png',config);
+  if(dimensions.width!==expected.width||dimensions.height!==expected.height||dimensions.width>1600||dimensions.height>1600||createHash('sha256').update(bytes).digest('hex')!==expected.sha256)invalid('editing','編集入力の寸法/hashが一致しません。');
+  if(bytes[24]!==8||![2,6].includes(bytes[25])||bytes[26]!==0||bytes[27]!==0||bytes[28]!==0)invalid('editing','編集入力PNG形式が未対応です。');
+  let offset=8, ended=false, chunks=0;const parts:Buffer[]=[];
+  while(offset<bytes.length){
+    if(++chunks>2048||offset+12>bytes.length)invalid('editing','編集PNGが不正です。');
+    const length=bytes.readUInt32BE(offset),kind=bytes.toString('ascii',offset+4,offset+8);
+    if(offset+length+12>bytes.length||!['IHDR','IDAT','IEND','sRGB'].includes(kind))invalid('editing','編集PNGに不要なmetadataが含まれています。');
+    if((offset===8 && (kind!=='IHDR'||length!==13)) || (offset!==8&&kind==='IHDR') || (kind==='sRGB'&&(length!==1||bytes[offset+8]>3||parts.length>0)))invalid('editing','編集PNGのchunk順序が不正です。');
+    let crc=0xffffffff;for(const byte of bytes.subarray(offset+4,offset+8+length)){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
+    if(((crc^0xffffffff)>>>0)!==bytes.readUInt32BE(offset+8+length))invalid('editing','編集PNGのCRCが一致しません。');
+    if(kind==='IDAT')parts.push(bytes.subarray(offset+8,offset+8+length));
+    if(kind==='IEND'){ended=true;if(length!==0||offset+12!==bytes.length)invalid('editing','編集PNG末尾が不正です。');}
+    offset+=length+12;
+  }
+  if(!ended||!parts.length)invalid('editing','編集PNGが不完全です。');
+  const channels=bytes[25]===6?4:3,rowLength=dimensions.width*channels,expectedBytes=(rowLength+1)*dimensions.height;
+  let decoded:Buffer;try{const compressed=Buffer.concat(parts), result=inflateSync(compressed,{maxOutputLength:expectedBytes,info:true}) as unknown as {buffer:Buffer;engine:{bytesWritten:number}};if(result.engine.bytesWritten!==compressed.length)invalid('editing','編集PNGに余分な圧縮データがあります。');decoded=result.buffer;}catch{invalid('editing','編集PNGの展開が不正です。');}
+  if(decoded!.length!==expectedBytes)invalid('editing','編集PNGの展開寸法が不正です。');
+  let previous=Buffer.alloc(rowLength);
+  for(let y=0;y<dimensions.height;y++){
+    const start=y*(rowLength+1),filter=decoded![start],row=Buffer.alloc(rowLength);
+    if(filter>4)invalid('editing','編集PNGのfilterが不正です。');
+    for(let x=0;x<rowLength;x++){
+      const a=x>=channels?row[x-channels]:0,b=previous[x],c=x>=channels?previous[x-channels]:0;
+      const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);
+      const value=filter===0?0:filter===1?a:filter===2?b:filter===3?Math.floor((a+b)/2):pa<=pb&&pa<=pc?a:pb<=pc?b:c;
+      row[x]=(decoded![start+1+x]+value)&255;
+    }
+    if(channels===4)for(let x=0;x<rowLength;x+=4)if(row[x+3]===0&&(row[x]!==0||row[x+1]!==0||row[x+2]!==0))invalid('editing','透明領域に不要な画像情報が残っています。');
+    previous=row;
+  }
 }

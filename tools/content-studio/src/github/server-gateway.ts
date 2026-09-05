@@ -1,3 +1,6 @@
+import { readBoundedJson } from '../domain/bounded-json';
+import { decodePublishedResponse } from '../generation/published-edit';
+import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '../generation/catalog';
 import { assertPublishSize, assertRequestSize, PUBLISH_LIMITS, type PublishLimits } from '../domain/publish-limits.js';
 import type {
   ArtifactBundle,
@@ -42,6 +45,7 @@ interface SerializedFile {
 }
 
 interface SerializedBundle {
+  sourceRevision?: ArtifactBundle['sourceRevision'];
   revalidation?: ArtifactBundle['revalidation'];
   recoveryBranch?: string;
   bundleId: string;
@@ -123,6 +127,7 @@ export async function serializeBundle(bundle: ArtifactBundle): Promise<Serialize
   assertPublishSize(bundle.files);
   for (const file of bundle.files.filter(f => !f.path.startsWith('generated/content-studio-'))) files.push(await serializeFile(file));
   return {
+    sourceRevision: bundle.sourceRevision,
     bundleId: bundle.bundleId,
     generatorVersion: bundle.generatorVersion,
     recoveryBranch: bundle.recoveryBranch,
@@ -206,6 +211,25 @@ export class ServerRepositoryGateway implements RepositoryGateway {
     const status = await this.request<RepositoryStatus>('/api/github/status');
     if (status.publishLimits) this.limits = status.publishLimits;
     return status;
+  }
+
+  private async readPublished(path: string): Promise<unknown> {
+    await this.ensureAuthenticated();
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { credentials: 'same-origin', signal: AbortSignal.timeout(30000), headers: { Accept: 'application/json' } });
+    const value = await readBoundedJson(response, PUBLISH_LIMITS.maxRequestBytes);
+    if (!response.ok) throw new RepositoryGatewayError('公開正本を取得できません。下書きは保持しています。', 'published_read_failed', response.status);
+    return value;
+  }
+  async listPublishedCharacters(): Promise<{records:CanonicalCharacterRecord[];warning:string|null}> {
+    const value = await this.readPublished('/api/github/published-list') as {records: unknown[];failed?:number};
+    if (!Array.isArray(value.records) || value.records.length > 500) throw new Error('公開一覧が不正です。');
+    const failed=value.failed??0;
+    if(!Number.isSafeInteger(failed)||failed<0||failed>500)throw new Error('公開一覧の失敗件数が不正です。');
+    return {records:value.records.map(record => canonicalCharacterRecordSchema.parse(record) as CanonicalCharacterRecord),warning:failed?`公開一覧の一部（${failed}件）を検証できません。完全な一覧ではありません。`:null};
+  }
+  async readPublishedCharacter(slug: string) {
+    if (!/^[a-z][a-z0-9-]{0,23}$/.test(slug)) throw new Error('公開identityが不正です。');
+    return decodePublishedResponse(await this.readPublished(`/api/github/published-character?slug=${encodeURIComponent(slug)}`));
   }
 
   async prepare(bundle: ArtifactBundle): Promise<PreparedChange> {

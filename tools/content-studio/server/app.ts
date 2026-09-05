@@ -220,6 +220,12 @@ export function createApiHandler(dependencies: ApiDependencies) {
         if (!sessionLookup) throw new HttpError(401, 'session_required', 'GitHubへ接続してください。');
       }
 
+      if (method === 'GET' && pathname === '/api/github/published-list') {
+        sendJson(response,200,await repository.listPublishedCharacters());return;
+      }
+      if (method === 'GET' && pathname === '/api/github/published-character') {
+        sendJson(response,200,await repository.readPublishedCharacter(context.url.searchParams.get('slug')??'',String(sessionLookup!.session.user.id)));return;
+      }
       if (method === 'GET' && pathname === '/api/github/status') {
         const status = await repository.getStatus();
         sendJson(response, 200, {

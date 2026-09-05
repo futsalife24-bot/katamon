@@ -1,3 +1,4 @@
+import { acquirePublishedBitmap } from '../generation/published-edit';
 import { useEffect, useRef } from 'react';
 import type { PreviewSettings, SpriteMetadata } from '../domain/types';
 import type { EncodedIdleSpriteResult } from '../motion';
@@ -43,8 +44,8 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
     let animation = 0;
     let lastFrame = -1;
     const startedAt = performance.now();
-    const frameCount = active?.metadata.frameCount ?? 1;
-    const fps = active?.metadata.fps ?? 1;
+    const frameCount = sprite?.metadata.frameCount ?? 1;
+    const fps = sprite?.metadata.fps ?? 1;
     const sheetCanvas = document.createElement('canvas');
     const sheetContext = sheetCanvas.getContext('2d');
     if (active && sheetContext) {
@@ -60,6 +61,8 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
       fallbackContext.putImageData(new ImageData(new Uint8ClampedArray(fallback.data), fallback.width, fallback.height), 0, 0);
     }
 
+    let disposed = false;
+    let lease: Awaited<ReturnType<typeof acquirePublishedBitmap>> | null = null;
     const draw = (timestamp: number) => {
       const frame = settings.playing && document.visibilityState === 'visible'
         ? Math.floor(Math.max(0, timestamp - startedAt) / (1000 / fps)) % frameCount
@@ -89,6 +92,8 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
         }
         if (active) {
           context.drawImage(sheetCanvas, frame * width, 0, width, height, 0, 0, width, height);
+        } else if (lease) {
+          context.drawImage(lease.bitmap, frame * width, 0, width, height, 0, 0, width, height);
         } else if (fallback) {
           context.drawImage(fallbackCanvas, 0, 0, fallback.width, fallback.height, 0, 0, width, height);
         }
@@ -117,7 +122,12 @@ export function MotionPreview({ sprite, fallback, settings, metadata = sprite?.m
       if (settings.playing) animation = requestAnimationFrame(draw);
     };
     draw(startedAt);
-    return () => cancelAnimationFrame(animation);
+    if (sprite && !active) void acquirePublishedBitmap(sprite.spriteSheetPng.blob, width * frameCount, height).then(next => {
+      if (disposed) { next.release(); return; }
+      lease = next; lastFrame = -1;
+      if (!settings.playing) draw(performance.now());
+    }).catch(() => { if (!disposed) canvas.setAttribute('aria-label', `${label}（画像読込失敗・保存済み生成物は保持）`); });
+    return () => { disposed = true; cancelAnimationFrame(animation); lease?.release(); };
   }, [fallback, metadata, settings.background, settings.direction, settings.playing, settings.showAnchor, settings.showCollision, sprite]);
 
   return (

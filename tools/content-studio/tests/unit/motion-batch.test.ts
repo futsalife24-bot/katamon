@@ -118,3 +118,20 @@ describe('5モーション一括生成', () => {
     ].sort());
   });
 });
+
+it('E1 binds reuse to actual pixels, placement and per-clip settings, excluding time',async()=>{
+ const request={source:sourceImage(),sourceImage:'normalized.png',landmarks,outputSize:128 as const,sourcePlacement:{padding:10,offsetX:0,offsetY:0,scale:1,flipHorizontal:false,referenceSize:128 as const}};
+ const original=await generateMotionBatch(request);
+ const unchanged=await generateMotionBatch({...request,reuse:original,generatedAt:'2099-01-01T00:00:00.000Z'});for(const id of MOTION_CLIP_IDS)expect(unchanged[id]).toBe(original[id]);
+ const fire=await generateMotionBatch({...request,reuse:original,intensity:{fire:'strong'}});for(const id of MOTION_CLIP_IDS)expect(fire[id]===original[id]).toBe(id!=='fire');
+ for(const patch of [{scale:.5},{offsetX:20},{offsetY:12},{padding:20},{flipHorizontal:true},{referenceSize:256 as const}]){const changed=await generateMotionBatch({...request,reuse:original,sourcePlacement:{...request.sourcePlacement,...patch}});for(const id of MOTION_CLIP_IDS)expect(changed[id]).not.toBe(original[id]);}
+ const pixels=sourceImage();pixels.data[0]=1;const changed=await generateMotionBatch({...request,reuse:original,source:pixels});for(const id of MOTION_CLIP_IDS)expect(changed[id]).not.toBe(original[id]);
+ const alternate=await generateMotionBatch({...request,reuse:original,hitSource:hitImage()});for(const id of MOTION_CLIP_IDS)expect(alternate[id]===original[id]).toBe(id!=='hit');
+});
+
+it('E1 refuses a checkpoint with settings different from the actual generated pixels',async()=>{
+ const {createEditingInput}=await import('../../src/image/editing-input');const draft=createDraft();draft.landmarks=landmarks;draft.motion.outputSize=128;const source=sourceImage();
+ const motions=await generateMotionBatch({source,sourceImage:'normalized.png',landmarks,outputSize:128,intensity:draft.motionIntensity,sourcePlacement:{padding:draft.editor.padding,offsetX:draft.editor.offsetX,offsetY:draft.editor.offsetY,scale:draft.editor.scale,flipHorizontal:draft.editor.flipHorizontal,referenceSize:draft.editor.outputSize}});
+ const checkpoint=await createEditingInput(draft,source,undefined,motions);expect(checkpoint.checkpoint.placement.scale).toBe(draft.editor.scale);
+ draft.editor.scale=.5;await expect(createEditingInput(draft,source,undefined,motions)).rejects.toThrow('生成物と編集入力が一致しません');
+});

@@ -1,3 +1,4 @@
+import { editingCheckpointSchema, type EditingCheckpoint } from '../domain/editing-checkpoint';
 import { assertPublishSize, PUBLISH_LIMITS } from '../domain/publish-limits';
 import { convertSkillTemplate } from '../domain/skills';
 import { spriteMetadataSchema } from '../domain/schemas';
@@ -27,6 +28,7 @@ export interface ArtifactImages {
 }
 
 export interface BuildArtifactBundleInput {
+  editing?: { checkpoint: EditingCheckpoint; source: Blob; hitSource?: Blob };
   character: CharacterForm;
   spriteMetadata: SpriteMetadata;
   motionMetadata?: Record<MotionClipId, SpriteMetadata>;
@@ -136,11 +138,18 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
       ? Object.fromEntries(await Promise.all(Object.entries(input.images.motionSpriteSheets).map(async ([clipId, blob]) => [clipId, await sha256Blob(blob)])))
       : null,
   };
+  const editing = input.editing ? editingCheckpointSchema.parse(input.editing.checkpoint) : undefined;
+  if (input.editing && editing) {
+    if (await sha256Blob(input.editing.source) !== editing.source.sha256 || Boolean(input.editing.hitSource) !== Boolean(editing.hitSource) || (input.editing.hitSource && await sha256Blob(input.editing.hitSource) !== editing.hitSource?.sha256)) throw new ArtifactGenerationError('編集入力hashが一致しません');
+    await assertValidBlob(input.editing.source, 'image/png', '加工済み編集入力', PUBLISH_LIMITS.maxFileBytes);
+    if (input.editing.hitSource) await assertValidBlob(input.editing.hitSource, 'image/png', '被弾編集入力', PUBLISH_LIMITS.maxFileBytes);
+  }
   const assetVersionHash = await sha256Text(stableStringify({
     createdAt,
     generatorVersion,
     character: { id: character.id, slug: character.slug, implementationVersion: character.implementationVersion },
     images: imageHashes,
+    editing,
     rendering: input.spriteMetadata.rendering ?? null,
     motionRendering: input.motionMetadata ? Object.fromEntries(Object.entries(input.motionMetadata).map(([id, metadata]) => [id, metadata.rendering ?? null])) : null,
     sprite: {
@@ -158,6 +167,7 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     },
   }));
   const paths = buildGeneratedPaths(character.slug, assetVersionHash, input.images.sourceImage?.type, Boolean(input.images.motionSpriteSheets && input.motionMetadata));
+  if (editing) { paths.assets.editSourcePng = `${paths.assets.directory}/edit-source.png`; if (editing.hitSource) paths.assets.editHitPng = `${paths.assets.directory}/edit-hit.png`; }
   const normalizedMotionMetadata = input.motionMetadata
     ? Object.fromEntries(Object.entries(input.motionMetadata).map(([clipId, metadata]) => [clipId, spriteMetadataSchema.parse({
       ...metadata,
@@ -178,6 +188,7 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     schemaVersion: 1,
     character,
     assets: paths.assets,
+    ...(editing ? { editing } : {}),
     spriteMetadata,
     ...(normalizedMotionMetadata ? { motionMetadata: normalizedMotionMetadata } : {}),
     ...(input.legacyTargetId ? { legacyTargetId: input.legacyTargetId } : {}),
@@ -204,6 +215,11 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
   }
 
   const files: ArtifactFile[] = [];
+  if (input.editing && paths.assets.editSourcePng) {
+    files.push(await blobFile(paths.assets.editSourcePng, 'image', input.editing.source));
+    if (input.editing.hitSource && paths.assets.editHitPng) files.push(await blobFile(paths.assets.editHitPng, 'image', input.editing.hitSource));
+    issues.push({ severity: 'info', code: 'editing.published', message: '加工済みの編集基準PNGと配置・基準点・5動作の設定もGitHubへ公開されます。撮影原画・消去前の履歴は含めません。' });
+  }
   files.push(await blobFile(paths.assets.normalizedPng, 'image', input.images.normalizedPng, imageHashes.normalizedPng));
   files.push(await blobFile(paths.assets.optimizedWebp, 'image', input.images.optimizedWebp, imageHashes.optimizedWebp));
   files.push(await blobFile(paths.assets.iconPng, 'image', input.images.iconPng, imageHashes.iconPng));

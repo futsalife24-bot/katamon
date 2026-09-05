@@ -1,4 +1,11 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { spriteMetadataSchema } from '../domain/schemas';
+import type { SpriteMetadata } from '../domain/types';
+import { inspectImageBlob } from '../image/header';
+import { parseBoundedJson } from '../domain/bounded-json';
+import { decodePublishedResponse } from '../generation/published-edit';
+import { validatePublishedSnapshot, artifactBlob, editingSourceKeys, type PublishedSnapshot } from '../generation/published-edit';
+import { draftRecordSchema } from '../domain/schemas';
+import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction } from 'idb';
 import type { ArtifactBundle, DraftRecord, PullRequestResult, PreparedChange } from '../domain/types';
 import type { CharacterAssetVersionRecord, CharacterIdentityRecord, CharacterRevisionRecord } from '../domain/character-db';
 import { createInitialCharacterRecords } from '../domain/character-db';
@@ -298,6 +305,25 @@ export function migrateDraft(raw: unknown): DraftRecord {
   throw new Error(`未対応の下書きschemaです: ${String(raw.schemaVersion)}`);
 }
 
+/** Exact owned keys; shared settings and publish history are deliberately outside this list. */
+export const DRAFT_META_SUFFIXES = ['published-snapshot','editing-input','motion-inputs','sprite-metadata',
+  ...['move-forward','move-backward','fire','hit','land'].map(id=>`motion:${id}:metadata`)];
+const deletedKey = (id:string) => `deleted-draft:${id}`;
+function metaOwner(key:string):string|null {
+  const suffix=DRAFT_META_SUFFIXES.find(suffix=>key.endsWith(`:${suffix}`));
+  return suffix ? key.slice(0,-suffix.length-1) : null;
+}
+async function assertNotDeleted(store:{get:(key:string)=>Promise<AppMetaRecord|undefined>},id:string):Promise<void>{
+  if(await store.get(deletedKey(id)))throw new Error('削除済み下書きへの保存を停止しました。新しい下書きとして作成してください。');
+}
+type DraftWriteTransaction=IDBPTransaction<StudioDbSchema,['drafts','blobs','appMeta','outbox'],'readwrite'>;
+/** Serializes deletion against already queued autosaves, blob hashing and outbox writes, including other tabs. */
+async function writeDraftOwned<T>(id:string,write:(tx:DraftWriteTransaction)=>Promise<T>):Promise<T>{
+  const db=await openStudioDb(),tx=db.transaction(['drafts','blobs','appMeta','outbox'],'readwrite');
+  try{await assertNotDeleted(tx.objectStore('appMeta'),id);const result=await write(tx);await tx.done;return result;}
+  catch(cause){try{tx.abort();}catch{/* Already finished. */}await tx.done.catch(()=>undefined);throw cause;}
+}
+
 export async function saveDraft(record: DraftRecord): Promise<DraftRecord> {
   const db = await openStudioDb();
   const saved: DraftRecord = {
@@ -306,7 +332,7 @@ export async function saveDraft(record: DraftRecord): Promise<DraftRecord> {
     updatedAt: new Date().toISOString(),
     historyStatus: record.historyStatus === 'corrupt' ? 'corrupt' : 'clean',
   };
-  await db.put('drafts', saved);
+  await writeDraftOwned(record.id,tx=>tx.objectStore('drafts').put(saved));
   return saved;
 }
 
@@ -349,7 +375,7 @@ export async function putDraftBlob(draftId: string, kind: DraftBlobKind, blob: B
     sha256: await digestBlob(blob),
     updatedAt: new Date().toISOString(),
   };
-  await db.put('blobs', stored);
+  await writeDraftOwned(draftId,tx=>tx.objectStore('blobs').put(stored));
   return stored;
 }
 
@@ -377,24 +403,40 @@ export async function duplicateDraft(id: string): Promise<DraftRecord> {
   duplicate.createdAt = new Date().toISOString();
   duplicate.updatedAt = duplicate.createdAt;
   duplicate.historyStatus = 'dirty';
-  await saveDraft(duplicate);
-  const blobs = await listDraftBlobs(id);
-  for (const item of blobs) await putDraftBlob(duplicate.id, item.kind, item.blob);
+  const blobs = await listDraftBlobs(id), metadata:AppMetaRecord[]=[];
+  for(const suffix of DRAFT_META_SUFFIXES){
+    const value=await getAppMeta(`${id}:${suffix}`);if(value)metadata.push({key:`${duplicate.id}:${suffix}`,value});
+  }
+  const db=await openStudioDb(),tx=db.transaction(['drafts','blobs','appMeta'],'readwrite');
+  try {
+  await assertNotDeleted(tx.objectStore('appMeta'),id);
+  await tx.objectStore('drafts').put(duplicate);
+  for(const blob of blobs)await tx.objectStore('blobs').put({...blob,key:`${duplicate.id}:${blob.kind}`,draftId:duplicate.id});
+  for(const item of metadata)await tx.objectStore('appMeta').put(item);
+  await tx.done;
+  }catch(cause){try{tx.abort();}catch{/* Already aborted. */}await tx.done.catch(()=>undefined);throw cause;}
   return duplicate;
 }
 
 export async function deleteDraft(id: string): Promise<void> {
   const db = await openStudioDb();
-  const tx = db.transaction(['drafts', 'blobs'], 'readwrite');
-  await tx.objectStore('drafts').delete(id);
-  const blobKeys = await tx.objectStore('blobs').index('by-draft').getAllKeys(id);
-  for (const key of blobKeys) await tx.objectStore('blobs').delete(key);
-  await tx.done;
+  const tx = db.transaction(['drafts','blobs','appMeta','outbox'], 'readwrite');
+  try {
+    const dependent=(await tx.objectStore('outbox').getAll()).some(item=>item.draftId===id);
+    if(dependent)throw new Error('この下書きには復旧用の公開操作があります。既存PR・生成物を保持するため削除できません。');
+    await tx.objectStore('drafts').delete(id);
+    const blobKeys=await tx.objectStore('blobs').index('by-draft').getAllKeys(id);
+    for(const key of blobKeys)await tx.objectStore('blobs').delete(key);
+    for(const suffix of DRAFT_META_SUFFIXES)await tx.objectStore('appMeta').delete(`${id}:${suffix}`);
+    // Minimal durable tombstone: no images, names, revision, or user content. Never exported.
+    await tx.objectStore('appMeta').put({key:deletedKey(id),value:true});
+    await tx.done;
+  }catch(cause){try{tx.abort();}catch{/* Already aborted. */}await tx.done.catch(()=>undefined);throw cause;}
 }
 
 export async function putOutbox(record: OutboxRecord): Promise<void> {
   const db = await openStudioDb();
-  await db.put('outbox', { ...record, updatedAt: new Date().toISOString() });
+  await writeDraftOwned(record.draftId,tx=>tx.objectStore('outbox').put({ ...record, updatedAt: new Date().toISOString() }));
 }
 
 export async function listOutbox(): Promise<OutboxRecord[]> {
@@ -419,7 +461,10 @@ export async function listPublishHistory(): Promise<PublishHistoryRecord[]> {
 
 export async function setAppMeta(key: string, value: unknown): Promise<void> {
   const db = await openStudioDb();
-  await db.put('appMeta', { key, value });
+  const owner=metaOwner(key);
+  if(owner)await writeDraftOwned(owner,tx=>tx.objectStore('appMeta').put({key,value}));
+  else if(key.startsWith('deleted-draft:'))throw new Error('削除マーカーは変更できません。');
+  else await db.put('appMeta', { key, value });
 }
 
 export async function getAppMeta<T>(key: string): Promise<T | null> {
@@ -435,6 +480,8 @@ interface ExportedBlob {
 }
 
 interface DraftExportEnvelope {
+  published?: unknown;
+  metadata?: Record<string, unknown>;
   exportSchemaVersion: 1;
   exportedAt: string;
   generator: 'Content Studio';
@@ -450,32 +497,49 @@ export async function exportDraftJson(id: string): Promise<Blob> {
   for (const item of storedBlobs) {
     blobs.push({ kind: item.kind, type: item.blob.type, base64: await blobToBase64(item.blob), sha256: item.sha256 });
   }
+  const snapshot = await getAppMeta<PublishedSnapshot>(`${id}:published-snapshot`);
+  let published: unknown;
+  if (snapshot) {
+    await validatePublishedSnapshot(snapshot,false);
+    const files=[];
+    for(const file of snapshot.files)files.push({path:file.path,mimeType:file.mimeType,byteLength:file.byteLength,sha256:file.sha256,contentBase64:await blobToBase64(artifactBlob(file))});
+    published={revision:snapshot.revision,record:snapshot.record,files};
+  }
+  const metadata:Record<string,unknown>={};
+  for(const suffix of DRAFT_META_SUFFIXES.filter(key=>key!=='published-snapshot'&&key!=='editing-input')) {
+    const value=await getAppMeta(`${id}:${suffix}`);if(value)metadata[suffix]=value;
+  }
   const envelope: DraftExportEnvelope = {
+    published, metadata,
     exportSchemaVersion: 1,
     exportedAt: new Date().toISOString(),
     generator: 'Content Studio',
     draft,
     blobs,
   };
-  return new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+  const output = new Blob([JSON.stringify(envelope)], { type: 'application/json' });
+  if(output.size>64*1024*1024)throw new Error('下書きバックアップは64MiB以内にしてください。公開容量の上限は変更されません。元の下書きは保持しています。');
+  return output;
 }
 
 export async function importDraftJson(file: Blob): Promise<DraftRecord> {
-  if (file.size > 30 * 1024 * 1024) throw new Error('下書きJSONは30MB以下にしてください。');
+  if (file.size > 64 * 1024 * 1024) throw new Error('下書きJSONは64MiB以下にしてください。');
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await file.text());
+    parsed = parseBoundedJson(await file.text());
   } catch {
     throw new Error('JSONを読み込めませんでした。');
   }
   if (!isRecord(parsed) || parsed.exportSchemaVersion !== 1 || !Array.isArray(parsed.blobs)) throw new Error('Content Studioの下書きJSONではありません。');
   const draft = migrateDraft(parsed.draft);
   draft.id = crypto.randomUUID();
+  draftRecordSchema.parse(draft);
   draft.title = `${draft.title}（読み込み）`;
   draft.createdAt = new Date().toISOString();
   draft.updatedAt = draft.createdAt;
   draft.historyStatus = 'dirty';
-  await saveDraft(draft);
+  const entries:StoredBlob[]=[];
+  if(parsed.blobs.length>20)throw new Error('下書き画像数が上限を超えています。');
   for (const raw of parsed.blobs) {
     if (!isRecord(raw) || typeof raw.kind !== 'string' || typeof raw.type !== 'string' || typeof raw.base64 !== 'string' || typeof raw.sha256 !== 'string') {
       throw new Error('下書き内の画像データが壊れています。');
@@ -483,8 +547,37 @@ export async function importDraftJson(file: Blob): Promise<DraftRecord> {
     if (!isDraftBlobKind(raw.kind)) throw new Error('未対応の画像種類が含まれています。');
     const blob = base64ToBlob(raw.base64, raw.type);
     if (await digestBlob(blob) !== raw.sha256) throw new Error('下書き画像の整合性を確認できません。');
-    await putDraftBlob(draft.id, raw.kind, blob);
+    if(entries.some(e=>e.kind===raw.kind))throw new Error('下書き画像が重複しています。');
+    entries.push({key:`${draft.id}:${raw.kind}`,draftId:draft.id,kind:raw.kind,blob,sha256:raw.sha256,updatedAt:draft.updatedAt});
   }
+  const snapshot=parsed.published ? await decodePublishedResponse(parsed.published) : null;
+  if(draft.publishedEdit && (!snapshot || JSON.stringify(snapshot.revision)!==JSON.stringify(draft.publishedEdit.revision)))throw new Error('公開元revisionと生成物が一致しません。');
+  const metadata:Record<string,unknown>={};
+  if(parsed.metadata!==undefined){
+    if(!isRecord(parsed.metadata))throw new Error('モーション保存情報が不正です。');
+    for(const [suffix,value] of Object.entries(parsed.metadata)){
+      if(suffix==='motion-inputs'){
+        if(!isRecord(value)||Object.entries(value).some(([id,key])=>!['move-forward','move-backward','fire','hit','land'].includes(id)||typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)))throw new Error('生成入力の対応情報が不正です。');
+        metadata[suffix]=value;continue;
+      }
+      if(suffix!=='sprite-metadata'&&!/^motion:(move-forward|move-backward|fire|hit|land):metadata$/.test(suffix))throw new Error('未対応の保存情報があります。');
+      metadata[suffix]=spriteMetadataSchema.parse(value);
+    }
+  }
+  if(draft.publishedEdit)for(const id of draft.generatedClips){
+    const item=entries.find(e=>e.kind===`motion-${id}`),meta=metadata[`motion:${id}:metadata`];
+    if(!item||!meta)throw new Error('下書きの動作画像・設定が不足しています。');
+    const header=await inspectImageBlob(item.blob,`${id}.png`);
+    const m=meta as SpriteMetadata;if(header.header.width!==m.frameWidth*m.frameCount||header.header.height!==m.frameHeight)throw new Error('下書き動作の寸法が一致しません。');
+  }
+  const db=await openStudioDb(),tx=db.transaction(['drafts','blobs','appMeta'],'readwrite');
+  try {
+  await tx.objectStore('drafts').put(draft);
+  for(const entry of entries)await tx.objectStore('blobs').put(entry);
+  for(const [suffix,value] of Object.entries(metadata))await tx.objectStore('appMeta').put({key:`${draft.id}:${suffix}`,value});
+  if(snapshot)await tx.objectStore('appMeta').put({key:`${draft.id}:published-snapshot`,value:snapshot});
+  await tx.done;
+  }catch(cause){try{tx.abort();}catch{/* Already aborted. */}await tx.done.catch(()=>undefined);throw cause;}
   return draft;
 }
 
@@ -525,4 +618,50 @@ export async function resetDatabaseConnectionForTests(): Promise<void> {
     db.close();
   }
   dbPromise = null;
+}
+
+/** All hashes/reads complete before opening one write transaction. No partial draft is exposed. */
+export async function savePublishedDraft(draft: DraftRecord, snapshot: PublishedSnapshot): Promise<DraftRecord> {
+  await validatePublishedSnapshot(snapshot, false);
+  draftRecordSchema.parse(draft);
+  const assets = snapshot.record.assets;
+  const mappings: Array<[DraftBlobKind, string | undefined]> = [['normalized',assets.normalizedPng],['optimized',assets.optimizedWebp],['icon',assets.iconPng],['thumbnail',assets.thumbnailWebp],['preview',assets.previewPng],['sprite',assets.spriteSheetPng],['original',assets.editSourcePng],['hit-original',assets.editHitPng]];
+  for (const [id,path] of Object.entries(assets.motionSpriteSheets ?? {})) mappings.push([`motion-${id}` as DraftBlobKind,path]);
+  const entries: StoredBlob[] = [];
+  for (const [kind,path] of mappings) { if (!path) continue; const file=snapshot.files.find(f=>f.path===path); if (!file) throw new Error('保存する公開画像が不足しています。'); entries.push({key:`${draft.id}:${kind}`,draftId:draft.id,kind,blob:artifactBlob(file),sha256:file.sha256,updatedAt:draft.updatedAt}); }
+  const db=await openStudioDb(),tx=db.transaction(['drafts','blobs','appMeta'],'readwrite');
+  try {
+  await assertNotDeleted(tx.objectStore('appMeta'),draft.id);
+  await tx.objectStore('drafts').put(structuredClone(draft));
+  for (const entry of entries) await tx.objectStore('blobs').put(entry);
+  await tx.objectStore('appMeta').put({key:`${draft.id}:published-snapshot`,value:snapshot});
+  await tx.objectStore('appMeta').put({key:`${draft.id}:sprite-metadata`,value:snapshot.record.spriteMetadata});
+  for (const [id,value] of Object.entries(snapshot.record.motionMetadata ?? {})) await tx.objectStore('appMeta').put({key:`${draft.id}:motion:${id}:metadata`,value});
+  await tx.done;
+  }catch(cause){try{tx.abort();}catch{/* Already aborted. */}await tx.done.catch(()=>undefined);throw cause;}
+  return draft;
+}
+
+/** A generated set is one persisted unit. Hashing and cancellation checks precede the transaction. */
+export async function saveGeneratedMotions(draft:DraftRecord, motions:import('../motion/types').MotionBatchResult, editing:import('../generation/artifacts').BuildArtifactBundleInput['editing'], visualKey:string, isCurrent:()=>boolean):Promise<void>{
+  const blobs:StoredBlob[]=[];
+  for(const [id,motion] of Object.entries(motions)){
+    const kind=`motion-${id}` as DraftBlobKind,blob=motion.spriteSheetPng.blob;
+    blobs.push({key:`${draft.id}:${kind}`,draftId:draft.id,kind,blob,sha256:await digestBlob(blob),updatedAt:draft.updatedAt});
+  }
+  const primary=blobs.find(b=>b.kind==='motion-move-forward')!;
+  blobs.push({...primary,key:`${draft.id}:sprite`,kind:'sprite'});
+  if(!isCurrent())throw new Error('生成中に編集先や内容が変わりました。保存結果を適用しません。');
+  const db=await openStudioDb(),tx=db.transaction(['drafts','blobs','appMeta'],'readwrite');
+  try {
+  await assertNotDeleted(tx.objectStore('appMeta'),draft.id);
+  if(!isCurrent())throw new Error('生成中に内容が変わりました。');
+  await tx.objectStore('drafts').put({...draft,generatedClips:['move-forward','move-backward','fire','hit','land']});
+  for(const blob of blobs)await tx.objectStore('blobs').put(blob);
+  for(const [id,motion] of Object.entries(motions))await tx.objectStore('appMeta').put({key:`${draft.id}:motion:${id}:metadata`,value:motion.metadata});
+  await tx.objectStore('appMeta').put({key:`${draft.id}:sprite-metadata`,value:motions['move-forward'].metadata});
+  await tx.objectStore('appMeta').put({key:`${draft.id}:motion-inputs`,value:Object.fromEntries(Object.entries(motions).filter(([,m])=>m.inputKey).map(([id,m])=>[id,m.inputKey]))});
+  await tx.objectStore('appMeta').put({key:`${draft.id}:editing-input`,value:{visualKey,editing,sourceKeys:editingSourceKeys(draft)}});
+  await tx.done;
+  }catch(cause){try{tx.abort();}catch{/* Already aborted. */}await tx.done.catch(()=>undefined);throw cause;}
 }
