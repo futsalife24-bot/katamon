@@ -198,9 +198,19 @@ async function concedeResultPlan(lease) {
   messages[key(6)] = packet('result', { actionId: 'f'.repeat(48), unitId: 'p1', winner: 'cpu', reason: '投了', units: start.start.packet.snap.units.map(unit => ({ id: unit.id, hp: unit.hp })) });
   return { value, plan: bridge.build(value, messages) };
 }
+// Fixed firing lanes for tests whose acceptance requires a hit. The unseeded
+// rolling terrain otherwise moves the snapped target below the y=360 shot.
+// Only the initial fixture changes; the terminal still comes from real physics.
+function fixedProjectileTerrain(start) {
+  const bottom = Math.max(...start.segments.flatMap(column => column.map(segment => segment[1])));
+  start.segments = start.segments.map(() => [[376, bottom]]);
+  start.terrainMaterialSegments = start.segments.map(() => []);
+  start.craters = [];
+}
 async function normalResultPlan(lease) {
   const initial = await battleStartPlan(lease);
   const start = structuredClone(initial.start.packet.snap);
+  fixedProjectileTerrain(start);
   const actorId = start.turnOrder[start.activeIndex];
   const targetId = actorId === 'p1' ? 'e1' : 'p1';
   const actor = start.units.find(unit => unit.id === actorId);
@@ -685,6 +695,7 @@ async function normalResultPlan(lease) {
     const opts = { p2Set: 'last_stand' };
     const provisional = await gear2v2StartPlan('p1', lease, [], null, opts);
     const start = structuredClone(provisional.start.packet.snap);
+    fixedProjectileTerrain(start);
     const p2 = start.units.find(unit => unit.id === 'p2');
     p2.x = 650; p2.y = 360;
     const order = start.turnOrder.slice();

@@ -141,6 +141,8 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     generatorVersion,
     character: { id: character.id, slug: character.slug, implementationVersion: character.implementationVersion },
     images: imageHashes,
+    rendering: input.spriteMetadata.rendering ?? null,
+    motionRendering: input.motionMetadata ? Object.fromEntries(Object.entries(input.motionMetadata).map(([id, metadata]) => [id, metadata.rendering ?? null])) : null,
     sprite: {
       frameWidth: input.spriteMetadata.frameWidth,
       frameHeight: input.spriteMetadata.frameHeight,

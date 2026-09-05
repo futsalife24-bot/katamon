@@ -108,7 +108,15 @@ export const canonicalCharacterRecordSchema = z
         if (stableStringify(record.spriteMetadata) !== stableStringify(record.motionMetadata['move-forward'])) {
           context.addIssue({ code: 'custom', path: ['spriteMetadata'], message: '共通スプライト情報と前進モーション情報が一致しません' });
         }
+        const rendering = record.motionMetadata['move-forward'].rendering;
+        if (rendering && (rendering.sourceFacing === 'left') !== record.character.sourceFacesLeft) {
+          context.addIssue({ code: 'custom', path: ['character', 'sourceFacesLeft'], message: '原画方向と生成済みモーションの方向が一致しません' });
+        }
         for (const clipId of clipIds) {
+          const currentRendering = record.motionMetadata[clipId].rendering;
+          if (Boolean(rendering) !== Boolean(currentRendering) || (rendering && currentRendering?.sourceFacing !== rendering.sourceFacing)) {
+            context.addIssue({ code: 'custom', path: ['motionMetadata', clipId, 'rendering'], message: '5動作の描画形式・原画方向が一致しません' });
+          }
           if (record.assets.motionSpriteSheets[clipId] !== `${record.assets.directory}/${clipId}.png`) {
             context.addIssue({ code: 'custom', path: ['assets', 'motionSpriteSheets', clipId], message: 'モーション画像参照が一致しません' });
           }

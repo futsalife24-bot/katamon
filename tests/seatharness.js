@@ -48,6 +48,28 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 // (本体には残さない。ここで組み立てるだけ。)
 const HOOK = `
   globalThis.__kt = {
+    motionTest: {
+      enable(value) {
+        // Test-only registered clip paths; production legacy characters may have no motions.
+        const dir='assets/content-studio/fixture/aaaaaaaaaaaa';
+        CHARACTERS.kyoryu.motionSheets=Object.fromEntries(ContentStudioMotion.CLIPS.map(clip=>[clip,dir+'/'+clip+'.png']));
+        CHARACTERS.kyoryu.motionMetadata=Object.fromEntries(ContentStudioMotion.CLIPS.map(clip=>[clip,dir+'/'+clip+'.json']));
+        battleMotion = value ? new ContentStudioMotion.Player({clock:()=>simTimeMs,fetch:async()=>new Response('',{status:404})}) : null;
+      },
+      event(id) { return battleMotion?.states.get(id+':'+unitById(id).character)?.event?.clip ?? null; },
+      walk(id) { return battleMotion?.states.get(id+':'+unitById(id).character)?.walk ?? null; },
+      damage(id,n,remoteShot=false) { return applyResolvedUnitDamage(unitById(id),n,{remoteShot}); },
+      flame(id,remoteShot=true) { const u=unitById(id),a=unitAnchor(u);damageGroundFlameTick({x:a.x,y:a.y,owner:id==='p1'?'e1':'p1',remoteShot,ticksDone:0}); },
+      confirm() { confirmBattleMotionHits(); },
+      replay(snapshot) { const original=firebaseBattleReplayActive;try{firebaseBattleReplayActive=()=>true;applySnapshot(snapshot);}finally{firebaseBattleReplayActive=original;} },
+      remoteWalk(id, distance) { const u=unitById(id);u.control='remote';u.netWalkTargetX=u.x+distance;battleMotion?.beginStep();updateRemoteWalk(.05); },
+      follow(id) { updateFalling(.02,unitById(id)); },
+      land(id) { const u=unitById(id);u.grounded=false;u.vy=2;u.fallStartY=u.y-50;updateFalling(.02,u); },
+      reset() { resetTransientBattleState(); },
+      move(dir,dt) { moveDir=dir;update(dt); },
+      setup(format='1v1') { setMatchFormat(format);for(const u of units)u.character='kyoryu';battleMode='free';resetMatch(false);gamePhase='battle';battleIntroPending=false;cutIn=null;awaitingResolve=false; },
+      snapshot() { return buildSnapshot({includeTerrain:true,includeStageBattleItems:true}); }
+    },
     units, unitById, localUnit, foeUnit, activeUnit, isLocalTurn, localWon,
     setLocalSeat,
     seat: () => localUnitId,

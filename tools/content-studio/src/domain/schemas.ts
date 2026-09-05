@@ -363,6 +363,13 @@ const contentBoundsSchema = z.object({
 
 export const spriteMetadataSchema = z
   .object({
+    rendering: z.object({
+      version: z.literal(1),
+      sourceFacing: z.enum(['left', 'right']),
+      restBounds: contentBoundsSchema,
+      ground: z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative() }).strict(),
+      contactFrame: z.number().int().nonnegative(),
+    }).strict().optional(),
     schemaVersion: z.literal(1),
     frameWidth: z.number().int().positive().max(4_096),
     frameHeight: z.number().int().positive().max(4_096),
@@ -398,6 +405,14 @@ export const spriteMetadataSchema = z
   })
   .strict()
   .superRefine((metadata, context) => {
+    if (metadata.rendering) {
+      const { restBounds: b, ground, contactFrame } = metadata.rendering;
+      if (b.width <= 0 || b.height <= 0 || b.x + b.width > metadata.frameWidth || b.y + b.height > metadata.frameHeight ||
+        ground.x !== b.x + b.width / 2 || ground.y !== b.y + b.height ||
+        contactFrame !== (metadata.clipId === 'land' ? Math.ceil(0.48 * (metadata.frameCount - 1)) : 0)) {
+        context.addIssue({ code: 'custom', path: ['rendering'], message: '描画基準の範囲・接地フレームが不正です' });
+      }
+    }
     if (metadata.frameCount !== metadata.motionParameters.frameCount) {
       context.addIssue({ code: 'custom', path: ['frameCount'], message: 'モーション設定のフレーム数と一致しません' });
     }

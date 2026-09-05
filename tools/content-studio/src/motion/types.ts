@@ -44,6 +44,8 @@ export interface PartMotionProvider {
 
 export interface MotionGenerationRequest {
   source: PixelBuffer;
+  /** Direction of the artwork after sourcePlacement.flipHorizontal has been applied. */
+  sourceFacing?: 'left' | 'right';
   sourceImage: string;
   preset: MotionPreset;
   parameters?: Partial<MotionParameters>;

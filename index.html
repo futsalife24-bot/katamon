@@ -897,6 +897,7 @@
 <script src="shared/stage-zip.js"></script>
 <script src="shared/stage-battle-items.js"></script>
 <script src="./generated/content-studio-catalog.js"></script>
+<script src="./shared/content-studio-motion.js"></script>
 <script src="coop-mvp-foundation.js"></script>
 <!-- Gear persistence is loaded before the game shell, but it does not fetch or preload any visual asset. -->
 <script src="shared/gear-domain.js"></script>
@@ -968,12 +969,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.174-weekday-battle-dungeon';
+  const BUILD_ID = 'v2.0.175-content-studio-motion';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.175', date: '2026/09/05', summary: '登録済み5モーションの戦闘表示と安全な遅延読込を追加' },
     { version: 'v2.0.174', date: '2026/09/05', summary: '曜日迷宮を既存BATTLEの一日一射・雲下6部位狙撃へ刷新' },
     { version: 'v2.0.173', date: '2026/09/04', summary: '一日一射の曜日ダンジョンと部位別Gear報酬を追加' },
     { version: 'v2.0.172', date: '2026/09/04', summary: 'CPU報酬の素材内訳・結果共有・素材のみ受取を追加' },
@@ -3920,6 +3922,38 @@
   }
   const GENERATED_CHARACTERS = loadGeneratedCharacters(globalThis.__CONTENT_STUDIO_CATALOG__);
   const CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
+  // Visual-only state: never serialized, never consumes battle RNG.
+  let battleMotion = null;
+  let battleMotionPhase = null;
+  let pendingBattleMotionHits = new Map();
+  try { if (globalThis.ContentStudioMotion) battleMotion = new globalThis.ContentStudioMotion.Player(); } catch (_) { /* static fallback */ }
+  function resetBattleMotion() { try { pendingBattleMotionHits = new Map(); battleMotion?.reset(); } catch (_) { /* presentation only */ } }
+  function notifyBattleMotion(u, clip) {
+    try { if (!isCoopBossUnit(u) && !firebaseBattleReplayActive()) battleMotion?.notify(u, clip, CHARACTERS[u.character]); } catch (_) { /* presentation only */ }
+  }
+  function notifyBattleDamage(u, amount, remote) {
+    try {
+      if (!(amount > 0) || isCoopBossUnit(u) || firebaseBattleReplayActive()) return;
+      if (remote) {
+        if (!pendingBattleMotionHits.has(u.id) && pendingBattleMotionHits.size < 16)
+          pendingBattleMotionHits.set(u.id, { character: u.character, hp: u.hp + amount });
+      } else notifyBattleMotion(u, 'hit');
+    } catch (_) { /* presentation only */ }
+  }
+  function confirmBattleMotionHits(hits = pendingBattleMotionHits) {
+    try {
+      if (firebaseBattleReplayActive()) return;
+      if (hits === pendingBattleMotionHits) pendingBattleMotionHits = new Map();
+      for (const [id, before] of hits) {
+        const u = unitById(id);
+        if (u && u.character === before.character && u.hp < before.hp) notifyBattleMotion(u, 'hit');
+      }
+    } catch (_) { /* presentation only */ }
+  }
+  function walkBattleMotion(u, delta) {
+    try { if (!isCoopBossUnit(u) && !firebaseBattleReplayActive()) battleMotion?.walk(u, delta, unitFacesLeftInWorld(u)); } catch (_) { /* presentation only */ }
+  }
+
 
   function normalizeCharacterUnlock(value) {
     if (!value || typeof value !== 'object') return { enabled: false, type: 'always', target: 0, achievementId: '', description: '' };
@@ -6910,6 +6944,7 @@
       u.y = bossLanding?.y ?? surface - UNIT_RADIUS;
       u.grounded = true;
       u.vy = 0;
+      notifyBattleMotion(u, 'land');
     } else {
       // 壁面衝突ならめり込んだ現在位置を使わず、衝突前の位置へ戻してから落下させる。
       // 闘技場の外壁は画面上端より1400px上まで当たり判定を持つ(ARENA_WALL_SKY_EXTENSION)。
@@ -7065,6 +7100,7 @@
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - dmg);
       const actualHpDamage = beforeHp - u.hp;
+      notifyBattleDamage(u, actualHpDamage, isOnline() && unitById(p.owner)?.control === 'remote');
       recordBattleGearLastStandDamage({ ownerId: p.owner, target: u, actualDamage: actualHpDamage, damageType: 'normal_blast', fromEnemyAttackAction: true });
       spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, dmg);
       creditDamage(p.owner, u, dmg);
@@ -7729,6 +7765,7 @@
         // Phase 3C-2A; all special projectile profiles remain excluded.
         gearDamageProfile: !activateSpecial && !activateJump ? 'normal_cannonball' : 'excluded'
       });
+      if (!activateSpecial && !activateJump && !deferred) notifyBattleMotion(unit, 'fire');
     }
 
     // チャージ消費・オーラ・カットイン・必殺音は保留側で済ませてある。
@@ -8371,6 +8408,7 @@
       const before = target.hp;
       target.hp = Math.max(0, target.hp - actualDamage);
       const hpDamage = before - target.hp;
+      notifyBattleDamage(target, hpDamage, options.remoteShot);
       recordBattleGearLastStandDamage({ ownerId: options.ownerId, target, actualDamage: hpDamage,
         damageType: options.damageType || 'fixed', fromEnemyAttackAction: options.fromEnemyAttackAction === true });
       return { actualDamage: hpDamage, target: 'body', bodyDamage: hpDamage, partDamage: 0 };
@@ -8436,7 +8474,9 @@
       const takenMul = CHARACTERS[u.character]?.damageTakenMul || 1;
       const requested = Math.max(1, Math.round(GROUND_FLAME_TICK_DAMAGE * takenMul));
       const actualDamage = mitigateDamageAfterBattleGearShield(u, applyBattleGearNumericShieldToIncomingDamage({ ownerId: flame.owner, target: u, requestedDamage: requested }));
+      const motionHpBefore = u.hp;
       u.hp = Math.max(0, u.hp - actualDamage);
+      notifyBattleDamage(u, motionHpBefore - u.hp, flame.remoteShot);
       if (!flame.remoteShot) spawnDamageText(a.x, a.y - UNIT_RADIUS - 10, actualDamage);
       creditDamage(flame.owner, u, actualDamage);
     }
@@ -10789,6 +10829,7 @@
   // 開始・同期・結果画面から戻る時に、試合中だけ生きる状態を同じ内容で捨てる。
   // 各呼び出し側が残すべき開始演出・ボス表示・順位送信状態は、この外で明示する。
   function resetTransientBattleState() {
+    if (!firebaseBattleReplayActive()) resetBattleMotion();
     projectiles = [];
     barucopters = [];
     creamClouds = [];
@@ -10839,6 +10880,8 @@
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
   function applySnapshot(data, options = {}) {
+    const motionHits = pendingBattleMotionHits;
+    if (!firebaseBattleReplayActive()) resetBattleMotion();
     // turn境界stateは地形基底を含まない。開始で検証済みのローカル基底を補ってから、
     // 従来どおり権威側のcratersとユニット状態を適用する。
     if (options.preserveTerrain) {
@@ -11050,6 +11093,7 @@
       cameraTargetX = null;
       cameraTargetY = null;
     }
+    confirmBattleMotionHits(motionHits);
   }
 
   function resumeSuspendedMatch() {
@@ -15555,9 +15599,11 @@
       let nx = Math.min(STAGE_W - UNIT_RADIUS - 4, Math.max(UNIT_RADIUS + 4, u.x + step));
       nx = limitMoveByClimb(u, nx);
       if (Math.abs(nx - u.x) < 0.01) { u.netWalkTargetX = null; continue; } // 崖などで進めない
+      const motionDelta = nx - u.x;
       u.x = nx;
       faceAllUnitsTowardOpponents();
       followGroundOrFall(u);
+      walkBattleMotion(u, motionDelta);
     }
   }
 
@@ -21133,6 +21179,7 @@
       const beforeHp = u.hp;
       u.hp = Math.max(0, u.hp - damage);
       const actualHpDamage = beforeHp - u.hp;
+      notifyBattleDamage(u, actualHpDamage, isOnline() && unitById(owner)?.control === 'remote');
       recordBattleGearLastStandDamage({ ownerId: owner, target: u, actualDamage: actualHpDamage, damageType: 'status', fromEnemyAttackAction: true });
       // Status Resistance is a hostile-status gate only.  EMP's legacy damage
       // always resolves first and is never reduced or removed by resistance.
@@ -21172,6 +21219,7 @@
   }
   // 権威ある値が届いた後に、その差分だけをポップさせる。
   function flushRemoteDamageText() {
+    confirmBattleMotionHits();
     if (!online || !online.pendingRemoteDamage) return;
     const before = online.pendingRemoteDamage;
     online.pendingRemoteDamage = null;
@@ -22251,6 +22299,7 @@
         u.vy = 0;
         u.knockbackVx = 0;
         u.grounded = true;
+        if (!intoVoid && u.hp > 0) notifyBattleMotion(u, 'land');
         if (fallDist > 15) {
           triggerShake(3, 0.1);
         }
@@ -23286,12 +23335,17 @@
       // 反転していても傾き方向が世界座標基準(実際の地形)と一致するようにする
       ctx.translate(0, UNIT_RADIUS);
       ctx.rotate(tilt);
-      if (facingLeft) ctx.scale(-1, 1);
       ctx.translate(0, -UNIT_RADIUS);
-      if (imageRect) {
-        ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
-      } else {
-        ctx.drawImage(img, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
+      const staticSourceLeft = !LEGACY_CHARACTERS[u.character] && CHARACTERS[u.character]?.facesLeft === true;
+      const animated = battleMotion?.draw(ctx, u, CHARACTERS[u.character], img, imageRect,
+        { x: -w / 2, y: UNIT_RADIUS - h + groundOffsetY, width: w, height: h }, facingLeft, staticSourceLeft);
+      if (!animated) {
+        if (facingLeft !== staticSourceLeft) ctx.scale(-1, 1);
+        if (imageRect) {
+          ctx.drawImage(img, imageRect.sx, imageRect.sy, imageRect.sw, imageRect.sh, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
+        } else {
+          ctx.drawImage(img, -w / 2, UNIT_RADIUS - h + groundOffsetY, w, h);
+        }
       }
       ctx.restore();
     } else {
@@ -29958,6 +30012,7 @@
   window.addEventListener('resize', resize);
   // スリープ・アプリ切り替え・タブ移動でBGMを止め、戻ってきたら鳴らし直す
   document.addEventListener('visibilitychange', () => {
+    resetBattleMotion();
     resetFirebasePendingTerminalClocks();
     if (document.hidden) suspendAudioForHidden();
     else {
@@ -29970,6 +30025,7 @@
   });
   // iOSなどvisibilitychangeが来ない経路(bfcache行き)の保険
   function releaseFirebaseGuestLeaseForDocumentHandoff(event) {
+    resetBattleMotion();
     if (!online || online.kind !== 'firebase' || online.role === 'host' || event?.persisted === true) return false;
     // A non-bfcache pagehide is a one-way document replacement (reload or
     // navigation).  Release before the replacement document bootstraps; relying
@@ -30345,6 +30401,12 @@
   function resetPhysicsClock() { physicsAccumulator = 0; }
 
   function update(dt) {
+    try {
+      if (!firebaseBattleReplayActive()) {
+        if (battleMotionPhase !== gamePhase) { resetBattleMotion(); battleMotionPhase = gamePhase; }
+        battleMotion?.beginStep();
+      }
+    } catch (_) { /* presentation must not stop the simulation */ }
     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
     updateOnline(dt);
     // 画面の揺れは描画側の効果であって対戦の状態ではない。**どの画面でも必ず減らす。**
@@ -30869,6 +30931,7 @@
       faceAllUnitsTowardOpponents();
       me.fuel -= moved;
       followGroundOrFall(me);
+      walkBattleMotion(me, moveDir * moved);
       tryCollectStageBattleItemByUnit(me);
       // 移動中は一定間隔で位置を配信する。移動は立派な戦略なので相手にも見せる。
       if (moved > 0) moveSyncPending = true;
@@ -30909,6 +30972,7 @@
             cpuActor.fuel -= moved;
             cpuMoveRemaining -= moved;
             followGroundOrFall(cpuActor);
+            walkBattleMotion(cpuActor, cpuMoveDir * moved);
             tryCollectStageBattleItemByUnit(cpuActor);
             if (moved > 0) moveSyncPending = true;
             if (moved < 0.01) cpuPhase = 'aim'; // 端に到達して進めなくなったら打ち切り

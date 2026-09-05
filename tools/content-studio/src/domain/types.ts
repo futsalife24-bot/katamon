@@ -285,7 +285,16 @@ export interface ContentBounds {
   height: number;
 }
 
+export interface MotionRendering {
+  version: 1;
+  sourceFacing: FacingDirection;
+  restBounds: ContentBounds;
+  ground: { x: number; y: number };
+  contactFrame: number;
+}
+
 export interface SpriteMetadata {
+  rendering?: MotionRendering;
   schemaVersion: 1;
   frameWidth: number;
   frameHeight: number;

@@ -12,6 +12,7 @@ import {
 } from '../domain/types';
 
 export interface BuildSpriteMetadataInput {
+  rendering?: SpriteMetadata['rendering'];
   frameWidth: number;
   frameHeight: number;
   frameCount: number;
@@ -64,6 +65,7 @@ export function buildSpriteMetadata(input: BuildSpriteMetadataInput): SpriteMeta
 
   const metadata: SpriteMetadata = {
     schemaVersion: 1,
+    ...(input.rendering ? { rendering: input.rendering } : {}),
     frameWidth: input.frameWidth,
     frameHeight: input.frameHeight,
     frameCount: input.frameCount,
