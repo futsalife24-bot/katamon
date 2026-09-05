@@ -18,6 +18,7 @@ for (const width of [360,390,412]) test(`${width}px portrait touch: failed catal
     let body: unknown;
     if(path.endsWith('/auth/session')) body={configured:true,authenticated,user:authenticated?'allowed-user':null,csrfToken:authenticated?'dummy-csrf-for-test':undefined};
     else if(!authenticated) return route.fulfill({status:401,json:{error:{code:'session_required',message:'再ログインしてください。'}}});
+    else if(path.endsWith('/published-list')) return route.fulfill({status:catalogOk?200:503,json:catalogOk?{baseSha:'a'.repeat(40),records:[]}:{error:{code:'fixture_offline',message:'公開一覧を取得できません。'}}});
     else if(path.endsWith('/status')) body={mode:'server',connected:true,user:'allowed-user',baseSha:'a'.repeat(40),build:checks,deployment,publishLimits:PUBLISH_LIMITS,message:'テスト用GitHub接続'};
     else if(path.endsWith('/prepare')) body={id:'prepared-'+Date.now(),branch,baseSha:'a'.repeat(40),diff:'+ content/characters/sample-unit.json\n+ generated/content-studio-manifest.json',changedFiles:[{path:'generated/content-studio-manifest.json',mimeType:'application/json',byteLength:2,sha256:'d'.repeat(64),text:'{}'}],...(created?{recovered:result()}:{})};
     else if(path.endsWith('/pull-requests')) {

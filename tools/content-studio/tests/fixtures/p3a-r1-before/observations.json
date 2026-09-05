@@ -1,0 +1,671 @@
+{
+  "kind": "historical pre-fix observation, NOT a CI execution on the new head",
+  "head": "0ca0012aba7992a2e4cbcd3d0b74d0873c9dfd10",
+  "tree": "6b43d06e9129bcdb112260bf8d5a863789a31a8f",
+  "verifiedGitBlobs": {
+    "controller": "9ca0f46d3e09b27fa0f83d3d16bda9f36bf39744",
+    "batch": "d18e24eec1fa3224c896ac78a30db6f488ce587c"
+  },
+  "fixtureOnlyPortForOldArchive": 4187,
+  "cases": [
+    {
+      "case": "E1-new",
+      "runner": "local Windows Chromium with real frontend/backend; only GitHub boundary is an in-memory fixture",
+      "expectedAssertion": "reject unapplied inputs",
+      "exitCode": 1,
+      "observations": [
+        {
+          "before": {
+            "drafts": [
+              {
+                "id": "42c29d8b-0a37-4836-b81c-576f5aab7267",
+                "published": false,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.86,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              }
+            ],
+            "blobs": [
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:working",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              }
+            ],
+            "meta": [
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:editing-input",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:fire:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:hit:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:land:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:move-backward:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:move-forward:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": []
+          },
+          "after": {
+            "drafts": [
+              {
+                "id": "42c29d8b-0a37-4836-b81c-576f5aab7267",
+                "published": false,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.5,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              }
+            ],
+            "blobs": [
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "42c29d8b-0a37-4836-b81c-576f5aab7267:working",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              }
+            ],
+            "meta": [
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:editing-input",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:fire:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:hit:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:land:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:move-backward:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:motion:move-forward:metadata",
+              "42c29d8b-0a37-4836-b81c-576f5aab7267:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": []
+          }
+        }
+      ],
+      "traceSha256": "d3e00d746cd47212ef876548ee9a2985d238fea8b90ee81e862b6ee95e376e95",
+      "image": "E1-new.png"
+    },
+    {
+      "case": "E2",
+      "runner": "local Windows Chromium with real frontend/backend; only GitHub boundary is an in-memory fixture",
+      "expectedAssertion": "delete owned appMeta",
+      "exitCode": 1,
+      "observations": [
+        {
+          "before": {
+            "drafts": [
+              {
+                "id": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18",
+                "published": false,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.86,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              }
+            ],
+            "blobs": [
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:working",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              }
+            ],
+            "meta": [
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:editing-input",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:fire:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:hit:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:land:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:move-backward:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:move-forward:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": []
+          },
+          "after": {
+            "drafts": [],
+            "blobs": [],
+            "meta": [
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:editing-input",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:fire:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:hit:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:land:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:move-backward:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:motion:move-forward:metadata",
+              "35e3b3f5-2b35-4d92-ad17-6f62742a1a18:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": []
+          }
+        }
+      ],
+      "traceSha256": "85a32db740db7b3b64ff1d3527fe05be94ea7449ee63fd52392971137c607d2c",
+      "image": "E2.png"
+    },
+    {
+      "case": "E1-published",
+      "runner": "local Windows Chromium with real frontend/backend; only GitHub boundary is an in-memory fixture",
+      "expectedAssertion": "reject unapplied inputs",
+      "exitCode": 1,
+      "observations": [
+        {
+          "before": {
+            "drafts": [
+              {
+                "id": "06e921d9-9e52-43ed-8b11-6acf8a61edc5",
+                "published": true,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.86,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              },
+              {
+                "id": "5862dc81-59ae-4ea0-81ca-6551172ba09b",
+                "published": false,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.86,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              }
+            ],
+            "blobs": [
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:preview",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:working",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              }
+            ],
+            "meta": [
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:fire:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:hit:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:land:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:move-backward:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:move-forward:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:published-snapshot",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:sprite-metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:editing-input",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:fire:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:hit:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:land:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:move-backward:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:move-forward:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": [
+              "publish:2389dcb8f116601e5e4264a79d29e684a45dcc9e968acab9573f07a2134e7b71"
+            ]
+          },
+          "after": {
+            "drafts": [
+              {
+                "id": "06e921d9-9e52-43ed-8b11-6acf8a61edc5",
+                "published": true,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.5,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              },
+              {
+                "id": "5862dc81-59ae-4ea0-81ca-6551172ba09b",
+                "published": false,
+                "editor": {
+                  "tolerance": 32,
+                  "edgeFeather": 1,
+                  "brushSize": 28,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "scale": 0.86,
+                  "flipHorizontal": false,
+                  "padding": 24,
+                  "outputSize": 512,
+                  "zoom": 1,
+                  "tool": "pan"
+                },
+                "generatedClips": [
+                  "move-forward",
+                  "move-backward",
+                  "fire",
+                  "hit",
+                  "land"
+                ]
+              }
+            ],
+            "blobs": [
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:preview",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "06e921d9-9e52-43ed-8b11-6acf8a61edc5:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:icon",
+                "sha256": "77b94bba57b8a07300f2137e5dbe3e631c156b5a5f7febe0ba431d45b895fb98"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-fire",
+                "sha256": "d2c5782bb92b25b92d105d6d610dee368ae1155bde4a173c34491f567ee701e3"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-hit",
+                "sha256": "f1f4ccf3d0d0a9d47799fe3bf094bbaf08e6ccde0c0e8ce40e35b75d35fa7461"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-land",
+                "sha256": "23e8d4640529f761512abf3ac2bf51bb87493b9cf0cf2bc62f492d57560d1932"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-move-backward",
+                "sha256": "9f08bdd488bcaf8fc9db817a0c6093a0bb183ca5b8ee35e1dfb19026985c2473"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion-move-forward",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:normalized",
+                "sha256": "65f31a0db2f9d9509c4ead31a52662e7fb8aa9facabbfec99f18f08d288a13a9"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:optimized",
+                "sha256": "0486389377875adb4a09d51f778e66696b652bc9b0b5bc7bf7d9c3e5eb200465"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:original",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:sprite",
+                "sha256": "0e4b414c9e387a81f044e5e84b4257b96b50b4d7fe0260fab5c358fb8377c0fa"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:thumbnail",
+                "sha256": "189d7d2f457519c39cb912184a5a545dfdc791157524afd0811bdb9d7451ebbe"
+              },
+              {
+                "key": "5862dc81-59ae-4ea0-81ca-6551172ba09b:working",
+                "sha256": "502d3756ebed868ea1fbdc85d3b5bb083d4776b76f5c11bf7d4d210db411898a"
+              }
+            ],
+            "meta": [
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:editing-input",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:fire:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:hit:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:land:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:move-backward:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:motion:move-forward:metadata",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:published-snapshot",
+              "06e921d9-9e52-43ed-8b11-6acf8a61edc5:sprite-metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:editing-input",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:fire:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:hit:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:land:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:move-backward:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:motion:move-forward:metadata",
+              "5862dc81-59ae-4ea0-81ca-6551172ba09b:sprite-metadata",
+              "storage-persistent"
+            ],
+            "outbox": [
+              "publish:2389dcb8f116601e5e4264a79d29e684a45dcc9e968acab9573f07a2134e7b71"
+            ]
+          }
+        }
+      ],
+      "traceSha256": "2eb8f7eee6d287e9a5be665574dbe105b22ad40a2bf1121183105dc389228ef9",
+      "image": "E1-published.png"
+    }
+  ]
+}

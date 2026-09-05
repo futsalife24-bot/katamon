@@ -1,3 +1,7 @@
+import { canonicalCharacterRecordSchema } from '../src/generation/catalog.js';
+import { parseBoundedJson } from '../src/domain/bounded-json.js';
+import { trustedFile } from './snapshot.js';
+import type { PublishedRevision } from '../src/domain/editing-checkpoint.js';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { GitHubClient } from './github-api.js';
 import { HttpError } from './security.js';
@@ -29,6 +33,69 @@ export class RepositoryService {
     const baseSha = await this.github.getBaseSha();
     const [checks, deployment] = await Promise.allSettled([this.github.getChecks(baseSha), this.github.getDeployment(baseSha)]);
     return { baseSha, build: checks.status === 'fulfilled' ? checks.value : 'idle' as BuildState, deployment: deployment.status === 'fulfilled' ? deployment.value : 'unknown' as DeploymentState };
+  }
+  private publishedReads = 0;
+  async listPublishedCharacters() {
+    if(this.publishedReads>=2)throw new HttpError(429,'published_read_busy','公開データの読込中です。少し待って再試行してください。');
+    this.publishedReads++;
+    try {
+    const baseSha=await this.github.getBaseSha(), commit=await this.github.getCommit(baseSha);
+    if(commit.sha!==baseSha)fail('snapshot_invalid','基準commitが一致しません。');
+    const tree=await this.github.getTree(commit.treeSha);
+    const entries=tree.filter(e=>e.path.startsWith('content/characters/') && e.path.endsWith('.json'));
+    if(entries.length>500)fail('snapshot_limit','公開キャラ数が上限を超えています。');
+    const records=[];let total=0, failed=0;
+    for(const e of entries) {
+      try {
+      if(e.type!=='blob'||e.mode!=='100644'||(e.size??0)>this.config.maxFileBytes)fail('snapshot_invalid','公開正本を安全に読めません。');
+      const bytes=await this.github.getBlob(e.sha);total+=bytes.length;
+      if(bytes.length>this.config.maxFileBytes||total>this.config.maxTotalFileBytes||trustedFile(e.path,'application/json',bytes).gitBlobSha!==e.sha)fail('snapshot_invalid','公開正本の容量・hashが不正です。');
+      const record=canonicalCharacterRecordSchema.parse(parseBoundedJson(bytes.toString('utf8')));
+      if(e.path!==`content/characters/${record.character.slug}.json`)fail('snapshot_invalid','公開正本のslugが一致しません。');
+      records.push(record);
+      }catch{failed++;}
+      if(total>this.config.maxTotalFileBytes)fail('snapshot_limit','公開一覧の容量が上限を超えています。');
+    }
+    return {baseSha,records,failed};
+    }finally{this.publishedReads--;}
+  }
+  async readPublishedCharacter(slug:string, actor:string) {
+    if(!/^[a-z][a-z0-9-]{0,23}$/.test(slug))fail('published_slug_invalid','公開対象のslugが不正です。');
+    if(this.publishedReads>=2)throw new HttpError(429,'published_read_busy','公開データの読込中です。少し待って再試行してください。');
+    this.publishedReads++;
+    try {
+      const baseSha=await this.github.getBaseSha(), commit=await this.github.getCommit(baseSha), tree=await this.github.getTree(commit.treeSha);
+      if(commit.sha!==baseSha)fail('snapshot_invalid','基準commitが一致しません。');
+      const path=`content/characters/${slug}.json`, entry=tree.find(e=>e.path===path);
+      if(!entry)throw new HttpError(404,'published_missing','公開正本が見つかりません。');
+      const files: ValidatedFile[]=[];let total=0;
+      const read=async(path:string)=>{
+        const e=tree.find(e=>e.path===path);
+        if(!e||e.type!=='blob'||e.mode!=='100644'||(e.size??0)>this.config.maxFileBytes)fail('snapshot_invalid','公開参照が不正または容量超過です。');
+        const bytes=await this.github.getBlob(e!.sha);total+=bytes.length;
+        if(bytes.length>this.config.maxFileBytes||total>this.config.maxTotalFileBytes)fail('snapshot_limit','公開生成物の容量が上限を超えています。');
+        const mime=path.endsWith('.json')?'application/json':path.endsWith('.webp')?'image/webp':path.endsWith('.jpg')?'image/jpeg':'image/png';
+        const f=trustedFile(path,mime,bytes);if(f.gitBlobSha!==e!.sha)fail('snapshot_invalid','公開参照のhashが一致しません。');files.push(f);return f;
+      };
+      const canonical=await read(path), record=canonicalCharacterRecordSchema.parse(parseBoundedJson(canonical.bytes.toString('utf8')));
+      if(record.character.slug!==slug)fail('snapshot_invalid','公開正本のslugが一致しません。');
+      const paths=new Set<string>();
+      for(const [key,value] of Object.entries(record.assets))if(key!=='directory'&&value){if(typeof value==='string')paths.add(value);else Object.values(value).forEach(p=>paths.add(p));}
+      if(paths.size+1>this.config.maxFiles)fail('snapshot_limit','公開ファイル数が上限を超えています。');
+      for(const asset of paths)await read(asset);
+      const revision:PublishedRevision={mode:'server',repository:`${this.config.githubOwner}/${this.config.githubRepo}`,slug,baseSha,canonicalBlobSha:entry.sha,attestation:this.sign('published-edit-v1',actor,slug,baseSha,entry.sha)};
+      await reconstructSnapshot({bundleId:'published-read',generatorVersion:record.generatorVersion,character:record.character,files,prBody:'Read published character',digest:'read'},tree,sha=>this.github.getBlob(sha),this.config);
+      const response={revision,record,files:files.map(f=>({path:f.path,mimeType:f.mimeType,byteLength:f.bytes.length,sha256:f.sha256,gitBlobSha:f.gitBlobSha,contentBase64:f.bytes.toString('base64')}))};
+      if(Buffer.byteLength(JSON.stringify(response))>this.config.maxRequestBytes)fail('snapshot_limit','公開データの転送容量が上限を超えています。');
+      return response;
+    } finally {this.publishedReads--;}
+  }
+  private validateSourceRevision(bundle:ValidatedBundle, entries:GitTreeEntry[], actor:string) {
+    const path=`content/characters/${bundle.character.slug}.json`, before=entries.find(e=>e.path===path), target=bundle.files.find(f=>f.path===path);
+    const revision=bundle.sourceRevision;
+    if(!revision) {if(before && before.sha!==target?.gitBlobSha)fail('published_revision_required','公開元revisionを確認できません。作業を保持して公開一覧から最新版を別の下書きへ読み込んでください。');return;}
+    if(revision.mode!=='server'||revision.repository!==`${this.config.githubOwner}/${this.config.githubRepo}`||revision.slug!==bundle.character.slug||revision.attestation!==this.sign('published-edit-v1',actor,revision.slug,revision.baseSha,revision.canonicalBlobSha))throw new HttpError(403,'published_revision_invalid','公開元の本人・repository・revisionを確認できません。');
+    if(before?.sha!==revision.canonicalBlobSha)fail('published_target_conflict','同じキャラクターが別の操作で更新されています。編集中の内容を保持して停止しました。公開最新版は別の下書きへ読み込めます。');
   }
   private sign(...values: string[]): string {
     return createHmac('sha256', this.config.sessionSecret).update(JSON.stringify([this.config.githubOwner, this.config.githubRepo, this.config.githubBaseBranch, ...values])).digest('hex');
@@ -105,8 +172,10 @@ export class RepositoryService {
       if(revalidation && baseSha!==revalidation.targetBaseSha)fail('base_sha_conflict','最新baseが再度変わりました。旧PRを保持し、最新baseの再検証をやり直してください。');
       if (bundle.expectedBaseSha && baseSha !== bundle.expectedBaseSha) fail('base_sha_conflict', '基準ブランチが変わりました。再準備してください。');
     }
+    const sourceCommit=await this.github.getCommit(baseSha);
+    this.validateSourceRevision(bundle,await this.github.getTree(sourceCommit.treeSha),actor);
     const inspection = await this.inspect(bundle, baseSha);
-    if (!inspection.changed.length && !existingHead) fail('no_changes', '公開する変更がありません。');
+    if (!inspection.changed.some(f=>!f.path.startsWith('generated/content-studio-')) && !existingHead) fail('no_changes', '公開する変更がありません。');
     const p: Preparation = { id: randomBytes(24).toString('base64url'), actor, digest: bundle.digest, branch, baseSha, expiresAt: this.clock.now() + this.config.preparationTtlMs, snapshotDigest: fileDigest(inspection.files), bundle };
     if (existingHead) await this.assertHead(p, existingHead, inspection);
     const recovered = pr ? await this.result(p, pr.number) : undefined;
@@ -136,6 +205,7 @@ export class RepositoryService {
   }
   private async create(p: Preparation): Promise<PullRequestServiceResult> {
     const inspection = await this.inspect(p.bundle, p.baseSha);
+    this.validateSourceRevision(p.bundle,inspection.entries,p.actor);
     if (fileDigest(inspection.files) !== p.snapshotDigest) fail('snapshot_changed', '差分が変わりました。再準備してください。');
     let existingPr = await this.github.findPullRequest(p.branch);
     let head = await this.github.getBranchSha(p.branch);

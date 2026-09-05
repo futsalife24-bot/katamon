@@ -1,3 +1,6 @@
+import {canonicalAssetPaths, validatePublishedSnapshot, gitBlobHash} from '../generation/published-edit';
+import {sha256Blob} from '../generation/hash';
+import {PUBLISH_LIMITS} from '../domain/publish-limits';
 import { readBoundedJson } from '../domain/bounded-json';
 import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '../generation';
 import { LEGACY_CHARACTERS, type LegacyCharacter } from '../domain/legacy-characters';
@@ -76,4 +79,22 @@ export async function fetchLegacyImage(record: LegacyCharacter, fetchImpl: typeo
     return new File([blob], `${record.slug}.${extension}`, { type: mimeType, lastModified: Date.now() });
   }
   throw new Error('既存キャラクター画像が見つかりませんでした。');
+}
+/** Pages is only a mock/demo source. A server operation always reads a fixed GitHub revision instead. */
+export async function readMockPublishedCharacter(record: CanonicalCharacterRecord): Promise<import('../generation/published-edit').PublishedSnapshot> {
+  const files: import('../domain/types').ArtifactFile[]=[];
+  let total=0;
+  for (const path of [`content/characters/${record.character.slug}.json`,...canonicalAssetPaths(record)]) {
+    const url=path.startsWith('content/characters/')?new URL(path,repositoryRootUrl()):publishedAssetUrl(path);
+    const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.ok||Number(response.headers.get('content-length'))>PUBLISH_LIMITS.maxFileBytes)throw new Error('公開ファイルを取得できません。');
+    const mime=path.endsWith('.json')?'application/json':path.endsWith('.webp')?'image/webp':path.endsWith('.jpg')?'image/jpeg':'image/png';
+    if(response.headers.get('content-type')?.split(';')[0]!==mime)throw new Error('公開ファイルのMIMEが一致しません。');
+    const reader=response.body?.getReader();if(!reader)throw new Error('応答が空です。');
+    let length=0;const parts:Uint8Array<ArrayBuffer>[]=[];
+    try{for(;;){const next=await reader.read();if(next.done)break;length+=next.value.length;total+=next.value.length;if(length>PUBLISH_LIMITS.maxFileBytes||total>PUBLISH_LIMITS.maxTotalFileBytes)throw new Error('公開読込の容量が上限を超えています。');parts.push(new Uint8Array(next.value));}}finally{await reader.cancel();}
+    const blob=new Blob(parts,{type:mime});files.push({path,mimeType:mime,byteLength:blob.size,sha256:await sha256Blob(blob),kind:mime==='application/json'?'metadata':'image',...(mime==='application/json'?{text:await blob.text()}:{blob})});
+  }
+  const canonical=files[0];
+  return validatePublishedSnapshot({record,files,revision:{mode:'mock',repository:'futsalife24-bot/katamon',baseSha:'0'.repeat(40),slug:record.character.slug,canonicalBlobSha:await gitBlobHash(new Blob([canonical.text!],{type:'application/json'}))}});
 }

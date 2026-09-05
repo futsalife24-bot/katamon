@@ -568,3 +568,7 @@ progress { width: 100%; accent-color: var(--brand); }
 .publish-review pre { max-height: 320px; overflow: auto; }
 .recovery-item { margin-block: 16px; }
 .workflow-main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+
+.published-character { padding: 16px 0; border-bottom: 1px solid #ccd3df; overflow-wrap: anywhere; }
+.published-character button, .published-edit-mode button { min-height:48px; white-space:normal; margin-top:8px; }
+.published-character h3 { overflow-wrap:anywhere; }

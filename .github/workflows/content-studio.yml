@@ -133,14 +133,89 @@ jobs:
         working-directory: .
         run: npx playwright test tests/e2e/content-studio-motion.spec.js --project=android-chromium-portrait-touch
 
-      - name: Upload Playwright evidence
+      - name: Package bounded audit evidence
+        id: evidence
         if: always()
+        working-directory: .
+        run: node tools/content-studio/tests/e2e/package-evidence.mjs
+
+      - name: Upload audit summary (HTML, JSON and images)
+        if: always() && steps.evidence.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: content-studio-playwright-report
-          path: |
-            tools/content-studio/playwright-report/
-            tools/content-studio/test-results/
-            test-results/playwright/
+          name: content-studio-audit-summary-${{ github.run_attempt }}
+          path: audit-evidence/summary/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload complete evidence part 1
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-1-${{ github.run_attempt }}
+          path: audit-evidence/details-1/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
+
+      - name: Upload complete evidence part 2
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-2-${{ github.run_attempt }}
+          path: audit-evidence/details-2/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 3
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-3-${{ github.run_attempt }}
+          path: audit-evidence/details-3/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 4
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-4-${{ github.run_attempt }}
+          path: audit-evidence/details-4/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 5
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-5-${{ github.run_attempt }}
+          path: audit-evidence/details-5/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 6
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-6-${{ github.run_attempt }}
+          path: audit-evidence/details-6/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 7
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-7-${{ github.run_attempt }}
+          path: audit-evidence/details-7/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload complete evidence part 8
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-studio-evidence-8-${{ github.run_attempt }}
+          path: audit-evidence/details-8/
+          if-no-files-found: ignore
+          retention-days: 14
