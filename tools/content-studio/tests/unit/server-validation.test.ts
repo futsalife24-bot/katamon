@@ -19,6 +19,12 @@ function submission(file = submittedFile(
 }
 
 describe('server-side submission validation', () => {
+  it('rejects a different reviewed display name and dummy fine-grained token in PR text', () => {
+    const raw = submission(); raw.character.displayName = 'different';
+    expect(() => validateSubmission(raw, serverTestConfig())).toThrow(/表示名/);
+    const token = submission(); token.prBody = 'github_pat_' + 'x'.repeat(40);
+    expect(() => validateSubmission(token, serverTestConfig())).toThrow(/秘密/);
+  });
   it('slugとcanonical JSONを再検証する', () => {
     const result = validateSubmission(submission(), serverTestConfig());
     expect(result.character.slug).toBe('sample-unit');

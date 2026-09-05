@@ -1,5 +1,8 @@
+import { requiredChecksFromProtection, type RequiredCheck } from './ci-policy.js';
+import { readBoundedJson } from '../src/domain/bounded-json.js';
 import { createPrivateKey, createSign } from 'node:crypto';
 
+import { REQUIRED_STUDIO_CHECKS, GITHUB_ACTIONS_APP_ID, safeMergeProtection } from './ci-policy.js';
 import { HttpError } from './security.js';
 import type {
   AuthenticatedUser,
@@ -132,7 +135,7 @@ export class GitHubClient {
     return asString(asRecord(asRecord(data, 'ブランチ').object, 'ブランチ').sha, 'ブランチ');
   }
 
-  async getCommit(commitSha: string): Promise<{ sha: string; treeSha: string }> {
+  async getCommit(commitSha: string): Promise<{ sha: string; treeSha: string; parents: string[]; message: string }> {
     const data = asRecord(
       await this.request(`/repos/${this.repoPath()}/git/commits/${encodeURIComponent(commitSha)}`),
       'コミット',
@@ -140,6 +143,8 @@ export class GitHubClient {
     return {
       sha: asString(data.sha, 'コミット'),
       treeSha: asString(asRecord(data.tree, 'ツリー').sha, 'ツリー'),
+      parents: Array.isArray(data.parents) ? data.parents.map(p => asString(asRecord(p, 'parent').sha, 'parent')) : [],
+      message: asString(data.message, 'commit message'),
     };
   }
 
@@ -179,7 +184,7 @@ export class GitHubClient {
       throw new GitHubApiError(502, 'github_invalid_response', 'GitHubのファイルを確認できませんでした。', 502);
     }
     const content = asString(data.content, 'Blob').replace(/\s/g, '');
-    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content)) {
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(content)) {
       throw new GitHubApiError(502, 'github_invalid_response', 'GitHubのファイルを確認できませんでした。', 502);
     }
     return Buffer.from(content, 'base64');
@@ -264,14 +269,16 @@ export class GitHubClient {
     return { number: data.number as number, url: asString(data.html_url, 'PR') };
   }
 
-  async findOpenPullRequest(branch: string): Promise<{ number: number; url: string } | null> {
+  async findPullRequest(branch: string): Promise<{ number: number; url: string } | null> {
     const head = `${this.config.githubOwner}:${branch}`;
     const data = await this.request(
-      `/repos/${this.repoPath()}/pulls?state=open&head=${encodeURIComponent(head)}&base=${encodeURIComponent(this.config.githubBaseBranch)}&per_page=1`,
+      `/repos/${this.repoPath()}/pulls?state=all&head=${encodeURIComponent(head)}&base=${encodeURIComponent(this.config.githubBaseBranch)}&per_page=100`,
     );
-    if (!Array.isArray(data) || data.length === 0) return null;
+    if (!Array.isArray(data)) throw new HttpError(502, 'pull_requests_invalid', 'PR一覧を確認できません。');
+    if (data.length === 0) return null;
+    if (data.length !== 1) throw new HttpError(409, 'ambiguous_pr', '同じ公開操作のPRを一意に確認できません。');
     const pr = asRecord(data[0], 'PR');
-    if (!Number.isSafeInteger(pr.number) || (pr.number as number) <= 0) return null;
+    if (!Number.isSafeInteger(pr.number) || (pr.number as number) <= 0) throw new HttpError(502, 'pull_requests_invalid', 'PR番号を確認できません。');
     return { number: pr.number as number, url: asString(pr.html_url, 'PR') };
   }
 
@@ -283,6 +290,7 @@ export class GitHubClient {
     headRef: string;
     headSha: string;
     merged: boolean;
+    baseRepo: string; headRepo: string; baseSha: string; mergeCommitSha: string | null;
   }> {
     const data = asRecord(
       await this.request(`/repos/${this.repoPath()}/pulls/${number}`),
@@ -303,6 +311,10 @@ export class GitHubClient {
       headRef: asString(asRecord(data.head, 'PR head').ref, 'PR head'),
       headSha: asString(asRecord(data.head, 'PR head').sha, 'PR head'),
       merged: data.merged === true,
+      baseRepo: asString(asRecord(asRecord(data.base, 'base').repo, 'base repo').full_name, 'repo'),
+      headRepo: asString(asRecord(asRecord(data.head, 'head').repo, 'head repo').full_name, 'repo'),
+      baseSha: asString(asRecord(data.base, 'base').sha, 'base sha'),
+      mergeCommitSha: data.merged === true ? asString(data.merge_commit_sha, 'merge sha') : null,
     };
   }
 
@@ -320,31 +332,126 @@ export class GitHubClient {
     return { merged: true };
   }
 
-  async getChecks(ref: string): Promise<BuildState> {
-    const data = asRecord(
-      await this.request(
-        `/repos/${this.repoPath()}/commits/${encodeURIComponent(ref)}/check-runs?per_page=100`,
-      ),
-      'Checks',
-    );
-    if (!Array.isArray(data.check_runs) || data.check_runs.length === 0) return 'idle';
-    const runs = data.check_runs.map((run) => asRecord(run, 'Checks'));
-    if (runs.some((run) => run.status === 'in_progress')) return 'running';
-    if (runs.some((run) => run.status === 'queued' || run.status === 'requested' || run.status === 'waiting')) {
-      return 'queued';
+  async getBranchSha(branch: string): Promise<string | null> {
+    try {
+      const data = asRecord(await this.request(`/repos/${this.repoPath()}/git/ref/heads/${encodedRef(branch)}`), 'branch');
+      return asString(asRecord(data.object, 'branch').sha, 'branch');
+    } catch (error) { if (error instanceof GitHubApiError && error.githubStatus === 404) return null; throw error; }
+  }
+
+  async getMergeProtection(): Promise<{ safe: boolean; requirements: RequiredCheck[]; reason?: string }> {
+    try {
+      const data = await this.request(`/repos/${this.repoPath()}/branches/${encodedRef(this.config.githubBaseBranch)}/protection`);
+      try { return {safe:safeMergeProtection(data),requirements:requiredChecksFromProtection(data)}; }
+      catch(error) {return {safe:false,requirements:[],reason:error instanceof Error?error.message:'必須CI設定が不正です。'};}
+    } catch { return {safe:false,requirements:[],reason:'ブランチ保護設定を取得できません。'}; }
+  }
+
+  private async pages(path: string, key?: string): Promise<Record<string, unknown>[]> {
+    const result: Record<string, unknown>[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const data = await this.request(`/repos/${this.repoPath()}/${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+      const items = key ? asRecord(data, key)[key] : data;
+      if (!Array.isArray(items)) throw new HttpError(502, 'checks_invalid', 'CI一覧を取得できません。');
+      result.push(...items.map(v => asRecord(v, 'CI')));
+      if (items.length < 100) return result;
     }
-    const successful = new Set(['success', 'neutral', 'skipped']);
-    return runs.every((run) => typeof run.conclusion === 'string' && successful.has(run.conclusion))
-      ? 'success'
-      : 'failure';
+    throw new HttpError(409, 'checks_truncated', 'CI一覧を最後まで確認できません。');
+  }
+
+  async getChecks(ref: string, requirements: readonly RequiredCheck[] = []): Promise<BuildState> {
+    const runs = await this.pages(`actions/workflows/content-studio.yml/runs?head_sha=${encodeURIComponent(ref)}`, 'workflow_runs');
+    const latest = runs.filter(r => r.head_sha === ref && (r.event === 'pull_request' || r.event === 'push' || r.event === 'workflow_dispatch'))
+      .sort((a,b) => String(b.run_started_at ?? '').localeCompare(String(a.run_started_at ?? '')) || Number(b.id) - Number(a.id))[0];
+    if (!latest) return 'queued';
+    if (!Number.isSafeInteger(latest.id) || !Number.isSafeInteger(latest.run_attempt)) return 'failure';
+    const [jobs, checks, statuses] = await Promise.all([
+      this.pages(`actions/runs/${latest.id}/attempts/${latest.run_attempt}/jobs`, 'jobs'),
+      this.pages(`commits/${encodeURIComponent(ref)}/check-runs?filter=all`, 'check_runs'),
+      this.pages(`commits/${encodeURIComponent(ref)}/statuses`),
+    ]);
+    for (const name of REQUIRED_STUDIO_CHECKS) {
+      const matching = jobs.filter(j => j.name === name);
+      if (!matching.length) return 'queued';
+      if (matching.length !== 1) return 'failure';
+      const job = matching[0];
+      if (job.head_sha !== ref || job.run_id !== latest.id || (job.run_attempt !== undefined && job.run_attempt !== latest.run_attempt)) return 'failure';
+      if (job.status !== 'completed') return job.status === 'in_progress' ? 'running' : 'queued';
+      if (job.conclusion !== 'success') return 'failure';
+      const id = Number(String(job.check_run_url).split('/').pop());
+      const check = checks.find(c => c.id === id);
+      if (!check || check.head_sha !== ref || check.name !== name || asRecord(check.app, 'check app').id !== GITHUB_ACTIONS_APP_ID || check.status !== 'completed' || check.conclusion !== 'success') return 'failure';
+    }
+    const latestStatuses = new Map<string, Record<string, unknown>>();
+    for (const status of statuses.sort((a,b) => Number(b.id) - Number(a.id))) {
+      if (typeof status.context !== 'string' || (status.sha !== undefined ? status.sha !== ref : !String(status.url).endsWith('/statuses/' + ref))) return 'failure';
+      if (!latestStatuses.has(status.context)) latestStatuses.set(status.context, status);
+    }
+    let actionRuns: Record<string,unknown>[] | undefined;
+    const jobCache = new Map<string,Record<string,unknown>[]>();
+    const unsupported = (message:string):never => { throw new HttpError(409,'required_checks_unsupported',message); };
+    const newest = (values:Record<string,unknown>[]) => [...values].sort((a,b)=>Number(b.id)-Number(a.id))[0];
+    for (const requirement of requirements) {
+      const {context,appId} = requirement;
+      if(typeof context!=='string'||!context||!(appId===null||(Number.isSafeInteger(appId)&&appId>0))) unsupported('必須CI設定の形式が未対応です。管理者に設定確認を依頼してください。');
+      if ((REQUIRED_STUDIO_CHECKS as readonly string[]).includes(context)) {
+        if(appId!==GITHUB_ACTIONS_APP_ID) unsupported('Studio必須CIの実行元がGitHub Actionsに固定されていません。');
+        continue;
+      }
+      const named = checks.filter(c=>c.name===context);
+      if(named.some(c=>c.head_sha!==ref)) return 'failure';
+      const eligible = named.filter(c=>appId===null || asRecord(c.app,'check app').id===appId);
+      if(named.length && !eligible.length) return 'failure';
+      if(eligible.some(c=>!Number.isSafeInteger(c.id)||(c.id as number)<=0)) unsupported('追加必須checkの実行IDを確認できません。');
+      const sources = new Set(eligible.map(c=>asRecord(c.app,'check app').id));
+      if(sources.size>1) unsupported('同名checkの実行元が複数あります。保護設定で実行元を固定してください。');
+      let check = newest(eligible);
+      if(check && asRecord(check.app,'check app').id===GITHUB_ACTIONS_APP_ID) {
+        // A new workflow attempt can exist before its jobs/check-runs appear. Old green evidence must not substitute.
+        actionRuns ??= await this.pages(`actions/runs?head_sha=${encodeURIComponent(ref)}`,'workflow_runs');
+        const owningRuns = actionRuns.filter(r=>eligible.some(c=>asRecord(c.check_suite,'check suite').id===r.check_suite_id));
+        const workflows = new Set(owningRuns.map(r=>r.workflow_id));
+        if(workflows.size!==1) unsupported('追加必須checkのworkflowを一意に特定できません。');
+        const run = [...actionRuns].filter(r=>r.workflow_id===owningRuns[0].workflow_id && r.head_sha===ref)
+          .sort((a,b)=>String(b.run_started_at??'').localeCompare(String(a.run_started_at??''))||Number(b.id)-Number(a.id))[0];
+        if(!run || !Number.isSafeInteger(run.id)||!Number.isSafeInteger(run.run_attempt)) unsupported('追加必須checkの最新実行を確認できません。');
+        const key=String(run.id)+':'+run.run_attempt;
+        if(!jobCache.has(key))jobCache.set(key,await this.pages(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,'jobs'));
+        const matching=jobCache.get(key)!.filter(j=>j.name===context);
+        if(!matching.length)return 'queued';
+        if(matching.length!==1)unsupported('同名必須jobが複数あり判定できません。');
+        const job=matching[0];
+        if(job.head_sha!==ref||job.run_id!==run.id||(job.run_attempt!==undefined&&job.run_attempt!==run.run_attempt))return 'failure';
+        if(job.status!=='completed')return job.status==='in_progress'?'running':'queued';
+        if(job.conclusion!=='success')return 'failure';
+        check=eligible.find(c=>c.id===Number(String(job.check_run_url).split('/').pop()))!;
+        if(!check)return 'failure';
+        if(run.status!=='completed')return 'running';
+        if(run.conclusion!=='success')return 'failure';
+      }
+      if(check) {
+        if(check.status!=='completed')return check.status==='in_progress'?'running':'queued';
+        if(check.conclusion!=='success')return 'failure';
+      }
+      const status=latestStatuses.get(context);
+      // The status API does not attest an integration app ID. Never invent one from a bot login.
+      if(status && appId!==null) unsupported('app固定の必須名にcommit statusも存在します。status APIでは実行元を証明できません。checkとstatusを別名で設定してください。');
+      if(!check && !status)return 'queued';
+      if(status && status.state!=='success')return status.state==='pending'?'queued':'failure';
+    }
+    for (const status of latestStatuses.values()) if (status.state !== 'success') return status.state === 'pending' ? 'queued' : 'failure';
+    if (latest.status !== 'completed') return 'running';
+    return latest.conclusion === 'success' ? 'success' : 'failure';
   }
 
   async getDeployment(ref: string): Promise<DeploymentState> {
     const deployments = await this.request(
-      `/repos/${this.repoPath()}/deployments?sha=${encodeURIComponent(ref)}&per_page=5`,
+      `/repos/${this.repoPath()}/deployments?sha=${encodeURIComponent(ref)}&environment=github-pages&per_page=100`,
     );
     if (!Array.isArray(deployments) || deployments.length === 0) return 'unknown';
-    const deployment = asRecord(deployments[0], 'Deployment');
+    const matching = deployments.map(d => asRecord(d, 'Deployment')).filter(d => d.sha === ref && d.environment === 'github-pages').sort((a,b) => Number(b.id) - Number(a.id));
+    if (!matching.length) return 'unknown';
+    const deployment = matching[0];
     if (!Number.isSafeInteger(deployment.id)) return 'unknown';
     const statuses = await this.request(
       `/repos/${this.repoPath()}/deployments/${deployment.id as number}/statuses?per_page=1`,
@@ -429,10 +536,8 @@ export class GitHubClient {
   }
 
   private async readJson(response: Response): Promise<unknown> {
-    const text = await response.text();
-    if (!text) return {};
     try {
-      return JSON.parse(text);
+      return await readBoundedJson(response, this.config.maxRequestBytes);
     } catch {
       throw new GitHubApiError(502, 'github_invalid_response', 'GitHubから不正な応答を受け取りました。', response.status);
     }

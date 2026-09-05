@@ -1,3 +1,4 @@
+import { assertPublishSize, PUBLISH_LIMITS } from '../domain/publish-limits';
 import { convertSkillTemplate } from '../domain/skills';
 import { spriteMetadataSchema } from '../domain/schemas';
 import { GENERATOR_VERSION, type ArtifactBundle, type ArtifactFile, type CharacterForm, type MotionClipId, type SpriteMetadata, type ValidationIssue } from '../domain/types';
@@ -110,18 +111,18 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
   const generatorVersion = input.generatorVersion ?? GENERATOR_VERSION;
   const createdAt = validateCreatedAt(input.createdAt ?? new Date().toISOString());
 
-  await assertValidBlob(input.images.normalizedPng, MIME_BY_IMAGE_KEY.normalizedPng, '正規化PNG', 8 * 1024 * 1024);
-  await assertValidBlob(input.images.optimizedWebp, MIME_BY_IMAGE_KEY.optimizedWebp, '軽量WebP', 5 * 1024 * 1024);
-  await assertValidBlob(input.images.iconPng, MIME_BY_IMAGE_KEY.iconPng, 'アイコン', 2 * 1024 * 1024);
-  await assertValidBlob(input.images.thumbnailWebp, MIME_BY_IMAGE_KEY.thumbnailWebp, 'サムネイル', 2 * 1024 * 1024);
-  await assertValidBlob(input.images.spriteSheetPng, MIME_BY_IMAGE_KEY.spriteSheetPng, 'スプライトシート', 16 * 1024 * 1024);
+  await assertValidBlob(input.images.normalizedPng, MIME_BY_IMAGE_KEY.normalizedPng, '正規化PNG', PUBLISH_LIMITS.maxFileBytes);
+  await assertValidBlob(input.images.optimizedWebp, MIME_BY_IMAGE_KEY.optimizedWebp, '軽量WebP', PUBLISH_LIMITS.maxFileBytes);
+  await assertValidBlob(input.images.iconPng, MIME_BY_IMAGE_KEY.iconPng, 'アイコン', PUBLISH_LIMITS.maxFileBytes);
+  await assertValidBlob(input.images.thumbnailWebp, MIME_BY_IMAGE_KEY.thumbnailWebp, 'サムネイル', PUBLISH_LIMITS.maxFileBytes);
+  await assertValidBlob(input.images.spriteSheetPng, MIME_BY_IMAGE_KEY.spriteSheetPng, 'スプライトシート', PUBLISH_LIMITS.maxFileBytes);
   if (input.images.motionSpriteSheets) {
     for (const [clipId, blob] of Object.entries(input.images.motionSpriteSheets)) {
-      await assertValidBlob(blob, 'image/png', `${clipId}スプライトシート`, 16 * 1024 * 1024);
+      await assertValidBlob(blob, 'image/png', `${clipId}スプライトシート`, PUBLISH_LIMITS.maxFileBytes);
     }
   }
-  await assertValidBlob(input.images.previewPng, MIME_BY_IMAGE_KEY.previewPng, 'プレビュー', 4 * 1024 * 1024);
-  if (input.images.sourceImage) await assertValidBlob(input.images.sourceImage, undefined, '元画像', 20 * 1024 * 1024);
+  await assertValidBlob(input.images.previewPng, MIME_BY_IMAGE_KEY.previewPng, 'プレビュー', PUBLISH_LIMITS.maxFileBytes);
+  if (input.images.sourceImage) await assertValidBlob(input.images.sourceImage, undefined, '元画像', PUBLISH_LIMITS.maxFileBytes);
 
   const imageHashes = {
     normalizedPng: await sha256Blob(input.images.normalizedPng),
@@ -232,6 +233,8 @@ export async function buildArtifactBundle(input: BuildArtifactBundleInput): Prom
     pathsSeen.add(file.path);
   }
 
+  assertPublishSize(files);
+  issues.push({ severity: 'warning', code: 'catalog.preview_only', message: 'ZIP内の全体カタログはローカルの参考データです。安全な公開にはGitHub基準snapshotからの再構成と差分確認が必要です。' });
   const bundleId = await sha256Text(stableStringify(files.map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }))));
   const partial = { character, spriteMetadata, files, issues, generatorVersion, legacyTargetId: input.legacyTargetId };
   return {

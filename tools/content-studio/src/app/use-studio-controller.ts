@@ -1,3 +1,5 @@
+import { publicationInputKey } from '../domain/publication-input';
+import { assertPublishSize } from '../domain/publish-limits';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { createDraft } from '../domain/defaults';
@@ -44,7 +46,6 @@ import {
   addPublishHistory,
   deleteDraftBlob,
   deleteDraft,
-  deleteOutbox,
   duplicateDraft,
   exportDraftJson,
   getAppMeta,
@@ -147,6 +148,8 @@ export interface StudioController {
   downloadZip(): Promise<void>;
   downloadJson(): Promise<void>;
   prepareChange(): Promise<void>;
+  reprepareLatest(): Promise<void>;
+  refreshPublishedContent(): Promise<void>;
   createPullRequest(): Promise<void>;
   retryOutbox(id: string): Promise<void>;
   refreshRepositoryStatus(): Promise<void>;
@@ -296,6 +299,8 @@ async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchR
   return Object.fromEntries(entries.filter((entry): entry is readonly [MotionClipId, EncodedIdleSpriteResult] => entry[1] !== null));
 }
 
+function publicationOutboxId(bundle: ArtifactBundle): string { return 'publish:' + bundle.bundleId + (bundle.revalidation ? ':' + bundle.revalidation.targetBaseSha + ':' + bundle.revalidation.headSha : ''); }
+
 export function useStudioController(): StudioController {
   const appVersion = import.meta.env.VITE_APP_VERSION || '0.5.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
@@ -308,7 +313,7 @@ export function useStudioController(): StudioController {
   const [draft, setDraft] = useState<DraftRecord | null>(null);
   const [drafts, setDrafts] = useState<DraftRecord[]>([]);
   const [publishedCharacters, setPublishedCharacters] = useState<CanonicalCharacterRecord[]>([]);
-  const [publishedWarning, setPublishedWarning] = useState<string | null>(null);
+  const [publishedWarning, setPublishedWarning] = useState<string | null>('公開一覧を確認中です。');
   const [history, setHistory] = useState<PublishHistoryRecord[]>([]);
   const [outbox, setOutbox] = useState<OutboxRecord[]>([]);
   const [processed, setProcessed] = useState<ProcessedImage | null>(null);
@@ -336,10 +341,15 @@ export function useStudioController(): StudioController {
   const hitAbortRef = useRef<AbortController | null>(null);
   const draftRef = useRef<DraftRecord | null>(null);
   const bundleRef = useRef<ArtifactBundle | null>(null);
+  const publicationRef = useRef(false);
+  const contentEpochRef = useRef(0);
+  const originalWorkRef = useRef<Promise<void> | null>(null);
 
   const setBundle = useCallback((next: ArtifactBundle | null) => {
     bundleRef.current = next;
     setBundleState(next);
+    setPrepared(null);
+    setPullRequest(null);
   }, []);
 
   const refreshLists = useCallback(async () => {
@@ -376,16 +386,19 @@ export function useStudioController(): StudioController {
   }, [draft]);
 
   const persistDraftState = useCallback((updater: (current: DraftRecord) => DraftRecord) => {
-    setDraft((current) => {
-      if (!current) return current;
-      const next = updater(structuredClone(current));
-      next.updatedAt = new Date().toISOString();
-      draftRef.current = next;
-      setSaveState('pending');
-      autosaveRef.current.schedule(next);
-      return next;
-    });
-  }, []);
+    const current = draftRef.current;
+    if (!current) return;
+    const next = updater(structuredClone(current));
+    if (publicationInputKey(next) !== publicationInputKey(current)) {
+      contentEpochRef.current++;
+      setBundle(null);
+    }
+    next.updatedAt = new Date().toISOString();
+    draftRef.current = next;
+    setDraft(next);
+    setSaveState('pending');
+    autosaveRef.current.schedule(next);
+  }, [setBundle]);
 
   const refreshRepositoryStatus = useCallback(async () => {
     try {
@@ -395,13 +408,16 @@ export function useStudioController(): StudioController {
     }
   }, []);
 
+  const refreshPublishedContent = useCallback(async () => {
+    const { records, warning } = await loadPublishedContent();
+    setPublishedCharacters(records);
+    setPublishedWarning(warning);
+  }, []);
+
   useEffect(() => {
     void refreshLists();
     void refreshRepositoryStatus();
-    void loadPublishedContent().then(({ records, warning }) => {
-      setPublishedCharacters(records);
-      setPublishedWarning(warning);
-    });
+    void refreshPublishedContent();
     void requestPersistentStorage().then(async (persistent) => {
       if (persistent !== null) await setAppMeta('storage-persistent', persistent);
       const estimate = await storageUsage();
@@ -429,23 +445,11 @@ export function useStudioController(): StudioController {
       window.removeEventListener('online', online);
       window.removeEventListener('offline', offline);
     };
-  }, [refreshLists, refreshRepositoryStatus]);
+  }, [refreshLists, refreshRepositoryStatus, refreshPublishedContent]);
 
   const updateDraft = useCallback((updater: (current: DraftRecord) => DraftRecord) => {
-    setDraft((current) => {
-      if (!current) return current;
-      const next = updater(structuredClone(current));
-      next.updatedAt = new Date().toISOString();
-      next.historyStatus = 'dirty';
-      draftRef.current = next;
-      setSaveState('pending');
-      autosaveRef.current.schedule(next);
-      setBundle(null);
-      setPrepared(null);
-      setPullRequest(null);
-      return next;
-    });
-  }, []);
+    persistDraftState(current => ({...updater(current), historyStatus:'dirty'}));
+  }, [persistDraftState]);
 
   const goToStep = useCallback((step: WorkflowStep, replace = false) => {
     persistDraftState((current) => ({ ...current, lastStep: step }));
@@ -454,6 +458,8 @@ export function useStudioController(): StudioController {
   }, [persistDraftState]);
 
   const openDraft = useCallback(async (id: string) => {
+    const epoch = ++contentEpochRef.current;
+    abortRef.current?.abort(); hitAbortRef.current?.abort();
     await autosaveRef.current.flush();
     const stored = await getDraft(id);
     if (!stored) {
@@ -466,6 +472,7 @@ export function useStudioController(): StudioController {
       restoreStoredSprite(id),
       restoreMotionBatch(id),
     ]);
+    if (epoch !== contentEpochRef.current) return;
     originalBlobRef.current = original;
     hitOriginalBlobRef.current = hitOriginal;
     setDraft(stored);
@@ -487,14 +494,18 @@ export function useStudioController(): StudioController {
     if (original || hitOriginal) {
       setNotice('下書きを復旧しました。画像プレビューを再構築しています。');
       setTimeout(() => void (async () => {
-        if (original) await rebuildImage(stored, original, false);
-        if (hitOriginal) await rebuildHitImage(stored, hitOriginal, false);
+        if (epoch !== contentEpochRef.current || draftRef.current?.id !== id) return;
+        if (original) await rebuildImage(stored, original, false, stored.processingOperations, true).catch(() => undefined);
+        if (epoch !== contentEpochRef.current || draftRef.current?.id !== id) return;
+        if (hitOriginal) await rebuildHitImage(stored, hitOriginal, false, true).catch(() => undefined);
+        if (epoch === contentEpochRef.current && draftRef.current?.id === id) setNotice('画像プレビューの復元処理が完了しました。保存した公開操作は保持しています。');
       })().catch(() => undefined), 0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const createNewDraft = useCallback(async () => {
+    contentEpochRef.current++; abortRef.current?.abort(); hitAbortRef.current?.abort();
     await autosaveRef.current.flush();
     const next = createDraft();
     const saved = await saveDraft(next);
@@ -519,6 +530,7 @@ export function useStudioController(): StudioController {
   }, [refreshLists]);
 
   const backToDashboard = useCallback(async () => {
+    contentEpochRef.current++; abortRef.current?.abort(); hitAbortRef.current?.abort();
     await autosaveRef.current.flush();
     setView('dashboard');
     window.history.pushState({ studio: false }, '', window.location.pathname);
@@ -531,7 +543,7 @@ export function useStudioController(): StudioController {
       if (!current || view !== 'workflow') return;
       const index = WORKFLOW_STEPS.findIndex(({ id }) => id === current.lastStep);
       if (index > 0) {
-        updateDraft((item) => ({ ...item, lastStep: WORKFLOW_STEPS[index - 1].id }));
+        persistDraftState((item) => ({ ...item, lastStep: WORKFLOW_STEPS[index - 1].id }));
       } else {
         setView('dashboard');
       }
@@ -583,12 +595,19 @@ export function useStudioController(): StudioController {
     setProgress({ value: Math.max(0, Math.min(1, value)), label });
   }, []);
 
-  const rebuildImage = useCallback(async (snapshot: DraftRecord, source: Blob, generateVariants: boolean, operations = snapshot.processingOperations) => {
+  const rebuildImage = useCallback(async (snapshot: DraftRecord, source: Blob, generateVariants: boolean, operations = snapshot.processingOperations, restoring = false) => {
+    if (draftRef.current?.id !== snapshot.id) return;
+    if (!restoring) { contentEpochRef.current++; setBundle(null); }
+    const epoch = contentEpochRef.current;
+    let finishOriginal!: () => void;
+    const originalWork = new Promise<void>(resolve => { finishOriginal = resolve; });
+    originalWorkRef.current = originalWork;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const isCurrent = () => epoch === contentEpochRef.current && draftRef.current?.id === snapshot.id && !controller.signal.aborted;
     setBusy(true);
-    setError(null);
+    if (!restoring) setError(null);
     const wakeLock = await acquireWakeLock();
     try {
       const result = await new ContentImageProcessor().process(
@@ -610,9 +629,11 @@ export function useStudioController(): StudioController {
         },
         {
           signal: controller.signal,
-          onProgress: (item: ImageProgress) => setBusyProgress(item.progress, item.message),
+          onProgress: (item: ImageProgress) => { if (isCurrent()) setBusyProgress(item.progress, item.message); },
         },
       );
+      const working = result.variants ? await encodePixelBuffer(result.edited, 'image/png').then(({blob}) => blob) : null;
+      if (!isCurrent()) return;
       setProcessed(result);
       if (generateVariants) {
         setSprite(null);
@@ -622,10 +643,10 @@ export function useStudioController(): StudioController {
       const landmarks = snapshot.landmarks.status === 'idle'
         ? detectMotionLandmarks(result.normalized.pixels, snapshot.landmarks.facing)
         : snapshot.landmarks;
-      updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations, landmarks, generatedClips: generateVariants ? [] : current.generatedClips }));
+      if (!restoring) updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations, landmarks, generatedClips: generateVariants ? [] : current.generatedClips }));
       if (result.variants) {
         await Promise.all([
-          putDraftBlob(snapshot.id, 'working', await encodePixelBuffer(result.edited, 'image/png').then(({ blob }) => blob)),
+          putDraftBlob(snapshot.id, 'working', working!),
           putDraftBlob(snapshot.id, 'normalized', result.variants.normalizedPng.blob),
           putDraftBlob(snapshot.id, 'optimized', result.variants.lightweightWebp.blob),
           putDraftBlob(snapshot.id, 'icon', result.variants.iconPng.blob),
@@ -636,22 +657,26 @@ export function useStudioController(): StudioController {
       }
       return result;
     } catch (cause) {
-      setError(humanError(cause, '画像処理に失敗しました。画質を下げて再試行してください。'));
+      if (isCurrent()) setError(humanError(cause, restoring ? '元画像プレビューを復元できませんでした。保存済み生成物と既存PRは保持しています。' : '画像処理に失敗しました。再試行してください。'));
       throw cause;
     } finally {
       await wakeLock?.release().catch(() => undefined);
-      if (abortRef.current === controller) abortRef.current = null;
-      setBusy(false);
-      setProgress(null);
+      if (abortRef.current === controller) { abortRef.current = null; setBusy(false); setProgress(null); }
+      if (originalWorkRef.current === originalWork) originalWorkRef.current = null;
+      finishOriginal();
     }
   }, [setBusyProgress, updateDraft]);
 
-  const rebuildHitImage = useCallback(async (snapshot: DraftRecord, source: Blob, invalidateMotion: boolean) => {
+  const rebuildHitImage = useCallback(async (snapshot: DraftRecord, source: Blob, invalidateMotion: boolean, restoring = false) => {
+    if (draftRef.current?.id !== snapshot.id) return;
+    if (!restoring) { contentEpochRef.current++; setBundle(null); }
+    const epoch = contentEpochRef.current;
     hitAbortRef.current?.abort();
     const controller = new AbortController();
     hitAbortRef.current = controller;
+    const isCurrent = () => epoch === contentEpochRef.current && draftRef.current?.id === snapshot.id && !controller.signal.aborted;
     setBusy(true);
-    setError(null);
+    if (!restoring) setError(null);
     const wakeLock = await acquireWakeLock();
     const process = (removeBackground: boolean) => new ContentImageProcessor().process(
       {
@@ -671,22 +696,24 @@ export function useStudioController(): StudioController {
       },
       {
         signal: controller.signal,
-        onProgress: (item: ImageProgress) => setBusyProgress(item.progress, `被弾用: ${item.message}`),
+        onProgress: (item: ImageProgress) => { if (isCurrent()) setBusyProgress(item.progress, `被弾用: ${item.message}`); },
       },
     );
     try {
       let result = await process(false);
+      if (!isCurrent()) return;
       if (!result.analysis.hasAlpha && result.analysis.isLikelySolidBackground) {
         setBusyProgress(0.36, '被弾用画像の単色背景を除去しています');
         result = await process(true);
       }
+      if (!isCurrent()) return;
       setHitProcessed(result);
       const hitImageInfo = {
         ...result.info,
         fileName: snapshot.hitImageInfo?.fileName || result.info.fileName,
         status: 'ready' as const,
       };
-      persistDraftState((current) => current.id === snapshot.id
+      if (!restoring) persistDraftState((current) => current.id === snapshot.id
         ? { ...current, hitImageInfo, generatedClips: invalidateMotion ? [] : current.generatedClips }
         : current);
       if (invalidateMotion) {
@@ -696,13 +723,11 @@ export function useStudioController(): StudioController {
       }
       return result;
     } catch (cause) {
-      setError(humanError(cause, '被弾用画像を処理できませんでした。別の画像で再試行してください。'));
+      if (isCurrent()) setError(humanError(cause, restoring ? '被弾画像プレビューを復元できませんでした。保存済み生成物と既存PRは保持しています。' : '被弾用画像を処理できませんでした。再試行してください。'));
       throw cause;
     } finally {
       await wakeLock?.release().catch(() => undefined);
-      if (hitAbortRef.current === controller) hitAbortRef.current = null;
-      setBusy(false);
-      setProgress(null);
+      if (hitAbortRef.current === controller) { hitAbortRef.current = null; setBusy(false); setProgress(null); }
     }
   }, [persistDraftState, setBusyProgress]);
 
@@ -717,10 +742,14 @@ export function useStudioController(): StudioController {
       setError('画像は20MB以下にしてください。大きい画像は端末側で縮小してから再試行できます。');
       return;
     }
+    contentEpochRef.current++; setBundle(null);
+    const epoch=contentEpochRef.current;
     originalBlobRef.current = file;
-    await putDraftBlob(current.id, 'original', file);
+    const storedSource = await putDraftBlob(current.id, 'original', file);
+    if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id)return;
     const next: DraftRecord = {
       ...current,
+      originalSha256: storedSource.sha256,
       imageInfo: {
         fileName: file.name,
         mimeType: file.type as 'image/png' | 'image/jpeg' | 'image/webp',
@@ -752,7 +781,12 @@ export function useStudioController(): StudioController {
   }, [acceptFile]);
 
   const acceptHitFile = useCallback(async (file: File) => {
+    const requestedDraftId = draftRef.current?.id;
+    // A rapid second file selection must not invalidate the normal image still being imported.
+    setBundle(null);
+    await originalWorkRef.current;
     const current = draftRef.current;
+    if (current?.id !== requestedDraftId) return;
     if (!current) return;
     if (!ALLOWED_FILE_TYPES.has(file.type)) {
       setError('被弾用画像はPNG、JPEG、WebPのいずれかを選んでください。');
@@ -762,10 +796,14 @@ export function useStudioController(): StudioController {
       setError('被弾用画像は20MB以下にしてください。');
       return;
     }
+    contentEpochRef.current++; setBundle(null);
+    const epoch=contentEpochRef.current;
     hitOriginalBlobRef.current = file;
-    await putDraftBlob(current.id, 'hit-original', file);
+    const storedSource = await putDraftBlob(current.id, 'hit-original', file);
+    if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id)return;
     const next: DraftRecord = {
       ...current,
+      hitOriginalSha256: storedSource.sha256,
       hitImageInfo: {
         fileName: file.name,
         mimeType: file.type as 'image/png' | 'image/jpeg' | 'image/webp',
@@ -807,7 +845,7 @@ export function useStudioController(): StudioController {
     setMotions({});
     setSprite(null);
     persistDraftState((active) => active.id === current.id
-      ? { ...active, hitImageInfo: null, generatedClips: [] }
+      ? { ...active, hitImageInfo: null, hitOriginalSha256: undefined, generatedClips: [] }
       : active);
     setNotice('被弾用画像を外しました。次回生成は通常画像を使います。');
   }, [persistDraftState]);
@@ -824,6 +862,8 @@ export function useStudioController(): StudioController {
       setError('公開済みキャラクターが見つかりませんでした。');
       return;
     }
+    const epoch = ++contentEpochRef.current;
+    abortRef.current?.abort(); hitAbortRef.current?.abort();
     try {
       await autosaveRef.current.flush();
       const next = createDraft();
@@ -834,6 +874,8 @@ export function useStudioController(): StudioController {
       next.motion = structuredClone(record.spriteMetadata.motionParameters);
       next.lastStep = 'image';
       const saved = await saveDraft(next);
+      if(epoch!==contentEpochRef.current)return;
+      originalBlobRef.current = null;
       hitOriginalBlobRef.current = null;
       setDraft(saved);
       draftRef.current = saved;
@@ -851,6 +893,7 @@ export function useStudioController(): StudioController {
       setSaveState('saved');
       window.history.pushState({ studio: true, step: 'image' }, '', '#image');
       const file = await fetchPublishedImage(record);
+      if(epoch!==contentEpochRef.current || draftRef.current?.id!==saved.id)return;
       await acceptFile(file);
       setNotice('公開済みデータを更新用の下書きへ読み込みました。');
       await refreshLists();
@@ -865,6 +908,8 @@ export function useStudioController(): StudioController {
       setError('既存キャラクターが見つかりませんでした。');
       return;
     }
+    const epoch = ++contentEpochRef.current;
+    abortRef.current?.abort(); hitAbortRef.current?.abort();
     try {
       await autosaveRef.current.flush();
       const next = createDraft();
@@ -884,6 +929,8 @@ export function useStudioController(): StudioController {
       next.landmarks = { ...next.landmarks, facing: record.facesLeft ? 'left' : 'right' };
       next.lastStep = 'image';
       const saved = await saveDraft(next);
+      if(epoch!==contentEpochRef.current)return;
+      originalBlobRef.current = null;
       hitOriginalBlobRef.current = null;
       setDraft(saved);
       draftRef.current = saved;
@@ -900,7 +947,9 @@ export function useStudioController(): StudioController {
       setSavedAt(saved.updatedAt);
       setSaveState('saved');
       window.history.pushState({ studio: true, step: 'image' }, '', '#image');
-      await acceptFile(await fetchLegacyImage(record));
+      const file=await fetchLegacyImage(record);
+      if(epoch!==contentEpochRef.current || draftRef.current?.id!==saved.id)return;
+      await acceptFile(file);
       setNotice('既存の能力・技・静止画像は変更せず、5モーションだけを追加する下書きを作りました。');
       await refreshLists();
     } catch (cause) {
@@ -1041,6 +1090,8 @@ export function useStudioController(): StudioController {
       setError('被弾用画像を復旧できていません。画像ステップで選び直すか、被弾用画像を外してください。');
       return;
     }
+    contentEpochRef.current++;setBundle(null);
+    const epoch=contentEpochRef.current;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1068,8 +1119,9 @@ export function useStudioController(): StudioController {
         },
       }, {
         signal: controller.signal,
-        onProgress: (item) => setBusyProgress(item.progress, item.message),
+        onProgress: (item) => { if(epoch===contentEpochRef.current && !controller.signal.aborted)setBusyProgress(item.progress, item.message); },
       });
+      if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id || controller.signal.aborted)return;
       const active = result['move-forward'];
       setMotions(result);
       setSelectedClip('move-forward');
@@ -1082,6 +1134,7 @@ export function useStudioController(): StudioController {
           setAppMeta(`${current.id}:motion:${clipId}:metadata`, result[clipId].metadata),
         ]),
       ]);
+      if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id || controller.signal.aborted)return;
       persistDraftState((draftItem) => draftItem.id === current.id
         ? {
           ...draftItem,
@@ -1090,19 +1143,19 @@ export function useStudioController(): StudioController {
           preview: { ...draftItem.preview, playing: true },
         }
         : draftItem);
+      // Preserve every generated blob before reporting publication limits.
+      assertPublishSize(MOTION_CLIP_IDS.map(clipId => ({ path: clipId, byteLength: result[clipId].spriteSheetPng.blob.size })), repositoryStatus.publishLimits);
       const usedWorker = MOTION_CLIP_IDS.every((clipId) => result[clipId].usedWorker);
       setNotice(usedWorker
         ? '前進・後退・単発砲撃・被弾・着地の5種類を高画質で生成しました。'
         : 'Worker未対応のため、端末を固めない軽量画質で5種類を生成しました。');
     } catch (cause) {
-      setError(humanError(cause, '5種類のモーションを生成できませんでした。'));
+      if(epoch===contentEpochRef.current && !controller.signal.aborted)setError(humanError(cause, '5種類のモーションを生成できませんでした。'));
     } finally {
       await wakeLock?.release().catch(() => undefined);
-      if (abortRef.current === controller) abortRef.current = null;
-      setBusy(false);
-      setProgress(null);
+      if (abortRef.current === controller) { abortRef.current = null; setBusy(false); setProgress(null); }
     }
-  }, [hitProcessed, persistDraftState, processed, setBusyProgress]);
+  }, [hitProcessed, persistDraftState, processed, repositoryStatus.publishLimits, setBusyProgress]);
 
   const downloadMotionZip = useCallback(async () => {
     const current = draftRef.current;
@@ -1147,6 +1200,9 @@ export function useStudioController(): StudioController {
   const validateAndBuild = useCallback(async (): Promise<ValidationIssue[]> => {
     const current = draftRef.current;
     if (!current) return [];
+    const inputKey = publicationInputKey(current);
+    const epoch = contentEpochRef.current;
+    if (bundleRef.current?.inputKey === inputKey) return bundleRef.current.issues;
     let activeMotions = motions;
     if (!MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) {
       activeMotions = await restoreMotionBatch(current.id);
@@ -1208,6 +1264,9 @@ export function useStudioController(): StudioController {
         currentCharacter: current.sourceIdentity ?? undefined,
         legacyTargetId: current.legacyTargetId ?? undefined,
       });
+      if (epoch !== contentEpochRef.current || draftRef.current?.id !== current.id || publicationInputKey(draftRef.current) !== inputKey) throw new Error('編集中に内容が変わりました。現在の内容で再検証してください。');
+      nextBundle.inputKey = inputKey;
+      assertPublishSize(nextBundle.files, repositoryStatus.publishLimits);
       setBundle(nextBundle);
       return [...issues, ...nextBundle.issues];
     } catch (cause) {
@@ -1216,7 +1275,7 @@ export function useStudioController(): StudioController {
       persistDraftState((item) => ({ ...item, validation: next }));
       return next;
     }
-  }, [motions, persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, sprite]);
+  }, [motions, persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, repositoryStatus.publishLimits, sprite]);
 
   const downloadZip = useCallback(async () => {
     let active = bundleRef.current;
@@ -1239,6 +1298,8 @@ export function useStudioController(): StudioController {
   }, []);
 
   const prepareChange = useCallback(async () => {
+    if (publicationRef.current) return;
+    publicationRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -1246,24 +1307,63 @@ export function useStudioController(): StudioController {
       if (issues.some(({ severity }) => severity === 'error')) throw new Error('検証エラーを修正してから公開準備を実行してください。');
       const active = bundleRef.current;
       if (!active) throw new Error('生成物を準備できませんでした。もう一度検証してください。');
+      const sourceDraft = draftRef.current;
+      await autosaveRef.current.flush();
+      const storedDraft = sourceDraft ? await getDraft(sourceDraft.id) : null;
+      if (!storedDraft || active.inputKey !== publicationInputKey(storedDraft) || !draftRef.current || active.inputKey !== publicationInputKey(draftRef.current) || bundleRef.current !== active) throw new Error('公開する下書きの保存・内容照合を完了できません。下書きと生成物を保持して停止しました。');
+      const now = new Date().toISOString();
+      const recovery: OutboxRecord = { id: publicationOutboxId(active), draftId: draftRef.current!.id, bundle: active, actor: repositoryStatus.user, createdAt: now, updatedAt: now, attempts: 0, lastError: null };
+      await putOutbox(recovery);
       const next = await gatewayRef.current.prepare(active, draftRef.current?.mockScenario);
+      if (repositoryStatus.mode === 'server') active.recoveryBranch = next.branch;
+      await putOutbox({ ...recovery, bundle: active, prepared: next, result: next.recovered });
+      await refreshLists();
+      if (bundleRef.current !== active || !draftRef.current || active.inputKey !== publicationInputKey(draftRef.current)) throw new Error('準備中に内容が変わりました。現在の内容で再検証してください。');
       setPrepared(next);
-      setNotice(next.testStatus === 'success' ? 'モックコミットとテストが完了しました。' : 'テスト失敗を再現しました。');
+      setPullRequest(next.recovered ?? null);
+      setNotice(repositoryStatus.mode === 'server' ? 'GitHubの基準snapshotで差分を再構成しました。内容を確認してください。CIはPR作成後に実行します。' : next.testStatus === 'success' ? 'モックコミットとテストが完了しました。' : 'テスト失敗を再現しました。');
     } catch (cause) {
       const message = humanError(cause, '公開準備に失敗しました。');
       setError(message);
       const current = draftRef.current;
       const active = bundleRef.current;
-      if (current && active && (!navigator.onLine || current.mockScenario === 'network-offline')) {
-        await putOutbox({ id: crypto.randomUUID(), draftId: current.id, bundle: active, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attempts: 0, lastError: message });
+      if (current && active) {
+        await putOutbox({ id: publicationOutboxId(active), draftId: current.id, bundle: active, actor: repositoryStatus.user, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attempts: 0, lastError: message });
         await refreshLists();
       }
     } finally {
+      publicationRef.current = false;
       setBusy(false);
     }
-  }, [refreshLists, validateAndBuild]);
+  }, [refreshLists, validateAndBuild, repositoryStatus]);
+
+  const reprepareLatest = useCallback(async () => {
+    if(publicationRef.current) return;
+    const active=bundleRef.current;
+    const current=draftRef.current;
+    if(!active || !current || !prepared?.operationDigest || !pullRequest || pullRequest.merged) return;
+    if(active.inputKey!==publicationInputKey(current)){setBundle(null);setError('内容が変わっています。現在の内容で再準備してください。');return;}
+    publicationRef.current=true;setBusy(true);setError(null);
+    try {
+      const status=await gatewayRef.current.getStatus();
+      if(!status.baseSha)throw new Error('最新masterを確認できません。');
+      if(status.baseSha===prepared.commitSha){setNotice('この操作は最新masterを基準にしています。同じ操作の確認・再試行を利用できます。');return;}
+      const nextBundle:ArtifactBundle={...active,recoveryBranch:undefined,revalidation:{branch:prepared.branch,headSha:pullRequest.commitSha,baseSha:prepared.commitSha,digest:prepared.operationDigest,targetBaseSha:status.baseSha}};
+      const now=new Date().toISOString();
+      const recovery:OutboxRecord={id:publicationOutboxId(nextBundle),draftId:current.id,bundle:nextBundle,actor:status.user,createdAt:now,updatedAt:now,attempts:0,lastError:null};
+      await putOutbox(recovery);
+      const next=await gatewayRef.current.prepare(nextBundle);
+      nextBundle.recoveryBranch=next.branch;
+      await putOutbox({...recovery,bundle:nextBundle,prepared:next,result:next.recovered});
+      if(bundleRef.current!==active || !draftRef.current || active.inputKey!==publicationInputKey(draftRef.current))throw new Error('再検証中に内容が変わりました。保存した操作は保持しています。');
+      setBundle(nextBundle);setPrepared(next);setPullRequest(next.recovered??null);
+      setNotice('元のPRを保持し、同じ画像から最新masterの差分を作りました。新しい差分承認とCIが必要です。');
+    } catch(cause){setError(humanError(cause,'最新masterでの再検証を停止しました。元PRと生成物は保持しています。'));}
+    finally{publicationRef.current=false;setBusy(false);await refreshLists();}
+  },[prepared,pullRequest,refreshLists,setBundle]);
 
   const createPullRequest = useCallback(async () => {
+    if (publicationRef.current) return;
     const current = draftRef.current;
     if (!current || !bundle || !prepared) {
       setError('先に変更内容を準備してください。');
@@ -1273,8 +1373,10 @@ export function useStudioController(): StudioController {
       setError('自動テストが失敗しています。PR作成前に修正してください。');
       return;
     }
+    if (!bundle.inputKey || bundle.inputKey !== publicationInputKey(current)) { setBundle(null); setError('画面の内容が公開差分と一致しません。再準備してください。'); return; }
     const mergeRequested = current.publishMode === 'merge-after-ci';
     if (mergeRequested && !window.confirm('PRを作成し、CIがすべて成功した場合だけmasterへマージしますか？失敗や競合があれば自動で中断します。')) return;
+    publicationRef.current = true;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1283,8 +1385,13 @@ export function useStudioController(): StudioController {
     try {
       setBusyProgress(0.2, 'ブランチへpushしてPRを作成しています');
       let result = await gatewayRef.current.createPullRequest(prepared, bundle, current.mockScenario);
+      const now = new Date().toISOString();
+      const recovery = { id: publicationOutboxId(bundle), draftId: current.id, bundle, actor: repositoryStatus.user, prepared, result, createdAt: now, updatedAt: now, attempts: 0, lastError: null };
+      await putOutbox(recovery);
+      await refreshLists();
+      if (bundleRef.current !== bundle || !draftRef.current || bundle.inputKey !== publicationInputKey(draftRef.current)) throw new Error('送信中に内容が変わりました。作成されたPRは復旧一覧に保持しています。');
       setPullRequest(result);
-      if (mergeRequested) {
+      if (mergeRequested && !result.merged) {
         let checks: RepositoryStatus['build'] = result.checks;
         for (let attempt = 0; checks !== 'success'; attempt += 1) {
           if (checks === 'failure') throw new Error('CIが失敗したためPRはマージしていません。PR上で結果を確認してください。');
@@ -1294,8 +1401,10 @@ export function useStudioController(): StudioController {
           checks = await gatewayRef.current.getChecks(result.commitSha);
         }
         setBusyProgress(0.82, 'CI成功を確認しました。競合を再確認してマージします');
+        if (bundleRef.current !== bundle || !draftRef.current || bundle.inputKey !== publicationInputKey(draftRef.current)) throw new Error('CI待機中に内容が変わったためマージを停止しました。');
         result = await gatewayRef.current.mergePullRequest(prepared, { ...result, checks: 'success' }, current.mockScenario);
         setPullRequest(result);
+        await putOutbox({ ...recovery, result });
       }
       setBusyProgress(1, result.merged ? 'マージが完了しました' : 'PRを作成しました');
       await addPublishHistory({
@@ -1313,30 +1422,47 @@ export function useStudioController(): StudioController {
       setError(humanError(cause, 'PRを作成できませんでした。'));
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
+      publicationRef.current = false;
       setBusy(false);
       setProgress(null);
     }
-  }, [bundle, persistDraftState, prepared, refreshLists, setBusyProgress]);
+  }, [bundle, persistDraftState, prepared, refreshLists, setBusyProgress, repositoryStatus]);
 
   const retryOutbox = useCallback(async (id: string) => {
-    const item = outbox.find((candidate) => candidate.id === id);
+    if (publicationRef.current) return;
+    const item = outbox.find(candidate => candidate.id === id);
+    const epoch=contentEpochRef.current;
     if (!item) return;
+    publicationRef.current = true;
     setBusy(true);
+    setError(null);
     try {
+      const status = await gatewayRef.current.getStatus();
+      if (status.mode === 'server' && (!status.connected || (item.actor && item.actor !== status.user))) throw new Error('保存時と同じGitHubアカウントで再ログインしてください。');
+      const stored = await getDraft(item.draftId);
+      if (!stored || !item.bundle.inputKey || item.bundle.inputKey !== publicationInputKey(stored)) throw new Error('保存した下書きと公開操作の対応を確認できません。下書き・生成物・既存PRは保持しています。現在の内容で再準備してください。');
       const next = await gatewayRef.current.prepare(item.bundle, 'success');
-      await deleteOutbox(id);
-      setPrepared(next);
+      if (item.result && next.recovered && item.result.commitSha !== next.recovered.commitSha) throw new Error('保存したPRのheadが変わっています。再開を停止しました。');
+      if (status.mode === 'server') item.bundle.recoveryBranch = next.branch;
+      if (epoch !== contentEpochRef.current) throw new Error('復旧中に別の作業へ移動しました。保存した操作は保持しています。');
+      const opening = openDraft(item.draftId);
+      const openingEpoch = contentEpochRef.current;
+      await opening;
+      if (openingEpoch !== contentEpochRef.current || draftRef.current?.id !== item.draftId || item.bundle.inputKey !== publicationInputKey(draftRef.current)) throw new Error('復旧中に下書きが変わりました。保存した操作は保持しています。');
       setBundle(item.bundle);
-      setNotice('未送信の変更を再送しました。PR作成へ進めます。');
+      setPrepared(next);
+      setPullRequest(next.recovered ?? item.result ?? null);
+      goToStep('publish');
+      await putOutbox({ ...item, prepared: next, result: next.recovered ?? item.result, attempts: item.attempts + 1, lastError: null });
+      setNotice(next.recovered ? '既存PRを確認しました。最新の差分・CI・配備状況を確認できます。' : '生成物を復旧しました。差分を確認して同じ公開操作を続けられます。');
       await refreshLists();
     } catch (cause) {
-      await putOutbox({ ...item, attempts: item.attempts + 1, lastError: humanError(cause, '再送に失敗しました。'), updatedAt: new Date().toISOString() });
-      setError(humanError(cause, '再送に失敗しました。'));
+      const message = humanError(cause, '公開操作の復旧に失敗しました。');
+      await putOutbox({ ...item, attempts: item.attempts + 1, lastError: message });
+      setError(message);
       await refreshLists();
-    } finally {
-      setBusy(false);
-    }
-  }, [outbox, refreshLists]);
+    } finally { publicationRef.current = false; setBusy(false); }
+  }, [outbox, refreshLists, openDraft, goToStep]);
 
   const duplicateExistingDraft = useCallback(async (id: string) => {
     const duplicate = await duplicateDraft(id);
@@ -1413,8 +1539,9 @@ export function useStudioController(): StudioController {
     goToStep, nextStep, previousStep, acceptFile, onFileInput, onHitFileInput, removeHitImage, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
     addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, setMotionIntensity, generateMotion,
     downloadMotionZip, downloadMotionMetadata, downloadSpriteSheet, validateAndBuild, downloadZip, downloadJson,
-    prepareChange, createPullRequest, retryOutbox, refreshRepositoryStatus, login, logout,
+    prepareChange, reprepareLatest, createPullRequest, retryOutbox, refreshRepositoryStatus, refreshPublishedContent, login, logout,
     cancelProcessing: () => {
+      if (publicationRef.current) setNotice('待機を終了します。送信済みのPR作成・マージは取り消されません。「既存PRを確認・再開」で結果を確認してください。');
       abortRef.current?.abort();
       hitAbortRef.current?.abort();
     },
@@ -1422,8 +1549,8 @@ export function useStudioController(): StudioController {
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
     capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editLegacyCharacter, editPublishedCharacter,
     detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
-    nextStep, notice, onDrop, onFileInput, onHitFileInput, openDraft, outbox, prepareChange, prepared, previousStep, processed, hitProcessed, progress, removeHitImage,
-    pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, repositoryStatus, retryOutbox, saveState, savedAt,
+    nextStep, notice, onDrop, onFileInput, onHitFileInput, openDraft, outbox, prepareChange, reprepareLatest, prepared, previousStep, processed, hitProcessed, progress, removeHitImage,
+    pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, refreshPublishedContent, repositoryStatus, retryOutbox, saveState, savedAt,
     motions, publishedCharacters, publishedWarning, selectedClip, selectMotionClip, setMotionIntensity, sprite, step, stepIndex, storage, undoImageOperation, updateDraft, validateAndBuild, view, login, logout,
   ]);
 

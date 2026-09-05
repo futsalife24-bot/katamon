@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { ArtifactBundle, DraftRecord, PullRequestResult } from '../domain/types';
+import type { ArtifactBundle, DraftRecord, PullRequestResult, PreparedChange } from '../domain/types';
 import type { CharacterAssetVersionRecord, CharacterIdentityRecord, CharacterRevisionRecord } from '../domain/character-db';
 import { createInitialCharacterRecords } from '../domain/character-db';
 import type { AiProposal } from '../domain/ai-proposal';
@@ -34,6 +34,9 @@ interface StoredBlob {
 }
 
 export interface OutboxRecord {
+  actor?: string | null;
+  prepared?: PreparedChange;
+  result?: PullRequestResult;
   id: string;
   draftId: string;
   bundle: ArtifactBundle;

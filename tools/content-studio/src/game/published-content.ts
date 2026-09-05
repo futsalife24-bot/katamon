@@ -1,9 +1,10 @@
+import { readBoundedJson } from '../domain/bounded-json';
 import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '../generation';
 import { LEGACY_CHARACTERS, type LegacyCharacter } from '../domain/legacy-characters';
 
 interface ContentManifest {
   schemaVersion: 1;
-  characters: Array<{ contentFile: string }>;
+  characters: Array<{ contentFile: string; id: string; slug: string; assetDirectory: string }>;
 }
 
 function repositoryRootUrl(): URL {
@@ -24,24 +25,31 @@ export function publishedAssetUrl(path: string): URL {
   return new URL(path, repositoryRootUrl());
 }
 
-export async function loadPublishedContent(fetchImpl: typeof fetch = fetch): Promise<{ records: CanonicalCharacterRecord[]; warning: string | null }> {
+export async function loadPublishedContent(fetchImpl: typeof fetch = fetch): Promise<{ records: CanonicalCharacterRecord[]; warning: string | null; state: 'complete' | 'partial' | 'unavailable' }> {
+  const records: CanonicalCharacterRecord[] = [];
   try {
     const manifestResponse = await fetchImpl(new URL('generated/content-studio-manifest.json', repositoryRootUrl()), { cache: 'no-store' });
-    if (manifestResponse.status === 404) return { records: [], warning: null };
     if (!manifestResponse.ok) throw new Error('公開カタログを読み込めませんでした。');
-    const manifest = await manifestResponse.json() as ContentManifest;
-    if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.characters)) throw new Error('公開カタログの形式が正しくありません。');
-    const records: CanonicalCharacterRecord[] = [];
+    const manifest = await readBoundedJson(manifestResponse, 6 * 1024 * 1024) as ContentManifest;
+    if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.characters) || manifest.characters.length > 500) throw new Error('公開カタログの形式が正しくありません。');
+    const seen = new Set<string>();
+    let incomplete = false;
     for (const item of manifest.characters) {
-      if (!item || typeof item.contentFile !== 'string' || !safeContentPath(item.contentFile)) continue;
+      try {
+      if (!item || typeof item.contentFile !== 'string' || !safeContentPath(item.contentFile) || seen.has(item.contentFile)) throw new Error('公開一覧の参照が不正です。');
+      seen.add(item.contentFile);
       const response = await fetchImpl(new URL(item.contentFile, repositoryRootUrl()), { cache: 'no-store' });
       if (!response.ok) throw new Error('公開済みキャラクターデータの一部を読み込めませんでした。');
-      const parsed = canonicalCharacterRecordSchema.safeParse(await response.json());
-      if (parsed.success) records.push(parsed.data as CanonicalCharacterRecord);
+      const parsed = canonicalCharacterRecordSchema.safeParse(await readBoundedJson(response, 6 * 1024 * 1024));
+      if (!parsed.success || item.contentFile !== `content/characters/${parsed.data.character.slug}.json`) throw new Error('公開データの形式が不正です。');
+      if (item.id !== parsed.data.character.id || item.slug !== parsed.data.character.slug || item.assetDirectory !== parsed.data.assets.directory) throw new Error('公開一覧と正規データの参照が一致しません。');
+      if (records.some(r => r.character.id === parsed.data.character.id)) throw new Error('公開IDが重複しています。');
+      records.push(parsed.data as CanonicalCharacterRecord);
+      } catch { incomplete = true; }
     }
-    return { records, warning: null };
+    return { records, warning: incomplete ? '公開一覧の一部を取得できませんでした。再試行してください。編集とバックアップは続けられます。' : null, state: incomplete ? 'partial' : 'complete' };
   } catch (error) {
-    return { records: [], warning: error instanceof Error ? error.message : '公開カタログを読み込めませんでした。' };
+    return { records, state: 'unavailable', warning: error instanceof Error ? error.message : '公開カタログを読み込めませんでした。' };
   }
 }
 

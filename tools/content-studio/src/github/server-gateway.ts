@@ -1,3 +1,4 @@
+import { assertPublishSize, assertRequestSize, PUBLISH_LIMITS, type PublishLimits } from '../domain/publish-limits.js';
 import type {
   ArtifactBundle,
   ArtifactFile,
@@ -15,11 +16,16 @@ interface SessionResponse {
 }
 
 interface PrepareResponse {
+  operationDigest: string;
+  latestBaseSha: string;
+  predecessor?: {number:number;url:string};
+  recovered?: PullRequestResult;
   id: string;
   branch: string;
   baseSha: string;
   diff: string;
   changedFiles: Array<{
+    text?: string;
     path: string;
     mimeType: string;
     byteLength: number;
@@ -36,6 +42,8 @@ interface SerializedFile {
 }
 
 interface SerializedBundle {
+  revalidation?: ArtifactBundle['revalidation'];
+  recoveryBranch?: string;
   bundleId: string;
   generatorVersion: string;
   expectedBaseSha?: string;
@@ -110,13 +118,15 @@ async function serializeFile(file: ArtifactFile): Promise<SerializedFile> {
   };
 }
 
-async function serializeBundle(bundle: ArtifactBundle): Promise<SerializedBundle> {
+export async function serializeBundle(bundle: ArtifactBundle): Promise<SerializedBundle> {
   const files: SerializedFile[] = [];
-  for (const file of bundle.files) files.push(await serializeFile(file));
+  assertPublishSize(bundle.files);
+  for (const file of bundle.files.filter(f => !f.path.startsWith('generated/content-studio-'))) files.push(await serializeFile(file));
   return {
     bundleId: bundle.bundleId,
     generatorVersion: bundle.generatorVersion,
-    expectedBaseSha: bundle.expectedBaseSha,
+    recoveryBranch: bundle.recoveryBranch,
+    revalidation: bundle.revalidation,
     character: {
       id: bundle.character.id,
       slug: bundle.character.slug,
@@ -147,11 +157,12 @@ function normalizeBaseUrl(value: string): string {
 export class ServerRepositoryGateway implements RepositoryGateway {
   private readonly baseUrl: string;
   private csrfToken: string | null = null;
+  private limits: PublishLimits = PUBLISH_LIMITS;
   private session: SessionResponse | null = null;
 
   constructor(
     baseUrl = '',
-    private readonly fetchImpl: FetchLike = fetch,
+    private readonly fetchImpl: FetchLike = (input, init) => fetch(input, init),
   ) {
     this.baseUrl = normalizeBaseUrl(baseUrl);
   }
@@ -192,21 +203,29 @@ export class ServerRepositoryGateway implements RepositoryGateway {
         message: 'GitHubへログインしてください。',
       };
     }
-    return this.request<RepositoryStatus>('/api/github/status');
+    const status = await this.request<RepositoryStatus>('/api/github/status');
+    if (status.publishLimits) this.limits = status.publishLimits;
+    return status;
   }
 
   async prepare(bundle: ArtifactBundle): Promise<PreparedChange> {
     await this.ensureAuthenticated();
+    await this.getStatus();
+    assertPublishSize(bundle.files, this.limits);
     const response = await this.request<PrepareResponse>('/api/github/prepare', {
       method: 'POST',
       body: JSON.stringify(await serializeBundle(bundle)),
     });
-    const changedPaths = new Set(response.changedFiles.map((file) => file.path));
+
     return {
       id: response.id,
+      operationDigest: response.operationDigest,
+      latestBaseSha: response.latestBaseSha,
+      predecessor: response.predecessor,
       branch: response.branch,
       commitSha: response.baseSha,
-      files: bundle.files.filter((file) => changedPaths.has(file.path)),
+      recovered: response.recovered,
+      files: response.changedFiles.map(file => ({ ...file, kind: 'metadata' as const })),
       testStatus: 'success',
       diff: response.diff,
     };
@@ -284,6 +303,7 @@ export class ServerRepositoryGateway implements RepositoryGateway {
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    if (typeof init.body === 'string') assertRequestSize(init.body, this.limits.maxRequestBytes);
     const headers = new Headers(init.headers);
     headers.set('accept', 'application/json');
     if (init.body !== undefined) headers.set('content-type', 'application/json');
@@ -312,6 +332,7 @@ export class ServerRepositoryGateway implements RepositoryGateway {
       throw new RepositoryGatewayError('サーバー応答を読み込めませんでした。', 'response_invalid', response.status);
     }
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) { this.session = null; this.csrfToken = null; }
       const error = typeof body === 'object' && body !== null
         ? (body as { error?: { code?: unknown; message?: unknown; requestId?: unknown } }).error
         : undefined;

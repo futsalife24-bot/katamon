@@ -67,11 +67,22 @@ export function validatedFile(path: string, mimeType: string, bytes: Buffer): Va
 
 export function validatedBundle(): ValidatedBundle {
   const bytes = canonicalRecordBytes();
+  const record = JSON.parse(bytes.toString());
+  const png = Buffer.alloc(33); Buffer.from([137,80,78,71,13,10,26,10]).copy(png); png.writeUInt32BE(256,16); png.writeUInt32BE(256,20);
+  const webp = Buffer.alloc(30); webp.write('RIFF'); webp.writeUInt32LE(22,4); webp.write('WEBP',8); webp.write('VP8X',12); webp.writeUIntLE(255,24,3); webp.writeUIntLE(255,27,3);
+  const files = [validatedFile('content/characters/sample-unit.json', 'application/json', bytes)];
+  for (const [key,path] of Object.entries(record.assets)) {
+    if (key === 'directory') continue;
+    const name = path as string;
+    const image = Buffer.from(name.endsWith('.webp') ? webp : png);
+    if (name.endsWith('/idle.png')) image.writeUInt32BE(2048,16);
+    files.push(validatedFile(name, name.endsWith('.json') ? 'application/json' : name.endsWith('.webp') ? 'image/webp' : 'image/png', name.endsWith('.json') ? Buffer.from(JSON.stringify(record.spriteMetadata)) : image));
+  }
   return {
     bundleId: 'a'.repeat(64),
     generatorVersion: '0.1.0',
     character: { id: 'sample-unit', slug: 'sample-unit', displayName: 'サンプルキャラクター' },
-    files: [validatedFile('content/characters/sample-unit.json', 'application/json', bytes)],
+    files,
     prBody: '## Content Studio\n\n- 自動確認: 成功\n',
     digest: 'b'.repeat(64),
   };

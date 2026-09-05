@@ -11,7 +11,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test && playwright test --config tests/e2e/server-safety.config.ts && playwright test --config tests/e2e/local-backend.config.ts",
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json && esbuild ./server/index.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=server-dist/index.js",
     "server:start": "node server-dist/index.js",

@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
+import { LEGACY_CHARACTERS } from './src/domain/legacy-characters';
 import react from '@vitejs/plugin-react';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const legacyAssets = new Set(['dirano', 'eyebolt', 'gorocca', 'fenice', 'barugerukan', 'obelisk', 'bloom-tan', 'sumoeru', 'dread-arrow', 'mocchario', 'chrome-gear', 'rubidevi', 'astauros', 'paladier', 'nyan-tank', 'yomigama', 'cool-kai']);
+const legacyAssets = new Set<string>(LEGACY_CHARACTERS.map(c => c.asset));
 
 function repositoryAssetMiddleware() {
   return async (request: { url?: string }, response: { statusCode: number; setHeader(name: string, value: string): void; end(body?: Uint8Array): void }, next: () => void) => {
