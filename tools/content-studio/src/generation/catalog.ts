@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { characterFormSchema, spriteMetadataSchema } from '../domain/schemas.js';
-import { getLegacyRepositoryIdentity, type LegacyCharacterId } from '../domain/legacy-characters.js';
+import { LEGACY_CHARACTERS, LEGACY_CHARACTER_IDS, getLegacyRepositoryIdentity, type LegacyCharacterId } from '../domain/legacy-characters.js';
 import { convertSkillTemplate, NORMAL_SKILL_DEFINITION, type DeclarativeSkillDefinition } from '../domain/skills.js';
 import { GENERATOR_VERSION, type CharacterForm, type CharacterUnlock, type MotionClipId, type SpriteMetadata } from '../domain/types.js';
 import { isAllowedGeneratedPath } from '../domain/validation.js';
@@ -57,11 +57,15 @@ export const canonicalCharacterRecordSchema = z
     assets: generatedAssetPathsSchema,
     spriteMetadata: spriteMetadataSchema,
     motionMetadata: motionMetadataMapSchema.optional(),
-    legacyTargetId: z.enum(['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai']).optional(),
+    legacyTargetId: z.enum(LEGACY_CHARACTER_IDS).optional(),
     generatorVersion: z.string().min(1).max(32),
   })
   .strict()
   .superRefine((record, context) => {
+    const reserved = new Set(LEGACY_CHARACTERS.flatMap(c => [c.id.toLowerCase(), c.slug]));
+    if (!record.legacyTargetId && (reserved.has(record.character.id.toLowerCase()) || reserved.has(record.character.slug))) {
+      context.addIssue({ code: 'custom', path: ['character', 'id'], message: '既存キャラクターのID/slugはモーション追加からのみ使用できます' });
+    }
     const expectedDirectoryPrefix = `assets/content-studio/${record.character.slug}/`;
     if (!record.assets.directory.startsWith(expectedDirectoryPrefix)) {
       context.addIssue({ code: 'custom', path: ['assets', 'directory'], message: 'asset directoryとslugが一致しません' });
@@ -101,6 +105,9 @@ export const canonicalCharacterRecordSchema = z
       if (!record.assets.motionSpriteSheets || !record.assets.motionMetadataJson || !record.motionMetadata) {
         context.addIssue({ code: 'custom', path: ['motionMetadata'], message: '5種類のモーション参照が揃っていません' });
       } else {
+        if (stableStringify(record.spriteMetadata) !== stableStringify(record.motionMetadata['move-forward'])) {
+          context.addIssue({ code: 'custom', path: ['spriteMetadata'], message: '共通スプライト情報と前進モーション情報が一致しません' });
+        }
         for (const clipId of clipIds) {
           if (record.assets.motionSpriteSheets[clipId] !== `${record.assets.directory}/${clipId}.png`) {
             context.addIssue({ code: 'custom', path: ['assets', 'motionSpriteSheets', clipId], message: 'モーション画像参照が一致しません' });

@@ -13,6 +13,7 @@ import type {
   SpecialTemplate,
 } from './domain/types';
 import { WORKFLOW_STEPS } from './domain/types';
+import { PUBLISH_LIMITS } from './domain/publish-limits';
 import { LEGACY_CHARACTERS } from './domain/legacy-characters';
 import { ACTION_LABELS, getActionPreset, listActionPresets, MOTION_CLIP_IDS, MOTION_CLIP_LABELS, MOTION_INTENSITY_LABELS } from './motion';
 import type { PixelBuffer } from './image';
@@ -284,7 +285,7 @@ function Dashboard({ studio }: { studio: StudioController }) {
       </button>
 
       <section className="card legacy-motion-card" data-testid="legacy-motion-card">
-        <div className="section-heading"><div><h2>既存キャラへモーション追加</h2><p>能力・技・元の静止画像は変更せず、1体ずつ5動作だけをPRで追加します。</p></div><Status value={`${migratedLegacyCount} / ${LEGACY_CHARACTERS.length}`} good={migratedLegacyCount > 0} /></div>
+        <div className="section-heading"><div><h2>既存キャラへモーション追加</h2><p>能力・技・元の静止画像は変更せず、1体ずつ5動作だけをPRで追加します。</p></div><Status value={studio.publishedWarning ? `確認中 / ${LEGACY_CHARACTERS.length}` : `${migratedLegacyCount} / ${LEGACY_CHARACTERS.length}`} good={!studio.publishedWarning && migratedLegacyCount > 0} /></div>
         <Field label="対象キャラクター">
           <select value={legacyId} onChange={(event) => setLegacyId(event.target.value as typeof legacyId)} data-testid="legacy-character-select">
             {LEGACY_CHARACTERS.map((character) => <option key={character.id} value={character.id}>{character.displayName}</option>)}
@@ -294,6 +295,8 @@ function Dashboard({ studio }: { studio: StudioController }) {
         <p className="support-note">未対応キャラは従来の静止表示を継続します。一括上書きは行いません。</p>
       </section>
 
+      {studio.publishedWarning && <section className="warning-card" role="alert" data-testid="published-warning"><p>{studio.publishedWarning}</p><p>件数は未確定です。公開時はGitHubの正規データを照合します。</p><button type="button" className="secondary" onClick={() => void studio.refreshPublishedContent()}>公開一覧を再試行</button></section>}
+      {studio.outbox.length > 0 && <section className="card" data-testid="publish-recovery"><h2>公開操作の復旧</h2><p>再読込・通信切断・再ログイン後も、保存した生成物から確認できます。</p>{studio.outbox.map(item => <article className="recovery-item" key={item.id}><b>{item.bundle.character.displayName}</b><p>{item.result?.merged ? 'マージ済み・配備状況を確認' : item.result ? 'PR作成済み・CIと復旧状況を確認' : '公開準備・送信結果を確認'}</p>{item.result && <p><a href={item.result.url} target="_blank" rel="noreferrer">保存済みPR #{item.result.number}を開く</a></p>}{item.lastError && <p>{item.lastError}</p>}<button className="secondary full-width" type="button" disabled={studio.busy} onClick={() => void studio.retryOutbox(item.id)}>既存PRを確認・再開</button></article>)}</section>}
       <CharacterDatabaseCard />
       <AiProposalCard studio={studio} />
 
@@ -526,6 +529,7 @@ function MotionStep({ studio }: { studio: StudioController }) {
   return (
     <section className="step-panel motion-batch-step" data-testid="step-motion">
       <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>各動作を「控えめ・標準・激しめ」の3段階だけで調整できます。</p></div></div>
+      <p className="support-note">公開上限は各ファイル{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFileBytes / 1024 ** 2) + ' MiB'}、全ファイル合計{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxTotalFileBytes / 1024 ** 2) + ' MiB'}です。超過時も生成結果は保存します。出力サイズを調整し、再生成できます。</p>
       <div className="motion-batch-list" aria-label="生成するモーション">
         {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
           <div className="motion-card-heading"><span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}後方へ反転着地・低くバウンド・遅れて復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong></div>
@@ -766,11 +770,13 @@ function FileInspector({ file }: { file: ArtifactFile | null }) {
 
 function PublishStep({ studio }: { studio: StudioController }) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [reviewed, setReviewed] = useState(false);
+  useEffect(() => setReviewed(false), [studio.prepared?.id]);
   const draft = studio.draft!;
   const selected = studio.bundle?.files.find(({ path }) => path === selectedPath) ?? null;
   return (
     <section className="step-panel" data-testid="step-publish">
-      <div className="step-intro"><span>5</span><div><h2>GitHubへ反映</h2><p>専用ブランチへ1コミットでpushし、PRを作成します。mainへ直接pushしません。</p></div></div>
+      <div className="step-intro"><span>5</span><div><h2>GitHubへ反映</h2><p>専用ブランチへ1コミットでpushし、PRを作成します。masterへ直接pushしません。</p></div></div>
       <article className="connection-card card">
         <div className="section-heading"><div><h3>{studio.repositoryStatus.mode === 'mock' ? 'モック接続' : 'GitHub App接続'}</h3><p>{studio.repositoryStatus.message}</p></div><Status value={studio.repositoryStatus.connected ? '接続済み' : '未接続'} good={studio.repositoryStatus.connected} /></div>
         {studio.repositoryStatus.mode === 'server' && <div className="button-row"><button type="button" className="primary" onClick={studio.login}>GitHubへログイン</button><button type="button" className="secondary" onClick={() => void studio.logout()}>ログアウト</button></div>}
@@ -784,14 +790,18 @@ function PublishStep({ studio }: { studio: StudioController }) {
         <button type="button" role="radio" aria-checked={draft.publishMode === 'merge-after-ci'} className={draft.publishMode === 'merge-after-ci' ? 'active' : ''} onClick={() => studio.updateDraft((current) => ({ ...current, publishMode: 'merge-after-ci' }))} data-testid="publish-mode-merge"><b>CI成功後にマージ</b><small>実行直前にもう一度確認。失敗・競合時は中断</small></button>
       </div>
       <div className="button-grid"><button type="button" className="secondary" onClick={() => void studio.downloadMotionZip()} disabled={draft.generatedClips.length !== 5}>モーションZIP</button><button type="button" className="secondary" onClick={() => void studio.downloadJson()}>下書きJSON</button></div>
-      <h3>生成予定ファイル</h3>
+      <h3>生成予定ファイル</h3><p className="support-note">公開上限: 1ファイル{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFileBytes / 1024 ** 2) + ' MiB'}・合計{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxTotalFileBytes / 1024 ** 2) + ' MiB'}・{(studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFiles}件・送信時{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxRequestBytes / 1024 ** 2) + ' MiB'}。ZIPの全体カタログは参考データです。公開差分はGitHubのsnapshotで再構成します。</p>
       {!studio.bundle ? <p className="support-note">先に「検証」で生成ファイルを作成してください。</p> : <div className="file-list">{studio.bundle.files.map((file) => <button type="button" className={selectedPath === file.path ? 'active' : ''} key={file.path} onClick={() => setSelectedPath(file.path)}><span>{file.path}</span><small>{formatBytes(file.byteLength)}</small></button>)}</div>}
       <FileInspector file={selected} />
       {studio.bundle && <details className="controls-card"><summary>PR本文プレビュー</summary><pre>{studio.bundle.prBody}</pre></details>}
-      <button type="button" className="primary full-width" disabled={studio.busy || draft.generatedClips.length !== 5 || !draft.character.id || !draft.character.displayName} onClick={() => void studio.prepareChange()} data-testid="prepare-change">検証・ファイル生成・テスト</button>
-      {studio.prepared && <div className="result-card"><dl className="facts facts--compact"><div><dt>ブランチ</dt><dd>{studio.prepared.branch}</dd></div><div><dt>コミット</dt><dd>{studio.prepared.commitSha.slice(0, 12)}</dd></div><div><dt>自動テスト</dt><dd>{studio.prepared.testStatus}</dd></div><div><dt>変更</dt><dd>{studio.prepared.files.length}件</dd></div></dl><details><summary>差分を表示</summary><pre>{studio.prepared.diff}</pre></details></div>}
-      <button type="button" className="primary full-width" disabled={!studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy} onClick={() => void studio.createPullRequest()} data-testid="create-pr">{draft.publishMode === 'merge-after-ci' ? 'PR作成 → CI成功後にマージ' : 'PRを作成'}</button>
-      {studio.pullRequest && <div className="success-card" data-testid="publish-complete"><b>{studio.pullRequest.merged ? 'PRを作成してマージしました' : 'PRを作成しました'}</b><span>#{studio.pullRequest.number}・CI {studio.pullRequest.checks}・{studio.pullRequest.deployment}</span><a href={studio.pullRequest.url} target="_blank" rel="noreferrer">PRを開く</a></div>}
+      <button type="button" className="primary full-width" disabled={studio.busy || draft.generatedClips.length !== 5 || !draft.character.id || !draft.character.displayName} onClick={() => void studio.prepareChange()} data-testid="prepare-change">{studio.bundle ? '同じ操作の確認・再試行' : '公開準備・差分を確認'}</button>
+      {studio.repositoryStatus.mode === 'server' && studio.prepared && studio.pullRequest && !studio.pullRequest.merged && <button type="button" className="secondary full-width" disabled={studio.busy} onClick={() => void studio.reprepareLatest()} data-testid="reprepare-latest">最新masterで差分を作り直す（元PRを保持）</button>}
+      {studio.prepared?.latestBaseSha && studio.prepared.latestBaseSha !== studio.prepared.commitSha && <p className="warning-card">masterが更新されています。同じ操作の再試行は元PRを確認します。公開を続けるには最新masterで差分を作り直してください。</p>}
+      {studio.prepared?.predecessor && <p className="support-note">後継操作です。<a href={studio.prepared.predecessor.url} target="_blank" rel="noreferrer">元PR #{studio.prepared.predecessor.number}（保持）</a>から引き継ぎ、新しい差分とCIを確認します。</p>}
+      {studio.prepared && <div className="result-card"><dl className="facts facts--compact"><div><dt>ブランチ</dt><dd>{studio.prepared.branch}</dd></div><div><dt>基準SHA</dt><dd>{studio.prepared.commitSha.slice(0, 12)}</dd></div><div><dt>生成物検証</dt><dd>{studio.prepared.testStatus}（CIはPR作成後）</dd></div><div><dt>変更</dt><dd>{studio.prepared.files.length}件</dd></div></dl><details><summary>差分を表示</summary><pre>{studio.prepared.diff}</pre></details></div>}
+      {studio.prepared && <section className="card publish-review"><h3>公開する正確な差分</h3>{studio.prepared.files.map(file => <details key={file.path}><summary>{file.path}・{formatBytes(file.byteLength)}</summary><code>SHA256 {file.sha256}</code>{file.text && <pre>{file.text}</pre>}</details>)}<label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} data-testid="review-publish-diff" />この基準SHAと差分を確認した</label></section>}
+      <button type="button" className="primary full-width" disabled={!reviewed || !studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy} onClick={() => void studio.createPullRequest()} data-testid="create-pr">{draft.publishMode === 'merge-after-ci' ? 'PR作成 → CI成功後にマージ' : 'PRを作成'}</button>
+      {studio.pullRequest && <div className="success-card" data-testid="publish-complete"><b>{studio.pullRequest.merged ? 'PRを作成してマージしました' : 'PRを作成しました'}</b><span>#{studio.pullRequest.number}・CI {studio.pullRequest.checks}・{studio.pullRequest.merged ? studio.pullRequest.deployment === 'published' ? '配備済み' : 'マージ済み・配備待ち（' + studio.pullRequest.deployment + ')' : 'PR作成済み・未マージ'}</span><a href={studio.pullRequest.url} target="_blank" rel="noreferrer">PRを開く</a></div>}
     </section>
   );
 }
@@ -855,7 +865,7 @@ export default function App() {
       {studio.notice && <div className="toast toast--notice" role="status"><span>{studio.notice}</span><button type="button" onClick={studio.dismissNotice} aria-label="通知を閉じる">×</button></div>}
       {studio.error && <div className="toast toast--error" role="alert"><span>{studio.error}</span><button type="button" onClick={studio.dismissError} aria-label="エラーを閉じる">×</button></div>}
       {updateRegistration && <div className="update-banner"><span>Content Studioの更新があります。</span><button type="button" onClick={() => updateRegistration.waiting?.postMessage({ type: 'SKIP_WAITING' })}>更新する</button></div>}
-      {studio.busy && studio.step !== 'motion' && <div className="busy-overlay" role="dialog" aria-modal="true" aria-label="処理中"><div><span className="spinner" /><b>{studio.progress?.label ?? '処理しています…'}</b><progress max={1} value={studio.progress?.value ?? undefined} /><small>{studio.progress ? `${Math.round(studio.progress.value * 100)}%` : '入力内容は自動保存されています'}</small><button type="button" className="secondary" onClick={studio.cancelProcessing}>処理を中止</button></div></div>}
+      {studio.busy && studio.step !== 'motion' && <div className="busy-overlay" role="dialog" aria-modal="true" aria-label="処理中"><div><span className="spinner" /><b>{studio.progress?.label ?? '処理しています…'}</b><progress max={1} value={studio.progress?.value ?? undefined} /><small>{studio.progress ? `${Math.round(studio.progress.value * 100)}%` : '入力内容は自動保存されています'}</small><button type="button" className="secondary" onClick={studio.cancelProcessing}>{studio.step === 'publish' ? '待機を終了（送信済み操作は取り消せません）' : '処理を中止'}</button></div></div>}
     </div>
   );
 }

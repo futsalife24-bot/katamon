@@ -1,0 +1,95 @@
+import { publicationInputKey } from '../../src/domain/publication-input';
+import { test, expect } from '@playwright/test';
+import { createDraft } from '../../src/domain/defaults';
+import { sampleBundle } from '../integration/test-bundle';
+import { LEGACY_CHARACTERS } from '../../src/domain/legacy-characters';
+import { PUBLISH_LIMITS } from '../../src/domain/publish-limits';
+
+for (const width of [360,390,412]) test(`${width}px portrait touch: failed catalog, lost response, reload, session, TTL, CI and deployment recovery`, async ({page}, info) => {
+  await page.setViewportSize({width,height:850});
+  let catalogOk=false, authenticated=true, created=false, createCalls=0, expired=false;
+  let checks='queued', merged=false, deployment='pending';
+  const errors: string[]=[]; page.on('pageerror',error=>errors.push(error.message));
+  const branch='studio/add-character-sample-unit-'+'a'.repeat(40), head='b'.repeat(40);
+  const result=()=>({number:42,url:'https://github.invalid/pull/42',branch,commitSha:head,checks,deployment,merged,...(merged?{mergeCommitSha:'c'.repeat(40)}:{})});
+  await page.route('**/generated/content-studio-manifest.json',route=>route.fulfill({status:catalogOk?200:503,contentType:'application/json',body:JSON.stringify(catalogOk?{schemaVersion:1,characters:[]}:{error:'offline'})}));
+  await page.route('**/api/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    let body: unknown;
+    if(path.endsWith('/auth/session')) body={configured:true,authenticated,user:authenticated?'allowed-user':null,csrfToken:authenticated?'dummy-csrf-for-test':undefined};
+    else if(!authenticated) return route.fulfill({status:401,json:{error:{code:'session_required',message:'再ログインしてください。'}}});
+    else if(path.endsWith('/status')) body={mode:'server',connected:true,user:'allowed-user',baseSha:'a'.repeat(40),build:checks,deployment,publishLimits:PUBLISH_LIMITS,message:'テスト用GitHub接続'};
+    else if(path.endsWith('/prepare')) body={id:'prepared-'+Date.now(),branch,baseSha:'a'.repeat(40),diff:'+ content/characters/sample-unit.json\n+ generated/content-studio-manifest.json',changedFiles:[{path:'generated/content-studio-manifest.json',mimeType:'application/json',byteLength:2,sha256:'d'.repeat(64),text:'{}'}],...(created?{recovered:result()}:{})};
+    else if(path.endsWith('/pull-requests')) {
+      createCalls++;
+      if(expired) {expired=false;return route.fulfill({status:410,json:{error:{code:'preparation_expired',message:'公開準備が失効しました。既存PRを確認・再開してください。'}}});}
+      created=true;
+      await new Promise(resolve=>setTimeout(resolve,700));
+      if(createCalls===1) return route.abort('failed');
+      body=result();
+    } else if(path.endsWith('/checks')) body={build:checks};
+    else if(path.endsWith('/deployment')) body={deployment};
+    else return route.fulfill({status:404,json:{}});
+    return route.fulfill({json:body});
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('published-warning')).toBeVisible();
+  catalogOk=true; await page.getByRole('button',{name:'公開一覧を再試行'}).click();
+  await expect(page.getByTestId('published-warning')).toBeHidden();
+  await expect(page.getByTestId('legacy-character-select').locator('option')).toHaveCount(LEGACY_CHARACTERS.length);
+  await page.getByTestId('legacy-character-select').selectOption('hamulton');
+  await page.getByTestId('edit-legacy-character').click();
+  await expect(page.getByText('hamulton.webp')).toBeVisible({timeout:60000});
+  await page.getByTestId('step-nav-character').click();
+  await expect(page.getByTestId('display-name')).toBeDisabled();
+  await page.getByRole('button',{name:'ダッシュボードへ戻る'}).click();
+  const draft=createDraft(); draft.character.displayName='長い名前のキャラクターで安全な公開と復旧を確認する'; draft.character.id='sample-unit'; draft.character.slug='sample-unit'; draft.lastStep='publish'; draft.publishMode='pr-only';
+  const bundle=await sampleBundle(); bundle.character.displayName=draft.character.displayName; bundle.inputKey=publicationInputKey(draft);
+  const files=await Promise.all(bundle.files.map(async f=>({...f,blob:undefined,bytes:f.blob?Array.from(new Uint8Array(await f.blob.arrayBuffer())):undefined})));
+  await page.evaluate(async ({draft,bundle,files})=>{
+    const db=await new Promise<IDBDatabase>((resolve,reject)=>{const req=indexedDB.open('content-studio-v1',2);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+    const tx=db.transaction(['drafts','outbox'],'readwrite');
+    tx.objectStore('drafts').put(draft);
+    const restored={...bundle,files:files.map(({bytes,...f})=>({...f,...(bytes?{blob:new Blob([new Uint8Array(bytes)],{type:f.mimeType})}:{})}))};
+    tx.objectStore('outbox').put({id:'mobile-recovery',draftId:draft.id,bundle:restored,actor:'allowed-user',createdAt:draft.createdAt,updatedAt:draft.updatedAt,attempts:0,lastError:null});
+    await new Promise<void>((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});db.close();
+  },{draft,bundle:{...bundle,files:[]},files});
+  await page.reload();
+  const resume=()=>page.getByRole('button',{name:'既存PRを確認・再開'}).first().click();
+  await resume();
+  await expect(page.getByTestId('create-pr')).toBeDisabled();
+  await page.getByTestId('review-publish-diff').check();
+  await page.getByTestId('create-pr').scrollIntoViewIfNeeded();
+  const box=await page.getByTestId('create-pr').boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(48);
+  await page.screenshot({path:info.outputPath(`review-${width}.png`),fullPage:true});
+  await page.getByTestId('create-pr').evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+  await expect.poll(()=>createCalls).toBe(1);
+  await expect(page.getByRole('dialog',{name:'処理中'})).toBeHidden();
+  await expect(page.getByRole('alert').last()).toBeVisible();
+  await page.reload(); await resume();
+  await expect(page.getByTestId('publish-complete')).toContainText('CI queued');
+  expired=true; await page.getByTestId('review-publish-diff').check(); await page.getByTestId('create-pr').click();
+  await expect(page.getByRole('alert').last()).toContainText('失効');
+  authenticated=false; await page.reload(); await resume();
+  await expect(page.getByRole('alert').last()).toContainText('再ログイン');
+  authenticated=true; checks='failure'; await page.reload(); await resume();
+  await expect(page.getByTestId('publish-complete')).toContainText('CI failure');
+  await page.screenshot({path:info.outputPath(`ci-failure-${width}.png`),fullPage:true});
+  checks='success'; merged=true; await page.reload(); await resume();
+  await expect(page.getByTestId('publish-complete')).toContainText('配備待ち');
+  deployment='published'; await page.reload(); await resume();
+  await expect(page.getByTestId('publish-complete')).toContainText('配備済み');
+  // Resized viewport approximates available space above a software keyboard; not a physical keyboard test.
+  await page.setViewportSize({width,height:430});
+  await page.getByTestId('create-pr').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('create-pr')).toBeInViewport();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath(`short-viewport-${width}.png`),fullPage:true});
+  const persisted = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve,reject) => { const r=indexedDB.open('content-studio-v1',2); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); });
+    const rows = await new Promise<unknown[]>((resolve,reject) => { const r=db.transaction('outbox').objectStore('outbox').getAll(); r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); });
+    db.close(); return JSON.stringify({rows,local:{...localStorage},session:{...sessionStorage}});
+  });
+  expect(persisted).not.toContain('dummy-csrf-for-test');
+  expect(errors).toEqual([]);
+});

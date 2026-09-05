@@ -51,7 +51,7 @@ function validateRecords(records: readonly CanonicalCharacterRecord[]): void {
     const existing = records
       .filter((candidate) => candidate !== current)
       .map(({ character }) => ({ id: character.id, slug: character.slug }));
-    const errors = validateCharacter(current.character, { existing }).filter(({ severity }) => severity === 'error');
+    const errors = validateCharacter(current.character, { existing, includeLegacy: !current.legacyTargetId }).filter(({ severity }) => severity === 'error');
     if (errors.length > 0) throw new Error(`キャラクターデータの検証に失敗しました: ${current.character.slug}`);
   }
 }

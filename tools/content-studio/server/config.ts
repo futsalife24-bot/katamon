@@ -1,3 +1,4 @@
+import { PUBLISH_LIMITS } from '../src/domain/publish-limits.js';
 import { randomBytes } from 'node:crypto';
 
 import type { ServerConfig } from './types.js';
@@ -118,10 +119,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     preparationTtlMs: positiveInteger(env.PREPARATION_TTL_SECONDS, 30 * 60) * 1_000,
     rateLimitWindowMs: positiveInteger(env.RATE_LIMIT_WINDOW_SECONDS, 60) * 1_000,
     rateLimitMax: positiveInteger(env.RATE_LIMIT_MAX, 60),
-    maxRequestBytes: positiveInteger(env.MAX_REQUEST_BYTES, 24 * 1024 * 1024),
-    maxFileBytes: positiveInteger(env.MAX_FILE_BYTES, 6 * 1024 * 1024),
-    maxTotalFileBytes: positiveInteger(env.MAX_TOTAL_FILE_BYTES, 16 * 1024 * 1024),
-    maxFiles: positiveInteger(env.MAX_FILES, 32),
+    maxRequestBytes: Math.min(positiveInteger(env.MAX_REQUEST_BYTES, PUBLISH_LIMITS.maxRequestBytes), PUBLISH_LIMITS.maxRequestBytes),
+    maxFileBytes: Math.min(positiveInteger(env.MAX_FILE_BYTES, PUBLISH_LIMITS.maxFileBytes), PUBLISH_LIMITS.maxFileBytes),
+    maxTotalFileBytes: Math.min(positiveInteger(env.MAX_TOTAL_FILE_BYTES, PUBLISH_LIMITS.maxTotalFileBytes), PUBLISH_LIMITS.maxTotalFileBytes),
+    maxFiles: Math.min(positiveInteger(env.MAX_FILES, PUBLISH_LIMITS.maxFiles), PUBLISH_LIMITS.maxFiles),
     maxImageDimension: positiveInteger(env.MAX_IMAGE_DIMENSION, 8192),
     maxImagePixels: positiveInteger(env.MAX_IMAGE_PIXELS, 16_777_216),
     allowedPathPrefixes: DEFAULT_PATH_PREFIXES,

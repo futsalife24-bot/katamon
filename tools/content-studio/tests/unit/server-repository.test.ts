@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { GitHubClient } from '../../server/github-api.js';
 import { RepositoryService } from '../../server/repository-service.js';
 import { HttpError } from '../../server/security.js';
-import type { BuildState, Clock, DeploymentState, GitTreeEntry } from '../../server/types.js';
+import { FixtureRepository } from './repository-fake';
+import type { Clock } from '../../server/types.js';
 import { serverTestConfig, validatedBundle } from './server-fixtures.js';
 
 class FixedClock implements Clock {
@@ -15,62 +16,7 @@ class FixedClock implements Clock {
   }
 }
 
-class FakeRepositoryGitHub {
-  baseSha = 'a'.repeat(40);
-  tree: GitTreeEntry[] = [];
-  blobs = 0;
-  trees = 0;
-  commits = 0;
-  branches: string[] = [];
-  pullRequests = 0;
-  merges = 0;
-  checks: BuildState = 'queued';
-
-  async getBaseSha() { return this.baseSha; }
-  async getCommit(commitSha: string) { return { sha: commitSha, treeSha: 'b'.repeat(40) }; }
-  async getTree() { return this.tree; }
-  async getBlob() { return Buffer.from('{}'); }
-  async createBlob() { this.blobs += 1; return 'c'.repeat(40); }
-  async createTree(_base: string, entries: Array<{ path: string; sha: string }>) {
-    this.trees += 1;
-    expect(entries).toHaveLength(1);
-    return 'd'.repeat(40);
-  }
-  async createCommit(message: string) {
-    this.commits += 1;
-    expect(message).toBe('content-studio: update sample-unit');
-    return 'e'.repeat(40);
-  }
-  async createBranch(branch: string) {
-    this.branches.push(branch);
-  }
-  async createPullRequest(input: { branch: string; title: string; body: string }) {
-    this.pullRequests += 1;
-    expect(input.branch).toMatch(/^studio\/add-character-sample-unit-/);
-    expect(input.title).toBe('Content Studio: サンプルキャラクター');
-    return { number: 42, url: 'https://github.invalid/pull/42' };
-  }
-  async findOpenPullRequest() { return null; }
-  async getPullRequest(number: number) {
-    return {
-      number,
-      url: `https://github.invalid/pull/${number}`,
-      state: 'open' as const,
-      baseRef: 'master',
-      headRef: this.branches[0],
-      headSha: 'e'.repeat(40),
-      merged: false,
-    };
-  }
-  async mergePullRequest(number: number, expectedHeadSha: string) {
-    expect(number).toBe(42);
-    expect(expectedHeadSha).toBe('e'.repeat(40));
-    this.merges += 1;
-    return { merged: true as const };
-  }
-  async getChecks(): Promise<BuildState> { return this.checks; }
-  async getDeployment(): Promise<DeploymentState> { return 'pending'; }
-}
+class FakeRepositoryGitHub extends FixtureRepository {}
 
 describe('GitHub repository service', () => {
   it('prepareは非破壊で、PR時だけ新branch・1 commitを作る', async () => {
@@ -88,7 +34,7 @@ describe('GitHub repository service', () => {
     expect(prepared.diff).toContain('+ content/characters/sample-unit.json');
 
     const result = await service.createPullRequest(prepared.id, bundle, 'session-hash');
-    expect(github.blobs).toBe(1);
+    expect(github.blobs).toBe(bundle.files.length + 2);
     expect(github.trees).toBe(1);
     expect(github.commits).toBe(1);
     expect(github.branches).toEqual([prepared.branch]);

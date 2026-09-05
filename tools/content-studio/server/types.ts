@@ -88,6 +88,8 @@ export interface ValidatedFile {
 }
 
 export interface ValidatedBundle {
+  revalidation?: import('../src/domain/types.js').PublicationRevalidation;
+  recoveryBranch?: string;
   bundleId: string;
   generatorVersion: string;
   expectedBaseSha?: string;

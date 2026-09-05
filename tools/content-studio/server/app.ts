@@ -1,3 +1,4 @@
+import { parseBoundedJson } from '../src/domain/bounded-json.js';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -83,7 +84,7 @@ async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise
   }
   if (received === 0) throw new HttpError(400, 'request_empty', '送信データがありません。');
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return parseBoundedJson(Buffer.concat(chunks).toString('utf8'));
   } catch {
     throw new HttpError(400, 'json_invalid', 'JSONを読み込めませんでした。');
   }
@@ -228,6 +229,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
           build: status.build,
           deployment: status.deployment,
           baseSha: status.baseSha,
+          publishLimits: { maxFileBytes: config.maxFileBytes, maxTotalFileBytes: config.maxTotalFileBytes, maxRequestBytes: config.maxRequestBytes, maxFiles: config.maxFiles },
           message: 'GitHubへ安全に接続しています。',
         });
         return;
@@ -239,7 +241,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
         verifyCsrf(sessionLookup!.session.csrfToken, request.headers['x-csrf-token'] as string | undefined);
         const body = await readJsonBody(request, config.maxRequestBytes);
         const bundle = validateSubmission(body, config);
-        const result = await repository.prepare(bundle, sessionLookup!.key);
+        const result = await repository.prepare(bundle, String(sessionLookup!.session.user.id));
         audit.write(auditEvent, 'success', context.id, sessionLookup!.session.user.login, {
           slug: bundle.character.slug,
           files: result.changedFiles.length,
@@ -258,7 +260,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
           throw new HttpError(422, 'preparation_invalid', '公開準備IDがありません。');
         }
         const bundle = validateSubmission(body.bundle, config);
-        const result = await repository.createPullRequest(body.preparationId, bundle, sessionLookup!.key);
+        const result = await repository.createPullRequest(body.preparationId, bundle, String(sessionLookup!.session.user.id));
         audit.write(auditEvent, 'success', context.id, sessionLookup!.session.user.login, {
           slug: bundle.character.slug,
           pullRequest: result.number,
@@ -285,7 +287,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
           body.preparationId,
           body.pullRequestNumber as number,
           body.expectedHeadSha,
-          sessionLookup!.key,
+          String(sessionLookup!.session.user.id),
         );
         audit.write(auditEvent, 'success', context.id, sessionLookup!.session.user.login, {
           pullRequest: result.number,

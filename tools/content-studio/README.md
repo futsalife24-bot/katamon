@@ -73,17 +73,17 @@ npm run preview
 4. 「生成」で前進、後退、単発砲撃、被弾、着地それぞれの「控えめ・標準・激しめ」を選び、一括生成します。「5種類をまとめて生成」はスクロール位置に関係なく下部ナビの上へ固定され、処理中は同じ場所に進捗と中止ボタンが出ます。
 5. 「キャラ」で表示名と半角小文字IDを入力します。slugはIDから自動設定され、通常技は標準弾、必殺技は未設定になります。
 6. 「GitHub」で検証、生成ファイル、差分、PR本文を確認します。モーション一式のZIPもここで保存できます。
-7. 「PRだけ作る」または「CI成功後にマージ」を選び、専用ブランチへの1コミットとPR作成を実行します。後者は実行直前に再確認し、CI失敗・競合・head SHA不一致ならマージしません。
+7. 「PRだけ作る」または「CI成功後にマージ」を選び、専用ブランチへの1コミットとPR作成を実行します。後者は実行直前に再確認し、必須CI・検証したbase/head・GitHub側の厳格な保護設定を照合します。保護が未設定または確認不能ならPRを保持して停止します。
 
 ## 既存キャラクターへモーションを追加する
 
-既存17体は、能力や技を再入力せず1体ずつ安全に追加できます。
+現行の既存キャラクターは、能力や技を再入力せず1体ずつ安全に追加できます。
 
 1. ダッシュボードの「既存キャラへモーション追加」で対象を選び、「このキャラを開く」を押します。
 2. 既存の静止画像と向きが読み込まれます。表示名、ID、slug、能力、技、元の静止画像は変更されません。
 3. 必要なら被弾用画像だけ追加し、基準点と5種類の強度を確認して生成します。
 4. 差分に新しいハッシュ付きモーション画像・JSONと対象キャラ用の正規レコードだけが含まれることを確認し、1体1PRで反映します。
-5. 未反映のキャラクターは従来どおり静止画像で動くため、17体の移行途中でもゲームは壊れません。ダッシュボードに「移行済み / 17」が表示されます。
+5. 未反映のキャラクターは従来どおり静止画像で動くため、各キャラクターの追加途中でもゲームは壊れません。ダッシュボードに現行一覧から求めた「反映済み / 対象数」が表示されます。
 
 生成した参照は既存キャラクターへ `motionSheets` と `motionMetadata` として安全に追加されます。現時点のゲーム本体は従来の静止画像描画を維持しており、5モーションを実バトルの状態に応じて再生するゲーム側処理は次段階です。
 
@@ -116,7 +116,7 @@ npm run preview
 実連携は PWA にトークンや秘密鍵を渡さず、同一オリジンの Node.js バックエンドが GitHub OAuth と GitHub App を仲介します。静的な GitHub Pages 単体では実認証は動作しません。PWA と `/api/*` を同じ HTTPS origin で配信し、リバースプロキシで API をバックエンドへ渡してください。
 
 1. GitHub OAuth App の callback URL を `<PUBLIC_APP_URL>/api/auth/callback` にします。
-2. GitHub App を固定対象リポジトリだけに install します。最小権限は Contents `Read and write`、Pull requests `Read and write`、Checks `Read-only`、Deployments `Read-only`、Metadata `Read-only` です。
+2. GitHub App を固定対象リポジトリだけに install します。最小権限は Contents `Read and write`、Pull requests `Read and write`、Checks / Actions / Commit statuses / Administration `Read-only`、Deployments `Read-only`、Metadata `Read-only` です。
 3. `.env.example` をサーバーの `.env` にコピーし、次を設定します。実値をコミットしないでください。
 
    - `GITHUB_OAUTH_CLIENT_ID`、`GITHUB_OAUTH_CLIENT_SECRET`
@@ -135,7 +135,7 @@ $env:VITE_REPOSITORY_MODE='server'
 npm run dev
 ```
 
-6. Android Chrome でログインし、生成ファイルと差分を確認して「公開準備」を実行します。サーバーが `studio/add-character-{slug}-{timestamp}` 形式のブランチを作り、1コミットで更新し、PR URLを返します。必要な場合だけ「CI成功後にマージ」を選び、最終確認後に安全条件を満たしたPRをsquash mergeします。
+6. Android Chrome でログインし、生成ファイルと差分を確認して「公開準備」を実行します。サーバーが `studio/add-character-{slug}-{operation-hmac}` 形式のブランチを作り、1コミットで更新し、PR URLを返します。必要な場合だけ「CI成功後にマージ」を選び、最終確認後に安全条件を満たしたPRをsquash mergeします。
 
 「GitHub 反映」は GitHub API への外部通信を行います。GitHub のプランや Actions の利用量によっては料金が発生する可能性があるため、実行前に対象リポジトリと差分を確認してください。
 
@@ -193,3 +193,27 @@ E2E は Chromium の Android 13 相当 User-Agent、`412 x 915`、タッチ、�
 - 実機確認前に、Android 13 以降の Chrome 現行安定版で、上記未確認項目と大きい写真のメモリ使用量を確認してください。
 
 既存ゲームの調査、互換データ方針、影響範囲、セキュリティ方針は [`../../../docs/content-studio-design.md`](../../../docs/content-studio-design.md) を参照してください。
+
+## Completion Phase 1: 公開と復旧
+
+現行ゲームとの一致は `LEGACY_CHARACTERS` とルートの照合テストで保証します（現在はhamultonを含む18体）。公開一覧が取得できない場合は「確認中」と警告を表示し、再試行できます。下書き編集・JSONバックアップは継続できます。
+
+公開準備はGitHubの固定base SHAの全canonical recordsから1体分だけを更新し、backendがcatalog/manifestを再生成します。Pages側の表示一覧は公開の正本ではありません。画面の差分確認には、このサーバーが返したファイル内容・ハッシュ・base SHAを使います。ZIP内の全体カタログはローカル参考データで、最新snapshotの公開保証はありません。
+
+公開操作は画像を含むoutboxを先にIndexedDBへ保存します。通信切断・再読込・再ログイン・backend再起動・準備失効後は、ダッシュボードの「既存PRを確認・再開」から同じ生成物を再送して照合します。他人・別repository・変更されたheadは復旧しません。「待機を終了」は既に送信したPRやmergeの取り消しではありません。サイトデータ消去やSESSION_SECRET交換後の自動復旧は保証しません。
+
+PR作成済み、CI待ち・失敗、merge済み、配備待ち・配備済みを分けて表示します。配備はsquash後のmerge commit SHAを照合します。base driftが生じたPRは保持して自動mergeを停止します。「同じ操作の確認・再試行」は保存した生成物・操作を再利用します。「最新masterで差分を作り直す」は元PRを残して同じ画像から後継操作を作り、新しい差分承認とCIを要求します。対象キャラが同時に更新された場合は競合として停止します。
+
+容量上限は `src/domain/publish-limits.ts` が正本です。既定6MiB/ファイル、16MiB/全体、32ファイル、Base64を含むUTF-8 requestは24MiBです。backendの上限を下げた場合も画面へ反映します。モーション生成後に画像容量を検査し、全生成物の検証と送信直前にも検査します。超過時も生成済みデータを保持し、出力サイズを明示的に調整して再生成できます。
+
+E2Eは従来の412pxテストに加え、serverモードのAPI応答を制御して360/390/412pxの公開・復旧を確認します。スクリーンショットとtraceはCIの `content-studio-playwright-report` に保存します。実Android端末・実キーボードでの検証ではありません。
+
+保護設定と監査証拠は [Phase 1記録](../../docs/tasks/content-studio-completion-p1.md) と [backend運用](server/README.md) を参照してください。このPhaseはStudio全体の完成宣言ではありません。
+
+### Phase 1-R1：画像付き復旧と再準備
+
+画像プレビューの復元は編集として扱わず、保存済み生成物・公開差分・PR結果を保持します。実際のキャラ情報・画像・基準点・モーション設定の変更では差分承認を無効にします。元画像のハッシュと内容の対応を保存し、古い非同期処理は別の下書きや後続編集へ反映しません。復元に失敗しても保存済み生成物とPRを消しません。
+
+旧形式のoutboxに内容照合情報がない場合は、自動で現在の下書きへ結び付けません。下書き・画像・outboxを残し、保存済みPRリンクから確認できます。新しい内容での準備は明示操作です。IndexedDBの破壊的移行は行いません。
+
+`npm run test:e2e` は従来の画面試験、API応答を制御する試験、実frontend＋実ローカルbackendの通し試験を順に実行します。最後の試験はGitHubだけをメモリfixtureにし、画面から通常画像・被弾画像を取り込んで5モーションを生成します。試験用サーバーと故障注入はtests内だけにあります。本番GitHubへ試験PRを作成しません。詳しくは [R1再監査記録](../../docs/tasks/content-studio-completion-p1-r1.md) を参照してください。

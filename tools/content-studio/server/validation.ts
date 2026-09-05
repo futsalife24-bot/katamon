@@ -1,3 +1,4 @@
+import { parseBoundedJson } from '../src/domain/bounded-json.js';
 import { createHash } from 'node:crypto';
 
 import { canonicalCharacterRecordSchema } from '../src/generation/catalog.js';
@@ -99,7 +100,7 @@ function decodeBase64(value: unknown, field: string): Buffer {
   if (typeof value !== 'string' || value.length === 0 || value.length % 4 !== 0) {
     invalid(field, 'Base64データが不正です。');
   }
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
     invalid(field, 'Base64データが不正です。');
   }
   const bytes = Buffer.from(value, 'base64');
@@ -115,7 +116,8 @@ function textFromBytes(bytes: Buffer, field: string): string {
   }
 }
 
-function inspectStrings(value: unknown, field: string): void {
+function inspectStrings(value: unknown, field: string, depth = 0): void {
+  if (depth > 32) invalid(field, 'JSONの階層が深すぎます。');
   if (typeof value === 'string') {
     if (
       value.length > 20_000 ||
@@ -130,7 +132,7 @@ function inspectStrings(value: unknown, field: string): void {
   }
   if (Array.isArray(value)) {
     if (value.length > 1_000) invalid(field, '配列が大きすぎます。');
-    value.forEach((item, index) => inspectStrings(item, `${field}[${index}]`));
+    value.forEach((item, index) => inspectStrings(item, `${field}[${index}]`, depth + 1));
     return;
   }
   if (isRecord(value)) {
@@ -140,7 +142,7 @@ function inspectStrings(value: unknown, field: string): void {
       if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
         invalid(field, '使用できない項目名です。');
       }
-      inspectStrings(item, `${field}.${key}`);
+      inspectStrings(item, `${field}.${key}`, depth + 1);
     }
   }
 }
@@ -248,11 +250,11 @@ function webpDimensions(bytes: Buffer): ImageDimensions | null {
   return null;
 }
 
-function validateImage(
+export function validateImage(
   bytes: Buffer,
   mimeType: string,
   config: ServerConfig,
-): void {
+): ImageDimensions {
   let dimensions: ImageDimensions | null = null;
   if (mimeType === 'image/png') dimensions = pngDimensions(bytes);
   if (mimeType === 'image/jpeg') dimensions = jpegDimensions(bytes);
@@ -267,6 +269,7 @@ function validateImage(
   ) {
     invalid('files.contentBase64', '画像の寸法が上限を超えています。');
   }
+  return dimensions;
 }
 
 function expectedMime(path: string): string | null {
@@ -279,7 +282,7 @@ function expectedMime(path: string): string | null {
   return null;
 }
 
-function validateSubmittedFile(
+export function validateSubmittedFile(
   raw: unknown,
   slug: string,
   config: ServerConfig,
@@ -290,6 +293,7 @@ function validateSubmittedFile(
   const mimeType = requiredString(raw.mimeType, 'files.mimeType', 80, /^[a-z0-9.+/-]+$/);
   const requiredMime = expectedMime(path);
   if (!requiredMime || mimeType !== requiredMime) invalid('files.mimeType', '拡張子とMIMEが一致しません。');
+  if (typeof raw.contentBase64 !== 'string' || raw.contentBase64.length > 4 * Math.ceil(config.maxFileBytes / 3)) invalid('files.byteLength', 'ファイル容量が上限外です。');
   const bytes = decodeBase64(raw.contentBase64, 'files.contentBase64');
   if (bytes.length === 0 || bytes.length > config.maxFileBytes) {
     invalid('files.byteLength', 'ファイル容量が上限外です。');
@@ -310,7 +314,7 @@ function validateSubmittedFile(
   return { path, mimeType, bytes, sha256: actualSha, gitBlobSha };
 }
 
-function readCanonicalIdentity(file: ValidatedFile): { id: string; slug: string } {
+function readCanonicalIdentity(file: ValidatedFile): { id: string; slug: string; displayName: string } {
   const parsed = parseJson(file.bytes, file.path);
   // Browser validation is only a convenience. The trusted server must reject
   // a hand-crafted request whose canonical record violates ranges, references,
@@ -319,6 +323,7 @@ function readCanonicalIdentity(file: ValidatedFile): { id: string; slug: string 
   if (!result.success) invalid(file.path, '正規キャラクターデータの形式が正しくありません。');
   const candidate = result.data.character;
   return {
+    displayName: candidate.displayName,
     id: validateIdentifier(candidate.id, `${file.path}.id`),
     slug: validateIdentifier(candidate.slug, `${file.path}.slug`),
   };
@@ -333,7 +338,7 @@ function validatePrBody(value: unknown): string {
     /<\/?[a-z!][^>]*>/i.test(value) ||
     /javascript\s*:/i.test(value) ||
     /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(value) ||
-    /gh[pousr]_[A-Za-z0-9_]{20,}/.test(value)
+    /(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}/.test(value)
   ) {
     invalid('prBody', 'PR本文に危険な文字列または秘密らしき値が含まれています。');
   }
@@ -374,16 +379,31 @@ export function validateSubmission(raw: unknown, config: ServerConfig): Validate
   const canonical = files.find((file) => file.path === canonicalPath);
   if (!canonical) invalid('files', '正規キャラクターデータがありません。');
   const canonicalIdentity = readCanonicalIdentity(canonical);
-  if (canonicalIdentity.id !== id || canonicalIdentity.slug !== slug) {
-    invalid('files', '正規データと送信情報のIDまたはslugが一致しません。');
+  if (canonicalIdentity.id !== id || canonicalIdentity.slug !== slug || canonicalIdentity.displayName !== displayName) {
+    invalid('files', '正規データと送信情報のID・slug・表示名が一致しません。');
   }
   const prBody = validatePrBody(raw.prBody);
+  let revalidation: ValidatedBundle['revalidation'];
+  if (raw.revalidation !== undefined) {
+    const r=raw.revalidation;
+    if(!isRecord(r)||Object.keys(r).some(k=>!['branch','headSha','baseSha','digest','targetBaseSha'].includes(k)))invalid('revalidation','再検証情報が不正です。');
+    revalidation={
+      branch:requiredString(r.branch,'revalidation.branch',150,/^studio\/add-character-[a-z0-9-]+$/),
+      headSha:requiredString(r.headSha,'revalidation.headSha',40,/^[a-f0-9]{40}$/),
+      baseSha:requiredString(r.baseSha,'revalidation.baseSha',40,/^[a-f0-9]{40}$/),
+      digest:requiredString(r.digest,'revalidation.digest',64,SHA256_PATTERN),
+      targetBaseSha:requiredString(r.targetBaseSha,'revalidation.targetBaseSha',40,/^[a-f0-9]{40}$/),
+    };
+  }
   const digest = createHash('sha256');
+  if(revalidation)digest.update(JSON.stringify(revalidation));
   digest.update(`${bundleId}\0${generatorVersion}\0${id}\0${slug}\0${prBody}\0`);
   for (const file of [...files].sort((left, right) => left.path.localeCompare(right.path))) {
     digest.update(`${file.path}\0${file.sha256}\0`);
   }
   return {
+    ...(typeof raw.recoveryBranch === 'string' ? { recoveryBranch: requiredString(raw.recoveryBranch, 'recoveryBranch', 150, /^studio\/add-character-[a-z0-9-]+$/) } : {}),
+    revalidation,
     bundleId,
     generatorVersion,
     expectedBaseSha,

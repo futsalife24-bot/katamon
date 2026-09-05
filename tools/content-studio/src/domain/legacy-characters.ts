@@ -12,6 +12,7 @@ export const LEGACY_CHARACTERS = [
   { id: 'burumutan', slug: 'burumutan', displayName: 'ブルームタン', asset: 'bloom-tan', facesLeft: false },
   { id: 'sumoeru', slug: 'sumoeru', displayName: 'スモエル', asset: 'sumoeru', facesLeft: false },
   { id: 'doRednote', slug: 'do-rednote', displayName: 'ドレッドアロー', asset: 'dread-arrow', facesLeft: false },
+  { id: 'hamulton', slug: 'hamulton', displayName: 'ハムルトン', asset: 'hamulton', facesLeft: false },
   { id: 'mocchario', slug: 'mocchario', displayName: 'モッチャリオ', asset: 'mocchario', facesLeft: false },
   { id: 'mecha', slug: 'mecha', displayName: 'クロムギア', asset: 'chrome-gear', facesLeft: false },
   { id: 'akuma', slug: 'akuma', displayName: 'ルビデビ', asset: 'rubidevi', facesLeft: false },

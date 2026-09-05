@@ -1,3 +1,4 @@
+import { LEGACY_CHARACTERS } from '../../src/domain/legacy-characters';
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { basename } from 'node:path';
 
@@ -155,8 +156,9 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
 
   await page.getByTestId('publish-mode-merge').click();
   await page.getByTestId('prepare-change').click();
-  await expect(page.getByText('自動テスト', { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('生成物検証', { exact: true })).toBeVisible({ timeout: 60_000 });
   page.once('dialog', (dialog) => dialog.accept());
+  await page.getByTestId('review-publish-diff').check();
   await page.getByTestId('create-pr').click();
   await expect(page.getByTestId('publish-complete')).toContainText('PRを作成してマージしました', { timeout: 60_000 });
 
@@ -196,7 +198,7 @@ test('Android縦画面で5モーション生成、固定操作、モック反映
 test('既存キャラクターは能力や技を触らずモーション追加用下書きへ読み込む', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/');
-  await expect(page.getByTestId('legacy-motion-card')).toContainText('0 / 17');
+  await expect(page.getByTestId('legacy-character-select').locator('option')).toHaveCount(LEGACY_CHARACTERS.length);
   await page.getByTestId('legacy-character-select').selectOption('coolKai');
   await page.getByTestId('edit-legacy-character').click();
   await expect(page.getByTestId('step-image')).toBeVisible();

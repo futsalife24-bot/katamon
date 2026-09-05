@@ -560,3 +560,11 @@ progress { width: 100%; accent-color: var(--brand); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Phase 1: review and recovery remain operable on narrow portrait screens. */
+.publish-review, .recovery-item, .publish-review summary, .facts dd { min-width: 0; overflow-wrap: anywhere; }
+.publish-review label { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.publish-review summary, .recovery-item button { min-height: 48px; }
+.publish-review pre { max-height: 320px; overflow: auto; }
+.recovery-item { margin-block: 16px; }
+.workflow-main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }

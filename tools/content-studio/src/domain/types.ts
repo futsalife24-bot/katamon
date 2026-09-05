@@ -247,6 +247,9 @@ export interface DraftRecord {
   lastStep: WorkflowStep;
   character: CharacterForm;
   imageInfo: ImageInfo | null;
+  /** Source bytes bind publication recovery even when replacement file metadata is identical. */
+  originalSha256?: string;
+  hitOriginalSha256?: string;
   /** Optional alternate artwork used only by the hit motion. The blob stays in IndexedDB. */
   hitImageInfo: ImageInfo | null;
   editor: ImageEditorState;
@@ -315,7 +318,17 @@ export interface ArtifactFile {
   sha256: string;
 }
 
+export interface PublicationRevalidation {
+  branch: string;
+  headSha: string;
+  baseSha: string;
+  digest: string;
+  targetBaseSha: string;
+}
 export interface ArtifactBundle {
+  revalidation?: PublicationRevalidation;
+  inputKey?: string;
+  recoveryBranch?: string;
   bundleId: string;
   createdAt: string;
   generatorVersion: string;
@@ -330,6 +343,7 @@ export interface ArtifactBundle {
 export type MockScenario = 'success' | 'network-offline' | 'tests-failed' | 'conflict';
 
 export interface RepositoryStatus {
+  publishLimits?: import('./publish-limits.js').PublishLimits;
   mode: 'mock' | 'server';
   connected: boolean;
   user: string | null;
@@ -340,6 +354,10 @@ export interface RepositoryStatus {
 }
 
 export interface PreparedChange {
+  operationDigest?: string;
+  latestBaseSha?: string;
+  predecessor?: {number:number;url:string};
+  recovered?: PullRequestResult;
   id: string;
   branch: string;
   commitSha: string;
@@ -349,12 +367,13 @@ export interface PreparedChange {
 }
 
 export interface PullRequestResult {
+  mergeCommitSha?: string;
   number: number;
   url: string;
   branch: string;
   commitSha: string;
-  checks: 'queued' | 'running' | 'success' | 'failure';
-  deployment: 'pending' | 'published' | 'failure';
+  checks: 'idle' | 'queued' | 'running' | 'success' | 'failure';
+  deployment: 'unknown' | 'pending' | 'published' | 'failure';
   merged?: boolean;
   mergedAt?: string;
 }

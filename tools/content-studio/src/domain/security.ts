@@ -6,6 +6,7 @@ const SCRIPT_BREAKOUT = /<\s*\/\s*script\s*>/iu;
 const ENCODED_PATH_SEPARATOR = /%(?:2e|2f|5c)/iu;
 
 export type UnsafeTextReason =
+  | 'secret'
   | 'control-character'
   | 'html'
   | 'active-content'
@@ -14,6 +15,7 @@ export type UnsafeTextReason =
 /** Returns the first security reason without echoing the unsafe input. */
 export function getUnsafeTextReason(value: string): UnsafeTextReason | null {
   const normalized = value.normalize('NFKC');
+  if (/-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}/u.test(normalized)) return 'secret';
   if (UNSAFE_CONTROL_CHARACTER.test(normalized)) return 'control-character';
   if (HTML_TAG.test(normalized) || SCRIPT_BREAKOUT.test(normalized)) return 'html';
   if (EVENT_HANDLER.test(normalized) || ACTIVE_SCHEME.test(normalized)) return 'active-content';
