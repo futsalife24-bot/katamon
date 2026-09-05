@@ -326,6 +326,14 @@ export async function generateIdleSpriteSheet(
         frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
       }
     }
+    // A battle starts land at contactFrame; keep that suffix planted rather than falling twice.
+    if (action === 'land' && frameIndex >= Math.ceil(0.48 * (parameters.frameCount - 1))) {
+      const bounds = findContentBounds(frame);
+      if (bounds) {
+        transform = { ...transform, translateY: transform.translateY + uprightBottom - bounds.y - bounds.height };
+        frame = renderMotionFrame(prepared, transform, pivot.x, pivot.y, control.signal);
+      }
+    }
     transforms.push(transform);
     const bounds = findContentBounds(frame) ?? { x: 0, y: 0, width: 0, height: 0 };
     frameBounds.push(bounds);
@@ -344,6 +352,12 @@ export async function generateIdleSpriteSheet(
     : undefined;
   const partMasks = validatePartMasks(request.partMasks ?? [], frameSize, frameSize);
   const metadata = buildSpriteMetadata({
+    ...(request.sourceFacing && preparedBounds ? { rendering: {
+      version: 1 as const, sourceFacing: request.sourceFacing,
+      restBounds: preparedBounds,
+      ground: { x: preparedBounds.x + preparedBounds.width / 2, y: preparedBounds.y + preparedBounds.height },
+      contactFrame: request.clipId === 'land' ? Math.ceil(0.48 * (parameters.frameCount - 1)) : 0,
+    } } : {}),
     frameWidth: frameSize,
     frameHeight: frameSize,
     frameCount: parameters.frameCount,

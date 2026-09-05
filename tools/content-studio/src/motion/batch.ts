@@ -151,6 +151,7 @@ export async function generateMotionBatch(
     const motion = await processor.generate({
       source: clipId === 'hit' && request.hitSource ? request.hitSource : request.source,
       sourceImage: request.sourceImage,
+      sourceFacing: request.landmarks.facing,
       preset: definition.preset,
       parameters: motionClipParameters(clipId, request.landmarks.facing, request.outputSize, request.intensity?.[clipId] ?? 'standard'),
       sourcePlacement: request.sourcePlacement,

@@ -3,9 +3,6 @@ name: Content Studio verification
 on:
   pull_request:
   push:
-    branches-ignore:
-      - master
-      - main
   workflow_dispatch:
 
 permissions:
@@ -73,6 +70,9 @@ jobs:
       - name: Verify current legacy identity and motion-only integration
         run: node --test tests/content-studio-legacy.test.js
 
+      - name: Verify battle motion runtime and gameplay invariance
+        run: node --test tests/content-studio-motion.test.js && node tests/content-studio-motion-game.test.js
+
       - name: Run existing game seat tests
         run: |
           node tests/seattest.js p1
@@ -125,6 +125,14 @@ jobs:
       - name: Run Android-equivalent E2E
         run: npm run test:e2e
 
+      - name: Install root browser test dependencies
+        working-directory: .
+        run: npm ci
+
+      - name: Verify generated sprites in the production battle renderer
+        working-directory: .
+        run: npx playwright test tests/e2e/content-studio-motion.spec.js --project=android-chromium-portrait-touch
+
       - name: Upload Playwright evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -133,5 +141,6 @@ jobs:
           path: |
             tools/content-studio/playwright-report/
             tools/content-studio/test-results/
+            test-results/playwright/
           if-no-files-found: ignore
           retention-days: 7
