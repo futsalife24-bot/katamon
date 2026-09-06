@@ -89,6 +89,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.inspect.outputs.source }}
           REGISTRATION_APPLY_APPROVED: 'true'
+          REGISTRATION_APPROVAL_MODE: ${{ vars.CONTENT_REGISTRATION_APPROVAL_MODE || 'independent' }}
           REGISTRY_DATABASE_ORIGIN: ${{ vars.REGISTRY_DATABASE_ORIGIN }}
           REGISTRY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
         run: tools/content-studio/node_modules/.bin/tsx tools/registration/publish.ts --sha="$TARGET_SHA" --apply

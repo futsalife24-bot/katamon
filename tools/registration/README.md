@@ -13,7 +13,7 @@ publisherは固定repositoryのmerge済みcommitからcanonical・既存定義�
 ## 初回の人間操作（別途承認が必要）
 
 1. 本PRを独立監査・merge後、後方互換RulesをEmulatorと同じhashで別途承認・配備する。このworkflowはRulesを配備しない。
-2. `content-registration-production` environmentを作り、required reviewersとprevent self review、master限定の配備branch規則を設定する。publisherもreviewer設定を読取検証し、確認不能時は停止する。
+2. `content-registration-production` environmentを作り、master限定の配備branch規則を設定する。通常はrequired reviewersと自己承認禁止を設定する。単独運用では、管理者本人をrequired reviewerに登録して自己承認を許可し、repository variable `CONTENT_REGISTRATION_APPROVAL_MODE=single-operator` を明示する。どちらの場合もreviewerが空、設定不明、または方式が一致しないとpublisherは停止する。
    environmentの読取にはworkflowの`actions: read`を使用する（[GitHub Get an environment](https://docs.github.com/en/rest/deployments/environments#get-an-environment)）。設定を書き換えるAdministration権限は付与しない。
 3. 固定repo・当該environment・masterに限定したWorkload Identity Federationと専用service accountを用意する。権限は対象Realtime Databaseの登録処理に必要なものに限定する。PWA用サービスアカウントや長期鍵を作らない。
 4. environment変数`REGISTRY_DATABASE_ORIGIN`、`REGISTRY_WORKLOAD_IDENTITY_PROVIDER`、`REGISTRY_SERVICE_ACCOUNT`を設定する。originは対象DBのHTTPS originだけ。tokenはActionから一時的に渡し、ファイル・artifact・ログへ出さない。

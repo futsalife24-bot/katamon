@@ -7,6 +7,7 @@ import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '.
 const require = createRequire(import.meta.url);
 const { publish, REPOSITORY } = require('./publisher.cjs');
 const { createStore } = require('./firebase-store.cjs');
+const { approvalMode } = require('./approval-policy.cjs');
 const root = resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const sha = process.argv.find(v => v.startsWith('--sha='))?.slice(6);
 const apply = process.argv.includes('--apply');
@@ -74,7 +75,7 @@ async function main() {
   if (apply) {
     if (process.env.REGISTRATION_APPLY_APPROVED !== 'true' || !process.env.REGISTRY_DATABASE_ORIGIN || !process.env.REGISTRY_ACCESS_TOKEN) throw new Error('publisher.applyNotConfigured');
     const environment = await github('environments/content-registration-production');
-    if (!environment.protection_rules?.some((rule: any) => rule.type === 'required_reviewers' && rule.prevent_self_review === true && rule.reviewers?.length)) throw new Error('publisher.environmentApprovalMissing');
+    approvalMode(environment, process.env.REGISTRATION_APPROVAL_MODE || 'independent');
     database = createStore({origin:process.env.REGISTRY_DATABASE_ORIGIN,token:process.env.REGISTRY_ACCESS_TOKEN,approved:true});
     expectedActive = (await database.read('active')).value;
   }
