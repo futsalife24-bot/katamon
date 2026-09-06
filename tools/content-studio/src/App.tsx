@@ -1,3 +1,5 @@
+import { hasUnappliedImage, UNAPPLIED_IMAGE_MESSAGE } from './domain/generation-input';
+import { PublishedThumbnail } from './components/PublishedThumbnail';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
@@ -296,12 +298,24 @@ function Dashboard({ studio }: { studio: StudioController }) {
       </section>
 
       {studio.publishedWarning && <section className="warning-card" role="alert" data-testid="published-warning"><p>{studio.publishedWarning}</p><p>件数は未確定です。公開時はGitHubの正規データを照合します。</p><button type="button" className="secondary" onClick={() => void studio.refreshPublishedContent()}>公開一覧を再試行</button></section>}
+      <section className="card" data-testid="published-characters">
+        <h2>公開済みキャラクターを再編集</h2>
+        <p>{studio.repositoryStatus.mode === 'server' ? '一覧と編集元はGitHub正本から取得します。' : 'モックモード：表示・PRは試行用です。実GitHubへ公開しません。'}</p>
+        <button type="button" className="secondary full-width" disabled={studio.busy} onClick={() => void studio.refreshPublishedContent()}>公開一覧を更新</button>
+        {!studio.publishedWarning && studio.publishedCharacters.length === 0 && <p>公開済みキャラクターは0件です。</p>}
+        {studio.publishedCharacters.map(record => <article className="published-character" key={record.character.slug} data-testid={`published-${record.character.slug}`}>
+          <PublishedThumbnail path={record.assets.iconPng} />
+          <h3>{record.character.displayName}</h3><p>{record.legacyTargetId ? '既存キャラのモーション追加' : 'Studioで追加したキャラ'}</p>
+          {studio.drafts.filter(d=>d.sourceIdentity?.slug===record.character.slug).map(d=><button className="secondary full-width" key={d.id} type="button" disabled={studio.busy} onClick={()=>void studio.openDraft(d.id)}>作業中の下書きを再開：{d.title}</button>)}
+          <button type="button" className="primary full-width" disabled={studio.busy} onClick={()=>void studio.editPublishedCharacter(record.character.slug)}>公開版から新しい更新用下書き</button>
+        </article>)}
+      </section>
       {studio.outbox.length > 0 && <section className="card" data-testid="publish-recovery"><h2>公開操作の復旧</h2><p>再読込・通信切断・再ログイン後も、保存した生成物から確認できます。</p>{studio.outbox.map(item => <article className="recovery-item" key={item.id}><b>{item.bundle.character.displayName}</b><p>{item.result?.merged ? 'マージ済み・配備状況を確認' : item.result ? 'PR作成済み・CIと復旧状況を確認' : '公開準備・送信結果を確認'}</p>{item.result && <p><a href={item.result.url} target="_blank" rel="noreferrer">保存済みPR #{item.result.number}を開く</a></p>}{item.lastError && <p>{item.lastError}</p>}<button className="secondary full-width" type="button" disabled={studio.busy} onClick={() => void studio.retryOutbox(item.id)}>既存PRを確認・再開</button></article>)}</section>}
       <CharacterDatabaseCard />
       <AiProposalCard studio={studio} />
 
       <section className="card connection-card motion-only-note">
-        <div><h2>生成AI・外部送信なし</h2><p>通常の画像処理と固定プリセットだけで動きます。画像を外部サービスへ送りません。</p></div>
+        <div><h2>画像生成は端末内</h2><p>通常の画像処理と固定プリセットを使います。GitHub公開時は、生成物・加工済み編集画像・安全な設定を送信します。撮影原画と消去前の履歴は含めません。</p></div>
         {studio.installAvailable && <button type="button" className="secondary full-width" onClick={() => void studio.installApp()}>Androidへアプリとしてインストール</button>}
       </section>
 
@@ -524,15 +538,16 @@ function PartsStep({ studio }: { studio: StudioController }) {
 
 function MotionStep({ studio }: { studio: StudioController }) {
   const draft = studio.draft!;
-  const generatedCount = MOTION_CLIP_IDS.filter((clipId) => studio.motions[clipId]).length;
-  const active = studio.motions[studio.selectedClip] ?? null;
+  const generatedCount = MOTION_CLIP_IDS.filter((clipId) => (draft.generatedClips.includes(clipId) && studio.motions[clipId])).length;
+  const active = draft.generatedClips.includes(studio.selectedClip) ? studio.motions[studio.selectedClip] ?? null : null;
   return (
     <section className="step-panel motion-batch-step" data-testid="step-motion">
       <div className="step-intro"><span>3</span><div><h2>5種類をまとめて生成</h2><p>各動作を「控えめ・標準・激しめ」の3段階だけで調整できます。</p></div></div>
       <p className="support-note">公開上限は各ファイル{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFileBytes / 1024 ** 2) + ' MiB'}、全ファイル合計{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxTotalFileBytes / 1024 ** 2) + ' MiB'}です。超過時も生成結果は保存します。出力サイズを調整し、再生成できます。</p>
+      {hasUnappliedImage(draft) && draft.publishedEdit?.mode!=='information' && <p className="warning-text" data-testid="unapplied-image">{UNAPPLIED_IMAGE_MESSAGE}</p>}
       <div className="motion-batch-list" aria-label="生成するモーション">
-        {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={studio.motions[clipId] ? 'is-complete' : ''}>
-          <div className="motion-card-heading"><span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}後方へ反転着地・低くバウンド・遅れて復帰` : '落下から接地して静止'}</small></div><strong>{studio.motions[clipId] ? '✓' : '—'}</strong></div>
+        {MOTION_CLIP_IDS.map((clipId, index) => <article key={clipId} className={(draft.generatedClips.includes(clipId) && studio.motions[clipId]) ? 'is-complete' : ''}>
+          <div className="motion-card-heading"><span>{index + 1}</span><div><b>{MOTION_CLIP_LABELS[clipId]}</b><small>{clipId === 'move-forward' ? '向きを保ったその場前進' : clipId === 'move-backward' ? '向きを保ったまま後ずさり' : clipId === 'fire' ? '1発だけの反動' : clipId === 'hit' ? `${draft.hitImageInfo ? '専用画像で' : ''}後方へ反転着地・低くバウンド・遅れて復帰` : '落下から接地して静止'}</small></div><strong>{(draft.generatedClips.includes(clipId) && studio.motions[clipId]) ? '✓' : '—'}</strong></div>
           <div className="motion-intensity-buttons" role="group" aria-label={`${MOTION_CLIP_LABELS[clipId]}の動きの強さ`}>
             {(['subtle', 'standard', 'strong'] as const).map((level) => <button
               type="button"
@@ -549,7 +564,7 @@ function MotionStep({ studio }: { studio: StudioController }) {
       {generatedCount > 0 ? <>
         <h3 className="subheading">プレビュー</h3>
         <div className="clip-tabs" role="group" aria-label="確認するモーション">
-          {MOTION_CLIP_IDS.map((clipId) => <button type="button" key={clipId} disabled={!studio.motions[clipId]} className={studio.selectedClip === clipId ? 'active' : ''} onClick={() => studio.selectMotionClip(clipId)} data-testid={`preview-${clipId}`}>{MOTION_CLIP_LABELS[clipId]}</button>)}
+          {MOTION_CLIP_IDS.map((clipId) => <button type="button" key={clipId} disabled={!(draft.generatedClips.includes(clipId) && studio.motions[clipId])} className={studio.selectedClip === clipId ? 'active' : ''} onClick={() => studio.selectMotionClip(clipId)} data-testid={`preview-${clipId}`}>{MOTION_CLIP_LABELS[clipId]}</button>)}
         </div>
         <MotionPreview sprite={active} fallback={studio.processed?.normalized.pixels ?? null} settings={draft.preview} label={`${MOTION_CLIP_LABELS[studio.selectedClip]}プレビュー`} />
         <button type="button" className="secondary full-width" onClick={() => studio.updateDraft((current) => ({ ...current, preview: { ...current.preview, playing: !current.preview.playing } }))}>
@@ -579,7 +594,7 @@ function CharacterStep({ studio }: { studio: StudioController }) {
   const setDisplayName = (displayName: string) => studio.updateDraft((current) => ({
     ...current,
     title: displayName.trim() || current.title,
-    character: { ...current.character, displayName, specialEnabled: false, specialName: '未設定' },
+    character: { ...current.character, displayName },
   }));
   const setId = (id: string) => studio.updateDraft((current) => ({
     ...current,
@@ -591,10 +606,11 @@ function CharacterStep({ studio }: { studio: StudioController }) {
       <MotionPreview sprite={studio.motions['move-forward'] ?? null} fallback={studio.processed?.normalized.pixels ?? null} settings={{ ...studio.draft!.preview, showAnchor: false, showCollision: false }} label="キャラクタープレビュー" />
       {legacyTarget && <div className="read-only-card"><b>既存キャラクターへ追加中</b><span>{legacyTarget.displayName}</span><small>名前・能力・技は既存ゲーム側をそのまま保持し、5モーション参照だけを追加します。</small></div>}
       <Field label="表示名" required><input data-testid="display-name" disabled={Boolean(legacyTarget)} maxLength={40} enterKeyHint="next" value={character.displayName} onChange={(event) => setDisplayName(event.target.value)} /></Field>
+      {studio.draft!.publishedEdit && <Field label="説明"><textarea data-testid="published-description" disabled={Boolean(legacyTarget)} rows={3} maxLength={500} value={character.description} onChange={event=>studio.updateDraft(d=>({...d,character:{...d.character,description:event.target.value}}))} /></Field>}
       <Field label="短いID" hint="小文字英字から開始。小文字英数字とハイフン、24文字以内" required>
         <input data-testid="character-id" disabled={Boolean(studio.draft!.sourceIdentity)} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={24} value={character.id} onChange={(event) => setId(event.target.value.toLowerCase())} />
       </Field>
-      <dl className="facts facts--compact"><div><dt>slug</dt><dd>{character.slug || 'IDから自動設定'}</dd></div><div><dt>通常技</dt><dd>{legacyTarget ? '既存設定を保持' : '標準弾'}</dd></div><div><dt>必殺技</dt><dd>{legacyTarget ? '既存設定を保持' : '未設定（ボタン無効）'}</dd></div><div><dt>向き</dt><dd>{studio.draft!.landmarks.facing === 'left' ? '左向き' : '右向き'}</dd></div></dl>
+      <dl className="facts facts--compact"><div><dt>slug</dt><dd>{character.slug || 'IDから自動設定'}</dd></div><div><dt>通常技</dt><dd>{legacyTarget ? '既存設定を保持' : '標準弾'}</dd></div><div><dt>必殺技</dt><dd>{legacyTarget ? '既存設定を保持' : character.specialEnabled ? character.specialName : '未設定（ボタン無効）'}</dd></div><div><dt>向き</dt><dd>{studio.draft!.landmarks.facing === 'left' ? '左向き' : '右向き'}</dd></div></dl>
       <p className="support-note">{legacyTarget ? '生成物は新しいモーション用ディレクトリへ追加し、元のキャラクターデータや画像を上書きしません。' : '登録後すぐキャラクター一覧から選べます。必殺技ボタンは「未設定」と表示して押せない状態にします。'}</p>
     </section>
   );
@@ -790,11 +806,14 @@ function PublishStep({ studio }: { studio: StudioController }) {
         <button type="button" role="radio" aria-checked={draft.publishMode === 'merge-after-ci'} className={draft.publishMode === 'merge-after-ci' ? 'active' : ''} onClick={() => studio.updateDraft((current) => ({ ...current, publishMode: 'merge-after-ci' }))} data-testid="publish-mode-merge"><b>CI成功後にマージ</b><small>実行直前にもう一度確認。失敗・競合時は中断</small></button>
       </div>
       <div className="button-grid"><button type="button" className="secondary" onClick={() => void studio.downloadMotionZip()} disabled={draft.generatedClips.length !== 5}>モーションZIP</button><button type="button" className="secondary" onClick={() => void studio.downloadJson()}>下書きJSON</button></div>
+      {draft.validation.filter(issue=>issue.severity==='error').map((issue,index)=><p className="warning-card" key={index}>{issue.message}</p>)}
+      <p className="support-note">公開差分には、再編集に必要な加工済み基準PNGと配置・向き・基準点・5動作の設定も含まれます。GitHubへ送信・公開する内容として確認してください。</p>
+      <button type="button" className="secondary full-width" disabled={studio.busy} onClick={() => void studio.validateAndBuild()} data-testid="run-validation">入力と生成ファイルを検証</button>
       <h3>生成予定ファイル</h3><p className="support-note">公開上限: 1ファイル{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFileBytes / 1024 ** 2) + ' MiB'}・合計{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxTotalFileBytes / 1024 ** 2) + ' MiB'}・{(studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxFiles}件・送信時{((studio.repositoryStatus.publishLimits ?? PUBLISH_LIMITS).maxRequestBytes / 1024 ** 2) + ' MiB'}。ZIPの全体カタログは参考データです。公開差分はGitHubのsnapshotで再構成します。</p>
       {!studio.bundle ? <p className="support-note">先に「検証」で生成ファイルを作成してください。</p> : <div className="file-list">{studio.bundle.files.map((file) => <button type="button" className={selectedPath === file.path ? 'active' : ''} key={file.path} onClick={() => setSelectedPath(file.path)}><span>{file.path}</span><small>{formatBytes(file.byteLength)}</small></button>)}</div>}
       <FileInspector file={selected} />
       {studio.bundle && <details className="controls-card"><summary>PR本文プレビュー</summary><pre>{studio.bundle.prBody}</pre></details>}
-      <button type="button" className="primary full-width" disabled={studio.busy || draft.generatedClips.length !== 5 || !draft.character.id || !draft.character.displayName} onClick={() => void studio.prepareChange()} data-testid="prepare-change">{studio.bundle ? '同じ操作の確認・再試行' : '公開準備・差分を確認'}</button>
+      <button type="button" className="primary full-width" disabled={studio.busy || (!draft.publishedEdit && draft.generatedClips.length !== 5) || !draft.character.id || !draft.character.displayName} onClick={() => void studio.prepareChange()} data-testid="prepare-change">{studio.bundle ? '同じ操作の確認・再試行' : '公開準備・差分を確認'}</button>
       {studio.repositoryStatus.mode === 'server' && studio.prepared && studio.pullRequest && !studio.pullRequest.merged && <button type="button" className="secondary full-width" disabled={studio.busy} onClick={() => void studio.reprepareLatest()} data-testid="reprepare-latest">最新masterで差分を作り直す（元PRを保持）</button>}
       {studio.prepared?.latestBaseSha && studio.prepared.latestBaseSha !== studio.prepared.commitSha && <p className="warning-card">masterが更新されています。同じ操作の再試行は元PRを確認します。公開を続けるには最新masterで差分を作り直してください。</p>}
       {studio.prepared?.predecessor && <p className="support-note">後継操作です。<a href={studio.prepared.predecessor.url} target="_blank" rel="noreferrer">元PR #{studio.prepared.predecessor.number}（保持）</a>から引き継ぎ、新しい差分とCIを確認します。</p>}
@@ -833,8 +852,14 @@ function Workflow({ studio }: { studio: StudioController }) {
         {WORKFLOW_STEPS.map((item, index) => <button type="button" key={item.id} data-testid={`step-nav-${item.id}`} className={`${studio.step === item.id ? 'active' : ''} ${index < studio.stepIndex ? 'done' : ''}`} onClick={() => studio.goToStep(item.id)}><span>{index + 1}</span><small>{item.label}</small></button>)}
       </nav>
       <main className="workflow-main">
-        {studio.step === 'image' && <><ImageStep studio={studio} />{studio.draft?.imageInfo && <CutoutStep studio={studio} embedded />}</>}
-        {studio.step === 'setup' && <LandmarkEditor studio={studio} />}
+        {studio.draft?.publishedEdit && <section className="card published-edit-mode" data-testid="published-edit-mode">
+          <h2>{studio.draft.publishedEdit.mode === 'information' ? '公開生成物を保持する情報編集' : '加工済み画像から再編集'}</h2>
+          <p>公開元：{studio.draft.publishedEdit.revision.canonicalBlobSha.slice(0,12)}。未変更の画像と動作は再生成しません。</p>
+          <p>{studio.publishedEditingAvailable ? '加工済み編集画像・配置・向き・基準点・5動作設定を保存しています。撮影原画や消去前の履歴は含みません。' : '旧形式：元の画像編集条件・基準点・強度は未復元です。公開生成物を保った情報編集は可能です。再生成には編集元の選び直しが必要です。'}</p>
+          <button type="button" className="secondary full-width" disabled={studio.busy} onClick={()=>void studio.enablePublishedRegeneration(!studio.publishedEditingAvailable)}>{studio.publishedEditingAvailable ? '編集入力を復元して画像・動作を編集' : 'この公開画像を新しい編集元にする'}</button>
+        </section>}
+        {studio.step === 'image' && studio.draft?.publishedEdit?.mode !== 'information' && <><ImageStep studio={studio} />{studio.draft?.imageInfo && <CutoutStep studio={studio} embedded />}</>}
+        {studio.step === 'setup' && studio.draft?.publishedEdit?.mode !== 'information' && <LandmarkEditor studio={studio} />}
         {studio.step === 'motion' && <MotionStep studio={studio} />}
         {studio.step === 'character' && <CharacterStep studio={studio} />}
         {studio.step === 'publish' && <PublishStep studio={studio} />}

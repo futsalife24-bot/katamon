@@ -73,3 +73,11 @@ merge直前のmaster GETは診断であって原子的な競合防止ではあ�
 通常の再試行は凍結bundleを再利用します。最新baseで作り直すときだけ `revalidation` に元branch/head/base/digestと新baseを渡します。backendは元操作のactor/repo署名、PR状態、single parent、全treeを再検証し、旧baseと新baseで対象canonicalのblob SHAが変わっていないことを確認します。他キャラは新baseの全canonicalから再構成します。操作digestにこの関係を含めるため、同じ後継操作の再試行は同じbranch/PRへ収束します。元PRをcloseせず、force pushも行いません。
 
 新baseの差分承認と新headのCIが必要です。対象キャラの競合、元PRの改変・merge・close、baseの再変更は停止します。管理者設定・secretの変更はこの実装に含みません。外部監査のMERGE GOは別途必要です。
+
+## Phase 3-A: 公開正本の読取と更新元の照合
+
+認証済み `/api/github/published-list` と `/api/github/published-character?slug=...` は設定済み単一repositoryだけを読み、任意URL/path/repoを受け付けません。最新commitを固定し、canonicalと参照ファイルを既存snapshot検査へ通します。読取は同時2操作、選択キャラは公開契約と同じファイル数・容量に制限します。
+
+`sourceRevision` はrepository・slug・base SHA・canonical blob SHAと、本人に結び付いたHMAC証明です。これは認証tokenや許可の代わりにはなりません。prepareで現在の対象blobを照合し、同じ対象の変更、別actor、改変された証明を拒否します。旧クライアントが更新元証明なしで既存canonicalを変更する経路も拒否します。再試行・既存PR回復、base/head検証、保護とCIゲートは継続します。aggregateの版表記だけの変化は新しい公開操作にしません。
+
+編集チェックポイントはcanonicalの専用strict項目と許可されたedit-source/edit-hit PNGだけです。PNGは容量・寸法・hash・CRC・chunk・有限展開を検証し、透明領域のRGB、補助metadata、余分な圧縮末尾を拒否します。別の編集JSONをmotion metadataとして扱う経路は作っていません。新しい秘密設定、依存、ホストの作成はありません。

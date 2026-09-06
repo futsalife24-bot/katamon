@@ -1,3 +1,6 @@
+import { GENERATOR_VERSION } from '../domain/types';
+import { sha256Bytes, sha256Text } from '../generation/hash';
+import { stableStringify } from '../generation/stable';
 import { DEFAULT_MOTION } from '../domain/defaults';
 import type {
   FacingDirection,
@@ -112,6 +115,7 @@ export function motionClipParameters(
 }
 
 export interface MotionBatchGenerationRequest {
+  reuse?: Partial<MotionBatchResult>;
   source: PixelBuffer;
   /** Optional alternate artwork used for the hit clip only. */
   hitSource?: PixelBuffer;
@@ -136,6 +140,19 @@ export interface MotionBatchControl {
   onProgress?: (progress: MotionBatchProgress) => void;
 }
 
+/** Hash actual pixels and the exact per-clip generator inputs. Time is deliberately excluded. */
+export async function motionInputKeys(request: MotionBatchGenerationRequest): Promise<Record<MotionClipId,string>> {
+  const hash = async (pixels: PixelBuffer) => ({ width: pixels.width, height: pixels.height,
+    sha256: await sha256Bytes(new Uint8Array(pixels.data.buffer,pixels.data.byteOffset,pixels.data.byteLength)) });
+  const source = await hash(request.source), hit = request.hitSource ? await hash(request.hitSource) : source;
+  return Object.fromEntries(await Promise.all(MOTION_CLIP_IDS.map(async id => [id, await sha256Text(stableStringify({
+    generatorVersion: GENERATOR_VERSION, source: id === 'hit' ? hit : source, sourceImage: request.sourceImage,
+    facing: request.landmarks.facing, ground: request.landmarks.ground, muzzle: request.landmarks.muzzle,
+    placement: request.sourcePlacement, definition: BASE_CLIPS[id],
+    parameters: motionClipParameters(id,request.landmarks.facing,request.outputSize,request.intensity?.[id] ?? 'standard'),
+  }))]))) as Record<MotionClipId,string>;
+}
+
 /** Generates the five fixed game clips locally and sequentially to cap peak memory. */
 export async function generateMotionBatch(
   request: MotionBatchGenerationRequest,
@@ -144,9 +161,11 @@ export async function generateMotionBatch(
   const processor = new ContentMotionProcessor();
   const generatedAt = request.generatedAt ?? new Date().toISOString();
   const result = {} as MotionBatchResult;
+  const inputKeys = await motionInputKeys(request);
   for (let index = 0; index < MOTION_CLIP_IDS.length; index += 1) {
     if (control.signal?.aborted) throw new DOMException('モーション生成を中止しました。', 'AbortError');
     const clipId = MOTION_CLIP_IDS[index];
+    if (request.reuse?.[clipId]?.inputKey === inputKeys[clipId]) { result[clipId] = request.reuse[clipId]!; continue; }
     const definition = BASE_CLIPS[clipId];
     const motion = await processor.generate({
       source: clipId === 'hit' && request.hitSource ? request.hitSource : request.source,
@@ -172,7 +191,7 @@ export async function generateMotionBatch(
       }),
     });
     const spriteSheetPng = await encodePixelBuffer(motion.sheet, 'image/png');
-    result[clipId] = { ...motion, spriteSheetPng };
+    result[clipId] = { ...motion, spriteSheetPng, inputKey: inputKeys[clipId] };
   }
   return result;
 }

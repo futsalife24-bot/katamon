@@ -1,3 +1,4 @@
+import { publishedRevisionSchema } from './published-revision';
 import { z } from 'zod';
 import { LEGACY_CHARACTER_IDS } from './legacy-characters.js';
 
@@ -317,6 +318,10 @@ const imageOperationSchema = z.discriminatedUnion('type', [
 
 export const draftRecordSchema = z
   .object({
+    appliedImageInputKey: z.string().max(4000).optional(),
+    publishedEdit: z.object({ revision: publishedRevisionSchema, mode: z.enum(['information', 'regenerate']), visualKey: z.string().max(200000) }).strict().optional(),
+    originalSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    hitOriginalSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     schemaVersion: z.literal(DRAFT_SCHEMA_VERSION),
     id: z.string().uuid(),
     title: plainText(1, 80),

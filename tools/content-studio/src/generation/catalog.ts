@@ -1,3 +1,4 @@
+import { editingCheckpointSchema, type EditingCheckpoint } from '../domain/editing-checkpoint.js';
 import { z } from 'zod';
 
 import { characterFormSchema, spriteMetadataSchema } from '../domain/schemas.js';
@@ -27,6 +28,8 @@ const motionMetadataMapSchema = z.object({
 const generatedAssetPathsSchema = z.object({
   directory: z.string().regex(/^assets\/content-studio\/[a-z][a-z0-9-]{0,23}\/[a-f0-9]{12}$/u),
   sourceImage: z.string().optional(),
+  editSourcePng: z.string().optional(),
+  editHitPng: z.string().optional(),
   normalizedPng: z.string(),
   optimizedWebp: z.string(),
   iconPng: z.string(),
@@ -52,6 +55,7 @@ const generatedAssetPathsSchema = z.object({
 
 export const canonicalCharacterRecordSchema = z
   .object({
+    editing: editingCheckpointSchema.optional(),
     schemaVersion: z.literal(1),
     character: characterFormSchema,
     assets: generatedAssetPathsSchema,
@@ -62,6 +66,18 @@ export const canonicalCharacterRecordSchema = z
   })
   .strict()
   .superRefine((record, context) => {
+    if (Boolean(record.editing) !== Boolean(record.assets.editSourcePng) || Boolean(record.editing?.hitSource) !== Boolean(record.assets.editHitPng)) {
+      context.addIssue({code:'custom',path:['editing'],message:'編集入力の参照が揃っていません'});
+    }
+    if (record.editing) {
+      if(record.editing.generatorVersion!==record.generatorVersion) context.addIssue({code:'custom',path:['editing'],message:'編集形式と生成器versionが一致しません'});
+      if (!record.motionMetadata || record.assets.editSourcePng !== `${record.assets.directory}/edit-source.png` || (record.assets.editHitPng && record.assets.editHitPng !== `${record.assets.directory}/edit-hit.png`)) context.addIssue({code:'custom',path:['editing'],message:'編集入力の場所が不正です'});
+      if ((record.editing.landmarks.facing === 'left') !== record.character.sourceFacesLeft) context.addIssue({code:'custom',path:['editing'],message:'編集入力と原画方向が一致しません'});
+      for (const id of ['move-forward','move-backward','fire','hit','land'] as const) {
+        const meta=record.motionMetadata?.[id], settings=record.editing.clips[id];
+        if (!meta?.rendering || meta.generatorVersion!==record.editing.generatorVersion || meta.preset!==settings.preset || stableStringify(meta.motionParameters)!==stableStringify(settings.parameters) || meta.frameWidth!==record.editing.outputSize) context.addIssue({code:'custom',path:['editing','clips',id],message:'実使用モーション設定と編集情報が一致しません'});
+      }
+    }
     const reserved = new Set(LEGACY_CHARACTERS.flatMap(c => [c.id.toLowerCase(), c.slug]));
     if (!record.legacyTargetId && (reserved.has(record.character.id.toLowerCase()) || reserved.has(record.character.slug))) {
       context.addIssue({ code: 'custom', path: ['character', 'id'], message: '既存キャラクターのID/slugはモーション追加からのみ使用できます' });
@@ -132,6 +148,7 @@ export const canonicalCharacterRecordSchema = z
   });
 
 export interface CanonicalCharacterRecord {
+  editing?: EditingCheckpoint;
   schemaVersion: 1;
   character: CharacterForm;
   assets: GeneratedAssetPaths;

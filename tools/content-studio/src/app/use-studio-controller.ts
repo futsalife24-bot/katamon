@@ -1,3 +1,7 @@
+import { imageInputKey, hasUnappliedImage, draftClipInputKey, UNAPPLIED_IMAGE_MESSAGE } from '../domain/generation-input';
+import { buildInformationBundle, validatePublishedSnapshot, visualEditKey, editingSourceKeys, artifactBlob, type PublishedSnapshot } from '../generation/published-edit';
+import { createEditingInput } from '../image/editing-input';
+import { saveGeneratedMotions, savePublishedDraft } from '../storage/db';
 import { publicationInputKey } from '../domain/publication-input';
 import { assertPublishSize } from '../domain/publish-limits';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,7 +23,7 @@ import type {
   ValidationIssue,
   WorkflowStep,
 } from '../domain/types';
-import { WORKFLOW_STEPS } from '../domain/types';
+import { GENERATOR_VERSION, WORKFLOW_STEPS } from '../domain/types';
 import { buildArtifactBundle, createArtifactZip } from '../generation';
 import type { CanonicalCharacterRecord } from '../generation';
 import { MockRepositoryGateway } from '../github/mock-gateway';
@@ -32,7 +36,7 @@ import {
   createMotionPackage,
   detectMotionLandmarks,
   detectMotionParts,
-  generateMotionBatch,
+  generateMotionBatch, motionInputKeys,
   generateIdleMotionFromBlob,
   MOTION_CLIP_IDS,
   type EncodedIdleSpriteResult,
@@ -41,7 +45,7 @@ import {
 } from '../motion';
 import { acquireWakeLock, detectCapabilities, requestPersistentStorage, storageUsage, type Capabilities } from '../pwa/capabilities';
 import { consumeSharedImage } from '../pwa/share-target';
-import { fetchLegacyImage, fetchPublishedImage, loadPublishedContent } from '../game/published-content';
+import { fetchLegacyImage, readMockPublishedCharacter, loadPublishedContent } from '../game/published-content';
 import {
   addPublishHistory,
   deleteDraftBlob,
@@ -88,6 +92,7 @@ export interface StudioController {
   drafts: DraftRecord[];
   publishedCharacters: CanonicalCharacterRecord[];
   publishedWarning: string | null;
+  publishedEditingAvailable: boolean;
   history: PublishHistoryRecord[];
   outbox: OutboxRecord[];
   processed: ProcessedImage | null;
@@ -115,6 +120,7 @@ export interface StudioController {
   createNewDraft(): Promise<void>;
   editLegacyCharacter(id: string): Promise<void>;
   editPublishedCharacter(slug: string): Promise<void>;
+  enablePublishedRegeneration(adopt?: boolean): Promise<void>;
   openDraft(id: string): Promise<void>;
   backToDashboard(): Promise<void>;
   duplicateExistingDraft(id: string): Promise<void>;
@@ -206,7 +212,7 @@ function validationExtras(draft: DraftRecord, processed: ProcessedImage | null, 
   const issues: ValidationIssue[] = [];
   if (!draft.imageInfo || !processed) issues.push({ severity: 'error', code: 'image.missing', field: 'image', message: 'キャラクター画像を登録してください。' });
   if (draft.imageInfo && draft.imageInfo.byteLength > MAX_INPUT_BYTES) issues.push({ severity: 'error', code: 'image.too_large', field: 'image', message: '元画像は20MB以下にしてください。' });
-  const missingClips = MOTION_CLIP_IDS.filter((clipId) => !motions[clipId]);
+  const missingClips = MOTION_CLIP_IDS.filter((clipId) => !motions[clipId] || !draft.generatedClips.includes(clipId));
   if (missingClips.length) issues.push({ severity: 'error', code: 'motion.missing', field: 'motion', message: `5種類のモーションを生成してください（不足: ${missingClips.join(', ')}）` });
   if (processed?.analysis.hasBakedCheckerboard) issues.push({ severity: 'warning', code: 'image.checkerboard', field: 'image', message: '市松模様が焼き付いている可能性があります。透明表示で輪郭を確認してください。' });
   if (processed?.analysis.hasBakedBlackBackground) issues.push({ severity: 'warning', code: 'image.black_background', field: 'image', message: '黒背景が焼き付いている可能性があります。' });
@@ -266,7 +272,7 @@ const MOTION_BLOB_KIND: Record<MotionClipId, DraftBlobKind> = {
   land: 'motion-land',
 };
 
-async function restoreStoredMotion(draftId: string, clipId: MotionClipId): Promise<EncodedIdleSpriteResult | null> {
+async function restoreStoredMotion(draftId: string, clipId: MotionClipId, lazy = false): Promise<EncodedIdleSpriteResult | null> {
   const [blob, storedMetadata] = await Promise.all([
     getDraftBlob(draftId, MOTION_BLOB_KIND[clipId]),
     getAppMeta<unknown>(`${draftId}:motion:${clipId}:metadata`),
@@ -279,9 +285,10 @@ async function restoreStoredMotion(draftId: string, clipId: MotionClipId): Promi
   if (sheetWidth > 8192 || metadata.frameHeight > 8192 || sheetWidth * metadata.frameHeight > 24_000_000) return null;
   try {
     const safety = await inspectImageBlob(blob, `${clipId}.png`, { decodeMaxDimension: Math.max(sheetWidth, metadata.frameHeight) });
-    const sheet = await decodeImageBlob(blob, safety);
+    const sheet = lazy ? {width:sheetWidth,height:metadata.frameHeight,data:new Uint8ClampedArray(0)} : await decodeImageBlob(blob, safety);
     if (sheet.width !== sheetWidth || sheet.height !== metadata.frameHeight) return null;
     return {
+      inputKey: (await getAppMeta<Record<string,string>>(`${draftId}:motion-inputs`))?.[clipId],
       spriteSheetPng: { blob, mimeType: 'image/png', width: sheet.width, height: sheet.height, byteLength: blob.size },
       sheet,
       metadata,
@@ -294,15 +301,30 @@ async function restoreStoredMotion(draftId: string, clipId: MotionClipId): Promi
   }
 }
 
-async function restoreMotionBatch(draftId: string): Promise<Partial<MotionBatchResult>> {
-  const entries = await Promise.all(MOTION_CLIP_IDS.map(async (clipId) => [clipId, await restoreStoredMotion(draftId, clipId)] as const));
+async function restoreMotionBatch(draftId: string, lazy = false): Promise<Partial<MotionBatchResult>> {
+  const entries = await Promise.all(MOTION_CLIP_IDS.map(async (clipId) => [clipId, await restoreStoredMotion(draftId, clipId, lazy)] as const));
   return Object.fromEntries(entries.filter((entry): entry is readonly [MotionClipId, EncodedIdleSpriteResult] => entry[1] !== null));
+}
+
+async function reusableEditingSources(draft:DraftRecord) {
+  const saved=await getAppMeta<{sourceKeys?:ReturnType<typeof editingSourceKeys>;editing?:import('../generation/artifacts').BuildArtifactBundleInput['editing']}>(`${draft.id}:editing-input`);
+  const keys=editingSourceKeys(draft),reuse:{source?:Blob;hitSource?:Blob}={};
+  if(saved?.sourceKeys?.normal===keys.normal)reuse.source=saved.editing?.source;
+  if(saved?.sourceKeys?.hit===keys.hit)reuse.hitSource=saved.editing?.hitSource;
+  if(draft.publishedEdit){
+    const snapshot=await getAppMeta<PublishedSnapshot>(`${draft.id}:published-snapshot`),recipe=snapshot?.record.editing;
+    if(recipe&&snapshot){
+      if(!reuse.source&&draft.originalSha256===recipe.source.sha256&&!draft.processingOperations.length)reuse.source=artifactBlob(snapshot.files.find(f=>f.path===snapshot.record.assets.editSourcePng)!);
+      if(!reuse.hitSource&&recipe.hitSource&&draft.hitOriginalSha256===recipe.hitSource.sha256)reuse.hitSource=artifactBlob(snapshot.files.find(f=>f.path===snapshot.record.assets.editHitPng)!);
+    }
+  }
+  return reuse;
 }
 
 function publicationOutboxId(bundle: ArtifactBundle): string { return 'publish:' + bundle.bundleId + (bundle.revalidation ? ':' + bundle.revalidation.targetBaseSha + ':' + bundle.revalidation.headSha : ''); }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.5.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.6.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -343,6 +365,8 @@ export function useStudioController(): StudioController {
   const bundleRef = useRef<ArtifactBundle | null>(null);
   const publicationRef = useRef(false);
   const contentEpochRef = useRef(0);
+  const publishedSnapshotRef = useRef<PublishedSnapshot | null>(null);
+  const publishedLoadingRef = useRef(false);
   const originalWorkRef = useRef<Promise<void> | null>(null);
 
   const setBundle = useCallback((next: ArtifactBundle | null) => {
@@ -393,6 +417,7 @@ export function useStudioController(): StudioController {
       contentEpochRef.current++;
       setBundle(null);
     }
+    next.generatedClips = next.generatedClips.filter(id => draftClipInputKey(current,id) === draftClipInputKey(next,id));
     next.updatedAt = new Date().toISOString();
     draftRef.current = next;
     setDraft(next);
@@ -409,9 +434,16 @@ export function useStudioController(): StudioController {
   }, []);
 
   const refreshPublishedContent = useCallback(async () => {
-    const { records, warning } = await loadPublishedContent();
-    setPublishedCharacters(records);
-    setPublishedWarning(warning);
+    setPublishedWarning('公開一覧を確認中です。');
+    try {
+      if (gatewayRef.current instanceof ServerRepositoryGateway) {
+        const {records,warning} = await gatewayRef.current.listPublishedCharacters();
+        setPublishedCharacters(records); setPublishedWarning(warning);
+      } else {
+        const { records, warning } = await loadPublishedContent();
+        setPublishedCharacters(records); setPublishedWarning(warning);
+      }
+    } catch (cause) { setPublishedWarning(humanError(cause,'公開正本の一覧を取得できません。ログイン後に再試行してください。')); }
   }, []);
 
   useEffect(() => {
@@ -466,13 +498,17 @@ export function useStudioController(): StudioController {
       setError('下書きが見つかりませんでした。');
       return;
     }
+    const published = stored.publishedEdit ? await getAppMeta<PublishedSnapshot>(`${id}:published-snapshot`) : null;
+    if (stored.publishedEdit && !published) throw new Error('公開元生成物が不足しています。下書きを保持して停止しました。');
+    if (published) await validatePublishedSnapshot(published, false);
     const [original, hitOriginal, restoredSprite, restoredMotions] = await Promise.all([
       getDraftBlob(id, 'original'),
       getDraftBlob(id, 'hit-original'),
-      restoreStoredSprite(id),
-      restoreMotionBatch(id),
+      stored.publishedEdit ? Promise.resolve(null) : restoreStoredSprite(id),
+      restoreMotionBatch(id, Boolean(stored.publishedEdit)),
     ]);
     if (epoch !== contentEpochRef.current) return;
+    publishedSnapshotRef.current = published;
     originalBlobRef.current = original;
     hitOriginalBlobRef.current = hitOriginal;
     setDraft(stored);
@@ -491,7 +527,7 @@ export function useStudioController(): StudioController {
     setSavedAt(stored.updatedAt);
     setSaveState('saved');
     window.history.pushState({ studio: true, step: stored.lastStep }, '', `#${stored.lastStep}`);
-    if (original || hitOriginal) {
+    if ((original || hitOriginal) && stored.publishedEdit?.mode !== 'information') {
       setNotice('下書きを復旧しました。画像プレビューを再構築しています。');
       setTimeout(() => void (async () => {
         if (epoch !== contentEpochRef.current || draftRef.current?.id !== id) return;
@@ -597,7 +633,7 @@ export function useStudioController(): StudioController {
 
   const rebuildImage = useCallback(async (snapshot: DraftRecord, source: Blob, generateVariants: boolean, operations = snapshot.processingOperations, restoring = false) => {
     if (draftRef.current?.id !== snapshot.id) return;
-    if (!restoring) { contentEpochRef.current++; setBundle(null); }
+    if (!restoring) { contentEpochRef.current++; setBundle(null); updateDraft(d=>({...d,appliedImageInputKey:undefined})); }
     const epoch = contentEpochRef.current;
     let finishOriginal!: () => void;
     const originalWork = new Promise<void>(resolve => { finishOriginal = resolve; });
@@ -643,7 +679,7 @@ export function useStudioController(): StudioController {
       const landmarks = snapshot.landmarks.status === 'idle'
         ? detectMotionLandmarks(result.normalized.pixels, snapshot.landmarks.facing)
         : snapshot.landmarks;
-      if (!restoring) updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations, landmarks, generatedClips: generateVariants ? [] : current.generatedClips }));
+
       if (result.variants) {
         await Promise.all([
           putDraftBlob(snapshot.id, 'working', working!),
@@ -655,6 +691,7 @@ export function useStudioController(): StudioController {
           ...MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${snapshot.id}:motion:${clipId}:metadata`, null)),
         ]);
       }
+      if (!restoring && isCurrent()) updateDraft((current) => ({ ...current, imageInfo, processingOperations: operations, landmarks, appliedImageInputKey: imageInputKey(snapshot), generatedClips: generateVariants ? [] : current.generatedClips }));
       return result;
     } catch (cause) {
       if (isCurrent()) setError(humanError(cause, restoring ? '元画像プレビューを復元できませんでした。保存済み生成物と既存PRは保持しています。' : '画像処理に失敗しました。再試行してください。'));
@@ -702,7 +739,7 @@ export function useStudioController(): StudioController {
     try {
       let result = await process(false);
       if (!isCurrent()) return;
-      if (!result.analysis.hasAlpha && result.analysis.isLikelySolidBackground) {
+      if (!snapshot.publishedEdit && !result.analysis.hasAlpha && result.analysis.isLikelySolidBackground) {
         setBusyProgress(0.36, '被弾用画像の単色背景を除去しています');
         result = await process(true);
       }
@@ -714,12 +751,12 @@ export function useStudioController(): StudioController {
         status: 'ready' as const,
       };
       if (!restoring) persistDraftState((current) => current.id === snapshot.id
-        ? { ...current, hitImageInfo, generatedClips: invalidateMotion ? [] : current.generatedClips }
+        ? { ...current, hitImageInfo, generatedClips: invalidateMotion ? current.generatedClips.filter(id=>id!=='hit') : current.generatedClips }
         : current);
       if (invalidateMotion) {
-        setMotions({});
-        setSprite(null);
-        await Promise.all(MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${snapshot.id}:motion:${clipId}:metadata`, null)));
+        setMotions(previous=>{const next={...previous};delete next.hit;return next;});
+        if(selectedClip==='hit')setSprite(null);
+        await setAppMeta(`${snapshot.id}:motion:hit:metadata`,null);
       }
       return result;
     } catch (cause) {
@@ -729,7 +766,7 @@ export function useStudioController(): StudioController {
       await wakeLock?.release().catch(() => undefined);
       if (hitAbortRef.current === controller) { hitAbortRef.current = null; setBusy(false); setProgress(null); }
     }
-  }, [persistDraftState, setBusyProgress]);
+  }, [persistDraftState, selectedClip, setBusyProgress]);
 
   const acceptFile = useCallback(async (file: File) => {
     const current = draftRef.current;
@@ -816,7 +853,7 @@ export function useStudioController(): StudioController {
         status: 'reading',
         warnings: [],
       },
-      generatedClips: [],
+      generatedClips: current.generatedClips.filter(id=>id!=='hit'),
       updatedAt: new Date().toISOString(),
       historyStatus: 'dirty',
     };
@@ -840,15 +877,15 @@ export function useStudioController(): StudioController {
     setHitProcessed(null);
     await Promise.all([
       deleteDraftBlob(current.id, 'hit-original'),
-      ...MOTION_CLIP_IDS.map((clipId) => setAppMeta(`${current.id}:motion:${clipId}:metadata`, null)),
+      setAppMeta(`${current.id}:motion:hit:metadata`,null),
     ]);
-    setMotions({});
-    setSprite(null);
+    setMotions(previous=>{const next={...previous};delete next.hit;return next;});
+    if(selectedClip==='hit')setSprite(null);
     persistDraftState((active) => active.id === current.id
-      ? { ...active, hitImageInfo: null, hitOriginalSha256: undefined, generatedClips: [] }
+      ? { ...active, hitImageInfo: null, hitOriginalSha256: undefined, generatedClips: active.generatedClips.filter(id=>id!=='hit') }
       : active);
     setNotice('被弾用画像を外しました。次回生成は通常画像を使います。');
-  }, [persistDraftState]);
+  }, [persistDraftState, selectedClip]);
 
   const onDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -857,50 +894,68 @@ export function useStudioController(): StudioController {
   }, [acceptFile]);
 
   const editPublishedCharacter = useCallback(async (slug: string) => {
-    const record = publishedCharacters.find((item) => item.character.slug === slug);
-    if (!record) {
-      setError('公開済みキャラクターが見つかりませんでした。');
-      return;
-    }
+    if (publishedLoadingRef.current) return;
+    const record = publishedCharacters.find(item => item.character.slug === slug);
+    if (!record) { setError('公開済みキャラが見つかりません。'); return; }
+    publishedLoadingRef.current = true;
     const epoch = ++contentEpochRef.current;
+    let opening=false;
     abortRef.current?.abort(); hitAbortRef.current?.abort();
+    setBusy(true); setError(null);
     try {
       await autosaveRef.current.flush();
-      const next = createDraft();
-      next.title = `${record.character.displayName}を更新`;
-      next.character = structuredClone(record.character);
-      next.sourceIdentity = { id: record.character.id, slug: record.character.slug };
-      next.motionPreset = record.spriteMetadata.preset;
-      next.motion = structuredClone(record.spriteMetadata.motionParameters);
-      next.lastStep = 'image';
-      const saved = await saveDraft(next);
-      if(epoch!==contentEpochRef.current)return;
-      originalBlobRef.current = null;
-      hitOriginalBlobRef.current = null;
-      setDraft(saved);
-      draftRef.current = saved;
-      setProcessed(null);
-      setHitProcessed(null);
-      setSprite(null);
-      setMotions({});
-      setSelectedClip('move-forward');
-      setBundle(null);
-      setPrepared(null);
-      setPullRequest(null);
-      setRedo([]);
-      setView('workflow');
-      setSavedAt(saved.updatedAt);
-      setSaveState('saved');
-      window.history.pushState({ studio: true, step: 'image' }, '', '#image');
-      const file = await fetchPublishedImage(record);
-      if(epoch!==contentEpochRef.current || draftRef.current?.id!==saved.id)return;
-      await acceptFile(file);
-      setNotice('公開済みデータを更新用の下書きへ読み込みました。');
-      await refreshLists();
-    } catch (cause) {
-      setError(humanError(cause, '公開済みキャラクターを読み込めませんでした。'));
-    }
-  }, [acceptFile, publishedCharacters, refreshLists, setBundle]);
+      const snapshot = gatewayRef.current instanceof ServerRepositoryGateway
+        ? await gatewayRef.current.readPublishedCharacter(slug) : await readMockPublishedCharacter(record);
+      if (epoch !== contentEpochRef.current) return;
+      const next = createDraft(), source = snapshot.record, recipe = source.editing;
+      next.title = `${source.character.displayName}を更新`;
+      next.character = structuredClone(source.character);
+      next.sourceIdentity = {id:source.character.id,slug:source.character.slug};
+      next.legacyTargetId = source.legacyTargetId ?? null;
+      next.lastStep = 'character'; next.generatedClips = source.motionMetadata ? [...MOTION_CLIP_IDS] : [];
+      if (recipe) {
+        next.editor = {...next.editor,...recipe.placement,outputSize:recipe.placement.referenceSize};
+        delete (next.editor as unknown as Record<string,unknown>).referenceSize;
+        next.landmarks = {...next.landmarks,...recipe.landmarks,ground:{...next.landmarks.ground,...recipe.landmarks.ground},muzzle:{...next.landmarks.muzzle,...recipe.landmarks.muzzle},status:'ready'};
+        next.motionIntensity = {...recipe.intensity}; next.motion.outputSize = recipe.outputSize;
+        next.originalSha256 = recipe.source.sha256; next.hitOriginalSha256 = recipe.hitSource?.sha256;
+      }
+      const info = (path:string, width:number,height:number): NonNullable<DraftRecord['imageInfo']> => ({fileName:'published-edit.png',mimeType:'image/png',byteLength:snapshot.files.find(f=>f.path===path)!.byteLength,width,height,hasAlpha:true,colorMode:'sRGB',estimatedOutputBytes:0,status:'ready',warnings:[]});
+      next.imageInfo = info(source.assets.editSourcePng ?? source.assets.normalizedPng,recipe?.source.width ?? source.spriteMetadata.frameWidth,recipe?.source.height ?? source.spriteMetadata.frameHeight);
+      next.hitImageInfo = recipe?.hitSource && source.assets.editHitPng ? info(source.assets.editHitPng,recipe.hitSource.width,recipe.hitSource.height) : null;
+      if (recipe) next.appliedImageInputKey = imageInputKey(next);
+      next.publishedEdit = {revision:snapshot.revision,mode:'information',visualKey:visualEditKey(next)};
+      const saved = await savePublishedDraft(next,snapshot);
+      if (epoch !== contentEpochRef.current) return;
+      opening=true;await openDraft(saved.id); await refreshLists();
+      setNotice(recipe ? '公開元の画像・5動作・編集入力を読み込みました。未変更の生成物はそのまま保持します。' : '公開生成物を保持しました。旧形式のため元の編集条件は未復元です。情報編集は可能です。');
+    } catch(cause) { if(epoch===contentEpochRef.current)setError(humanError(cause,'公開データを読み込めません。現在の下書きは保持しています。')); }
+    finally {publishedLoadingRef.current=false;if(contentEpochRef.current===epoch+(opening?1:0))setBusy(false);}
+  }, [openDraft,publishedCharacters,refreshLists]);
+
+  const enablePublishedRegeneration = useCallback(async (adopt = false) => {
+    const current=draftRef.current,snapshot=publishedSnapshotRef.current;
+    if(!current?.publishedEdit||!snapshot)return;
+    if((!snapshot.record.editing || snapshot.record.editing.generatorVersion!==GENERATOR_VERSION)&&!adopt){setError('元の編集条件は未復元です。公開画像を新しい編集元にするか、画像を選び直してください。');return;}
+    const epoch=++contentEpochRef.current;
+    try{
+      if(adopt&&(!snapshot.record.editing || snapshot.record.editing.generatorVersion!==GENERATOR_VERSION)){
+        const blob=await getDraftBlob(current.id,'normalized');if(!blob)throw new Error('公開画像がありません。');
+        if(epoch!==contentEpochRef.current)return;
+        updateDraft(d=>({...d,publishedEdit:{...d.publishedEdit!,mode:'regenerate'},processingOperations:[],editor:createDraft().editor,landmarks:{...createDraft().landmarks,facing:d.character.sourceFacesLeft?'left':'right'}}));
+        await acceptFile(new File([blob],'published-baseline.png',{type:'image/png'}));
+      }else{
+        const original=await getDraftBlob(current.id,'original'),hit=await getDraftBlob(current.id,'hit-original');
+        if(!original)throw new Error('検証済み編集入力がありません。');
+        await rebuildImage(current,original,false,[],true);
+        if(epoch!==contentEpochRef.current||draftRef.current?.id!==current.id)return;
+        if(hit)await rebuildHitImage(current,hit,false,true);
+        if(epoch!==contentEpochRef.current||draftRef.current?.id!==current.id)return;
+        persistDraftState(d=>({...d,publishedEdit:{...d.publishedEdit!,mode:'regenerate'}}));
+      }
+      goToStep('setup');setNotice('加工済み画像を編集開始地点として復元しました。変更した生成物だけを作り直します。');
+    }catch(cause){setError(humanError(cause,'編集入力を復元できません。公開生成物は保持しています。'));}
+  },[acceptFile,goToStep,persistDraftState,rebuildHitImage,rebuildImage,updateDraft]);
 
   const editLegacyCharacter = useCallback(async (id: string) => {
     const record = LEGACY_CHARACTERS.find((item) => item.id === id);
@@ -1063,21 +1118,13 @@ export function useStudioController(): StudioController {
   const setMotionIntensity = useCallback(async (clipId: MotionClipId, level: MotionIntensityLevel) => {
     const current = draftRef.current;
     if (!current || current.motionIntensity[clipId] === level) return;
-    setMotions({});
-    setSprite(null);
-    persistDraftState((active) => active.id === current.id
-      ? {
-        ...active,
-        motionIntensity: { ...active.motionIntensity, [clipId]: level },
-        generatedClips: [],
-      }
-      : active);
-    await Promise.all([
-      setAppMeta(`${current.id}:sprite-metadata`, null),
-      ...MOTION_CLIP_IDS.map((id) => setAppMeta(`${current.id}:motion:${id}:metadata`, null)),
-    ]);
-    setNotice('動きの強さを更新しました。下の固定ボタンから5種類を再生成してください。');
-  }, [persistDraftState]);
+    setMotions(previous=>{const next={...previous};delete next[clipId];return next;});
+    if (selectedClip===clipId) setSprite(null);
+    persistDraftState(active=>active.id===current.id?{...active,motionIntensity:{...active.motionIntensity,[clipId]:level},generatedClips:active.generatedClips.filter(id=>id!==clipId)}:active);
+    await setAppMeta(`${current.id}:motion:${clipId}:metadata`,null);
+    if(clipId==='move-forward')await setAppMeta(`${current.id}:sprite-metadata`,null);
+    setNotice('変更した動作だけ再生成します。未変更のPNGは保持します。');
+  }, [persistDraftState,selectedClip]);
 
   const generateMotion = useCallback(async () => {
     const current = draftRef.current;
@@ -1086,6 +1133,7 @@ export function useStudioController(): StudioController {
       setError('先に画像を切り抜いて正規化してください。');
       return;
     }
+    if (hasUnappliedImage(current)) { setError(UNAPPLIED_IMAGE_MESSAGE); return; }
     if (current.hitImageInfo && !hitProcessed) {
       setError('被弾用画像を復旧できていません。画像ステップで選び直すか、被弾用画像を外してください。');
       return;
@@ -1102,7 +1150,8 @@ export function useStudioController(): StudioController {
       const landmarks = current.landmarks.status === 'idle'
         ? detectMotionLandmarks(processed.normalized.pixels, current.landmarks.facing)
         : current.landmarks;
-      const result = await generateMotionBatch({
+      const request = {
+        reuse: Object.fromEntries(current.generatedClips.filter(id=>motions[id]).map(id=>[id,motions[id]])),
         source,
         hitSource: hitProcessed?.edited,
         sourceImage: 'normalized.png',
@@ -1117,24 +1166,24 @@ export function useStudioController(): StudioController {
           flipHorizontal: current.editor.flipHorizontal,
           referenceSize: current.editor.outputSize,
         },
-      }, {
+      };
+      // Verified published checkpoints can establish local keys without encoding PNGs.
+      const recipe=publishedSnapshotRef.current?.record.editing;
+      if(recipe?.generatorVersion===GENERATOR_VERSION && current.originalSha256===recipe.source.sha256 && current.hitOriginalSha256===recipe.hitSource?.sha256 && current.processingOperations.length===0) {
+        const baselineKeys=await motionInputKeys({...request,sourcePlacement:recipe.placement,landmarks:{...landmarks,...recipe.landmarks},outputSize:recipe.outputSize,intensity:recipe.intensity});
+        for(const id of MOTION_CLIP_IDS) if(request.reuse[id] && !request.reuse[id].inputKey) request.reuse[id]={...request.reuse[id],inputKey:baselineKeys[id]};
+      }
+      const result = await generateMotionBatch(request, {
         signal: controller.signal,
         onProgress: (item) => { if(epoch===contentEpochRef.current && !controller.signal.aborted)setBusyProgress(item.progress, item.message); },
       });
       if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id || controller.signal.aborted)return;
       const active = result['move-forward'];
-      setMotions(result);
-      setSelectedClip('move-forward');
-      setSprite(active);
-      await Promise.all([
-        putDraftBlob(current.id, 'sprite', active.spriteSheetPng.blob),
-        setAppMeta(`${current.id}:sprite-metadata`, active.metadata),
-        ...MOTION_CLIP_IDS.flatMap((clipId) => [
-          putDraftBlob(current.id, MOTION_BLOB_KIND[clipId], result[clipId].spriteSheetPng.blob),
-          setAppMeta(`${current.id}:motion:${clipId}:metadata`, result[clipId].metadata),
-        ]),
-      ]);
+      const generatedDraft={...current,landmarks};
+      const editing=await createEditingInput(generatedDraft,source,hitProcessed?.edited,result,await reusableEditingSources(generatedDraft));
+      await saveGeneratedMotions(generatedDraft,result,editing,visualEditKey(generatedDraft),()=>epoch===contentEpochRef.current&&draftRef.current?.id===current.id&&!controller.signal.aborted);
       if(epoch!==contentEpochRef.current || draftRef.current?.id!==current.id || controller.signal.aborted)return;
+      setMotions(result); setSelectedClip('move-forward'); setSprite(active);
       persistDraftState((draftItem) => draftItem.id === current.id
         ? {
           ...draftItem,
@@ -1155,11 +1204,12 @@ export function useStudioController(): StudioController {
       await wakeLock?.release().catch(() => undefined);
       if (abortRef.current === controller) { abortRef.current = null; setBusy(false); setProgress(null); }
     }
-  }, [hitProcessed, persistDraftState, processed, repositoryStatus.publishLimits, setBusyProgress]);
+  }, [hitProcessed, motions, persistDraftState, processed, repositoryStatus.publishLimits, setBusyProgress]);
 
   const downloadMotionZip = useCallback(async () => {
     const current = draftRef.current;
-    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId]);
+    if (current && hasUnappliedImage(current) && current.publishedEdit?.mode!=='information') { setError(UNAPPLIED_IMAGE_MESSAGE); return; }
+    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId] && current?.generatedClips.includes(clipId));
     if (!current || !complete) {
       setError('先に5種類のモーションを生成してください。');
       return;
@@ -1180,7 +1230,8 @@ export function useStudioController(): StudioController {
 
   const downloadMotionMetadata = useCallback(async () => {
     const current = draftRef.current;
-    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId]);
+    if (current && hasUnappliedImage(current) && current.publishedEdit?.mode!=='information') { setError(UNAPPLIED_IMAGE_MESSAGE); return; }
+    const complete = MOTION_CLIP_IDS.every((clipId) => motions[clipId] && current?.generatedClips.includes(clipId));
     if (!current || !complete) {
       setError('先に5種類のモーションを生成してください。');
       return;
@@ -1190,7 +1241,7 @@ export function useStudioController(): StudioController {
 
   const downloadSpriteSheet = useCallback(async () => {
     const current = draftRef.current;
-    if (!current || !sprite) {
+    if (!current || !sprite || !current.generatedClips.includes(selectedClip)) {
       setError('先にモーションを生成してください。');
       return;
     }
@@ -1203,9 +1254,18 @@ export function useStudioController(): StudioController {
     const inputKey = publicationInputKey(current);
     const epoch = contentEpochRef.current;
     if (bundleRef.current?.inputKey === inputKey) return bundleRef.current.issues;
+    if(current.publishedEdit && publishedSnapshotRef.current && visualEditKey(current)===current.publishedEdit.visualKey) {
+      try {
+        const next=await buildInformationBundle(publishedSnapshotRef.current,current.character);
+        if(epoch!==contentEpochRef.current || publicationInputKey(draftRef.current!)!==inputKey) throw new Error('編集中に内容が変わりました。');
+        next.inputKey=inputKey;setBundle(next);return next.issues;
+      }catch(cause){const issues:ValidationIssue[]=[{severity:'error',code:'published.information',message:humanError(cause,'情報編集を検証できません。')}];persistDraftState(d=>({...d,validation:issues}));return issues;}
+    }
+    if(hasUnappliedImage(current)) { const issues:ValidationIssue[]=[{severity:'error',code:'image.unapplied',message:UNAPPLIED_IMAGE_MESSAGE}];setBundle(null);persistDraftState(d=>({...d,validation:issues}));return issues; }
+    if(current.publishedEdit?.mode==='information')return [{severity:'error',code:'published.input_required',message:'画像・動作を変更するには、編集入力の復元または明示的な画像選び直しが必要です。'}];
     let activeMotions = motions;
     if (!MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) {
-      activeMotions = await restoreMotionBatch(current.id);
+      activeMotions = await restoreMotionBatch(current.id,Boolean(current.publishedEdit));
       if (MOTION_CLIP_IDS.every((clipId) => activeMotions[clipId])) setMotions(activeMotions);
     }
     let activeSprite = activeMotions['move-forward'] ?? sprite;
@@ -1244,7 +1304,10 @@ export function useStudioController(): StudioController {
       return next;
     }
     try {
+      const savedInput=await getAppMeta<{visualKey:string;editing:import('../generation/artifacts').BuildArtifactBundleInput['editing']}>(`${current.id}:editing-input`);
+      const editing=savedInput?.visualKey===visualEditKey(current) ? savedInput.editing : processed ? await createEditingInput(current,processed.edited,hitProcessed?.edited,activeMotions as MotionBatchResult,await reusableEditingSources(current)) : undefined;
       const nextBundle = await buildArtifactBundle({
+        editing,
         character: current.character,
         spriteMetadata: activeSprite.metadata,
         motionMetadata: Object.fromEntries(MOTION_CLIP_IDS.map((clipId) => [clipId, activeMotions[clipId]!.metadata])) as Record<MotionClipId, SpriteMetadata>,
@@ -1265,6 +1328,7 @@ export function useStudioController(): StudioController {
         legacyTargetId: current.legacyTargetId ?? undefined,
       });
       if (epoch !== contentEpochRef.current || draftRef.current?.id !== current.id || publicationInputKey(draftRef.current) !== inputKey) throw new Error('編集中に内容が変わりました。現在の内容で再検証してください。');
+      nextBundle.sourceRevision = current.publishedEdit?.revision;
       nextBundle.inputKey = inputKey;
       assertPublishSize(nextBundle.files, repositoryStatus.publishLimits);
       setBundle(nextBundle);
@@ -1275,7 +1339,7 @@ export function useStudioController(): StudioController {
       persistDraftState((item) => ({ ...item, validation: next }));
       return next;
     }
-  }, [motions, persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, repositoryStatus.publishLimits, sprite]);
+  }, [hitProcessed, motions, persistDraftState, processed, publishedCharacters, repositoryStatus.baseSha, repositoryStatus.publishLimits, sprite]);
 
   const downloadZip = useCallback(async () => {
     let active = bundleRef.current;
@@ -1294,6 +1358,7 @@ export function useStudioController(): StudioController {
   const downloadJson = useCallback(async () => {
     const current = draftRef.current;
     if (!current) return;
+    await autosaveRef.current.flush();
     downloadBlob(await exportDraftJson(current.id), `content-studio-draft-${current.character.slug || 'character'}.json`);
   }, []);
 
@@ -1304,13 +1369,17 @@ export function useStudioController(): StudioController {
     setError(null);
     try {
       const issues = await validateAndBuild();
-      if (issues.some(({ severity }) => severity === 'error')) throw new Error('検証エラーを修正してから公開準備を実行してください。');
+      if (issues.some(({ severity }) => severity === 'error')) throw new Error(issues.filter(issue=>issue.severity==='error').map(issue=>issue.message).join(' / '));
       const active = bundleRef.current;
       if (!active) throw new Error('生成物を準備できませんでした。もう一度検証してください。');
       const sourceDraft = draftRef.current;
       await autosaveRef.current.flush();
       const storedDraft = sourceDraft ? await getDraft(sourceDraft.id) : null;
       if (!storedDraft || active.inputKey !== publicationInputKey(storedDraft) || !draftRef.current || active.inputKey !== publicationInputKey(draftRef.current) || bundleRef.current !== active) throw new Error('公開する下書きの保存・内容照合を完了できません。下書きと生成物を保持して停止しました。');
+      if(active.noChanges){
+        if(repositoryStatus.mode==='server'){try{await gatewayRef.current.prepare(active);}catch(cause){if((cause as {code?:string}).code!=='no_changes')throw cause;}}
+        setNotice('変更はありません。branch・commit・PRは作成しません。');return;
+      }
       const now = new Date().toISOString();
       const recovery: OutboxRecord = { id: publicationOutboxId(active), draftId: draftRef.current!.id, bundle: active, actor: repositoryStatus.user, createdAt: now, updatedAt: now, attempts: 0, lastError: null };
       await putOutbox(recovery);
@@ -1327,7 +1396,7 @@ export function useStudioController(): StudioController {
       setError(message);
       const current = draftRef.current;
       const active = bundleRef.current;
-      if (current && active) {
+      if (current && active && !active.noChanges) {
         await putOutbox({ id: publicationOutboxId(active), draftId: current.id, bundle: active, actor: repositoryStatus.user, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attempts: 0, lastError: message });
         await refreshLists();
       }
@@ -1471,9 +1540,16 @@ export function useStudioController(): StudioController {
   }, [openDraft, refreshLists]);
 
   const deleteExistingDraft = useCallback(async (id: string) => {
-    await deleteDraft(id);
-    await refreshLists();
-  }, [refreshLists]);
+    try {
+      await deleteDraft(id);
+      if(draftRef.current?.id===id){
+        contentEpochRef.current++;abortRef.current?.abort();hitAbortRef.current?.abort();autosaveRef.current.cancel();
+        draftRef.current=null;originalBlobRef.current=null;hitOriginalBlobRef.current=null;publishedSnapshotRef.current=null;
+        setDraft(null);setProcessed(null);setHitProcessed(null);setMotions({});setSprite(null);setBundle(null);setView('dashboard');setSaveState('idle');
+      }
+      await refreshLists();setNotice('下書きと、その下書きが所有する画像・編集データを削除しました。');
+    } catch(cause) {setError(humanError(cause,'下書きを削除できません。保存データを保持しています。'));}
+  }, [refreshLists,setBundle]);
 
   const importDraft = useCallback(async (file: Blob) => {
     try {
@@ -1488,6 +1564,7 @@ export function useStudioController(): StudioController {
   const exportDraft = useCallback(async (id?: string) => {
     const target = id ?? draftRef.current?.id;
     if (!target) return;
+    await autosaveRef.current.flush();
     const blob = await exportDraftJson(target);
     downloadBlob(blob, `content-studio-draft-${target.slice(0, 8)}.json`);
   }, []);
@@ -1535,19 +1612,21 @@ export function useStudioController(): StudioController {
     appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, hitProcessed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
     repositoryStatus, capabilities, storage, saveState, savedAt, busy, progress, error, notice, redoCount: redo.length,
     installAvailable: Boolean(installEvent), installApp, dismissNotice: () => setNotice(null), dismissError: () => setError(null),
-    createNewDraft, editLegacyCharacter, editPublishedCharacter, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
+    publishedEditingAvailable: publishedSnapshotRef.current?.record.editing?.generatorVersion === GENERATOR_VERSION,
+    createNewDraft, editLegacyCharacter, editPublishedCharacter, enablePublishedRegeneration, openDraft, backToDashboard, duplicateExistingDraft, deleteExistingDraft, importDraft, exportDraft, updateDraft,
     goToStep, nextStep, previousStep, acceptFile, onFileInput, onHitFileInput, removeHitImage, onDrop, applyImageOperations, autoRemoveBackground, autoTrim,
     addBrushStroke, undoImageOperation, redoImageOperation, detectParts, detectLandmarks, selectMotionClip, setMotionIntensity, generateMotion,
     downloadMotionZip, downloadMotionMetadata, downloadSpriteSheet, validateAndBuild, downloadZip, downloadJson,
     prepareChange, reprepareLatest, createPullRequest, retryOutbox, refreshRepositoryStatus, refreshPublishedContent, login, logout,
     cancelProcessing: () => {
+      if(publishedLoadingRef.current){contentEpochRef.current++;setBusy(false);setNotice('公開読込を中止しました。現在の下書きを保持しています。');}
       if (publicationRef.current) setNotice('待機を終了します。送信済みのPR作成・マージは取り消されません。「既存PRを確認・再開」で結果を確認してください。');
       abortRef.current?.abort();
       hitAbortRef.current?.abort();
     },
   }), [
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
-    capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editLegacyCharacter, editPublishedCharacter,
+    capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editLegacyCharacter, editPublishedCharacter, enablePublishedRegeneration,
     detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,
     nextStep, notice, onDrop, onFileInput, onHitFileInput, openDraft, outbox, prepareChange, reprepareLatest, prepared, previousStep, processed, hitProcessed, progress, removeHitImage,
     pullRequest, redo.length, redoImageOperation, refreshRepositoryStatus, refreshPublishedContent, repositoryStatus, retryOutbox, saveState, savedAt,

@@ -12,6 +12,8 @@ const MOTION_FILE_STEMS: Record<MotionClipId, string> = {
 export interface GeneratedAssetPaths {
   directory: string;
   sourceImage?: string;
+  editSourcePng?: string;
+  editHitPng?: string;
   normalizedPng: string;
   optimizedWebp: string;
   iconPng: string;

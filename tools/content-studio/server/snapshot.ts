@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { buildCompatibilityCatalog, buildContentManifest, canonicalCharacterRecordSchema, serializeCompatibilityCatalog, type CanonicalCharacterRecord } from '../src/generation/catalog.js';
 import { stableStringify } from '../src/generation/stable.js';
 import { HttpError } from './security.js';
-import { validateImage, validateSubmittedFile } from './validation.js';
+import { validateCheckpointPng, validateImage, validateSubmittedFile } from './validation.js';
 import type { GitTreeEntry, ServerConfig, ValidatedBundle, ValidatedFile } from './types.js';
 
 export const AGGREGATES = ['generated/content-studio-catalog.js', 'generated/content-studio-manifest.json'] as const;
@@ -63,6 +63,7 @@ export async function reconstructSnapshot(bundle: ValidatedBundle, tree: GitTree
     ids.add(id); slugs.add(slug);
     if (entry.path === targetPath) {
       if (record.character.id !== target.character.id || record.legacyTargetId !== target.legacyTargetId) deny('更新対象のidentityを変更できません。');
+      if(record.legacyTargetId && stableStringify({...record.character,sourceFacesLeft:target.character.sourceFacesLeft})!==stableStringify(target.character))deny('既存キャラの非モーション設定は変更できません。');
     } else {
       if (id === target.character.id.toLowerCase() || slug === target.character.slug.toLowerCase()) deny('既存のIDまたはslugと衝突しています。');
       records.push(record);
@@ -85,6 +86,9 @@ export async function reconstructSnapshot(bundle: ValidatedBundle, tree: GitTree
       const mimeType = path.endsWith('.json') ? 'application/json' : path.endsWith('.webp') ? 'image/webp' : path.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
       const file = trustedFile(path, mimeType, bytes);
       validateSubmittedFile({ ...file, byteLength: bytes.length, contentBase64: bytes.toString('base64') }, record.character.slug, config);
+      if (record.editing && (path===record.assets.editSourcePng || path===record.assets.editHitPng)) {
+        validateCheckpointPng(bytes,path===record.assets.editSourcePng?record.editing.source:record.editing.hitSource!,config);
+      }
       if (path.endsWith('.png')) {
         const clip = Object.entries(record.assets.motionSpriteSheets ?? {}).find(([,p]) => p === path)?.[0];
         const metadata = clip ? record.motionMetadata?.[clip as keyof NonNullable<typeof record.motionMetadata>] : path === record.assets.spriteSheetPng ? record.spriteMetadata : undefined;

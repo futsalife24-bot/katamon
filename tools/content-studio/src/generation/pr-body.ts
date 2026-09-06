@@ -44,6 +44,7 @@ export function buildPullRequestBody(input: PullRequestBodyInput): string {
     `- モーション: 前進・後退・単発砲撃・被弾・着地 / 各${input.spriteMetadata.frameCount}フレーム`,
     `- 生成ツール: \`${input.generatorVersion}\``,
     '',
+    ...(imageFiles.some(file=>file.path.endsWith('/edit-source.png')) ? ['加工済み編集基準PNGと安全な再生成設定も公開します。撮影原画・消去前の背景・操作履歴は含めません。', ''] : []),
     '### 画像',
     '',
     '| ファイル | サイズ |',

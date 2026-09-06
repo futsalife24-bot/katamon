@@ -88,6 +88,7 @@ export interface ValidatedFile {
 }
 
 export interface ValidatedBundle {
+  sourceRevision?: import('../src/domain/editing-checkpoint.js').PublishedRevision;
   revalidation?: import('../src/domain/types.js').PublicationRevalidation;
   recoveryBranch?: string;
   bundleId: string;

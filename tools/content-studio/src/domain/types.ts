@@ -1,5 +1,5 @@
 export const DRAFT_SCHEMA_VERSION = 6 as const;
-export const GENERATOR_VERSION = '0.5.0';
+export const GENERATOR_VERSION = '0.6.0';
 
 export type WorkflowStep =
   | 'image'
@@ -239,6 +239,9 @@ export interface ValidationIssue {
 }
 
 export interface DraftRecord {
+  /** Last successfully applied image settings; absent in legacy drafts means unverified. */
+  appliedImageInputKey?: string;
+  publishedEdit?: { revision: import('./published-revision').PublishedRevision; mode: 'information' | 'regenerate'; visualKey: string };
   schemaVersion: typeof DRAFT_SCHEMA_VERSION;
   id: string;
   title: string;
@@ -335,6 +338,8 @@ export interface PublicationRevalidation {
   targetBaseSha: string;
 }
 export interface ArtifactBundle {
+  sourceRevision?: import('./published-revision').PublishedRevision;
+  noChanges?: boolean;
   revalidation?: PublicationRevalidation;
   inputKey?: string;
   recoveryBranch?: string;

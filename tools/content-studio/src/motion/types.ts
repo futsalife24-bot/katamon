@@ -91,6 +91,8 @@ export interface IdleSpriteResult {
 }
 
 export interface EncodedIdleSpriteResult extends IdleSpriteResult {
+  /** Local cache proof, never published as runtime metadata. */
+  inputKey?: string;
   spriteSheetPng: EncodedImage;
 }
 
