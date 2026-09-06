@@ -31,6 +31,7 @@ const RESERVED_IDENTIFIERS = new Set([
 const GENERATED_FILES = new Set([
   'generated/content-studio-catalog.js',
   'generated/content-studio-manifest.json',
+  'generated/content-studio-registration.json',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,0 +1,94 @@
+name: Content Studio registration activation
+
+on:
+  workflow_run:
+    workflows: [Content Studio Pages deploy]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Merged game source commit to verify
+        required: true
+        type: string
+      apply:
+        description: Request approved production activation (otherwise dry-run)
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  deployments: read
+  pull-requests: read
+
+concurrency:
+  group: content-studio-registration-production
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: >-
+      (github.ref == 'refs/heads/master' && github.event_name == 'workflow_dispatch') ||
+      (vars.CONTENT_REGISTRATION_ENABLED == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      source: ${{ steps.source.outputs.sha }}
+    steps:
+      # Execute publisher code only from merged master, never from an event's PR artifact.
+      - uses: actions/checkout@v4
+        with: { ref: master, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: source
+        env:
+          TARGET_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
+        run: |
+          node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.TARGET_SHA||""))process.exit(1);require("fs").appendFileSync(process.env.GITHUB_OUTPUT,"sha="+process.env.TARGET_SHA+"\n")'
+      - run: npm ci
+        working-directory: tools/content-studio
+      - name: Independently verify merged source and game Pages bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.source.outputs.sha }}
+        run: tools/content-studio/node_modules/.bin/tsx tools/registration/publish.ts --sha="$TARGET_SHA" --dry-run
+
+  activate:
+    needs: inspect
+    if: >-
+      github.ref == 'refs/heads/master' && vars.CONTENT_REGISTRATION_ENABLED == 'true' &&
+      (github.event_name == 'workflow_run' || inputs.apply == true)
+    environment: content-registration-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: master, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: tools/content-studio
+      - id: google
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.REGISTRY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.REGISTRY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+          access_token_scopes: https://www.googleapis.com/auth/firebase.database,https://www.googleapis.com/auth/userinfo.email
+      - name: Revalidate and conditionally activate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.inspect.outputs.source }}
+          REGISTRATION_APPLY_APPROVED: 'true'
+          REGISTRY_DATABASE_ORIGIN: ${{ vars.REGISTRY_DATABASE_ORIGIN }}
+          REGISTRY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: tools/content-studio/node_modules/.bin/tsx tools/registration/publish.ts --sha="$TARGET_SHA" --apply

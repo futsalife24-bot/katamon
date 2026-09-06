@@ -1,4 +1,5 @@
 import { parseBoundedJson } from '../src/domain/bounded-json.js';
+import { buildRegistrationCandidate, serializeRegistration } from '../src/generation/registration.js';
 import { createHash } from 'node:crypto';
 import { buildCompatibilityCatalog, buildContentManifest, canonicalCharacterRecordSchema, serializeCompatibilityCatalog, type CanonicalCharacterRecord } from '../src/generation/catalog.js';
 import { stableStringify } from '../src/generation/stable.js';
@@ -6,7 +7,7 @@ import { HttpError } from './security.js';
 import { validateCheckpointPng, validateImage, validateSubmittedFile } from './validation.js';
 import type { GitTreeEntry, ServerConfig, ValidatedBundle, ValidatedFile } from './types.js';
 
-export const AGGREGATES = ['generated/content-studio-catalog.js', 'generated/content-studio-manifest.json'] as const;
+export const AGGREGATES = ['generated/content-studio-catalog.js', 'generated/content-studio-manifest.json', 'generated/content-studio-registration.json'] as const;
 export function trustedFile(path: string, mimeType: string, bytes: Buffer): ValidatedFile {
   return { path, mimeType, bytes, sha256: createHash('sha256').update(bytes).digest('hex'), gitBlobSha: createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex') };
 }
@@ -113,6 +114,8 @@ export async function reconstructSnapshot(bundle: ValidatedBundle, tree: GitTree
   const aggregates = [
     trustedFile(AGGREGATES[0], 'text/javascript', Buffer.from(serializeCompatibilityCatalog(buildCompatibilityCatalog(records)))),
     trustedFile(AGGREGATES[1], 'application/json', Buffer.from(buildContentManifest(records))),
+    trustedFile(AGGREGATES[2], 'application/json', Buffer.from(serializeRegistration(await buildRegistrationCandidate(records,
+      (await read('index.html')).toString('utf8'), async path => submitted.get(path)?.bytes ?? read(path))))),
   ];
   for (const expected of aggregates) {
     const claim = submitted.get(expected.path);

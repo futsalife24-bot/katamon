@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { registrationBaseFiles } from './registration-fixture';
 import { trustedFile } from '../../server/snapshot';
 import type { BuildState, GitTreeEntry } from '../../server/types';
 const sha = (v: unknown) => createHash('sha1').update(JSON.stringify(v)).digest('hex');
@@ -12,6 +13,13 @@ export class FixtureRepository {
   prs = new Map<number, { branch: string; head: string; merged: boolean; base: string }>();
   branches: string[] = []; blobs = 0; trees = 0; commits = 0; pullRequests = 0; merges = 0;
   checks: BuildState = 'queued'; safe = true; fault: 'branch' | 'pr' | 'merge' | null = null;
+  constructor() {
+    for (const {path,bytes} of registrationBaseFiles()) {
+      const file = trustedFile(path,'',bytes);
+      this.blobData.set(file.gitBlobSha,bytes);
+      this.tree.push({path,sha:file.gitBlobSha,type:'blob',mode:'100644',size:bytes.length});
+    }
+  }
   async getBaseSha() { return this.baseSha; }
   async getCommit(commitSha: string) {
     if (this.commitData.has(commitSha)) return this.commitData.get(commitSha)!;

@@ -1174,6 +1174,10 @@
   }
 
   function normalSnapshotLooksSafe(snapshot, roster, config, requireTerrain) {
+    // Registered protocol 2 binds the actual large-arena runtime contract (index.html:
+    // applyStageSize -> DEAD_LINE_Y/TERRAIN_BOTTOM_Y = 924). Keep protocol 1's
+    // validator unchanged; never accept a geometry limit declared by a packet.
+    const terrainBottom = config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
     if (!snapshot || snapshot.battleMode !== 'coop' || snapshot.matchFormat !== 'coop4v1') return false;
     if (Number(snapshot.stageW) !== WORLD_WIDTH || Number(snapshot.stageH) !== WORLD_HEIGHT) return false;
     if (!Array.isArray(snapshot.craters) || snapshot.craters.length !== 0) return false;
@@ -1193,8 +1197,8 @@
           && column.every(segment => Array.isArray(segment) && segment.length === 2
             && Number.isFinite(Number(segment[0])) && Number.isFinite(Number(segment[1]))
             && Number(segment[0]) >= 0 && Number(segment[0]) < Number(segment[1])
-            && Number(segment[1]) <= STEEL_BOTTOM_Y)
-          && column.some(segment => Number(segment[0]) === STEEL_GROUND_Y && Number(segment[1]) === STEEL_BOTTOM_Y))) return false;
+            && Number(segment[1]) <= terrainBottom)
+          && column.some(segment => Number(segment[0]) === STEEL_GROUND_Y && Number(segment[1]) === terrainBottom))) return false;
       if (!Array.isArray(snapshot.terrainMaterialSegments) || snapshot.terrainMaterialSegments.length !== TERRAIN_COLUMNS
         || !snapshot.terrainMaterialSegments.every((column, columnIndex) => Array.isArray(column)
           && column.length >= 1 && column.length <= snapshot.segments[columnIndex].length
@@ -1204,7 +1208,7 @@
               Number(material[0]) === Number(segment[0]) && Number(material[1]) === Number(segment[1])
             )))
           && column.some(material => Number(material[0]) === STEEL_GROUND_Y
-            && Number(material[1]) === STEEL_BOTTOM_Y && material[2] === 'steel'))) return false;
+            && Number(material[1]) === terrainBottom && material[2] === 'steel'))) return false;
       let elevatedColumns = 0;
       let steelElevatedColumns = 0;
       let destructibleElevatedColumns = 0;
@@ -1344,9 +1348,15 @@
       return true;
     }
 
+    // RTDB push keys use code-point ordering; locale collation can skip later
+    // lower-case keys after an upper-case cursor. Keep protocol 1 unchanged.
+    const compareMessageKeys = bridge.registration?.enabled
+      ? (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0
+      : (a, b) => String(a).localeCompare(String(b));
+
     function outerLooksSafe(message) {
       const slot = session.room?.slots?.[message?.seat];
-      return message?.v === 1 && message?.t === 'net' && message.roundId === roundId
+      return message?.v === (bridge.registration?.enabled ? 2 : 1) && (!bridge.registration?.enabled || message.registryRevision === bridge.registration.revision) && message?.t === 'net' && message.roundId === roundId
         && SEATS.includes(message.seat) && typeof message.from === 'string'
         && slot?.uid === message.from && typeof message.payload === 'string' && message.payload.length <= 220000;
     }
@@ -1359,7 +1369,7 @@
             ? { orderBy: '"$key"', startAt: JSON.stringify(historyCursor), limitToFirst: NORMAL_MESSAGE_PAGE_SIZE }
             : { orderBy: '"$key"', limitToLast: NORMAL_MESSAGE_PAGE_SIZE };
           const rows = await bridge.request(`coopRooms/${session.code}/rounds/${roundId}/messages`, session.auth, { query });
-          const ordered = Object.entries(rows || {}).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+          const ordered = Object.entries(rows || {}).sort((a, b) => compareMessageKeys(a[0], b[0]));
           // 再読込時に古いfire/stateを再生しない。現在位置だけ覚え、直後に送るjoin/helloで
           // ホストから現在の完全snapshotを取り直す。
           if (!historyReady) {
@@ -1369,6 +1379,7 @@
               if (!outerLooksSafe(outer)) continue;
               let packet = null;
               try { packet = JSON.parse(outer.payload); } catch (_) { packet = null; }
+              if (bridge.registration?.enabled && (packet?.registryRevision !== bridge.registration.revision || (packet?.snap && bridge.registration.validateSnapshot(packet.snap)))) throw new Error('registry.coopPacketMismatch');
               if (!normalPacketLooksSafe(packet, outer, roster, config, delegatedSeats)) continue;
               validPackets.push(packet);
               if (packet.t === 'start') activeGeneration = Math.max(activeGeneration, packet.generation);
@@ -1388,13 +1399,14 @@
           }
           let advanced = false;
           for (const [key, outer] of ordered) {
-            if (historyCursor && String(key).localeCompare(historyCursor) <= 0) continue;
+            if (historyCursor && compareMessageKeys(key, historyCursor) <= 0) continue;
             historyCursor = String(key);
             advanced = true;
             if (!rememberKey(key) || !outerLooksSafe(outer)) continue;
             let packet = null;
             try { packet = JSON.parse(outer.payload); } catch (_) { packet = null; }
-            if (!normalPacketLooksSafe(packet, outer, roster, config, delegatedSeats)) continue;
+            if (bridge.registration?.enabled && (packet?.registryRevision !== bridge.registration.revision || (packet?.snap && bridge.registration.validateSnapshot(packet.snap)))) throw new Error('registry.coopPacketMismatch');
+              if (!normalPacketLooksSafe(packet, outer, roster, config, delegatedSeats)) continue;
             if (packet.t === 'start') {
               if (packet.generation < activeGeneration) continue;
               if (packet.generation > activeGeneration) {
@@ -1415,6 +1427,10 @@
           if (!advanced || ordered.length < NORMAL_MESSAGE_PAGE_SIZE) break;
         }
       } catch (error) {
+        if (String(error?.message || '').startsWith('registry.')) {
+          reportHostAbort('登録版と受信した協力戦データが一致しないため停止しました。部屋の版は変更していません。');
+          return;
+        }
         browserRoot.console?.warn?.('CO-OP transport retry', error);
       }
       if (!closed) pollTimer = browserRoot.setTimeout(poll, 350);
@@ -1517,7 +1533,8 @@
           // 退出前に積んだbyeだけはclose後も送る。それ以外の古いstateは次画面へ持ち越さない。
           if (closed && packet.t !== 'bye') return false;
           const outer = {
-            v: 1,
+            v: bridge.registration?.enabled ? 2 : 1,
+            ...(bridge.registration?.enabled ? { registryRevision:bridge.registration.revision } : {}),
             t: 'net',
             from: session.auth.uid,
             seat: session.seat,
@@ -1624,8 +1641,18 @@
 
   function startBrowser(config) {
     if (!root?.document || !config?.bridge?.startNormalBattle || !config?.session) return false;
-    if (browserController) browserController.stop?.();
     const room = config.session.room || {};
+    if (config.bridge.registration?.enabled) {
+      try {
+        if (room.protocol !== 2 || room.registryRevision !== config.bridge.registration.revision) return false;
+        for (const slot of Object.values(room.slots || {})) if (slot?.uid) {
+          if (typeof slot.definitionHash !== 'string') return false;
+          config.bridge.registration.resolve(slot.character,slot.definitionHash);
+        }
+        for (const id of Object.values(room.settings?.aiCharacters || {})) config.bridge.registration.resolve(id);
+      } catch (_) { return false; }
+    }
+    if (browserController) browserController.stop?.();
     const roster = activeRoster(room.slots, room.settings?.aiFill, config.characters, room.settings?.aiCharacters);
     if (SEATS.some(seat => !roster[seat])) return false;
     const humans = Object.values(roster).filter(entry => !entry.ai).length;
@@ -1633,7 +1660,7 @@
     const difficulty = ['normal', 'hard', 'extreme'].includes(room.settings?.difficulty) ? room.settings.difficulty : 'normal';
     const soloHost = config.session.role === 'host' && humans === 1;
     const bossMaxHp = Math.round(BASE_BODY_HP[difficulty] * playerCountRatio(humans, aiPlayers));
-    const transportConfig = { ...config, bossMaxHp };
+    const transportConfig = { ...config, bossMaxHp, registeredProtocol:config.bridge.registration?.enabled ? 2 : null };
     const transport = soloHost ? createSoloNormalBattleTransport() : createNormalBattleTransport(root, transportConfig, roster);
     if (!transport) return false;
     browserController = config.bridge.startNormalBattle({

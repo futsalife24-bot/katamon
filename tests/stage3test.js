@@ -1375,9 +1375,10 @@ function check(name, value) {
   })());
   // クライアントの protocol と、ルールが受け付ける protocol は必ず一致させる。
   // ここがずれると本番で「部屋を作れません」から先へ一切進めなくなる。
-  const clientProto = /const FIREBASE_PROTO_VERSION = (\d+);/.exec(htmlText);
+  const clientProto = /const FIREBASE_PROTO_VERSION = REGISTERED_MATCH_MODE \? (\d+) : (\d+);/.exec(htmlText);
   check('deployed rules protocol matches the client FIREBASE_PROTO_VERSION',
-    !!clientProto && rules.protocol['.validate'] === 'newData.val() === ' + clientProto[1]);
+    !!clientProto && rules.protocol['.validate'] === 'newData.val() === ' + clientProto[2]
+    && JSON.parse(require('fs').readFileSync('database.rules.json','utf8')).rules.registeredRooms.$room.protocol['.validate'] === 'newData.val() === ' + clientProto[1]);
 
   check('refresh failure keeps the existing anonymous identity', htmlText.includes('if (firebaseAuth) {') && htmlText.includes('新規匿名アカウントを作るのは、認証情報がまったく無い最初の接続時だけ'));
   check('host cleanup waits after bye and pagehide leaves TTL cleanup', htmlText.includes('skipDeferredCleanup') && htmlText.includes('), 1000)') && htmlText.includes('endOnline(true, true, true)'));

@@ -12,7 +12,7 @@ async function preserveContextTrace(context:BrowserContext,info:TestInfo,name:st
  await info.attach(name,{path,contentType:'application/zip'});
 }
 async function browserRequest(page:Page,url:string,init:RequestInit={}){
- init.headers={...init.headers,'x-content-studio-version':'0.7.0'};
+ init.headers={...init.headers,'x-content-studio-version':'0.8.0'};
  const result=await page.evaluate(async({url,init})=>{if(new URL(url).origin!==location.origin)throw new Error('Fixture request must remain same origin');const response=await fetch(url,{...init,credentials:'same-origin',cache:'no-store'});return {status:response.status,body:await response.json()};},{url,init});
  return {status:()=>result.status,json:async()=>result.body};
 }
@@ -81,7 +81,7 @@ test('built production preflight, strict static routing, OAuth/PKCE, cookies, SW
    expect((await browserRequest(page,origin+'/api/github/pull-requests',{method:'POST',headers:writeHeaders,body:'{}'})).status()).toBe(409);
    expect(f.repo.pullRequests).toBe(0);expect(f.repo.commits).toBe(0);expect(f.repo.merges).toBe(0);
    const cookieHeader=(await context.cookies(origin)).map(cookie=>cookie.name+'='+cookie.value).join('; ');
-   expect((await f.request(origin,'/api/github/prepare','POST',{...writeHeaders,'x-content-studio-version':'0.7.0',Cookie:cookieHeader,'content-length':String(24*1024*1024+1)})).status).toBe(413);
+   expect((await f.request(origin,'/api/github/prepare','POST',{...writeHeaders,'x-content-studio-version':'0.8.0',Cookie:cookieHeader,'content-length':String(24*1024*1024+1)})).status).toBe(413);
    await f.instances[0].restart();expect((await (await browserRequest(page,origin+'/api/auth/session')).json()).authenticated).toBe(false);await authenticate(page,origin);
    await info.attach('production-entry-results',{body:JSON.stringify({sourceSha:f.release.manifest.sourceSha,files:f.release.files.size,staticBytes:f.release.manifest.files.reduce((n:number,f:any)=>n+f.bytes,0),preflightExit:preflight.status,legacyImages:images.length,cacheUrls:cached,realAndroid:false,https:'isolated self-signed loopback certificate; browser context only',memory:process.memoryUsage()}),contentType:'application/json'});
    await page.screenshot({path:info.outputPath('production-status.png'),fullPage:true});

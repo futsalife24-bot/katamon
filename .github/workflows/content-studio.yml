@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Record reviewed source identity
         env:
@@ -43,6 +45,30 @@ jobs:
       - name: Install Content Studio dependencies
         working-directory: tools/content-studio
         run: npm ci
+
+      - name: Set up isolated Rules Emulator Java runtime
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install root and Emulator test dependencies
+        run: npm ci
+
+      - name: Verify deterministic registration and trusted publisher
+        run: npm run test:registration
+
+      - name: Verify real Realtime Database Rules and publisher CAS
+        run: npm run test:registration:emulator
+
+      - name: Retain actual Rules and publisher results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registration-rules-${{ github.run_attempt }}
+          path: .registration-evidence/rules-results.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Type-check Content Studio
         working-directory: tools/content-studio
@@ -111,6 +137,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -138,6 +166,16 @@ jobs:
       - name: Verify generated sprites in the production battle renderer
         working-directory: .
         run: npx playwright test tests/e2e/content-studio-motion.spec.js --project=android-chromium-portrait-touch
+
+      - name: Set up real registry browser Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify registry ONLINE and coop on real Emulator
+        working-directory: .
+        run: npm run test:registration:browser
 
       - name: Package bounded audit evidence
         id: evidence

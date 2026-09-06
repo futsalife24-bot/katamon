@@ -274,6 +274,7 @@
   #onlineRoomFilters button { margin-top: 0; min-height: 32px; font-size: 12px; }
   #onlineRoomFilters button.active { color: #13171c; background: #ffd24a; }
   #onlineCreateOptions, #onlineBrowseOptions { display: none; }
+  #onlineEntryPanel #onlineCreatePublic, #onlineEntryPanel #onlineCreateMode, #onlineEntryPanel #onlineBrowseMode { min-height: 48px; }
   #onlineLobby.create-mode #onlineCreateOptions, #onlineLobby.browse-mode #onlineBrowseOptions { display: block; }
   #onlineLobby.browse-mode:not(.in-room) #onlineRoomInput, #onlineLobby.browse-mode:not(.in-room) #onlineRoomHint, #onlineLobby.browse-mode:not(.in-room) #onlineJoin { display: block; }
   #onlineLobby:not(.in-room) #onlineQuick, #onlineLobby:not(.in-room) #onlineCodeToggle { display: none; }
@@ -739,6 +740,11 @@
       <button id="onlineCancel" type="button">タイトルへ戻る</button>
     </div>
     <div id="onlineLobbyBody">
+      <style>#onlineLobby.in-room #registryModePicker{display:none!important}</style>
+      <nav id="registryModePicker" aria-label="対戦の登録形式" style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="?roster=registered" style="min-height:48px;display:flex;align-items:center;color:#ffe2a1">登録キャラ対応の対戦</a>
+        <a href="?roster=legacy" style="min-height:48px;display:flex;align-items:center;color:#ffe2a1">旧形式（18体）</a>
+      </nav>
       <!-- WebPが読めない端末は下のPNGへ自動で落ちる。CSSは img に当たるので見た目は変わらない。 -->
       <picture>
         <source srcset="assets/loading-emblem.webp" type="image/webp">
@@ -898,6 +904,8 @@
 <script src="shared/stage-battle-items.js"></script>
 <script src="./generated/content-studio-catalog.js"></script>
 <script src="./shared/content-studio-motion.js"></script>
+<script src="./shared/content-studio-registration.js"></script>
+<script src="./shared/content-studio-registration-game.js"></script>
 <script src="coop-mvp-foundation.js"></script>
 <!-- Gear persistence is loaded before the game shell, but it does not fetch or preload any visual asset. -->
 <script src="shared/gear-domain.js"></script>
@@ -969,12 +977,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.175-content-studio-motion';
+  const BUILD_ID = 'v2.0.176-content-studio-registration';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.176', date: '2026/09/06', summary: '登録revisionへ固定するONLINE・協力戦の専用入口を追加' },
     { version: 'v2.0.175', date: '2026/09/05', summary: '登録済み5モーションの戦闘表示と安全な遅延読込を追加' },
     { version: 'v2.0.174', date: '2026/09/05', summary: '曜日迷宮を既存BATTLEの一日一射・雲下6部位狙撃へ刷新' },
     { version: 'v2.0.173', date: '2026/09/04', summary: '一日一射の曜日ダンジョンと部位別Gear報酬を追加' },
@@ -3921,7 +3930,8 @@
     return accepted;
   }
   const GENERATED_CHARACTERS = loadGeneratedCharacters(globalThis.__CONTENT_STUDIO_CATALOG__);
-  const CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
+  const LOCAL_CHARACTERS = Object.freeze({ ...LEGACY_CHARACTERS, ...GENERATED_CHARACTERS });
+  let CHARACTERS = LOCAL_CHARACTERS;
   // Visual-only state: never serialized, never consumes battle RNG.
   let battleMotion = null;
   let battleMotionPhase = null;
@@ -3996,7 +4006,52 @@
     MATCHUP_FACES[id] = Array.isArray(character.matchupFace) ? character.matchupFace : CHARACTER_FACES[id];
   }
   const LEGACY_CHARACTER_LIST = ['kyoryu', 'medama', 'iwa', 'tori', 'barugerukan', 'nisenmono', 'burumutan', 'sumoeru', 'doRednote', 'hamulton', 'mocchario', 'mecha', 'akuma', 'jinba', 'kishi', 'neko', 'shinigami', 'coolKai'];
-  const CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
+  let CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
+  const REGISTERED_MATCH_MODE = new URLSearchParams(location.search).get('roster') === 'registered';
+  let registeredGame = null;
+  const localRegistrationRollbackSnapshots = new WeakSet();
+  const registeredArtBackups = new Map();
+  function releaseRegisteredCharacters() {
+    registeredGame?.reset();
+    for (const [id,prior] of registeredArtBackups) { if (charImages[id] && charImages[id] !== prior) charImages[id].src = ''; if (prior) charImages[id] = prior; else delete charImages[id]; }
+    registeredArtBackups.clear(); CHARACTERS = LOCAL_CHARACTERS;
+    CHARACTER_LIST = [...LEGACY_CHARACTER_LIST, ...Object.keys(GENERATED_CHARACTERS)];
+    if (onlineCharacterEl) { onlineCharacterEl.replaceChildren(); delete onlineCharacterEl.dataset.ready; }
+  }
+  function ensureRegisteredArt(id) {
+    if (!REGISTERED_MATCH_MODE || !registeredGame?.revision || !CHARACTERS[id]) return;
+    if (LOCAL_CHARACTERS[id]?.assetBase === CHARACTERS[id].assetBase && charImages[id]) return;
+    if (!registeredArtBackups.has(id)) { registeredArtBackups.set(id,charImages[id]); charImages[id] = loadCharacterArt(id); }
+  }
+  function registeredRuntime() {
+    if (!REGISTERED_MATCH_MODE) return null;
+    if (!registeredGame) {
+      if (!globalThis.ContentStudioRegistrationGame) throw new Error('登録対戦runtimeを読み込めません。再読込してください');
+      registeredGame = new globalThis.ContentStudioRegistrationGame.GameRegistry(async path => firebaseRequest(path, await ensureFirebaseAuth()), LEGACY_CHARACTERS);
+    }
+    return registeredGame;
+  }
+  async function pinRegisteredCharacters(revision, auth) {
+    const runtime = registeredRuntime();
+    if (!runtime) return;
+    releaseRegisteredCharacters();
+    runtime.session.read = path => firebaseRequest(path, auth);
+    CHARACTERS = await runtime.pin(revision);
+    CHARACTER_LIST = Object.keys(CHARACTERS);
+    if (onlineCharacterEl) { onlineCharacterEl.replaceChildren(); delete onlineCharacterEl.dataset.ready; populateOnlineCharacters(); }
+  }
+  function networkCharacterIds() { return REGISTERED_MATCH_MODE ? (registeredGame?.revision ? CHARACTER_LIST : []) : LEGACY_CHARACTER_LIST; }
+  function registeredCommitContext(msg) {
+    return { registryRevision: registeredGame?.revision, room: online?.room, round: msg?.roundId || online?.currentRoundId, seat: msg?.seat || online?.seat };
+  }
+  function registeredSnapshotReason(data) {
+    if (!REGISTERED_MATCH_MODE) return data?.registryRevision === undefined && data?.definitionHashes === undefined ? '' : 'snap.unexpectedRegistry';
+    const recoveryRoom = !online && pendingFirebaseReentry?.room;
+    const verifiedRecovery = recoveryRoom && recoveryRoom.registryRevision === registeredGame?.revision;
+    if ((!online || !['firebase','coop'].includes(online.kind)) && !verifiedRecovery) return data?.registryRevision === undefined ? '' : 'snap.unexpectedRegistry';
+    return registeredRuntime().validateSnapshot(data, { gearEnabled: verifiedRecovery ? firebaseGearEnabled(recoveryRoom.settings) : online?.kind === 'firebase' && firebaseGearEnabled(), baseStats:characterBattleBaseStats });
+  }
+
   // 地形・当たり判定は全員共通の足元座標を使う。素材ごとの透明余白だけ描画で補正する。
   function characterGroundOffsetY(key) {
     const offset = Number(CHARACTERS[key]?.groundOffsetY);
@@ -10468,6 +10523,7 @@
       simTimeMs, // 再開時に闘技場の障害物の揺れが飛ばないよう位相も持ち越す
       matchFormat,
       units: units.map(serializeUnit),
+      ...(REGISTERED_MATCH_MODE && options.forLocalRollback !== true && online && ['firebase','coop'].includes(online.kind) ? registeredRuntime().snapshotTag(units) : {}),
       turnOrder: turnOrder.slice(),
       activeIndex, turnCount,
       wind: { dir: wind.dir, strength: wind.strength, calmWind, calmBattle },
@@ -10880,6 +10936,11 @@
   // スナップショットを現在の試合状態へ流し込む。飛翔中の弾や入力は持ち越さず、
   // 必ずターン境界の状態から再開する(進行中の演出を復元しようとすると破綻するため)。
   function applySnapshot(data, options = {}) {
+    // Only a locally captured object can restore the pre-network page. A serialized
+    // packet cannot obtain this identity; setting an option is not an exemption.
+    if (!localRegistrationRollbackSnapshots.has(data)) {
+      const registrationError = registeredSnapshotReason(data); if (registrationError) throw new Error(registrationError);
+    }
     const motionHits = pendingBattleMotionHits;
     if (!firebaseBattleReplayActive()) resetBattleMotion();
     // turn境界stateは地形基底を含まない。開始で検証済みのローカル基底を補ってから、
@@ -13646,7 +13707,7 @@
   // 通信は send/onMessage/close の3つだけのインターフェースに切ってある。
   // BroadcastChannel は既存v2を維持する。Firebaseだけを常設ロビーv3へ上げる。
   const PROTO_VERSION = 2;
-  const FIREBASE_PROTO_VERSION = 3;
+  const FIREBASE_PROTO_VERSION = REGISTERED_MATCH_MODE ? 4 : 3;
   const FIREBASE_SEATS = ['p1', 'e1', 's1', 's2'];
   const FIREBASE_PLAYER_SEATS = ['p1', 'e1'];
   const FIREBASE_ROUND_RE = /^[0-9a-f]{48}$/;
@@ -13730,7 +13791,8 @@
     const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
   }
-  function commitPayload(character, nonce, readyGearBindingText = null) {
+  function commitPayload(character, nonce, readyGearBindingText = null, registrationContext = null) {
+    if (REGISTERED_MATCH_MODE && online?.kind === 'firebase') return globalThis.ContentStudioRegistration.binding({ ...registeredCommitContext(null), ...registrationContext, character, nonce, gear: readyGearBindingText });
     // Gear OFFは公開済みFirebase v3のbyte contractを維持する。Gear ONだけ、
     // local-only Ready Gear Bindingをnonce付きSHA-256材料の内側へ封印する。
     if (readyGearBindingText === null) return sha256Hex(`${character}:${nonce}`);
@@ -13831,7 +13893,11 @@
   }
   function firebaseReentryStorage() {
     try {
-      if (globalThis.localStorage && typeof globalThis.localStorage.getItem === 'function') return globalThis.localStorage;
+      if (globalThis.localStorage && typeof globalThis.localStorage.getItem === 'function') {
+        const storage = globalThis.localStorage;
+        if (!REGISTERED_MATCH_MODE) return storage;
+        return { getItem:key => storage.getItem(key + '_registered4'), setItem:(key,value) => storage.setItem(key + '_registered4',value), removeItem:key => storage.removeItem(key + '_registered4') };
+      }
     } catch (_) { /* explicit failure below */ }
     throw Object.assign(new Error('Firebase re-entry storageを利用できません'), { code: 'FIREBASE_REENTRY_STORAGE_UNAVAILABLE' });
   }
@@ -14007,6 +14073,7 @@
     let room;
     try { room = await response.json(); } catch (_) { throw Object.assign(new Error('Firebase room応答が不正です'), { code: 'FIREBASE_REENTRY_ROOM_TRANSIENT' }); }
     if (!room || typeof room !== 'object') throw Object.assign(new Error('Firebase roomは存在しません'), { code: 'FIREBASE_REENTRY_ROOM_UNAVAILABLE' });
+    if (REGISTERED_MATCH_MODE) await pinRegisteredCharacters(room.registryRevision, auth);
     return room;
   }
   function assertNoPendingFirebaseReentry() {
@@ -14163,6 +14230,7 @@
     return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
   }
   function firebaseRequestUrl(path, auth, query = null) {
+    if (REGISTERED_MATCH_MODE) path = registeredRuntime().path(path);
     const params = new URLSearchParams({ auth: auth.idToken });
     if (query) Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== null) params.set(key, String(value)); });
     return `${FIREBASE.databaseURL}/${path}.json?${params.toString()}`;
@@ -14196,6 +14264,7 @@
         status: response.status
       });
     }
+    if (path.startsWith('characterRegistry/')) return globalThis.ContentStudioRegistration.readJson(response);
     return response.status === 204 ? null : response.json();
   }
   function estimateFirebaseServerNow(clientNow, serverTimeOffset) {
@@ -14246,7 +14315,9 @@
     return firebaseBattleRecoveryApi().buildRecoveryPlan({
       roundId: candidate.roundId,
       roundStatus: candidate.roundStatus,
-      messages,
+      // RTDB omits empty arrays. Replay must apply the same normalized packets
+      // that passed validation, rather than retaining raw, fieldless snapshots.
+      messages: Object.fromEntries(Object.entries(messages).map(([key,packet]) => [key,normalizeFirebaseRecoveryPacket(packet)])),
       hostUid: candidate.room.hostUid,
       isPushKey: isFirebasePushId,
       actionMatches: firebaseActionMatches,
@@ -14348,6 +14419,7 @@
     });
   }
   async function verifyFirebaseHistoricalReveal(msg) {
+    if (REGISTERED_MATCH_MODE) { const reason = registeredRuntime().validatePacket(msg); if (reason) firebaseRecoveryFail(reason); await registeredRuntime().assets(msg.character); ensureRegisteredArt(msg.character); }
     if (!online || !firebaseSeatIsPlayer(msg?.seat) || !online.slots?.[msg.seat] || online.slots[msg.seat].uid !== msg.from) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_AUTHORITY_INVALID');
     if (typeof msg.character !== 'string' || !CHARACTER_LIST.includes(msg.character) || typeof msg.nonce !== 'string' || msg.nonce.length < 24) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_INVALID');
     const seat = msg.seat;
@@ -14358,11 +14430,11 @@
       const loadoutCommitment = globalThis.KatamonGearOnlineFirebaseWire.decodeRevealGearCommitment(msg.gearCommitmentJson, trustedContext);
       globalThis.KatamonGearOnlineProtocol.reconstructBattleGearSnapshot(loadoutCommitment, trustedContext);
       const readyBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({ loadoutCommitment, trustedContext });
-      expected = await commitPayload(msg.character, msg.nonce, globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyBinding));
+      expected = await commitPayload(msg.character, msg.nonce, globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyBinding), registeredCommitContext(msg));
       verifiedGearReveal = Object.freeze({ trustedContext, revealedCommitment: globalThis.KatamonGearOnlineLobbyProtocol.validateRevealedGearCommitment({ readyBinding, loadoutCommitment, trustedContext }) });
     } else {
       if (firebaseMessageHasGearWire(msg)) firebaseRecoveryFail('FIREBASE_RECOVERY_GEAR_UNEXPECTED');
-      expected = await commitPayload(msg.character, msg.nonce);
+      expected = await commitPayload(msg.character, msg.nonce, null, registeredCommitContext(msg));
     }
     if (online.seatCommit[seat] !== expected) firebaseRecoveryFail('FIREBASE_RECOVERY_REVEAL_COMMIT_MISMATCH');
     online.seatRevealSeen[seat] = true; online.seatCharacter[seat] = msg.character; online.seatNonce[seat] = msg.nonce; online.seatVerified[seat] = true;
@@ -14437,11 +14509,13 @@
     for (const [key, value] of Object.entries(source)) target[key] = cloneFirebaseReplayValue(value);
   }
   function captureFirebaseBattleReplayRollback() {
+    const battleSnapshot = cloneFirebaseReplayValue(buildSnapshot({ forLocalRollback:true }));
+    localRegistrationRollbackSnapshots.add(battleSnapshot);
     return {
       // applySnapshot is the established terrain/unit restoration boundary;
       // the full unit copies additionally retain transient per-unit fields
       // that a turn-boundary wire snapshot intentionally omits.
-      battleSnapshot: cloneFirebaseReplayValue(buildSnapshot()),
+      battleSnapshot,
       unitStates: units.map(unit => cloneFirebaseReplayValue(unit)),
       onlineReference: online,
       onlineState: cloneFirebaseReplayValue(online),
@@ -14629,7 +14703,7 @@
   }
   function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
   async function firebasePutMessageIfAbsent(path, auth, body) {
-    const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+    const url = firebaseRequestUrl(path, auth);
     const response = await firebaseFetchWithTimeout(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
     });
@@ -14657,7 +14731,7 @@
   // 401の時は素のPUTで撃ち直す。ルール側も !data.exists() を要求しているので、
   // 空席でなければサーバーが弾き、二人が同時に来ても片方しか通らない。
   async function firebaseClaimEmptySlot(path, auth, body) {
-    const url = `${FIREBASE.databaseURL}/${path}.json?auth=${encodeURIComponent(auth.idToken)}`;
+    const url = firebaseRequestUrl(path, auth);
     const payload = JSON.stringify(body);
     const response = await firebaseFetchWithTimeout(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: payload
@@ -14700,7 +14774,7 @@
       }
     };
     function connect() {
-      const eventUrl = `${FIREBASE.databaseURL}/rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages.json?auth=${encodeURIComponent(auth.idToken)}`;
+      const eventUrl = firebaseRequestUrl(`rooms/${room}/rounds/${roundId}/messages`,auth);
       try { source = new EventSource(eventUrl); } catch (_) { return false; }
       source.addEventListener('put', receive);
       source.addEventListener('patch', receive);
@@ -14750,13 +14824,14 @@
     }
     if (!online) return Promise.resolve(false);
     if (!ONLINE_LOG_SKIP.has(msg.t)) logOnlineEvent({ dir: 'out', t: msg.t, seat: online.seat });
-    const packet = {
+    let packet = {
       v: online.kind === 'firebase' ? FIREBASE_PROTO_VERSION : PROTO_VERSION,
       from: online.clientId,
       ...(online.kind === 'firebase' ? { seat: online.seat, roundId: online.currentRoundId } : {}),
       ...(online.kind === 'coop' ? { generation: online.matchGeneration } : {}),
       ...msg
     };
+    if (REGISTERED_MATCH_MODE && ['firebase','coop'].includes(online.kind)) packet = registeredRuntime().packet(packet);
     if (netSim.lossRate > 0 && Math.random() < netSim.lossRate) return; // 落とす
     if (netSim.delayMs > 0) return new Promise(resolve => setTimeout(() => resolve(online ? online.transport.send(packet) : false), netSim.delayMs));
     return online.transport.send(packet);
@@ -14856,6 +14931,7 @@
   function snapshotValidationReason(snap, options = {}) {
     const includeTerrain = options.includeTerrain !== false;
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return 'snap.type';
+    const registrationError = registeredSnapshotReason(snap); if (registrationError) return registrationError;
     if (snap.v !== SNAPSHOT_VERSION) return 'snap.v';
     if (snap.battleMode !== 'normal') return 'snap.battleMode';
     const limits = snapshotLimits(snap);
@@ -14989,6 +15065,8 @@
     // テスト/診断用には旧v2パケットの形も検証できるよう残す。ただし本番受信は下でv3だけに絞る。
     const legacyV2 = msg.v === PROTO_VERSION && !Object.prototype.hasOwnProperty.call(msg, 'roundId');
     if (msg.v !== FIREBASE_PROTO_VERSION && !legacyV2) return { ok: false, reason: 'packet.v' };
+    if (REGISTERED_MATCH_MODE) { const reason = registeredRuntime().validatePacket(msg); if (reason) return { ok:false, reason }; }
+    else if (msg.registryRevision !== undefined || msg.definitionHash !== undefined || (msg.character && !LEGACY_CHARACTER_LIST.includes(msg.character))) return { ok:false, reason:'packet.legacyRegistry' };
     if (typeof msg.from !== 'string' || msg.from.length < 1 || msg.from.length > 128) return { ok: false, reason: 'packet.from' };
     const types = legacyV2 ? new Set(['join', 'hello', 'start', 'ready', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'ping']) : FIREBASE_MESSAGE_TYPES;
     if (!types.has(msg.t)) return { ok: false, reason: 'packet.t' };
@@ -16342,14 +16420,14 @@
   // ステータス行の更新はここに一本化されている。protocolErrorの有無で赤帯クラスを付け外しし、
   // 新しい呼び出し経路は作らない(rejectFirebaseMessage等の既存呼び出しに乗る)。
   function onlineLobbyStatus(text) {
-    if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = text;
+    if (onlineLobbyStatusEl) onlineLobbyStatusEl.textContent = globalThis.ContentStudioRegistrationGame?.message(text) ?? text;
     if (onlineLobbyEl) onlineLobbyEl.classList.toggle('error', !!(online && online.protocolError));
   }
   function closeOnlineLobby() { if (onlineLobbyEl) onlineLobbyEl.classList.remove('open'); syncBgm(); }
   function populateOnlineCharacters() {
     if (!onlineCharacterEl) return;
     if (!onlineCharacterEl.dataset.ready) {
-      for (const key of CHARACTER_LIST) {
+      for (const key of networkCharacterIds()) {
         const option = document.createElement('option'); option.value = key; option.textContent = CHARACTERS[key].name;
         onlineCharacterEl.appendChild(option);
       }
@@ -16392,12 +16470,13 @@
     if (onlineLobbyEl) onlineLobbyEl.classList.toggle('busy', busy);
   }
   function selectedOnlineCharacter() {
-    return onlineCharacterEl && CHARACTER_LIST.includes(onlineCharacterEl.value) ? onlineCharacterEl.value : CHARACTER_LIST[0];
+    return onlineCharacterEl && networkCharacterIds().includes(onlineCharacterEl.value) ? onlineCharacterEl.value : networkCharacterIds()[0];
   }
   function updateOnlineCharacterPreview() {
     if (!onlineCharacterPreviewEl) return;
     const key = selectedOnlineCharacter();
     const character = CHARACTERS[key];
+    if (key) ensureRegisteredArt(key);
     const art = charImages[key];
     onlineCharacterPreviewEl.dataset.character = key;
     onlineCharacterPreviewEl.alt = character ? character.name : '';
@@ -16463,6 +16542,7 @@
     if (visibility === 'public' && settings.gearCapability) throw new Error('公開部屋ではGearを有効にできません');
     return Object.freeze({
       protocol: room.protocol,
+      ...(room.registryRevision ? { registryRevision: room.registryRevision } : {}),
       hostUid: room.hostUid,
       createdAt: room.createdAt,
       expiresAt: room.expiresAt,
@@ -16972,6 +17052,7 @@
     // awaits Firebase. Do not create a second session after that restoration.
     assertNoPendingFirebaseReentry();
     const now = firebaseServerNow(auth);
+    if (REGISTERED_MATCH_MODE) await pinRegisteredCharacters(undefined, auth);
     if (!options || typeof options !== 'object' || Array.isArray(options)
         || Object.keys(options).some(key => key !== 'visibility' && key !== 'gearMode')) throw new Error('部屋作成設定が不正です');
     const visibility = normalizeFirebaseRoomVisibility(options.visibility === undefined ? 'private' : options.visibility);
@@ -16984,6 +17065,7 @@
       const roomSettings = { ...normalizeLobbySettings(settings || defaultLobbySettings()) };
       if (gearCapability) roomSettings.gearCapability = gearCapability;
       const room = {
+        ...(REGISTERED_MATCH_MODE ? { registryRevision: registeredRuntime().revision } : {}),
         protocol: FIREBASE_PROTO_VERSION, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS,
         visibility, settings: roomSettings, slots: { p1: { uid: auth.uid, claimedAt: now }, e1: null, s1: null, s2: null },
         round: { id: roundId, status: 'lobby', players: { p1: auth.uid, e1: null } },
@@ -17010,6 +17092,10 @@
     // The same post-auth fence prevents a restored candidate from racing into
     // an empty-seat claim in another room.
     assertNoPendingFirebaseReentry();
+    if (REGISTERED_MATCH_MODE) {
+      const revision = await firebaseRequest(`rooms/${code}/registryRevision`, auth);
+      await pinRegisteredCharacters(revision, auth);
+    }
     firebaseServerNow(auth); // オフセットが無い/不正なら入室前に止める。
     let seat = null;
     let reentryCredentialSaved = false;
@@ -17474,6 +17560,7 @@
   }
   function beginFirebaseOnline(role, code, auth, character, room, seat, quick = null, reentryLease = null, recoveryOptions = null) {
     const persisted = inspectPersistedFirebaseRoom(room);
+    if (REGISTERED_MATCH_MODE && (persisted.protocol !== 4 || persisted.registryRevision !== registeredRuntime().revision)) throw new Error('registry.roomMismatch');
     if (!persisted.slots[seat] || persisted.slots[seat].uid !== auth.uid) throw new Error('自分のFirebase席を確認できません');
     const recovering = !!recoveryOptions?.recovering;
     const transport = makeFirebaseTransport(code, auth, room && room.round && room.round.id, onlineLobbyStatus, () => refreshFirebaseTransport(true), err => {
@@ -17931,6 +18018,8 @@
       && readying.readyCaptureGeneration === generation;
     renderFirebaseLobby();
     try {
+      if (REGISTERED_MATCH_MODE) { await registeredRuntime().session.assertNewStart(); await registeredRuntime().assets(characterId); }
+      else if (!LEGACY_CHARACTER_LIST.includes(characterId)) throw new Error('旧対戦では既存18体のみ利用できます');
       if (!await ensureFirebaseSettingsAuthority('READY')) return false;
       if (!operationIsCurrent() || !isFirebasePlayer()) return false;
       const readyAuthorityIdentity = firebaseReadyAuthorityIdentity();
@@ -18076,6 +18165,7 @@
   }
   async function verifyPeerReveal(msg) {
     if (!online || online.kind !== 'firebase') return;
+    if (REGISTERED_MATCH_MODE) { const reason = registeredRuntime().validatePacket(msg); if (reason) { rejectFirebaseMessage(reason); return; } await registeredRuntime().assets(msg.character); ensureRegisteredArt(msg.character); }
     const seat = msg.seat;
     // Gear OFF は現行v3互換のまま検証する。Gear payloadを扱う時だけ、
     // messageではなく永続化済みsettingsを再確認してauthorityを固定する。
@@ -18101,7 +18191,7 @@
         globalThis.KatamonGearOnlineProtocol.reconstructBattleGearSnapshot(loadoutCommitment, trustedContext);
         const readyGearBinding = globalThis.KatamonGearOnlineLobbyProtocol.createReadyGearBinding({ loadoutCommitment, trustedContext });
         const bindingText = globalThis.KatamonGearOnlineLobbyProtocol.stableSerializeReadyGearBinding(readyGearBinding);
-        expected = await commitPayload(msg.character, msg.nonce, bindingText);
+        expected = await commitPayload(msg.character, msg.nonce, bindingText, registeredCommitContext(msg));
         const revealedCommitment = globalThis.KatamonGearOnlineLobbyProtocol.validateRevealedGearCommitment({
           readyBinding: readyGearBinding,
           loadoutCommitment,
@@ -18110,7 +18200,7 @@
         verifiedGearReveal = Object.freeze({ trustedContext, revealedCommitment });
       } else {
         if (firebaseMessageHasGearWire(msg)) throw new Error('Gear OFF roomへGear revealを送信できません');
-        expected = await commitPayload(msg.character, msg.nonce);
+        expected = await commitPayload(msg.character, msg.nonce, null, registeredCommitContext(msg));
       }
       if (!online || expected !== online.seatCommit[seat]) {
         if (online) rejectFirebaseMessage('キャラクター／Gear確認が一致しません');
@@ -18551,6 +18641,7 @@
   function applyPersistedFirebaseRoomAuthority(room) {
     if (!online || online.kind !== 'firebase') return false;
     const persisted = inspectPersistedFirebaseRoom(room);
+    if (REGISTERED_MATCH_MODE && persisted.registryRevision !== registeredRuntime().revision) throw new Error('registry.roomMismatch');
     if (persisted.visibility !== online.visibility) throw new Error('room visibilityが変更されました');
     const acceptedRevision = Number(online.acceptedSettingsRevision) || 0;
     if (persisted.settings.revision < acceptedRevision) throw new Error('persisted settings revisionが巻き戻りました');
@@ -18789,6 +18880,7 @@
     // 人が座っている対戦者席ぶんの伏せ合いがそろってから開始する。
     if (!firebasePeersCommitted()) return;
     try {
+      if (REGISTERED_MATCH_MODE) await registeredRuntime().session.start();
       if (!await ensureFirebaseSettingsAuthority('start request') || !online || online.phase !== 'lobby') return;
       if (!allFirebasePlayersReady() || !firebasePeersCommitted()) return;
       if (firebaseGearEnabled() && !await ensureFirebaseReadyGearCurrent()) return;
@@ -18983,6 +19075,7 @@
     }
     online = null;
     setLocalSeat('p1');
+    if (REGISTERED_MATCH_MODE && registeredGame && leaving.kind === 'firebase') releaseRegisteredCharacters();
     if (onlineLobbyEl) onlineLobbyEl.classList.remove('in-room', 'host', 'results');
     cancelLeaveFirebaseLobbyConfirm();
     closeOnlineLobby();
@@ -29927,6 +30020,9 @@
 
   function restartCoopNormalBattle() {
     if (!coopNormalSession || online?.kind !== 'coop' || online.role !== 'host') return false;
+    // Registered rematches go through the room's write-time active revision gate.
+    // The legacy in-battle shortcut cannot establish a new registry start boundary.
+    if (REGISTERED_MATCH_MODE) { returnCoopNormalToLobby(); return false; }
     flushCoopPendingTakeovers();
     online.resultSent = false;
     online.readyUids.clear();
@@ -31281,6 +31377,16 @@
         onlineActive: isOnline() || roomScreenOpen(),
       };
     },
+    registration: Object.freeze({
+      enabled: REGISTERED_MATCH_MODE,
+      async pin(revision, auth) { await pinRegisteredCharacters(revision, auth); },
+      get revision() { return registeredGame?.revision ?? null; },
+      resolve(id, hash) { return registeredRuntime().resolve(id, hash); },
+      async ready(id) { await registeredRuntime().session.assertNewStart(); await registeredRuntime().assets(id); ensureRegisteredArt(id); },
+      async start(ids) { await registeredRuntime().session.assertNewStart(); for (const id of new Set(ids)) { await registeredRuntime().assets(id); ensureRegisteredArt(id); } },
+      release() { releaseRegisteredCharacters(); },
+      validateSnapshot(snapshot) { return registeredRuntime().validateSnapshot(snapshot,{baseStats:characterBattleBaseStats}); },
+    }),
     getPlayerName: localPlayerName,
     getCanvas() { return canvas; },
     getBattleUiContract: coopBattleUiContract,
@@ -31292,7 +31398,7 @@
       if (!surface || coopBattleSurface === surface) coopBattleSurface = null;
     },
     getCharacters() {
-      return CHARACTER_LIST.filter(key => isCharacterUnlocked(key)).map(key => {
+      return (REGISTERED_MATCH_MODE && !registeredGame?.revision ? LEGACY_CHARACTER_LIST : networkCharacterIds()).filter(key => isCharacterUnlocked(key)).map(key => {
         const character = CHARACTERS[key];
         const assetStem = character.asset || key;
         return {
@@ -31304,7 +31410,7 @@
     getBattleCharacters() {
       // ロビーで選べる範囲は各端末の解放状況に従う。一方、戦闘で受け取る仲間の
       // キャラ定義は全端末共通にし、他端末だけが解放したキャラを差し替えない。
-      return CHARACTER_LIST.map(key => {
+      return (REGISTERED_MATCH_MODE && !registeredGame?.revision ? LEGACY_CHARACTER_LIST : networkCharacterIds()).map(key => {
         const character = CHARACTERS[key];
         const assetStem = character.asset || key;
         return {

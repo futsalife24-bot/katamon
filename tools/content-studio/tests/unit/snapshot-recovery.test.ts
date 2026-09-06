@@ -26,10 +26,12 @@ describe('fixed GitHub snapshot and durable reconciliation', () => {
     const a = await publish(repo, bundle()); repo.advanceTo(a.result.commitSha);
     const b = await publish(repo, bundle('unit-b')); repo.advanceTo(b.result.commitSha);
     const preserved = repo.tree.filter(e => e.path.includes('unit-b'));
+    const registeredB = JSON.parse((await repo.getBlob(repo.tree.find(e => e.path.endsWith('content-studio-registration.json'))!.sha)).toString()).characters['unit-b'];
     const update = bundle('unit-a', 'abcdef012345');
     update.sourceRevision = (await new RepositoryService(serverTestConfig(),repo).readPublishedCharacter('unit-a','123')).revision;
     const result = await publish(repo, update); repo.advanceTo(result.result.commitSha);
     expect(repo.tree.filter(e => e.path.includes('unit-b'))).toEqual(preserved);
+    expect(JSON.parse((await repo.getBlob(repo.tree.find(e => e.path.endsWith('content-studio-registration.json'))!.sha)).toString()).characters['unit-b']).toEqual(registeredB);
     const manifest = JSON.parse((await repo.getBlob(repo.tree.find(e => e.path.endsWith('manifest.json'))!.sha)).toString());
     expect(manifest.characters.map((c: {id: string}) => c.id)).toEqual(['unit-a','unit-b']);
     const regenerated = await reconstructSnapshot(update, repo.tree, sha => repo.getBlob(sha), serverTestConfig());

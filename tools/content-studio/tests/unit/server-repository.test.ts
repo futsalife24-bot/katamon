@@ -8,6 +8,7 @@ import { HttpError } from '../../server/security.js';
 import { FixtureRepository } from './repository-fake';
 import type { Clock } from '../../server/types.js';
 import { serverTestConfig, validatedBundle } from './server-fixtures.js';
+import registration from '../../../../shared/content-studio-registration.js';
 
 class FixedClock implements Clock {
   constructor(private readonly value: number) {}
@@ -34,13 +35,21 @@ describe('GitHub repository service', () => {
     expect(prepared.diff).toContain('+ content/characters/sample-unit.json');
 
     const result = await service.createPullRequest(prepared.id, bundle, 'session-hash');
-    expect(github.blobs).toBe(bundle.files.length + 2);
+    expect(github.blobs).toBe(bundle.files.length + 3); // catalog, manifest, trusted registration candidate
     expect(github.trees).toBe(1);
     expect(github.commits).toBe(1);
     expect(github.branches).toEqual([prepared.branch]);
     expect(github.branches[0]).not.toBe('master');
     expect(github.pullRequests).toBe(1);
     expect(result.number).toBe(42);
+    const committed = await github.getCommit(github.refs.get(result.branch)!);
+    const candidateFile = (await github.getTree(committed.treeSha)).find(file => file.path === 'generated/content-studio-registration.json');
+    expect(candidateFile).toBeDefined();
+    const registry = await registration.verify(JSON.parse((await github.getBlob(candidateFile!.sha)).toString('utf8')));
+    expect(Object.keys(registry.characters)).toHaveLength(19);
+    expect(registry.characters['sample-unit']).toMatchObject({gameId:'sample-unit'});
+    expect(registry.characters.doRednote).toMatchObject({slug:'do-rednote'});
+    expect(prepared.diff).toContain('generated/content-studio-registration.json');
 
     const retry = await service.createPullRequest(prepared.id, bundle, 'session-hash');
     expect(retry).toEqual(result);
