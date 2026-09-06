@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.175-content-studio-motion';
+const CACHE_VERSION = 'katamon-pwa-v2.0.176-content-studio-registration';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -16,6 +16,8 @@ const APP_SHELL = [
   './index.html',
   './generated/content-studio-catalog.js',
   './shared/content-studio-motion.js',
+  './shared/content-studio-registration.js',
+  './shared/content-studio-registration-game.js',
   './generated/content-studio-manifest.json',
   './manifest.webmanifest',
   './coop-mvp-foundation.js',

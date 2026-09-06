@@ -5,6 +5,9 @@
   "description": "対象ゲームとモバイル向けStage Studioのローカル開発・検証コマンド",
   "scripts": {
     "serve": "http-server . -p 4173 -c-1",
+    "test:registration": "node tools/registration/build-rules.cjs --check && node --test tests/content-studio-registration.test.js tests/registration-publisher.test.js",
+    "test:registration:emulator": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"node tests/registration-emulator.cjs\"",
+    "test:registration:browser": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"playwright test --config tests/registration.playwright.config.cjs\"",
     "test:content-motion": "node --test tests/content-studio-motion.test.js && node tests/content-studio-motion-game.test.js",
     "test:seat": "node tests/seattest.js p1 && node tests/seattest.js e1",
     "test:regression": "node tests/regressiontest.js p1 && node tests/regressiontest.js e1",
@@ -146,6 +149,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "firebase-tools": "15.29.0",
     "http-server": "^14.1.1"
   }
 }

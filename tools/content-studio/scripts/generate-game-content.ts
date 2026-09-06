@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { GENERATOR_VERSION } from '../src/domain/types';
+import { buildRegistrationCandidate, serializeRegistration } from '../src/generation/registration';
 import { validateCharacter } from '../src/domain/validation';
 import {
   buildCompatibilityCatalog,
@@ -75,14 +76,19 @@ export async function generateGameContent(options: GenerateGameContentOptions): 
   const manifestText = buildContentManifest(records, GENERATOR_VERSION);
   const catalogPath = resolve(repoRoot, 'generated/content-studio-catalog.js');
   const manifestPath = resolve(repoRoot, 'generated/content-studio-manifest.json');
+  const registryPath = resolve(repoRoot, 'generated/content-studio-registration.json');
+  const registryText = serializeRegistration(await buildRegistrationCandidate(records,
+    await readFile(resolve(repoRoot, 'index.html'), 'utf8'), async path => readFile(resolve(repoRoot, path))));
 
   if (options.check) {
     await assertCurrent(catalogPath, catalogText);
     await assertCurrent(manifestPath, manifestText);
+    await assertCurrent(registryPath, registryText);
   } else if (options.write !== false) {
     await mkdir(dirname(catalogPath), { recursive: true });
     await writeFile(catalogPath, catalogText, 'utf8');
     await writeFile(manifestPath, manifestText, 'utf8');
+    await writeFile(registryPath, registryText, 'utf8');
   }
   return { recordCount: records.length, catalogPath, manifestPath, catalogText, manifestText };
 }

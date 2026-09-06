@@ -328,7 +328,7 @@ async function reusableEditingSources(draft:DraftRecord) {
 function publicationOutboxId(bundle: ArtifactBundle): string { return 'publish:' + bundle.bundleId + (bundle.revalidation ? ':' + bundle.revalidation.targetBaseSha + ':' + bundle.revalidation.headSha : ''); }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.7.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.8.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode

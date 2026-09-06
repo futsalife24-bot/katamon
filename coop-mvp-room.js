@@ -131,9 +131,10 @@
 
     const document = browserRoot.document;
     const progress = foundation.loadState();
-    const characters = bridge.getCharacters();
-    const battleCharacters = bridge.getBattleCharacters?.() || characters;
-    const characterIds = characters.map((entry) => entry.id);
+    let characters = bridge.getCharacters();
+    const roomProtocol = bridge.registration?.enabled ? 2 : ROOM_PROTOCOL;
+    let battleCharacters = bridge.getBattleCharacters?.() || characters;
+    let characterIds = characters.map((entry) => entry.id);
     let session = null;
     let busy = false;
     let battleActive = false;
@@ -211,7 +212,7 @@
       e1: element('coopAiCharacterE1'), s1: element('coopAiCharacterS1'), s2: element('coopAiCharacterS2'),
     };
 
-    const setStatus = (message) => { statusEl.textContent = message; };
+    const setStatus = (message) => { statusEl.textContent = browserRoot.ContentStudioRegistrationGame?.message(message) ?? message; };
     const setBusy = (value) => { busy = value; overlay.classList.toggle('busy', value); };
     const option = (select, value, label) => { const node = document.createElement('option'); node.value = value; node.textContent = label; select.appendChild(node); };
     foundation.DIFFICULTIES.forEach((value) => {
@@ -230,6 +231,23 @@
     subweaponEl.value = progress.equipment.subweapon || '';
     itemEl.value = progress.equipment.coopItem || 'rescue-kit';
 
+    async function pinRegistration(revision, auth) {
+      if (!bridge.registration?.enabled) return;
+      await bridge.registration.pin(revision, auth);
+      characters = bridge.getCharacters(); battleCharacters = bridge.getBattleCharacters(); characterIds = characters.map(entry => entry.id);
+      characterEl.replaceChildren(); Object.values(aiCharacterEls).forEach(select => select.replaceChildren());
+      characters.forEach(value => { option(characterEl,value.id,value.name); GUEST_SEATS.forEach(seat => option(aiCharacterEls[seat],value.id,value.name)); });
+    }
+    function validateRegisteredRoom(room) {
+      if (!bridge.registration?.enabled) return;
+      if (room?.protocol !== roomProtocol || room.registryRevision !== bridge.registration.revision) throw new Error('registry.coopRoomMismatch');
+      for (const slot of Object.values(room.slots || {})) if (slot?.uid) {
+        if (typeof slot.definitionHash !== 'string') throw new Error('registry.coopDefinition');
+        bridge.registration.resolve(slot.character,slot.definitionHash);
+      }
+      if (room.settings?.aiCharacters) for (const id of Object.values(room.settings.aiCharacters)) bridge.registration.resolve(id);
+    }
+
     function selectedEquipment() {
       return { character: characterEl.value, subweapon: subweaponEl.value || null, coopItem: itemEl.value || 'rescue-kit' };
     }
@@ -246,6 +264,7 @@
         uid: auth.uid,
         name: cleanText(bridge.getPlayerName(), 12, 'ななし'),
         character: chosen.character,
+        ...(bridge.registration?.enabled ? { definitionHash:bridge.registration.resolve(chosen.character).definitionHash } : {}),
         subweapon: chosen.subweapon,
         coopItem: chosen.coopItem,
         ready: prior?.ready === true,
@@ -351,6 +370,7 @@
     }
 
     function enterSession(next) {
+      validateRegisteredRoom(next.room);
       session = next; renderRoom(); stopTimers(); schedulePoll(0); scheduleHeartbeat(18000);
       setStatus('参加者と装備を同期しています。');
     }
@@ -369,12 +389,14 @@
           overlay.classList.add('open');
           if (!nextRoom) {
             session = null;
+            bridge.registration?.enabled && bridge.registration.release();
             roomEl.hidden = true; footerEl.hidden = true; entryEl.hidden = false;
             bridge.syncBgm();
             setStatus('協力部屋を退出しました。');
             return;
           }
           if (!session) return;
+          validateRegisteredRoom(nextRoom);
           session.room = nextRoom;
           renderRoom();
           schedulePoll(0); scheduleHeartbeat(18000); bridge.syncBgm();
@@ -383,6 +405,7 @@
         onExitTitle() {
           battleActive = false;
           session = null;
+          bridge.registration?.enabled && bridge.registration.release();
           roomEl.hidden = true;
           footerEl.hidden = true;
           entryEl.hidden = false;
@@ -401,9 +424,10 @@
         if (active.role === 'host') await renewHostLease();
         const room = await bridge.request(`coopRooms/${active.code}`, active.auth);
         if (!session || session !== active) return;
-        if (!room || room.protocol !== ROOM_PROTOCOL || !room.slots?.[active.seat] || room.slots[active.seat].uid !== active.auth.uid) {
+        if (!room || room.protocol !== roomProtocol || !room.slots?.[active.seat] || room.slots[active.seat].uid !== active.auth.uid) {
           await leaveRoom(false); setStatus('この協力部屋は終了しました。'); return;
         }
+        validateRegisteredRoom(room);
         session.room = room;
         if (room.phase !== 'lobby') { launchBattle(); return; }
         renderRoom();
@@ -433,10 +457,10 @@
       if (!gate.allowed) { setStatus(gate.message); showRecovery(); return; }
       setBusy(true); setStatus('協力部屋を建造しています…');
       try {
-        const auth = await bridge.ensureAuth(); const now = bridge.serverNow(auth); const settings = settingsFromEntry();
+        const auth = await bridge.ensureAuth(); await pinRegistration(undefined, auth); const now = bridge.serverNow(auth); const settings = settingsFromEntry();
         for (let attempt = 0; attempt < 6; attempt += 1) {
           const code = bridge.generateRoomCode(); const hostSlot = makeSlot(auth);
-          const room = { protocol: ROOM_PROTOCOL, hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS, phase: 'lobby', settings, slots: { p1: hostSlot } };
+          const room = { protocol: roomProtocol, ...(bridge.registration?.enabled ? { registryRevision:bridge.registration.revision } : {}), hostUid: auth.uid, createdAt: { '.sv': 'timestamp' }, expiresAt: now + ROOM_TTL_MS, phase: 'lobby', settings, slots: { p1: hostSlot } };
           try {
             await bridge.request(`coopRooms/${code}`, auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(room) });
             const next = { role: 'host', seat: 'p1', code, auth, room, roomName: cleanText(element('coopRoomName').value, 24, '巨大要塞へ挑戦'), listCreatedAt: now, lastLeaseAt: now };
@@ -458,13 +482,14 @@
       let claimedSeat = null; let auth = null;
       try {
         auth = await bridge.ensureAuth();
+        if (bridge.registration?.enabled) await pinRegistration(await bridge.request(`coopRooms/${code}/registryRevision`,auth),auth);
         for (const seat of GUEST_SEATS) {
           const claimed = await bridge.claimEmptySlot(`coopRooms/${code}/slots/${seat}`, auth, makeSlot(auth));
           if (claimed) { claimedSeat = seat; break; }
         }
         if (!claimedSeat) throw new Error('この協力部屋は満席です。');
         const room = await bridge.request(`coopRooms/${code}`, auth);
-        if (!room || room.protocol !== ROOM_PROTOCOL || room.phase !== 'lobby' || room.slots?.[claimedSeat]?.uid !== auth.uid) throw new Error('参加受付中の部屋ではありません。');
+        if (!room || room.protocol !== roomProtocol || room.phase !== 'lobby' || room.slots?.[claimedSeat]?.uid !== auth.uid) throw new Error('参加受付中の部屋ではありません。');
         enterSession({ role: 'guest', seat: claimedSeat, code, auth, room, roomName: '' });
         setStatus('協力部屋へ参加しました。装備を選んで準備完了を押してください。');
       } catch (error) {
@@ -502,7 +527,8 @@
       }
       setBusy(true);
       try {
-        const body = { ...nextSlot, uid: session.auth.uid, name: cleanText(bridge.getPlayerName(), 12, 'ななし'), claimedAt: session.room.slots[session.seat].claimedAt, seenAt: { '.sv': 'timestamp' } };
+        if (bridge.registration?.enabled && nextSlot.ready) await bridge.registration.ready(nextSlot.character);
+        const body = { ...nextSlot, ...(bridge.registration?.enabled ? { definitionHash:bridge.registration.resolve(nextSlot.character).definitionHash } : {}), uid: session.auth.uid, name: cleanText(bridge.getPlayerName(), 12, 'ななし'), claimedAt: session.room.slots[session.seat].claimedAt, seenAt: { '.sv': 'timestamp' } };
         await bridge.request(`coopRooms/${session.code}/slots/${session.seat}`, session.auth, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         session.room.slots[session.seat] = { ...body, seenAt: bridge.serverNow(session.auth) }; renderRoom();
       } catch (_error) { setStatus('装備の同期に失敗しました。もう一度お試しください。'); }
@@ -533,6 +559,7 @@
       if (!battle?.makeRoundId) { setStatus('協力戦を読み込めませんでした。'); return; }
       setBusy(true); setStatus('要塞戦の同期を開始しています…'); renderSeats();
       try {
+        if (bridge.registration?.enabled) { validateRegisteredRoom(session.room); await bridge.registration.start([...Object.values(session.room.slots).map(slot => slot.character), ...Object.values(selectedAiCharacters())]); }
         const now = bridge.serverNow(session.auth);
         const revision = Math.max(1, Number(session.room.settings?.revision || 1) + 1);
         // A match identity is fixed when this battle starts.  Individual round
@@ -570,6 +597,7 @@
           await bridge.request(`coopRooms/${leaving.code}`, leaving.auth, { method: 'DELETE' }).catch(() => {});
         } else await bridge.request(`coopRooms/${leaving.code}/slots/${leaving.seat}`, leaving.auth, { method: 'DELETE' }).catch(() => {});
       }
+      bridge.registration?.enabled && bridge.registration.release();
       roomEl.hidden = true; footerEl.hidden = true; entryEl.hidden = false;
       if (showEntry) setStatus('協力ロビーから退出しました。');
     }

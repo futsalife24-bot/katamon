@@ -116,6 +116,14 @@ const transportSnapshot = {
 };
 check('鋼鉄初期台座と破壊可能足場を持つ大型開始snapshotを通信境界が受理',
   battle.normalSnapshotLooksSafe(transportSnapshot, soloRoster, transportConfig, true));
+const registeredTerrainSnapshot = clone(transportSnapshot);
+for (const columns of [registeredTerrainSnapshot.segments,registeredTerrainSnapshot.terrainMaterialSegments]) {
+  for (const column of columns) for (const segment of column) if (segment[1] === 936) segment[1] = 924;
+}
+check('登録protocolは実ゲーム下端924を受理し旧936を拒否、旧protocolの契約は維持',
+  battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+  && !battle.normalSnapshotLooksSafe(transportSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+  && !battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,transportConfig,true));
 check('旧・全面鋼鉄の空中足場snapshotを新ルールでは拒否',
   !battle.normalSnapshotLooksSafe({
     ...transportSnapshot,

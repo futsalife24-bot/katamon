@@ -7,8 +7,10 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 assert.match(html, /<script src="shared\/stage-battle-items\.js"><\/script>/,
   'pure stage battle item module must load before the inline game');
-assert.match(html, /const BUILD_ID = 'v2\.0\.175-content-studio-motion'/,
-  'index and service worker build IDs must advance together');
+const buildId = html.match(/const BUILD_ID = '([^']+)'/)?.[1];
+const cacheVersion = fs.readFileSync(path.join(root,'sw.js'),'utf8').match(/const CACHE_VERSION = '([^']+)'/)?.[1];
+assert.ok(buildId && cacheVersion, 'both build identifiers must be explicit');
+assert.equal(cacheVersion,'katamon-pwa-'+buildId,'index and service worker build IDs must advance together');
 
 for (const needle of [
   'function isStageBattleItemEligibleMatch()',

@@ -4,6 +4,9 @@ const baseURL = process.env.STAGE_STUDIO_BASE_URL || 'http://127.0.0.1:4173';
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
+  // Runs with a fail-closed demo Auth/RTDB Emulator in registration.playwright.config.cjs.
+  // Content Studio CI invokes that suite explicitly; ordinary browser tests have no Emulator.
+  testIgnore: '**/content-studio-registration.spec.js',
   outputDir: './test-results/playwright',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
