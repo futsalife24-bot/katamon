@@ -8,7 +8,7 @@
 2. OAuth Appのcallback URLを `http://localhost:4174/api/auth/callback` にします。Viteが `/api` を `127.0.0.1:8787` へ転送します。Chromeのlocalhost例外を使ってもcookie自体の `Secure` 属性は外しません。
 3. `npm run server:dev` と `npm run dev` を別々に起動します。
 
-本番相当では `npm run server:build` 後に `npm run server:start` で、検証済みの単一bundleを起動します。
+本番同一origin配信は `npm run production:build` → 環境設定 → `npm run production:preflight` → `npm run production:start` です。`server:build/start` はAPI単体用です。配布物・TLS・OAuth・移行・復旧・外部設定は [PRODUCTION.md](PRODUCTION.md) を参照してください。設定済み本番ホストの作成・配備は、この実装PRに含みません。
 
 環境変数が未設定でもサーバーはhealth応答を返しますが、実GitHub操作は503で安全に停止します。PWAのモックモードはサーバー認証なしで最後まで確認できます。本番環境では設定不足のまま起動しません。
 

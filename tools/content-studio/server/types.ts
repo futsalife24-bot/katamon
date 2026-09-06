@@ -24,6 +24,8 @@ export interface SessionRecord {
 }
 
 export interface ServerConfig {
+  production?: boolean;
+  trustedProxyAddresses?: readonly string[];
   host: string;
   port: number;
   publicAppUrl: URL;

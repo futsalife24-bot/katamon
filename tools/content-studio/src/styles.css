@@ -572,3 +572,6 @@ progress { width: 100%; accent-color: var(--brand); }
 .published-character { padding: 16px 0; border-bottom: 1px solid #ccd3df; overflow-wrap: anywhere; }
 .published-character button, .published-edit-mode button { min-height:48px; white-space:normal; margin-top:8px; }
 .published-character h3 { overflow-wrap:anywhere; }
+.origin-migration { min-width:0; overflow-wrap:anywhere; }
+.origin-migration button { min-height:48px; white-space:normal; margin-top:8px; }
+.origin-migration select { width:100%; min-width:0; min-height:48px; }

@@ -357,6 +357,9 @@ export interface ArtifactBundle {
 export type MockScenario = 'success' | 'network-offline' | 'tests-failed' | 'conflict';
 
 export interface RepositoryStatus {
+  repository?: string;
+  accessVerified?: boolean;
+  protectionVerified?: boolean;
   publishLimits?: import('./publish-limits.js').PublishLimits;
   mode: 'mock' | 'server';
   connected: boolean;

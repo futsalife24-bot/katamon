@@ -1,4 +1,4 @@
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 const CACHE_NAME = `content-studio-pwa-${VERSION}`;
 const CACHE_PREFIX = 'content-studio-pwa-';
 const MAX_RUNTIME_ENTRIES = 80;
@@ -77,6 +77,8 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Authenticated API and OAuth navigations never enter the offline/cache path.
+  if (!url.pathname.startsWith(new URL(self.registration.scope).pathname) || request.headers.has('authorization')) return;
 
   // A controlled page may POST to the same-origin GitHub backend as well. Only
   // the manifest's share-target action is image intake; all other POST requests

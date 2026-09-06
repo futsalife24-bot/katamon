@@ -8,6 +8,8 @@ import { HttpError } from './security.js';
 import { reconstructSnapshot, fileDigest } from './snapshot.js';
 import type { BuildState, Clock, DeploymentState, GitTreeEntry, ServerConfig, ValidatedBundle, ValidatedFile } from './types.js';
 import { systemClock } from './types.js';
+import { recoveryHintSchema, type RecoveryHint } from '../src/domain/recovery-package.js';
+import { validateImage } from './validation.js';
 
 type RepositoryGitHub = Pick<GitHubClient, 'getBaseSha' | 'getCommit' | 'getTree' | 'getBlob' | 'createBlob' | 'createTree' | 'createCommit' | 'createBranch' | 'getBranchSha' | 'createPullRequest' | 'findPullRequest' | 'getPullRequest' | 'mergePullRequest' | 'getChecks' | 'getDeployment' | 'getMergeProtection'>;
 export interface PullRequestServiceResult {
@@ -44,7 +46,7 @@ export class RepositoryService {
     const tree=await this.github.getTree(commit.treeSha);
     const entries=tree.filter(e=>e.path.startsWith('content/characters/') && e.path.endsWith('.json'));
     if(entries.length>500)fail('snapshot_limit','公開キャラ数が上限を超えています。');
-    const records=[];let total=0, failed=0;
+    const records=[];const thumbnailRevisions:Record<string,{baseSha:string;canonicalBlobSha:string;slug:string}>={};let total=0, failed=0;
     for(const e of entries) {
       try {
       if(e.type!=='blob'||e.mode!=='100644'||(e.size??0)>this.config.maxFileBytes)fail('snapshot_invalid','公開正本を安全に読めません。');
@@ -53,10 +55,11 @@ export class RepositoryService {
       const record=canonicalCharacterRecordSchema.parse(parseBoundedJson(bytes.toString('utf8')));
       if(e.path!==`content/characters/${record.character.slug}.json`)fail('snapshot_invalid','公開正本のslugが一致しません。');
       records.push(record);
+      thumbnailRevisions[record.assets.iconPng]={baseSha,canonicalBlobSha:e.sha,slug:record.character.slug};
       }catch{failed++;}
       if(total>this.config.maxTotalFileBytes)fail('snapshot_limit','公開一覧の容量が上限を超えています。');
     }
-    return {baseSha,records,failed};
+    return {baseSha,records,failed,thumbnailRevisions};
     }finally{this.publishedReads--;}
   }
   async readPublishedCharacter(slug:string, actor:string) {
@@ -187,6 +190,40 @@ export class RepositoryService {
       diff: inspection.changed.map(f => `${inspection.entries.some(e => e.path === f.path) ? '~' : '+'} ${f.path} (${f.bytes.length} bytes, SHA256 ${f.sha256})`).join('\n'),
       changedFiles: inspection.changed.map(f => ({ path: f.path, mimeType: f.mimeType, byteLength: f.bytes.length, sha256: f.sha256, ...(!f.mimeType.startsWith('image/') ? { text: f.bytes.toString('utf8') } : {}) })),
     };
+  }
+  async readThumbnail(slug:string,baseSha:string,canonicalBlobSha:string):Promise<Buffer>{
+    if(!/^[a-z][a-z0-9-]{0,23}$/.test(slug)||![baseSha,canonicalBlobSha].every(sha=>/^[a-f0-9]{40}$/.test(sha)))fail('thumbnail_invalid','サムネイルrevisionが不正です。');
+    if(this.publishedReads>=2)throw new HttpError(429,'published_read_busy','公開画像の読込中です。');
+    this.publishedReads++;
+    try{
+      const commit=await this.github.getCommit(baseSha);if(commit.sha!==baseSha)fail('snapshot_invalid','基準commitが不正です。');
+      const tree=await this.github.getTree(commit.treeSha),canonicalPath=`content/characters/${slug}.json`;
+      const read=async(path:string,expected?:string)=>{
+        const entry=tree.find(e=>e.path===path);
+        if(!entry||entry.type!=='blob'||entry.mode!=='100644'||(entry.size??0)>1024*1024||expected&&entry.sha!==expected)fail('snapshot_invalid','画像参照が一致しません。');
+        const bytes=await this.github.getBlob(entry!.sha);
+        if(bytes.length>1024*1024||trustedFile(path,path.endsWith('.png')?'image/png':'application/json',bytes).gitBlobSha!==entry!.sha)fail('snapshot_invalid','画像のhash・容量が一致しません。');
+        return bytes;
+      };
+      const record=canonicalCharacterRecordSchema.parse(parseBoundedJson((await read(canonicalPath,canonicalBlobSha)).toString('utf8')));
+      if(record.character.slug!==slug||record.assets.iconPng!==`${record.assets.directory}/icon.png`||!record.assets.directory.startsWith(`assets/content-studio/${slug}/`))fail('thumbnail_invalid','画像の所有キャラクターが一致しません。');
+      const bytes=await read(record.assets.iconPng);
+      validateImage(bytes,'image/png',{...this.config,maxImageDimension:512,maxImagePixels:512*512});return bytes;
+    }finally{this.publishedReads--;}
+  }
+  /** Import is only a hint. This method never creates a branch, commit or PR. */
+  async recover(bundle:ValidatedBundle,actor:string,rawHint:RecoveryHint):Promise<PrepareResult>{
+    const hint=recoveryHintSchema.parse(rawHint);
+    if(hint.repository!==`${this.config.githubOwner}/${this.config.githubRepo}` || hint.branch!==this.branch(bundle,actor) || hint.operationDigest!==bundle.digest)fail('recovery_identity','復旧情報の本人・repository・操作内容が一致しません。');
+    const found=await this.github.findPullRequest(hint.branch);
+    if(!found||hint.pullRequestNumber!==undefined&&hint.pullRequestNumber!==found.number)fail('recovery_pr_missing','既存PRを確認できません。保存物は保持しています。新しいPRは作成しません。');
+    const pr=await this.github.getPullRequest(found!.number);
+    if(hint.headSha && hint.headSha!==pr.headSha)fail('head_changed','復旧対象のheadが変わっています。');
+    const commit=await this.github.getCommit(pr.headSha);
+    if(commit.parents.length!==1||commit.parents[0]!==hint.baseSha)fail('recovery_base','復旧元のbaseが一致しません。');
+    const result=await this.prepare({...bundle,recoveryBranch:hint.branch},actor);
+    if(!result.recovered||result.recovered.number!==pr.number||result.recovered.commitSha!==pr.headSha||result.baseSha!==hint.baseSha){this.preparations.delete(result.id);fail('recovery_changed','照合中にPRが変わりました。保存物は保持しています。');}
+    return result;
   }
   private prepared(id: string, actor: string): Preparation {
     const p = this.preparations.get(id);

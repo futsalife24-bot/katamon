@@ -1,4 +1,5 @@
 import { readBoundedJson } from '../domain/bounded-json';
+import { STUDIO_RUNTIME_VERSION } from '../domain/runtime-contract';
 import { decodePublishedResponse } from '../generation/published-edit';
 import { canonicalCharacterRecordSchema, type CanonicalCharacterRecord } from '../generation/catalog';
 import { assertPublishSize, assertRequestSize, PUBLISH_LIMITS, type PublishLimits } from '../domain/publish-limits.js';
@@ -160,6 +161,11 @@ function normalizeBaseUrl(value: string): string {
 }
 
 export class ServerRepositoryGateway implements RepositoryGateway {
+  private thumbnailRevisions:Record<string,{baseSha:string;canonicalBlobSha:string;slug:string}>={};
+  thumbnailUrl(path:string):string|undefined {
+    const revision=this.thumbnailRevisions[path];
+    return revision ? `${this.baseUrl}/api/github/thumbnail?${new URLSearchParams(revision)}` : undefined;
+  }
   private readonly baseUrl: string;
   private csrfToken: string | null = null;
   private limits: PublishLimits = PUBLISH_LIMITS;
@@ -195,7 +201,7 @@ export class ServerRepositoryGateway implements RepositoryGateway {
         user: null,
         build: 'idle',
         deployment: 'unknown',
-        message: '実GitHub連携は未設定です。モックモードを利用できます。',
+        message: '実GitHub連携は未設定です。公開を停止しています。下書きは保持されます。管理者が設定を確認してください。',
       };
     }
     if (!session.authenticated) {
@@ -221,10 +227,12 @@ export class ServerRepositoryGateway implements RepositoryGateway {
     return value;
   }
   async listPublishedCharacters(): Promise<{records:CanonicalCharacterRecord[];warning:string|null}> {
-    const value = await this.readPublished('/api/github/published-list') as {records: unknown[];failed?:number};
+    const value = await this.readPublished('/api/github/published-list') as {records: unknown[];failed?:number;thumbnailRevisions?:Record<string,{baseSha:string;canonicalBlobSha:string;slug:string}>};
     if (!Array.isArray(value.records) || value.records.length > 500) throw new Error('公開一覧が不正です。');
     const failed=value.failed??0;
     if(!Number.isSafeInteger(failed)||failed<0||failed>500)throw new Error('公開一覧の失敗件数が不正です。');
+    this.thumbnailRevisions={};
+    for(const [path,revision] of Object.entries(value.thumbnailRevisions??{}))if(revision&&/^[a-f0-9]{40}$/.test(revision.baseSha)&&/^[a-f0-9]{40}$/.test(revision.canonicalBlobSha)&&/^[a-z][a-z0-9-]{0,23}$/.test(revision.slug))this.thumbnailRevisions[path]={baseSha:revision.baseSha,canonicalBlobSha:revision.canonicalBlobSha,slug:revision.slug};
     return {records:value.records.map(record => canonicalCharacterRecordSchema.parse(record) as CanonicalCharacterRecord),warning:failed?`公開一覧の一部（${failed}件）を検証できません。完全な一覧ではありません。`:null};
   }
   async readPublishedCharacter(slug: string) {
@@ -253,6 +261,12 @@ export class ServerRepositoryGateway implements RepositoryGateway {
       testStatus: 'success',
       diff: response.diff,
     };
+  }
+
+  async recover(bundle:ArtifactBundle,hint:import('../domain/recovery-package').RecoveryHint):Promise<PreparedChange>{
+    await this.ensureAuthenticated();
+    const response=await this.request<PrepareResponse>('/api/github/recover',{method:'POST',body:JSON.stringify({hint,bundle:await serializeBundle(bundle)})});
+    return {id:response.id,operationDigest:response.operationDigest,latestBaseSha:response.latestBaseSha,predecessor:response.predecessor,branch:response.branch,commitSha:response.baseSha,recovered:response.recovered,files:response.changedFiles.map(file=>({...file,kind:'metadata' as const})),testStatus:'success',diff:response.diff};
   }
 
   async createPullRequest(
@@ -306,10 +320,10 @@ export class ServerRepositoryGateway implements RepositoryGateway {
   }
 
   private async ensureAuthenticated(): Promise<void> {
-    const session = this.session?.authenticated ? this.session : await this.loadSession();
+    const session = import.meta.env.MODE==='production-server' ? await this.loadSession() : this.session?.authenticated ? this.session : await this.loadSession();
     if (!session.configured) {
       throw new RepositoryGatewayError(
-        '実GitHub連携は未設定です。モックモードを利用してください。',
+        '実GitHub連携は未設定です。公開を停止しています。保存物は保持されます。',
         'github_not_configured',
         503,
       );
@@ -330,6 +344,7 @@ export class ServerRepositoryGateway implements RepositoryGateway {
     if (typeof init.body === 'string') assertRequestSize(init.body, this.limits.maxRequestBytes);
     const headers = new Headers(init.headers);
     headers.set('accept', 'application/json');
+    headers.set('x-content-studio-version',STUDIO_RUNTIME_VERSION);
     if (init.body !== undefined) headers.set('content-type', 'application/json');
     if (init.method && init.method !== 'GET' && this.csrfToken) {
       headers.set('x-csrf-token', this.csrfToken);
@@ -337,6 +352,7 @@ export class ServerRepositoryGateway implements RepositoryGateway {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        signal: AbortSignal.timeout(95000),
         ...init,
         headers,
         credentials: 'include',
@@ -350,8 +366,9 @@ export class ServerRepositoryGateway implements RepositoryGateway {
       );
     }
     let body: unknown;
+    if(import.meta.env.MODE==='production-server' && response.headers.get('x-content-studio-version')!==STUDIO_RUNTIME_VERSION)throw new RepositoryGatewayError('StudioとAPIの配布版が一致しません。保存物を保持して更新を確認してください。','runtime_version_mismatch',409);
     try {
-      body = await response.json();
+      body = await readBoundedJson(response,this.limits.maxRequestBytes);
     } catch {
       throw new RepositoryGatewayError('サーバー応答を読み込めませんでした。', 'response_invalid', response.status);
     }
