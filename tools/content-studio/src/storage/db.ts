@@ -41,6 +41,7 @@ interface StoredBlob {
 }
 
 export interface OutboxRecord {
+  recoveryHint?: import('../domain/recovery-package').RecoveryHint;
   actor?: string | null;
   prepared?: PreparedChange;
   result?: PullRequestResult;

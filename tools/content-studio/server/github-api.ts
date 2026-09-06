@@ -1,5 +1,6 @@
 import { requiredChecksFromProtection, type RequiredCheck } from './ci-policy.js';
 import { readBoundedJson } from '../src/domain/bounded-json.js';
+import { boundedGitHubFetch, assertOperationActive } from './operation-budget.js';
 import { createPrivateKey, createSign } from 'node:crypto';
 
 import { REQUIRED_STUDIO_CHECKS, GITHUB_ACTIONS_APP_ID, safeMergeProtection } from './ci-policy.js';
@@ -70,26 +71,43 @@ function mapGitHubFailure(status: number, body: GitHubErrorBody): GitHubApiError
 }
 
 export class GitHubClient {
+  private readonly fetchImpl: FetchLike;
   private installationToken: string | null = null;
   private installationTokenExpiresAt = 0;
 
   constructor(
     private readonly config: ServerConfig,
-    private readonly fetchImpl: FetchLike = fetch,
+    fetchImpl: FetchLike = fetch,
     private readonly clock: Clock = systemClock,
-  ) {}
+  ) { this.fetchImpl = boundedGitHubFetch(fetchImpl, config.maxRequestBytes); }
 
-  oauthAuthorizeUrl(state: string): string {
+  async verifyRepositoryAccess(): Promise<void> {
+    const response = await this.fetchImpl(`${this.config.githubApiUrl}/repos/${this.repoPath()}/installation`, {
+      headers: { accept:'application/vnd.github+json', authorization:`Bearer ${this.createAppJwt()}`, 'x-github-api-version':'2022-11-28', 'user-agent':'Content-Studio-Backend' },
+    });
+    if (!response.ok) throw new HttpError(503,'github_access_unverified','固定repositoryのGitHub App権限を確認できません。');
+    const record = asRecord(await this.readJson(response),'Installation');
+    const permissions = asRecord(record.permissions,'Installation permissions');
+    const required: Record<string,string> = {contents:'write',pull_requests:'write',actions:'read',checks:'read',statuses:'read',deployments:'read',administration:'read',metadata:'read'};
+    if (String(record.id)!==this.config.githubInstallationId || String(record.app_id)!==this.config.githubAppId || record.suspended_at != null || Object.entries(required).some(([key,level]) => permissions[key]!==level && !(level==='read'&&permissions[key]==='write'))) {
+      throw new HttpError(503,'github_access_unverified','固定repositoryのinstallation・App・必要権限が一致しません。管理者が設定を確認してください。');
+    }
+  }
+
+  oauthAuthorizeUrl(state: string, challenge: string): string {
     const callback = new URL('/api/auth/callback', this.config.publicAppUrl);
     const url = new URL('/login/oauth/authorize', this.config.githubWebUrl);
     url.searchParams.set('client_id', this.config.githubOAuthClientId);
     url.searchParams.set('redirect_uri', callback.toString());
     url.searchParams.set('scope', 'read:user');
     url.searchParams.set('state', state);
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
     return url.toString();
   }
 
-  async authenticateOAuthCode(code: string): Promise<AuthenticatedUser> {
+  async authenticateOAuthCode(code: string, verifier: string): Promise<AuthenticatedUser> {
+    if (!/^[A-Za-z0-9_-]{43,128}$/.test(verifier)) throw new HttpError(400, 'oauth_pkce_invalid', 'ログインを開始し直してください。');
     if (!/^[A-Za-z0-9_-]{8,512}$/.test(code)) {
       throw new HttpError(400, 'oauth_code_invalid', 'GitHubから受け取った認証情報が不正です。');
     }
@@ -104,6 +122,7 @@ export class GitHubClient {
         client_id: this.config.githubOAuthClientId,
         client_secret: this.config.githubOAuthClientSecret,
         code,
+        code_verifier: verifier,
         redirect_uri: new URL('/api/auth/callback', this.config.publicAppUrl).toString(),
       }),
     });
@@ -501,7 +520,7 @@ export class GitHubClient {
           'user-agent': 'Content-Studio-Backend/0.1',
           'x-github-api-version': '2022-11-28',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ repositories: [this.config.githubRepo] }),
       },
     );
     const body = await this.readJson(response);
@@ -518,6 +537,7 @@ export class GitHubClient {
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<unknown> {
+    assertOperationActive();
     const token = await this.getInstallationToken();
     const response = await this.fetchImpl(`${this.config.githubApiUrl}${path}`, {
       ...init,

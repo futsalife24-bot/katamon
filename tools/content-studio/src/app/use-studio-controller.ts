@@ -68,6 +68,7 @@ import {
   type PublishHistoryRecord,
 } from '../storage/db';
 import { createAutosaveController } from '../storage/autosave';
+import { exportRecovery, readRecovery } from '../storage/recovery';
 
 export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
 
@@ -84,6 +85,9 @@ export interface StudioProgress {
 }
 
 export interface StudioController {
+  publishedThumbnailUrl(path:string):string|undefined;
+  exportRecoveryPackage(id:string):Promise<void>;
+  importRecoveryPackage(file:Blob,draftId:string):Promise<void>;
   appVersion: string;
   view: 'dashboard' | 'workflow';
   step: WorkflowStep;
@@ -324,7 +328,7 @@ async function reusableEditingSources(draft:DraftRecord) {
 function publicationOutboxId(bundle: ArtifactBundle): string { return 'publish:' + bundle.bundleId + (bundle.revalidation ? ':' + bundle.revalidation.targetBaseSha + ':' + bundle.revalidation.headSha : ''); }
 
 export function useStudioController(): StudioController {
-  const appVersion = import.meta.env.VITE_APP_VERSION || '0.6.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.7.0';
   const serverMode = import.meta.env.VITE_REPOSITORY_MODE === 'server';
   const gatewayRef = useRef<RepositoryGateway>(
     serverMode
@@ -448,6 +452,7 @@ export function useStudioController(): StudioController {
 
   useEffect(() => {
     void refreshLists();
+    if(new URL(location.href).searchParams.get('auth')==='failed')setError('GitHub認証は完了しませんでした。取消・期限・許可ユーザーを確認し、再ログインしてください。保存物は保持しています。');
     void refreshRepositoryStatus();
     void refreshPublishedContent();
     void requestPersistentStorage().then(async (persistent) => {
@@ -1510,7 +1515,9 @@ export function useStudioController(): StudioController {
       if (status.mode === 'server' && (!status.connected || (item.actor && item.actor !== status.user))) throw new Error('保存時と同じGitHubアカウントで再ログインしてください。');
       const stored = await getDraft(item.draftId);
       if (!stored || !item.bundle.inputKey || item.bundle.inputKey !== publicationInputKey(stored)) throw new Error('保存した下書きと公開操作の対応を確認できません。下書き・生成物・既存PRは保持しています。現在の内容で再準備してください。');
-      const next = await gatewayRef.current.prepare(item.bundle, 'success');
+      const next = item.recoveryHint
+        ? gatewayRef.current instanceof ServerRepositoryGateway ? await gatewayRef.current.recover(item.bundle,item.recoveryHint) : (()=>{throw new Error('実GitHub復旧はserverモードで再認証してください。');})()
+        : await gatewayRef.current.prepare(item.bundle, 'success');
       if (item.result && next.recovered && item.result.commitSha !== next.recovered.commitSha) throw new Error('保存したPRのheadが変わっています。再開を停止しました。');
       if (status.mode === 'server') item.bundle.recoveryBranch = next.branch;
       if (epoch !== contentEpochRef.current) throw new Error('復旧中に別の作業へ移動しました。保存した操作は保持しています。');
@@ -1532,6 +1539,39 @@ export function useStudioController(): StudioController {
       await refreshLists();
     } finally { publicationRef.current = false; setBusy(false); }
   }, [outbox, refreshLists, openDraft, goToStep]);
+
+  const exportRecoveryPackage=useCallback(async(id:string)=>{
+    try{
+      const item=outbox.find(item=>item.id===id);
+      if(!item||!(gatewayRef.current instanceof ServerRepositoryGateway))throw new Error('mockや証明不足の旧履歴は実GitHub復旧パッケージにできません。');
+      const status=await gatewayRef.current.getStatus();
+      if(!status.repository||status.user!==item.actor)throw new Error('保存時の本人・repositoryを確認してください。');
+      downloadBlob(await exportRecovery(item,status.repository),'content-studio-recovery.json');
+      setNotice('復旧情報を書き出しました。下書きJSONとは別です。移行先で本人確認と差分の再承認が必要です。');
+    }catch(cause){setError(humanError(cause,'復旧情報を書き出せません。保存物は保持しています。'));}
+  },[outbox]);
+  const importRecoveryPackage=useCallback(async(file:Blob,draftId:string)=>{
+    if(publicationRef.current)return;
+    publicationRef.current=true;setBusy(true);setError(null);
+    const epoch=contentEpochRef.current;
+    try{
+      const gateway=gatewayRef.current;
+      if(!(gateway instanceof ServerRepositoryGateway))throw new Error('実GitHubへの復旧はserverモードで行ってください。mockには移行しません。');
+      const status=await gateway.getStatus(),stored=await getDraft(draftId);
+      if(!stored)throw new Error('先に移行元の下書きJSONを読み込み、対応する下書きを選択してください。');
+      const {value,bundle:recoveryBundle}=await readRecovery(file,stored);
+      if(!status.connected||status.user!==value.actor||status.repository!==value.hint.repository)throw new Error('復旧元と同じ本人・repositoryを確認できません。');
+      const existing=(await listOutbox()).find(item=>item.bundle.recoveryBranch===value.hint.branch);
+      if(existing)throw new Error('この公開操作は既に保存されています。「既存PRを確認・再開」を使ってください。');
+      const next=await gateway.recover(recoveryBundle,value.hint);
+      if(epoch!==contentEpochRef.current||publicationInputKey(stored)!==publicationInputKey((await getDraft(draftId))!))throw new Error('確認中に下書きが変わりました。保存物は保持しています。');
+      const now=new Date().toISOString();
+      await putOutbox({id:publicationOutboxId(recoveryBundle),draftId,bundle:recoveryBundle,actor:value.actor,recoveryHint:value.hint,result:next.recovered,createdAt:now,updatedAt:now,attempts:0,lastError:null});
+      await refreshLists();
+      setNotice(next.recovered?.merged?'merge済みPRを確認しました。実merge SHAのゲーム配備確認または公開済み再編集へ進んでください。':'既存PRの本人・内容を読取照合しました。新しいPRは作っていません。「既存PRを確認・再開」で現在の差分を確認し、新しく承認してください。');
+    }catch(cause){setError(humanError(cause,'復旧情報を照合できません。保存物は保持しています。'));}
+    finally{publicationRef.current=false;setBusy(false);}
+  },[refreshLists]);
 
   const duplicateExistingDraft = useCallback(async (id: string) => {
     const duplicate = await duplicateDraft(id);
@@ -1609,6 +1649,8 @@ export function useStudioController(): StudioController {
   }, [backToDashboard, goToStep]);
 
   const value = useMemo<StudioController>(() => ({
+    publishedThumbnailUrl:path=>gatewayRef.current instanceof ServerRepositoryGateway?gatewayRef.current.thumbnailUrl(path):undefined,
+    exportRecoveryPackage,importRecoveryPackage,
     appVersion, view, step, stepIndex, draft, drafts, publishedCharacters, publishedWarning, history, outbox, processed, hitProcessed, sprite, motions, selectedClip, bundle, prepared, pullRequest,
     repositoryStatus, capabilities, storage, saveState, savedAt, busy, progress, error, notice, redoCount: redo.length,
     installAvailable: Boolean(installEvent), installApp, dismissNotice: () => setNotice(null), dismissError: () => setError(null),
@@ -1625,6 +1667,7 @@ export function useStudioController(): StudioController {
       hitAbortRef.current?.abort();
     },
   }), [
+    exportRecoveryPackage,importRecoveryPackage,
     acceptFile, addBrushStroke, appVersion, applyImageOperations, autoRemoveBackground, autoTrim, backToDashboard, bundle, busy,
     capabilities, createNewDraft, createPullRequest, deleteExistingDraft, downloadJson, downloadZip, draft, drafts, editLegacyCharacter, editPublishedCharacter, enablePublishedRegeneration,
     detectLandmarks, detectParts, downloadMotionMetadata, downloadMotionZip, downloadSpriteSheet, duplicateExistingDraft, error, exportDraft, generateMotion, goToStep, history, importDraft, installApp, installEvent,

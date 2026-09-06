@@ -73,6 +73,7 @@ export class SessionStore {
 
   create(user: AuthenticatedUser): { token: string; key: string; session: SessionRecord } {
     this.cleanup();
+    if(this.records.size>=256)throw new HttpError(503,'session_busy','認証処理が混み合っています。後で再試行してください。');
     const token = randomBytes(32).toString('base64url');
     const key = sha256(token);
     const now = this.clock.now();
@@ -130,6 +131,7 @@ export function safeReturnTo(value: string | null | undefined): string {
 }
 
 export class OAuthStateManager {
+  private readonly pending = new Map<string, { verifier: string; expiresAt: number }>();
   constructor(
     private readonly secret: string,
     private readonly ttlMs: number,
@@ -137,6 +139,8 @@ export class OAuthStateManager {
   ) {}
 
   create(returnTo: string): string {
+    for (const [key, value] of this.pending) if (value.expiresAt <= this.clock.now()) this.pending.delete(key);
+    if (this.pending.size >= 256) throw new HttpError(429, 'oauth_busy', 'ログイン操作が混み合っています。後で再試行してください。');
     const payload: OAuthStatePayload = {
       nonce: randomBytes(24).toString('base64url'),
       expiresAt: this.clock.now() + this.ttlMs,
@@ -144,10 +148,18 @@ export class OAuthStateManager {
     };
     const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
     const signature = createHmac('sha256', this.secret).update(encoded).digest('base64url');
-    return `${encoded}.${signature}`;
+    const state = `${encoded}.${signature}`;
+    this.pending.set(state, { verifier: randomBytes(32).toString('base64url'), expiresAt: payload.expiresAt });
+    return state;
   }
 
-  verify(queryState: string | null, cookieState: string | undefined): OAuthStatePayload {
+  challenge(state: string): string {
+    const record = this.pending.get(state);
+    if (!record) throw new HttpError(400, 'oauth_state_invalid', 'ログインを開始し直してください。');
+    return createHash('sha256').update(record.verifier).digest('base64url');
+  }
+
+  verify(queryState: string | null, cookieState: string | undefined): OAuthStatePayload & { verifier: string } {
     if (!queryState || !cookieState || !equalText(queryState, cookieState)) {
       throw new HttpError(400, 'oauth_state_mismatch', 'ログイン状態を確認できませんでした。もう一度お試しください。');
     }
@@ -178,7 +190,10 @@ export class OAuthStateManager {
     if (validPayload.expiresAt <= this.clock.now()) {
       throw new HttpError(400, 'oauth_state_expired', 'ログイン操作の有効期限が切れました。もう一度お試しください。');
     }
-    return { ...validPayload, returnTo: safeReturnTo(validPayload.returnTo) };
+    const pending = this.pending.get(queryState);
+    this.pending.delete(queryState);
+    if (!pending) throw new HttpError(400, 'oauth_state_consumed', 'ログイン操作は使用済みか再起動で失効しています。開始し直してください。');
+    return { ...validPayload, returnTo: safeReturnTo(validPayload.returnTo), verifier: pending.verifier };
   }
 }
 
@@ -200,6 +215,8 @@ export class RateLimiter {
     const now = this.clock.now();
     const current = this.buckets.get(key);
     if (!current || current.resetAt <= now) {
+      this.cleanup(now);
+      if(!current&&this.buckets.size>=10000)throw new HttpError(429,'rate_limit_capacity','操作が混み合っています。少し待って再試行してください。');
       this.buckets.set(key, { count: 1, resetAt: now + this.windowMs });
       this.cleanup(now);
       return;

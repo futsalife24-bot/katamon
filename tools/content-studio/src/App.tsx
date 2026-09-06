@@ -1,5 +1,6 @@
 import { hasUnappliedImage, UNAPPLIED_IMAGE_MESSAGE } from './domain/generation-input';
 import { PublishedThumbnail } from './components/PublishedThumbnail';
+import { OriginMigration } from './components/OriginMigration';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
@@ -304,7 +305,7 @@ function Dashboard({ studio }: { studio: StudioController }) {
         <button type="button" className="secondary full-width" disabled={studio.busy} onClick={() => void studio.refreshPublishedContent()}>公開一覧を更新</button>
         {!studio.publishedWarning && studio.publishedCharacters.length === 0 && <p>公開済みキャラクターは0件です。</p>}
         {studio.publishedCharacters.map(record => <article className="published-character" key={record.character.slug} data-testid={`published-${record.character.slug}`}>
-          <PublishedThumbnail path={record.assets.iconPng} />
+          <PublishedThumbnail path={record.assets.iconPng} serverMode={studio.repositoryStatus.mode==='server'} url={studio.publishedThumbnailUrl(record.assets.iconPng)} />
           <h3>{record.character.displayName}</h3><p>{record.legacyTargetId ? '既存キャラのモーション追加' : 'Studioで追加したキャラ'}</p>
           {studio.drafts.filter(d=>d.sourceIdentity?.slug===record.character.slug).map(d=><button className="secondary full-width" key={d.id} type="button" disabled={studio.busy} onClick={()=>void studio.openDraft(d.id)}>作業中の下書きを再開：{d.title}</button>)}
           <button type="button" className="primary full-width" disabled={studio.busy} onClick={()=>void studio.editPublishedCharacter(record.character.slug)}>公開版から新しい更新用下書き</button>
@@ -312,6 +313,7 @@ function Dashboard({ studio }: { studio: StudioController }) {
       </section>
       {studio.outbox.length > 0 && <section className="card" data-testid="publish-recovery"><h2>公開操作の復旧</h2><p>再読込・通信切断・再ログイン後も、保存した生成物から確認できます。</p>{studio.outbox.map(item => <article className="recovery-item" key={item.id}><b>{item.bundle.character.displayName}</b><p>{item.result?.merged ? 'マージ済み・配備状況を確認' : item.result ? 'PR作成済み・CIと復旧状況を確認' : '公開準備・送信結果を確認'}</p>{item.result && <p><a href={item.result.url} target="_blank" rel="noreferrer">保存済みPR #{item.result.number}を開く</a></p>}{item.lastError && <p>{item.lastError}</p>}<button className="secondary full-width" type="button" disabled={studio.busy} onClick={() => void studio.retryOutbox(item.id)}>既存PRを確認・再開</button></article>)}</section>}
       <CharacterDatabaseCard />
+      <OriginMigration studio={studio} />
       <AiProposalCard studio={studio} />
 
       <section className="card connection-card motion-only-note">
@@ -819,7 +821,7 @@ function PublishStep({ studio }: { studio: StudioController }) {
       {studio.prepared?.predecessor && <p className="support-note">後継操作です。<a href={studio.prepared.predecessor.url} target="_blank" rel="noreferrer">元PR #{studio.prepared.predecessor.number}（保持）</a>から引き継ぎ、新しい差分とCIを確認します。</p>}
       {studio.prepared && <div className="result-card"><dl className="facts facts--compact"><div><dt>ブランチ</dt><dd>{studio.prepared.branch}</dd></div><div><dt>基準SHA</dt><dd>{studio.prepared.commitSha.slice(0, 12)}</dd></div><div><dt>生成物検証</dt><dd>{studio.prepared.testStatus}（CIはPR作成後）</dd></div><div><dt>変更</dt><dd>{studio.prepared.files.length}件</dd></div></dl><details><summary>差分を表示</summary><pre>{studio.prepared.diff}</pre></details></div>}
       {studio.prepared && <section className="card publish-review"><h3>公開する正確な差分</h3>{studio.prepared.files.map(file => <details key={file.path}><summary>{file.path}・{formatBytes(file.byteLength)}</summary><code>SHA256 {file.sha256}</code>{file.text && <pre>{file.text}</pre>}</details>)}<label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} data-testid="review-publish-diff" />この基準SHAと差分を確認した</label></section>}
-      <button type="button" className="primary full-width" disabled={!reviewed || !studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy} onClick={() => void studio.createPullRequest()} data-testid="create-pr">{draft.publishMode === 'merge-after-ci' ? 'PR作成 → CI成功後にマージ' : 'PRを作成'}</button>
+      <button type="button" className="primary full-width" disabled={!reviewed || !studio.prepared || studio.prepared.testStatus !== 'success' || studio.busy || studio.pullRequest?.merged || studio.repositoryStatus.accessVerified===false || studio.repositoryStatus.protectionVerified===false} onClick={() => void studio.createPullRequest()} data-testid="create-pr">{studio.pullRequest?.merged ? 'merge済み：ゲーム配備を確認してください' : draft.publishMode === 'merge-after-ci' ? 'PR作成 → CI成功後にマージ' : 'PRを作成'}</button>
       {studio.pullRequest && <div className="success-card" data-testid="publish-complete"><b>{studio.pullRequest.merged ? 'PRを作成してマージしました' : 'PRを作成しました'}</b><span>#{studio.pullRequest.number}・CI {studio.pullRequest.checks}・{studio.pullRequest.merged ? studio.pullRequest.deployment === 'published' ? '配備済み' : 'マージ済み・配備待ち（' + studio.pullRequest.deployment + ')' : 'PR作成済み・未マージ'}</span><a href={studio.pullRequest.url} target="_blank" rel="noreferrer">PRを開く</a></div>}
     </section>
   );

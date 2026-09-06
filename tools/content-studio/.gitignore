@@ -7,5 +7,6 @@ test-results/
 coverage/
 .vite/
 server-dist/
+production/
 *.tsbuildinfo
 *.local

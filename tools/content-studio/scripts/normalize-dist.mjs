@@ -30,6 +30,7 @@ async function normalizeDirectory(directory) {
 
     const source = await readFile(entryPath, 'utf8')
     const normalized = source
+      .replace(/\r/gu, '')
       .replace(/[ \t]+(?=\r?\n|$)/gu, '')
       .replace(/(?:\r?\n){2,}$/u, '\n')
 

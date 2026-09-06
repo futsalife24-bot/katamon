@@ -37,7 +37,14 @@ const localRepositoryAssets = {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), localRepositoryAssets],
+  plugins: [react(), localRepositoryAssets, {
+    name: 'studio-build-identity',
+    transformIndexHtml() {
+      const mode = process.env.VITE_REPOSITORY_MODE || 'mock';
+      if (!['mock', 'server'].includes(mode)) throw new Error('VITE_REPOSITORY_MODE: use mock or server');
+      return [{ tag: 'meta', attrs: { name: 'studio-repository-mode', content: mode }, injectTo: 'head' as const }];
+    },
+  }],
   build: {
     target: 'es2022',
     // Production Pages assets should not expose the complete TypeScript source

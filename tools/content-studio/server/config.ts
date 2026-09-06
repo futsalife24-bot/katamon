@@ -1,5 +1,6 @@
 import { PUBLISH_LIMITS } from '../src/domain/publish-limits.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createPrivateKey } from 'node:crypto';
+import { isIP } from 'node:net';
 
 import type { ServerConfig } from './types.js';
 
@@ -53,7 +54,13 @@ function normalizePrivateKey(value: string | undefined): string {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const configurationErrors: string[] = [];
   const testMode = env.NODE_ENV === 'test';
-  const publicAppUrl = new URL(env.PUBLIC_APP_URL || 'http://localhost:4174');
+  const production = env.NODE_ENV === 'production';
+  let publicAppUrl = new URL('http://localhost:4174');
+  try { publicAppUrl = new URL(env.PUBLIC_APP_URL || publicAppUrl.href); }
+  catch { configurationErrors.push('PUBLIC_APP_URL must be a valid origin'); }
+  if (production && (!env.PUBLIC_APP_URL || !/^https:\/\/[^/\\?#\s]+\/?$/.test(env.PUBLIC_APP_URL) || publicAppUrl.protocol !== 'https:' || publicAppUrl.username || publicAppUrl.password || publicAppUrl.search || publicAppUrl.hash || publicAppUrl.pathname !== '/')) {
+    configurationErrors.push('PUBLIC_APP_URL must be an explicit HTTPS origin without credentials, path, query or fragment');
+  }
   const githubOwner = (env.GITHUB_OWNER ?? '').trim();
   const githubRepo = (env.GITHUB_REPO ?? '').trim();
   const githubBaseBranch = (env.GITHUB_BASE_BRANCH || 'master').trim();
@@ -64,7 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const githubInstallationId = (env.GITHUB_INSTALLATION_ID ?? '').trim();
   const allowedGithubUsers = new Set(csv(env.ALLOWED_GITHUB_USERS).map((item) => item.toLowerCase()));
   const suppliedSessionSecret = (env.SESSION_SECRET ?? '').trim();
-  const sessionSecret = suppliedSessionSecret || randomBytes(32).toString('base64url');
+  const sessionSecret = suppliedSessionSecret || (production ? '' : randomBytes(32).toString('base64url'));
 
   const required: Array<[string, string]> = [
     ['GITHUB_OWNER', githubOwner],
@@ -79,6 +86,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     if (!value) configurationErrors.push(`${name} is required`);
   }
   if (allowedGithubUsers.size === 0) configurationErrors.push('ALLOWED_GITHUB_USERS is required');
+  if ([...allowedGithubUsers].some(user => !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(user))) configurationErrors.push('ALLOWED_GITHUB_USERS must contain valid GitHub logins');
+  if (production) {
+    for(const name of ['GITHUB_APP_ID','GITHUB_INSTALLATION_ID'])if(!/^[1-9][0-9]{0,14}$/.test(env[name]??''))configurationErrors.push(`${name} must be a positive integer`);
+    for(const name of ['TRUST_PROXY'])if(env[name]!==undefined&&!['true','false'].includes(env[name]!))configurationErrors.push(`${name} must be true or false`);
+    const bounds:Record<string,number>={PORT:65535,SESSION_TTL_SECONDS:86400,OAUTH_STATE_TTL_SECONDS:600,PREPARATION_TTL_SECONDS:3600,RATE_LIMIT_WINDOW_SECONDS:3600,RATE_LIMIT_MAX:1000,MAX_IMAGE_DIMENSION:8192,MAX_IMAGE_PIXELS:16777216,MAX_REQUEST_BYTES:PUBLISH_LIMITS.maxRequestBytes,MAX_FILE_BYTES:PUBLISH_LIMITS.maxFileBytes,MAX_TOTAL_FILE_BYTES:PUBLISH_LIMITS.maxTotalFileBytes,MAX_FILES:PUBLISH_LIMITS.maxFiles};
+    for(const [name,max] of Object.entries(bounds))if(env[name]!==undefined&&(!/^[1-9][0-9]*$/.test(env[name]!)||!Number.isSafeInteger(Number(env[name]))||Number(env[name])>max))configurationErrors.push(`${name} must be a positive integer within its documented limit`);
+    if(env.GITHUB_ALLOWED_EXACT_FILES)configurationErrors.push('GITHUB_ALLOWED_EXACT_FILES is not allowed in production');
+    if (!env.GITHUB_BASE_BRANCH) configurationErrors.push('GITHUB_BASE_BRANCH is required');
+    try {
+      const key = createPrivateKey(githubPrivateKey);
+      if (key.asymmetricKeyType !== 'rsa' || (key.asymmetricKeyDetails?.modulusLength ?? 0) < 2048) throw new Error();
+    } catch { configurationErrors.push('GITHUB_PRIVATE_KEY must be a valid RSA private key of at least 2048 bits'); }
+  }
   if (suppliedSessionSecret.length < 32) configurationErrors.push('SESSION_SECRET must contain at least 32 characters');
   if (githubOwner) validateRepositoryPart(githubOwner, 'GITHUB_OWNER', configurationErrors);
   if (githubRepo) validateRepositoryPart(githubRepo, 'GITHUB_REPO', configurationErrors);
@@ -88,7 +108,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     configurationErrors.push('GITHUB_INSTALLATION_ID must be numeric');
   }
 
-  const additionalOrigins = csv(env.ADDITIONAL_ALLOWED_ORIGINS).map((origin) => new URL(origin).origin);
+  const additionalOrigins: string[] = [];
+  for (const origin of csv(env.ADDITIONAL_ALLOWED_ORIGINS)) {
+    try { additionalOrigins.push(new URL(origin).origin); }
+    catch { configurationErrors.push('ADDITIONAL_ALLOWED_ORIGINS is invalid'); }
+  }
+  if (production && additionalOrigins.length) configurationErrors.push('ADDITIONAL_ALLOWED_ORIGINS is not allowed in production');
+  const trustedProxyAddresses = csv(env.TRUSTED_PROXY_ADDRESSES);
+  if (trustedProxyAddresses.some(address => !isIP(address))) configurationErrors.push('TRUSTED_PROXY_ADDRESSES must contain exact IP addresses');
+  if (production && booleanValue(env.TRUST_PROXY, false) && !trustedProxyAddresses.length) configurationErrors.push('TRUSTED_PROXY_ADDRESSES is required when TRUST_PROXY is true');
   const allowedOrigins = new Set([publicAppUrl.origin, ...additionalOrigins]);
   const allowedExactFiles = new Set(csv(env.GITHUB_ALLOWED_EXACT_FILES));
   const host = (env.HOST || '127.0.0.1').trim();
@@ -128,6 +156,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     allowedPathPrefixes: DEFAULT_PATH_PREFIXES,
     allowedExactFiles,
     trustProxy: booleanValue(env.TRUST_PROXY, false),
+    trustedProxyAddresses,
+    production,
     configured: configurationErrors.length === 0,
     configurationErrors,
   };

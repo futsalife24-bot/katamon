@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'.',testMatch:'*.production.ts',fullyParallel:false,workers:1,timeout:240000,expect:{timeout:20000},outputDir:'../../test-results/production',reporter:[['list'],['json',{outputFile:'../../test-results/production-results.json'}],['html',{outputFolder:'../../playwright-report/production',open:'never'}]],use:{browserName:'chromium',viewport:{width:390,height:850},hasTouch:true,isMobile:true,locale:'ja-JP',serviceWorkers:'allow',trace:'on',screenshot:'only-on-failure'}});

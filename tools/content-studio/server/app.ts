@@ -21,6 +21,8 @@ import {
 } from './security.js';
 import type { ServerConfig } from './types.js';
 import { validateSubmission } from './validation.js';
+import { STUDIO_APP_PATH, STUDIO_RUNTIME_VERSION } from '../src/domain/runtime-contract.js';
+import { recoveryHintSchema } from '../src/domain/recovery-package.js';
 
 export interface ApiDependencies {
   config: ServerConfig;
@@ -39,6 +41,7 @@ interface RequestContext {
 }
 
 function securityHeaders(response: ServerResponse): void {
+  response.setHeader('X-Content-Studio-Version', STUDIO_RUNTIME_VERSION);
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
@@ -95,7 +98,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function requestIp(request: IncomingMessage, config: ServerConfig): string {
-  if (config.trustProxy) {
+  if (config.trustProxy && (!config.production || config.trustedProxyAddresses?.includes(request.socket.remoteAddress || ''))) {
     const forwarded = request.headers['x-forwarded-for'];
     const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
     if (first && /^[0-9a-f:.]{2,64}$/i.test(first.trim())) return first.trim();
@@ -105,7 +108,7 @@ function requestIp(request: IncomingMessage, config: ServerConfig): string {
 
 function requireConfigured(config: ServerConfig): void {
   if (!config.configured) {
-    throw new HttpError(503, 'github_not_configured', '実GitHub連携はまだ設定されていません。モックモードを利用してください。');
+    throw new HttpError(503, 'github_not_configured', '実GitHub連携の設定が不足しています。管理者が設定を確認してください。保存物は保持されています。');
   }
 }
 
@@ -131,6 +134,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
     try {
       limiter.consume(context.ip);
       const method = request.method || 'GET';
+      if(config.production && method!=='GET'&&method!=='HEAD'&&request.headers['x-content-studio-version']!==STUDIO_RUNTIME_VERSION)throw new HttpError(409,'runtime_version_mismatch','Studioの配布版とAPI版が一致しません。保存物を保持してアプリ更新を確認してください。');
       const pathname = context.url.pathname;
       const cookies = parseCookies(request.headers.cookie);
       const sessionLookup = sessions.get(cookies.get(SESSION_COOKIE));
@@ -140,7 +144,9 @@ export function createApiHandler(dependencies: ApiDependencies) {
         sendJson(response, 200, {
           ok: true,
           configured: config.configured,
-          version: '0.1.0',
+          version: STUDIO_RUNTIME_VERSION,
+          mode: 'server',
+          readiness: 'not_checked',
           missing: config.configured
             ? []
             : config.configurationErrors.map((message) => message.split(' ', 1)[0]),
@@ -164,13 +170,13 @@ export function createApiHandler(dependencies: ApiDependencies) {
       if (method === 'GET' && pathname === '/api/auth/login') {
         auditEvent = 'auth.login_started';
         requireConfigured(config);
-        const state = oauthStates.create(safeReturnTo(context.url.searchParams.get('returnTo')));
+        const state = oauthStates.create(config.production ? STUDIO_APP_PATH : safeReturnTo(context.url.searchParams.get('returnTo')));
         response.setHeader(
           'Set-Cookie',
           secureCookie(OAUTH_STATE_COOKIE, state, Math.ceil(config.oauthStateTtlMs / 1_000)),
         );
         audit.write(auditEvent, 'success', context.id);
-        sendRedirect(response, github.oauthAuthorizeUrl(state));
+        sendRedirect(response, github.oauthAuthorizeUrl(state, oauthStates.challenge(state)));
         return;
       }
 
@@ -187,7 +193,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
         }
         const code = context.url.searchParams.get('code');
         if (!code) throw new HttpError(400, 'oauth_code_missing', 'GitHubから認証情報を受け取れませんでした。');
-        const user = await github.authenticateOAuthCode(code);
+        const user = await github.authenticateOAuthCode(code, state.verifier);
         auditLogin = user.login;
         if (!config.allowedGithubUsers.has(user.login.toLowerCase())) {
           audit.write(auditEvent, 'denied', context.id, user.login);
@@ -196,7 +202,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
         const created = sessions.create(user);
         response.setHeader(
           'Set-Cookie',
-          secureCookie(SESSION_COOKIE, created.token, Math.ceil(config.sessionTtlMs / 1_000)),
+          [clearSecureCookie(OAUTH_STATE_COOKIE), secureCookie(SESSION_COOKIE, created.token, Math.ceil(config.sessionTtlMs / 1_000))],
         );
         audit.write(auditEvent, 'success', context.id, user.login);
         sendRedirect(response, new URL(state.returnTo, config.publicAppUrl).toString());
@@ -227,16 +233,24 @@ export function createApiHandler(dependencies: ApiDependencies) {
         sendJson(response,200,await repository.readPublishedCharacter(context.url.searchParams.get('slug')??'',String(sessionLookup!.session.user.id)));return;
       }
       if (method === 'GET' && pathname === '/api/github/status') {
+        let accessVerified = false;
+        let protectionVerified = false;
+        if(config.production) {
+          try { await github.verifyRepositoryAccess(); accessVerified = true; protectionVerified = (await github.getMergeProtection()).safe; } catch { /* unavailable is not ready */ }
+        }
         const status = await repository.getStatus();
         sendJson(response, 200, {
           mode: 'server',
           connected: true,
+          repository: `${config.githubOwner}/${config.githubRepo}`,
           user: sessionLookup!.session.user.login,
           build: status.build,
           deployment: status.deployment,
           baseSha: status.baseSha,
+          accessVerified: config.production ? accessVerified : undefined,
+          protectionVerified: config.production ? protectionVerified : undefined,
           publishLimits: { maxFileBytes: config.maxFileBytes, maxTotalFileBytes: config.maxTotalFileBytes, maxRequestBytes: config.maxRequestBytes, maxFiles: config.maxFiles },
-          message: 'GitHubへ安全に接続しています。',
+          message: !config.production ? 'GitHubへ安全に接続しています。' : !accessVerified ? '本人確認済み。repository操作権限は未確認のため公開停止中です。' : !protectionVerified ? '本人・repository確認済み。保護設定を確認できないため公開停止中です。下書きと既存PRの確認は継続できます。' : '本人・repository権限・保護設定を確認しました。公開時に再検証します。ゲームPagesの配備状態はStudioホストと別です。',
         });
         return;
       }
@@ -256,11 +270,28 @@ export function createApiHandler(dependencies: ApiDependencies) {
         sendJson(response, 200, result);
         return;
       }
+      if(method==='GET'&&pathname==='/api/github/thumbnail'){
+        const bytes=await repository.readThumbnail(context.url.searchParams.get('slug')??'',context.url.searchParams.get('baseSha')??'',context.url.searchParams.get('canonicalBlobSha')??'');
+        response.setHeader('Content-Type','image/png');response.setHeader('Content-Length',bytes.length);response.end(bytes);return;
+      }
+      if (method === 'POST' && pathname === '/api/github/recover') {
+        verifyOrigin(request.headers.origin,config.allowedOrigins);
+        verifyCsrf(sessionLookup!.session.csrfToken,request.headers['x-csrf-token'] as string|undefined);
+        const body=await readJsonBody(request,config.maxRequestBytes);
+        if(!isRecord(body))throw new HttpError(422,'recovery_invalid','復旧情報が不正です。');
+        const hint=recoveryHintSchema.safeParse(body.hint);
+        if(!hint.success)throw new HttpError(422,'recovery_invalid','復旧情報が不正です。');
+        sendJson(response,200,await repository.recover(validateSubmission(body.bundle,config),String(sessionLookup!.session.user.id),hint.data));return;
+      }
 
       if (method === 'POST' && pathname === '/api/github/pull-requests') {
         auditEvent = 'github.pull_request';
         verifyOrigin(request.headers.origin, config.allowedOrigins);
         verifyCsrf(sessionLookup!.session.csrfToken, request.headers['x-csrf-token'] as string | undefined);
+        if(config.production) {
+          await github.verifyRepositoryAccess();
+          if(!(await github.getMergeProtection()).safe) throw new HttpError(409,'protection_required','保護設定を確認できないため公開停止中です。既存PRは保持されています。');
+        }
         const body = await readJsonBody(request, config.maxRequestBytes);
         if (!isRecord(body) || typeof body.preparationId !== 'string') {
           throw new HttpError(422, 'preparation_invalid', '公開準備IDがありません。');
@@ -280,6 +311,7 @@ export function createApiHandler(dependencies: ApiDependencies) {
         auditEvent = 'github.merge';
         verifyOrigin(request.headers.origin, config.allowedOrigins);
         verifyCsrf(sessionLookup!.session.csrfToken, request.headers['x-csrf-token'] as string | undefined);
+        if(config.production) await github.verifyRepositoryAccess();
         const body = await readJsonBody(request, config.maxRequestBytes);
         if (
           !isRecord(body)
@@ -335,6 +367,11 @@ export function createApiHandler(dependencies: ApiDependencies) {
         { code: handled.code, status: handled.status, path: context.url.pathname },
       );
       if (!response.writableEnded) {
+        if(config.production && context.url.pathname === '/api/auth/callback') {
+          response.setHeader('Set-Cookie', clearSecureCookie(OAUTH_STATE_COOKIE));
+          sendRedirect(response, STUDIO_APP_PATH + '?auth=failed');
+          return;
+        }
         sendJson(response, handled.status, {
           error: { code: handled.code, message: handled.message, requestId: context.id },
         });

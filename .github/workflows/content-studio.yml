@@ -95,10 +95,13 @@ jobs:
       - name: Run existing game lobby simulation tests
         run: node tests/lobbysimtest.js
 
+      - name: Run complete root regression entry
+        run: npm test
+
   android-e2e:
     name: Android 13 portrait Chromium E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: verify
     defaults:
       run:
@@ -124,6 +127,9 @@ jobs:
 
       - name: Run Android-equivalent E2E
         run: npm run test:e2e
+
+      - name: Verify built production HTTPS, OAuth and cross-origin recovery
+        run: npm run test:production
 
       - name: Install root browser test dependencies
         working-directory: .

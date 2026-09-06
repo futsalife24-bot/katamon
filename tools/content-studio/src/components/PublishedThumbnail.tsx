@@ -4,7 +4,7 @@ import {inspectImageBlob} from '../image/header';
 import {acquirePublishedBitmap} from '../generation/published-edit';
 let active=0;
 /** List thumbnails are optional. Bound the response/header before a browser decoder sees bytes. */
-export function PublishedThumbnail({path}:{path:string}){
+export function PublishedThumbnail({path,serverMode=false,url}:{path:string;serverMode?:boolean;url?:string}){
   const ref=useRef<HTMLCanvasElement>(null);
   useEffect(()=>{
     const canvas=ref.current;if(!canvas)return;
@@ -14,7 +14,8 @@ export function PublishedThumbnail({path}:{path:string}){
       if(active>=2){timer=setTimeout(()=>void load(),150);return;}
       started=true;active++;
       try{
-        const response=await fetch(publishedAssetUrl(path),{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(10000)])});
+        if(serverMode&&!url)throw new Error('snapshot thumbnail unavailable');
+        const response=await fetch(serverMode?url!:publishedAssetUrl(path),{cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(10000)])});
         if(!response.ok||response.headers.get('content-type')?.split(';')[0]!=='image/png'||Number(response.headers.get('content-length'))>6*1024*1024)throw new Error('thumbnail unavailable');
         const reader=response.body?.getReader();if(!reader)throw new Error('empty thumbnail');
         const chunks:Uint8Array<ArrayBuffer>[]=[];let size=0;
@@ -28,6 +29,6 @@ export function PublishedThumbnail({path}:{path:string}){
     };
     const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();void load();}});observer.observe(canvas);
     return()=>{abort.abort();clearTimeout(timer);observer.disconnect();};
-  },[path]);
+  },[path,serverMode,url]);
   return <canvas ref={ref} width={64} height={64} role="img" aria-label="公開キャラクター画像" />;
 }
