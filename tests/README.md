@@ -7,6 +7,8 @@
 ```bash
 node tests/seattest.js p1
 node tests/seattest.js e1
+node tests/pointercanceltest.js
+node tests/pointercanceltest.js e1
 node tests/regressiontest.js p1
 node tests/regressiontest.js e1
 node tests/resulttest.js

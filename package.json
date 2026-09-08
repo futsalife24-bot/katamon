@@ -9,7 +9,7 @@
     "test:registration:emulator": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"node tests/registration-emulator.cjs\"",
     "test:registration:browser": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"playwright test --config tests/registration.playwright.config.cjs\"",
     "test:content-motion": "node --test tests/content-studio-motion.test.js && node tests/content-studio-motion-game.test.js",
-    "test:seat": "node tests/seattest.js p1 && node tests/seattest.js e1",
+    "test:seat": "node tests/seattest.js p1 && node tests/seattest.js e1 && node tests/pointercanceltest.js && node tests/pointercanceltest.js e1",
     "test:regression": "node tests/regressiontest.js p1 && node tests/regressiontest.js e1",
     "test:result": "node tests/resulttest.js",
     "test:loopback": "node tests/loopbacktest.js",
