@@ -29561,7 +29561,8 @@
     }
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'aim' && aimState) {
-      if (!isInCancelZone(aimState.curX, aimState.curY)) {
+      // OS・ブラウザによるタッチ中断では撃たず、照準だけ解除する。
+      if (e.type === 'pointerup' && !isInCancelZone(aimState.curX, aimState.curY)) {
         let dx = aimState.curX - aimState.origin.x;
         let dy = aimState.curY - aimState.origin.y;
         const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
