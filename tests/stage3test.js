@@ -1980,12 +1980,12 @@ function check(name, value) {
   // 発射の配信は1か所に集約する。人とCPUで別々に組み立てると、片方だけ
   // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
   check('the human shot and the CPU shot are announced through the same one place',
-    (htmlText.match(/netSendFire\(/g) || []).length === 6
+    (htmlText.match(/netSendFire\(/g) || []).length === 5
     && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon, false, activateCoopItem);')
     && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
     && htmlText.includes('netSendFire(self, anchor, vx, vy, false, false, null, true);')
     && htmlText.includes('netSendFire(self, supportAnchor, supportVelocity.vx0, supportVelocity.vy0, false, false, null, false, self.coopItem);')
-    && htmlText.includes('authorityUnit, authorityAction.anchor, authorityAction.vx0, authorityAction.vy0,')
+    && htmlText.includes("netSend({ t: 'salvoFire'")
     && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
   check('the turn-end authority and the result declaration follow the same rule',
     htmlText.includes('if (!netControlsUnit(actedUnit)) return;')
@@ -2214,7 +2214,10 @@ function check(name, value) {
       h.receiveFirebaseForTest({ v: 3, from: 'uid-' + seat, seat, roundId, t: 'reveal', sentAt: Date.now(), character: revealChars[seat], nonce: revealNonces[seat] });
     }
     // 公開の検証はSHA-256を待つ非同期処理。決着まで数回まわして落ち着かせる。
-    for (let i = 0; i < 8; i++) await new Promise(resolve => setTimeout(resolve, 0));
+    const revealDeadline = Date.now() + 5000;
+    while (!seats.every(seat => o.seatVerified[seat]) && !o.protocolError && Date.now() < revealDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
     return committed;
   }
   {

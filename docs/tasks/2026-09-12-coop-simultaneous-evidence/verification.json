@@ -1,0 +1,92 @@
+{
+  "date": "2026-09-12",
+  "branch": "feat/coop-simultaneous-20260912",
+  "base": "3d404d96867e98966b0f6595e4368404476765db",
+  "head": "3d404d96867e98966b0f6595e4368404476765db",
+  "uncommitted": true,
+  "published": false,
+  "build": "v2.0.179-coop-salvo",
+  "trackedChanges": [
+    "CURRENT_WORK_STATE.md",
+    "coop-mvp-battle.js",
+    "docs/tasks/2026-08-22-coop-boss-mvp.md",
+    "index.html",
+    "package.json",
+    "sw.js",
+    "tests/README.md",
+    "tests/cache-version-test.js",
+    "tests/coop-boss-playable.test.js",
+    "tests/regressiontest.js",
+    "tests/seatharness.js",
+    "tests/stage3test.js",
+    "tests/storm-boss-transport.test.js"
+  ],
+  "newSourceFiles": [
+    "docs/coop-simultaneous-actions.md",
+    "docs/tasks/2026-09-12-coop-simultaneous.md",
+    "tests/coop-simultaneous.test.js",
+    "tests/coop-simultaneous-peer.cjs",
+    "tests/coop-simultaneous-network.test.cjs",
+    "tests/coop-simultaneous-browser.cjs"
+  ],
+  "sha256": {
+    "index.html": "f93672dcc0dc48ab8703a3d69025c54873bf678499772298087bd1601c4e9c12",
+    "coop-mvp-battle.js": "3e208648d4e1c6822f3cd61bf04b017de5f521c057686ee19cff58714ed02c11",
+    "sw.js": "19c9a1841a425b65d48db937fddc5f82666cd9a2143a23e2f0336c2ebcb9d380"
+  },
+  "tests": {
+    "simultaneous": {
+      "solo": 28,
+      "stormFourProcesses": 26,
+      "fortressFourProcesses": 26,
+      "total": 80,
+      "passed": true
+    },
+    "existing": {
+      "allConstituentCommandsPassed": true,
+      "execution": "Run in parts; initial aggregate stopped on obsolete expectations, then corrected affected tests and completed remaining commands.",
+      "seat": [
+        20,
+        20
+      ],
+      "regression": [
+        476,
+        476
+      ],
+      "result": 93,
+      "loopback": 103,
+      "stage3": 510,
+      "lobby": 7,
+      "back": 17,
+      "ranking": 7,
+      "undefinedScan": 2,
+      "appShell": 3,
+      "cacheVersion": 2,
+      "weekdayDomain": 6,
+      "weekdayUI": 9,
+      "pointerCancel": "both seats passed"
+    },
+    "relatedCoopFiles": 10,
+    "playable": 134,
+    "currentWorkStateSize": "30147/30720 bytes",
+    "gitDiffCheck": true
+  },
+  "browser": {
+    "engine": "Chromium",
+    "viewport": "390x844",
+    "pageErrors": 0,
+    "result": "browser-result.json",
+    "visualReview": [
+      "01-shared-preparation-mobile.png",
+      "02-simultaneous-fire-mobile.png",
+      "03-ready-wait-mobile.png"
+    ]
+  },
+  "notVerified": [
+    "Production Firebase multiplayer",
+    "Physical Android/iPhone",
+    "Real-network disconnect/reentry",
+    "Final human balance review"
+  ],
+  "rulesModified": false
+}

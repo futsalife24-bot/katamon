@@ -1,0 +1,21 @@
+
+> stage-studio-mvp@0.1.0 test:weekday-dungeon
+> node tests/gear-weekday-dungeon.test.js && node tests/weekday-dungeon-ui.test.js
+
+  ok   v2は標準battle定数、中央発射、整数ドラッグを固定する
+  ok   6 lanesは左右×近中遠で、6日ローテーション中に全slotが全zoneを一度ずつ通る
+  ok   v2 attemptは日単位identityで、派生lane/impactを保存・再計算検証する
+  ok   v2はhit slot Gear、miss powder 3を同じquality profileで決定的に生成する
+  ok   v2の同日別方向は一つの永続entitlementへ収束し、queue/recovery契約を維持する
+  ok   公開済みv1 attemptは旧判定、固定曜日identity、reward/gear IDのまま復旧できる
+gear-weekday-dungeon: 6/6 passed
+  ok Garage keeps the weekday entry, while the old portrait overlay is gone
+  ok weekday play uses the existing Battle canvas and a dedicated battle mode
+  ok weekday arena is a calm one-player flat battlefield
+  ok a release just outside the Battle cancel circle is canonicalized into the durable shot range
+  ok all six reward lanes are drawn under opaque Hamilton clouds and only the hit lane can reveal
+  ok one-shot protection isolates normal match, ONLINE, GOAL and suspend paths
+  ok battle status is live-readable and reduced-motion stays immediate
+  ok production integration has no test-only weekday controls
+  ok offline cache retains the reused cloud but excludes the retired portrait background
+weekday-dungeon-ui: 9/9 passed

@@ -24,6 +24,6 @@ async function delivered(code){
 }
 (async()=>{
  assert.deepEqual(await delivered('storm-dragon-02'),['upper','lower'],'later RTDB lowercase key must not be skipped after uppercase cursor');
- assert.deepEqual(await delivered('siege-fortress-01'),['upper'],'legacy fortress ordering remains unchanged');
+ assert.deepEqual(await delivered('siege-fortress-01'),['upper','lower'],'fortress uses the same RTDB key ordering');
  console.log('Storm transport: 2/2 ordering checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1});

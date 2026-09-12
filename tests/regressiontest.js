@@ -3416,13 +3416,13 @@ check('同時カットインはカタモン固有の黒鉄・真鍮パネルと�
     && !/persona|ペルソナ|atlus/i.test(indexHtml),
   'original presentation guard missing');
 const supportSalvo = kt.launchCoopSupportSalvoForTest();
-check('一斉行動の跳躍と救助弾は通常物理へ順番に投入し、各使用権を1回だけ消費する',
+check('一斉行動の跳躍と救助弾は通常物理へ同時に投入し、各使用権を1回だけ消費する',
   supportSalvo.projectiles.length === 2
     && supportSalvo.projectiles[0].owner === 'p1' && supportSalvo.projectiles[0].jump === true
     && supportSalvo.projectiles[1].owner === 'p2' && supportSalvo.projectiles[1].coopItemId === 'rescue-kit'
     && supportSalvo.jumpAvailable === false
     && supportSalvo.rescueUsesLeft === 0
-    && supportSalvo.launchTicks.join(',') === '0,18',
+    && supportSalvo.launchTicks.join(',') === '0,0',
   JSON.stringify(supportSalvo));
 
 console.log(`\n=== regression seat=${SEAT} ===`);

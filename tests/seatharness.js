@@ -49,6 +49,30 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 // (本体には残さない。ここで組み立てるだけ。)
 const HOOK = `
   globalThis.__kt = {
+    salvoTest: {
+      reopen: () => { coopSalvoState = null; beginCoopSalvoRound(); startCoopSalvoPreparation(); },
+      freezeAI: () => { for (const u of units) if (u.team === 'player' && u.id !== localUnitId) u.control = 'remote'; },
+      aim: (special = false, targetId = 'boss1') => {
+        const unit = localUnit(), target = unitById(targetId), anchor = unitAnchor(unit);
+        const rect = targetId === 'boss1' ? coopBossRect(target) : null;
+        const aim = rect ? {x: rect.x + rect.width * .5, y: rect.y + rect.height * .65} : unitAnchor(target);
+        const profile = shotPhysicsProfile(CHARACTERS[unit.character], special, false);
+        const v = perfectAimVelocity(anchor, aim, 2.2, profile.gravityMul, profile.windMul, 1);
+        return queueCoopSalvoAction(unit, {anchor,...v,useSpecial:special,useJump:false,
+          coopItemId:targetId === 'boss1' ? null : 'rescue-kit'});
+      },
+      clock: fn => { coopNormalSession.serverNow = fn; },
+      ready: (id = localUnitId, options = {}) => queueCoopSalvoAction(unitById(id), {
+        anchor: unitAnchor(unitById(id)), vx0: 300, vy0: -180, useSpecial: false, useJump: false, ...options }),
+      move: dir => { moveDir = dir; },
+      input: () => isLocalTurn(),
+      menu: value => { menuOpen = value; },
+      receive: msg => netReceiveInner(msg),
+      status: () => ({ ...coopNormalBattleState(), error: online?.protocolError, onlinePhase: online?.phase,
+        intro: battleIntroPending, cutIn: !!cutIn, ready: coopSalvoState?.started,
+        phase: coopSalvoState?.phase, pendingOwn: coopSalvoState?.pendingOwn,
+        localAction: online?.localAction, remoteAction: online?.remoteAction }),
+    },
     stormTest: {
       rect: () => coopBossRect(coopBossUnit),
       bodyDistance: (x,y) => distanceToCoopBossBody(coopBossUnit,x,y),

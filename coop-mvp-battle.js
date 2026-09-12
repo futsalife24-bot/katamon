@@ -30,7 +30,7 @@
   const WORLD_HEIGHT = 960;
   const TERRAIN_COLUMNS = 720;
   const STEEL_GROUND_Y = 848;
-  const STEEL_BOTTOM_Y = 936;
+  const STEEL_BOTTOM_Y = 924;
   const NORMAL_MESSAGE_PAGE_SIZE = 65;
   const NORMAL_RECENT_KEY_LIMIT = 256;
   // NORMALは部位→CORE→第二形態を8巡前後で見せ切れる耐久へ。難易度ごとの
@@ -1150,13 +1150,13 @@
     return { stop: () => stop(null), getState: () => clone(state) };
   }
 
-  const NORMAL_PACKET_TYPES = new Set(['hello', 'join', 'start', 'ready', 'move', 'fire', 'state', 'result', 'bye', 'ping', 'takeover']);
+  const NORMAL_PACKET_TYPES = new Set(['hello', 'join', 'start', 'ready', 'move', 'fire', 'state', 'result', 'bye', 'ping', 'takeover', 'salvoOpen', 'salvoMove', 'salvoReady', 'salvoAck', 'salvoFire']);
   const NORMAL_ACTION_ID_RE = /^[0-9a-f]{48}$/;
   const NORMAL_SEAT_UNIT = Object.freeze({ p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' });
   const NORMAL_TURN_ORDER = Object.freeze(['p1', 'e1', 'p2', 'e2', 'boss1']);
 
   function normalPacketUnitAllowed(packet, outer, roster, delegatedSeats = null) {
-    if (!['move', 'fire', 'state', 'result'].includes(packet.t)) return true;
+    if (!['move', 'fire', 'state', 'result', 'salvoMove', 'salvoReady'].includes(packet.t)) return true;
     if (!NORMAL_TURN_ORDER.includes(packet.unitId)) return false;
     const ownerSeat = SEATS.find(seat => NORMAL_SEAT_UNIT[seat] === packet.unitId);
     // takeover が記録された後は、元の参加者から遅れて届いた fire/state/result を
@@ -1177,14 +1177,12 @@
     const bossId = config?.bossId || config?.session?.room?.settings?.bossId || deps.boss.BOSS_ID;
     if (![deps.boss.BOSS_ID, deps.stormBoss?.BOSS_ID].includes(bossId)) return false;
     const bossApi = bossId === deps.stormBoss?.BOSS_ID ? deps.stormBoss : deps.boss;
-    // The storm arena and registered protocol 2 use the actual large-arena bottom
-    // (index.html: applyStageSize -> TERRAIN_BOTTOM_Y = 924). Preserve the legacy
-    // fortress contract; never accept a geometry limit declared by a packet.
-    const terrainBottom = bossId === deps.stormBoss?.BOSS_ID || config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
+    // Both live arenas use the same fixed large-arena bottom.
+    const terrainBottom = STEEL_BOTTOM_Y;
     if (!snapshot || snapshot.battleMode !== 'coop' || snapshot.matchFormat !== 'coop4v1') return false;
     if (Number(snapshot.stageW) !== WORLD_WIDTH || Number(snapshot.stageH) !== WORLD_HEIGHT) return false;
     if (!Array.isArray(snapshot.craters)) return false;
-    if (bossId === deps.stormBoss?.BOSS_ID && !requireTerrain) {
+    if (!requireTerrain) {
       // Destructible altar platforms record the normal engine's bounded crater list.
       // Keeping the start-only empty constraint here stalls the next network turn.
       if (snapshot.craters.length > 400 || !snapshot.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr)
@@ -1279,6 +1277,36 @@
     if (!Number.isInteger(packet.generation) || packet.generation < 1 || packet.generation > 100000) return false;
     if (packet.to != null && (typeof packet.to !== 'string' || !Object.values(roster).some(entry => entry?.uid === packet.to))) return false;
     if (!normalPacketUnitAllowed(packet, outer, roster, delegatedSeats)) return false;
+    if (packet.t.startsWith('salvo')) {
+      if (!Number.isInteger(packet.roundTurn) || packet.roundTurn < 0 || packet.roundTurn > 100) return false;
+      const idsSafe = ids => Array.isArray(ids) && ids.length <= 4 && new Set(ids).size === ids.length
+        && ids.every(id => NORMAL_TURN_ORDER.slice(0,4).includes(id));
+      const actionSafe = action => action && NORMAL_TURN_ORDER.slice(0,4).includes(action.unitId)
+        && [action.anchor?.x, action.anchor?.y, action.vx0, action.vy0].every(Number.isFinite)
+        && action.anchor.x >= 0 && action.anchor.x <= WORLD_WIDTH && action.anchor.y >= -100 && action.anchor.y <= WORLD_HEIGHT
+        && Math.abs(action.vx0) <= 5000 && Math.abs(action.vy0) <= 5000
+        && typeof action.useSpecial === 'boolean' && typeof action.useJump === 'boolean'
+        && (!action.subweaponId || ['impact','drill','barrier'].includes(action.subweaponId))
+        && (!action.coopItemId || ['rescue-kit','healing-kit','debuff-grenade'].includes(action.coopItemId))
+        && [action.useSpecial,action.useJump,!!action.coopItemId,!!action.subweaponId].filter(Boolean).length <= 1;
+      if (packet.t === 'salvoReady' || packet.t === 'salvoMove') {
+        if (packet.unitId === 'boss1' || ![packet.x,packet.y,packet.fuel].every(Number.isFinite)
+          || packet.x < 0 || packet.x > WORLD_WIDTH || packet.y < -100 || packet.y > WORLD_HEIGHT
+          || packet.fuel < 0 || packet.fuel > 256) return false;
+        return packet.t === 'salvoMove' ? Number.isSafeInteger(packet.seq) && packet.seq > 0
+          : actionSafe({ ...packet.action, unitId: packet.unitId });
+      }
+      if (outer.seat !== 'p1') return false;
+      if (packet.t === 'salvoAck') return actionSafe(packet.action);
+      if (!idsSafe(packet.participants) || !idsSafe(packet.expected)
+        || !packet.expected.every(id => packet.participants.includes(id))
+        || !normalSnapshotLooksSafe(packet.snap, roster, config, false)
+        || packet.snap.turnCount !== packet.roundTurn) return false;
+      if (packet.t === 'salvoOpen') return Number.isFinite(packet.deadlineAt) && packet.deadlineAt > 0;
+      return NORMAL_ACTION_ID_RE.test(packet.actionId || '') && Number.isFinite(packet.launchAt) && packet.launchAt > 0 && Array.isArray(packet.actions)
+        && packet.actions.length <= 4 && new Set(packet.actions.map(a => a?.unitId)).size === packet.actions.length
+        && packet.actions.every(a => actionSafe(a) && packet.expected.includes(a.unitId));
+    }
     if (packet.t === 'start') return outer.seat === 'p1' && normalSnapshotLooksSafe(packet.snap, roster, config, true);
     if (packet.t === 'state') return NORMAL_ACTION_ID_RE.test(packet.actionId || '')
       && normalSnapshotLooksSafe(packet.snap, roster, config, false);
@@ -1359,12 +1387,8 @@
       return true;
     }
 
-    // RTDB push keys use code-point ordering; locale collation can skip later
-    // lower-case keys after an upper-case cursor. The new storm entry uses the
-    // database's ordering too, while the legacy fortress contract is preserved.
-    const compareMessageKeys = bridge.registration?.enabled || config.bossId === deps.stormBoss?.BOSS_ID
-      ? (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0
-      : (a, b) => String(a).localeCompare(String(b));
+    // RTDB push keys must use the database code-point order for both bosses.
+    const compareMessageKeys = (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
 
     function outerLooksSafe(message) {
       const slot = session.room?.slots?.[message?.seat];
@@ -1712,6 +1736,7 @@
       wind: room.round?.wind,
       nextWind: room.round?.nextWind,
       transport,
+      serverNow: () => config.bridge.serverNow(config.session.auth),
       async onResult() {
         const own = config.session.room?.slots?.[config.session.seat];
         if (!own?.uid) return false;

@@ -1,0 +1,45 @@
+{
+  "browser": "Chromium",
+  "viewport": "390x844",
+  "before": {
+    "ready": 3,
+    "seconds": 27
+  },
+  "firing": {
+    "phase": "resolving",
+    "ready": 4,
+    "total": 4,
+    "unitIds": [
+      "e2",
+      "e1",
+      "p2",
+      "p1"
+    ],
+    "ownGuideVisible": false,
+    "launchTicks": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "remainingSeconds": 27
+  },
+  "timeout": {
+    "phase": "resolving",
+    "ready": 3,
+    "total": 4,
+    "unitIds": [
+      "e2",
+      "e1",
+      "p2"
+    ],
+    "ownGuideVisible": false,
+    "launchTicks": [
+      0,
+      0,
+      0
+    ],
+    "remainingSeconds": 0
+  },
+  "errors": []
+}

@@ -93,8 +93,8 @@ transportUnits.push({
   coopItem: null, coopItemUsesLeft: 0, coopBoss: true, phase: 1, vulnerabilityTurns: 0,
   bossState: boss.createLiveState({ bodyMaxHp: transportConfig.bossMaxHp, difficulty: 'normal' }), facingLeft: true,
 });
-const transportSegments = Array.from({ length: 720 }, () => [[848, 936]]);
-const transportMaterials = Array.from({ length: 720 }, () => [[848, 936, 'steel']]);
+const transportSegments = Array.from({ length: 720 }, () => [[848, 924]]);
+const transportMaterials = Array.from({ length: 720 }, () => [[848, 924, 'steel']]);
 [
   { start: 58, end: 130, top: 634, steel: true },
   { start: 166, end: 252, top: 461, steel: true },
@@ -118,11 +118,11 @@ check('鋼鉄初期台座と破壊可能足場を持つ大型開始snapshotを�
   battle.normalSnapshotLooksSafe(transportSnapshot, soloRoster, transportConfig, true));
 const registeredTerrainSnapshot = clone(transportSnapshot);
 for (const columns of [registeredTerrainSnapshot.segments,registeredTerrainSnapshot.terrainMaterialSegments]) {
-  for (const column of columns) for (const segment of column) if (segment[1] === 936) segment[1] = 924;
+  for (const column of columns) for (const segment of column) if (segment[1] === 924) segment[1] = 936;
 }
-check('登録protocolは実ゲーム下端924を受理し旧936を拒否、旧protocolの契約は維持',
-  battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
-  && !battle.normalSnapshotLooksSafe(transportSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+check('両protocolは実ゲーム下端924を受理し旧936を拒否',
+  battle.normalSnapshotLooksSafe(transportSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+  && !battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
   && !battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,transportConfig,true));
 check('旧・全面鋼鉄の空中足場snapshotを新ルールでは拒否',
   !battle.normalSnapshotLooksSafe({
@@ -281,23 +281,20 @@ check('味方4体から要塞へ進む通常ターン順を一斉攻撃の入力
     && /startTurn\(\)/.test(coopResetBlock)
     && /advanceToNextPlayableTurn/.test(index));
 check('ソロ＋CPU3体は4体のREADY後に通常物理へ通常弾・必殺・跳躍・救助弾を一斉投入',
-  /function coopSoloSalvoEnabled\(\)/.test(index)
-    && /coopHumanUids\(\)\.length === 1/.test(index)
-    && /function queueCoopSalvoAction\(unit, action\)/.test(index)
-    && /showCutIn\('一斉攻撃!'/.test(index)
-    && /COOP_SALVO_LAUNCH_INTERVAL_TICKS = 18/.test(index)
+  /function coopSalvoEnabled\(\)/.test(index)
+    && /function queueCoopSalvoAction\(unit, action, received = false\)/.test(index)
+    && /function finishCoopSalvoPreparation\(\)/.test(index)
+    && /COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0/.test(index)
     && /state\.launchTicks\.push\(state\.physicsTick\)/.test(index)
     && /function stepCoopSalvoLaunchQueue\(\)/.test(index)
-    && /action\.coopItemId === 'rescue-kit'[\s\S]{0,180}launchCoopItemShot\(/.test(index)
-    && /launchShot\(unit, action\.anchor, action\.vx0, action\.vy0, action\.useSpecial, action\.useSpecial, action\.useJump\)/.test(index));
-check('一斉攻撃は跳躍と救助弾を許可し、SUBと救助以外のCO-OP ITEMを拒否する',
-  /if \(action\.subweaponId \|\| \(action\.coopItemId && action\.coopItemId !== 'rescue-kit'\)\) return false/.test(index)
-    && /const useJump = !!action\.useJump/.test(index)
-    && /unit\.jumpAvailable !== false && unit\.moveLockTurns <= 0/.test(index)
-    && /unit\.coopItem === 'rescue-kit' && unit\.coopItemUsesLeft > 0/.test(index)
+    && /action\.coopItemId[\s\S]{0,180}launchCoopItemShot\(/.test(index)
+    && /launchShot\(unit, action\.anchor, action\.vx0, action\.vy0, action\.useSpecial, action\.useSpecial, action\.useJump, action\.subweaponId\)/.test(index));
+check('一斉行動でも装備と残弾・必殺ゲージ・跳躍使用権を確認する',
+  /action.subweaponId !== unit.subweapon/.test(index)
+    && /action.coopItemId !== unit.coopItem/.test(index)
+    && /unit.jumpAvailable !== false && unit.moveLockTurns <= 0/.test(index)
     && /if \(useSpecial && \(def\?\.specialEnabled === false \|\| !isSpecialReady\(unit\)\)\) return false/.test(index)
-    && /showCutIn\(`\$\{label\} READY`[^\n]+advanceCoopSalvoCollector/.test(index)
-    && /coopSalvoState\?\.phase === 'resolving'/.test(index));
+    && /t: 'salvoAck'/.test(index));
 check('ハムルトンのクリーム雲は生成素材の3コマをその場でモクモク表示',
   fs.existsSync(path.join(root, 'assets', 'effects', 'hamulton-cream-cloud-frames.png'))
     && /const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets\/effects\/hamulton-cream-cloud-frames\.png';/.test(index)
@@ -338,9 +335,9 @@ check('複数必殺は全員同時オーラ、共通SE1回、長い同時カッ�
     && /const headline = entries\.length > 1 \? '同時必殺' : '必殺砲撃'/.test(index)
     && /beginQueuedCoopSalvoResolution\(\)/.test(index));
 check('ソロCPUもゲージMAXなら一斉攻撃へ必殺をREADYする',
-  /const useSpecial = isSpecialReady\(self\)[\s\S]{0,100}coopSoloSalvoEnabled\(\)/.test(index));
-check('複数人戦は専用同期導入まで一斉攻撃へ誤って入れない',
-  /return isCoop4v1\(\) && coopHumanUids\(\)\.length === 1;/.test(index));
+  /const useSpecial = isSpecialReady\(self\)[\s\S]{0,100}coopSalvoEnabled\(\)/.test(index));
+check('複数人戦も専用同期で一斉攻撃を使用する',
+  /function coopSalvoEnabled\(\) \{\s*return isCoop4v1\(\);/.test(index) && /t: 'salvoFire'/.test(index));
 check('NORMALは12巡60ターン、HARDとEXTREMEは既存難度別上限を使う',
   /function coopDifficultyRoundLimit\(\)/.test(index)
     && /return coopRounds \* Math\.max\(1, turnOrder\.length\)/.test(index)

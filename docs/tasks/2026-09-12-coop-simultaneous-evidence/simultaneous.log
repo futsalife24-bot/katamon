@@ -1,0 +1,32 @@
+
+> stage-studio-mvp@0.1.0 test:coop-simultaneous
+> node tests/coop-simultaneous.test.js && node tests/coop-simultaneous-network.test.cjs && node tests/coop-simultaneous-network.test.cjs siege-fortress-01
+
+Coop simultaneous solo: 28 passed
+Coop simultaneous four-peer: 26 passed {
+  join: 12,
+  hello: 4,
+  start: 12,
+  ready: 12,
+  salvoOpen: 6,
+  salvoMove: 8,
+  salvoReady: 9,
+  salvoAck: 12,
+  salvoFire: 4,
+  state: 7,
+  fire: 3
+}
+Coop simultaneous four-peer: 26 passed {
+  hello: 4,
+  join: 12,
+  start: 12,
+  ready: 12,
+  salvoOpen: 5,
+  salvoMove: 8,
+  salvoReady: 9,
+  salvoAck: 12,
+  salvoFire: 4,
+  state: 6,
+  fire: 3,
+  result: 2
+}
