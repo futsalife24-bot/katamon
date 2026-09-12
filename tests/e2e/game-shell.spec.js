@@ -150,7 +150,7 @@ test.describe('カタモン本体の基本導線', () => {
     )), { timeout: 30_000 }).toMatchObject({
       activeUnitId: 'boss1',
       turnCount: 4,
-      salvo: { phase: 'complete', ready: 4, total: 4, ownGuideVisible: false, launchTicks: [0, 18, 36, 54] },
+      salvo: { phase: 'complete', ready: 4, total: 4, ownGuideVisible: false, launchTicks: [0, 0, 0, 0] },
     });
     await expect.poll(() => page.locator('#gameFrame').evaluate((frame) => (
       frame.contentWindow.KatamonCoopBridge.getNormalBattleState()

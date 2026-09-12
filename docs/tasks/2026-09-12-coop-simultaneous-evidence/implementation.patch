@@ -1,0 +1,1342 @@
+diff --git a/CURRENT_WORK_STATE.md b/CURRENT_WORK_STATE.md
+index 4a5034d..e5fafe2 100644
+--- a/CURRENT_WORK_STATE.md
++++ b/CURRENT_WORK_STATE.md
+@@ -1,5 +1,12 @@
+ # カタモン 現在作業状態
+ 
++## 2026-09-12 協力戦の同時行動（実装済み・未公開）
++
++- 作業場所 `.codex-worktrees/coop-simultaneous-20260912` / branch `feat/coop-simultaneous-20260912` / base・HEAD `3d404d96867e98966b0f6595e4368404476765db`。未コミット、BUILD `v2.0.179-coop-salvo`。
++- 両ボス・ソロ/複数人の味方準備を同時化。共通30秒、全員READYで早期一斉発射、期限切れの未READYは待機。
++- 新規80項目、既存回帰の各コマンド、モバイル相当Chromiumを確認。実Firebase複数人・物理スマホ・公開は未実施。詳細は[作業記録](docs/tasks/2026-09-12-coop-simultaneous.md)。
++
++
+ ## 2026-09-12 フォント修正（v2.0.178-font-repair）
+ 
+ - base `bc8dcbd8d14ddc453179244e8bcbca4779e96e8e` / branch `fix/font-repair-20260912`。画像報告のGARAGE・協力ロビーに対応。
+diff --git a/coop-mvp-battle.js b/coop-mvp-battle.js
+index 2516199..cbb9f01 100644
+--- a/coop-mvp-battle.js
++++ b/coop-mvp-battle.js
+@@ -30,7 +30,7 @@
+   const WORLD_HEIGHT = 960;
+   const TERRAIN_COLUMNS = 720;
+   const STEEL_GROUND_Y = 848;
+-  const STEEL_BOTTOM_Y = 936;
++  const STEEL_BOTTOM_Y = 924;
+   const NORMAL_MESSAGE_PAGE_SIZE = 65;
+   const NORMAL_RECENT_KEY_LIMIT = 256;
+   // NORMALは部位→CORE→第二形態を8巡前後で見せ切れる耐久へ。難易度ごとの
+@@ -1150,13 +1150,13 @@
+     return { stop: () => stop(null), getState: () => clone(state) };
+   }
+ 
+-  const NORMAL_PACKET_TYPES = new Set(['hello', 'join', 'start', 'ready', 'move', 'fire', 'state', 'result', 'bye', 'ping', 'takeover']);
++  const NORMAL_PACKET_TYPES = new Set(['hello', 'join', 'start', 'ready', 'move', 'fire', 'state', 'result', 'bye', 'ping', 'takeover', 'salvoOpen', 'salvoMove', 'salvoReady', 'salvoAck', 'salvoFire']);
+   const NORMAL_ACTION_ID_RE = /^[0-9a-f]{48}$/;
+   const NORMAL_SEAT_UNIT = Object.freeze({ p1: 'p1', e1: 'e1', s1: 'p2', s2: 'e2' });
+   const NORMAL_TURN_ORDER = Object.freeze(['p1', 'e1', 'p2', 'e2', 'boss1']);
+ 
+   function normalPacketUnitAllowed(packet, outer, roster, delegatedSeats = null) {
+-    if (!['move', 'fire', 'state', 'result'].includes(packet.t)) return true;
++    if (!['move', 'fire', 'state', 'result', 'salvoMove', 'salvoReady'].includes(packet.t)) return true;
+     if (!NORMAL_TURN_ORDER.includes(packet.unitId)) return false;
+     const ownerSeat = SEATS.find(seat => NORMAL_SEAT_UNIT[seat] === packet.unitId);
+     // takeover が記録された後は、元の参加者から遅れて届いた fire/state/result を
+@@ -1177,14 +1177,12 @@
+     const bossId = config?.bossId || config?.session?.room?.settings?.bossId || deps.boss.BOSS_ID;
+     if (![deps.boss.BOSS_ID, deps.stormBoss?.BOSS_ID].includes(bossId)) return false;
+     const bossApi = bossId === deps.stormBoss?.BOSS_ID ? deps.stormBoss : deps.boss;
+-    // The storm arena and registered protocol 2 use the actual large-arena bottom
+-    // (index.html: applyStageSize -> TERRAIN_BOTTOM_Y = 924). Preserve the legacy
+-    // fortress contract; never accept a geometry limit declared by a packet.
+-    const terrainBottom = bossId === deps.stormBoss?.BOSS_ID || config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
++    // Both live arenas use the same fixed large-arena bottom.
++    const terrainBottom = STEEL_BOTTOM_Y;
+     if (!snapshot || snapshot.battleMode !== 'coop' || snapshot.matchFormat !== 'coop4v1') return false;
+     if (Number(snapshot.stageW) !== WORLD_WIDTH || Number(snapshot.stageH) !== WORLD_HEIGHT) return false;
+     if (!Array.isArray(snapshot.craters)) return false;
+-    if (bossId === deps.stormBoss?.BOSS_ID && !requireTerrain) {
++    if (!requireTerrain) {
+       // Destructible altar platforms record the normal engine's bounded crater list.
+       // Keeping the start-only empty constraint here stalls the next network turn.
+       if (snapshot.craters.length > 400 || !snapshot.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr)
+@@ -1279,6 +1277,36 @@
+     if (!Number.isInteger(packet.generation) || packet.generation < 1 || packet.generation > 100000) return false;
+     if (packet.to != null && (typeof packet.to !== 'string' || !Object.values(roster).some(entry => entry?.uid === packet.to))) return false;
+     if (!normalPacketUnitAllowed(packet, outer, roster, delegatedSeats)) return false;
++    if (packet.t.startsWith('salvo')) {
++      if (!Number.isInteger(packet.roundTurn) || packet.roundTurn < 0 || packet.roundTurn > 100) return false;
++      const idsSafe = ids => Array.isArray(ids) && ids.length <= 4 && new Set(ids).size === ids.length
++        && ids.every(id => NORMAL_TURN_ORDER.slice(0,4).includes(id));
++      const actionSafe = action => action && NORMAL_TURN_ORDER.slice(0,4).includes(action.unitId)
++        && [action.anchor?.x, action.anchor?.y, action.vx0, action.vy0].every(Number.isFinite)
++        && action.anchor.x >= 0 && action.anchor.x <= WORLD_WIDTH && action.anchor.y >= -100 && action.anchor.y <= WORLD_HEIGHT
++        && Math.abs(action.vx0) <= 5000 && Math.abs(action.vy0) <= 5000
++        && typeof action.useSpecial === 'boolean' && typeof action.useJump === 'boolean'
++        && (!action.subweaponId || ['impact','drill','barrier'].includes(action.subweaponId))
++        && (!action.coopItemId || ['rescue-kit','healing-kit','debuff-grenade'].includes(action.coopItemId))
++        && [action.useSpecial,action.useJump,!!action.coopItemId,!!action.subweaponId].filter(Boolean).length <= 1;
++      if (packet.t === 'salvoReady' || packet.t === 'salvoMove') {
++        if (packet.unitId === 'boss1' || ![packet.x,packet.y,packet.fuel].every(Number.isFinite)
++          || packet.x < 0 || packet.x > WORLD_WIDTH || packet.y < -100 || packet.y > WORLD_HEIGHT
++          || packet.fuel < 0 || packet.fuel > 256) return false;
++        return packet.t === 'salvoMove' ? Number.isSafeInteger(packet.seq) && packet.seq > 0
++          : actionSafe({ ...packet.action, unitId: packet.unitId });
++      }
++      if (outer.seat !== 'p1') return false;
++      if (packet.t === 'salvoAck') return actionSafe(packet.action);
++      if (!idsSafe(packet.participants) || !idsSafe(packet.expected)
++        || !packet.expected.every(id => packet.participants.includes(id))
++        || !normalSnapshotLooksSafe(packet.snap, roster, config, false)
++        || packet.snap.turnCount !== packet.roundTurn) return false;
++      if (packet.t === 'salvoOpen') return Number.isFinite(packet.deadlineAt) && packet.deadlineAt > 0;
++      return NORMAL_ACTION_ID_RE.test(packet.actionId || '') && Number.isFinite(packet.launchAt) && packet.launchAt > 0 && Array.isArray(packet.actions)
++        && packet.actions.length <= 4 && new Set(packet.actions.map(a => a?.unitId)).size === packet.actions.length
++        && packet.actions.every(a => actionSafe(a) && packet.expected.includes(a.unitId));
++    }
+     if (packet.t === 'start') return outer.seat === 'p1' && normalSnapshotLooksSafe(packet.snap, roster, config, true);
+     if (packet.t === 'state') return NORMAL_ACTION_ID_RE.test(packet.actionId || '')
+       && normalSnapshotLooksSafe(packet.snap, roster, config, false);
+@@ -1359,12 +1387,8 @@
+       return true;
+     }
+ 
+-    // RTDB push keys use code-point ordering; locale collation can skip later
+-    // lower-case keys after an upper-case cursor. The new storm entry uses the
+-    // database's ordering too, while the legacy fortress contract is preserved.
+-    const compareMessageKeys = bridge.registration?.enabled || config.bossId === deps.stormBoss?.BOSS_ID
+-      ? (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0
+-      : (a, b) => String(a).localeCompare(String(b));
++    // RTDB push keys must use the database code-point order for both bosses.
++    const compareMessageKeys = (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+ 
+     function outerLooksSafe(message) {
+       const slot = session.room?.slots?.[message?.seat];
+@@ -1712,6 +1736,7 @@
+       wind: room.round?.wind,
+       nextWind: room.round?.nextWind,
+       transport,
++      serverNow: () => config.bridge.serverNow(config.session.auth),
+       async onResult() {
+         const own = config.session.room?.slots?.[config.session.seat];
+         if (!own?.uid) return false;
+diff --git a/docs/tasks/2026-08-22-coop-boss-mvp.md b/docs/tasks/2026-08-22-coop-boss-mvp.md
+index edec816..658ca7c 100644
+--- a/docs/tasks/2026-08-22-coop-boss-mvp.md
++++ b/docs/tasks/2026-08-22-coop-boss-mvp.md
+@@ -1,5 +1,7 @@
+ # 協力ボスMVP 実装監査・分割計画
+ 
++> 2026-09-12更新：入力順・READY・一斉発射・複数人戦の現行仕様は [同時行動仕様](../coop-simultaneous-actions.md) を優先する。以下の2026-08-23の逐次入力制限は履歴。
++
+ ## 起点と安全境界
+ 
+ - 起点: `origin/master` の `ec0dd790274c0790cc553f47827122ec55fa8452`（PR #263統合済み）
+diff --git a/index.html b/index.html
+index c141279..ea897bc 100644
+--- a/index.html
++++ b/index.html
+@@ -978,13 +978,14 @@
+   // ===== ビルド番号 =====
+   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
+   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
+-  const BUILD_ID = 'v2.0.178-font-repair';
++  const BUILD_ID = 'v2.0.179-coop-salvo';
+   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
+   // download on first paint. Activate it at the first title tap, independently
+   // of Service Worker availability and the large T2 media download queue.
+   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
+   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
+   const UPDATE_HISTORY = Object.freeze([
++    { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
+     { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
+     { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
+     { version: 'v2.0.176', date: '2026/09/06', summary: '登録revisionへ固定するONLINE・協力戦の専用入口を追加' },
+@@ -7880,10 +7881,17 @@
+   }
+   function activeUnit() { return unitById(turnOrder[activeIndex]) || units[0]; }
+   // 手番を持っているのがこの端末で操作するユニットか(将来のオンライン対戦の入力ガード)
+-  function isLocalTurn() { return activeUnit().control === 'local'; }
++  function isLocalTurn() {
++    if (coopSalvoEnabled() && activeUnit().team === 'player') {
++      return coopSalvoCollecting() && coopSalvoState.started && localUnit().hp > 0
++        && coopSalvoState.expected.includes(localUnitId)
++        && !coopSalvoState.ready.has(localUnitId) && !coopSalvoState.pendingOwn
++        && coopSalvoNow() < coopSalvoState.deadlineAt;
++    }
++    return activeUnit().control === 'local';
++  }
+   let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
+-  // 一斉攻撃の第一段階。まずソロ＋CPU3体で通常対戦の弾道・着弾処理をそのまま束ねる。
+-  // 複数人戦は従来同期を維持し、専用packetを導入する次段階まで逐次手番のままにする。
++  // 協力戦の味方全員が共有する30秒の準備・一斉発射状態。
+   let coopSalvoState = null;
+   const TURN_SETTLE_SEC = 0.8; // 着弾が収まってから手番を交代するまでの余韻
+   // CPUが狙いを定めるのにかける時間。実測で「手番の交代から発射まで1.8〜2.1秒、うち
+@@ -14861,7 +14869,7 @@
+       v: online.kind === 'firebase' ? FIREBASE_PROTO_VERSION : PROTO_VERSION,
+       from: online.clientId,
+       ...(online.kind === 'firebase' ? { seat: online.seat, roundId: online.currentRoundId } : {}),
+-      ...(online.kind === 'coop' ? { generation: online.matchGeneration } : {}),
++      ...(online.kind === 'coop' ? { generation: online.matchGeneration, salvoVersion: 1 } : {}),
+       ...msg
+     };
+     if (REGISTERED_MATCH_MODE && ['firebase','coop'].includes(online.kind)) packet = registeredRuntime().packet(packet);
+@@ -15687,6 +15695,7 @@
+   }
+ 
+   function sendMoveUpdate(unit) {
++    if (coopSalvoCollecting()) { sendCoopSalvoMove(unit); moveSyncPending = false; moveSyncTimer = 0; return; }
+     moveSyncTimer = 0;
+     if (!isOnline() || !netControlsUnit(unit)) { moveSyncPending = false; return; }
+     if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
+@@ -15914,6 +15923,7 @@
+       return;
+     }
+     if (online.kind === 'coop') {
++      if (msg.salvoVersion !== 1) { rejectFirebaseMessage('協力戦のバージョンが異なります。全員が更新してから入り直してください。'); return; }
+       const generation = Number(msg.generation);
+       if (msg.t === 'start') {
+         if (!Number.isInteger(generation) || generation < online.matchGeneration) return;
+@@ -15928,6 +15938,13 @@
+         }
+       } else if (msg.t !== 'hello' && msg.t !== 'join' && generation !== online.matchGeneration) return;
+     }
++    if (online.kind === 'coop' && ['salvoOpen', 'salvoMove', 'salvoReady', 'salvoAck', 'salvoFire'].includes(msg.t)) {
++      if (msg.v === PROTO_VERSION) {
++        if (msg.t === 'salvoOpen' || msg.t === 'salvoFire') enqueueNetMessage(msg);
++        else receiveCoopSalvo(msg);
++      }
++      return;
++    }
+     if (msg.v !== PROTO_VERSION) {
+       online.versionMismatch = true;
+       online.queue.length = 0;
+@@ -15964,6 +15981,7 @@
+   }
+ 
+   function applyNetMessage(msg) {
++    if (online?.kind === 'coop' && (msg.t === 'salvoOpen' || msg.t === 'salvoFire')) { receiveCoopSalvo(msg); return; }
+     // SSEではfireと直後のstateが同じイベント周期で届く。受信時ではなくFIFOキューから
+     // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
+     if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
+@@ -16179,7 +16197,7 @@
+             || (!phase2Handoff && (Number(msg.snap?.activeIndex) !== activeIndex || Number(msg.snap?.turnCount) !== turnCount))
+             || (phaseChanged && !phase2Handoff)
+             || snapshotMismatch) {
+-            rejectFirebaseMessage('相手の行動と一致しない協力戦の状態更新です。');
++            rejectFirebaseMessage('相手の行動と一致しない協力戦の状態更新です（' + (!action ? 'action' : !action.resolved ? 'resolving' : !firebaseActionMatches(msg, action) ? 'actionId' : snapshotMismatch || 'turn') + '）。');
+             break;
+           }
+           rememberCoopCompletedAction(msg.actionId);
+@@ -21710,7 +21728,7 @@
+       calmBattle = true;
+     } else if (!options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
+     const acting = activeUnit();
+-    if (coopSoloSalvoEnabled() && acting.team === 'player'
++    if (coopSalvoEnabled() && acting.team === 'player'
+         && (!coopSalvoState || coopSalvoState.phase !== 'collecting')) {
+       beginCoopSalvoRound();
+     }
+@@ -21718,8 +21736,9 @@
+     // 跳躍は全モード共通で自分の手番ごとに戻す。着地後の移動不能中も使用権自体は戻し、
+     // 発動可否側でデバフを優先する。将来デバフを解除できれば、その手番中の連続跳躍も可能になる。
+     if (!isCoopBossUnit(acting)) acting.jumpAvailable = true;
+-    focusCameraOn(acting.x, false, acting.y);
+-    if (!firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
++    const focused = coopSalvoCollecting() ? localUnit() : acting;
++    focusCameraOn(focused.x, false, focused.y);
++    if (!coopSalvoCollecting() && !firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
+     if (battleMode !== 'weekday') updateStageBattleItemsAtTurnStart();
+     if (battleMode === 'weekday') return;
+     if (cpuGearSkipNextTurnStartSuspend) cpuGearSkipNextTurnStartSuspend = false;
+@@ -21745,19 +21764,176 @@
+     cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
+   }
+ 
+-  function coopSoloSalvoEnabled() {
+-    return isCoop4v1() && coopHumanUids().length === 1;
++  function coopSalvoEnabled() {
++    return isCoop4v1();
+   }
+ 
+   function coopSalvoCollecting() {
+-    return coopSoloSalvoEnabled() && coopSalvoState?.phase === 'collecting';
++    return coopSalvoEnabled() && coopSalvoState?.phase === 'collecting';
++  }
++
++  const COOP_PREPARATION_MS = 30000;
++  function coopSalvoNow() { return coopNormalSession?.serverNow?.() ?? Date.now(); }
++  function coopSalvoHost() { return !online || online.role === 'host'; }
++  function coopSalvoOwns(msg) {
++    const seat = Object.keys(COOP_SEAT_UNIT).find(key => COOP_SEAT_UNIT[key] === msg.unitId);
++    const entry = coopNormalSession?.roster?.[seat];
++    return !!entry && (entry.ai || coopNormalSession.takeoverSeats.has(seat)
++      ? msg.from === coopNormalSession.roster.p1.uid : msg.from === entry.uid);
++  }
++  function coopSalvoActionGuide(action) {
++    const unit = unitById(action.unitId);
++    if (!unit || unit.id !== localUnitId) return null;
++    const profile = shotPhysicsProfile(CHARACTERS[unit.character], action.useSpecial, action.useJump);
++    const gravity = GRAVITY * profile.gravityMul;
++    return { gravity, windAccel: wind.dir * wind.strength * WIND_ACCEL_MAX * profile.windMul,
++      previewT: trajectoryPreviewDuration(action.vx0, action.vy0, gravity) * profile.guideMul
++        * (unitIsInCreamCloud(unit) ? 0.5 : 1) };
++  }
++  function sendCoopSalvoMove(unit) {
++    const state = coopSalvoState;
++    if (!state?.started || state.phase !== 'collecting' || !netControlsUnit(unit)) return;
++    const seq = state.moveSeq[unit.id] = (state.moveSeq[unit.id] || 0) + 1;
++    netSend({ t: 'salvoMove', roundTurn: state.roundTurn, unitId: unit.id, seq,
++      x: unit.x, y: unit.y, fuel: unit.fuel });
++  }
++  function acceptCoopSalvoPosition(msg, final = false) {
++    const state = coopSalvoState, unit = unitById(msg.unitId);
++    if (!state?.started || state.phase !== 'collecting' || msg.roundTurn !== state.roundTurn
++      || !state.expected.includes(msg.unitId) || state.ready.has(msg.unitId) || !coopSalvoOwns(msg)
++      || !unit || ![msg.x, msg.y, msg.fuel].every(Number.isFinite)
++      || msg.x < UNIT_RADIUS || msg.x > STAGE_W - UNIT_RADIUS || msg.y < -100 || msg.y > STAGE_H
++      || msg.fuel < 0 || msg.fuel > unit.fuel + 0.01) return false;
++    const previousX = unit.netWalkTargetX ?? unit.x;
++    if (Math.abs(msg.x - previousX) > unit.fuel - msg.fuel + 1) return false;
++    if (!final && (!Number.isInteger(msg.seq) || msg.seq <= (state.receivedMoveSeq[msg.unitId] || 0))) return false;
++    if (final) {
++      const surface = walkableGroundYAt(msg.x, unit.y + UNIT_RADIUS);
++      if (surface === null || Math.abs(msg.y + UNIT_RADIUS - surface) > 3) return false;
++    }
++    if (!final) state.receivedMoveSeq[msg.unitId] = msg.seq;
++    unit.fuel = msg.fuel;
++    if (final) {
++      unit.x = msg.x; unit.y = msg.y; unit.netWalkTargetX = null;
++      unit.grounded = true; unit.vy = 0;
++    } else unit.netWalkTargetX = msg.x;
++    return true;
++  }
++  function startCoopSalvoPreparation() {
++    const state = coopSalvoState;
++    if (!state || state.started || !coopSalvoHost()) return;
++    state.started = true;
++    state.deadlineAt = coopSalvoNow() + COOP_PREPARATION_MS;
++    netSend({ t: 'salvoOpen', roundTurn: state.roundTurn, deadlineAt: state.deadlineAt,
++      snap: buildSnapshot({ includeTerrain: false }), participants: state.participants, expected: state.expected });
++  }
++  function finishCoopSalvoPreparation() {
++    const state = coopSalvoState;
++    if (!state || state.phase !== 'collecting' || !state.started || !coopSalvoHost()) return false;
++    state.phase = 'launching';
++    state.launchAt = coopSalvoNow() + (coopHumanUids().length > 1 ? 700 : 0);
++    state.actions.sort((a,b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
++    moveDir = 0; moveSyncPending = false; aimState = null; inputMode = null; inputPointerId = null;
++    for (const unit of units) unit.netWalkTargetX = null;
++    const actionId = secureNonce();
++    if (online) online.localAction = { unitId: 'p1', actionId };
++    netSend({ t: 'salvoFire', roundTurn: state.roundTurn, actionId, launchAt: state.launchAt,
++      snap: buildSnapshot({ includeTerrain: false }), actions: state.actions.map(({guide, ...action}) => action),
++      participants: state.participants, expected: state.expected });
++    awaitingResolve = true;
++    if (state.launchAt <= coopSalvoNow()) armQueuedCoopSalvo();
++    return true;
++  }
++  function receiveCoopSalvo(msg) {
++    if (online?.kind !== 'coop' || online.phase !== 'playing') return;
++    const host = msg.from === coopNormalSession?.roster?.p1?.uid;
++    let state = coopSalvoState;
++    if (msg.t === 'salvoOpen') {
++      if (!host || coopSalvoHost() || msg.roundTurn !== turnCount || (state?.started && state.roundTurn === msg.roundTurn)) return;
++      applySnapshot(msg.snap, { preserveTerrain: true });
++      setCoopOnlineSeat(online.seat);
++      state = beginCoopSalvoRound(false);
++      // snapshotに含まれる燃料・デバフを再消費しない。
++      for (const saved of msg.snap.units) Object.assign(unitById(saved.id), {
++        fuel: saved.fuel, jumpAvailable: saved.jumpAvailable });
++      state.participants = msg.participants.slice(); state.expected = msg.expected.slice();
++      state.started = true; state.deadlineAt = msg.deadlineAt;
++      battleIntroPending = false; cutIn = null;
++      focusCameraOn(localUnit().x, false, localUnit().y);
++      return;
++    }
++    if (!state?.started || msg.roundTurn !== state.roundTurn || state.phase !== 'collecting') return;
++    if (msg.t === 'salvoMove') {
++      if (coopSalvoNow() <= state.deadlineAt) acceptCoopSalvoPosition(msg);
++    } else if (msg.t === 'salvoReady') {
++      if (!coopSalvoHost() || coopSalvoNow() >= state.deadlineAt || !acceptCoopSalvoPosition(msg, true)) return;
++      queueCoopSalvoAction(unitById(msg.unitId), msg.action, true);
++    } else if (msg.t === 'salvoAck') {
++      if (!host || coopSalvoHost() || !state.expected.includes(msg.action.unitId) || state.ready.has(msg.action.unitId)) return;
++      const action = { ...msg.action, guide: coopSalvoActionGuide(msg.action) };
++      state.actions.push(action); state.ready.add(action.unitId);
++      if (action.unitId === localUnitId) state.pendingOwn = false;
++    } else if (msg.t === 'salvoFire') {
++      if (!host || coopSalvoHost()) return;
++      const saved = state;
++      applySnapshot(msg.snap, { preserveTerrain: true });
++      setCoopOnlineSeat(online.seat);
++      coopSalvoState = saved;
++      saved.actions = msg.actions.map(action => ({ ...action, guide: coopSalvoActionGuide(action) }));
++      saved.ready = new Set(saved.actions.map(action => action.unitId));
++      saved.phase = 'launching'; saved.launchAt = msg.launchAt;
++      online.remoteAction = { unitId: 'p1', actionId: msg.actionId, from: msg.from, resolved: false };
++      awaitingResolve = true;
++      battleIntroPending = false;
++      if (saved.launchAt <= coopSalvoNow()) armQueuedCoopSalvo();
++    }
++  }
++  function updateCoopSalvoPreparation(dt) {
++    if (!coopSalvoEnabled() || matchOver || online?.phase !== 'playing') return;
++    if (coopSalvoState?.phase === 'launching' && coopSalvoNow() >= coopSalvoState.launchAt) armQueuedCoopSalvo();
++    if (activeUnit().team !== 'player') return;
++    if (coopAwaitingAuthoritativeState()) return;
++    if (!coopSalvoState) beginCoopSalvoRound();
++    const state = coopSalvoState;
++    if (state.phase !== 'collecting' || battleIntroPending || cutIn) return;
++    if (!state.started) startCoopSalvoPreparation();
++    if (!state.started || !coopSalvoHost() || coopAwaitingAuthoritativeState()) return;
++    if (coopSalvoNow() >= state.deadlineAt) { finishCoopSalvoPreparation(); return; }
++    for (const id of state.expected) {
++      const unit = unitById(id);
++      if (unit?.control !== 'cpu' || unit.hp <= 0 || state.ready.has(id)) continue;
++      let plan = state.aiPlans[id];
++      if (!plan) {
++        const move = planCpuMove(unit);
++        plan = state.aiPlans[id] = { dir: move.dir, distance: move.distance,
++          think: CPU_THINK_MIN_SEC + Math.random() * CPU_THINK_RANGE_SEC, sync: 0 };
++      }
++      if (!unit.grounded) continue;
++      if (plan.distance > 0 && unit.fuel > 0 && unit.moveLockTurns <= 0) {
++        const distance = Math.min(MOVE_SPEED * dt, unit.fuel, plan.distance);
++        const nx = limitMoveByClimb(unit, Math.max(UNIT_RADIUS + 4, Math.min(STAGE_W - UNIT_RADIUS - 4, unit.x + plan.dir * distance)));
++        if (cpuStepIsSafe(unit, nx)) {
++          const delta = nx - unit.x;
++          unit.x = nx; unit.fuel -= Math.abs(delta); plan.distance -= Math.abs(delta);
++          followGroundOrFall(unit); walkBattleMotion(unit, delta);
++          if (Math.abs(delta) < 0.01) plan.distance = 0;
++        } else plan.distance = 0;
++        plan.sync += dt;
++        if (plan.sync >= MOVE_SYNC_INTERVAL_SEC || plan.distance <= 0) { sendCoopSalvoMove(unit); plan.sync = 0; }
++      } else {
++        if (!plan.settled) { sendCoopSalvoMove(unit); plan.settled = true; }
++        plan.think -= dt;
++        if (plan.think <= 0) cpuAutoTurn(unit);
++      }
++    }
++    if (state.expected.every(id => state.ready.has(id) || unitById(id)?.hp <= 0)) finishCoopSalvoPreparation();
+   }
+ 
+   function coopSalvoItemAllowed(itemId) {
+-    return !coopSalvoCollecting() || itemId === 'rescue-kit';
++    return !coopSalvoCollecting() || ['rescue-kit', 'healing-kit', 'debuff-grenade'].includes(itemId);
+   }
+ 
+-  function beginCoopSalvoRound() {
++  function beginCoopSalvoRound(initialize = true) {
+     // 直前に行動不能・救助直後待機を通常進行側で消費した席は、現在のactiveIndexより
+     // 前にいる。そこを次の一斉攻撃へ二重計上せず、現在席から要塞直前までだけ集める。
+     const participants = [];
+@@ -21773,12 +21949,25 @@
+     coopSalvoState = {
+       phase: 'collecting', participants, expected, ready: new Set(), actions: [],
+       nextLaunchIndex: 0, physicsTick: 0, launchTicks: [], deferredMatchEndReason: '',
++      started: false, roundTurn: turnCount, deadlineAt: 0, aiPlans: {}, moveSeq: {}, receivedMoveSeq: {},
+     };
++    for (const id of initialize ? participants : []) {
++      const unit = unitById(id);
++      // 救助した次の巡回では全員の保護を同じ境界で解除する。
++      if (unit.coopReviveGuard && unit.coopRevivedBossRound !== coopBossRoundNumber()) {
++        unit.coopReviveGuard = false;
++        unit.coopRevivedBossRound = 0;
++        if (unit.actionSkipTurns <= 0 && !expected.includes(id)) expected.push(id);
++      }
++      unit.fuel = unit.fuelMax;
++      unit.jumpAvailable = true;
++      if (id !== activeUnit().id) advanceCreamCloudsForTurn(unit);
++    }
+     return coopSalvoState;
+   }
+ 
+   function coopSalvoStatus() {
+-    if (!coopSoloSalvoEnabled() || !coopSalvoState) return null;
++    if (!coopSalvoEnabled() || !coopSalvoState) return null;
+     const ownGuideVisible = ['collecting', 'launching', 'special-aura', 'special-cutin'].includes(coopSalvoState.phase);
+     return {
+       phase: coopSalvoState.phase,
+@@ -21787,6 +21976,7 @@
+       unitIds: [...coopSalvoState.ready],
+       ownGuideVisible: ownGuideVisible && coopSalvoState.actions.some(action => unitById(action.unitId)?.control === 'local'),
+       launchTicks: [...coopSalvoState.launchTicks],
++      remainingSeconds: coopSalvoState.started ? Math.max(0, Math.ceil((coopSalvoState.deadlineAt - coopSalvoNow()) / 1000)) : 30,
+     };
+   }
+ 
+@@ -21794,18 +21984,7 @@
+     const state = coopSalvoState;
+     if (!state || (state.phase !== 'launching' && state.phase !== 'special-cutin')) return false;
+     state.phase = 'resolving';
+-    // 既存net同期は「現在手番のfire→解決後state」を1組として検証する。
+-    // ソロでも最後のREADYを権威actionとして記録し、4発の解決後stateが孤立しないようにする。
+-    const authorityAction = [...state.actions].reverse().find(action => action.unitId === activeUnit()?.id)
+-      || state.actions[state.actions.length - 1];
+-    const authorityUnit = authorityAction ? unitById(authorityAction.unitId) : null;
+-    if (authorityAction && authorityUnit) {
+-      netSendFire(
+-        authorityUnit, authorityAction.anchor, authorityAction.vx0, authorityAction.vy0,
+-        authorityAction.useSpecial, authorityAction.useJump, authorityAction.subweaponId,
+-        false, authorityAction.coopItemId
+-      );
+-    }
++    // 発射集合はホストのsalvoFireで確定済み。各席のfireを個別送信しない。
+     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
+     state.nextLaunchIndex = 0;
+     state.physicsTick = 0;
+@@ -21856,9 +22035,9 @@
+     return true;
+   }
+ 
+-  const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 18; // 120Hz固定物理で150ms
++  const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0; // 全員を同じ固定物理tickへ投入
+   function coopSalvoLaunchesPending() {
+-    if (coopSalvoState?.phase === 'special-aura' || coopSalvoState?.phase === 'special-cutin') return true;
++    if (['launching', 'special-aura', 'special-cutin'].includes(coopSalvoState?.phase)) return true;
+     return coopSalvoState?.phase === 'resolving'
+       && coopSalvoState.nextLaunchIndex < coopSalvoState.actions.length;
+   }
+@@ -21874,37 +22053,22 @@
+       if (unit?.hp > 0) {
+         // 必殺のチャージと共通カットインはarm側で済んでいる。跳躍と救助弾は
+         // 通常の発射口を通し、使用権・残弾を実際に発射した瞬間だけ消費する。
+-        if (action.coopItemId === 'rescue-kit') {
++        if (action.coopItemId) {
+           launchCoopItemShot(unit, action.anchor, action.vx0, action.vy0, action.coopItemId);
+         } else {
+-          launchShot(unit, action.anchor, action.vx0, action.vy0, action.useSpecial, action.useSpecial, action.useJump);
++          launchShot(unit, action.anchor, action.vx0, action.vy0, action.useSpecial, action.useSpecial, action.useJump, action.subweaponId);
+         }
+-        runStats.shots++;
++        if (action.subweaponId !== 'barrier') runStats.shots++;
+       }
+     }
+     state.physicsTick++;
+   }
+ 
+-  function advanceCoopSalvoCollector() {
+-    const state = coopSalvoState;
+-    if (!state || state.phase !== 'collecting') return false;
+-    for (let i = 0; i < turnOrder.length; i++) {
+-      activeIndex = (activeIndex + 1) % turnOrder.length;
+-      const next = activeUnit();
+-      if (!state.expected.includes(next.id) || state.ready.has(next.id)) continue;
+-      advanceCreamCloudsForTurn(next);
+-      startTurn({ salvoCollect: true });
+-      const lines = turnCutInLines(next);
+-      showCutIn(lines.text, `${state.ready.size}/${state.expected.length} READY　通常・必殺・跳躍・救助を照準`, TURN_CUTIN_DURATION, null, lines.color);
+-      return true;
+-    }
+-    return false;
+-  }
+-
+   function completeCoopSalvoResolution() {
+     const state = coopSalvoState;
+     if (!state || state.phase !== 'resolving') return false;
+     state.phase = 'complete';
++    if (online?.remoteAction && !coopSalvoHost()) online.remoteAction.resolved = true;
+     for (const unitId of state.participants) {
+       const unit = unitById(unitId);
+       if (!unit) continue;
+@@ -21928,36 +22092,44 @@
+       showCutIn('タイムアップ!', '判定は…', 1.6, () => judgeByHp());
+       return true;
+     }
+-    activeIndex = turnOrder.indexOf(COOP_BOSS_UNIT_ID);
+-    const boss = activeUnit();
+-    advanceCreamCloudsForTurn(boss);
+-    startTurn();
+-    const lines = turnCutInLines(boss);
+-    showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
++    activeIndex = turnOrder.indexOf(COOP_BOSS_UNIT_ID) - 1;
++    const authority = unitById('p1');
++    advanceToNextPlayableTurn(() => netSyncTurn(authority), { authorityUnit: authority });
+     return true;
+   }
+ 
+-  function queueCoopSalvoAction(unit, action) {
+-    if (!coopSoloSalvoEnabled() || !unit || unit.team !== 'player') return false;
+-    if (!coopSalvoState || coopSalvoState.phase !== 'collecting') beginCoopSalvoRound();
++  function queueCoopSalvoAction(unit, action, received = false) {
++    if (!coopSalvoEnabled() || !unit || unit.team !== 'player' || unit.hp <= 0 || !unit.grounded) return false;
++    if (!coopSalvoCollecting() || !coopSalvoState.started || coopSalvoNow() >= coopSalvoState.deadlineAt) return false;
+     if (!coopSalvoState.expected.includes(unit.id) || coopSalvoState.ready.has(unit.id)) return false;
+-    // SUBと対象が広い支援弾は逐次手番のまま。一斉行動には通常・必殺・跳躍と、
+-    // ダウン中の味方へ飛ばす救助弾だけを許可する。
+-    if (action.subweaponId || (action.coopItemId && action.coopItemId !== 'rescue-kit')) return false;
++    if (!action) return false;
++    if (action.subweaponId && (action.subweaponId !== unit.subweapon || unit.subweaponUsesLeft <= 0)) return false;
++    if (action.coopItemId && (!coopSalvoItemAllowed(action.coopItemId) || action.coopItemId !== unit.coopItem || unit.coopItemUsesLeft <= 0)) return false;
++    if (![action.anchor?.x, action.anchor?.y, action.vx0, action.vy0].every(Number.isFinite)
++      || Math.abs(action.vx0) > 5000 || Math.abs(action.vy0) > 5000
++      || Math.hypot(action.anchor.x - unitAnchor(unit).x, action.anchor.y - unitAnchor(unit).y) > 6) return false;
+     const def = CHARACTERS[unit.character];
+     const useSpecial = !!action.useSpecial;
+     const useJump = !!action.useJump;
+     const useRescue = action.coopItemId === 'rescue-kit';
+-    if ((useSpecial && useJump) || (useRescue && (useSpecial || useJump))) return false;
++    if ([useSpecial, useJump, !!action.coopItemId, !!action.subweaponId].filter(Boolean).length > 1) return false;
+     if (useSpecial && (def?.specialEnabled === false || !isSpecialReady(unit))) return false;
+     if (useJump && !(unit.jumpAvailable !== false && unit.moveLockTurns <= 0)) return false;
+     if (useRescue && !(unit.coopItem === 'rescue-kit' && unit.coopItemUsesLeft > 0)) return false;
++    if (!coopSalvoHost() && !received) {
++      if (unit.id !== localUnitId || coopSalvoState.pendingOwn) return false;
++      coopSalvoState.pendingOwn = true;
++      moveDir = 0; moveSyncPending = false;
++      netSend({ t: 'salvoReady', roundTurn: coopSalvoState.roundTurn, unitId: unit.id,
++        x: unit.x, y: unit.y, fuel: unit.fuel, action });
++      return true;
++    }
+     coopSalvoState.ready.add(unit.id);
+     const shotProfile = shotPhysicsProfile(def, useSpecial, useJump);
+     const gravity = GRAVITY * shotProfile.gravityMul;
+     coopSalvoState.actions.push({
+       unitId: unit.id, anchor: { ...action.anchor }, vx0: action.vx0, vy0: action.vy0,
+-      useSpecial, useJump, subweaponId: null, coopItemId: useRescue ? 'rescue-kit' : null,
++      useSpecial, useJump, subweaponId: action.subweaponId || null, coopItemId: action.coopItemId || null,
+       guide: unit.control === 'local' ? {
+         gravity,
+         windAccel: wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul,
+@@ -21965,16 +22137,11 @@
+           * shotProfile.guideMul * (unitIsInCreamCloud(unit) ? 0.5 : 1),
+       } : null,
+     });
+-    const ready = coopSalvoState.ready.size;
+-    const total = coopSalvoState.expected.length;
+-    if (ready >= total) {
+-      coopSalvoState.phase = 'launching';
+-      awaitingResolve = true;
+-      showCutIn('一斉攻撃!', `${ready}門 READY — FIRE!`, 0.8, armQueuedCoopSalvo, '#ffd24a');
+-    } else {
+-      const label = String(unit.label || CHARACTERS[unit.character]?.name || unit.id).replace(/\s*\[AI\]$/, '');
+-      showCutIn(`${label} READY`, `${ready}/${total}　味方の照準を待機`, 0.5, advanceCoopSalvoCollector, '#72e8ff');
+-    }
++    const accepted = coopSalvoState.actions[coopSalvoState.actions.length - 1];
++    const { guide, ...wireAction } = accepted;
++    netSend({ t: 'salvoAck', roundTurn: coopSalvoState.roundTurn, action: wireAction });
++    if (unit.id === localUnitId) { moveDir = 0; moveSyncPending = false; }
++    if (coopSalvoState.ready.size >= coopSalvoState.expected.length) finishCoopSalvoPreparation();
+     return true;
+   }
+ 
+@@ -22253,9 +22420,9 @@
+     return best;
+   }
+ 
+-  function cpuAutoTurn() {
++  function cpuAutoTurn(actor = activeUnit()) {
+     if (matchOver || projectiles.length || barucopters.length) return;
+-    const self = activeUnit();
++    const self = actor;
+     const foe = isCoopBossUnit(self) ? coopBossPlannedTarget() : cpuPickTarget(self);
+     if (!foe) return;
+     if (isCoopBossUnit(self)) {
+@@ -22277,8 +22444,7 @@
+       awaitingResolve = true;
+       return;
+     }
+-    if (isCoop4v1() && self.team === 'player' && self.coopItemUsesLeft > 0
+-        && (!coopSoloSalvoEnabled() || self.coopItem === 'rescue-kit')) {
++    if (isCoop4v1() && self.team === 'player' && self.coopItemUsesLeft > 0) {
+       let supportTarget = null;
+       if (self.coopItem === 'rescue-kit') {
+         supportTarget = units.find(u => u.team === self.team && u.id !== self.id && u.hp <= 0) || null;
+@@ -22317,7 +22483,7 @@
+     const tier = activeCpuAccuracyTier();
+     if (!tier) return;
+     const useSpecial = isSpecialReady(self)
+-      && (coopSoloSalvoEnabled() || tier.name === 'high' || tier.name === 'perfect');
++      && (coopSalvoEnabled() || tier.name === 'high' || tier.name === 'perfect');
+     const shotProfile = shotPhysicsProfile(def, useSpecial, false);
+     const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * shotProfile.tBias;
+     // 悪魔の必殺は重力も風も受けないので、逆算も直線で行わないと大きく外れる。
+@@ -24260,7 +24426,7 @@
+   // CPU/味方の弾道は見せず、オンライン拡張時にも狙いが透けないルールを保つ。
+   function drawOwnQueuedCoopSalvoGuide() {
+     const state = coopSalvoState;
+-    if (!coopSoloSalvoEnabled() || !state || !['collecting', 'launching', 'special-aura', 'special-cutin'].includes(state.phase)) return;
++    if (!coopSalvoEnabled() || !state || !['collecting', 'launching', 'special-aura', 'special-cutin'].includes(state.phase)) return;
+     const action = state.actions.find(entry => unitById(entry.unitId)?.control === 'local');
+     const guide = action?.guide;
+     if (!action || !guide) return;
+@@ -25973,7 +26139,9 @@
+ 
+     // 2vs2は4体居るので「CPUのターン」だけでは、味方のCPUなのか敵のCPUなのかも
+     // 4体のうちどれなのかも分からなかった(実機で指摘)。HPカードと同じ呼び名を添える。
+-    const turnLabel = coop?.turnLabel || turnCutInLines(actingUnit).short;
++    const turnLabel = coop?.turnLabel || (coopSalvoCollecting()
++      ? (coopSalvoState.ready.has(localUnitId) ? 'READY・仲間を待機' : coopSalvoState.pendingOwn ? 'READY送信中' : '全員同時に準備')
++      : turnCutInLines(actingUnit).short);
+     const lockLabel = actingUnit.actionSkipTurns > 0 ? `　行動不能 ${actingUnit.actionSkipTurns}手`
+       : actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
+     // チュートリアルは時間切れが無いので、あるように見える「TURN n/15」は出さない。
+@@ -25990,7 +26158,7 @@
+       ? (forecastTarget.id === localUnitId ? 'あなた' : forecastTarget.label.replace(/\s*\[AI\]$/, ''))
+       : '';
+     const salvo = coopSalvoStatus();
+-    const salvoLabel = salvo && salvo.phase === 'collecting' ? `READY ${salvo.ready}/${salvo.total}` : '';
++    const salvoLabel = salvo && salvo.phase === 'collecting' ? `${salvo.remainingSeconds}秒  READY ${salvo.ready}/${salvo.total}` : '';
+     const rightLabel = coop?.rightLabel || (salvoLabel
+       ? salvoLabel
+       : isCoop4v1() && forecastName
+@@ -26831,7 +26999,7 @@
+     const btn = activeSubweaponButton();
+     const entry = globalThis.KatamonCoopMvp?.SUBWEAPONS?.find(item => item.id === me?.subweapon);
+     const available = !!entry && me.subweaponUsesLeft > 0;
+-    const active = !coopSalvoCollecting() && available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
++    const active = available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
+     const color = subweaponArmed ? '#ffd49a' : available ? '#f29a38' : 'rgba(126,116,99,0.5)';
+     ctx.save();
+     const body = ctx.createRadialGradient(btn.x - 10, btn.y - 10, 2, btn.x, btn.y, btn.r);
+@@ -28167,7 +28335,7 @@
+       drawOutlinedText(String(power), cx, cy + 6, { font: `900 46px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5 });
+       drawOutlinedText(`仰角 ${elevDeg}°`, cx, cy + 34, { font: `900 15px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3.5 });
+     } else if (active) {
+-      drawOutlinedText('引いて発射', cx, cy + 5, { font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5 });
++      drawOutlinedText(coopSalvoCollecting() ? '引いてREADY' : '引いて発射', cx, cy + 5, { font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5 });
+       drawOutlinedText('PULL & RELEASE', cx, cy + 26, { font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(255,226,161,0.6)', lineWidth: 3 });
+     } else {
+       // 自分の手番でない理由が分かるようにしておく(以前は暗くなるだけだった)
+@@ -28180,7 +28348,11 @@
+           : weekdayDungeonBattle.phase === 'error' ? '保存を再試行してください'
+           : '報酬を保存中')
+         : '';
+-      const reason = weekdayReason || (matchOver ? '試合終了'
++      const salvoReason = coopSalvoCollecting() ? (coopSalvoState.pendingOwn ? 'READY送信中'
++        : coopSalvoState.ready.has(localUnitId) ? 'READY・仲間を待機'
++        : !coopSalvoState.expected.includes(localUnitId) ? 'この巡回は待機'
++        : coopSalvoNow() >= coopSalvoState.deadlineAt ? '準備時間終了' : '') : '';
++      const reason = weekdayReason || salvoReason || (matchOver ? '試合終了'
+         : !localUnit().grounded ? '落下中'
+         : awaitingResolve ? '着弾を待っています'
+         : cutIn ? 'まもなく開始'
+@@ -29456,7 +29628,7 @@
+         if (specialArmed) { subweaponArmed = false; jumpArmed = false; coopItemArmed = false; }
+         return;
+       }
+-      if (!coopSalvoCollecting() && COOP_MVP_FEATURE_ENABLED && (battleMode === 'normal' || battleMode === 'coop') && me.subweaponUsesLeft > 0
++      if (COOP_MVP_FEATURE_ENABLED && (battleMode === 'normal' || battleMode === 'coop') && me.subweaponUsesLeft > 0
+           && radialControlHit(p0, subweaponControl, 5)) {
+         subweaponArmed = !subweaponArmed;
+         if (subweaponArmed) { specialArmed = false; jumpArmed = false; coopItemArmed = false; }
+@@ -29680,7 +29852,7 @@
+     if (e.pointerId !== inputPointerId) return;
+     if (inputMode === 'aim' && aimState) {
+       // OS・ブラウザによるタッチ中断では撃たず、照準だけ解除する。
+-      if (e.type === 'pointerup' && !isInCancelZone(aimState.curX, aimState.curY)) {
++      if (e.type === 'pointerup' && isLocalTurn() && !netInputLocked() && !awaitingResolve && !isInCancelZone(aimState.curX, aimState.curY)) {
+         let dx = aimState.curX - aimState.origin.x;
+         let dy = aimState.curY - aimState.origin.y;
+         const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
+@@ -29700,7 +29872,7 @@
+           const def = CHARACTERS[me.character];
+           const salvoCollecting = coopSalvoCollecting();
+           const activateCoopItem = isCoop4v1() && coopSalvoItemAllowed(me.coopItem) && coopItemArmed && me.coopItemUsesLeft > 0 ? me.coopItem : null;
+-          const activateSubweapon = !salvoCollecting && !activateCoopItem && subweaponArmed && me.subweaponUsesLeft > 0 ? me.subweapon : null;
++          const activateSubweapon = !activateCoopItem && subweaponArmed && me.subweaponUsesLeft > 0 ? me.subweapon : null;
+           const activateSpecial = !activateCoopItem && !activateSubweapon && specialArmed && isSpecialReady(me);
+           const activateJump = !activateCoopItem && !activateSubweapon && jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
+           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def, activateSpecial, activateJump);
+@@ -29708,7 +29880,7 @@
+             anchor: aimState.anchor, vx0, vy0, useSpecial: activateSpecial, useJump: activateJump,
+             subweaponId: activateSubweapon, coopItemId: activateCoopItem,
+           });
+-          if (!queuedForSalvo) {
++          if (!queuedForSalvo && !salvoCollecting) {
+             netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon, false, activateCoopItem);
+             if (activateCoopItem) launchCoopItemShot(me, aimState.anchor, vx0, vy0, activateCoopItem);
+             else launchShot(me, aimState.anchor, vx0, vy0, activateSpecial, false, activateJump, activateSubweapon);
+@@ -30628,6 +30800,7 @@
+     } catch (_) { /* presentation must not stop the simulation */ }
+     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
+     updateOnline(dt);
++    if (gamePhase === 'battle') updateCoopSalvoPreparation(menuOpen ? 0 : dt);
+     // 画面の揺れは描画側の効果であって対戦の状態ではない。**どの画面でも必ず減らす。**
+     // 以前はこれを対戦中の分岐の内側でやっていたため、起動演出(着弾で揺らす)のあと
+     // タイトルへ移ると減衰が一度も走らず、画面が永久に震え続けた。
+@@ -30643,7 +30816,7 @@
+       return;
+     }
+     if (gamePhase !== 'battle') return;
+-    if (menuOpen) return; // メニュー表示中はゲーム進行を止める
++    if (menuOpen && !coopSalvoEnabled()) return; // 協力戦の共通期限・進行はメニューで停止しない
+ 
+     if (workshopBattlePreview) updateWorkshopBattlePreview(dt);
+ 
+@@ -30818,8 +30991,7 @@
+   // 弾と落下。必ず固定刻み(PHYSICS_DT)で呼ぶこと。ここへ描画フレームのdtを
+   // 渡すと Issue #9 の不具合がそのまま戻る。
+   function stepWorldPhysics(dt) {
+-    // 4発は描画フレームではなく固定物理tickで0/18/36/54tickに投入する。
+-    // 端末性能に関係なく約150ms間隔を保ち、通常弾の軌道・衝突処理は一切分岐させない。
++    // 全員の発射を同じ固定物理tickへ投入し、その後は通常の軌道・衝突処理を使う。
+     stepCoopSalvoLaunchQueue();
+     stepBarucopters(dt);
+     stepGroundFlames(dt);
+@@ -31170,7 +31342,7 @@
+     const cpuActor = activeUnit();
+     // 開始カットインが終わるまでは、まだ誰の手番も始まっていない。
+     // ここを通すと、カットインが出る前や明けた直後にCPUが撃ってしまう。
+-    if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && !coopAwaitingAuthoritativeState()
++    if (!coopSalvoCollecting() && cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && !coopAwaitingAuthoritativeState()
+       && cpuActor.grounded && !projectiles.length && !barucopters.length) {
+       if (cpuPhase === 'skip') {
+         cpuThinkTimer -= dt;
+diff --git a/package.json b/package.json
+index 27b4c81..84a2627 100644
+--- a/package.json
++++ b/package.json
+@@ -42,7 +42,8 @@
+     "test:e2e:weekday-dungeon": "playwright test tests/e2e/weekday-dungeon.spec.js --project=android-chromium-portrait-touch --project=iphone-webkit-portrait-touch",
+     "test:e2e:shop-assets": "playwright test tests/e2e/shop-assets-phase5a.spec.js --project=android-chromium-portrait-touch --project=iphone-webkit-portrait-touch",
+     "test:coop-session": "node tests/coop-results-rematch.test.js",
+-    "test:coop-playable": "node tests/coop-boss-playable.test.js",
++    "test:coop-playable": "node tests/coop-boss-playable.test.js && npm run test:coop-simultaneous",
++    "test:coop-simultaneous": "node tests/coop-simultaneous.test.js && node tests/coop-simultaneous-network.test.cjs && node tests/coop-simultaneous-network.test.cjs siege-fortress-01",
+     "test:gear": "node tests/gear-domain.test.js",
+     "test:gear-storage": "node tests/gear-storage.test.js",
+     "test:weekday-dungeon": "node tests/gear-weekday-dungeon.test.js && node tests/weekday-dungeon-ui.test.js",
+diff --git a/sw.js b/sw.js
+index 7323017..ddb099f 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE_VERSION = 'katamon-pwa-v2.0.178-font-repair';
++const CACHE_VERSION = 'katamon-pwa-v2.0.179-coop-salvo';
+ const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
+ const ASSET_CACHE = 'katamon-assets-v1';
+ // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
+diff --git a/tests/README.md b/tests/README.md
+index 83d8bb8..5c1fc9a 100644
+--- a/tests/README.md
++++ b/tests/README.md
+@@ -71,3 +71,9 @@ npm run test:e2e:storm-boss
+   なお**落ちる引きは素の乱数240セッションでも再現できておらず、原因の引きは未特定**。
+   シード固定は「再現しない稀な引きを踏まないようにする」処置であって、原因の修正ではない
+ - 完走まで1〜3分かかる(1試合を何度も通すため)。遅延・ロス・必殺・プロトコル不一致の7シナリオ
++
++## 協力戦の同時行動（2026-09-12）
++
++- `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。
++- `tests/coop-simultaneous-browser.cjs`: Playwright Chromiumで390×844の操作・READY表示・一斉発射・期限を確認する。HTTPサーバーを起動し、必要なら `COOP_BASE_URL` で指定する（既定4181、`npm run serve`は4173）。テストフックは配信レスポンスだけに注入する。
++- Firebase本番回線・物理スマホの複数人検証は別工程。Node中継は実ネットワークの検証ではない。
+diff --git a/tests/cache-version-test.js b/tests/cache-version-test.js
+index db1c9da..9321d81 100644
+--- a/tests/cache-version-test.js
++++ b/tests/cache-version-test.js
+@@ -5,7 +5,7 @@ const path = require('node:path');
+ const root = path.join(__dirname, '..');
+ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+ const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+-const EXPECTED_BUILD_ID = 'v2.0.178-font-repair';
++const EXPECTED_BUILD_ID = 'v2.0.179-coop-salvo';
+ 
+ function tierBody(worker, tier) {
+   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
+diff --git a/tests/coop-boss-playable.test.js b/tests/coop-boss-playable.test.js
+index 2ef91f9..758e99c 100644
+--- a/tests/coop-boss-playable.test.js
++++ b/tests/coop-boss-playable.test.js
+@@ -93,8 +93,8 @@ transportUnits.push({
+   coopItem: null, coopItemUsesLeft: 0, coopBoss: true, phase: 1, vulnerabilityTurns: 0,
+   bossState: boss.createLiveState({ bodyMaxHp: transportConfig.bossMaxHp, difficulty: 'normal' }), facingLeft: true,
+ });
+-const transportSegments = Array.from({ length: 720 }, () => [[848, 936]]);
+-const transportMaterials = Array.from({ length: 720 }, () => [[848, 936, 'steel']]);
++const transportSegments = Array.from({ length: 720 }, () => [[848, 924]]);
++const transportMaterials = Array.from({ length: 720 }, () => [[848, 924, 'steel']]);
+ [
+   { start: 58, end: 130, top: 634, steel: true },
+   { start: 166, end: 252, top: 461, steel: true },
+@@ -118,11 +118,11 @@ check('鋼鉄初期台座と破壊可能足場を持つ大型開始snapshotを
+   battle.normalSnapshotLooksSafe(transportSnapshot, soloRoster, transportConfig, true));
+ const registeredTerrainSnapshot = clone(transportSnapshot);
+ for (const columns of [registeredTerrainSnapshot.segments,registeredTerrainSnapshot.terrainMaterialSegments]) {
+-  for (const column of columns) for (const segment of column) if (segment[1] === 936) segment[1] = 924;
++  for (const column of columns) for (const segment of column) if (segment[1] === 924) segment[1] = 936;
+ }
+-check('登録protocolは実ゲーム下端924を受理し旧936を拒否、旧protocolの契約は維持',
+-  battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+-  && !battle.normalSnapshotLooksSafe(transportSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
++check('両protocolは実ゲーム下端924を受理し旧936を拒否',
++  battle.normalSnapshotLooksSafe(transportSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
++  && !battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,{...transportConfig,registeredProtocol:2},true)
+   && !battle.normalSnapshotLooksSafe(registeredTerrainSnapshot,soloRoster,transportConfig,true));
+ check('旧・全面鋼鉄の空中足場snapshotを新ルールでは拒否',
+   !battle.normalSnapshotLooksSafe({
+@@ -281,23 +281,20 @@ check('味方4体から要塞へ進む通常ターン順を一斉攻撃の入力
+     && /startTurn\(\)/.test(coopResetBlock)
+     && /advanceToNextPlayableTurn/.test(index));
+ check('ソロ＋CPU3体は4体のREADY後に通常物理へ通常弾・必殺・跳躍・救助弾を一斉投入',
+-  /function coopSoloSalvoEnabled\(\)/.test(index)
+-    && /coopHumanUids\(\)\.length === 1/.test(index)
+-    && /function queueCoopSalvoAction\(unit, action\)/.test(index)
+-    && /showCutIn\('一斉攻撃!'/.test(index)
+-    && /COOP_SALVO_LAUNCH_INTERVAL_TICKS = 18/.test(index)
++  /function coopSalvoEnabled\(\)/.test(index)
++    && /function queueCoopSalvoAction\(unit, action, received = false\)/.test(index)
++    && /function finishCoopSalvoPreparation\(\)/.test(index)
++    && /COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0/.test(index)
+     && /state\.launchTicks\.push\(state\.physicsTick\)/.test(index)
+     && /function stepCoopSalvoLaunchQueue\(\)/.test(index)
+-    && /action\.coopItemId === 'rescue-kit'[\s\S]{0,180}launchCoopItemShot\(/.test(index)
+-    && /launchShot\(unit, action\.anchor, action\.vx0, action\.vy0, action\.useSpecial, action\.useSpecial, action\.useJump\)/.test(index));
+-check('一斉攻撃は跳躍と救助弾を許可し、SUBと救助以外のCO-OP ITEMを拒否する',
+-  /if \(action\.subweaponId \|\| \(action\.coopItemId && action\.coopItemId !== 'rescue-kit'\)\) return false/.test(index)
+-    && /const useJump = !!action\.useJump/.test(index)
+-    && /unit\.jumpAvailable !== false && unit\.moveLockTurns <= 0/.test(index)
+-    && /unit\.coopItem === 'rescue-kit' && unit\.coopItemUsesLeft > 0/.test(index)
++    && /action\.coopItemId[\s\S]{0,180}launchCoopItemShot\(/.test(index)
++    && /launchShot\(unit, action\.anchor, action\.vx0, action\.vy0, action\.useSpecial, action\.useSpecial, action\.useJump, action\.subweaponId\)/.test(index));
++check('一斉行動でも装備と残弾・必殺ゲージ・跳躍使用権を確認する',
++  /action.subweaponId !== unit.subweapon/.test(index)
++    && /action.coopItemId !== unit.coopItem/.test(index)
++    && /unit.jumpAvailable !== false && unit.moveLockTurns <= 0/.test(index)
+     && /if \(useSpecial && \(def\?\.specialEnabled === false \|\| !isSpecialReady\(unit\)\)\) return false/.test(index)
+-    && /showCutIn\(`\$\{label\} READY`[^\n]+advanceCoopSalvoCollector/.test(index)
+-    && /coopSalvoState\?\.phase === 'resolving'/.test(index));
++    && /t: 'salvoAck'/.test(index));
+ check('ハムルトンのクリーム雲は生成素材の3コマをその場でモクモク表示',
+   fs.existsSync(path.join(root, 'assets', 'effects', 'hamulton-cream-cloud-frames.png'))
+     && /const HAMULTON_CREAM_CLOUD_IMAGE_PATH = 'assets\/effects\/hamulton-cream-cloud-frames\.png';/.test(index)
+@@ -338,9 +335,9 @@ check('複数必殺は全員同時オーラ、共通SE1回、長い同時カッ
+     && /const headline = entries\.length > 1 \? '同時必殺' : '必殺砲撃'/.test(index)
+     && /beginQueuedCoopSalvoResolution\(\)/.test(index));
+ check('ソロCPUもゲージMAXなら一斉攻撃へ必殺をREADYする',
+-  /const useSpecial = isSpecialReady\(self\)[\s\S]{0,100}coopSoloSalvoEnabled\(\)/.test(index));
+-check('複数人戦は専用同期導入まで一斉攻撃へ誤って入れない',
+-  /return isCoop4v1\(\) && coopHumanUids\(\)\.length === 1;/.test(index));
++  /const useSpecial = isSpecialReady\(self\)[\s\S]{0,100}coopSalvoEnabled\(\)/.test(index));
++check('複数人戦も専用同期で一斉攻撃を使用する',
++  /function coopSalvoEnabled\(\) \{\s*return isCoop4v1\(\);/.test(index) && /t: 'salvoFire'/.test(index));
+ check('NORMALは12巡60ターン、HARDとEXTREMEは既存難度別上限を使う',
+   /function coopDifficultyRoundLimit\(\)/.test(index)
+     && /return coopRounds \* Math\.max\(1, turnOrder\.length\)/.test(index)
+diff --git a/tests/regressiontest.js b/tests/regressiontest.js
+index e4dddb8..36bd5cf 100644
+--- a/tests/regressiontest.js
++++ b/tests/regressiontest.js
+@@ -3416,13 +3416,13 @@ check('同時カットインはカタモン固有の黒鉄・真鍮パネルと
+     && !/persona|ペルソナ|atlus/i.test(indexHtml),
+   'original presentation guard missing');
+ const supportSalvo = kt.launchCoopSupportSalvoForTest();
+-check('一斉行動の跳躍と救助弾は通常物理へ順番に投入し、各使用権を1回だけ消費する',
++check('一斉行動の跳躍と救助弾は通常物理へ同時に投入し、各使用権を1回だけ消費する',
+   supportSalvo.projectiles.length === 2
+     && supportSalvo.projectiles[0].owner === 'p1' && supportSalvo.projectiles[0].jump === true
+     && supportSalvo.projectiles[1].owner === 'p2' && supportSalvo.projectiles[1].coopItemId === 'rescue-kit'
+     && supportSalvo.jumpAvailable === false
+     && supportSalvo.rescueUsesLeft === 0
+-    && supportSalvo.launchTicks.join(',') === '0,18',
++    && supportSalvo.launchTicks.join(',') === '0,0',
+   JSON.stringify(supportSalvo));
+ 
+ console.log(`\n=== regression seat=${SEAT} ===`);
+diff --git a/tests/seatharness.js b/tests/seatharness.js
+index 602c9aa..411f58b 100644
+--- a/tests/seatharness.js
++++ b/tests/seatharness.js
+@@ -49,6 +49,30 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
+ // (本体には残さない。ここで組み立てるだけ。)
+ const HOOK = `
+   globalThis.__kt = {
++    salvoTest: {
++      reopen: () => { coopSalvoState = null; beginCoopSalvoRound(); startCoopSalvoPreparation(); },
++      freezeAI: () => { for (const u of units) if (u.team === 'player' && u.id !== localUnitId) u.control = 'remote'; },
++      aim: (special = false, targetId = 'boss1') => {
++        const unit = localUnit(), target = unitById(targetId), anchor = unitAnchor(unit);
++        const rect = targetId === 'boss1' ? coopBossRect(target) : null;
++        const aim = rect ? {x: rect.x + rect.width * .5, y: rect.y + rect.height * .65} : unitAnchor(target);
++        const profile = shotPhysicsProfile(CHARACTERS[unit.character], special, false);
++        const v = perfectAimVelocity(anchor, aim, 2.2, profile.gravityMul, profile.windMul, 1);
++        return queueCoopSalvoAction(unit, {anchor,...v,useSpecial:special,useJump:false,
++          coopItemId:targetId === 'boss1' ? null : 'rescue-kit'});
++      },
++      clock: fn => { coopNormalSession.serverNow = fn; },
++      ready: (id = localUnitId, options = {}) => queueCoopSalvoAction(unitById(id), {
++        anchor: unitAnchor(unitById(id)), vx0: 300, vy0: -180, useSpecial: false, useJump: false, ...options }),
++      move: dir => { moveDir = dir; },
++      input: () => isLocalTurn(),
++      menu: value => { menuOpen = value; },
++      receive: msg => netReceiveInner(msg),
++      status: () => ({ ...coopNormalBattleState(), error: online?.protocolError, onlinePhase: online?.phase,
++        intro: battleIntroPending, cutIn: !!cutIn, ready: coopSalvoState?.started,
++        phase: coopSalvoState?.phase, pendingOwn: coopSalvoState?.pendingOwn,
++        localAction: online?.localAction, remoteAction: online?.remoteAction }),
++    },
+     stormTest: {
+       rect: () => coopBossRect(coopBossUnit),
+       bodyDistance: (x,y) => distanceToCoopBossBody(coopBossUnit,x,y),
+diff --git a/tests/stage3test.js b/tests/stage3test.js
+index 23ab8af..05bca4f 100644
+--- a/tests/stage3test.js
++++ b/tests/stage3test.js
+@@ -1980,12 +1980,12 @@ function check(name, value) {
+   // 発射の配信は1か所に集約する。人とCPUで別々に組み立てると、片方だけ
+   // 直したときに「同じ弾道なのに片側だけ届かない」という壊れ方をする。
+   check('the human shot and the CPU shot are announced through the same one place',
+-    (htmlText.match(/netSendFire\(/g) || []).length === 6
++    (htmlText.match(/netSendFire\(/g) || []).length === 5
+     && htmlText.includes('netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon, false, activateCoopItem);')
+     && htmlText.includes('netSendFire(self, anchor, vx, vy, useSpecial, false);')
+     && htmlText.includes('netSendFire(self, anchor, vx, vy, false, false, null, true);')
+     && htmlText.includes('netSendFire(self, supportAnchor, supportVelocity.vx0, supportVelocity.vy0, false, false, null, false, self.coopItem);')
+-    && htmlText.includes('authorityUnit, authorityAction.anchor, authorityAction.vx0, authorityAction.vy0,')
++    && htmlText.includes("netSend({ t: 'salvoFire'")
+     && /function netSendFire\([\s\S]{0,600}if \(!isOnline\(\) \|\| !netControlsUnit\(unit\)\) return;/.test(htmlText));
+   check('the turn-end authority and the result declaration follow the same rule',
+     htmlText.includes('if (!netControlsUnit(actedUnit)) return;')
+@@ -2214,7 +2214,10 @@ function check(name, value) {
+       h.receiveFirebaseForTest({ v: 3, from: 'uid-' + seat, seat, roundId, t: 'reveal', sentAt: Date.now(), character: revealChars[seat], nonce: revealNonces[seat] });
+     }
+     // 公開の検証はSHA-256を待つ非同期処理。決着まで数回まわして落ち着かせる。
+-    for (let i = 0; i < 8; i++) await new Promise(resolve => setTimeout(resolve, 0));
++    const revealDeadline = Date.now() + 5000;
++    while (!seats.every(seat => o.seatVerified[seat]) && !o.protocolError && Date.now() < revealDeadline) {
++      await new Promise(resolve => setTimeout(resolve, 5));
++    }
+     return committed;
+   }
+   {
+diff --git a/tests/storm-boss-transport.test.js b/tests/storm-boss-transport.test.js
+index afadf24..e017c65 100644
+--- a/tests/storm-boss-transport.test.js
++++ b/tests/storm-boss-transport.test.js
+@@ -24,6 +24,6 @@ async function delivered(code){
+ }
+ (async()=>{
+  assert.deepEqual(await delivered('storm-dragon-02'),['upper','lower'],'later RTDB lowercase key must not be skipped after uppercase cursor');
+- assert.deepEqual(await delivered('siege-fortress-01'),['upper'],'legacy fortress ordering remains unchanged');
++ assert.deepEqual(await delivered('siege-fortress-01'),['upper','lower'],'fortress uses the same RTDB key ordering');
+  console.log('Storm transport: 2/2 ordering checks passed');
+ })().catch(e=>{console.error(e);process.exitCode=1});
+diff --git a/docs/coop-simultaneous-actions.md b/docs/coop-simultaneous-actions.md
+new file mode 100644
+--- /dev/null
++++ b/docs/coop-simultaneous-actions.md
+@@ -0,0 +1,37 @@
++# 協力戦：同時準備と一斉発射
++
++2026-09-12のユーザー指定を反映。第1ボス・第2ボス、ソロ＋AI、複数人戦に共通。
++従来の「ソロのみ順次READY・150ms間隔発射」「複数人は逐次手番」を置き換える。
++
++## 遊び方
++
++- 味方の準備時間は全員共通で30秒。全員が同時に移動・照準できる。
++- 従来の発射操作（引いて離す）で行動をREADYにする。READY後は移動と再入力を固定し、自分の確定した弾道を表示する。
++- 通常弾、必殺、跳躍、救助・回復・弱体化弾、装備SUBを予約できる。装備・使用回数・ゲージ・移動禁止の条件を守る。1人1行動。
++- 生存して行動可能な味方全員がREADYになると、30秒を待たず発射へ進む。AIも人間の入力待ちをせず移動・照準・READYする。
++- 30秒を過ぎた未READYの味方はその巡回を待機する。未確定の照準を勝手に射撃へ変換しない。
++- 全弾を同じ固定物理tickで生成する。複数必殺の共通演出は維持する。全弾・跳躍・落下などの解決後にボスへ渡す。
++- ダウン、行動不能、救助直後の待機は既存の状態条件を維持し、READY必須人数から除外する。
++- メニューを開いても共通期限とオンライン進行は停止しない。
++
++## 同期
++
++ホストが準備開始・共通期限・受理した行動集合を確定する。時間は既存のサーバー時刻補正を使用し、ソロは端末時刻を使用する。
++複数人では発射集合を送る時点から700ms後を共通開始時刻として指定する。通信がそれより遅い端末は受信後に再生を開始し、着弾後の既存state/resultで収束する。実ネットワーク上の画面表示が完全な同時刻になることまでは保証しない。
++
++| 通信 | 送信者と用途 |
++|---|---|
++| salvoOpen | ホスト。準備前の盤面、対象席、30秒の期限 |
++| salvoMove | 本人、または空席/引継ぎAIを担当するホスト。0.25秒間隔と停止時の座標・燃料 |
++| salvoReady | 参加者。最終位置と確定した1行動をホストへ送信 |
++| salvoAck | ホスト。受理したREADYを全員へ通知 |
++| salvoFire | ホスト。発射集合、共通開始時刻、発射前の盤面、行動ID |
++
++- 協力部屋の既存net外包みを利用。通常ONLINEのprotocol・Firebase Rules・保存schemaは変更しない。
++- 世代と巡回番号、送信者と席、移動連番、燃料消費、座標、弾道、装備・残数を確認する。同じREADYは二度追加せず、期限後・過去巡回の入力を捨てる。
++- 次の準備開始と発射通知は、既存の状態更新を追い越さない受信キューで適用する。
++- 協力通信にsalvoVersion=1を付ける。旧クライアントとの混在は更新を案内して停止する。
++- 固定物理とホストのstate/result検証を再利用する。最初の命中で撃破しても予約済み行動の解決までは決着を保留する。
++- 両ボスの通信に必要なRTDBキー順と地形下端924px・破壊跡検証を統一する。
++
++検証・作業状況は [作業記録](tasks/2026-09-12-coop-simultaneous.md) を参照。
+diff --git a/docs/tasks/2026-09-12-coop-simultaneous.md b/docs/tasks/2026-09-12-coop-simultaneous.md
+new file mode 100644
+--- /dev/null
++++ b/docs/tasks/2026-09-12-coop-simultaneous.md
+@@ -0,0 +1,46 @@
++# 協力ボス戦の同時準備・一斉発射
++
++- 状態: 実装・自己検証完了、未コミット・未公開。
++- 起点/base/HEAD: 3d404d96867e98966b0f6595e4368404476765db（公開済みフォント修正版のmerge）。
++- branch: feat/coop-simultaneous-20260912
++- 作業場所: .codex-worktrees/coop-simultaneous-20260912
++- BUILD_ID / CACHE_VERSION: v2.0.179-coop-salvo
++- ルートおよび別worktreeの既存差分は維持。ルートの変更はCURRENT_WORK_STATE.mdへの今回の現在地追記だけ。
++
++## 変更
++
++味方の逐次行動を、全員共通30秒の同時移動・照準・READYへ変更。全員READYなら期限前に一斉発射し、期限切れの未READYは待機する。両ボス・ソロ＋AI・複数人に対応。
++
++- index.html: 共同準備、席別AI計画、移動と確定、同時物理発射、既存の着弾後state/resultとの接続、残秒/READY表示。
++- coop-mvp-battle.js: 協力専用packetの送信者・形状検証、サーバー時刻の受け渡し。両ボスのRTDBキー順と実地形下端・破壊跡の検証を統一。
++- sw.js / 更新履歴 / cache-version-test: v2.0.179-coop-salvoへ整合。
++- tests: 実エンジンのソロ、4独立プロセス＋実通信バリデータ、モバイルChromiumを追加。既存の逐次発射を期待した検査を更新。
++- stage3testの固定8回待機は負荷時にSHA-256完了前の判定となったため、完了条件つき上限5秒の待機へ変更。本体の通常ONLINE処理は変更していない。
++
++現行仕様は [同時行動仕様](../coop-simultaneous-actions.md)。従来の逐次入力仕様からの上書き関係も明記。
++
++## 検証
++
++- 新規の同時行動: 80項目（ソロ28、4独立プロセス各ボス26ずつ）成功。
++- 同時移動、順不同READY、同一tick発射、30秒期限、全員待機、重複/過去巡回/他席/非有限値拒否、旧版拒否、複数必殺と実ダメージ収束、Phase 2、決着を確認。
++- ソロではREADY後の移動禁止、ダウン/行動不能除外、回復・弱体化・SUBの使用権、撃破後も全弾解決してからリザルトへ進むことを確認。
++- 既存回帰は分割で全コマンド成功。seat両席、pointercancel両席、regression両席各476、result93、loopback103、stage3 510、lobby7、back17、ranking7、静的識別子2、app-shell3、cache-version2、曜日ダンジョン/表示を確認。
++- 協力戦/第2ボス関連10ファイルも成功（アイテム、ダウン救助、ボスAI、旧ラウンド、再戦、ロビー、テンポ、実戦統合、Storm domain/runtime）。
++- Chromium 390×844: 実際の引いて離す操作、残秒・人数、AIの並行READY、4発同時、次巡回、期限を確認。pageerrorなし。物理スマホではない。
++- 既存テストの初回ログには旧期待値による失敗が残る。修正後stage3以降の最終結果はremaining-regression.log、cache/曜日の最終成功は検証サマリーを参照。
++
++## 証拠
++
++- [機械可読検証サマリー](2026-09-12-coop-simultaneous-evidence/verification.json)
++- [同時行動ログ](2026-09-12-coop-simultaneous-evidence/simultaneous.log)
++- [既存回帰の前半](2026-09-12-coop-simultaneous-evidence/existing-regression.log)
++- [既存回帰の後半](2026-09-12-coop-simultaneous-evidence/remaining-regression.log)
++- [ブラウザ結果](2026-09-12-coop-simultaneous-evidence/browser-result.json)
++- [準備画面](2026-09-12-coop-simultaneous-evidence/01-shared-preparation-mobile.png) / [発射画面](2026-09-12-coop-simultaneous-evidence/02-simultaneous-fire-mobile.png) / [READY待機](2026-09-12-coop-simultaneous-evidence/03-ready-wait-mobile.png)
++- [コード・テストの差分](2026-09-12-coop-simultaneous-evidence/implementation.patch)
++
++## 未実施・残る制約
++
++- Firebase本番回線上の複数人プレイ、実機Android/iPhone、通信断・復帰の実回線検証、最終バランス調整は未実施。
++- 700msの共通開始時刻を超える通信遅延では端末間の見た目に時間差が出る。全員の弾は各端末で同じ物理tickに生成し、結果はホストへ収束する。
++- 通常ONLINE/Firebase Rules/保存schema/報酬契約は変更していない。公開・merge・本番変更は行っていない。
+diff --git a/tests/coop-simultaneous.test.js b/tests/coop-simultaneous.test.js
+new file mode 100644
+--- /dev/null
++++ b/tests/coop-simultaneous.test.js
+@@ -0,0 +1,55 @@
++const assert = require('node:assert/strict');
++const {kt} = require('./seatharness.js');
++const battle = globalThis.KatamonCoopBattle = require('../coop-mvp-battle.js');
++const bridge = globalThis.KatamonCoopBridge;
++let now = 100000, checks=0;
++function check(value,message){assert.ok(value,message);checks++;}
++function step(frames=1){for(let i=0;i<frames;i++){now+=1000/60;kt().step(1/60);}}
++function start(){battle.startSoloBrowser({bridge,characters:bridge.getBattleCharacters(),character:'kyoryu',bossId:'storm-dragon-02'});kt().salvoTest.clock(()=>now);step(240);}
++start();
++let state=bridge.getNormalBattleState();
++check(state.inputReady,'human can aim while all AI prepare');
++const aiBefore=state.units.filter(u=>u.id!=='p1'&&u.id!=='boss1').map(u=>u.x);
++step(180);state=bridge.getNormalBattleState();
++check(state.salvo.ready===3,'all AI ready without waiting for human');
++check(state.inputReady,'AI ready never takes away local input');
++check(state.projectiles.length===0,'no shot before all ready or deadline');
++check(kt().salvoTest.ready(),'human commits');
++check(!kt().salvoTest.ready(),'duplicate ready rejected');
++step(1);state=bridge.getNormalBattleState();
++check(state.salvo.launchTicks.length===4&&state.salvo.launchTicks.every(n=>n===0),'all four fire on tick zero');
++for(let i=0;i<1800&&!bridge.getNormalBattleState().inputReady;i++)step();
++state=bridge.getNormalBattleState();
++check(state.inputReady&&state.turnCount>=5,'boss resolves then next shared round opens');
++start(); step(180);const prior=bridge.getNormalBattleState().turnCount;
++now+=31000;kt().salvoTest.menu(true);step(1);state=bridge.getNormalBattleState();
++check(state.salvo.phase==='resolving','menu does not pause common deadline');
++check(state.salvo.launchTicks.length===3,'timeout fires only ready allies');
++check(!kt().salvoTest.ready(),'late ready rejected');
++kt().salvoTest.menu(false);
++start(); kt().salvoTest.freezeAI();
++const me=kt().unitById('p1');
++const readyX=me.x;
++check(kt().salvoTest.ready(),'ready before other members');
++kt().salvoTest.move(1);step(60);
++check(me.x===readyX,'ready locks movement while others prepare');
++check(!kt().salvoTest.input(),'ready locks repeated input');
++start(); kt().salvoTest.freezeAI();
++kt().unitById('e1').hp=0;kt().unitById('p2').actionSkipTurns=1;kt().salvoTest.reopen();
++check(bridge.getNormalBattleState().salvo.total===2,'down/stunned allies excluded from ready total');
++check(!kt().salvoTest.ready('e1'),'down unit cannot commit');
++check(!kt().salvoTest.ready('p2'),'stunned unit cannot commit');
++// Every equipped support/subweapon remains selectable under the new collection phase.
++for(const [kind,id] of [['coopItem','healing-kit'],['coopItem','debuff-grenade'],['subweapon','barrier']]){
++ start();kt().salvoTest.freezeAI();const u=kt().unitById('p1');u[kind]=id;u[kind+'UsesLeft']=1;
++ check(!kt().salvoTest.ready(undefined,{[kind+'Id']:id,useSpecial:true}),'combined action rejected');
++ check(kt().salvoTest.ready(undefined,{[kind+'Id']:id}),id+' can be committed');
++ now+=31000;step(2);
++ check(u[kind+'UsesLeft']===0,id+' consumes exactly once on launch');
++}
++start();step(180);kt().unitById('boss1').hp=1;kt().salvoTest.ready();step(1);
++const rect=kt().stormTest.rect();kt().stormTest.shootAt(rect.x+rect.width*.42,rect.y+rect.height*.62);step(5);
++check(kt().unitById('boss1').hp===0&&!kt().stormTest.result().matchOver,'lethal hit waits for remaining simultaneous projectiles');
++step(900);
++check(kt().stormTest.result().matchOver&&bridge.getNormalBattleState().phase==='results','salvo victory reaches result once');
++console.log('Coop simultaneous solo:',checks,'passed');
+diff --git a/tests/coop-simultaneous-peer.cjs b/tests/coop-simultaneous-peer.cjs
+new file mode 100644
+--- /dev/null
++++ b/tests/coop-simultaneous-peer.cjs
+@@ -0,0 +1,35 @@
++const {kt}=require('./seatharness.js');
++const fs=require('node:fs'), vm=require('node:vm'), path=require('node:path');
++const file=path.join(__dirname,'../coop-mvp-battle.js');
++const context={module:{exports:{}},require:require('node:module').createRequire(file)};
++vm.runInNewContext(fs.readFileSync(file,'utf8').replace('    normalSnapshotLooksSafe,','    normalSnapshotLooksSafe,\n    packetSafe: normalPacketLooksSafe,'),context);
++const battle=globalThis.KatamonCoopBattle=context.module.exports,bridge=globalThis.KatamonCoopBridge;
++let now=100000,out=[],handler,roster,config,seat;
++const slots=Object.fromEntries(['p1','e1','s1','s2'].map((s,i)=>[s,{uid:'user'+i,character:['kyoryu','medama','iwa','tori'][i],coopItem:'rescue-kit'}]));
++process.on('message',m=>{
++ try{
++ let result;
++ if(m.cmd==='init'){
++  seat=m.seat;roster=battle.activeRoster(slots,true,bridge.getBattleCharacters());
++  config={bossId:m.boss||'storm-dragon-02',bossMaxHp:1650,difficulty:'normal'};
++  bridge.startNormalBattle({...config,roster,session:{role:seat==='p1'?'host':'guest',seat,auth:{uid:slots[seat].uid},room:{slots}},
++   serverNow:()=>now,transport:{send:p=>{out.push(JSON.parse(JSON.stringify(p)));return Promise.resolve(true);},onMessage:fn=>handler=fn,close:()=>{}}});
++ }else if(m.cmd==='validate'){
++  const p=m.packet,fromSeat=Object.keys(slots).find(s=>slots[s].uid===p.from);
++  result=battle.packetSafe(p,{from:p.from,seat:fromSeat},roster,config);
++ }else if(m.cmd==='receive'){
++  const p=m.packet,fromSeat=Object.keys(slots).find(s=>slots[s].uid===p.from);
++  result=battle.packetSafe(p,{from:p.from,seat:fromSeat},roster,config);
++  if(result)handler(p);
++ }else if(m.cmd==='step'){for(let i=0;i<m.frames;i++){now+=1000/60;kt().step(1/60);}}
++ else if(m.cmd==='aim')result=kt().salvoTest.aim(m.special,m.target);
++ else if(m.cmd==='ready') result=kt().salvoTest.ready(undefined,m.options);
++ else if(m.cmd==='move')kt().salvoTest.move(m.dir);
++ else if(m.cmd==='clock')now+=m.ms;
++ else if(m.cmd==='position'){for(let i=0;i<4;i++){const u=kt().unitById(['p1','e1','p2','e2'][i]);Object.assign(u,{x:1500+i*35,y:830,grounded:true,vy:0,netWalkTargetX:null});}}
++ else if(m.cmd==='special')kt().fillCharges();
++ else if(m.cmd==='hp')kt().unitById(m.unit).hp=m.hp;
++ else if(m.cmd==='menu')kt().salvoTest.menu(m.value);
++ process.send({id:m.id,result,state:kt().salvoTest.status(),out});out=[];
++ }catch(e){process.send({id:m.id,error:e.stack});}
++});
+diff --git a/tests/coop-simultaneous-network.test.cjs b/tests/coop-simultaneous-network.test.cjs
+new file mode 100644
+--- /dev/null
++++ b/tests/coop-simultaneous-network.test.cjs
+@@ -0,0 +1,66 @@
++const assert=require('node:assert/strict'),{fork}=require('node:child_process'),path=require('node:path');
++const seats=['p1','e1','s1','s2'];let seq=0,checks=0,queue=[],last=[],types={},history=[];
++const children=seats.map(()=>fork(path.join(__dirname,'coop-simultaneous-peer.cjs'),[],{stdio:['ignore','inherit','inherit','ipc']}));
++const pending=new Map();
++children.forEach((c,i)=>c.on('message',m=>{const p=pending.get(m.id);if(!p)return;pending.delete(m.id);if(m.error)p.reject(Error(m.error));else{last[i]=m.state;for(const packet of m.out){queue.push({source:i,packet});history.push(packet);types[packet.t]=(types[packet.t]||0)+1;}p.resolve(m);}}));
++function rpc(i,cmd,extra={}){return new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});children[i].send({id,cmd,...extra});});}
++async function drain(){let count=0;while(queue.length){if(++count>200)throw Error('packet loop');const {source,packet}=queue.shift();for(let i=0;i<4;i++)if(i!==source){const r=await rpc(i,'receive',{packet});assert.ok(r.result,`transport rejects ${packet.t} from ${source} to ${i}`);}}}
++async function step(frames=6){await Promise.all(children.map((c,i)=>rpc(i,'step',{frames})));await drain();for(const s of last)assert.ok(!s.error,s.error);}
++async function until(fn,max=400){for(let i=0;i<max;i++){if(fn())return;await step();}throw Error('timeout '+JSON.stringify(last.map(s=>({phase:s.phase,ready:s.ready,turn:s.turnCount,input:s.inputReady,err:s.error,action:s.remoteAction}))))}
++function check(v,m){assert.ok(v,m);checks++;}
++(async()=>{try{
++ await Promise.all(seats.map((seat,i)=>rpc(i,'init',{seat,boss:process.argv[2]})));await drain();
++ await until(()=>last.every(s=>s.inputReady));
++ check(last.every(s=>s.salvo.total===4),'all four can act in same round');
++ const before=last.map((s,i)=>s.units[i].x);
++ await Promise.all(children.map((c,i)=>rpc(i,'move',{dir:1})));
++ await step(30);
++ await Promise.all(children.map((c,i)=>rpc(i,'move',{dir:0})));await step(30);
++ check(last.every((s,i)=>s.units[i].x>before[i]),'four humans move concurrently');
++ await step(60);
++ const positions=last.map(s=>s.units.slice(0,4).map(u=>Math.round(u.x)));
++ check(positions.every(p=>JSON.stringify(p)===JSON.stringify(positions[0])),'all clients see same settled positions');
++ for(let i=3;i>=1;i--){check((await rpc(i,'ready')).result,'guest ready out of seat order');await drain();}
++ const duplicate=history.find(p=>p.t==='salvoReady');
++ await rpc(0,'receive',{packet:duplicate});await drain();
++ check(last[0].salvo.ready===3,'same-round duplicate ready cannot add an action');
++ check(last.every(s=>s.salvo.ready===3&&s.projectiles.length===0),'ready ack shared with no early fire');
++ check((await rpc(0,'ready')).result,'last human ready');await drain();await until(()=>last.every(s=>s.salvo?.launchTicks.length===4),20);
++ check(last.every(s=>s.salvo.launchTicks.length===4&&s.salvo.launchTicks.every(t=>t===0)),'all peers launch four on same physics tick');
++ await until(()=>last.every(s=>s.turnCount>=5&&s.inputReady));
++ check(last.every(s=>s.turnCount===5),'one boss turn then shared second round');
++ check(last.every(s=>s.bossHp===last[0].bossHp),'authoritative boss HP converges');
++ // Nobody ready: common deadline advances without synthesizing a shot.
++ await Promise.all(children.map((c,i)=>rpc(i,'clock',{ms:31000})));await step(1);await until(()=>last.every(s=>s.salvo?.phase==='resolving'),10);
++ check(last.every(s=>s.salvo.phase==='resolving'&&s.salvo.launchTicks.length===0),'all idle timeout skips every ally');
++ await until(()=>last.every(s=>s.turnCount>=10&&s.inputReady));
++ check(last.every(s=>s.turnCount===10),'timeout round also resolves and resets fuel/ready');
++ // Replays cannot change a later preparation round.
++ const oldReady=history.find(p=>p.t==='salvoReady'),oldFire=history.find(p=>p.t==='salvoFire');
++ const count=last[0].salvo.ready;
++ await rpc(0,'receive',{packet:oldReady});await rpc(1,'receive',{packet:oldFire});await step(1);
++ check(last.every(s=>s.salvo.ready===count&&s.turnCount===10),'old round ready/fire ignored');
++ check(!(await rpc(0,'validate',{packet:{...oldReady,unitId:'p2'}})).result,'other-seat ready rejected at transport');
++ check(!(await rpc(0,'validate',{packet:{...oldReady,action:{...oldReady.action,vx0:Infinity}}})).result,'nonfinite shot rejected');
++ check(!(await rpc(0,'validate',{packet:{...oldFire,from:'user1'}})).result,'guest cannot forge collective fire');
++ await Promise.all(children.map((c,i)=>rpc(i,'position')));
++ await Promise.all(children.map((c,i)=>rpc(i,'special')));
++ for(let i=0;i<4;i++){check((await rpc(i,'aim',{special:true})).result,'special ready');await drain();}
++ await until(()=>last.every(s=>s.salvo?.launchTicks.length===4));
++ check(last.every(s=>s.salvo.launchTicks.every(t=>t===0)),'four specials share launch tick');
++ await until(()=>last.every(s=>s.turnCount>=14&&(s.onlinePhase==='results'||s.phase==='collecting'&&s.ready)));
++
++ check(last[0].bossHp<1650&&last.every(s=>s.bossHp===last[0].bossHp),'real special damage converges '+JSON.stringify(last.map(s=>s.bossHp)));
++ // Independent phase-change scenario starts with fresh HP and statuses.
++ await Promise.all(seats.map((seat,i)=>rpc(i,'init',{seat,boss:process.argv[2]})));await drain();
++ await until(()=>last.every(s=>s.inputReady));
++ await Promise.all(children.map((c,i)=>rpc(i,'hp',{unit:'boss1',hp:800})));
++ for(let i=0;i<4;i++){await rpc(i,'ready');await drain();}
++ await until(()=>last.every(s=>s.turnCount>=5&&s.inputReady));
++ check(last.every(s=>s.units[4].phase===2),'phase two transformation converges');
++ const legacy={...history.find(p=>p.t==='hello'),salvoVersion:0};
++ await rpc(1,'receive',{packet:legacy});
++ check(last[1].onlinePhase==='ended'&&last[1].error.includes('バージョン'),'legacy client mismatch closes with update guidance');
++ console.log('Coop simultaneous four-peer:',checks,'passed',types);
++ }finally{children.forEach(c=>c.kill());}
++})().catch(e=>{console.error(e);process.exitCode=1;});
+diff --git a/tests/coop-simultaneous-browser.cjs b/tests/coop-simultaneous-browser.cjs
+new file mode 100644
+--- /dev/null
++++ b/tests/coop-simultaneous-browser.cjs
+@@ -0,0 +1,56 @@
++// Browser QA: production input handlers and renderer; hooks exist only in intercepted test HTML.
++const {chromium}=require('playwright'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
++const root=path.join(__dirname,'..'),evidence=path.join(root,'docs/tasks/2026-09-12-coop-simultaneous-evidence');
++fs.mkdirSync(evidence,{recursive:true});
++const hook=`globalThis.__salvoQa={
++ state:()=>({...coopNormalBattleState(),error:online?.protocolError,matchOver,ready:coopSalvoState?.started}),
++ clock:()=>{coopNormalSession.serverNow=()=>Date.now()+31000;},
++};\n`;
++(async()=>{
++ const browser=await chromium.launch({headless:true});const errors=[];let lastPage;
++ try{
++  const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,deviceScaleFactor:1,serviceWorkers:'block'});
++  const page=await context.newPage();lastPage=page;page.on('pageerror',e=>errors.push(e.message));
++  await page.route('**/index.html*',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8').replace('  globalThis.KatamonCoopBridge = Object.freeze({',hook+'  globalThis.KatamonCoopBridge = Object.freeze({')}));
++  await page.goto((process.env.COOP_BASE_URL||'http://127.0.0.1:4181')+'/index.html?coopMvp=1',{waitUntil:'domcontentloaded',timeout:60000});
++  await page.waitForFunction(()=>globalThis.KatamonCustomStageBridge?.getState()?.gamePhase==='press');
++  const canvas=page.locator('#game'),box=await canvas.boundingBox();
++  await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
++  await page.waitForFunction(()=>globalThis.KatamonCustomStageBridge?.getState()?.gamePhase==='title',null,{timeout:30000});
++  await page.evaluate(()=>globalThis.KatamonCoopRoom.openLobby());
++  await page.locator('#coopBossTarget').selectOption('storm-dragon-02');await page.locator('#coopSoloStart').click();
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().inputReady,null,{timeout:30000});
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.ready===3,null,{timeout:15000});
++  const before=await page.evaluate(()=>globalThis.__salvoQa.state());
++  assert.equal(before.projectiles.length,0);assert.equal(before.inputReady,true);assert.ok(before.salvo.remainingSeconds>20);
++  await page.screenshot({path:path.join(evidence,'01-shared-preparation-mobile.png')});
++  const pt=(x,y)=>({x:box.x+x/540*box.width,y:box.y+y/960*box.height});
++  const fire=pt(270,810),pull=pt(178,860);
++  await page.mouse.move(fire.x,fire.y);await page.mouse.down();await page.mouse.move(pull.x,pull.y,{steps:10});await page.mouse.up();
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.launchTicks.length===4,null,{timeout:10000});
++  const firing=await page.evaluate(()=>globalThis.__salvoQa.state());assert.ok(firing.salvo.launchTicks.every(t=>t===0));
++  await page.screenshot({path:path.join(evidence,'02-simultaneous-fire-mobile.png')});
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().turnCount>=5&&globalThis.__salvoQa.state().inputReady||globalThis.__salvoQa.state().matchOver,null,{timeout:60000});
++  if((await page.evaluate(()=>globalThis.__salvoQa.state())).matchOver) {
++    await page.evaluate(()=>globalThis.KatamonCoopBattle.startSoloBrowser({bridge:globalThis.KatamonCoopBridge,characters:globalThis.KatamonCoopBridge.getBattleCharacters(),character:'kyoryu',bossId:'storm-dragon-02'}));
++    await page.waitForFunction(()=>globalThis.__salvoQa.state().inputReady,null,{timeout:30000});
++  }
++  await page.mouse.move(fire.x,fire.y);await page.mouse.down();await page.mouse.move(pull.x,pull.y,{steps:5});await page.mouse.up();
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.unitIds.includes('p1'));
++  assert.equal((await page.evaluate(()=>globalThis.__salvoQa.state())).inputReady,false);
++  await page.waitForTimeout(150); // Canvasの次の描画を待ってREADY表示を保存する。
++  await page.screenshot({path:path.join(evidence,'03-ready-wait-mobile.png')});
++  if(process.env.COOP_SCREENSHOT_ONLY) { assert.deepEqual(errors,[]); console.log('READY screenshot refreshed'); return; }
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().turnCount>=10&&globalThis.__salvoQa.state().inputReady,null,{timeout:45000});
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.ready===3,null,{timeout:15000});
++  await page.evaluate(()=>globalThis.__salvoQa.clock());
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.phase==='resolving',null,{timeout:10000});
++  const expired=await page.evaluate(()=>globalThis.__salvoQa.state());assert.equal(expired.salvo.launchTicks.length,3);
++  assert.deepEqual(errors,[]);
++  fs.writeFileSync(path.join(evidence,'browser-result.json'),JSON.stringify({browser:'Chromium',viewport:'390x844',before:{ready:before.salvo.ready,seconds:before.salvo.remainingSeconds},firing:firing.salvo,timeout:expired.salvo,errors},null,2));
++  console.log('Browser QA passed: mobile 30-second preparation, AI concurrent ready, real drag/ready, same-tick fire, next round, timeout; no page errors');
++ }catch(error){
++  if(lastPage){fs.writeFileSync(path.join(evidence,'browser-failure.json'),JSON.stringify(await lastPage.evaluate(()=>globalThis.__salvoQa?.state()),null,2));await lastPage.screenshot({path:path.join(evidence,'browser-failure.png')});}
++  throw error;
++ }finally{await browser.close();}
++})().catch(e=>{console.error(e);process.exitCode=1});

@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.178-font-repair';
+  const BUILD_ID = 'v2.0.179-coop-salvo';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
     { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
     { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
     { version: 'v2.0.176', date: '2026/09/06', summary: '登録revisionへ固定するONLINE・協力戦の専用入口を追加' },
@@ -7880,10 +7881,17 @@
   }
   function activeUnit() { return unitById(turnOrder[activeIndex]) || units[0]; }
   // 手番を持っているのがこの端末で操作するユニットか(将来のオンライン対戦の入力ガード)
-  function isLocalTurn() { return activeUnit().control === 'local'; }
+  function isLocalTurn() {
+    if (coopSalvoEnabled() && activeUnit().team === 'player') {
+      return coopSalvoCollecting() && coopSalvoState.started && localUnit().hp > 0
+        && coopSalvoState.expected.includes(localUnitId)
+        && !coopSalvoState.ready.has(localUnitId) && !coopSalvoState.pendingOwn
+        && coopSalvoNow() < coopSalvoState.deadlineAt;
+    }
+    return activeUnit().control === 'local';
+  }
   let awaitingResolve = false; // 発射後、着弾+落下が収まるまでtrue
-  // 一斉攻撃の第一段階。まずソロ＋CPU3体で通常対戦の弾道・着弾処理をそのまま束ねる。
-  // 複数人戦は従来同期を維持し、専用packetを導入する次段階まで逐次手番のままにする。
+  // 協力戦の味方全員が共有する30秒の準備・一斉発射状態。
   let coopSalvoState = null;
   const TURN_SETTLE_SEC = 0.8; // 着弾が収まってから手番を交代するまでの余韻
   // CPUが狙いを定めるのにかける時間。実測で「手番の交代から発射まで1.8〜2.1秒、うち
@@ -14861,7 +14869,7 @@
       v: online.kind === 'firebase' ? FIREBASE_PROTO_VERSION : PROTO_VERSION,
       from: online.clientId,
       ...(online.kind === 'firebase' ? { seat: online.seat, roundId: online.currentRoundId } : {}),
-      ...(online.kind === 'coop' ? { generation: online.matchGeneration } : {}),
+      ...(online.kind === 'coop' ? { generation: online.matchGeneration, salvoVersion: 1 } : {}),
       ...msg
     };
     if (REGISTERED_MATCH_MODE && ['firebase','coop'].includes(online.kind)) packet = registeredRuntime().packet(packet);
@@ -15687,6 +15695,7 @@
   }
 
   function sendMoveUpdate(unit) {
+    if (coopSalvoCollecting()) { sendCoopSalvoMove(unit); moveSyncPending = false; moveSyncTimer = 0; return; }
     moveSyncTimer = 0;
     if (!isOnline() || !netControlsUnit(unit)) { moveSyncPending = false; return; }
     if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
@@ -15914,6 +15923,7 @@
       return;
     }
     if (online.kind === 'coop') {
+      if (msg.salvoVersion !== 1) { rejectFirebaseMessage('協力戦のバージョンが異なります。全員が更新してから入り直してください。'); return; }
       const generation = Number(msg.generation);
       if (msg.t === 'start') {
         if (!Number.isInteger(generation) || generation < online.matchGeneration) return;
@@ -15927,6 +15937,13 @@
           online.completedActionOrder.length = 0;
         }
       } else if (msg.t !== 'hello' && msg.t !== 'join' && generation !== online.matchGeneration) return;
+    }
+    if (online.kind === 'coop' && ['salvoOpen', 'salvoMove', 'salvoReady', 'salvoAck', 'salvoFire'].includes(msg.t)) {
+      if (msg.v === PROTO_VERSION) {
+        if (msg.t === 'salvoOpen' || msg.t === 'salvoFire') enqueueNetMessage(msg);
+        else receiveCoopSalvo(msg);
+      }
+      return;
     }
     if (msg.v !== PROTO_VERSION) {
       online.versionMismatch = true;
@@ -15964,6 +15981,7 @@
   }
 
   function applyNetMessage(msg) {
+    if (online?.kind === 'coop' && (msg.t === 'salvoOpen' || msg.t === 'salvoFire')) { receiveCoopSalvo(msg); return; }
     // SSEではfireと直後のstateが同じイベント周期で届く。受信時ではなくFIFOキューから
     // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
     if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
@@ -16179,7 +16197,7 @@
             || (!phase2Handoff && (Number(msg.snap?.activeIndex) !== activeIndex || Number(msg.snap?.turnCount) !== turnCount))
             || (phaseChanged && !phase2Handoff)
             || snapshotMismatch) {
-            rejectFirebaseMessage('相手の行動と一致しない協力戦の状態更新です。');
+            rejectFirebaseMessage('相手の行動と一致しない協力戦の状態更新です（' + (!action ? 'action' : !action.resolved ? 'resolving' : !firebaseActionMatches(msg, action) ? 'actionId' : snapshotMismatch || 'turn') + '）。');
             break;
           }
           rememberCoopCompletedAction(msg.actionId);
@@ -21710,7 +21728,7 @@
       calmBattle = true;
     } else if (!options.salvoCollect && battleMode !== 'tutorial' && turnCount % (turnOrder.length * 2) === 0) rollWind();
     const acting = activeUnit();
-    if (coopSoloSalvoEnabled() && acting.team === 'player'
+    if (coopSalvoEnabled() && acting.team === 'player'
         && (!coopSalvoState || coopSalvoState.phase !== 'collecting')) {
       beginCoopSalvoRound();
     }
@@ -21718,8 +21736,9 @@
     // 跳躍は全モード共通で自分の手番ごとに戻す。着地後の移動不能中も使用権自体は戻し、
     // 発動可否側でデバフを優先する。将来デバフを解除できれば、その手番中の連続跳躍も可能になる。
     if (!isCoopBossUnit(acting)) acting.jumpAvailable = true;
-    focusCameraOn(acting.x, false, acting.y);
-    if (!firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
+    const focused = coopSalvoCollecting() ? localUnit() : acting;
+    focusCameraOn(focused.x, false, focused.y);
+    if (!coopSalvoCollecting() && !firebaseBattleReplayActive() && acting.control === 'cpu') beginCpuTurnPlan(acting);
     if (battleMode !== 'weekday') updateStageBattleItemsAtTurnStart();
     if (battleMode === 'weekday') return;
     if (cpuGearSkipNextTurnStartSuspend) cpuGearSkipNextTurnStartSuspend = false;
@@ -21745,19 +21764,176 @@
     cpuPhase = cpuMoveRemaining > 0 ? 'move' : 'aim';
   }
 
-  function coopSoloSalvoEnabled() {
-    return isCoop4v1() && coopHumanUids().length === 1;
+  function coopSalvoEnabled() {
+    return isCoop4v1();
   }
 
   function coopSalvoCollecting() {
-    return coopSoloSalvoEnabled() && coopSalvoState?.phase === 'collecting';
+    return coopSalvoEnabled() && coopSalvoState?.phase === 'collecting';
+  }
+
+  const COOP_PREPARATION_MS = 30000;
+  function coopSalvoNow() { return coopNormalSession?.serverNow?.() ?? Date.now(); }
+  function coopSalvoHost() { return !online || online.role === 'host'; }
+  function coopSalvoOwns(msg) {
+    const seat = Object.keys(COOP_SEAT_UNIT).find(key => COOP_SEAT_UNIT[key] === msg.unitId);
+    const entry = coopNormalSession?.roster?.[seat];
+    return !!entry && (entry.ai || coopNormalSession.takeoverSeats.has(seat)
+      ? msg.from === coopNormalSession.roster.p1.uid : msg.from === entry.uid);
+  }
+  function coopSalvoActionGuide(action) {
+    const unit = unitById(action.unitId);
+    if (!unit || unit.id !== localUnitId) return null;
+    const profile = shotPhysicsProfile(CHARACTERS[unit.character], action.useSpecial, action.useJump);
+    const gravity = GRAVITY * profile.gravityMul;
+    return { gravity, windAccel: wind.dir * wind.strength * WIND_ACCEL_MAX * profile.windMul,
+      previewT: trajectoryPreviewDuration(action.vx0, action.vy0, gravity) * profile.guideMul
+        * (unitIsInCreamCloud(unit) ? 0.5 : 1) };
+  }
+  function sendCoopSalvoMove(unit) {
+    const state = coopSalvoState;
+    if (!state?.started || state.phase !== 'collecting' || !netControlsUnit(unit)) return;
+    const seq = state.moveSeq[unit.id] = (state.moveSeq[unit.id] || 0) + 1;
+    netSend({ t: 'salvoMove', roundTurn: state.roundTurn, unitId: unit.id, seq,
+      x: unit.x, y: unit.y, fuel: unit.fuel });
+  }
+  function acceptCoopSalvoPosition(msg, final = false) {
+    const state = coopSalvoState, unit = unitById(msg.unitId);
+    if (!state?.started || state.phase !== 'collecting' || msg.roundTurn !== state.roundTurn
+      || !state.expected.includes(msg.unitId) || state.ready.has(msg.unitId) || !coopSalvoOwns(msg)
+      || !unit || ![msg.x, msg.y, msg.fuel].every(Number.isFinite)
+      || msg.x < UNIT_RADIUS || msg.x > STAGE_W - UNIT_RADIUS || msg.y < -100 || msg.y > STAGE_H
+      || msg.fuel < 0 || msg.fuel > unit.fuel + 0.01) return false;
+    const previousX = unit.netWalkTargetX ?? unit.x;
+    if (Math.abs(msg.x - previousX) > unit.fuel - msg.fuel + 1) return false;
+    if (!final && (!Number.isInteger(msg.seq) || msg.seq <= (state.receivedMoveSeq[msg.unitId] || 0))) return false;
+    if (final) {
+      const surface = walkableGroundYAt(msg.x, unit.y + UNIT_RADIUS);
+      if (surface === null || Math.abs(msg.y + UNIT_RADIUS - surface) > 3) return false;
+    }
+    if (!final) state.receivedMoveSeq[msg.unitId] = msg.seq;
+    unit.fuel = msg.fuel;
+    if (final) {
+      unit.x = msg.x; unit.y = msg.y; unit.netWalkTargetX = null;
+      unit.grounded = true; unit.vy = 0;
+    } else unit.netWalkTargetX = msg.x;
+    return true;
+  }
+  function startCoopSalvoPreparation() {
+    const state = coopSalvoState;
+    if (!state || state.started || !coopSalvoHost()) return;
+    state.started = true;
+    state.deadlineAt = coopSalvoNow() + COOP_PREPARATION_MS;
+    netSend({ t: 'salvoOpen', roundTurn: state.roundTurn, deadlineAt: state.deadlineAt,
+      snap: buildSnapshot({ includeTerrain: false }), participants: state.participants, expected: state.expected });
+  }
+  function finishCoopSalvoPreparation() {
+    const state = coopSalvoState;
+    if (!state || state.phase !== 'collecting' || !state.started || !coopSalvoHost()) return false;
+    state.phase = 'launching';
+    state.launchAt = coopSalvoNow() + (coopHumanUids().length > 1 ? 700 : 0);
+    state.actions.sort((a,b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
+    moveDir = 0; moveSyncPending = false; aimState = null; inputMode = null; inputPointerId = null;
+    for (const unit of units) unit.netWalkTargetX = null;
+    const actionId = secureNonce();
+    if (online) online.localAction = { unitId: 'p1', actionId };
+    netSend({ t: 'salvoFire', roundTurn: state.roundTurn, actionId, launchAt: state.launchAt,
+      snap: buildSnapshot({ includeTerrain: false }), actions: state.actions.map(({guide, ...action}) => action),
+      participants: state.participants, expected: state.expected });
+    awaitingResolve = true;
+    if (state.launchAt <= coopSalvoNow()) armQueuedCoopSalvo();
+    return true;
+  }
+  function receiveCoopSalvo(msg) {
+    if (online?.kind !== 'coop' || online.phase !== 'playing') return;
+    const host = msg.from === coopNormalSession?.roster?.p1?.uid;
+    let state = coopSalvoState;
+    if (msg.t === 'salvoOpen') {
+      if (!host || coopSalvoHost() || msg.roundTurn !== turnCount || (state?.started && state.roundTurn === msg.roundTurn)) return;
+      applySnapshot(msg.snap, { preserveTerrain: true });
+      setCoopOnlineSeat(online.seat);
+      state = beginCoopSalvoRound(false);
+      // snapshotに含まれる燃料・デバフを再消費しない。
+      for (const saved of msg.snap.units) Object.assign(unitById(saved.id), {
+        fuel: saved.fuel, jumpAvailable: saved.jumpAvailable });
+      state.participants = msg.participants.slice(); state.expected = msg.expected.slice();
+      state.started = true; state.deadlineAt = msg.deadlineAt;
+      battleIntroPending = false; cutIn = null;
+      focusCameraOn(localUnit().x, false, localUnit().y);
+      return;
+    }
+    if (!state?.started || msg.roundTurn !== state.roundTurn || state.phase !== 'collecting') return;
+    if (msg.t === 'salvoMove') {
+      if (coopSalvoNow() <= state.deadlineAt) acceptCoopSalvoPosition(msg);
+    } else if (msg.t === 'salvoReady') {
+      if (!coopSalvoHost() || coopSalvoNow() >= state.deadlineAt || !acceptCoopSalvoPosition(msg, true)) return;
+      queueCoopSalvoAction(unitById(msg.unitId), msg.action, true);
+    } else if (msg.t === 'salvoAck') {
+      if (!host || coopSalvoHost() || !state.expected.includes(msg.action.unitId) || state.ready.has(msg.action.unitId)) return;
+      const action = { ...msg.action, guide: coopSalvoActionGuide(msg.action) };
+      state.actions.push(action); state.ready.add(action.unitId);
+      if (action.unitId === localUnitId) state.pendingOwn = false;
+    } else if (msg.t === 'salvoFire') {
+      if (!host || coopSalvoHost()) return;
+      const saved = state;
+      applySnapshot(msg.snap, { preserveTerrain: true });
+      setCoopOnlineSeat(online.seat);
+      coopSalvoState = saved;
+      saved.actions = msg.actions.map(action => ({ ...action, guide: coopSalvoActionGuide(action) }));
+      saved.ready = new Set(saved.actions.map(action => action.unitId));
+      saved.phase = 'launching'; saved.launchAt = msg.launchAt;
+      online.remoteAction = { unitId: 'p1', actionId: msg.actionId, from: msg.from, resolved: false };
+      awaitingResolve = true;
+      battleIntroPending = false;
+      if (saved.launchAt <= coopSalvoNow()) armQueuedCoopSalvo();
+    }
+  }
+  function updateCoopSalvoPreparation(dt) {
+    if (!coopSalvoEnabled() || matchOver || online?.phase !== 'playing') return;
+    if (coopSalvoState?.phase === 'launching' && coopSalvoNow() >= coopSalvoState.launchAt) armQueuedCoopSalvo();
+    if (activeUnit().team !== 'player') return;
+    if (coopAwaitingAuthoritativeState()) return;
+    if (!coopSalvoState) beginCoopSalvoRound();
+    const state = coopSalvoState;
+    if (state.phase !== 'collecting' || battleIntroPending || cutIn) return;
+    if (!state.started) startCoopSalvoPreparation();
+    if (!state.started || !coopSalvoHost() || coopAwaitingAuthoritativeState()) return;
+    if (coopSalvoNow() >= state.deadlineAt) { finishCoopSalvoPreparation(); return; }
+    for (const id of state.expected) {
+      const unit = unitById(id);
+      if (unit?.control !== 'cpu' || unit.hp <= 0 || state.ready.has(id)) continue;
+      let plan = state.aiPlans[id];
+      if (!plan) {
+        const move = planCpuMove(unit);
+        plan = state.aiPlans[id] = { dir: move.dir, distance: move.distance,
+          think: CPU_THINK_MIN_SEC + Math.random() * CPU_THINK_RANGE_SEC, sync: 0 };
+      }
+      if (!unit.grounded) continue;
+      if (plan.distance > 0 && unit.fuel > 0 && unit.moveLockTurns <= 0) {
+        const distance = Math.min(MOVE_SPEED * dt, unit.fuel, plan.distance);
+        const nx = limitMoveByClimb(unit, Math.max(UNIT_RADIUS + 4, Math.min(STAGE_W - UNIT_RADIUS - 4, unit.x + plan.dir * distance)));
+        if (cpuStepIsSafe(unit, nx)) {
+          const delta = nx - unit.x;
+          unit.x = nx; unit.fuel -= Math.abs(delta); plan.distance -= Math.abs(delta);
+          followGroundOrFall(unit); walkBattleMotion(unit, delta);
+          if (Math.abs(delta) < 0.01) plan.distance = 0;
+        } else plan.distance = 0;
+        plan.sync += dt;
+        if (plan.sync >= MOVE_SYNC_INTERVAL_SEC || plan.distance <= 0) { sendCoopSalvoMove(unit); plan.sync = 0; }
+      } else {
+        if (!plan.settled) { sendCoopSalvoMove(unit); plan.settled = true; }
+        plan.think -= dt;
+        if (plan.think <= 0) cpuAutoTurn(unit);
+      }
+    }
+    if (state.expected.every(id => state.ready.has(id) || unitById(id)?.hp <= 0)) finishCoopSalvoPreparation();
   }
 
   function coopSalvoItemAllowed(itemId) {
-    return !coopSalvoCollecting() || itemId === 'rescue-kit';
+    return !coopSalvoCollecting() || ['rescue-kit', 'healing-kit', 'debuff-grenade'].includes(itemId);
   }
 
-  function beginCoopSalvoRound() {
+  function beginCoopSalvoRound(initialize = true) {
     // 直前に行動不能・救助直後待機を通常進行側で消費した席は、現在のactiveIndexより
     // 前にいる。そこを次の一斉攻撃へ二重計上せず、現在席から要塞直前までだけ集める。
     const participants = [];
@@ -21773,12 +21949,25 @@
     coopSalvoState = {
       phase: 'collecting', participants, expected, ready: new Set(), actions: [],
       nextLaunchIndex: 0, physicsTick: 0, launchTicks: [], deferredMatchEndReason: '',
+      started: false, roundTurn: turnCount, deadlineAt: 0, aiPlans: {}, moveSeq: {}, receivedMoveSeq: {},
     };
+    for (const id of initialize ? participants : []) {
+      const unit = unitById(id);
+      // 救助した次の巡回では全員の保護を同じ境界で解除する。
+      if (unit.coopReviveGuard && unit.coopRevivedBossRound !== coopBossRoundNumber()) {
+        unit.coopReviveGuard = false;
+        unit.coopRevivedBossRound = 0;
+        if (unit.actionSkipTurns <= 0 && !expected.includes(id)) expected.push(id);
+      }
+      unit.fuel = unit.fuelMax;
+      unit.jumpAvailable = true;
+      if (id !== activeUnit().id) advanceCreamCloudsForTurn(unit);
+    }
     return coopSalvoState;
   }
 
   function coopSalvoStatus() {
-    if (!coopSoloSalvoEnabled() || !coopSalvoState) return null;
+    if (!coopSalvoEnabled() || !coopSalvoState) return null;
     const ownGuideVisible = ['collecting', 'launching', 'special-aura', 'special-cutin'].includes(coopSalvoState.phase);
     return {
       phase: coopSalvoState.phase,
@@ -21787,6 +21976,7 @@
       unitIds: [...coopSalvoState.ready],
       ownGuideVisible: ownGuideVisible && coopSalvoState.actions.some(action => unitById(action.unitId)?.control === 'local'),
       launchTicks: [...coopSalvoState.launchTicks],
+      remainingSeconds: coopSalvoState.started ? Math.max(0, Math.ceil((coopSalvoState.deadlineAt - coopSalvoNow()) / 1000)) : 30,
     };
   }
 
@@ -21794,18 +21984,7 @@
     const state = coopSalvoState;
     if (!state || (state.phase !== 'launching' && state.phase !== 'special-cutin')) return false;
     state.phase = 'resolving';
-    // 既存net同期は「現在手番のfire→解決後state」を1組として検証する。
-    // ソロでも最後のREADYを権威actionとして記録し、4発の解決後stateが孤立しないようにする。
-    const authorityAction = [...state.actions].reverse().find(action => action.unitId === activeUnit()?.id)
-      || state.actions[state.actions.length - 1];
-    const authorityUnit = authorityAction ? unitById(authorityAction.unitId) : null;
-    if (authorityAction && authorityUnit) {
-      netSendFire(
-        authorityUnit, authorityAction.anchor, authorityAction.vx0, authorityAction.vy0,
-        authorityAction.useSpecial, authorityAction.useJump, authorityAction.subweaponId,
-        false, authorityAction.coopItemId
-      );
-    }
+    // 発射集合はホストのsalvoFireで確定済み。各席のfireを個別送信しない。
     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
     state.nextLaunchIndex = 0;
     state.physicsTick = 0;
@@ -21856,9 +22035,9 @@
     return true;
   }
 
-  const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 18; // 120Hz固定物理で150ms
+  const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0; // 全員を同じ固定物理tickへ投入
   function coopSalvoLaunchesPending() {
-    if (coopSalvoState?.phase === 'special-aura' || coopSalvoState?.phase === 'special-cutin') return true;
+    if (['launching', 'special-aura', 'special-cutin'].includes(coopSalvoState?.phase)) return true;
     return coopSalvoState?.phase === 'resolving'
       && coopSalvoState.nextLaunchIndex < coopSalvoState.actions.length;
   }
@@ -21874,37 +22053,22 @@
       if (unit?.hp > 0) {
         // 必殺のチャージと共通カットインはarm側で済んでいる。跳躍と救助弾は
         // 通常の発射口を通し、使用権・残弾を実際に発射した瞬間だけ消費する。
-        if (action.coopItemId === 'rescue-kit') {
+        if (action.coopItemId) {
           launchCoopItemShot(unit, action.anchor, action.vx0, action.vy0, action.coopItemId);
         } else {
-          launchShot(unit, action.anchor, action.vx0, action.vy0, action.useSpecial, action.useSpecial, action.useJump);
+          launchShot(unit, action.anchor, action.vx0, action.vy0, action.useSpecial, action.useSpecial, action.useJump, action.subweaponId);
         }
-        runStats.shots++;
+        if (action.subweaponId !== 'barrier') runStats.shots++;
       }
     }
     state.physicsTick++;
-  }
-
-  function advanceCoopSalvoCollector() {
-    const state = coopSalvoState;
-    if (!state || state.phase !== 'collecting') return false;
-    for (let i = 0; i < turnOrder.length; i++) {
-      activeIndex = (activeIndex + 1) % turnOrder.length;
-      const next = activeUnit();
-      if (!state.expected.includes(next.id) || state.ready.has(next.id)) continue;
-      advanceCreamCloudsForTurn(next);
-      startTurn({ salvoCollect: true });
-      const lines = turnCutInLines(next);
-      showCutIn(lines.text, `${state.ready.size}/${state.expected.length} READY　通常・必殺・跳躍・救助を照準`, TURN_CUTIN_DURATION, null, lines.color);
-      return true;
-    }
-    return false;
   }
 
   function completeCoopSalvoResolution() {
     const state = coopSalvoState;
     if (!state || state.phase !== 'resolving') return false;
     state.phase = 'complete';
+    if (online?.remoteAction && !coopSalvoHost()) online.remoteAction.resolved = true;
     for (const unitId of state.participants) {
       const unit = unitById(unitId);
       if (!unit) continue;
@@ -21928,36 +22092,44 @@
       showCutIn('タイムアップ!', '判定は…', 1.6, () => judgeByHp());
       return true;
     }
-    activeIndex = turnOrder.indexOf(COOP_BOSS_UNIT_ID);
-    const boss = activeUnit();
-    advanceCreamCloudsForTurn(boss);
-    startTurn();
-    const lines = turnCutInLines(boss);
-    showCutIn(lines.text, lines.sub, TURN_CUTIN_DURATION, null, lines.color);
+    activeIndex = turnOrder.indexOf(COOP_BOSS_UNIT_ID) - 1;
+    const authority = unitById('p1');
+    advanceToNextPlayableTurn(() => netSyncTurn(authority), { authorityUnit: authority });
     return true;
   }
 
-  function queueCoopSalvoAction(unit, action) {
-    if (!coopSoloSalvoEnabled() || !unit || unit.team !== 'player') return false;
-    if (!coopSalvoState || coopSalvoState.phase !== 'collecting') beginCoopSalvoRound();
+  function queueCoopSalvoAction(unit, action, received = false) {
+    if (!coopSalvoEnabled() || !unit || unit.team !== 'player' || unit.hp <= 0 || !unit.grounded) return false;
+    if (!coopSalvoCollecting() || !coopSalvoState.started || coopSalvoNow() >= coopSalvoState.deadlineAt) return false;
     if (!coopSalvoState.expected.includes(unit.id) || coopSalvoState.ready.has(unit.id)) return false;
-    // SUBと対象が広い支援弾は逐次手番のまま。一斉行動には通常・必殺・跳躍と、
-    // ダウン中の味方へ飛ばす救助弾だけを許可する。
-    if (action.subweaponId || (action.coopItemId && action.coopItemId !== 'rescue-kit')) return false;
+    if (!action) return false;
+    if (action.subweaponId && (action.subweaponId !== unit.subweapon || unit.subweaponUsesLeft <= 0)) return false;
+    if (action.coopItemId && (!coopSalvoItemAllowed(action.coopItemId) || action.coopItemId !== unit.coopItem || unit.coopItemUsesLeft <= 0)) return false;
+    if (![action.anchor?.x, action.anchor?.y, action.vx0, action.vy0].every(Number.isFinite)
+      || Math.abs(action.vx0) > 5000 || Math.abs(action.vy0) > 5000
+      || Math.hypot(action.anchor.x - unitAnchor(unit).x, action.anchor.y - unitAnchor(unit).y) > 6) return false;
     const def = CHARACTERS[unit.character];
     const useSpecial = !!action.useSpecial;
     const useJump = !!action.useJump;
     const useRescue = action.coopItemId === 'rescue-kit';
-    if ((useSpecial && useJump) || (useRescue && (useSpecial || useJump))) return false;
+    if ([useSpecial, useJump, !!action.coopItemId, !!action.subweaponId].filter(Boolean).length > 1) return false;
     if (useSpecial && (def?.specialEnabled === false || !isSpecialReady(unit))) return false;
     if (useJump && !(unit.jumpAvailable !== false && unit.moveLockTurns <= 0)) return false;
     if (useRescue && !(unit.coopItem === 'rescue-kit' && unit.coopItemUsesLeft > 0)) return false;
+    if (!coopSalvoHost() && !received) {
+      if (unit.id !== localUnitId || coopSalvoState.pendingOwn) return false;
+      coopSalvoState.pendingOwn = true;
+      moveDir = 0; moveSyncPending = false;
+      netSend({ t: 'salvoReady', roundTurn: coopSalvoState.roundTurn, unitId: unit.id,
+        x: unit.x, y: unit.y, fuel: unit.fuel, action });
+      return true;
+    }
     coopSalvoState.ready.add(unit.id);
     const shotProfile = shotPhysicsProfile(def, useSpecial, useJump);
     const gravity = GRAVITY * shotProfile.gravityMul;
     coopSalvoState.actions.push({
       unitId: unit.id, anchor: { ...action.anchor }, vx0: action.vx0, vy0: action.vy0,
-      useSpecial, useJump, subweaponId: null, coopItemId: useRescue ? 'rescue-kit' : null,
+      useSpecial, useJump, subweaponId: action.subweaponId || null, coopItemId: action.coopItemId || null,
       guide: unit.control === 'local' ? {
         gravity,
         windAccel: wind.dir * wind.strength * WIND_ACCEL_MAX * shotProfile.windMul,
@@ -21965,16 +22137,11 @@
           * shotProfile.guideMul * (unitIsInCreamCloud(unit) ? 0.5 : 1),
       } : null,
     });
-    const ready = coopSalvoState.ready.size;
-    const total = coopSalvoState.expected.length;
-    if (ready >= total) {
-      coopSalvoState.phase = 'launching';
-      awaitingResolve = true;
-      showCutIn('一斉攻撃!', `${ready}門 READY — FIRE!`, 0.8, armQueuedCoopSalvo, '#ffd24a');
-    } else {
-      const label = String(unit.label || CHARACTERS[unit.character]?.name || unit.id).replace(/\s*\[AI\]$/, '');
-      showCutIn(`${label} READY`, `${ready}/${total}　味方の照準を待機`, 0.5, advanceCoopSalvoCollector, '#72e8ff');
-    }
+    const accepted = coopSalvoState.actions[coopSalvoState.actions.length - 1];
+    const { guide, ...wireAction } = accepted;
+    netSend({ t: 'salvoAck', roundTurn: coopSalvoState.roundTurn, action: wireAction });
+    if (unit.id === localUnitId) { moveDir = 0; moveSyncPending = false; }
+    if (coopSalvoState.ready.size >= coopSalvoState.expected.length) finishCoopSalvoPreparation();
     return true;
   }
 
@@ -22253,9 +22420,9 @@
     return best;
   }
 
-  function cpuAutoTurn() {
+  function cpuAutoTurn(actor = activeUnit()) {
     if (matchOver || projectiles.length || barucopters.length) return;
-    const self = activeUnit();
+    const self = actor;
     const foe = isCoopBossUnit(self) ? coopBossPlannedTarget() : cpuPickTarget(self);
     if (!foe) return;
     if (isCoopBossUnit(self)) {
@@ -22277,8 +22444,7 @@
       awaitingResolve = true;
       return;
     }
-    if (isCoop4v1() && self.team === 'player' && self.coopItemUsesLeft > 0
-        && (!coopSoloSalvoEnabled() || self.coopItem === 'rescue-kit')) {
+    if (isCoop4v1() && self.team === 'player' && self.coopItemUsesLeft > 0) {
       let supportTarget = null;
       if (self.coopItem === 'rescue-kit') {
         supportTarget = units.find(u => u.team === self.team && u.id !== self.id && u.hp <= 0) || null;
@@ -22317,7 +22483,7 @@
     const tier = activeCpuAccuracyTier();
     if (!tier) return;
     const useSpecial = isSpecialReady(self)
-      && (coopSoloSalvoEnabled() || tier.name === 'high' || tier.name === 'perfect');
+      && (coopSalvoEnabled() || tier.name === 'high' || tier.name === 'perfect');
     const shotProfile = shotPhysicsProfile(def, useSpecial, false);
     const baseT = Math.min(2.2, Math.max(0.72, Math.abs(target.x - anchor.x) / 300)) * shotProfile.tBias;
     // 悪魔の必殺は重力も風も受けないので、逆算も直線で行わないと大きく外れる。
@@ -24260,7 +24426,7 @@
   // CPU/味方の弾道は見せず、オンライン拡張時にも狙いが透けないルールを保つ。
   function drawOwnQueuedCoopSalvoGuide() {
     const state = coopSalvoState;
-    if (!coopSoloSalvoEnabled() || !state || !['collecting', 'launching', 'special-aura', 'special-cutin'].includes(state.phase)) return;
+    if (!coopSalvoEnabled() || !state || !['collecting', 'launching', 'special-aura', 'special-cutin'].includes(state.phase)) return;
     const action = state.actions.find(entry => unitById(entry.unitId)?.control === 'local');
     const guide = action?.guide;
     if (!action || !guide) return;
@@ -25973,7 +26139,9 @@
 
     // 2vs2は4体居るので「CPUのターン」だけでは、味方のCPUなのか敵のCPUなのかも
     // 4体のうちどれなのかも分からなかった(実機で指摘)。HPカードと同じ呼び名を添える。
-    const turnLabel = coop?.turnLabel || turnCutInLines(actingUnit).short;
+    const turnLabel = coop?.turnLabel || (coopSalvoCollecting()
+      ? (coopSalvoState.ready.has(localUnitId) ? 'READY・仲間を待機' : coopSalvoState.pendingOwn ? 'READY送信中' : '全員同時に準備')
+      : turnCutInLines(actingUnit).short);
     const lockLabel = actingUnit.actionSkipTurns > 0 ? `　行動不能 ${actingUnit.actionSkipTurns}手`
       : actingUnit.moveLockTurns > 0 ? `　⚡移動封印 ${actingUnit.moveLockTurns}手` : '';
     // チュートリアルは時間切れが無いので、あるように見える「TURN n/15」は出さない。
@@ -25990,7 +26158,7 @@
       ? (forecastTarget.id === localUnitId ? 'あなた' : forecastTarget.label.replace(/\s*\[AI\]$/, ''))
       : '';
     const salvo = coopSalvoStatus();
-    const salvoLabel = salvo && salvo.phase === 'collecting' ? `READY ${salvo.ready}/${salvo.total}` : '';
+    const salvoLabel = salvo && salvo.phase === 'collecting' ? `${salvo.remainingSeconds}秒  READY ${salvo.ready}/${salvo.total}` : '';
     const rightLabel = coop?.rightLabel || (salvoLabel
       ? salvoLabel
       : isCoop4v1() && forecastName
@@ -26831,7 +26999,7 @@
     const btn = activeSubweaponButton();
     const entry = globalThis.KatamonCoopMvp?.SUBWEAPONS?.find(item => item.id === me?.subweapon);
     const available = !!entry && me.subweaponUsesLeft > 0;
-    const active = !coopSalvoCollecting() && available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
+    const active = available && isLocalTurn() && !awaitingResolve && !matchOver && !cutIn && !netInputLocked();
     const color = subweaponArmed ? '#ffd49a' : available ? '#f29a38' : 'rgba(126,116,99,0.5)';
     ctx.save();
     const body = ctx.createRadialGradient(btn.x - 10, btn.y - 10, 2, btn.x, btn.y, btn.r);
@@ -28167,7 +28335,7 @@
       drawOutlinedText(String(power), cx, cy + 6, { font: `900 46px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 5 });
       drawOutlinedText(`仰角 ${elevDeg}°`, cx, cy + 34, { font: `900 15px ${UI_FONT_HEAVY}`, color: UI.brassLight, lineWidth: 3.5 });
     } else if (active) {
-      drawOutlinedText('引いて発射', cx, cy + 5, { font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5 });
+      drawOutlinedText(coopSalvoCollecting() ? '引いてREADY' : '引いて発射', cx, cy + 5, { font: `900 17px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 3.5 });
       drawOutlinedText('PULL & RELEASE', cx, cy + 26, { font: `900 9px ${UI_FONT_HEAVY}`, color: 'rgba(255,226,161,0.6)', lineWidth: 3 });
     } else {
       // 自分の手番でない理由が分かるようにしておく(以前は暗くなるだけだった)
@@ -28180,7 +28348,11 @@
           : weekdayDungeonBattle.phase === 'error' ? '保存を再試行してください'
           : '報酬を保存中')
         : '';
-      const reason = weekdayReason || (matchOver ? '試合終了'
+      const salvoReason = coopSalvoCollecting() ? (coopSalvoState.pendingOwn ? 'READY送信中'
+        : coopSalvoState.ready.has(localUnitId) ? 'READY・仲間を待機'
+        : !coopSalvoState.expected.includes(localUnitId) ? 'この巡回は待機'
+        : coopSalvoNow() >= coopSalvoState.deadlineAt ? '準備時間終了' : '') : '';
+      const reason = weekdayReason || salvoReason || (matchOver ? '試合終了'
         : !localUnit().grounded ? '落下中'
         : awaitingResolve ? '着弾を待っています'
         : cutIn ? 'まもなく開始'
@@ -29456,7 +29628,7 @@
         if (specialArmed) { subweaponArmed = false; jumpArmed = false; coopItemArmed = false; }
         return;
       }
-      if (!coopSalvoCollecting() && COOP_MVP_FEATURE_ENABLED && (battleMode === 'normal' || battleMode === 'coop') && me.subweaponUsesLeft > 0
+      if (COOP_MVP_FEATURE_ENABLED && (battleMode === 'normal' || battleMode === 'coop') && me.subweaponUsesLeft > 0
           && radialControlHit(p0, subweaponControl, 5)) {
         subweaponArmed = !subweaponArmed;
         if (subweaponArmed) { specialArmed = false; jumpArmed = false; coopItemArmed = false; }
@@ -29680,7 +29852,7 @@
     if (e.pointerId !== inputPointerId) return;
     if (inputMode === 'aim' && aimState) {
       // OS・ブラウザによるタッチ中断では撃たず、照準だけ解除する。
-      if (e.type === 'pointerup' && !isInCancelZone(aimState.curX, aimState.curY)) {
+      if (e.type === 'pointerup' && isLocalTurn() && !netInputLocked() && !awaitingResolve && !isInCancelZone(aimState.curX, aimState.curY)) {
         let dx = aimState.curX - aimState.origin.x;
         let dy = aimState.curY - aimState.origin.y;
         const dist = Math.min(MAX_DRAG, Math.hypot(dx, dy));
@@ -29700,7 +29872,7 @@
           const def = CHARACTERS[me.character];
           const salvoCollecting = coopSalvoCollecting();
           const activateCoopItem = isCoop4v1() && coopSalvoItemAllowed(me.coopItem) && coopItemArmed && me.coopItemUsesLeft > 0 ? me.coopItem : null;
-          const activateSubweapon = !salvoCollecting && !activateCoopItem && subweaponArmed && me.subweaponUsesLeft > 0 ? me.subweapon : null;
+          const activateSubweapon = !activateCoopItem && subweaponArmed && me.subweaponUsesLeft > 0 ? me.subweapon : null;
           const activateSpecial = !activateCoopItem && !activateSubweapon && specialArmed && isSpecialReady(me);
           const activateJump = !activateCoopItem && !activateSubweapon && jumpArmed && me.jumpAvailable !== false && me.moveLockTurns <= 0;
           const { vx0, vy0 } = computeLaunchVelocity(dx, dy, def, activateSpecial, activateJump);
@@ -29708,7 +29880,7 @@
             anchor: aimState.anchor, vx0, vy0, useSpecial: activateSpecial, useJump: activateJump,
             subweaponId: activateSubweapon, coopItemId: activateCoopItem,
           });
-          if (!queuedForSalvo) {
+          if (!queuedForSalvo && !salvoCollecting) {
             netSendFire(me, aimState.anchor, vx0, vy0, activateSpecial, activateJump, activateSubweapon, false, activateCoopItem);
             if (activateCoopItem) launchCoopItemShot(me, aimState.anchor, vx0, vy0, activateCoopItem);
             else launchShot(me, aimState.anchor, vx0, vy0, activateSpecial, false, activateJump, activateSubweapon);
@@ -30628,6 +30800,7 @@
     } catch (_) { /* presentation must not stop the simulation */ }
     // 相手待ちの再送と受信キューの消化は、画面がタイトルでも回す必要がある。
     updateOnline(dt);
+    if (gamePhase === 'battle') updateCoopSalvoPreparation(menuOpen ? 0 : dt);
     // 画面の揺れは描画側の効果であって対戦の状態ではない。**どの画面でも必ず減らす。**
     // 以前はこれを対戦中の分岐の内側でやっていたため、起動演出(着弾で揺らす)のあと
     // タイトルへ移ると減衰が一度も走らず、画面が永久に震え続けた。
@@ -30643,7 +30816,7 @@
       return;
     }
     if (gamePhase !== 'battle') return;
-    if (menuOpen) return; // メニュー表示中はゲーム進行を止める
+    if (menuOpen && !coopSalvoEnabled()) return; // 協力戦の共通期限・進行はメニューで停止しない
 
     if (workshopBattlePreview) updateWorkshopBattlePreview(dt);
 
@@ -30818,8 +30991,7 @@
   // 弾と落下。必ず固定刻み(PHYSICS_DT)で呼ぶこと。ここへ描画フレームのdtを
   // 渡すと Issue #9 の不具合がそのまま戻る。
   function stepWorldPhysics(dt) {
-    // 4発は描画フレームではなく固定物理tickで0/18/36/54tickに投入する。
-    // 端末性能に関係なく約150ms間隔を保ち、通常弾の軌道・衝突処理は一切分岐させない。
+    // 全員の発射を同じ固定物理tickへ投入し、その後は通常の軌道・衝突処理を使う。
     stepCoopSalvoLaunchQueue();
     stepBarucopters(dt);
     stepGroundFlames(dt);
@@ -31170,7 +31342,7 @@
     const cpuActor = activeUnit();
     // 開始カットインが終わるまでは、まだ誰の手番も始まっていない。
     // ここを通すと、カットインが出る前や明けた直後にCPUが撃ってしまう。
-    if (cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && !coopAwaitingAuthoritativeState()
+    if (!coopSalvoCollecting() && cpuActor.control === 'cpu' && !battleIntroPending && !awaitingResolve && !coopAwaitingAuthoritativeState()
       && cpuActor.grounded && !projectiles.length && !barucopters.length) {
       if (cpuPhase === 'skip') {
         cpuThinkTimer -= dt;
