@@ -73,7 +73,9 @@ test('turn timing, runtime pickup paths, durable resource escrow, and snapshot r
   resetCpuMatch();
   const jumpPlayer = kt.unitById('p1');
   jumpPlayer.specialCharge = 0;
-  const jumpItemX = Math.round((jumpPlayer.x + kt.unitById('e1').x) / 2);
+  // The random stage midpoint may be a void. The safe spawn guarantees a
+  // landing surface while still exercising the production jump pickup hook.
+  const jumpItemX = Math.round(jumpPlayer.x);
   kt.forceStageBattleItemForTest('special_charge', jumpItemX, null);
   const jumpLanding = kt.landJumpOnStageBattleItemForTest('p1');
   assert.equal(jumpLanding.grounded, true);

@@ -208,7 +208,12 @@ test.describe('カタモン本体の基本導線', () => {
     await expect(page.getByRole('button', { name: /協力ボス/ })).toBeVisible();
     await page.locator('#onlineCoopKind').click();
     await expect(page.locator('#coopBossLobby')).toHaveClass(/open/);
-    await expect(page.getByText('超大型要塞戦車')).toBeVisible();
+    await expect(page.locator('#coopBossName')).toHaveText('超大型要塞戦車');
+    await page.locator('#coopBossTarget').selectOption('storm-dragon-02');
+    await expect(page.locator('#coopBossName')).toHaveText('雷晶龍ヴォルテリス');
+    await expect(page.locator('#coopSoloStart')).toBeVisible();
+    await page.locator('#coopBossTarget').selectOption('siege-fortress-01');
+    await expect(page.locator('#coopBossName')).toHaveText('超大型要塞戦車');
     await expect.poll(() => page.evaluate(() => ({
       titlePaused: document.querySelector('#titleBgm').paused,
       roomPaused: document.querySelector('#roomBgm').paused,

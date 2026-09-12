@@ -1,0 +1,11 @@
+{
+  "project": "katamon-online",
+  "instance": "katamon-online-default-rtdb",
+  "beforeSha256": "7e32f56c97806144b57a375e8898e2042411ba81c8581a484e02dc90c86b5ba9",
+  "afterSha256": "fb0f5ccf8122811a46fee302ab3ea910b4762df0b6aa0c6b95640f2ad8d4bc1e",
+  "changedPaths": [
+    "rules.coopOpen.$room.bossId",
+    "rules.coopRooms.$room.settings.bossId"
+  ],
+  "baseMatchesLive": true
+}

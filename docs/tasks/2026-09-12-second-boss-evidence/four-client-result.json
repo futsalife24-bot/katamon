@@ -1,0 +1,8 @@
+{
+  "base": "http://127.0.0.1:4176",
+  "clients": 4,
+  "rounds": 3,
+  "actualFireActions": 12,
+  "transport": "production Firebase",
+  "pageErrors": []
+}

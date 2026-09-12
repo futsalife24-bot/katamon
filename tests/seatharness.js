@@ -10,6 +10,7 @@ if (!globalThis.crypto) globalThis.crypto = require('crypto').webcrypto;
 // 本番ではindex.html直後に読み込まれる協力要塞API。ハーネスはinline scriptだけを
 // 実行するため、実弾のCORE・部位判定を検証する時だけ同じAPIを先に接続する。
 globalThis.KatamonCoopBoss = require('../coop-mvp-boss.js');
+globalThis.KatamonStormBoss = require('../coop-storm-boss.js');
 
 const SEAT = process.argv[2] === 'e1' ? 'e1' : 'p1';
 const HTML = path.join(__dirname, '..', 'index.html');
@@ -48,6 +49,27 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 // (本体には残さない。ここで組み立てるだけ。)
 const HOOK = `
   globalThis.__kt = {
+    stormTest: {
+      rect: () => coopBossRect(coopBossUnit),
+      bodyDistance: (x,y) => distanceToCoopBossBody(coopBossUnit,x,y),
+      target: (x,y,r=0) => coopBossDirectTargetAt(coopBossUnit,x,y,r),
+      shootAt: (x,y) => {
+        fireProjectile('p1',{x:x-3,y},180,0,{radius:5,damageMul:1,windMul:0,gravityMul:0});
+        awaitingResolve=true;
+      },
+      setRound: (round) => { coopBossUnit.bossState.round=round; },
+      launchBoss: () => {
+        coopSalvoState=null;
+        activeIndex=turnOrder.indexOf('boss1'); awaitingResolve=false;
+        cpuAutoTurn();
+        return projectiles.map(p=>({x:p.x,y:p.y,vx:p.vx,vy:p.vy,damageMul:p.damageMul,stormLightning:p.stormLightning,owner:p.owner}));
+      },
+      profile: () => coopBossLiveApi().liveAttackProfile(ensureCoopBossLiveState(coopBossUnit)),
+      phase2: () => activateCoopBossPhase2(),
+      end: () => endTurn(),
+      idle: () => !cutIn && !awaitingResolve && projectiles.length===0,
+      result: () => ({matchOver,gamePhase}),
+    },
     motionTest: {
       enable(value) {
         // Test-only registered clip paths; production legacy characters may have no motions.

@@ -18,6 +18,8 @@ npm run test:stage
 npm run test:battle-item-assets
 npm run test:weekday-dungeon
 npm run test:e2e:weekday-dungeon
+npm run test:storm-boss
+npm run test:e2e:storm-boss
 ```
 
 引数は「席」= この端末がどのユニットを操作するか。`p1` が通常のCPU戦、
@@ -27,6 +29,10 @@ npm run test:e2e:weekday-dungeon
 | ファイル | 中身 |
 |---|---|
 | `seatharness.js` | スタブとフックの土台。`globalThis.__kt` にゲーム内部を露出する |
+| `storm-boss.test.js` | 第2ボスの部位・心核・3手周期・覚醒・地形・状態拒否・素材登録を確認する |
+| `storm-boss-runtime.test.js` | 実協力戦でソロ入口・snapshot・部位命中・蓄雷/落雷の解決・勝敗・第1ボス復帰を確認する |
+| `storm-boss-transport.test.js` | Firebaseの大文字→小文字キー境界で、次の通信を取りこぼさないことを実transportで確認する |
+| `storm-boss-browser.cjs` | Chromiumで選択・実FIRE・再戦・ロビー・部屋設定を確認。HTTPサーバー4174が必要（STORM_BASE_URLで変更可） |
 | `seattest.js` | Stage 2a「視点の切り離し」。入力・HUD・弾のowner・勝敗が席側を向いているか(18項目) |
 | `regressiontest.js` | CPU戦の完走・中断再開のラウンドトリップ・フリーモード(20項目) |
 | `resulttest.js` | 結果画面の「タイトルへ戻る」。勝利時だけ中断セーブして連勝を守る(26項目) |

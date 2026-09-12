@@ -68,6 +68,23 @@ async function main() {
   await expect('unauthenticated registered room creation',request('registeredCoopRooms/HJKLMNPQ','PUT',coop),false);
   await expect('valid coop2 creation with registered humans and AI',request(`registeredCoopRooms/${coopId}`,'PUT',coop,host.idToken),true);
   await expect('valid coop guest claim',request(`registeredCoopRooms/${coopId}/slots/e1`,'PUT',{...coopSlot,uid:guest.localId,name:'guest'},guest.idToken),true);
+  // Both entry protocols preserve old rooms and restrict boss selection to the host in lobby.
+  for (const registered of [false, true]) {
+    const prefix=registered?'registeredCoop':'coop', id=registered?'STURMABC':'STURMBCD';
+    const fixture=structuredClone(coop);
+    if (!registered) { fixture.protocol=1; delete fixture.registryRevision; delete fixture.slots.p1.definitionHash; }
+    await expect(`${prefix} legacy boss omission`,request(`${prefix}Rooms/${id}`,'PUT',fixture,host.idToken),true);
+    await expect(`${prefix} select second boss`,request(`${prefix}Rooms/${id}/settings/bossId`,'PUT','storm-dragon-02',host.idToken),true);
+    await expect(`${prefix} invalid boss rejected`,request(`${prefix}Rooms/${id}/settings/bossId`,'PUT','forged-boss',host.idToken),false);
+    await expect(`${prefix} guest cannot change boss`,request(`${prefix}Rooms/${id}/settings/bossId`,'PUT','siege-fortress-01',guest.idToken),false);
+    const listing={hostUid:host.localId,hostName:'host',roomName:'storm QA',playerCount:1,difficulty:'normal',aiFill:true,createdAt:now,expiresAt:now+600000};
+    await expect(`${prefix} old listing omission`,request(`${prefix}Open/${id}`,'PUT',listing,host.idToken),true);
+    await expect(`${prefix} second boss listing`,request(`${prefix}Open/${id}`,'PUT',{...listing,bossId:'storm-dragon-02'},host.idToken),true);
+    await expect(`${prefix} invalid listing boss rejected`,request(`${prefix}Open/${id}`,'PUT',{...listing,bossId:'forged-boss'},host.idToken),false);
+    await expect(`${prefix} return to implicit first boss`,request(`${prefix}Rooms/${id}/settings/bossId`,'DELETE',undefined,host.idToken),true);
+    await expect(`${prefix} lock room on launch`,request(`${prefix}Rooms/${id}/phase`,'PUT','launching',host.idToken),true);
+    await expect(`${prefix} launched boss cannot change`,request(`${prefix}Rooms/${id}/settings/bossId`,'PUT','storm-dragon-02',host.idToken),false);
+  }
   for(const [name,path,method,body,identity] of [
     ['coop revision delete','registryRevision','DELETE',undefined,host.idToken],
     ['coop protocol downgrade','protocol','PUT',1,host.idToken],
