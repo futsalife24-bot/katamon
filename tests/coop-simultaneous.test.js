@@ -17,13 +17,20 @@ check(state.projectiles.length===0,'no shot before all ready or deadline');
 check(kt().salvoTest.ready(),'human commits');
 check(!kt().salvoTest.ready(),'duplicate ready rejected');
 step(1);state=bridge.getNormalBattleState();
+check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'rally starts before projectiles');
+step(38);state=bridge.getNormalBattleState();
+check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'Ready holds shots');
+step(5);state=bridge.getNormalBattleState();
+check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'Fire holds shots until cue ends');
+step(16);state=bridge.getNormalBattleState();
 check(state.salvo.launchTicks.length===4&&state.salvo.launchTicks.every(n=>n===0),'all four fire on tick zero');
 for(let i=0;i<1800&&!bridge.getNormalBattleState().inputReady;i++)step();
 state=bridge.getNormalBattleState();
 check(state.inputReady&&state.turnCount>=5,'boss resolves then next shared round opens');
 start(); step(180);const prior=bridge.getNormalBattleState().turnCount;
 now+=31000;kt().salvoTest.menu(true);step(1);state=bridge.getNormalBattleState();
-check(state.salvo.phase==='resolving','menu does not pause common deadline');
+check(state.salvo.phase==='launch-cue','menu does not pause common deadline');
+step(60);state=bridge.getNormalBattleState();
 check(state.salvo.launchTicks.length===3,'timeout fires only ready allies');
 check(!kt().salvoTest.ready(),'late ready rejected');
 kt().salvoTest.menu(false);
@@ -44,12 +51,25 @@ for(const [kind,id] of [['coopItem','healing-kit'],['coopItem','debuff-grenade']
  start();kt().salvoTest.freezeAI();const u=kt().unitById('p1');u[kind]=id;u[kind+'UsesLeft']=1;
  check(!kt().salvoTest.ready(undefined,{[kind+'Id']:id,useSpecial:true}),'combined action rejected');
  check(kt().salvoTest.ready(undefined,{[kind+'Id']:id}),id+' can be committed');
- now+=31000;step(2);
+ now+=31000;step(62);
  check(u[kind+'UsesLeft']===0,id+' consumes exactly once on launch');
 }
-start();step(180);kt().unitById('boss1').hp=1;kt().salvoTest.ready();step(1);
+start();step(180);kt().unitById('boss1').hp=1;kt().salvoTest.ready();step(61);
 const rect=kt().stormTest.rect();kt().stormTest.shootAt(rect.x+rect.width*.42,rect.y+rect.height*.62);step(5);
 check(kt().unitById('boss1').hp===0&&!kt().stormTest.result().matchOver,'lethal hit waits for remaining simultaneous projectiles');
 step(900);
 check(kt().stormTest.result().matchOver&&bridge.getNormalBattleState().phase==='results','salvo victory reaches result once');
+// Follow a real mixed normal/special round frame by frame through every pre-launch phase.
+start();step(180);kt().fillCharges();
+check(kt().salvoTest.ready(undefined,{useSpecial:true}),'special action accepted');
+const phases=[];
+for(let i=0;i<360;i++){
+ step();const current=bridge.getNormalBattleState();
+ if(phases.at(-1)!==current.salvo?.phase) phases.push(current.salvo?.phase);
+ if(current.salvo?.phase==='resolving') break;
+ assert.equal(current.projectiles.length,0,'no projectile before special cut-in ends');
+ assert.equal(current.inputReady,false,'input locked throughout the special sequence');
+}
+check(phases.join(',')==='launch-cue,special-aura,special-cutin,resolving','Ready/Fire then aura then cut-in then launch: '+phases);
+check(bridge.getNormalBattleState().salvo.launchTicks.every(t=>t===0),'mixed special salvo still shares tick zero');
 console.log('Coop simultaneous solo:',checks,'passed');

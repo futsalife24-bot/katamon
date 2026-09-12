@@ -3363,7 +3363,11 @@ kt.startFreeMatch();
 const coopSpecialKeys = ['kyoryu', 'medama', 'iwa', 'tori'];
 const coopSpecialIds = ['p1', 'p2', 'e1', 'e2'];
 const armedCoopSpecials = kt.armCoopSpecialSalvoForTest(coopSpecialIds, coopSpecialKeys);
-check('4体の必殺を同じ一斉砲撃へ積むと、全員同時オーラの予兆から始まる',
+check('必殺オーラの前に0.95秒のReady→Fireが入り、弾もカットインも出ない',
+  armedCoopSpecials.cue.phase === 'launch-cue' && armedCoopSpecials.cue.duration === 0.95
+    && !armedCoopSpecials.cue.auraVisible && !armedCoopSpecials.cue.flashVisible
+    && armedCoopSpecials.cue.projectileCount === 0, JSON.stringify(armedCoopSpecials.cue));
+check('合図の後は4体全員の同時オーラから始まる',
   armedCoopSpecials.armed === true
     && armedCoopSpecials.phase === 'special-aura'
     && armedCoopSpecials.duration === 0.9

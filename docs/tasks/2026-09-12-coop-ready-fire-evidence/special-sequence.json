@@ -1,0 +1,96 @@
+[
+  {
+    "boss": "siege-fortress-01",
+    "sequence": [
+      {
+        "label": "Ready",
+        "aura": false,
+        "flash": false,
+        "shots": 0,
+        "time": 10960.699999988079
+      },
+      {
+        "label": "Fire",
+        "aura": false,
+        "flash": false,
+        "shots": 0,
+        "time": 11586.400000035763
+      },
+      {
+        "label": "special-aura",
+        "aura": true,
+        "flash": false,
+        "shots": 0,
+        "time": 11897.800000011921
+      },
+      {
+        "label": "special-cutin",
+        "aura": false,
+        "flash": true,
+        "shots": 0,
+        "time": 12819.600000023842
+      },
+      {
+        "label": "resolving",
+        "aura": false,
+        "flash": false,
+        "shots": 4,
+        "time": 15196.900000035763
+      }
+    ],
+    "launchTicks": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "errors": []
+  },
+  {
+    "boss": "storm-dragon-02",
+    "sequence": [
+      {
+        "label": "Ready",
+        "aura": false,
+        "flash": false,
+        "shots": 0,
+        "time": 9846.900000035763
+      },
+      {
+        "label": "Fire",
+        "aura": false,
+        "flash": false,
+        "shots": 0,
+        "time": 10475.5
+      },
+      {
+        "label": "special-aura",
+        "aura": true,
+        "flash": false,
+        "shots": 0,
+        "time": 10783.800000011921
+      },
+      {
+        "label": "special-cutin",
+        "aura": false,
+        "flash": true,
+        "shots": 0,
+        "time": 11673.900000035763
+      },
+      {
+        "label": "resolving",
+        "aura": false,
+        "flash": false,
+        "shots": 4,
+        "time": 14064.5
+      }
+    ],
+    "launchTicks": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "errors": []
+  }
+]

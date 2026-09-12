@@ -77,3 +77,5 @@ npm run test:e2e:storm-boss
 - `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。
 - `tests/coop-simultaneous-browser.cjs`: Playwright Chromiumで390×844の操作・READY表示・一斉発射・期限を確認する。HTTPサーバーを起動し、必要なら `COOP_BASE_URL` で指定する（既定4181、`npm run serve`は4173）。テストフックは配信レスポンスだけに注入する。
 - Firebase本番回線・物理スマホの複数人検証は別工程。Node中継は実ネットワークの検証ではない。
+
+- `tests/coop-ready-fire-browser.cjs`: 両ボスで実ドラッグによる必殺のReady→Fire→オーラ→カットイン→同tick発射を実時間で確認。`COOP_BASE_URL`（既定4186）でHTTPサーバーを指定。`COOP_PUBLISHED=1`では公開レスポンスを取得して観測用フックだけ注入する。
