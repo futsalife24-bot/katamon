@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.177-storm-boss';
+const CACHE_VERSION = 'katamon-pwa-v2.0.178-font-repair';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -65,7 +65,7 @@ const APP_SHELL = [
   './shared/gear-online-battle-damage.js',
   './shared/gear-online-battle-rng.js',
   './shared/gear-online-battle-runtime-state.js',
-  './assets/fonts/katamon-fonts.css'
+  './assets/fonts/katamon-fonts-v178.css'
 ];
 // T1: title is interactive soon after the first tap. This queue deliberately
 // excludes battle HUD and bonus media so it cannot compete with first paint.
@@ -95,6 +95,8 @@ const TIER2_ASSETS = [
   './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
   './assets/gear/ui/runtime/gear_lab_control_frame_01.png',
   './assets/fonts/rocknroll-one-regular.ttf',
+  './assets/fonts/katamon-fonts-v178.css',
+  './assets/fonts/reggae-one-display-v178.woff2',
   './assets/favicon-32.png',
   './assets/apple-touch-icon.png',
   './assets/icon-192.png',
