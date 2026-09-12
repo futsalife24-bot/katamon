@@ -17,6 +17,13 @@
   const COOP_ITEM_IDS = new Set(['rescue-kit', 'healing-kit', 'debuff-grenade']);
   const SUBWEAPON_IDS = new Set(['barrier', 'impact', 'drill']);
   const DIFFICULTY_IDS = new Set(['normal', 'hard', 'extreme']);
+  const BOSS_TARGETS = Object.freeze({
+    'siege-fortress-01': { name: '超大型要塞戦車', image: 'assets/bosses/runtime/fortress-tank.webp', stage: '鋼鉄要塞',
+      description: '砲台・装甲を破壊してCOREを開く、地上の重装要塞。' },
+    'storm-dragon-02': { name: '雷晶龍ヴォルテリス', image: 'assets/bosses/runtime/volteris.webp', stage: '雷雲の祭壇',
+      description: '雷角・両翼晶・尾晶を狙う空中戦。三連弾 → 蓄雷 → 落雷。蓄雷後は心核を狙い、雷柱を避けよう。' },
+  });
+  const bossTarget = id => BOSS_TARGETS[id] || BOSS_TARGETS['siege-fortress-01'];
   let browserOpenHandler = null;
 
   function normalizeRoomCode(value) {
@@ -120,6 +127,7 @@
       && typeof value.roomName === 'string' && value.roomName.length > 0
       && Number.isInteger(value.playerCount) && value.playerCount >= 1 && value.playerCount <= 4
       && DIFFICULTY_IDS.has(value.difficulty)
+      && (value.bossId == null || Object.hasOwn(BOSS_TARGETS, value.bossId))
       && Number.isFinite(value.expiresAt) && value.expiresAt > now;
   }
 
@@ -173,8 +181,11 @@
       <main class="coop-body">
         <section id="coopRecovery" class="coop-card" hidden><p id="coopRecoveryText">未処理の協力ボスGear報酬があります</p><button id="coopRecoveryRetry" class="coop-button coop-primary" type="button">報酬保存を再試行</button></section>
         <section id="coopEntry" class="coop-entry">
-          <p class="coop-kicker">巨大要塞 共同討伐作戦</p>
-          <div class="coop-boss-card"><img src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span>FIRST TARGET</span><strong>超大型要塞戦車</strong><small>右側固定型・4人共同討伐</small></div></div>
+          <p class="coop-kicker">大型ボス 共同討伐作戦</p>
+          <select id="coopBossTarget" class="coop-button" aria-label="討伐ボス"><option value="siege-fortress-01">第1ボス：超大型要塞戦車</option><option value="storm-dragon-02">第2ボス：雷晶龍ヴォルテリス</option></select>
+          <div class="coop-boss-card"><img id="coopBossPreview" src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span id="coopBossStage">鋼鉄要塞</span><strong id="coopBossName">超大型要塞戦車</strong><small>4人共同討伐・ソロ＋CPU3体対応</small></div></div>
+          <p id="coopBossGuide" class="coop-note">砲台・装甲を破壊してCOREを開く、地上の重装要塞。</p>
+          <div class="coop-card coop-grid"><select id="coopSoloCharacter" class="wide" aria-label="ソロのモンスター"></select><button id="coopSoloStart" class="coop-button coop-primary wide" type="button">ソロ出撃（あなた＋CPU3体）</button><small class="wide">部屋作成なしで挑戦。難易度は下の設定を使用します。</small></div>
           <div class="coop-card"><div class="coop-grid">
             <input id="coopRoomName" class="wide" maxlength="24" autocomplete="off" value="巨大要塞へ挑戦" aria-label="部屋名">
             <select id="coopDifficulty" aria-label="難易度"></select>
@@ -189,7 +200,8 @@
         </section>
         <section id="coopRoom" class="coop-room" hidden>
           <p class="coop-kicker">作戦準備室　<span id="coopCode" class="coop-code"></span></p>
-          <div id="coopHostSettings" class="coop-card coop-grid"><select id="coopRoomDifficulty" aria-label="難易度"></select><select id="coopRoomAiFill" aria-label="AI補充"><option value="on">AI補充 ON</option><option value="off">AI補充 OFF</option></select></div>
+          <p id="coopRoomTarget" class="coop-note"></p>
+          <div id="coopHostSettings" class="coop-card coop-grid"><select id="coopRoomBossTarget" class="wide" aria-label="討伐ボス"><option value="siege-fortress-01">超大型要塞戦車 ／ 鋼鉄要塞</option><option value="storm-dragon-02">雷晶龍ヴォルテリス ／ 雷雲の祭壇</option></select><select id="coopRoomDifficulty" aria-label="難易度"></select><select id="coopRoomAiFill" aria-label="AI補充"><option value="on">AI補充 ON</option><option value="off">AI補充 OFF</option></select></div>
           <div id="coopAiRoster" class="coop-card coop-ai-roster" hidden><strong>味方AIのモンスター</strong><label><span>AI P2</span><select id="coopAiCharacterE1" aria-label="AI P2のモンスター"></select></label><label><span>AI P3</span><select id="coopAiCharacterS1" aria-label="AI P3のモンスター"></select></label><label><span>AI P4</span><select id="coopAiCharacterS2" aria-label="AI P4のモンスター"></select></label><small>参加者が入った席は、その人が選んだモンスターを優先します。</small></div>
           <div class="coop-card"><div id="coopSeats" class="coop-seats"></div></div>
           <div class="coop-card coop-grid"><select id="coopCharacter" class="wide" aria-label="モンスター"></select><select id="coopSubweapon" aria-label="サブウェポン"></select><select id="coopItem" aria-label="CO-OP ITEM"></select></div>
@@ -205,6 +217,7 @@
     const entryEl = element('coopEntry'); const recoveryEl = element('coopRecovery'); const recoveryTextEl = element('coopRecoveryText'); const recoveryRetryEl = element('coopRecoveryRetry'); const roomEl = element('coopRoom'); const footerEl = element('coopFooter');
     const statusEl = element('coopStatus'); const roomListEl = element('coopRoomList'); const seatsEl = element('coopSeats');
     const difficultyEl = element('coopDifficulty'); const roomDifficultyEl = element('coopRoomDifficulty');
+    const bossEl = element('coopBossTarget'); const roomBossEl = element('coopRoomBossTarget');
     const aiFillEl = element('coopAiFill'); const roomAiFillEl = element('coopRoomAiFill');
     const characterEl = element('coopCharacter'); const subweaponEl = element('coopSubweapon'); const itemEl = element('coopItem');
     const aiRosterEl = element('coopAiRoster');
@@ -221,6 +234,7 @@
       }
     });
     characters.forEach((value) => {
+      option(element('coopSoloCharacter'), value.id, value.name);
       option(characterEl, value.id, value.name);
       GUEST_SEATS.forEach((seat) => option(aiCharacterEls[seat], value.id, value.name));
     });
@@ -275,6 +289,7 @@
 
     function settingsFromEntry() {
       return {
+        ...(bossEl.value === 'storm-dragon-02' ? { bossId: bossEl.value } : {}),
         difficulty: difficultyEl.value || 'normal',
         aiFill: aiFillEl.value !== 'off',
         aiCharacters: normalizeAiCharacters(null, characterIds, { p1: { character: characterEl.value } }),
@@ -297,6 +312,7 @@
           hostUid: session.auth.uid, hostName: cleanText(bridge.getPlayerName(), 12, 'ななし'),
           roomName: cleanText(session.roomName, 24, '巨大要塞へ挑戦'), playerCount: occupied,
           difficulty: session.room.settings.difficulty, aiFill: session.room.settings.aiFill,
+          ...(session.room.settings.bossId ? { bossId: session.room.settings.bossId } : {}),
           createdAt: session.listCreatedAt || now, expiresAt: now + ROOM_TTL_MS,
         }),
       });
@@ -337,13 +353,16 @@
       element('coopReady').textContent = mySlot?.ready ? '準備を取り消す' : '準備完了';
       const startable = session?.role === 'host' && canHostStart(session.room.slots, session.room.settings);
       const start = element('coopStart'); start.disabled = !startable || busy;
-      start.textContent = startable ? '超大型要塞へ出撃' : '全員の準備を待っています';
+      start.textContent = startable ? `${bossTarget(session.room.settings?.bossId).name}へ出撃` : '全員の準備を待っています';
     }
 
     function renderRoom() {
       if (!session) return;
       entryEl.hidden = true; roomEl.hidden = false; footerEl.hidden = false;
       element('coopCode').textContent = session.code;
+      roomBossEl.value = session.room.settings?.bossId || 'siege-fortress-01';
+      const target = bossTarget(roomBossEl.value);
+      element('coopRoomTarget').textContent = `${target.name} ／ ${target.stage} — ${target.description}`;
       roomDifficultyEl.value = session.room.settings?.difficulty || 'normal';
       roomAiFillEl.value = session.room.settings?.aiFill === false ? 'off' : 'on';
       element('coopHostSettings').hidden = session.role !== 'host';
@@ -510,7 +529,7 @@
         rows.forEach(([code, value]) => {
           const row = document.createElement('div'); row.className = 'coop-list-row';
           const title = document.createElement('strong'); title.textContent = cleanText(value.roomName, 24, '巨大要塞へ挑戦');
-          const detail = document.createElement('small'); detail.textContent = `超大型要塞戦車 ／ ${cleanText(value.hostName, 12, 'ななし')} ／ ${String(value.difficulty).toUpperCase()} ／ ${value.playerCount}/4人 ／ AI ${value.aiFill ? 'ON' : 'OFF'}`;
+          const detail = document.createElement('small'); detail.textContent = `${bossTarget(value.bossId).name} ／ ${cleanText(value.hostName, 12, 'ななし')} ／ ${String(value.difficulty).toUpperCase()} ／ ${value.playerCount}/4人 ／ AI ${value.aiFill ? 'ON' : 'OFF'}`;
           const join = document.createElement('button'); join.type = 'button'; join.textContent = '入る'; join.addEventListener('click', () => joinRoom(code));
           row.append(title, detail, join); roomListEl.appendChild(row);
         });
@@ -538,6 +557,7 @@
     async function updateHostSettings() {
       if (!session || session.role !== 'host' || busy) return;
       const next = {
+        ...(roomBossEl.value === 'storm-dragon-02' ? { bossId: roomBossEl.value } : {}),
         difficulty: roomDifficultyEl.value || 'normal',
         aiFill: roomAiFillEl.value !== 'off',
         aiCharacters: selectedAiCharacters(),
@@ -617,6 +637,17 @@
     };
     element('coopClose').addEventListener('click', closeOverlay);
     element('coopCreate').addEventListener('click', createRoom);
+    element('coopSoloStart').addEventListener('click', () => {
+      if (busy || battleActive || session) return;
+      const started = browserRoot.KatamonCoopBattle?.startSoloBrowser({
+        bridge, characters: battleCharacters, character: element('coopSoloCharacter').value,
+        playerName: bridge.getPlayerName(), bossId: bossEl.value, difficulty: difficultyEl.value,
+        onReturnLobby() { battleActive = false; overlay.classList.add('open'); bridge.syncBgm(); },
+        onExitTitle() { battleActive = false; bridge.syncBgm(); },
+      });
+      if (started) { battleActive = true; stopTimers(); overlay.classList.remove('open'); }
+      else setStatus('ソロ戦を開始できませんでした。画面を開き直してください。');
+    });
     element('coopJoin').addEventListener('click', () => joinRoom(element('coopJoinCode').value));
     element('coopRefresh').addEventListener('click', refreshListings);
     recoveryRetryEl.addEventListener('click', async () => {
@@ -639,6 +670,15 @@
       updateOwnSlot(applyEquipmentChange(current, selectedEquipment()));
     }));
     roomDifficultyEl.addEventListener('change', updateHostSettings); roomAiFillEl.addEventListener('change', updateHostSettings);
+    roomBossEl.addEventListener('change', updateHostSettings);
+    bossEl.addEventListener('change', () => {
+      const target = bossTarget(bossEl.value);
+      element('coopBossPreview').src = target.image;
+      element('coopBossName').textContent = target.name;
+      element('coopBossStage').textContent = target.stage;
+      element('coopBossGuide').textContent = target.description;
+      element('coopRoomName').value = `${target.name}へ挑戦`;
+    });
     GUEST_SEATS.forEach((seat) => aiCharacterEls[seat].addEventListener('change', updateHostSettings));
     element('coopJoinCode').addEventListener('input', (event) => { event.target.value = normalizeRoomCode(event.target.value); });
 

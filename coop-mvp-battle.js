@@ -1,13 +1,13 @@
 (function attachCoopBattle(root, factory) {
   const deps = typeof module === 'object' && module.exports ? {
-    boss: require('./coop-mvp-boss.js'), ai: require('./coop-mvp-boss-ai.js'),
+    boss: require('./coop-mvp-boss.js'), stormBoss: require('./coop-storm-boss.js'), ai: require('./coop-mvp-boss-ai.js'),
     engine: require('./coop-mvp-engine.js'), survival: require('./coop-mvp-survival.js'),
     items: require('./coop-mvp-items.js'), subweapons: require('./subweapon-mvp.js'),
     rewards: require('./coop-mvp-rewards.js'), session: require('./coop-mvp-session.js'),
     gearRewards: require('./shared/gear-rewards.js'), gearStorage: require('./shared/gear-storage.js'),
     coopSettlement: require('./shared/gear-coop-settlement-storage.js'), coopRecovery: require('./shared/gear-coop-recovery.js'),
   } : {
-    boss: root?.KatamonCoopBoss, ai: root?.KatamonCoopBossAi, engine: root?.KatamonCoopEngine,
+    boss: root?.KatamonCoopBoss, stormBoss: root?.KatamonStormBoss, ai: root?.KatamonCoopBossAi, engine: root?.KatamonCoopEngine,
     survival: root?.KatamonCoopSurvival, items: root?.KatamonCoopItems,
     subweapons: root?.KatamonSubweapons, rewards: root?.KatamonCoopRewards,
     session: root?.KatamonCoopSession, gearRewards: root?.KatamonGearRewards, gearStorage: root?.KatamonGearStorage,
@@ -1174,10 +1174,13 @@
   }
 
   function normalSnapshotLooksSafe(snapshot, roster, config, requireTerrain) {
-    // Registered protocol 2 binds the actual large-arena runtime contract (index.html:
-    // applyStageSize -> DEAD_LINE_Y/TERRAIN_BOTTOM_Y = 924). Keep protocol 1's
-    // validator unchanged; never accept a geometry limit declared by a packet.
-    const terrainBottom = config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
+    const bossId = config?.bossId || config?.session?.room?.settings?.bossId || deps.boss.BOSS_ID;
+    if (![deps.boss.BOSS_ID, deps.stormBoss?.BOSS_ID].includes(bossId)) return false;
+    const bossApi = bossId === deps.stormBoss?.BOSS_ID ? deps.stormBoss : deps.boss;
+    // The storm arena and registered protocol 2 use the actual large-arena bottom
+    // (index.html: applyStageSize -> TERRAIN_BOTTOM_Y = 924). Preserve the legacy
+    // fortress contract; never accept a geometry limit declared by a packet.
+    const terrainBottom = bossId === deps.stormBoss?.BOSS_ID || config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
     if (!snapshot || snapshot.battleMode !== 'coop' || snapshot.matchFormat !== 'coop4v1') return false;
     if (Number(snapshot.stageW) !== WORLD_WIDTH || Number(snapshot.stageH) !== WORLD_HEIGHT) return false;
     if (!Array.isArray(snapshot.craters) || snapshot.craters.length !== 0) return false;
@@ -1191,7 +1194,7 @@
     const ids = snapshot.units.map(unit => unit?.id).join(',');
     if (ids !== NORMAL_TURN_ORDER.join(',')) return false;
     if (requireTerrain) {
-      if (snapshot.pattern !== 'coopSteel' || snapshot.terrainMaterial !== 'terrain') return false;
+      if (snapshot.pattern !== (bossId === deps.stormBoss?.BOSS_ID ? 'stormAltar' : 'coopSteel') || snapshot.terrainMaterial !== 'terrain') return false;
       if (!Array.isArray(snapshot.segments) || snapshot.segments.length !== TERRAIN_COLUMNS
         || !snapshot.segments.every(column => Array.isArray(column) && column.length >= 1 && column.length <= 4
           && column.every(segment => Array.isArray(segment) && segment.length === 2
@@ -1236,13 +1239,13 @@
       if (!Number.isFinite(Number(unit.specialCharge)) || Number(unit.specialCharge) < 0 || Number(unit.specialCharge) > 100) return false;
       if (unit.id === 'boss1') {
         const liveStateOptions = { bodyMaxHp: maxHp, difficulty: config?.difficulty || 'normal' };
-        const liveStateSafe = deps.boss?.liveStateLooksSafe?.(unit.bossState, liveStateOptions) === true;
+        const liveStateSafe = bossApi?.liveStateLooksSafe?.(unit.bossState, liveStateOptions) === true;
         return unit.team === 'cpu' && unit.character == null && maxHp === Number(config?.bossMaxHp)
           && Number(unit.fuel) === 0 && Number(unit.fuelMax) === 0
           && unit.coopReviveGuard === false && Number(unit.coopRevivedBossRound) === 0
           && (unit.phase === 1 || unit.phase === 2)
           && liveStateSafe && unit.phase === unit.bossState.phase
-          && (!requireTerrain || deps.boss?.liveStateIsInitial?.(unit.bossState, liveStateOptions) === true)
+          && (!requireTerrain || bossApi?.liveStateIsInitial?.(unit.bossState, liveStateOptions) === true)
           && Number.isInteger(Number(unit.vulnerabilityTurns)) && Number(unit.vulnerabilityTurns) >= 0 && Number(unit.vulnerabilityTurns) <= 5;
       }
       const entry = roster?.[seatByUnit[unit.id]];
@@ -1639,6 +1642,32 @@
     return true;
   }
 
+  function startSoloBrowser(config) {
+    if (!config?.bridge?.startNormalBattle || !Array.isArray(config.characters)) return false;
+    const bossId = config.bossId || deps.boss.BOSS_ID;
+    if (![deps.boss.BOSS_ID, deps.stormBoss?.BOSS_ID].includes(bossId)) return false;
+    const difficulty = ['normal', 'hard', 'extreme'].includes(config.difficulty) ? config.difficulty : 'normal';
+    const own = config.characters.find(entry => entry.id === config.character);
+    if (!own) return false;
+    const slots = { p1: { uid: 'local-solo', name: config.playerName || own.name,
+      character: own.id, coopItem: 'rescue-kit', ready: true } };
+    const roster = activeRoster(slots, true, config.characters);
+    const transport = createSoloNormalBattleTransport();
+    const roundId = makeRoundId(1, root.crypto.getRandomValues(new Uint8Array(20)));
+    const session = { role: 'host', seat: 'p1', code: 'LOCAL', auth: { uid: 'local-solo' },
+      room: { slots, settings: { bossId, difficulty, aiFill: true }, round: { id: roundId } } };
+    if (browserController) browserController.stop?.();
+    browserController = config.bridge.startNormalBattle({ session, roster, bossId, difficulty,
+      bossMaxHp: Math.round(BASE_BODY_HP[difficulty] * playerCountRatio(1, 3)),
+      wind: windForRound(roundId, 'current'), nextWind: windForRound(roundId, 'next'), transport,
+      onResult: () => true,
+      onReturnLobby() { browserController = null; config.onReturnLobby?.(); },
+      onExitTitle() { browserController = null; config.onExitTitle?.(); },
+    });
+    if (!browserController) { transport.close(); return false; }
+    return true;
+  }
+
   function startBrowser(config) {
     if (!root?.document || !config?.bridge?.startNormalBattle || !config?.session) return false;
     const room = config.session.room || {};
@@ -1658,15 +1687,18 @@
     const humans = Object.values(roster).filter(entry => !entry.ai).length;
     const aiPlayers = Object.values(roster).filter(entry => entry.ai).length;
     const difficulty = ['normal', 'hard', 'extreme'].includes(room.settings?.difficulty) ? room.settings.difficulty : 'normal';
+    const bossId = room.settings?.bossId || deps.boss.BOSS_ID;
+    if (![deps.boss.BOSS_ID, deps.stormBoss?.BOSS_ID].includes(bossId)) return false;
     const soloHost = config.session.role === 'host' && humans === 1;
     const bossMaxHp = Math.round(BASE_BODY_HP[difficulty] * playerCountRatio(humans, aiPlayers));
-    const transportConfig = { ...config, bossMaxHp, registeredProtocol:config.bridge.registration?.enabled ? 2 : null };
+    const transportConfig = { ...config, bossId, difficulty, bossMaxHp, registeredProtocol:config.bridge.registration?.enabled ? 2 : null };
     const transport = soloHost ? createSoloNormalBattleTransport() : createNormalBattleTransport(root, transportConfig, roster);
     if (!transport) return false;
     browserController = config.bridge.startNormalBattle({
       session: config.session,
       roster,
       difficulty,
+      bossId,
       bossMaxHp,
       wind: room.round?.wind,
       nextWind: room.round?.nextWind,
@@ -1703,6 +1735,7 @@
   }
 
   return Object.freeze({
+    startSoloBrowser,
     AI_PLAYER_WEIGHT,
     WORLD_WIDTH,
     WORLD_HEIGHT,

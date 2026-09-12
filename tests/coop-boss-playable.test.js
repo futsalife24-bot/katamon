@@ -465,9 +465,9 @@ check('部位破壊はボス攻撃性能へ反映し、Phase 2は変形手番・
     && /return 'coopPhase2'/.test(index)
     && /coopPhase2: '要塞決戦・第二形態'/.test(index));
 check('開始・途中stateは部位HPとCOREを検証し、外側phaseだけの改変を拒否',
-  /deps\.boss\?\.liveStateLooksSafe/.test(source)
+  /bossApi\?\.liveStateLooksSafe/.test(source)
     && /unit\.phase === unit\.bossState\.phase/.test(source)
-    && /deps\.boss\?\.liveStateIsInitial/.test(source)
+    && /bossApi\?\.liveStateIsInitial/.test(source)
     && /u\.phase = u\.bossState\?\.phase === 2 \? 2 : 1;/.test(index));
 check('通常弾とボス弾は同じ実弾physicsを通り、発射時に直接HPを減らさない',
   /fireProjectile\(unit\.id/.test(bossShotBlock)
@@ -489,7 +489,8 @@ check('専用地形は大型鋼鉄地面と初期台座3つを守り、高所を
   /const COOP_PLATFORM_LAYOUT = Object\.freeze\(\[/.test(index)
     && (index.match(/Object\.freeze\(\{ start: 0\./g) || []).length === 7
     && /setStageDimensions\(2160, 960\)/.test(coopResetBlock)
-    && /for \(const platform of COOP_PLATFORM_LAYOUT\)/.test(index)
+    && /platforms = storm \? globalThis.KatamonStormBoss.PLATFORM_LAYOUT : COOP_PLATFORM_LAYOUT/.test(index)
+    && /for \(const platform of platforms\)/.test(index)
     && /addFloatingIsland\([\s\S]{0,300}'mesa'/.test(index)
     && (index.match(/spawnSteel: true/g) || []).length === 3
     && (index.match(/spawnSteel: false/g) || []).length === 4
@@ -497,7 +498,7 @@ check('専用地形は大型鋼鉄地面と初期台座3つを守り、高所を
     && /top: 0\.19/.test(index)
     && /if \(!platform\.spawnSteel\) continue/.test(index)
     && /currentTerrainMaterial = 'terrain'/.test(index)
-    && /function loadCoopBossTerrain\(\)[\s\S]{0,2400}craterHistory = \[\]/.test(index));
+    && /function loadCoopBossTerrain\(\)[\s\S]{0,2800}craterHistory = \[\]/.test(index));
 check('ライブ要塞は大型化し、固定判定を動かさない外装待機モーションを持つ',
   /const COOP_BOSS_WIDTH = 560;/.test(index)
     && /const COOP_BOSS_HEIGHT = 372;/.test(index)
@@ -602,7 +603,7 @@ check('戦闘メニューのタイトル退出はロビー再表示と分離し�
     && /coopRooms\/\$\{session\.code\}[^\n]+method: 'DELETE'/.test(source)
     && /onExitTitle\(\)/.test(roomSource));
 check('照準線は白・緑・紫・赤・橙を区別', ['#ffffff', '#65e092', '#a873ff', '#ff5d4f', '#f29a38'].every((color) => index.includes(color)));
-check('ホスト開始ボタンが実戦を起動', /start\.disabled = !startable/.test(roomSource) && /超大型要塞へ出撃/.test(roomSource) && /startBattle/.test(roomSource));
+check('ホスト開始ボタンが選択したボスの実戦を起動', /start\.disabled = !startable/.test(roomSource) && /bossTarget\(session.room.settings\?\.bossId\).name/.test(roomSource) && /startBattle/.test(roomSource));
 check('通常ONLINEと別のcoopRoomsだけを使用', source.includes('coopRooms/${roomSession.code}') && !source.includes('rooms/${roomSession.code}'));
 check('再戦非希望のゲスト席だけ受付後にホスト解放可能', rules.rules.coopRooms.$room.slots.$seat['.write'].includes("phase').val() === 'results'") && rules.rules.coopRooms.$room.slots.$seat['.write'].includes("child('ready').val() !== true"));
 check('ホスト90秒無応答時だけ着席ゲストが無報酬ロビー中断可能', rules.rules.coopRooms.$room.phase['.write'].includes("newData.val() === 'lobby'") && rules.rules.coopRooms.$room.phase['.write'].includes("child('p1').child('seenAt').val() < now - 90000") && rules.rules.coopRooms.$room.phase['.write'].includes("child('e1').child('uid').val() === auth.uid"));

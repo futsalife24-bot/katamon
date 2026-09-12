@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.176-content-studio-registration';
+const CACHE_VERSION = 'katamon-pwa-v2.0.177-storm-boss';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -22,6 +22,7 @@ const APP_SHELL = [
   './manifest.webmanifest',
   './coop-mvp-foundation.js',
   './coop-mvp-boss.js',
+  './coop-storm-boss.js',
   './coop-mvp-boss-ai.js',
   './coop-mvp-engine.js',
   './coop-mvp-survival.js',
@@ -89,6 +90,8 @@ const TIER2_ASSETS = [
   './assets/effects/hamulton-cream-cloud-frames.png',
   './assets/bosses/runtime/fortress-tank.webp',
   './assets/bosses/runtime/fortress-tank-phase2.webp',
+  './assets/bosses/runtime/volteris.webp',
+  './assets/stages/runtime/thunder-altar.webp',
   './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',
   './assets/gear/ui/runtime/gear_lab_control_frame_01.png',
   './assets/fonts/rocknroll-one-regular.ttf',

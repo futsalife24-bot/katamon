@@ -977,12 +977,13 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.176-content-studio-registration';
+  const BUILD_ID = 'v2.0.177-storm-boss';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint, so retain the existing fallback until T2 idle.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
     { version: 'v2.0.176', date: '2026/09/06', summary: '登録revisionへ固定するONLINE・協力戦の専用入口を追加' },
     { version: 'v2.0.175', date: '2026/09/05', summary: '登録済み5モーションの戦闘表示と安全な遅延読込を追加' },
     { version: 'v2.0.174', date: '2026/09/05', summary: '曜日迷宮を既存BATTLEの一日一射・雲下6部位狙撃へ刷新' },
@@ -1226,6 +1227,7 @@
     return Math.min(MAX_CAMERA_ZOOM, Math.max(MIN_CAMERA_ZOOM, zoom));
   }
   function cameraViewportTop() {
+    if (isStormBossBattle()) return tacticalHudBottom() + 24;
     return usesFourCardHud() ? CAMERA_VIEW_TOP_2V2 : CAMERA_VIEW_TOP_1V1;
   }
   function cameraViewportHeight() {
@@ -1261,6 +1263,10 @@
     return clampCameraY(worldY - visibleWorldHeight() / 2);
   }
   function focusCameraOn(worldX, immediate = false, worldY = null) {
+    if (isStormBossBattle() && Math.abs(worldX - coopBossUnit.x) < 1 && Math.abs(worldY - coopBossUnit.y) < 1) {
+      const rect = coopBossRect(coopBossUnit);
+      worldY = rect.y + rect.height / 2;
+    }
     const target = centerCameraOn(worldX);
     const targetY = Number.isFinite(worldY) ? centerCameraYOn(worldY) : clampCameraY(STAGE_H - visibleWorldHeight());
     if (immediate) {
@@ -2522,6 +2528,10 @@
     stageBackgroundImages[key] = image;
   }
   function getReadyStageBackground() {
+    if (isStormBossBattle()) {
+      ensureCoopBossImages();
+      return stormStageImage.complete && stormStageImage.naturalWidth > 0 ? stormStageImage : null;
+    }
     if (currentCustomAppearance
         && (currentCustomAppearance.background.mode !== 'theme'
           || currentCustomAppearance.decorationsEnabled === false)) return null;
@@ -3671,18 +3681,20 @@
   // 初期配置に使う台座だけを鋼鉄、移動用の足場を破壊可能にする。
   function loadCoopBossTerrain() {
     parallaxSeed = 4242;
-    applyStageAppearance('volcanic', {
+    const storm = isStormBossBattle();
+    const platforms = storm ? globalThis.KatamonStormBoss.PLATFORM_LAYOUT : COOP_PLATFORM_LAYOUT;
+    applyStageAppearance(storm ? 'snow' : 'volcanic', {
       terrainMaterial: 'terrain',
       terrainMaterialSegments: [],
-      terrainColor: '#3e3430',
+      terrainColor: storm ? '#363956' : '#3e3430',
       decorationsEnabled: false,
-      background: { mode: 'theme', theme: 'volcanic' },
+      background: { mode: 'theme', theme: storm ? 'snow' : 'volcanic' },
     });
-    currentPattern = 'coopSteel';
+    currentPattern = storm ? 'stormAltar' : 'coopSteel';
     currentBridge = null;
     rebuildArenaObstacles();
     currentSegments = Array.from({ length: TERRAIN_COLS }, () => [[coopBossGroundY(), TERRAIN_BOTTOM_Y]]);
-    for (const platform of COOP_PLATFORM_LAYOUT) {
+    for (const platform of platforms) {
       const start = Math.round(TERRAIN_COLS * platform.start);
       const length = Math.max(1, Math.round(TERRAIN_COLS * (platform.end - platform.start)));
       addFloatingIsland(
@@ -3698,7 +3710,7 @@
     currentTerrainMaterial = 'terrain';
     currentTerrainMaterialSegments = currentSegments.map((column, columnIndex) => {
       const materials = [[coopBossGroundY(), TERRAIN_BOTTOM_Y, 'steel']];
-      for (const platform of COOP_PLATFORM_LAYOUT) {
+      for (const platform of platforms) {
         if (!platform.spawnSteel) continue;
         const start = Math.round(TERRAIN_COLS * platform.start);
         const end = start + Math.max(1, Math.round(TERRAIN_COLS * (platform.end - platform.start)));
@@ -4522,10 +4534,21 @@
     Object.freeze({ type: 'circle', x: 0.83, y: 0.31, radius: 0.15, partId: 'missilePod' }),
   ]);
   const coopBossImages = { phase1: new Image(), phase2: new Image() };
+  const stormBossImage = new Image();
+  const stormStageImage = new Image();
+  const stormBossImages = { phase1: stormBossImage, phase2: stormBossImage };
+  function isStormBossBattle() { return coopNormalSession?.bossId === 'storm-dragon-02'; }
   coopBossImages.phase1.decoding = 'async';
   coopBossImages.phase2.decoding = 'async';
   let coopBossImagesLoaded = false;
   function ensureCoopBossImages() {
+    if (isStormBossBattle()) {
+      if (!stormBossImage.src) {
+        stormBossImage.src = globalThis.KatamonStormBoss.BOSS_ASSET_PATH;
+        stormStageImage.src = globalThis.KatamonStormBoss.STAGE_ASSET_PATH;
+      }
+      return stormBossImages;
+    }
     if (coopBossImagesLoaded) return coopBossImages;
     coopBossImagesLoaded = true;
     coopBossImages.phase1.src = 'assets/bosses/runtime/fortress-tank.webp';
@@ -4535,6 +4558,7 @@
 
   function isCoopBossUnit(u) { return !!u && u.id === COOP_BOSS_UNIT_ID; }
   function coopBossRect(u) {
+    if (isStormBossBattle()) return { x: u.x - 320, y: u.y + UNIT_RADIUS - 170 - 640 / 1.5, width: 640, height: 640 / 1.5 };
     return {
       x: u.x - COOP_BOSS_WIDTH / 2,
       y: u.y + UNIT_RADIUS - COOP_BOSS_HEIGHT,
@@ -4563,7 +4587,7 @@
   }
   function distanceToCoopBossBody(u, x, y) {
     const rect = coopBossRect(u);
-    return COOP_BOSS_HIT_SHAPES.reduce(
+    return (isStormBossBattle() ? globalThis.KatamonStormBoss.LIVE_HIT_SHAPES : COOP_BOSS_HIT_SHAPES).reduce(
       (distance, shape) => Math.min(distance, distanceToCoopBossShape(rect, shape, x, y)),
       Infinity
     );
@@ -4607,7 +4631,7 @@
     }
     return distanceToCoopBossBody(u, p.x, p.y) <= p.radius;
   }
-  function coopBossLiveApi() { return globalThis.KatamonCoopBoss || null; }
+  function coopBossLiveApi() { return (isStormBossBattle() ? globalThis.KatamonStormBoss : globalThis.KatamonCoopBoss) || null; }
   function createCoopBossLiveState(bodyMaxHp, difficulty) {
     const api = coopBossLiveApi();
     return api?.createLiveState
@@ -6859,6 +6883,7 @@
       subweaponId: opts.subweaponId || null,
       coopItemId: opts.coopItemId || null,
       bossShot: !!opts.bossShot,
+      stormLightning: !!opts.stormLightning,
       // 曜日ダンジョンだけが着弾を報酬revealへ渡す。通常弾の衝突処理とは混ぜない。
       weekdayDungeonShot: !!opts.weekdayDungeonShot,
       normalImpactSound: !!opts.normalImpactSound,
@@ -11037,7 +11062,7 @@
       if (isCoopBossUnit(u)) {
         u.character = null;
         u.color = '#ff6254';
-        u.label = '超大型要塞戦車';
+        u.label = coopBossLiveApi()?.BOSS_NAME || '超大型要塞戦車';
         u.fuel = 0;
         u.fuelMax = 0;
         u.specialCharge = 0;
@@ -14846,7 +14871,7 @@
   const COOP_FIFO_TYPES = new Set(['move', 'takeover', 'bye']);
   const FIREBASE_MESSAGE_TYPES = new Set(['lobbyState', 'settings', 'start', 'ready', 'move', 'fire', 'boom', 'state', 'result', 'bye', 'commit', 'reveal', 'rematchVote', 'presence', 'ping']);
   function isFiniteIn(value, min, max) { return Number.isFinite(value) && value >= min && value <= max; }
-  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'coopSteel', ...Object.keys(OFFICIAL_STEEL_STAGE_DEFS), 'custom']);
+  const SNAPSHOT_PATTERNS = new Set(['plateauLeft', 'plateauRight', 'mountainCenter', 'valley', 'rolling', 'bridge', 'tieredBasin', 'coopSteel', 'stormAltar', ...Object.keys(OFFICIAL_STEEL_STAGE_DEFS), 'custom']);
   // スナップショットに入るユニットの並び。setMatchFormat が units を作る順と必ず同じにする。
   // 2vs2は味方と敵が交互(p1→e1→p2→e2)で、この並びがそのまま手番の順になる。
   const SNAPSHOT_UNIT_IDS_1V1 = ['p1', 'e1'];
@@ -22189,6 +22214,7 @@
     if (!alive.length) return null;
     const unguarded = alive.filter(unit => unit.coopReviveGuard !== true);
     const pool = unguarded.length ? unguarded : alive;
+    if (isStormBossBattle()) return pool.slice().sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))[0];
     const targetId = globalThis.KatamonCoopBattle?.selectLiveBossTargetId?.(alive, coopBossRoundNumber());
     return unitById(targetId) || pool[(coopBossRoundNumber() - 1) % pool.length];
   }
@@ -22272,6 +22298,13 @@
     }
     const anchor = unitAnchor(self);
     const target = unitAnchor(foe);
+    if (isStormBossBattle() && isCoopBossUnit(foe)) {
+      const api = coopBossLiveApi(), state = ensureCoopBossLiveState(foe), rect = coopBossRect(foe);
+      const intact = api.PART_ORDER.filter(id => !state.parts[id].destroyed);
+      const aim = state.core.exposed ? api.LIVE_CORE_SHAPE
+        : api.PART_DEFS[intact[(turnOrder.indexOf(self.id) + state.round) % intact.length]];
+      if (aim) { target.x = rect.x + rect.width * aim.x; target.y = rect.y + rect.height * aim.y; }
+    }
     const def = CHARACTERS[self.character];
     const tier = activeCpuAccuracyTier();
     if (!tier) return;
@@ -22307,6 +22340,31 @@
       radius: 10, blastMultiplier: 1.6, damageMultiplier: 1,
     };
     const difficultyDamage = difficulty === 'extreme' ? 1.45 : difficulty === 'hard' ? 1.22 : 1;
+    if (isStormBossBattle()) {
+      if (attack.weapon === 'charge') {
+        // A harmless off-field projectile uses the normal synchronized action/resolve boundary.
+        fireProjectile(unit.id, { x: STAGE_W + 40, y: -80 }, 500, 0, {
+          radius: 1, damageMul: 0, blastMul: 0, terrainBlastMul: 0, windMul: 0, gravityMul: 0, bossShot: true,
+        });
+        showCutIn('ヴォルテリス 蓄雷', '次の巡回は心核を狙え！ 雷柱の間へ移動', 1.4, null, '#8beaff');
+      } else if (attack.weapon === 'lightning') {
+        for (const lane of attack.lanes) fireProjectile(unit.id, { x: STAGE_W * lane, y: 8 }, 0, 520, {
+          radius: attack.radius, damageMul: difficultyDamage * attack.damageMultiplier,
+          blastMul: attack.blastMultiplier, terrainBlastMul: 1.4, windMul: 0, gravityMul: 0,
+          bossShot: true, stormLightning: true, normalImpactSound: true,
+        });
+        triggerShake(4, .18); playLaunchSound();
+      } else {
+        const offsets = attack.shots === 1 ? [0] : [-.075, 0, .075];
+        for (const angle of offsets) fireProjectile(unit.id, anchor,
+          vx0 * Math.cos(angle) - vy0 * Math.sin(angle), vx0 * Math.sin(angle) + vy0 * Math.cos(angle), {
+            radius: 8, damageMul: difficultyDamage * attack.damageMultiplier, blastMul: 1.15,
+            terrainBlastMul: .85, windMul: .8, gravityMul: 1, bossShot: true, normalImpactSound: true,
+          });
+        playLaunchSound();
+      }
+      return true;
+    }
     const damageMul = difficultyDamage * (attack.damageMultiplier || 1);
     fireProjectile(unit.id, anchor, vx0, vy0, {
       radius: attack.radius,
@@ -22453,7 +22511,15 @@
     ctx.drawImage(skyBackCanvas, 0, 0, VW, VH);
     // ステージ背景の写真だけは焼かずに直接貼る。焼くと540x960へ一度落ちて眠くなる。
     const stageBackground = getReadyStageBackground();
-    if (stageBackground) ctx.drawImage(stageBackground, 0, 0, VW, VH);
+    if (stageBackground && isStormBossBattle()) {
+      const top = cameraViewportTop(), height = CONTROL_PANEL_Y - top;
+      const scale = Math.max(VW / stageBackground.naturalWidth, height / stageBackground.naturalHeight);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, top, VW, height); ctx.clip();
+      ctx.drawImage(stageBackground, (VW - stageBackground.naturalWidth * scale) / 2,
+        top + (height - stageBackground.naturalHeight * scale) / 2,
+        stageBackground.naturalWidth * scale, stageBackground.naturalHeight * scale);
+      ctx.restore();
+    } else if (stageBackground) ctx.drawImage(stageBackground, 0, 0, VW, VH);
     drawSkyParticles();
     ctx.drawImage(skyFrontCanvas, 0, 0, VW, VH);
   }
@@ -23187,12 +23253,16 @@
   }
 
   function drawCoopBossUnit(u) {
-    ensureCoopBossImages();
+    const images = ensureCoopBossImages();
     const rect = coopBossRect(u);
-    const image = u.phase >= 2 ? coopBossImages.phase2 : coopBossImages.phase1;
-    drawCoopBossIdleMotion(u, rect, false);
+    const image = u.phase >= 2 ? images.phase2 : images.phase1;
+    if (!isStormBossBattle()) drawCoopBossIdleMotion(u, rect, false);
     ctx.save();
     ctx.globalAlpha = unitDefeated(u) ? 0.38 : 1;
+    if (isStormBossBattle()) {
+      ctx.shadowColor = u.phase >= 2 ? '#d481ff' : '#55ceff';
+      ctx.shadowBlur = 14 + Math.sin(simTimeMs / 260) * 5;
+    }
     if (image.complete && image.naturalWidth > 0) {
       ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
     } else {
@@ -23207,10 +23277,29 @@
       ctx.strokeRect(rect.x, rect.y + rect.height * 0.28, rect.width, rect.height * 0.72);
     }
     ctx.restore();
-    drawCoopBossIdleMotion(u, rect, true);
+    if (!isStormBossBattle()) drawCoopBossIdleMotion(u, rect, true);
 
     const live = ensureCoopBossLiveState(u);
     const bossApi = coopBossLiveApi();
+    if (isStormBossBattle() && u.phase >= 2 && !unitDefeated(u)) {
+      // Awakened energy is a runtime effect; the transparent sprite and hit sites stay aligned.
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const heart = bossApi.LIVE_CORE_SHAPE;
+      const hx = rect.x + rect.width * heart.x, hy = rect.y + rect.height * heart.y;
+      for (const id of ['skyWing', 'galeWing', 'tailCrystal']) {
+        if (live.parts[id].destroyed) continue;
+        const part = bossApi.PART_DEFS[id];
+        const tx = rect.x + rect.width * part.x, ty = rect.y + rect.height * part.y;
+        ctx.beginPath(); ctx.moveTo(hx, hy);
+        for (let i = 1; i <= 8; i++) {
+          const jitter = i === 8 ? 0 : Math.sin(simTimeMs / 90 + i * 7) * 8;
+          ctx.lineTo(hx + (tx - hx) * i / 8 + jitter, hy + (ty - hy) * i / 8);
+        }
+        ctx.shadowColor = '#bc7aff'; ctx.shadowBlur = 16; ctx.strokeStyle = '#ad6cff'; ctx.lineWidth = 5; ctx.stroke();
+        ctx.strokeStyle = '#fff0ff'; ctx.lineWidth = 1.6; ctx.stroke();
+      }
+      ctx.restore();
+    }
     const targeting = !!aimState && isLocalTurn() && !awaitingResolve && !matchOver;
     if (!unitDefeated(u) && live && bossApi?.PART_DEFS) {
       for (const partId of bossApi.PART_ORDER || []) {
@@ -23330,6 +23419,23 @@
     const attack = coopBossLiveApi()?.liveAttackProfile?.(ensureCoopBossLiveState(boss)) || {
       warningLabel: '要塞砲撃', warningRadius: 52,
     };
+    if (isStormBossBattle() && ['lightning', 'charge'].includes(attack.weapon)) {
+      ctx.save();
+      if (attack.weapon === 'lightning') {
+        for (const lane of attack.lanes) {
+          const x = STAGE_W * lane;
+          ctx.fillStyle = 'rgba(116,162,255,.13)';
+          ctx.fillRect(x - 58, 0, 116, coopBossGroundY());
+          ctx.strokeStyle = '#9cefff'; ctx.lineWidth = 3; ctx.setLineDash([12, 9]);
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, coopBossGroundY()); ctx.stroke();
+          drawOutlinedText('落雷予告', x, coopBossGroundY() - 25, { font: `900 13px ${UI_FONT_HEAVY}`, color: '#b6f5ff', lineWidth: 4 });
+        }
+      }
+      const rect = coopBossRect(boss);
+      drawOutlinedText(attack.weapon === 'charge' ? '蓄雷準備・この手番は攻撃なし' : '天雷崩し・雷柱を避けろ！',
+        rect.x + rect.width / 2, rect.y - 30, { font: `900 15px ${UI_FONT_HEAVY}`, color: '#b6f5ff', lineWidth: 4 });
+      ctx.restore(); return;
+    }
     const anchor = unitAnchor(target);
     const radius = Math.max(40, Number(attack.warningRadius) || 52);
     const pulse = 1 + Math.sin(simTimeMs / 115) * 0.08;
@@ -23513,7 +23619,7 @@
     ctx.restore();
 
     // ステージ名の真鍮プレート
-    const stageName = currentPattern === 'tieredBasin'
+    const stageName = currentPattern === 'stormAltar' ? '雷雲の祭壇' : currentPattern === 'tieredBasin'
       ? '闘技場ステージ'
       : `${THEME_LABELS[currentThemeKey] || 'バトル'}ステージ`;
     drawIronPlate(VW / 2, 19, 178, 27, { cut: 9, lineWidth: 2 });
@@ -24105,7 +24211,7 @@
     ctx.fillRect(VW / 2 - 124, y + 9, 244 * ratio, 8);
     ctx.restore();
     const difficulty = String(coopNormalSession?.difficulty || 'normal').toUpperCase();
-    drawOutlinedText(`超大型要塞戦車  ${difficulty}`, VW / 2 - 199, y + 18, {
+    drawOutlinedText(`${boss.label}  ${difficulty}`, VW / 2 - 199, y + 18, {
       align: 'left', font: `900 8px ${UI_FONT_HEAVY}`, color: UI.parchment, lineWidth: 2.5
     });
     drawOutlinedText(`${Math.ceil(boss.hp)}/${boss.maxHp}`, VW / 2 + 199, y + 18, {
@@ -24474,6 +24580,10 @@
       drawLightningPath(b.x0, b.y0, b.x1, b.y1, Math.max(0, b.life / b.maxLife) * 0.9, 0);
     }
     for (const p of projectiles) {
+      if (p.stormLightning) {
+        drawLightningPath(p.originX, p.originY, p.x, p.y, 1, 4.6);
+        continue;
+      }
       if (p.jump) {
         drawJumpProjectile(p);
         continue;
@@ -25436,7 +25546,7 @@
     }
     ctx.restore();
 
-    const foeName = isCoop4v1() ? '超大型要塞' : foeUnit().control === 'cpu' ? 'CPU' : '相手';
+    const foeName = isCoop4v1() ? (isStormBossBattle() ? 'ヴォルテリス' : '超大型要塞') : foeUnit().control === 'cpu' ? 'CPU' : '相手';
     drawOutlinedText(isCoop4v1()
       ? (won ? `${foeName}を撃破!` : '作戦失敗...')
       : (draw ? '相討ち!' : won ? `${foeName}を撃破!` : 'あなたの負け...'), VW / 2, VH / 2 - 70, {
@@ -26350,7 +26460,7 @@
     const bossEntry = entry?.id === COOP_BOSS_UNIT_ID;
     if (bossEntry) ensureCoopBossImages();
     const def = entry && CHARACTERS[entry.character];
-    const img = bossEntry ? coopBossImages.phase1 : entry && charImages[entry.character];
+    const img = bossEntry ? ensureCoopBossImages().phase1 : entry && charImages[entry.character];
     const ready = img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && (bossEntry || def);
     ctx.save();
     ctx.beginPath();
@@ -26391,7 +26501,7 @@
     ctx.restore();
 
     const font = `900 ${Math.round(Math.min(13, nameW * 0.13))}px ${UI_FONT_HEAVY}`;
-    drawOutlinedText(fitText(bossEntry ? '超大型要塞戦車' : def ? def.name : '？', font, nameW - 8), nameX + nameW / 2,
+    drawOutlinedText(fitText(bossEntry ? coopBossLiveApi().BOSS_NAME : def ? def.name : '？', font, nameW - 8), nameX + nameW / 2,
       rect.y + rect.h - nameH / 2 + 4,
       { font, color: '#fff4d6', lineWidth: 3.5 });
   }
@@ -26545,7 +26655,7 @@
     ctx.strokeRect(24, 186, VW - 48, 488);
 
     ensureCoopBossImages();
-    const image = coopBossImages.phase2;
+    const image = ensureCoopBossImages().phase2;
     ctx.save();
     ctx.translate(VW + 260 - slide * 290, 420);
     ctx.shadowColor = '#ff4c31';
@@ -26564,7 +26674,7 @@
     drawOutlinedText('PHASE 2', textX, 310, {
       align: 'left', font: `400 42px ${UI_FONT_DISPLAY}`, color: '#ffcf78', lineWidth: 7
     });
-    drawOutlinedText('要塞・第二形態へ', textX, 347, {
+    drawOutlinedText(isStormBossBattle() ? '雷晶龍・暴風覚醒' : '要塞・第二形態へ', textX, 347, {
       align: 'left', font: `900 18px ${UI_FONT_HEAVY}`, color: '#fff1cf', lineWidth: 5
     });
     drawOutlinedText(`CORE露出　残り${coreRounds}ラウンド`, textX, 622, {
@@ -28447,7 +28557,7 @@
         const logoW = 310, logoH = logoW * (1608 / 2880);
         ctx.drawImage(battleStartLogoImage, 608, 1776, 2880, 1608, VW / 2 - logoW / 2, 282 - logoH / 2, logoW, logoH);
       } else drawOutlinedText('BATTLE START', VW / 2, 282, { font: `400 34px ${UI_FONT_DISPLAY}`, color: UI.parchment, lineWidth: 6 });
-      drawOutlinedText('味方4体 vs 超大型要塞戦車', VW / 2, 392, { font: `900 20px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5 });
+      drawOutlinedText('味方4体 vs ' + coopBossLiveApi().BOSS_NAME, VW / 2, 392, { font: `900 20px ${UI_FONT_HEAVY}`, color: UI.gold, lineWidth: 5 });
     }
   }
 
@@ -29837,7 +29947,7 @@
 
     const boss = unitById(COOP_BOSS_UNIT_ID);
     const bossHp = Math.max(1, Math.round(Number(config.bossMaxHp) || 2200));
-    boss.x = STAGE_W * 0.88;
+    boss.x = STAGE_W * (isStormBossBattle() ? 0.85 : 0.88);
     boss.y = coopBossGroundY() - UNIT_RADIUS;
     boss.vy = 0;
     boss.knockbackVx = 0;
@@ -29849,7 +29959,7 @@
     boss.fuelMax = 0;
     boss.team = 'cpu';
     boss.character = null;
-    boss.label = '超大型要塞戦車';
+    boss.label = coopBossLiveApi()?.BOSS_NAME || '超大型要塞戦車';
     boss.color = '#ff6254';
     boss.specialCharge = 0;
     boss.moveLockTurns = 0;
@@ -29903,6 +30013,7 @@
     // 全景へ縮小せず、通常対戦の標準倍率から手番キャラを映す。
     // 大型2160×960の戦場は通常どおりドラッグ／自動追従で縦横へ移動する。
     cameraZoom = clampCameraZoom(DEFAULT_CAMERA_ZOOM);
+    if (isStormBossBattle()) cameraZoom = clampCameraZoom(.55);
     cameraDistanceSetting = cameraSliderValue();
     focusCameraOn(localUnit().x, true, localUnit().y);
     startTurn();
@@ -29938,10 +30049,12 @@
 
   function startCoopNormalBattle(config) {
     if (!config?.session?.auth?.uid || !config.transport?.send || !config.transport?.onMessage || !config.transport?.close) return false;
+    if (config.bossId != null && !['siege-fortress-01', 'storm-dragon-02'].includes(config.bossId)) return false;
     if (online) endOnline(false, false);
     coopBattleSurface = null;
     coopNormalSession = {
       ...config,
+      bossId: config.bossId || 'siege-fortress-01',
       difficulty: ['normal', 'hard', 'extreme'].includes(config.difficulty) ? config.difficulty : 'normal',
       previousCameraZoom: cameraZoom,
       previousCameraDistanceSetting: cameraDistanceSetting,
@@ -30016,6 +30129,7 @@
       craterCount: craterHistory.length,
       units: units.map(serializeUnit),
       bossHp: boss?.hp || 0,
+      bossId: coopNormalSession?.bossId || null,
     };
   }
 
@@ -31446,6 +31560,7 @@
 })();
 </script>
 <script src="coop-mvp-boss.js"></script>
+<script src="coop-storm-boss.js"></script>
 <script src="coop-mvp-boss-ai.js"></script>
 <script src="coop-mvp-engine.js"></script>
 <script src="coop-mvp-survival.js"></script>

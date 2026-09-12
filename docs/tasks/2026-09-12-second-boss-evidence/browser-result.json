@@ -1,0 +1,20 @@
+{
+  "browser": "Chromium",
+  "viewport": "390x844",
+  "assertions": [
+    "boss selection",
+    "real solo entry",
+    "dedicated stage",
+    "five units",
+    "actual FIRE and complete round",
+    "rendered parts",
+    "telegraph",
+    "awakening",
+    "real impact to victory",
+    "rematch reset",
+    "return to lobby",
+    "room creation and boss setting update",
+    "zero page errors"
+  ],
+  "errors": []
+}

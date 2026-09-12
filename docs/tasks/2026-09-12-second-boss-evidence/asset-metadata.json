@@ -1,0 +1,52 @@
+[
+  {
+    "path": "assets/bosses/master/volteris.png",
+    "sizeBytes": 2706644,
+    "sha256": "2348338eb2ab643d5fb714dcb4d4707c3a86a09215b8e89756ac7c583eafa5cc",
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alphaExtrema": [
+      0,
+      254
+    ]
+  },
+  {
+    "path": "assets/bosses/runtime/volteris.webp",
+    "sizeBytes": 1458334,
+    "sha256": "28670e1ad581acd643ef587c8e75e96fd92bb540f6ad75aec90e26d028a91db5",
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alphaExtrema": [
+      0,
+      254
+    ]
+  },
+  {
+    "path": "assets/stages/master/thunder-altar.png",
+    "sizeBytes": 1875657,
+    "sha256": "d35a317474ec796662490ef88ee3494ddee8e724c24405092ab33e520a1bb46a",
+    "dimensions": [
+      1672,
+      940
+    ],
+    "mode": "RGB",
+    "alphaExtrema": null
+  },
+  {
+    "path": "assets/stages/runtime/thunder-altar.webp",
+    "sizeBytes": 144334,
+    "sha256": "a86e8f958967366217353020758433e3116b9cd9976ad436e9d0ebe27cf8523c",
+    "dimensions": [
+      1672,
+      940
+    ],
+    "mode": "RGB",
+    "alphaExtrema": null
+  }
+]

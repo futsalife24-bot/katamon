@@ -28,6 +28,7 @@
         "hostName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12" },
         "roomName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24" },
         "playerCount": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
+        "bossId": { ".validate": "newData.val() === 'siege-fortress-01' || newData.val() === 'storm-dragon-02'" },
         "difficulty": { ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'" },
         "aiFill": { ".validate": "newData.isBoolean()" },
         "createdAt": { ".validate": "newData.isNumber()" },
@@ -54,6 +55,7 @@
         "settings": {
           ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('phase').val() === 'lobby'",
           ".validate": "newData.hasChildren(['difficulty','aiFill','revision'])",
+          "bossId": { ".validate": "newData.val() === 'siege-fortress-01' || newData.val() === 'storm-dragon-02'" },
           "difficulty": { ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'" },
           "aiFill": { ".validate": "newData.isBoolean()" },
           "aiCharacters": {
@@ -693,6 +695,7 @@
         "playerCount": {
           ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
         },
+        "bossId": { ".validate": "newData.val() === 'siege-fortress-01' || newData.val() === 'storm-dragon-02'" },
         "difficulty": {
           ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'"
         },
@@ -735,6 +738,7 @@
         "settings": {
           ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid && data.parent().child('expiresAt').val() > now && data.parent().child('phase').val() === 'lobby'",
           ".validate": "newData.hasChildren(['difficulty','aiFill','revision'])",
+          "bossId": { ".validate": "newData.val() === 'siege-fortress-01' || newData.val() === 'storm-dragon-02'" },
           "difficulty": {
             ".validate": "newData.val() === 'normal' || newData.val() === 'hard' || newData.val() === 'extreme'"
           },

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "date": "2026-09-12",
+  "generator": "Built-in image_gen.imagegen",
+  "assets": [
+    {
+      "role": "boss",
+      "master": "assets/bosses/master/volteris.png",
+      "runtime": "assets/bosses/runtime/volteris.webp",
+      "prompt": "Use case: stylized-concept. Asset type: final transparent 2D side-view game boss sprite, single creature, landscape 3:2 canvas. Primary request: an imposing floating storm crystal dragon named Volteris for a fantasy artillery game. Rich high-quality painted 3D fantasy game render, strong readable silhouette at small size, crisp silhouette and detailed scales, same production quality as premium fantasy monster art. Body is dark indigo scaled organic dragon, with ivory angular horns, turquoise lightning crystals and violet wing membranes. No machinery, no armor tank, no guns. Whole body fully visible facing LEFT, hovering with two huge swept wings rising above the body, long tail curling to the RIGHT with one large cyan crystal at its tip. Clearly separated target anatomy: crown crystal/horns centered at normalized (0.22,0.28), left/front wing crystal at (0.43,0.16), right/rear wing crystal at (0.72,0.27), tail crystal at (0.84,0.65). Glowing diamond chest heart at (0.46,0.59). Body centered at (0.48,0.60), curled feet below. Wings fill upper canvas, leave alpha between limbs and wings. Camera exact side view slightly three-quarter for depth, creature occupies 90 percent of canvas with 5 percent clear padding, all extremities inside. Dramatic cyan and violet light, natural dragon scale textures and luminous crystals. True transparent alpha background, no ground, no shadow floor, no environment, no text, no labels, no UI, no watermark. One fully assembled monster only.",
+      "transform": "Lossless WebP encoding only; original alpha preserved.",
+      "source": "exec-5454e779-78e4-4a5c-9109-b416c2a1a0f1.png"
+    },
+    {
+      "role": "stage",
+      "master": "assets/stages/master/thunder-altar.png",
+      "runtime": "assets/stages/runtime/thunder-altar.webp",
+      "prompt": "Use case: stylized-concept. Asset type: panoramic background painting for a side-view 2D fantasy artillery battle, landscape 16:9. Primary request: 'Altar of Thunderclouds', an ancient ruined sky sanctuary inside a tremendous storm. Luminous cyan runes on distant floating stone islands, shattered tall marble arches toward far left and far right, deep indigo and lavender storm clouds, a distant circular stone halo behind the right third where a dragon will hover in game. Majestic moody painted high-end fantasy game environment. View exactly side-on, layered atmospheric depth, clouds below, soft cyan lightning in far distance only. The left two thirds are quiet low-contrast dark open air, plenty of negative space to read players and projectile trajectories. Lower 15 percent distant cloud sea and faint ruin silhouettes. No solid playable ground or close-up platforms: terrain is rendered separately in game. No characters, no dragon, no text, no UI, no logos. Complete full-bleed scene. Detailed painting but low contrast central play space, midnight blue and desaturated purple, controlled turquoise accents.",
+      "transform": "WebP encoding at quality 90; no compositional edits.",
+      "source": "exec-12255082-2369-44f7-b871-0a5c8144bc3d.png"
+    },
+    {
+      "role": "awakening-concept-only",
+      "reference": "docs/tasks/2026-09-12-second-boss-evidence/awakening-concept.png",
+      "prompt": "Use case: precise-object-edit. Asset type: phase 2 awakened form of the same transparent game boss sprite. Edit target: the provided Volteris dragon. Change ONLY the glow and colors of crystals and wing energy: keep the exact creature, exact pose, exact anatomy and proportions, exact positions of all horns, wings, tail and chest, exact framing and transparent alpha background. The dragon has entered 'Tempest Awakening': brighten the chest diamond heart to white cyan, brighten both wing-tip crystals to violet-white, add distinct thin violet lightning veins INSIDE the existing wing membranes, and brighten eyes. Keep dark indigo scales for readable contrast. Do not add external lightning, no smoke, no environment or backdrop, no new objects, no extra limbs, no new spines, no rotation, no repositioning, no crop, no text. Preserve full size 1536x1024 and transparency. The output must be the same art in an unmistakable violet-white energized state, registered perfectly to the original sprite for switching in game.",
+      "alphaRepairPrompt": "Use case: background-extraction. Edit target: this exact violet-white Volteris dragon image. Remove every pixel of the gray and white checkerboard backdrop. Output a genuine transparent background using an alpha channel (RGBA PNG), NOT a painted checkerboard, not a white background, not a black background. Keep the dragon itself absolutely unchanged, exact pixels/pose/silhouette/framing/size as far as possible. Preserve its white glowing crystals and lightning inside its violet wing membranes. The checkerboard must be completely removed outside the silhouette and in every gap between wings, legs, tail and horns. No new background, no new objects, no text. Return the isolated character as a real alpha-transparent sprite.",
+      "status": "Not used at runtime: generated RGB concept and attempted repair contain baked checkerboard. Phase 2 uses original transparent boss plus Canvas purple-white electricity effects."
+    }
+  ],
+  "metadata": "2026-09-12-second-boss-evidence/asset-metadata.json"
+}
