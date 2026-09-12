@@ -21,9 +21,10 @@
 <link rel="preload" as="image" href="assets/title-hanging-sign.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/title-parchment-button.webp" type="image/webp" fetchpriority="high">
 <link rel="preload" as="image" href="assets/gear/ui/runtime/gear_title_menu_frame_01.webp" type="image/webp" fetchpriority="high">
-<link rel="preload" as="font" href="assets/fonts/reggae-one-display.woff2" type="font/woff2" crossorigin>
-<link id="katamonFontFaces" rel="stylesheet" href="assets/fonts/katamon-fonts.css" media="print">
-<style>@font-face{font-family:"Reggae One";src:url("assets/fonts/reggae-one-display.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}</style>
+<link rel="preload" as="font" href="assets/fonts/reggae-one-display-v178.woff2" type="font/woff2" crossorigin>
+<style>:root{--katamon-font-ui:"Yu Gothic UI","Hiragino Kaku Gothic ProN",sans-serif;--katamon-font-display:"Reggae One","Yu Gothic UI",sans-serif}</style>
+<link id="katamonFontFaces" rel="stylesheet" href="assets/fonts/katamon-fonts-v178.css" media="print">
+<style>@font-face{font-family:"Reggae One";src:url("assets/fonts/reggae-one-display-v178.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}</style>
 <link rel="stylesheet" href="game-custom-stages.css">
 <style>
   html, body {
@@ -977,12 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.177-storm-boss';
+  const BUILD_ID = 'v2.0.178-font-repair';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
-  // download on first paint, so retain the existing fallback until T2 idle.
+  // download on first paint. Activate it at the first title tap, independently
+  // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
     { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
     { version: 'v2.0.176', date: '2026/09/06', summary: '登録revisionへ固定するONLINE・協力戦の専用入口を追加' },
     { version: 'v2.0.175', date: '2026/09/05', summary: '登録済み5モーションの戦闘表示と安全な遅延読込を追加' },
@@ -1510,7 +1513,7 @@
     'assets/title-shield-button.webp',
     'assets/title-hanging-sign.webp',
     'assets/title-parchment-button.webp',
-    'assets/fonts/reggae-one-display.woff2'
+    'assets/fonts/reggae-one-display-v178.woff2'
   ]);
 
   function requestPrecacheTier(tier) {
@@ -1556,14 +1559,18 @@
     scheduleIdle(() => requestPrecacheTier(2), 5000);
   }
 
-  // T2 is already in the SW cache at this point. Decode only visual assets;
-  // gameplay audio follows in T3a.
-  function primeTier2Decode() {
+  function activateGameFonts() {
     const fontFaces = document.getElementById('katamonFontFaces');
     if (fontFaces) fontFaces.media = 'all';
     UI_FONT = '"RocknRoll One", "Yu Gothic UI", sans-serif';
     UI_FONT_HEAVY = '"RocknRoll One", "Yu Gothic UI", sans-serif';
     UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif';
+  }
+
+  // T2 is already in the SW cache at this point. Decode only visual assets;
+  // gameplay audio follows in T3a. Fonts do not depend on this notification.
+  function primeTier2Decode() {
+    activateGameFonts();
     ensureBattleStartLogoImage();
     ensureBattleHudAssets();
     ensureVsPlateAssets();
@@ -1686,6 +1693,7 @@
   }
   function enterTitleFromTap() {
     if (titleStartPending) return;
+    activateGameFonts();
     // 最初のタップ(確実なユーザー操作)のうちにWebAudio経路を用意しておく
     ensureBgmGraph();
     primeNormalImpactSound();

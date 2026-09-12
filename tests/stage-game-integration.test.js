@@ -440,7 +440,7 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /url\("assets\/exit-confirm-stay-v2\.png"\)/);
   assert.match(html, /url\("assets\/exit-confirm-exit-v2\.png"\)/);
   assert.doesNotMatch(html, /exit-confirm-(frame|stay|exit)\.png/);
-  const fontCss = fs.readFileSync(path.join(root, 'assets', 'fonts', 'katamon-fonts.css'), 'utf8');
+  const fontCss = fs.readFileSync(path.join(root, 'assets', 'fonts', 'katamon-fonts-v178.css'), 'utf8');
   assert.match(fontCss, /font-family:\s*"RocknRoll One"/);
   assert.match(fontCss, /font-family:\s*"Reggae One"/);
   assert.match(fontCss, /--katamon-font-ui:\s*"RocknRoll One"/);
@@ -453,10 +453,10 @@ test('game integration isolates official stages while online custom starts are i
   assert.match(html, /UI_FONT_DISPLAY = '"Reggae One", "RocknRoll One", sans-serif'/);
   assert.match(html, /#deviceBackConfirmTitle\s*\{[\s\S]*var\(--katamon-font-display\)/);
   assert.match(serviceWorker, /assets\/fonts\/rocknroll-one-regular\.ttf/);
-  assert.match(html, /rel="preload" as="font" href="assets\/fonts\/reggae-one-display\.woff2"/);
+  assert.match(html, /rel="preload" as="font" href="assets\/fonts\/reggae-one-display-v178\.woff2"/);
   assert.match(serviceWorker, /assets\/exit-confirm-stay-v2\.png/);
   assert.match(serviceWorker, /assets\/exit-confirm-exit-v2\.png/);
   assert.doesNotMatch(serviceWorker, /exit-confirm-(frame|stay|exit)\.png/);
   assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'rocknroll-one-regular.ttf')).size > 2_000_000);
-  assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display.woff2')).size > 5_000);
+  assert.ok(fs.statSync(path.join(root, 'assets', 'fonts', 'reggae-one-display-v178.woff2')).size > 5_000);
 });

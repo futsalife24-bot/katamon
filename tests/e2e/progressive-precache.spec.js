@@ -160,6 +160,8 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
 
     await page.locator('#game').click({ position: { x: 206, y: 450 } });
     await expect.poll(() => cacheHas(page, T2_SENTINEL), { timeout: 90000 }).toBe(true);
+    expect(await cacheHas(page, '/assets/fonts/rocknroll-one-regular.ttf')).toBe(true);
+    expect(await cacheHas(page, '/assets/fonts/reggae-one-display-v178.woff2')).toBe(true);
     expect(await cacheHas(page, '/assets/bosses/runtime/volteris.webp')).toBe(true);
     expect(await cacheHas(page, '/assets/stages/runtime/thunder-altar.webp')).toBe(true);
     await expect.poll(() => cacheHas(page, T3A_SENTINEL), { timeout: 90000 }).toBe(true);
@@ -186,10 +188,11 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
     const isWebKit = browser.browserType().name() === 'webkit';
     // WebKit has no shared first-navigation HTTP cache between the uncontrolled
     // document and the newly installed worker. It therefore repeats only these
-    // two parser-loaded assets while creating the first offline cache. Chromium
+    // parser-loaded assets while creating the first offline cache. Chromium
     // shares that cache and must remain at zero repeated asset bytes.
     const webKitBootstrapAssets = new Set([
-      '/assets/fonts/katamon-fonts.css',
+      '/assets/fonts/katamon-fonts-v178.css',
+      '/assets/fonts/reggae-one-display-v178.woff2',
       '/assets/title-background-logo-end.jpg',
       '/assets/bosses/runtime/fortress-tank.webp'
     ]);
@@ -208,6 +211,7 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
       isWebKit ? T3B_FULL_OFFLINE_LIMIT_BYTES + webKitBootstrapBytes : T3B_FULL_OFFLINE_LIMIT_BYTES
     );
     expect(unexpectedDuplicateAssets, `Repeated non-bootstrap asset paths: ${duplicateFiles}`).toEqual([]);
+    expect(requests.filter(request => request.pathname === '/assets/fonts/reggae-one-display-v178.woff2').length).toBeLessThanOrEqual(isWebKit ? 2 : 1);
     expect(isWebKit ? duplicateBytes : 0, `Repeated asset paths: ${duplicateFiles}`).toBeLessThanOrEqual(
       isWebKit ? webKitBootstrapBytes : 0
     );
@@ -235,6 +239,9 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.locator('#game')).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.title)).toContain('カタモン');
+      await page.locator('#game').click({ position: { x: 206, y: 450 } });
+      await expect(page.locator('#katamonFontFaces')).toHaveAttribute('media', 'all');
+      await expect.poll(() => page.evaluate(() => [...document.fonts].some(font => font.family === 'RocknRoll One' && font.status === 'loaded'))).toBe(true);
       await page.screenshot({ path: testInfo.outputPath('progressive-precache-offline.png') });
     }
   } finally {

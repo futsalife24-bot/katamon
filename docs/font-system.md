@@ -13,20 +13,24 @@ Reggae Oneは短く大きい文字だけに限定する。本文、長い説明�
 
 ## 実装
 
-共通定義は`assets/fonts/katamon-fonts.css`に置く。
+共通定義は`assets/fonts/katamon-fonts-v178.css`に置く。
 
 - `--katamon-font-display`: Reggae Oneを先頭にした見出し用
 - `--katamon-font-ui`: RocknRoll Oneを先頭にした通常UI用
 - Canvasは`UI_FONT_DISPLAY`と`UI_FONT`を同じ役割分担で使う
 - `button`、`input`、`select`、`textarea`は通常UIフォントを継承する
 
-各フォントはRegular 400を1ファイルだけ同梱する。RocknRoll Oneは利用者が入力する日本語を欠けさせない全文字版、Reggae Oneは強調演出で使用する文字へ絞った軽量WOFF2である。太字が必要な通常UIは追加ウェイトを取得せず、端末側の合成ウェイトを使う。
+各フォントはRegular 400を使用する。RocknRoll Oneは利用者が入力する日本語を欠けさせない全文字版、Reggae Oneは出荷するUIソースの文字を収録した軽量WOFF2である。v178の実行素材は`reggae-one-display-v178.woff2`（1,368コードポイント、148,032 bytes）。旧ファイルは旧版の参照用に保持する。太字が必要な通常UIは追加ウェイトを取得せず、端末側の合成ウェイトを使う。
+
+ゲームの通常UIフォントは最初のタイトルタップで有効化する。Service Workerの有無やT2素材キャッシュの完了通知に依存させない。最初のタップ前は従来のOSフォールバックを維持し、大容量の本文フォントを先行取得しない。
+
+見出し用フォントの再生成は`tools/build-display-font.py`へ公式原本TTFを渡す（開発用にfonttoolsとbrotliが必要）。固定した公式原本のURL、SHA-256、入力ファイル、必須表示語は`assets/fonts/display-font-manifest.json`へ記録する。文字追加時は再生成し、配信ファイル名・共通CSS・ゲームpreload/初期キャッシュ・Stage Studio SWを揃える。ファイル名を更新して古い永続キャッシュとの混在を避ける。
 
 ## 配信と安全性
 
 - フォント、CSS、ライセンスはリポジトリ内へ同梱する
 - Google Fonts等への通常時の外部通信は行わない
-- ゲーム本体とStage StudioのService Workerへフォントを登録し、オフラインでも使えるようにする
+- ゲーム本体のT2とStage StudioのService WorkerへCSS・フォントを登録し、オフラインでも使えるようにする。CSSも改版ファイル名で配信し、旧CSSが古いフォント参照を復活させないようにする
 - `font-display: swap`でフォント取得待ちによる操作不能を避ける
 - 読込失敗時はOSの日本語ゴシック体へ安全にフォールバックする
 
@@ -40,3 +44,5 @@ Reggae Oneは短く大きい文字だけに限定する。本文、長い説明�
 6. PWA更新後も下書きやセーブデータが失われないこと
 
 長文の可読性に明確な問題が実機で確認されるまでは、本文専用の第3フォントを追加しない。
+
+`tests/e2e/font-repair.spec.js`は、主要見出しのブラウザ描画・Chromiumで実際に使用されたフォント（代替文字混入の検出）・SWなしの最初のタップからGARAGE/協力ロビーを確認する。`progressive-precache.spec.js`はフォントのキャッシュ収録とオフライン再起動後の有効化も確認する。
