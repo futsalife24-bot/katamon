@@ -1183,7 +1183,15 @@
     const terrainBottom = bossId === deps.stormBoss?.BOSS_ID || config?.registeredProtocol === 2 ? 924 : STEEL_BOTTOM_Y;
     if (!snapshot || snapshot.battleMode !== 'coop' || snapshot.matchFormat !== 'coop4v1') return false;
     if (Number(snapshot.stageW) !== WORLD_WIDTH || Number(snapshot.stageH) !== WORLD_HEIGHT) return false;
-    if (!Array.isArray(snapshot.craters) || snapshot.craters.length !== 0) return false;
+    if (!Array.isArray(snapshot.craters)) return false;
+    if (bossId === deps.stormBoss?.BOSS_ID && !requireTerrain) {
+      // Destructible altar platforms record the normal engine's bounded crater list.
+      // Keeping the start-only empty constraint here stalls the next network turn.
+      if (snapshot.craters.length > 400 || !snapshot.craters.every(cr => cr && typeof cr === 'object' && !Array.isArray(cr)
+        && Number.isFinite(cr.x) && cr.x >= -600 && cr.x <= WORLD_WIDTH + 600
+        && Number.isFinite(cr.y) && cr.y >= -600 && cr.y <= WORLD_HEIGHT + 600
+        && Number.isFinite(cr.r) && cr.r >= 1 && cr.r <= 600)) return false;
+    } else if (snapshot.craters.length !== 0) return false;
     if (!Array.isArray(snapshot.turnOrder) || snapshot.turnOrder.join(',') !== NORMAL_TURN_ORDER.join(',')) return false;
     if (!Number.isInteger(snapshot.activeIndex) || snapshot.activeIndex < 0 || snapshot.activeIndex >= NORMAL_TURN_ORDER.length) return false;
     const roundLimit = Number(deps.ai?.DIFFICULTY_RULES?.[config?.difficulty || 'normal']?.roundLimit) || 20;
@@ -1352,8 +1360,9 @@
     }
 
     // RTDB push keys use code-point ordering; locale collation can skip later
-    // lower-case keys after an upper-case cursor. Keep protocol 1 unchanged.
-    const compareMessageKeys = bridge.registration?.enabled
+    // lower-case keys after an upper-case cursor. The new storm entry uses the
+    // database's ordering too, while the legacy fortress contract is preserved.
+    const compareMessageKeys = bridge.registration?.enabled || config.bossId === deps.stormBoss?.BOSS_ID
       ? (a, b) => String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0
       : (a, b) => String(a).localeCompare(String(b));
 

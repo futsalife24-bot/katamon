@@ -25,6 +25,16 @@ check('actual starting snapshot passes transport validation', battle.normalSnaps
 check('storm entry also validates without registered content', battle.normalSnapshotLooksSafe(initial, roster, { ...config, registeredProtocol: null }, true));
 const badTerrain = JSON.parse(JSON.stringify(initial)); badTerrain.segments[0][0][1] = 936;
 check('storm terrain cannot choose its own bottom limit', !battle.normalSnapshotLooksSafe(badTerrain, roster, { ...config, registeredProtocol: null }, true));
+const turnSnapshot=JSON.parse(JSON.stringify(initial));
+delete turnSnapshot.segments;delete turnSnapshot.pattern;delete turnSnapshot.terrainMaterialSegments;
+turnSnapshot.craters=[{x:500,y:500,r:52}];
+check('destroyed altar platform permits next network turn', battle.normalSnapshotLooksSafe(turnSnapshot,roster,{...config,registeredProtocol:null},false));
+turnSnapshot.craters[0].r=601;
+check('oversized destruction rejected', !battle.normalSnapshotLooksSafe(turnSnapshot,roster,config,false));
+turnSnapshot.craters=[{x:0,y:0,r:NaN}];
+check('nonfinite destruction rejected', !battle.normalSnapshotLooksSafe(turnSnapshot,roster,config,false));
+turnSnapshot.craters=Array.from({length:401},()=>({x:0,y:0,r:1}));
+check('unbounded destruction rejected', !battle.normalSnapshotLooksSafe(turnSnapshot,roster,config,false));
 check('storm snapshot cannot enter fortress room', !battle.normalSnapshotLooksSafe(initial, roster, { ...config, bossId: 'siege-fortress-01' }, true));
 const bad = JSON.parse(JSON.stringify(initial)); bad.units[4].bossState.parts.thunderHorn.hp = -1;
 check('forged parts rejected at transport boundary', !battle.normalSnapshotLooksSafe(bad, roster, config, true));

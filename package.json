@@ -146,7 +146,7 @@
     "test:firebase-reentry-lock-handoff-phase3d8df5": "node tests/firebase-reentry-lock-handoff-phase3d8df5.test.js",
     "test:e2e:firebase-reentry-startup-priority-phase3d8df4": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
     "test:e2e:firebase-reentry-lock-handoff-phase3d8df5": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
-    "test:storm-boss": "node tests/storm-boss.test.js && node tests/storm-boss-runtime.test.js",
+    "test:storm-boss": "node tests/storm-boss.test.js && node tests/storm-boss-runtime.test.js && node tests/storm-boss-transport.test.js",
     "test:e2e:storm-boss": "node tests/storm-boss-browser.cjs"
   },
   "devDependencies": {
