@@ -1,0 +1,419 @@
+{
+  "sourceSha": "774ae92c9f7ce279610b23e7d9af95280823dcea",
+  "run": "34680139409",
+  "attempt": "1",
+  "project": "demo-catamon-registration",
+  "endpoint": "127.0.0.1:19000",
+  "rulesSha256": "f39bd64dcb7c2aef5d81c2e8f7a94e49c22b8b91c0cd77ba8ba43511590bec0e",
+  "registryRevision": "261ae0db4cb5ab98117b0d6c0a176aae5e244a7e04d5e6076a54bbfb1175c2a1",
+  "results": [
+    {
+      "name": "authenticated revision read",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "unauthenticated revision read",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "revision child write",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "revision delete",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "parent set",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "root multipath",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "active delete",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "valid protocol4 room creation",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "valid guest seat claim",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "revision deletion",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "revision switch",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "protocol downgrade",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "protocol removal",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "unknown revision new room",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "guest cannot set host settings",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "invalid message included in room creation",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "direct playing skips reveal",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "valid registered reveal",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "unknown ID",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "slug instead of game ID",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "forged definition hash",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "another seat",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "another round",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "packet revision",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "commit cannot leak selection",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "unauthenticated registered room creation",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "valid coop2 creation with registered humans and AI",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "valid coop guest claim",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop legacy boss omission",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop select second boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop invalid boss rejected",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop guest cannot change boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop old listing omission",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop second boss listing",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop invalid listing boss rejected",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop return to implicit first boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop lock room on launch",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop launched boss cannot change",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "registeredCoop legacy boss omission",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop select second boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop invalid boss rejected",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "registeredCoop guest cannot change boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "registeredCoop old listing omission",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop second boss listing",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop invalid listing boss rejected",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "registeredCoop return to implicit first boss",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop lock room on launch",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "registeredCoop launched boss cannot change",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop revision delete",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop protocol downgrade",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop revision multipath",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop unknown AI",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop guest cannot alter host AI",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop forged slot hash",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop another seat UID",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop round deletion",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop parent creation cannot bypass registered ID",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "valid coop launch",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop live character replacement",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "coop live round replacement",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "opaque coop JSON passes Rules; internal revision needs client rejection",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "coop outer revision mismatch",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "active update invalidates new room",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "active update rejects revealing transition",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "active update rejects coop new start",
+      "boundary": "Realtime Database Rules",
+      "expected": "deny",
+      "status": 401
+    },
+    {
+      "name": "old pinned definition still readable",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "legacy protocol3 unaffected without active registry",
+      "boundary": "Realtime Database Rules",
+      "expected": "allow",
+      "status": 200
+    },
+    {
+      "name": "publisher actual ETag CAS and idempotent replay",
+      "boundary": "publisher + Emulator Admin fixture",
+      "expected": "generation preserved / stale ETag rejected",
+      "status": 200
+    }
+  ]
+}

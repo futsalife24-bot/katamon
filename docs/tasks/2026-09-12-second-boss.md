@@ -1,23 +1,27 @@
 # 第2ボス：雷晶龍ヴォルテリス
 
-作業日: 2026-09-12 / 状態: 実装・ローカル検証完了、未コミット・未公開。
+作業日: 2026-09-12 / 状態: 実装・本番Firebase対応完了。PR #394で公開前CI確認中。
 
 ## 公開作業（2026-09-12 追加依頼）
 
-ユーザーが「公開まで全部」と明示し、PR・merge・Pages公開・必要なFirebase反映を承認。公開前の現物確認では、本番Rulesは6ルート（従来通信のみ）で、各ルートの正規化SHA-256はbaseの該当部分と一致した。登録済みコンテンツ機能のRulesは本番未反映であり、今回それらを同時開放しない。本番へは既存RulesにcoopOpen/coopRoomsのbossId enumだけを追加する。リポジトリは将来の登録済み入口との整合のため4か所のenumを保持する。
+ユーザーが「公開まで全部」と明示し、PR・merge・Pages公開・必要なFirebase反映を承認。公開前の現物確認では、本番Rulesは6ルート（従来通信のみ）で、各ルートの正規化SHA-256はbaseの該当部分と一致した。登録済みコンテンツ機能のRulesは本番未反映であり、今回それらを同時開放しない。本番へは既存RulesにcoopOpen/coopRoomsのbossId enumだけを追加済み。リポジトリは将来の登録済み入口との整合のため4か所のenumを保持する。
 
 Firebase Emulatorへ、両通信入口での省略互換・新ボス許可・不正ID拒否・guest変更拒否・開始後変更拒否・一覧互換を20件追加した。ローカルJava 17は固定CLIの要求するJava 21に足りないため、プロジェクトの正本であるGitHub clean runner（Java 21）の実Emulator検証で確認する。認証・所有者・公開範囲のルールを広げる変更はない。
 
 PR #394のJava 21実Emulatorは68/68成功。本番Rulesへ2か所だけ反映し、読み戻した構造が意図したRulesと完全一致した。4独立ブラウザを本番Firebaseへ接続した検査で、破壊した足場のcratersを空配列に限定していた受信検証と、従来入口のlocaleCompareによるメッセージ取りこぼしを発見。第2ボスの手番snapshotは通常エンジンと同じ400件・座標/半径制限で検証し、受信順はFirebaseの文字コード順を使用するよう修正した。初期地形・第1ボス・所有者の境界は維持。新ボスのローカル検査は101＋28＋2件に更新。
 
+モバイルCIで、追加選択肢と重複する旧テキストlocator、画像増分によるオフライン容量超過を検出した。表示名のDOMを明示し、ボス切替も検査する。ボスruntimeを1,458,334→259,840 bytesへ圧縮し、背景と合わせ404,174 bytes。既存76MiBの全体枠へ今回の画像用512KiBを追加し、その2素材の実容量とキャッシュ収録も直接検査する。原画はキャッシュしない。
+
+既存masterでも発生したジャンプ着地テストのランダム失敗は、地形中央が穴になるfixtureが原因だった。安全な初期足場へ固定し、実際の着地・pickupのassertは維持した。
+
 ## 作業場所と範囲
 
 - 実装場所: `.codex-worktrees/second-boss-storm-20260912`
 - branch: `feat/second-boss-storm-20260912`
-- base / HEAD: `76258381cebb83c3e0646376c1b7697fc6aea5e4`（取得時の `origin/master`）。
+- base: `76258381cebb83c3e0646376c1b7697fc6aea5e4`（取得時の `origin/master`）。
 - ルートは古いブランチと既存の未コミット作業を保持しているため、最新masterから独立worktreeを作成した。ルートには所在を示すCURRENT_WORK_STATEの追記だけを行う。
 - 依頼は第2ボスの画像生成・行動/部位の差別化・専用ステージ・実装。既存協力戦への選択追加と、部屋作成不要のソロ＋CPU3体出撃まで含めた。
-- 公開、merge、本番Firebase Rules反映、報酬/保存データ移行は実施していない。
+- 本番Firebase Rulesの対象2か所を反映済み。PR #394のmerge / Pages公開は検証完了後に実行する。報酬/保存データ移行はない。
 
 ## 完成した仕様
 
@@ -38,7 +42,7 @@ PR #394のJava 21実Emulatorは68/68成功。本番Rulesへ2か所だけ反映�
 ## 画像制作
 
 - 採用原画: `assets/bosses/master/volteris.png`（1536×1024、RGBA）
-- 本体実行画像: `assets/bosses/runtime/volteris.webp`（lossless、透過維持）
+- 本体実行画像: `assets/bosses/runtime/volteris.webp`（1024×683、quality 90、透過維持）
 - ステージ原画: `assets/stages/master/thunder-altar.png`（1672×940）
 - 背景実行画像: `assets/stages/runtime/thunder-altar.webp`（quality 90）
 - [生成プロンプトと採否](2026-09-12-second-boss-assets.json)、[寸法・透過・SHA-256](2026-09-12-second-boss-evidence/asset-metadata.json)。
@@ -76,6 +80,6 @@ PR #394のJava 21実Emulatorは68/68成功。本番Rulesへ2か所だけ反映�
 4. 自キャラを選んで「ソロ出撃（あなた＋CPU3体）」。
 5. 自動検査は `npm run test:storm-boss`、ブラウザQAはサーバー起動後に `npm run test:e2e:storm-boss`。PlaywrightとChromiumが必要。別URLは `STORM_BASE_URL` を指定。
 
-## 残る公開前の確認
+## 残る確認
 
-実機スマホの操作/描画、4台の本番協力同期、3難易度の人間による通し攻略と最終バランス、既存プロジェクトのリリースゲートは未完了。本番で第2ボス部屋を作るには、この変更のRulesを所定の公開手順で反映する必要がある。既存のGear Production Acceptance保留事項は継続し、今回のローカルPASSを本番受入合格として扱わない。
+実機スマホの操作/描画と、3難易度の人間による通し攻略・最終バランスは未確認。4独立ブラウザを本番Firebaseへ接続し、3巡・実FIRE 12回・全員の状態一致・pageerror 0・検証部屋の削除を確認済み。既存のGear Production Acceptance保留事項は継続し、今回のローカルPASSを本番受入合格として扱わない。

@@ -10,10 +10,12 @@ const T3B_SENTINEL = '/assets/device-exit-seal.png';
 const T0_T1_LIMIT_BYTES = 11 * 1024 * 1024;
 const T3A_GAME_OFFLINE_LIMIT_BYTES = 45 * 1024 * 1024;
 // T3b keeps every optional sound-test, exit-confirmation, master fallback, and
-// the shared high-quality weekday cloud for a fully offline installation. The
-// WebKit one-pass payload is currently ~75.6MiB after its allowed bootstrap
-// re-requests are excluded, so retain a narrow 76MiB regression ceiling.
-const T3B_FULL_OFFLINE_LIMIT_BYTES = 76 * 1024 * 1024;
+// the shared high-quality weekday cloud for a fully offline installation.
+// Keep the existing 76MiB baseline plus a bounded 512KiB for the new storm
+// dragon and altar. Their actual combined bytes are checked below; master
+// artwork must not enter the runtime cache.
+const STORM_RUNTIME_IMAGE_LIMIT_BYTES = 512 * 1024;
+const T3B_FULL_OFFLINE_LIMIT_BYTES = 76 * 1024 * 1024 + STORM_RUNTIME_IMAGE_LIMIT_BYTES;
 const CONTENT_TYPES = Object.freeze({
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8',
   '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8',
@@ -117,6 +119,11 @@ async function collectTitlePerformance(page) {
 
 test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフライン再表示できる', async ({ browser }, testInfo) => {
   test.setTimeout(240000);
+  const stormImageSizes = await Promise.all([
+    'assets/bosses/runtime/volteris.webp',
+    'assets/stages/runtime/thunder-altar.webp'
+  ].map(async asset => (await fs.stat(path.join(ROOT, asset))).size));
+  expect(stormImageSizes.reduce((total, size) => total + size, 0)).toBeLessThanOrEqual(STORM_RUNTIME_IMAGE_LIMIT_BYTES);
   const { server, requests, baseUrl } = await startServer();
   const context = await browser.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'allow' });
   const page = await context.newPage();
@@ -153,6 +160,8 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
 
     await page.locator('#game').click({ position: { x: 206, y: 450 } });
     await expect.poll(() => cacheHas(page, T2_SENTINEL), { timeout: 90000 }).toBe(true);
+    expect(await cacheHas(page, '/assets/bosses/runtime/volteris.webp')).toBe(true);
+    expect(await cacheHas(page, '/assets/stages/runtime/thunder-altar.webp')).toBe(true);
     await expect.poll(() => cacheHas(page, T3A_SENTINEL), { timeout: 90000 }).toBe(true);
     const afterT3aBytes = bytesFor(requests);
     await expect.poll(() => cacheHas(page, T3B_SENTINEL), { timeout: 120000 }).toBe(true);

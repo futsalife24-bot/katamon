@@ -15,16 +15,16 @@
   },
   {
     "path": "assets/bosses/runtime/volteris.webp",
-    "sizeBytes": 1458334,
-    "sha256": "28670e1ad581acd643ef587c8e75e96fd92bb540f6ad75aec90e26d028a91db5",
+    "sizeBytes": 259840,
+    "sha256": "750c0e5ae26898716b1c6eba674db58e1eb643c61f346bf53547ea6db614244c",
     "dimensions": [
-      1536,
-      1024
+      1024,
+      683
     ],
     "mode": "RGBA",
     "alphaExtrema": [
       0,
-      254
+      255
     ]
   },
   {
