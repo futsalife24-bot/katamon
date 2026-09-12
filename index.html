@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.179-coop-salvo';
+  const BUILD_ID = 'v2.0.180-coop-ready-fire';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.180', date: '2026/09/12', summary: '協力戦の一斉発射前にReady! → Fire!の合図を追加' },
     { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
     { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
     { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
@@ -21982,7 +21983,7 @@
 
   function beginQueuedCoopSalvoResolution() {
     const state = coopSalvoState;
-    if (!state || (state.phase !== 'launching' && state.phase !== 'special-cutin')) return false;
+    if (!state || !['launching', 'special-cutin', 'launch-cue'].includes(state.phase)) return false;
     state.phase = 'resolving';
     // 発射集合はホストのsalvoFireで確定済み。各席のfireを個別送信しない。
     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
@@ -21993,7 +21994,13 @@
 
   function armQueuedCoopSalvo() {
     const state = coopSalvoState;
-    if (!state || state.phase !== 'launching') return false;
+    if (!state || !['launching', 'launch-cue'].includes(state.phase)) return false;
+    if (state.phase === 'launching' && state.actions.length) {
+      state.phase = 'launch-cue';
+      state.cueTimer = 0.95;
+      return true;
+    }
+    if (state.phase === 'launch-cue' && state.cueTimer > 0) return false;
     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
     const entries = state.actions.filter(action => action.useSpecial).map(action => {
       const unit = unitById(action.unitId);
@@ -22037,7 +22044,7 @@
 
   const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0; // 全員を同じ固定物理tickへ投入
   function coopSalvoLaunchesPending() {
-    if (['launching', 'special-aura', 'special-cutin'].includes(coopSalvoState?.phase)) return true;
+    if (['launching', 'special-aura', 'special-cutin', 'launch-cue'].includes(coopSalvoState?.phase)) return true;
     return coopSalvoState?.phase === 'resolving'
       && coopSalvoState.nextLaunchIndex < coopSalvoState.actions.length;
   }
@@ -27383,6 +27390,36 @@
     ctx.restore();
   }
 
+  // Ready → Fire leads into special aura/cut-in, or directly into normal shots.
+  function drawCoopSalvoLaunchCue() {
+    const state = coopSalvoState;
+    if (!coopSalvoEnabled() || state?.phase !== 'launch-cue' || matchOver) return;
+    const fire = state.cueTimer <= 0.3;
+    const elapsed = fire ? 0.3 - state.cueTimer : 0.95 - state.cueTimer;
+    const pop = Math.max(0, 1 - elapsed / 0.16);
+    const color = fire ? '#ffcc58' : '#8beaff';
+    const y = VH * 0.40;
+    ctx.save();
+    ctx.fillStyle = 'rgba(3, 12, 24, 0.38)';
+    ctx.fillRect(0, 0, VW, VH);
+    ctx.translate(VW / 2, y);
+    ctx.scale(1 + pop * 0.16, 1 + pop * 0.16);
+    ctx.fillStyle = 'rgba(5, 19, 34, 0.88)';
+    ctx.beginPath();
+    ctx.moveTo(-VW / 2, -62); ctx.lineTo(VW / 2, -46);
+    ctx.lineTo(VW / 2, 62); ctx.lineTo(-VW / 2, 46); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 3;
+    ctx.beginPath();ctx.moveTo(-210, -57);ctx.lineTo(210, -44);
+    ctx.moveTo(-210, 44);ctx.lineTo(210, 57);ctx.stroke();
+    drawOutlinedText(fire ? 'Fire!' : 'Ready!', 0, 5, {
+      font: 'italic 900 68px ' + UI_FONT_HEAVY, color, lineWidth: 7,
+    });
+    drawOutlinedText(fire ? '一斉発射！' : 'みんな、いくぞ！', 0, 37, {
+      font: '900 17px ' + UI_FONT_HEAVY, color: '#ffffff', lineWidth: 4,
+    });
+    ctx.restore();
+  }
+
   function drawCoopSalvoSpecialFlash() {
     const flash = coopSalvoSpecialFlash;
     if (!flash || flash.timer <= 0 || !flash.entries?.length) return;
@@ -28959,6 +28996,7 @@
     drawBossBanner();
     drawSpecialFlash();
     drawCoopSalvoSpecialFlash();
+    drawCoopSalvoLaunchCue();
     drawTutorialOverlay();
     drawCutIn();
     drawMenuOverlay();
@@ -30903,6 +30941,13 @@
         return;
       }
     }
+    if (coopSalvoState?.phase === 'launch-cue') {
+      coopSalvoState.cueTimer = Math.max(0, coopSalvoState.cueTimer - dt);
+      if (coopSalvoState.cueTimer > 0) return;
+      armQueuedCoopSalvo();
+      // The aura was just created after its update block; freeze physics this frame too.
+      if (coopSalvoState?.phase === 'special-aura') return;
+    }
     if (submitRevealTimer > 0) submitRevealTimer = Math.max(0, submitRevealTimer - dt);
     if (matchEndPause > 0) {
       const before = matchEndPause;
@@ -31425,6 +31470,7 @@
       && !projectiles.length && !barucopters.length && !groundFlames.length
       && !particles.length && !empRings.length && !lightningBeams.length
       && !floatTexts.length && !scorpionRailSpikeBursts.length
+      && coopSalvoState?.phase !== 'launch-cue'
       && moveDir === 0 && inputMode === null
       && cameraTargetX === null && cameraTargetY === null;
   }

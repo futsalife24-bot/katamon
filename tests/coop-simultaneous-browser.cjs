@@ -1,9 +1,10 @@
 // Browser QA: production input handlers and renderer; hooks exist only in intercepted test HTML.
 const {chromium}=require('playwright'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const root=path.join(__dirname,'..'),evidence=path.join(root,'docs/tasks/2026-09-12-coop-simultaneous-evidence');
+const root=path.join(__dirname,'..'),evidence=path.join(root,'docs/tasks/2026-09-12-coop-ready-fire-evidence');
 fs.mkdirSync(evidence,{recursive:true});
-const hook=`globalThis.__salvoQa={
+const hook=`globalThis.__cueFloor=0.6; globalThis.__salvoQa={
  state:()=>({...coopNormalBattleState(),error:online?.protocolError,matchOver,ready:coopSalvoState?.started}),
+ cue:()=>coopSalvoState?.cueTimer,
  clock:()=>{coopNormalSession.serverNow=()=>Date.now()+31000;},
 };\n`;
 (async()=>{
@@ -11,7 +12,7 @@ const hook=`globalThis.__salvoQa={
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,deviceScaleFactor:1,serviceWorkers:'block'});
   const page=await context.newPage();lastPage=page;page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/index.html*',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8').replace('  globalThis.KatamonCoopBridge = Object.freeze({',hook+'  globalThis.KatamonCoopBridge = Object.freeze({')}));
+  await page.route('**/index.html*',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8').replace('Math.max(0, coopSalvoState.cueTimer - dt)', 'Math.max(globalThis.__cueFloor || 0, coopSalvoState.cueTimer - dt)').replace('  globalThis.KatamonCoopBridge = Object.freeze({',hook+'  globalThis.KatamonCoopBridge = Object.freeze({')}));
   await page.goto((process.env.COOP_BASE_URL||'http://127.0.0.1:4181')+'/index.html?coopMvp=1',{waitUntil:'domcontentloaded',timeout:60000});
   await page.waitForFunction(()=>globalThis.KatamonCustomStageBridge?.getState()?.gamePhase==='press');
   const canvas=page.locator('#game'),box=await canvas.boundingBox();
@@ -27,6 +28,15 @@ const hook=`globalThis.__salvoQa={
   const pt=(x,y)=>({x:box.x+x/540*box.width,y:box.y+y/960*box.height});
   const fire=pt(270,810),pull=pt(178,860);
   await page.mouse.move(fire.x,fire.y);await page.mouse.down();await page.mouse.move(pull.x,pull.y,{steps:10});await page.mouse.up();
+  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.phase==='launch-cue');
+  assert.equal((await page.evaluate(()=>globalThis.__salvoQa.state())).projectiles.length,0);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await page.screenshot({path:path.join(evidence,'ready.png')});
+  await page.evaluate(()=>globalThis.__cueFloor=0.2);
+  await page.waitForFunction(()=>globalThis.__salvoQa.cue()<=0.3);
+  assert.equal((await page.evaluate(()=>globalThis.__salvoQa.state())).projectiles.length,0);
+  await page.screenshot({path:path.join(evidence,'fire.png')});
+  await page.evaluate(()=>globalThis.__cueFloor=0);
   await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.launchTicks.length===4,null,{timeout:10000});
   const firing=await page.evaluate(()=>globalThis.__salvoQa.state());assert.ok(firing.salvo.launchTicks.every(t=>t===0));
   await page.screenshot({path:path.join(evidence,'02-simultaneous-fire-mobile.png')});

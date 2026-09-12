@@ -2008,8 +2008,12 @@ const HOOK = `
         }),
       };
       const armed = armQueuedCoopSalvo();
+      const cue = { phase: coopSalvoState?.phase, duration: coopSalvoState?.cueTimer,
+        auraVisible: !!coopSalvoSpecialAura, flashVisible: !!coopSalvoSpecialFlash,
+        projectileCount: projectiles.length };
+      update(0.96);
       return {
-        armed,
+        armed, cue,
         phase: coopSalvoState?.phase || null,
         duration: coopSalvoSpecialAura?.duration || 0,
         charges: ids.map(unitId => unitById(unitId)?.specialCharge),

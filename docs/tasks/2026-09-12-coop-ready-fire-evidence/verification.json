@@ -1,0 +1,20 @@
+{
+  "build": "v2.0.180-coop-ready-fire",
+  "base": "f6894fd68a7b40ca665096b11263e99afd75e641",
+  "solo": 34,
+  "network": {
+    "siege-fortress-01": 26,
+    "storm-dragon-02": 26
+  },
+  "regression": {
+    "p1": 477,
+    "e1": 477
+  },
+  "playable": 134,
+  "stormRuntime": 28,
+  "supportItems": 44,
+  "cache": 2,
+  "undef": 2,
+  "browser": "special-sequence.json",
+  "physicalDevices": false
+}

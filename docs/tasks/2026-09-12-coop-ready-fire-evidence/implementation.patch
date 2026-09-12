@@ -1,0 +1,296 @@
+diff --git a/docs/coop-simultaneous-actions.md b/docs/coop-simultaneous-actions.md
+index 807802c..9fb2340 100644
+--- a/docs/coop-simultaneous-actions.md
++++ b/docs/coop-simultaneous-actions.md
+@@ -10,6 +10,7 @@
+ - 通常弾、必殺、跳躍、救助・回復・弱体化弾、装備SUBを予約できる。装備・使用回数・ゲージ・移動禁止の条件を守る。1人1行動。
+ - 生存して行動可能な味方全員がREADYになると、30秒を待たず発射へ進む。AIも人間の入力待ちをせず移動・照準・READYする。
+ - 30秒を過ぎた未READYの味方はその巡回を待機する。未確定の照準を勝手に射撃へ変換しない。
++- 発射する行動がある場合、発射直前にReady!（0.65秒）→Fire!（0.30秒）の共通合図を表示する。必殺技を含む場合はReady!→Fire!→キャラのオーラ→必殺技カットイン→一斉発射の順とする。合図中は入力と弾の生成・背景物理を止め、全員待機なら合図を省略する。
+ - 全弾を同じ固定物理tickで生成する。複数必殺の共通演出は維持する。全弾・跳躍・落下などの解決後にボスへ渡す。
+ - ダウン、行動不能、救助直後の待機は既存の状態条件を維持し、READY必須人数から除外する。
+ - メニューを開いても共通期限とオンライン進行は停止しない。
+diff --git a/index.html b/index.html
+index ea897bc..059beed 100644
+--- a/index.html
++++ b/index.html
+@@ -978,13 +978,14 @@
+   // ===== ビルド番号 =====
+   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
+   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
+-  const BUILD_ID = 'v2.0.179-coop-salvo';
++  const BUILD_ID = 'v2.0.180-coop-ready-fire';
+   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
+   // download on first paint. Activate it at the first title tap, independently
+   // of Service Worker availability and the large T2 media download queue.
+   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
+   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
+   const UPDATE_HISTORY = Object.freeze([
++    { version: 'v2.0.180', date: '2026/09/12', summary: '協力戦の一斉発射前にReady! → Fire!の合図を追加' },
+     { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
+     { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
+     { version: 'v2.0.177', date: '2026/09/12', summary: '第2ボス「雷晶龍ヴォルテリス」と雷雲の祭壇、ソロ出撃を追加' },
+@@ -21982,7 +21983,7 @@
+ 
+   function beginQueuedCoopSalvoResolution() {
+     const state = coopSalvoState;
+-    if (!state || (state.phase !== 'launching' && state.phase !== 'special-cutin')) return false;
++    if (!state || !['launching', 'special-cutin', 'launch-cue'].includes(state.phase)) return false;
+     state.phase = 'resolving';
+     // 発射集合はホストのsalvoFireで確定済み。各席のfireを個別送信しない。
+     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
+@@ -21993,7 +21994,13 @@
+ 
+   function armQueuedCoopSalvo() {
+     const state = coopSalvoState;
+-    if (!state || state.phase !== 'launching') return false;
++    if (!state || !['launching', 'launch-cue'].includes(state.phase)) return false;
++    if (state.phase === 'launching' && state.actions.length) {
++      state.phase = 'launch-cue';
++      state.cueTimer = 0.95;
++      return true;
++    }
++    if (state.phase === 'launch-cue' && state.cueTimer > 0) return false;
+     state.actions.sort((a, b) => state.expected.indexOf(a.unitId) - state.expected.indexOf(b.unitId));
+     const entries = state.actions.filter(action => action.useSpecial).map(action => {
+       const unit = unitById(action.unitId);
+@@ -22037,7 +22044,7 @@
+ 
+   const COOP_SALVO_LAUNCH_INTERVAL_TICKS = 0; // 全員を同じ固定物理tickへ投入
+   function coopSalvoLaunchesPending() {
+-    if (['launching', 'special-aura', 'special-cutin'].includes(coopSalvoState?.phase)) return true;
++    if (['launching', 'special-aura', 'special-cutin', 'launch-cue'].includes(coopSalvoState?.phase)) return true;
+     return coopSalvoState?.phase === 'resolving'
+       && coopSalvoState.nextLaunchIndex < coopSalvoState.actions.length;
+   }
+@@ -27383,6 +27390,36 @@
+     ctx.restore();
+   }
+ 
++  // Ready → Fire leads into special aura/cut-in, or directly into normal shots.
++  function drawCoopSalvoLaunchCue() {
++    const state = coopSalvoState;
++    if (!coopSalvoEnabled() || state?.phase !== 'launch-cue' || matchOver) return;
++    const fire = state.cueTimer <= 0.3;
++    const elapsed = fire ? 0.3 - state.cueTimer : 0.95 - state.cueTimer;
++    const pop = Math.max(0, 1 - elapsed / 0.16);
++    const color = fire ? '#ffcc58' : '#8beaff';
++    const y = VH * 0.40;
++    ctx.save();
++    ctx.fillStyle = 'rgba(3, 12, 24, 0.38)';
++    ctx.fillRect(0, 0, VW, VH);
++    ctx.translate(VW / 2, y);
++    ctx.scale(1 + pop * 0.16, 1 + pop * 0.16);
++    ctx.fillStyle = 'rgba(5, 19, 34, 0.88)';
++    ctx.beginPath();
++    ctx.moveTo(-VW / 2, -62); ctx.lineTo(VW / 2, -46);
++    ctx.lineTo(VW / 2, 62); ctx.lineTo(-VW / 2, 46); ctx.closePath(); ctx.fill();
++    ctx.strokeStyle = color; ctx.lineWidth = 3;
++    ctx.beginPath();ctx.moveTo(-210, -57);ctx.lineTo(210, -44);
++    ctx.moveTo(-210, 44);ctx.lineTo(210, 57);ctx.stroke();
++    drawOutlinedText(fire ? 'Fire!' : 'Ready!', 0, 5, {
++      font: 'italic 900 68px ' + UI_FONT_HEAVY, color, lineWidth: 7,
++    });
++    drawOutlinedText(fire ? '一斉発射！' : 'みんな、いくぞ！', 0, 37, {
++      font: '900 17px ' + UI_FONT_HEAVY, color: '#ffffff', lineWidth: 4,
++    });
++    ctx.restore();
++  }
++
+   function drawCoopSalvoSpecialFlash() {
+     const flash = coopSalvoSpecialFlash;
+     if (!flash || flash.timer <= 0 || !flash.entries?.length) return;
+@@ -28959,6 +28996,7 @@
+     drawBossBanner();
+     drawSpecialFlash();
+     drawCoopSalvoSpecialFlash();
++    drawCoopSalvoLaunchCue();
+     drawTutorialOverlay();
+     drawCutIn();
+     drawMenuOverlay();
+@@ -30903,6 +30941,13 @@
+         return;
+       }
+     }
++    if (coopSalvoState?.phase === 'launch-cue') {
++      coopSalvoState.cueTimer = Math.max(0, coopSalvoState.cueTimer - dt);
++      if (coopSalvoState.cueTimer > 0) return;
++      armQueuedCoopSalvo();
++      // The aura was just created after its update block; freeze physics this frame too.
++      if (coopSalvoState?.phase === 'special-aura') return;
++    }
+     if (submitRevealTimer > 0) submitRevealTimer = Math.max(0, submitRevealTimer - dt);
+     if (matchEndPause > 0) {
+       const before = matchEndPause;
+@@ -31425,6 +31470,7 @@
+       && !projectiles.length && !barucopters.length && !groundFlames.length
+       && !particles.length && !empRings.length && !lightningBeams.length
+       && !floatTexts.length && !scorpionRailSpikeBursts.length
++      && coopSalvoState?.phase !== 'launch-cue'
+       && moveDir === 0 && inputMode === null
+       && cameraTargetX === null && cameraTargetY === null;
+   }
+diff --git a/sw.js b/sw.js
+index ddb099f..167f0e3 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE_VERSION = 'katamon-pwa-v2.0.179-coop-salvo';
++const CACHE_VERSION = 'katamon-pwa-v2.0.180-coop-ready-fire';
+ const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
+ const ASSET_CACHE = 'katamon-assets-v1';
+ // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
+diff --git a/tests/README.md b/tests/README.md
+index 5c1fc9a..7ede873 100644
+--- a/tests/README.md
++++ b/tests/README.md
+@@ -77,3 +77,5 @@ npm run test:e2e:storm-boss
+ - `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。
+ - `tests/coop-simultaneous-browser.cjs`: Playwright Chromiumで390×844の操作・READY表示・一斉発射・期限を確認する。HTTPサーバーを起動し、必要なら `COOP_BASE_URL` で指定する（既定4181、`npm run serve`は4173）。テストフックは配信レスポンスだけに注入する。
+ - Firebase本番回線・物理スマホの複数人検証は別工程。Node中継は実ネットワークの検証ではない。
++
++- `tests/coop-ready-fire-browser.cjs`: 両ボスで実ドラッグによる必殺のReady→Fire→オーラ→カットイン→同tick発射を実時間で確認。`COOP_BASE_URL`（既定4186）でHTTPサーバーを指定。`COOP_PUBLISHED=1`では公開レスポンスを取得して観測用フックだけ注入する。
+diff --git a/tests/cache-version-test.js b/tests/cache-version-test.js
+index 9321d81..36ad40a 100644
+--- a/tests/cache-version-test.js
++++ b/tests/cache-version-test.js
+@@ -5,7 +5,7 @@ const path = require('node:path');
+ const root = path.join(__dirname, '..');
+ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+ const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+-const EXPECTED_BUILD_ID = 'v2.0.179-coop-salvo';
++const EXPECTED_BUILD_ID = 'v2.0.180-coop-ready-fire';
+ 
+ function tierBody(worker, tier) {
+   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
+diff --git a/tests/coop-simultaneous-browser.cjs b/tests/coop-simultaneous-browser.cjs
+index fdffd4c..a74c5c4 100644
+--- a/tests/coop-simultaneous-browser.cjs
++++ b/tests/coop-simultaneous-browser.cjs
+@@ -1,9 +1,10 @@
+ // Browser QA: production input handlers and renderer; hooks exist only in intercepted test HTML.
+ const {chromium}=require('playwright'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+-const root=path.join(__dirname,'..'),evidence=path.join(root,'docs/tasks/2026-09-12-coop-simultaneous-evidence');
++const root=path.join(__dirname,'..'),evidence=path.join(root,'docs/tasks/2026-09-12-coop-ready-fire-evidence');
+ fs.mkdirSync(evidence,{recursive:true});
+-const hook=`globalThis.__salvoQa={
++const hook=`globalThis.__cueFloor=0.6; globalThis.__salvoQa={
+  state:()=>({...coopNormalBattleState(),error:online?.protocolError,matchOver,ready:coopSalvoState?.started}),
++ cue:()=>coopSalvoState?.cueTimer,
+  clock:()=>{coopNormalSession.serverNow=()=>Date.now()+31000;},
+ };\n`;
+ (async()=>{
+@@ -11,7 +12,7 @@ const hook=`globalThis.__salvoQa={
+  try{
+   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,deviceScaleFactor:1,serviceWorkers:'block'});
+   const page=await context.newPage();lastPage=page;page.on('pageerror',e=>errors.push(e.message));
+-  await page.route('**/index.html*',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8').replace('  globalThis.KatamonCoopBridge = Object.freeze({',hook+'  globalThis.KatamonCoopBridge = Object.freeze({')}));
++  await page.route('**/index.html*',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8').replace('Math.max(0, coopSalvoState.cueTimer - dt)', 'Math.max(globalThis.__cueFloor || 0, coopSalvoState.cueTimer - dt)').replace('  globalThis.KatamonCoopBridge = Object.freeze({',hook+'  globalThis.KatamonCoopBridge = Object.freeze({')}));
+   await page.goto((process.env.COOP_BASE_URL||'http://127.0.0.1:4181')+'/index.html?coopMvp=1',{waitUntil:'domcontentloaded',timeout:60000});
+   await page.waitForFunction(()=>globalThis.KatamonCustomStageBridge?.getState()?.gamePhase==='press');
+   const canvas=page.locator('#game'),box=await canvas.boundingBox();
+@@ -27,6 +28,15 @@ const hook=`globalThis.__salvoQa={
+   const pt=(x,y)=>({x:box.x+x/540*box.width,y:box.y+y/960*box.height});
+   const fire=pt(270,810),pull=pt(178,860);
+   await page.mouse.move(fire.x,fire.y);await page.mouse.down();await page.mouse.move(pull.x,pull.y,{steps:10});await page.mouse.up();
++  await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.phase==='launch-cue');
++  assert.equal((await page.evaluate(()=>globalThis.__salvoQa.state())).projectiles.length,0);
++  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
++  await page.screenshot({path:path.join(evidence,'ready.png')});
++  await page.evaluate(()=>globalThis.__cueFloor=0.2);
++  await page.waitForFunction(()=>globalThis.__salvoQa.cue()<=0.3);
++  assert.equal((await page.evaluate(()=>globalThis.__salvoQa.state())).projectiles.length,0);
++  await page.screenshot({path:path.join(evidence,'fire.png')});
++  await page.evaluate(()=>globalThis.__cueFloor=0);
+   await page.waitForFunction(()=>globalThis.__salvoQa.state().salvo?.launchTicks.length===4,null,{timeout:10000});
+   const firing=await page.evaluate(()=>globalThis.__salvoQa.state());assert.ok(firing.salvo.launchTicks.every(t=>t===0));
+   await page.screenshot({path:path.join(evidence,'02-simultaneous-fire-mobile.png')});
+diff --git a/tests/coop-simultaneous.test.js b/tests/coop-simultaneous.test.js
+index cd24576..cca5725 100644
+--- a/tests/coop-simultaneous.test.js
++++ b/tests/coop-simultaneous.test.js
+@@ -17,13 +17,20 @@ check(state.projectiles.length===0,'no shot before all ready or deadline');
+ check(kt().salvoTest.ready(),'human commits');
+ check(!kt().salvoTest.ready(),'duplicate ready rejected');
+ step(1);state=bridge.getNormalBattleState();
++check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'rally starts before projectiles');
++step(38);state=bridge.getNormalBattleState();
++check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'Ready holds shots');
++step(5);state=bridge.getNormalBattleState();
++check(state.salvo.phase==='launch-cue' && state.projectiles.length===0,'Fire holds shots until cue ends');
++step(16);state=bridge.getNormalBattleState();
+ check(state.salvo.launchTicks.length===4&&state.salvo.launchTicks.every(n=>n===0),'all four fire on tick zero');
+ for(let i=0;i<1800&&!bridge.getNormalBattleState().inputReady;i++)step();
+ state=bridge.getNormalBattleState();
+ check(state.inputReady&&state.turnCount>=5,'boss resolves then next shared round opens');
+ start(); step(180);const prior=bridge.getNormalBattleState().turnCount;
+ now+=31000;kt().salvoTest.menu(true);step(1);state=bridge.getNormalBattleState();
+-check(state.salvo.phase==='resolving','menu does not pause common deadline');
++check(state.salvo.phase==='launch-cue','menu does not pause common deadline');
++step(60);state=bridge.getNormalBattleState();
+ check(state.salvo.launchTicks.length===3,'timeout fires only ready allies');
+ check(!kt().salvoTest.ready(),'late ready rejected');
+ kt().salvoTest.menu(false);
+@@ -44,12 +51,25 @@ for(const [kind,id] of [['coopItem','healing-kit'],['coopItem','debuff-grenade']
+  start();kt().salvoTest.freezeAI();const u=kt().unitById('p1');u[kind]=id;u[kind+'UsesLeft']=1;
+  check(!kt().salvoTest.ready(undefined,{[kind+'Id']:id,useSpecial:true}),'combined action rejected');
+  check(kt().salvoTest.ready(undefined,{[kind+'Id']:id}),id+' can be committed');
+- now+=31000;step(2);
++ now+=31000;step(62);
+  check(u[kind+'UsesLeft']===0,id+' consumes exactly once on launch');
+ }
+-start();step(180);kt().unitById('boss1').hp=1;kt().salvoTest.ready();step(1);
++start();step(180);kt().unitById('boss1').hp=1;kt().salvoTest.ready();step(61);
+ const rect=kt().stormTest.rect();kt().stormTest.shootAt(rect.x+rect.width*.42,rect.y+rect.height*.62);step(5);
+ check(kt().unitById('boss1').hp===0&&!kt().stormTest.result().matchOver,'lethal hit waits for remaining simultaneous projectiles');
+ step(900);
+ check(kt().stormTest.result().matchOver&&bridge.getNormalBattleState().phase==='results','salvo victory reaches result once');
++// Follow a real mixed normal/special round frame by frame through every pre-launch phase.
++start();step(180);kt().fillCharges();
++check(kt().salvoTest.ready(undefined,{useSpecial:true}),'special action accepted');
++const phases=[];
++for(let i=0;i<360;i++){
++ step();const current=bridge.getNormalBattleState();
++ if(phases.at(-1)!==current.salvo?.phase) phases.push(current.salvo?.phase);
++ if(current.salvo?.phase==='resolving') break;
++ assert.equal(current.projectiles.length,0,'no projectile before special cut-in ends');
++ assert.equal(current.inputReady,false,'input locked throughout the special sequence');
++}
++check(phases.join(',')==='launch-cue,special-aura,special-cutin,resolving','Ready/Fire then aura then cut-in then launch: '+phases);
++check(bridge.getNormalBattleState().salvo.launchTicks.every(t=>t===0),'mixed special salvo still shares tick zero');
+ console.log('Coop simultaneous solo:',checks,'passed');
+diff --git a/tests/regressiontest.js b/tests/regressiontest.js
+index 36bd5cf..76b222d 100644
+--- a/tests/regressiontest.js
++++ b/tests/regressiontest.js
+@@ -3363,7 +3363,11 @@ kt.startFreeMatch();
+ const coopSpecialKeys = ['kyoryu', 'medama', 'iwa', 'tori'];
+ const coopSpecialIds = ['p1', 'p2', 'e1', 'e2'];
+ const armedCoopSpecials = kt.armCoopSpecialSalvoForTest(coopSpecialIds, coopSpecialKeys);
+-check('4体の必殺を同じ一斉砲撃へ積むと、全員同時オーラの予兆から始まる',
++check('必殺オーラの前に0.95秒のReady→Fireが入り、弾もカットインも出ない',
++  armedCoopSpecials.cue.phase === 'launch-cue' && armedCoopSpecials.cue.duration === 0.95
++    && !armedCoopSpecials.cue.auraVisible && !armedCoopSpecials.cue.flashVisible
++    && armedCoopSpecials.cue.projectileCount === 0, JSON.stringify(armedCoopSpecials.cue));
++check('合図の後は4体全員の同時オーラから始まる',
+   armedCoopSpecials.armed === true
+     && armedCoopSpecials.phase === 'special-aura'
+     && armedCoopSpecials.duration === 0.9
+diff --git a/tests/seatharness.js b/tests/seatharness.js
+index 411f58b..87872dd 100644
+--- a/tests/seatharness.js
++++ b/tests/seatharness.js
+@@ -2008,8 +2008,12 @@ const HOOK = `
+         }),
+       };
+       const armed = armQueuedCoopSalvo();
++      const cue = { phase: coopSalvoState?.phase, duration: coopSalvoState?.cueTimer,
++        auraVisible: !!coopSalvoSpecialAura, flashVisible: !!coopSalvoSpecialFlash,
++        projectileCount: projectiles.length };
++      update(0.96);
+       return {
+-        armed,
++        armed, cue,
+         phase: coopSalvoState?.phase || null,
+         duration: coopSalvoSpecialAura?.duration || 0,
+         charges: ids.map(unitId => unitById(unitId)?.specialCharge),
