@@ -1,7 +1,7 @@
 # 協力ボス戦の同時準備・一斉発射
 
-- 状態: 実装・自己検証完了、未コミット・未公開。
-- 起点/base/HEAD: 3d404d96867e98966b0f6595e4368404476765db（公開済みフォント修正版のmerge）。
+- 状態: 実装・自己検証完了、PR #396で公開チェック中。
+- 起点/base: 3d404d96867e98966b0f6595e4368404476765db（公開済みフォント修正版のmerge）。
 - branch: feat/coop-simultaneous-20260912
 - 作業場所: .codex-worktrees/coop-simultaneous-20260912
 - BUILD_ID / CACHE_VERSION: v2.0.179-coop-salvo
@@ -28,6 +28,11 @@
 - 協力戦/第2ボス関連10ファイルも成功（アイテム、ダウン救助、ボスAI、旧ラウンド、再戦、ロビー、テンポ、実戦統合、Storm domain/runtime）。
 - Chromium 390×844: 実際の引いて離す操作、残秒・人数、AIの並行READY、4発同時、次巡回、期限を確認。pageerrorなし。物理スマホではない。
 - 既存テストの初回ログには旧期待値による失敗が残る。修正後stage3以降の最終結果はremaining-regression.log、cache/曜日の最終成功は検証サマリーを参照。
+
+## 公開チェック
+
+- ユーザーの公開依頼に基づきPR #396を作成。実装commitは8590107262578cd6ac175bd80c2901ebb82cafab。
+- 初回CIは本体npm test、Content StudioとAndroid E2Eが成功。全体mobile E2Eは115成功・20skip・1失敗。失敗はgame-shell.spec.jsの旧時間差発射期待値だけで、[0,0,0,0]へ修正後、同じケースをAndroid相当Chromiumで実行して成功（26.8秒）。ゲーム本体は変更なし。
 
 ## 証拠
 

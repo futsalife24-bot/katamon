@@ -1,8 +1,8 @@
 # カタモン 現在作業状態
 
-## 2026-09-12 協力戦の同時行動（実装済み・未公開）
+## 2026-09-12 協力戦の同時行動（PR #396・公開チェック中）
 
-- 作業場所 `.codex-worktrees/coop-simultaneous-20260912` / branch `feat/coop-simultaneous-20260912` / base・HEAD `3d404d96867e98966b0f6595e4368404476765db`。未コミット、BUILD `v2.0.179-coop-salvo`。
+- 作業場所 `.codex-worktrees/coop-simultaneous-20260912` / branch `feat/coop-simultaneous-20260912` / base `3d404d96867e98966b0f6595e4368404476765db`。BUILD `v2.0.179-coop-salvo`。
 - 両ボス・ソロ/複数人の味方準備を同時化。共通30秒、全員READYで早期一斉発射、期限切れの未READYは待機。
 - 新規80項目、既存回帰の各コマンド、モバイル相当Chromiumを確認。実Firebase複数人・物理スマホ・公開は未実施。詳細は[作業記録](docs/tasks/2026-09-12-coop-simultaneous.md)。
 
