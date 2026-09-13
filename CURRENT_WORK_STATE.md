@@ -1,5 +1,12 @@
 # カタモン 現在作業状態
 
+## 2026-09-13 第1ボス専用ステージ（統合完成・未公開）
+
+- `feat/fortress-stage-20260913` / base・HEAD `ab6e38e16cef336fe7ae6b9d617611fafc171d27`。BUILD `v2.0.182-fortress-foundry`、未コミット。
+- 既存制作済みの「灼鉄の包囲工廠」をアニメーション公開版へ統合。溶鉱炉背景・警戒帯の鋼鉄台座・赤銅色の破壊可能足場を使用。
+- 関連Node検証・実Chromiumで両ボスの発射／次巡回、地形破壊、背景切替、PC・スマホ幅を確認。アニメーションと味方行動中の部位固定を維持。
+- [変更・証拠](docs/tasks/2026-09-13-fortress-stage.md)。物理スマホ・本番Firebase複数人・公開は未実施。
+
 ## 2026-09-13 協力ボスアニメーション（ローカル完成・未公開）
 
 - `feat/coop-boss-animation-20260913` / base・HEAD `628b4f7cee6361c6f72b8c47bedeb1e45e76e5ae`、BUILD `v2.0.181-boss-motion`、未コミット。

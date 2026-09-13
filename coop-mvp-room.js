@@ -18,7 +18,7 @@
   const SUBWEAPON_IDS = new Set(['barrier', 'impact', 'drill']);
   const DIFFICULTY_IDS = new Set(['normal', 'hard', 'extreme']);
   const BOSS_TARGETS = Object.freeze({
-    'siege-fortress-01': { name: '超大型要塞戦車', image: 'assets/bosses/runtime/fortress-tank.webp', stage: '鋼鉄要塞',
+    'siege-fortress-01': { name: '超大型要塞戦車', image: 'assets/bosses/runtime/fortress-tank.webp', stage: '灼鉄の包囲工廠',
       description: '砲台・装甲を破壊してCOREを開く、地上の重装要塞。' },
     'storm-dragon-02': { name: '雷晶龍ヴォルテリス', image: 'assets/bosses/runtime/volteris.webp', stage: '雷雲の祭壇',
       description: '雷角・両翼晶・尾晶を狙う空中戦。三連弾 → 蓄雷 → 落雷。蓄雷後は心核を狙い、雷柱を避けよう。' },
@@ -183,7 +183,7 @@
         <section id="coopEntry" class="coop-entry">
           <p class="coop-kicker">大型ボス 共同討伐作戦</p>
           <select id="coopBossTarget" class="coop-button" aria-label="討伐ボス"><option value="siege-fortress-01">第1ボス：超大型要塞戦車</option><option value="storm-dragon-02">第2ボス：雷晶龍ヴォルテリス</option></select>
-          <div class="coop-boss-card"><img id="coopBossPreview" src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span id="coopBossStage">鋼鉄要塞</span><strong id="coopBossName">超大型要塞戦車</strong><small>4人共同討伐・ソロ＋CPU3体対応</small></div></div>
+          <div class="coop-boss-card"><img id="coopBossPreview" src="assets/bosses/runtime/fortress-tank.webp" alt=""><div class="coop-boss-copy"><span id="coopBossStage">灼鉄の包囲工廠</span><strong id="coopBossName">超大型要塞戦車</strong><small>4人共同討伐・ソロ＋CPU3体対応</small></div></div>
           <p id="coopBossGuide" class="coop-note">砲台・装甲を破壊してCOREを開く、地上の重装要塞。</p>
           <div class="coop-card coop-grid"><select id="coopSoloCharacter" class="wide" aria-label="ソロのモンスター"></select><button id="coopSoloStart" class="coop-button coop-primary wide" type="button">ソロ出撃（あなた＋CPU3体）</button><small class="wide">部屋作成なしで挑戦。難易度は下の設定を使用します。</small></div>
           <div class="coop-card"><div class="coop-grid">
@@ -201,7 +201,7 @@
         <section id="coopRoom" class="coop-room" hidden>
           <p class="coop-kicker">作戦準備室　<span id="coopCode" class="coop-code"></span></p>
           <p id="coopRoomTarget" class="coop-note"></p>
-          <div id="coopHostSettings" class="coop-card coop-grid"><select id="coopRoomBossTarget" class="wide" aria-label="討伐ボス"><option value="siege-fortress-01">超大型要塞戦車 ／ 鋼鉄要塞</option><option value="storm-dragon-02">雷晶龍ヴォルテリス ／ 雷雲の祭壇</option></select><select id="coopRoomDifficulty" aria-label="難易度"></select><select id="coopRoomAiFill" aria-label="AI補充"><option value="on">AI補充 ON</option><option value="off">AI補充 OFF</option></select></div>
+          <div id="coopHostSettings" class="coop-card coop-grid"><select id="coopRoomBossTarget" class="wide" aria-label="討伐ボス"><option value="siege-fortress-01">超大型要塞戦車 ／ 灼鉄の包囲工廠</option><option value="storm-dragon-02">雷晶龍ヴォルテリス ／ 雷雲の祭壇</option></select><select id="coopRoomDifficulty" aria-label="難易度"></select><select id="coopRoomAiFill" aria-label="AI補充"><option value="on">AI補充 ON</option><option value="off">AI補充 OFF</option></select></div>
           <div id="coopAiRoster" class="coop-card coop-ai-roster" hidden><strong>味方AIのモンスター</strong><label><span>AI P2</span><select id="coopAiCharacterE1" aria-label="AI P2のモンスター"></select></label><label><span>AI P3</span><select id="coopAiCharacterS1" aria-label="AI P3のモンスター"></select></label><label><span>AI P4</span><select id="coopAiCharacterS2" aria-label="AI P4のモンスター"></select></label><small>参加者が入った席は、その人が選んだモンスターを優先します。</small></div>
           <div class="coop-card"><div id="coopSeats" class="coop-seats"></div></div>
           <div class="coop-card coop-grid"><select id="coopCharacter" class="wide" aria-label="モンスター"></select><select id="coopSubweapon" aria-label="サブウェポン"></select><select id="coopItem" aria-label="CO-OP ITEM"></select></div>
