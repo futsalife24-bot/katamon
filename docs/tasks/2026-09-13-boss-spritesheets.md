@@ -16,7 +16,7 @@
 - 正本: `assets/bosses/master/spritesheets/*-source.png`
 - 切出しと移動記録: 同フォルダ `assembly.json`
 - 再組立: `node tools/build-boss-sprites.cjs`（sharpが必要）
-- 実行用: `assets/bosses/runtime/*-idle-atlas.webp`、各2560×1280、計約1.9MB
+- 実行用: `assets/bosses/runtime/*-idle-atlas.webp`、各2560×1280、計約1.36MB
 - コマ・部位データ: `shared/coop-boss-sprite-data.js`
 
 ## 検証
@@ -28,3 +28,7 @@
 - [画像・JSON証拠](2026-09-13-boss-sprites-evidence/)。`git diff --check`成功。
 
 実機スマホ・本番複数人・公開後確認は未実施。公開とmergeは今回の依頼範囲に含めていない。
+
+## 公開前の容量修正
+
+初回CIは115件成功・1件失敗。iPhone WebKitのT3a取得量が47,518,110 bytesで45MiB上限を332,190 bytes超過。atlasのWebP qualityを92→80へ調整し、計1,883,310→1,360,406 bytes（522,904 bytes減）。解像度・8コマ・透過率・ゲームコードは維持。24コマ境界QA再成功。ローカルWebKit取得は配布元タイムアウトで実行できず、同じ容量E2EをGitHub CIで確認する。

@@ -58,7 +58,7 @@ const specs = [
     }
     const name=spec.id==='fortressPhase2'?'fortress-phase2-idle-atlas':spec.id+'-idle-atlas';
     await sharp({create:{width:cell*4,height:cell*2,channels:4,background:{r:0,g:0,b:0,alpha:0}}})
-      .composite(composites).webp({quality:92,alphaQuality:100}).toFile(path.join(root,'assets/bosses/runtime',name+'.webp'));
+      .composite(composites).webp({quality:80,alphaQuality:100}).toFile(path.join(root,'assets/bosses/runtime',name+'.webp'));
     data[spec.id]={path:'assets/bosses/runtime/'+name+'.webp',cell,columns:4,count:8,fps:7,
       sourceWidth:444,anchor:spec.bodies?anchor:[320,440],reference:spec.reference,frames};
   }
