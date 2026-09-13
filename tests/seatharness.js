@@ -11,6 +11,7 @@ if (!globalThis.crypto) globalThis.crypto = require('crypto').webcrypto;
 // 実行するため、実弾のCORE・部位判定を検証する時だけ同じAPIを先に接続する。
 globalThis.KatamonCoopBoss = require('../coop-mvp-boss.js');
 globalThis.KatamonStormBoss = require('../coop-storm-boss.js');
+globalThis.KatamonBossSpriteData = require('../shared/coop-boss-sprite-data.js');
 
 const SEAT = process.argv[2] === 'e1' ? 'e1' : 'p1';
 const HTML = path.join(__dirname, '..', 'index.html');
@@ -50,6 +51,12 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 const HOOK = `
   globalThis.__kt = {
     bossMotionTest: {
+      loaded: (ready=true) => { for(const [key,data] of Object.entries(globalThis.KatamonBossSpriteData)) {
+        coopBossSpriteImages[key]={complete:ready,naturalWidth:ready?data.cell*data.columns:0,naturalHeight:ready?data.cell*2:0};
+      } },
+      draw: () => { const calls=[], original=ctx.drawImage; ctx.drawImage=(...args)=>calls.push(args);
+        try { drawCoopBossSprite(ensureCoopBossImages().phase1,coopBossRect(coopBossUnit),coopBossMotionPose(coopBossUnit)); }
+        finally {ctx.drawImage=original;} return calls; },
       pose: () => coopBossMotionPose(coopBossUnit),
       point: (x,y) => coopBossVisualPoint(coopBossRect(coopBossUnit),x,y,coopBossMotionPose(coopBossUnit)),
       locked: () => coopBossMotionLocked(coopBossUnit),

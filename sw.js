@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'katamon-pwa-v2.0.182-fortress-foundry';
+const CACHE_VERSION = 'katamon-pwa-v2.0.183-boss-sprites';
 const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
 const ASSET_CACHE = 'katamon-assets-v1';
 // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
@@ -23,6 +23,7 @@ const APP_SHELL = [
   './coop-mvp-foundation.js',
   './coop-mvp-boss.js',
   './coop-storm-boss.js',
+  './shared/coop-boss-sprite-data.js',
   './coop-mvp-boss-ai.js',
   './coop-mvp-engine.js',
   './coop-mvp-survival.js',
@@ -91,6 +92,9 @@ const TIER2_ASSETS = [
   './assets/bosses/runtime/fortress-tank.webp',
   './assets/bosses/runtime/fortress-tank-phase2.webp',
   './assets/bosses/runtime/volteris.webp',
+  './assets/bosses/runtime/fortress-idle-atlas.webp',
+  './assets/bosses/runtime/fortress-phase2-idle-atlas.webp',
+  './assets/bosses/runtime/volteris-idle-atlas.webp',
   './assets/stages/runtime/thunder-altar.webp',
   './assets/stages/runtime/fortress-foundry.webp',
   './assets/gear/ui/runtime/gear_workbench_lab_background_01.webp',

@@ -1,0 +1,36 @@
+[
+  {
+    "boss": "siege-fortress-01",
+    "realSalvo": true,
+    "neutralPoseRestored": true,
+    "frames": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "phase2": true,
+    "errors": []
+  },
+  {
+    "boss": "storm-dragon-02",
+    "realSalvo": true,
+    "neutralPoseRestored": true,
+    "frames": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "phase2": true,
+    "errors": []
+  }
+]

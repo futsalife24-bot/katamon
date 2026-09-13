@@ -1,0 +1,434 @@
+[
+  {
+    "id": "fortress",
+    "frame": 0,
+    "source": {
+      "left": 0,
+      "top": 0,
+      "width": 446,
+      "height": 444
+    },
+    "translation": [
+      98,
+      38
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 1,
+    "source": {
+      "left": 446,
+      "top": 0,
+      "width": 440,
+      "height": 444
+    },
+    "translation": [
+      98,
+      38
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 2,
+    "source": {
+      "left": 886,
+      "top": 0,
+      "width": 441,
+      "height": 444
+    },
+    "translation": [
+      98,
+      38
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 3,
+    "source": {
+      "left": 1327,
+      "top": 0,
+      "width": 447,
+      "height": 444
+    },
+    "translation": [
+      98,
+      38
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 4,
+    "source": {
+      "left": 0,
+      "top": 444,
+      "width": 446,
+      "height": 443
+    },
+    "translation": [
+      98,
+      60
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 5,
+    "source": {
+      "left": 446,
+      "top": 444,
+      "width": 440,
+      "height": 443
+    },
+    "translation": [
+      98,
+      60
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 6,
+    "source": {
+      "left": 886,
+      "top": 444,
+      "width": 441,
+      "height": 443
+    },
+    "translation": [
+      98,
+      60
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortress",
+    "frame": 7,
+    "source": {
+      "left": 1327,
+      "top": 444,
+      "width": 447,
+      "height": 443
+    },
+    "translation": [
+      98,
+      60
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 0,
+    "source": {
+      "left": 0,
+      "top": 0,
+      "width": 444,
+      "height": 444
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 1,
+    "source": {
+      "left": 444,
+      "top": 0,
+      "width": 442,
+      "height": 444
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 2,
+    "source": {
+      "left": 886,
+      "top": 0,
+      "width": 445,
+      "height": 444
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 3,
+    "source": {
+      "left": 1331,
+      "top": 0,
+      "width": 443,
+      "height": 444
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 4,
+    "source": {
+      "left": 0,
+      "top": 444,
+      "width": 444,
+      "height": 443
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 5,
+    "source": {
+      "left": 444,
+      "top": 444,
+      "width": 442,
+      "height": 443
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 6,
+    "source": {
+      "left": 886,
+      "top": 444,
+      "width": 445,
+      "height": 443
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "frame": 7,
+    "source": {
+      "left": 1331,
+      "top": 444,
+      "width": 443,
+      "height": 443
+    },
+    "translation": [
+      98,
+      58
+    ],
+    "anchor": [
+      320,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 0,
+    "source": {
+      "left": 0,
+      "top": 0,
+      "width": 443,
+      "height": 440
+    },
+    "translation": [
+      93,
+      118
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 1,
+    "source": {
+      "left": 443,
+      "top": 0,
+      "width": 444,
+      "height": 440
+    },
+    "translation": [
+      91,
+      117
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 2,
+    "source": {
+      "left": 0,
+      "top": 440,
+      "width": 443,
+      "height": 500
+    },
+    "translation": [
+      92,
+      93
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 3,
+    "source": {
+      "left": 443,
+      "top": 440,
+      "width": 444,
+      "height": 500
+    },
+    "translation": [
+      89,
+      94
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 4,
+    "source": {
+      "left": 0,
+      "top": 940,
+      "width": 443,
+      "height": 420
+    },
+    "translation": [
+      92,
+      149
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 5,
+    "source": {
+      "left": 443,
+      "top": 940,
+      "width": 444,
+      "height": 420
+    },
+    "translation": [
+      89,
+      151
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 6,
+    "source": {
+      "left": 0,
+      "top": 1360,
+      "width": 443,
+      "height": 414
+    },
+    "translation": [
+      92,
+      139
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  },
+  {
+    "id": "volteris",
+    "frame": 7,
+    "source": {
+      "left": 443,
+      "top": 1360,
+      "width": 444,
+      "height": 414
+    },
+    "translation": [
+      89,
+      142
+    ],
+    "anchor": [
+      220,
+      440
+    ]
+  }
+]

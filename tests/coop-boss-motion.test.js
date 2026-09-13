@@ -9,15 +9,30 @@ for(const bossId of ['siege-fortress-01','storm-dragon-02']) {
   battle.startSoloBrowser({bridge,characters:bridge.getBattleCharacters(),character:'kyoryu',bossId});
   kt().salvoTest.clock(()=>now);step(240);
   const m=kt().bossMotionTest;
+  m.loaded();
   check(m.locked(),'preparation locks '+bossId);
   const boss=kt().unitById('boss1'), before=JSON.stringify(boss.bossState);
-  const neutral=m.point(.33,.075);
+  const point=bossId==='storm-dragon-02'?[.33,.075]:[.48,.18];
+  const neutral=m.point(...point);
   m.bossTurn();m.advance(.6);
-  check(!m.locked() && m.point(.33,.075).y!==neutral.y,'boss turn animates '+bossId);
+  check(!m.locked() && m.point(...point).y!==neutral.y && m.pose().frame>=0,'boss turn animates '+bossId);
+  const seen=new Set();
+  for(let i=0;i<8;i++){
+    seen.add(m.pose().frame);
+    const calls=m.draw();check(calls.length===1&&calls[0].length===9,'one source-cell draw per frame');
+    check(calls[0][3]===calls[0][4]&&calls[0][7]===calls[0][8],'uniform aspect ratio, no frame stretching');
+    m.advance(1/7);
+  }
+  check(seen.size===8,'all eight drawn frames are played');
+  m.loaded(false);check(m.pose().frame===-1,'unavailable sheet falls back to canonical image');
+  check(m.draw()[0].length===5,'unavailable atlas renders original static image');
+  assert.deepEqual(m.point(...point),neutral);
+  m.loaded();
+  boss.phase=2;check(m.pose().sheet===(bossId==='storm-dragon-02'?'volteris':'fortressPhase2'),'phase2 uses correct atlas');boss.phase=1;
   check(JSON.stringify(boss.bossState)===before,'animation never mutates authoritative boss state');
   for(const phase of ['collecting','launch-cue','launching','special-aura','special-cutin','resolving']) {
     m.phase(phase); m.advance(1);
-    assert.deepEqual(m.point(.33,.075),neutral);
+    assert.deepEqual(m.point(...point),neutral);
     check(m.locked() && m.pose().time===0,phase+' locks even with boss active');
   }
   m.phase('complete');m.advance(.6);
@@ -31,7 +46,7 @@ for(const bossId of ['siege-fortress-01','storm-dragon-02']) {
     step();const state=bridge.getNormalBattleState();
     if(state.salvo?.phase && state.salvo.phase!=='complete') {
       check(m.locked(),'actual allied phase remains frozen');
-      assert.deepEqual(m.point(.33,.075),neutral);frames++;
+      assert.deepEqual(m.point(...point),neutral);check(m.pose().frame===-1,'allied actions use canonical sprite');frames++;
       if(state.salvo.phase==='resolving')sawResolving=true;
     } else if(m.pose().time>0) movingBoss=true;
     if(movingBoss && state.inputReady)break;

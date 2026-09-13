@@ -1,9 +1,12 @@
 # カタモン 現在作業状態
 
-## 2026-09-13 第1ボス専用ステージ（統合完成・未公開）
+## 2026-09-13 ボス8コマ（公開準備）
 
-- PR #399 / `v2.0.182-fortress-foundry`。工廠背景と専用足場を追加し、アニメーションを保持。関連Node・実Chromium成功。物理スマホ・本番複数人は未確認。
-- branch・base・仕様・証拠: [作業記録](docs/tasks/2026-09-13-fortress-stage.md)。公開承認済み、CI確認中。
+- `v2.0.183-boss-sprites`。[実装・検証](docs/tasks/2026-09-13-boss-spritesheets.md)。
+
+## 2026-09-13 第1ボス専用ステージ
+
+- PR #399 / `v2.0.182-fortress-foundry`。[仕様・検証記録](docs/tasks/2026-09-13-fortress-stage.md)。
 
 ## 2026-09-13 協力ボスアニメーション（公開済み）
 

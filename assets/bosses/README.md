@@ -22,3 +22,7 @@
 - `fortress-tank-phase2.png`: `265daeb673cbcd8c7f0b0544ebbe6e38370fc6907b8b26f89ee9412db38efcca`
 - `fortress-tank.webp`: `b9f3dd8d3842f85c90849673d1903b605d8643092423c0ce459df47dcc1424eb`
 - `fortress-tank-phase2.webp`: `5b594a85042dec2b1a09cbcb8a0c52d5c7b28629f1dfa3cebf9df91bebddb542`
+
+## 8コマアニメーション（2026-09-13）
+
+要塞通常・展開・龍の生成正本と実行用atlasを追加。各640pxセル×8、7fps。再組立は `node tools/build-boss-sprites.cjs`（sharp）。[制作・検証記録](../../docs/tasks/2026-09-13-boss-spritesheets.md)。

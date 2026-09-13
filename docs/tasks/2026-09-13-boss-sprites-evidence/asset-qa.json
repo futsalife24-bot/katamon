@@ -1,0 +1,53 @@
+[
+  {
+    "id": "fortress",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "217f9ca673b40b9d82f49f83725454333281bf73a6404e55673e6b5363407f71",
+      "e16dae75778049a1a0f4b188c290207d0eb018091a77103b0077ce5b08b68aa3",
+      "b5cd4ce88a108c8a5587f5974feac00467553e57538111965f1e2b2378be5568",
+      "39fca035432d71582f189a84b53978b0c1d3d6b439cbbdeca110e3ae78861118",
+      "3face85fde4454b63ef5989f8a07e40c681d4558279449b47cf1d4c5c61dd63e",
+      "6094057333158c4c2da430b724b377b53708668dbb358e561f6f4a2a8fbdb8b5",
+      "21bb3cffcbbd7aa353b091ddce5d85792c9cbde9b19e5a87be1de6bc2c6d1e30",
+      "0810faf94caf1ee033ed0be1f38406d9605f71d944071de9c67b2f72256399f1"
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "9c89f581bc4dd4a52992a090c33fc020a61dc369f93bd927866bbd4291b679a9",
+      "a19dc254a798e58ee6a223f3dc3cd92aa7dbe963d345392f770ce6bf45337bd2",
+      "3d82b478c86d31f8471e1505504cd12dbb077b6e01f0a7c8778b6fa8b281a6aa",
+      "d4dbf41cfa04ebb389312656136dd2b19ca96bb60e2b13b533dd5710ef1ac88a",
+      "e3c090915d45de673027c23a0923b0217ef651e3add558b2871bff38e720e29f",
+      "eb58cd5e07b81d893858587b6dfe788ea6c8ac9fe587f72e2a376d9fa27b6569",
+      "c2075e5d22dd632423755b5ba28e8e86e2d946f2b6ddf12723022b46135314ac",
+      "e46a321e0b90a9349bcc723938e97eefd05bd364620cd91fede9479b386a964a"
+    ]
+  },
+  {
+    "id": "volteris",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "58fd176a98611b946b7f016899a08a2df83e35bede6717356eab62365eb66291",
+      "11926e7ae761355cf3548179d8201c0d412963aff492588c5ad60f5a861d83a8",
+      "56c68acb81b32d0697843072c13e8ee2a70dccc745bdd84c0af2d40891e2b3ee",
+      "68c30ada6b368a08e1f7f7a97fb32beda991f254869662f48f578d36b87d389c",
+      "e4449b53cd7c89284ac189f7597e732d9a8ee03d6b24863c5db8f314f39d5603",
+      "eb50abea5f5f6e67e7604bd161b360765a5c47b097809897081a7524d65bd784",
+      "8dce6992620ef4b3d9284c7ee1ae8d1101c11339232d4bb7c37bcb7bf6a79361",
+      "96c7496c8440a283b88f31c06a157b8744ba24547a24a38c152ba2154487d331"
+    ]
+  }
+]
