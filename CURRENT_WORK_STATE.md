@@ -1,5 +1,12 @@
 # カタモン 現在作業状態
 
+## 2026-09-13 協力ボスアニメーション（ローカル完成・未公開）
+
+- `feat/coop-boss-animation-20260913` / base・HEAD `628b4f7cee6361c6f72b8c47bedeb1e45e76e5ae`、BUILD `v2.0.181-boss-motion`、未コミット。
+- 要塞の小さな重量感ある揺れ、龍の羽ばたきと浮遊、部位・CORE・覚醒雷の追従。味方準備から一斉発射の解決終了まで両ボスを判定と同じ姿勢に固定。
+- 関連Node検証・両ボス4プロセス同期・実Chromiumの発射／次巡回とPC・スマホ幅確認済み。物理スマホ・本番Firebase複数人・公開は未実施。
+- [仕様・変更・検証記録](docs/tasks/2026-09-13-boss-motion.md)。未公開の要塞専用ステージは別枝のまま。
+
 ## 2026-09-12 協力戦の同時行動（PR #396・公開チェック中）
 
 - 作業場所 `.codex-worktrees/coop-simultaneous-20260912` / branch `feat/coop-simultaneous-20260912` / base `3d404d96867e98966b0f6595e4368404476765db`。BUILD `v2.0.179-coop-salvo`。

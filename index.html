@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.180-coop-ready-fire';
+  const BUILD_ID = 'v2.0.181-boss-motion';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.181', date: '2026/09/13', summary: '協力ボス2体のアニメーションと味方攻撃中の部位固定を追加' },
     { version: 'v2.0.180', date: '2026/09/12', summary: '協力戦の一斉発射前にReady! → Fire!の合図を追加' },
     { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
     { version: 'v2.0.178', date: '2026/09/12', summary: 'タイトルと協力ロビーの文字欠け・書体混在を修正' },
@@ -23351,19 +23352,81 @@
     ctx.restore();
   }
 
-  // 車体座標と当たり判定は固定したまま、排煙・油圧・粉塵・圧力光だけを動かす。
-  // 全身画像を揺らすと見えている部位と命中判定がずれるため、待機演出は外装効果に限定する。
+  // Presentation only: every client uses the canonical hit pose throughout allied actions.
+  let coopBossMotionTime = 0;
+  function coopBossMotionLocked(u) {
+    return !isCoop4v1() || !u || unitDefeated(u) || matchOver
+      || (coopSalvoState && coopSalvoState.phase !== 'complete')
+      || !isCoopBossUnit(activeUnit());
+  }
+  function updateCoopBossMotion(dt) {
+    if (coopBossMotionLocked(coopBossUnit)) coopBossMotionTime = 0;
+    else coopBossMotionTime += Math.max(0, dt);
+  }
+  function coopBossMotionPose(u) {
+    if (coopBossMotionLocked(u)) return { time: 0, bob: 0, flap: 0, sway: 0 };
+    const time = coopBossMotionTime;
+    const fade = Math.min(1, time / .35);
+    return isStormBossBattle()
+      ? { time, bob: Math.sin(time * 2.2) * 5 * fade,
+          flap: Math.sin(time * 3.6) * .22 * fade, sway: 0 }
+      : { time, bob: Math.sin(time * 3) * 3 * fade, flap: 0,
+          sway: Math.sin(time * 1.5) * 1.8 * fade };
+  }
+  function coopBossVisualPoint(rect, x, y, pose) {
+    if (!isStormBossBattle()) return {
+      x: rect.x + rect.width * x + pose.sway * (1 - y),
+      y: rect.y + rect.height * y + pose.bob * (1 - y),
+    };
+    // The head stays stable; wing lift grows from the shoulder to the wing tips.
+    const shoulder = Math.max(0, Math.min(1, (x - .20) / .16));
+    const weight = shoulder * shoulder * (3 - 2 * shoulder);
+    return { x: rect.x + rect.width * x,
+      y: rect.y + rect.height * y + pose.bob
+        + rect.height * pose.flap * weight * Math.max(0, .54 - y) };
+  }
+  function drawCoopBossSprite(image, rect, pose) {
+    if (!pose.bob && !pose.flap && !pose.sway) {
+      ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      return;
+    }
+    if (!isStormBossBattle()) {
+      ctx.save();
+      ctx.translate(rect.x + pose.sway, rect.y + pose.bob);
+      ctx.transform(1, 0, -pose.sway / rect.height, 1 - pose.bob / rect.height, 0, 0);
+      ctx.drawImage(image, 0, 0, rect.width, rect.height);
+      ctx.restore();
+      return;
+    }
+    // Contiguous narrow source strips bend the existing transparent wings without new assets.
+    // No per-strip shadow: it would outline the internal strip edges.
+    ctx.save(); ctx.shadowBlur = 0;
+    const hinge = .54, strips = 96;
+    for (let i = 0; i < strips; i++) {
+      const x = i / strips;
+      const top = coopBossVisualPoint(rect, (i + .5) / strips, 0, pose);
+      const bottom = rect.y + rect.height * hinge + pose.bob;
+      ctx.drawImage(image, image.naturalWidth * x, 0, image.naturalWidth / strips,
+        image.naturalHeight * hinge, rect.x + rect.width * x, top.y,
+        rect.width / strips, bottom - top.y);
+    }
+    ctx.drawImage(image, 0, image.naturalHeight * hinge, image.naturalWidth,
+      image.naturalHeight * (1 - hinge), rect.x, rect.y + rect.height * hinge + pose.bob,
+      rect.width, rect.height * (1 - hinge));
+    ctx.restore();
+  }
+
   function drawCoopBossIdleMotion(u, rect, foreground) {
     if (!u || unitDefeated(u)) return;
     const visibleRight = cameraX + visibleWorldWidth();
     if (rect.x + rect.width < cameraX - 100 || rect.x > visibleRight + 100) return;
-    const phase = simTimeMs / 1000;
+    const phase = coopBossMotionPose(u).time;
     const phase2 = u.phase >= 2;
     const heat = phase2 ? '#ff4e32' : '#ff9b42';
     const intensity = phase2 ? 1.22 : 1;
     ctx.save();
     if (!foreground) {
-      // 履帯の下から周期的に噴く粉塵。車体は動かさず、重量感だけを出す。
+      // 履帯の接地位置から周期的に噴く粉塵。
       for (let i = 0; i < 7; i++) {
         const travel = (phase * (0.48 + i * 0.018) + i * 0.137) % 1;
         const alpha = Math.sin(travel * Math.PI) * 0.22 * intensity;
@@ -23401,7 +23464,7 @@
       ctx.ellipse(ventX, ventY, 18 + pulse * 8, 10 + pulse * 4, -0.18, 0, Math.PI * 2);
       ctx.fill();
 
-      // 主砲基部へ溜まる圧力リング。砲身自体と物理判定は一切動かさない。
+      // 主砲基部へ溜まる圧力リング。味方行動中は演出時計も固定する。
       const cannonX = rect.x + rect.width * 0.48;
       const cannonY = rect.y + rect.height * 0.18;
       ctx.globalAlpha = 0.18 + pulse * 0.36;
@@ -23436,16 +23499,18 @@
   function drawCoopBossUnit(u) {
     const images = ensureCoopBossImages();
     const rect = coopBossRect(u);
+    const pose = coopBossMotionPose(u);
+    const motionMs = pose.time * 1000;
     const image = u.phase >= 2 ? images.phase2 : images.phase1;
     if (!isStormBossBattle()) drawCoopBossIdleMotion(u, rect, false);
     ctx.save();
     ctx.globalAlpha = unitDefeated(u) ? 0.38 : 1;
     if (isStormBossBattle()) {
       ctx.shadowColor = u.phase >= 2 ? '#d481ff' : '#55ceff';
-      ctx.shadowBlur = 14 + Math.sin(simTimeMs / 260) * 5;
+      ctx.shadowBlur = 14 + Math.sin(motionMs / 260) * 5;
     }
     if (image.complete && image.naturalWidth > 0) {
-      ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      drawCoopBossSprite(image, rect, pose);
     } else {
       const fallback = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
       fallback.addColorStop(0, '#68747e');
@@ -23466,14 +23531,14 @@
       // Awakened energy is a runtime effect; the transparent sprite and hit sites stay aligned.
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       const heart = bossApi.LIVE_CORE_SHAPE;
-      const hx = rect.x + rect.width * heart.x, hy = rect.y + rect.height * heart.y;
+      const { x: hx, y: hy } = coopBossVisualPoint(rect, heart.x, heart.y, pose);
       for (const id of ['skyWing', 'galeWing', 'tailCrystal']) {
         if (live.parts[id].destroyed) continue;
         const part = bossApi.PART_DEFS[id];
-        const tx = rect.x + rect.width * part.x, ty = rect.y + rect.height * part.y;
+        const { x: tx, y: ty } = coopBossVisualPoint(rect, part.x, part.y, pose);
         ctx.beginPath(); ctx.moveTo(hx, hy);
         for (let i = 1; i <= 8; i++) {
-          const jitter = i === 8 ? 0 : Math.sin(simTimeMs / 90 + i * 7) * 8;
+          const jitter = i === 8 ? 0 : Math.sin(motionMs / 90 + i * 7) * 8;
           ctx.lineTo(hx + (tx - hx) * i / 8 + jitter, hy + (ty - hy) * i / 8);
         }
         ctx.shadowColor = '#bc7aff'; ctx.shadowBlur = 16; ctx.strokeStyle = '#ad6cff'; ctx.lineWidth = 5; ctx.stroke();
@@ -23487,12 +23552,11 @@
         const part = live.parts?.[partId];
         const def = bossApi.PART_DEFS[partId];
         if (!part || !def || !part.active) continue;
-        const x = rect.x + rect.width * def.x;
-        const y = rect.y + rect.height * def.y;
+        const { x, y } = coopBossVisualPoint(rect, def.x, def.y, pose);
         // 狙点の輪を実際の部位判定半径と揃える。以前の42%表示では、スマホ上で
         // 小さな飾りに見えて「ここを狙える」ことが伝わらなかった。
         const hitRadius = Math.min(rect.width, rect.height) * def.radius;
-        const pulse = 1 + Math.sin(simTimeMs / 180 + (bossApi.PART_ORDER || []).indexOf(partId)) * 0.035;
+        const pulse = 1 + Math.sin(motionMs / 180 + (bossApi.PART_ORDER || []).indexOf(partId)) * 0.035;
         const radius = part.destroyed ? hitRadius * 0.55 : hitRadius * pulse;
         ctx.save();
         ctx.globalAlpha = part.destroyed ? 0.38 : targeting ? 1 : 0.72;
@@ -23507,7 +23571,7 @@
           ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke();
         } else {
           ctx.setLineDash([6, 5]);
-          ctx.lineDashOffset = -simTimeMs / 45;
+          ctx.lineDashOffset = -motionMs / 45;
           ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(x, y, radius + 7, 0, Math.PI * 2); ctx.stroke();
           ctx.setLineDash([]);
@@ -23532,10 +23596,9 @@
 
       if (live.core?.exposed && bossApi.LIVE_CORE_SHAPE) {
         const core = bossApi.LIVE_CORE_SHAPE;
-        const x = rect.x + rect.width * core.x;
-        const y = rect.y + rect.height * core.y;
+        const { x, y } = coopBossVisualPoint(rect, core.x, core.y, pose);
         const hitRadius = Math.min(rect.width, rect.height) * core.radius;
-        const pulse = Math.sin(simTimeMs / 120);
+        const pulse = Math.sin(motionMs / 120);
         const outerRadius = hitRadius + 10 + pulse * 3;
         ctx.save();
         ctx.globalAlpha = 0.98;
@@ -23544,7 +23607,7 @@
         ctx.fillStyle = 'rgba(61,222,255,0.32)'; ctx.strokeStyle = '#e4fdff'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(x, y, hitRadius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.setLineDash([6, 5]);
-        ctx.lineDashOffset = simTimeMs / 32;
+        ctx.lineDashOffset = motionMs / 32;
         ctx.strokeStyle = '#72e8ff'; ctx.lineWidth = 2.6;
         ctx.beginPath(); ctx.arc(x, y, outerRadius, 0, Math.PI * 2); ctx.stroke();
         ctx.setLineDash([]);
@@ -30201,6 +30264,7 @@
   function resetCoopNormalBattle(showIntro = true) {
     if (!coopNormalSession) return false;
     coopPhase2CutInShown = false;
+    coopBossMotionTime = 0;
     battleMode = 'coop';
     gamePhase = 'battle';
     selectedCustomStage = null;
@@ -30881,6 +30945,7 @@
     // 対戦内の経過時間。壁時計ではなくこれを使うことで、障害物の揺れが
     // 「端末をいつ起動したか」に左右されなくなる(中断再開でも位相が続く)。
     simTimeMs += physicsSteps * PHYSICS_DT * 1000;
+    updateCoopBossMotion(physicsSteps * PHYSICS_DT);
 
     // カメラ:飛翔中は弾を追い、手番開始時は次のキャラへ滑らかに戻る。
     if (battleMode === 'demo' && (workshopBattlePreview || specialDemo)) {

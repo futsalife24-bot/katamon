@@ -1,5 +1,9 @@
 # tests — ブラウザなしで index.html を回す検証ハーネス
 
+協力ボスアニメーション: `node tests/coop-boss-motion.test.js`。
+実ブラウザ: `node tests/coop-boss-motion-browser.cjs`（Playwrightが必要。ローカル4191ポートを自身で起動・終了）。
+仕様・結果は [作業記録](../docs/tasks/2026-09-13-boss-motion.md)を参照。
+
 `index.html` の `<script>` を抜き出し、Canvas / WebAudio / DOM をスタブした Node 上で実行する。
 ブラウザを開けない状況(リモート画面・CI)でも、実際にポインタイベントを流して
 1試合まるごと進められる。実行にビルドも依存パッケージも要らない。
