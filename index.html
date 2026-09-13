@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.181-boss-motion';
+  const BUILD_ID = 'v2.0.182-fortress-foundry';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.182', date: '2026/09/13', summary: '協力ボス1専用の背景と足場「灼鉄の包囲工廠」を追加' },
     { version: 'v2.0.181', date: '2026/09/13', summary: '協力ボス2体のアニメーションと味方攻撃中の部位固定を追加' },
     { version: 'v2.0.180', date: '2026/09/12', summary: '協力戦の一斉発射前にReady! → Fire!の合図を追加' },
     { version: 'v2.0.179', date: '2026/09/12', summary: '協力戦を30秒の同時準備・全員READYで一斉発射へ変更' },
@@ -2539,6 +2540,10 @@
     stageBackgroundImages[key] = image;
   }
   function getReadyStageBackground() {
+    if (isFortressStage()) {
+      ensureCoopBossImages();
+      return fortressStageImage.complete && fortressStageImage.naturalWidth > 0 ? fortressStageImage : null;
+    }
     if (isStormBossBattle()) {
       ensureCoopBossImages();
       return stormStageImage.complete && stormStageImage.naturalWidth > 0 ? stormStageImage : null;
@@ -3053,6 +3058,54 @@
     terrainCtx.restore();
   }
 
+  // 工廠の装甲・警戒帯は地形へ焼き込み、破壊された箇所と一緒に消す。
+  function drawFortressTerrainDetails() {
+    if (!isFortressStage()) return;
+    const g = terrainCtx;
+    g.save();
+    g.globalCompositeOperation = 'source-atop';
+    const decks = COOP_PLATFORM_LAYOUT.map(p => ({
+      x: Math.round(TERRAIN_COLS * p.start) * COL_W,
+      width: Math.max(1, Math.round(TERRAIN_COLS * (p.end - p.start))) * COL_W,
+      y: Math.round(STAGE_H * p.top),
+      height: Math.round(STAGE_H * p.thickness), steel: p.spawnSteel,
+    }));
+    decks.push({ x: 0, width: STAGE_W, y: coopBossGroundY(), height: TERRAIN_BOTTOM_Y - coopBossGroundY(), steel: true });
+    for (const deck of decks) {
+      g.save();
+      g.beginPath(); g.rect(deck.x, deck.y, deck.width, deck.height); g.clip();
+      const face = g.createLinearGradient(0, deck.y, 0, deck.y + deck.height);
+      face.addColorStop(0, deck.steel ? '#657987' : '#98715a');
+      face.addColorStop(0.25, deck.steel ? '#293947' : '#634639');
+      face.addColorStop(1, '#111c29');
+      g.fillStyle = face; g.fillRect(deck.x, deck.y, deck.width, deck.height);
+      // 鋼鉄台座は警戒帯、破壊できる足場は赤銅色で区別。
+      g.fillStyle = deck.steel ? '#e2b05b' : '#c9855a';
+      g.fillRect(deck.x, deck.y, deck.width, 9);
+      if (deck.steel) {
+        g.strokeStyle = '#242c32'; g.lineWidth = 9;
+        for (let x = deck.x - 10; x < deck.x + deck.width; x += 25) {
+          g.beginPath(); g.moveTo(x, deck.y + 9); g.lineTo(x + 9, deck.y); g.stroke();
+        }
+      }
+      g.strokeStyle = '#0d1721'; g.lineWidth = 3;
+      for (let x = deck.x; x < deck.x + deck.width; x += 64) {
+        const bottom = deck.y + Math.min(deck.height - 3, 52);
+        g.beginPath(); g.moveTo(x, deck.y + 12); g.lineTo(x + 32, bottom);
+        g.lineTo(x + 64, deck.y + 12); g.stroke();
+        g.fillStyle = '#acb3aa'; g.fillRect(x + 6, deck.y + 13, 3, 3);
+        if (deck.height > 60) {
+          g.fillStyle = '#0a141e'; g.fillRect(x + 12, deck.y + 62, 40, 28);
+          g.fillStyle = '#df7944';
+          for (let vent = 0; vent < 4; vent++) g.fillRect(x + 17 + vent * 8, deck.y + 68, 3, 16);
+        }
+      }
+      g.fillStyle = '#e6c49a'; g.fillRect(deck.x, deck.y, deck.width, 2);
+      g.restore();
+    }
+    g.restore();
+  }
+
   function buildTerrainMask(segments, refreshRim = true) {
     markTerrainArtDirty();
     terrainCtx.clearRect(0, 0, STAGE_W, TERRAIN_BOTTOM_Y);
@@ -3137,6 +3190,7 @@
       }
       terrainCtx.restore();
     }
+    drawFortressTerrainDetails();
     rebuildBridgeDecoration();
     rebuildArenaDecoration();
     if (refreshRim) rebuildTerrainRim();
@@ -3697,7 +3751,7 @@
     applyStageAppearance(storm ? 'snow' : 'volcanic', {
       terrainMaterial: 'terrain',
       terrainMaterialSegments: [],
-      terrainColor: storm ? '#363956' : '#3e3430',
+      terrainColor: storm ? '#363956' : '#725548',
       decorationsEnabled: false,
       background: { mode: 'theme', theme: storm ? 'snow' : 'volcanic' },
     });
@@ -4547,6 +4601,9 @@
   const coopBossImages = { phase1: new Image(), phase2: new Image() };
   const stormBossImage = new Image();
   const stormStageImage = new Image();
+  const fortressStageImage = new Image();
+  fortressStageImage.decoding = 'async';
+  function isFortressStage() { return currentPattern === 'coopSteel'; }
   const stormBossImages = { phase1: stormBossImage, phase2: stormBossImage };
   function isStormBossBattle() { return coopNormalSession?.bossId === 'storm-dragon-02'; }
   coopBossImages.phase1.decoding = 'async';
@@ -4562,6 +4619,7 @@
     }
     if (coopBossImagesLoaded) return coopBossImages;
     coopBossImagesLoaded = true;
+    fortressStageImage.src = 'assets/stages/runtime/fortress-foundry.webp';
     coopBossImages.phase1.src = 'assets/bosses/runtime/fortress-tank.webp';
     coopBossImages.phase2.src = 'assets/bosses/runtime/fortress-tank-phase2.webp';
     return coopBossImages;
@@ -22693,13 +22751,17 @@
     ctx.drawImage(skyBackCanvas, 0, 0, VW, VH);
     // ステージ背景の写真だけは焼かずに直接貼る。焼くと540x960へ一度落ちて眠くなる。
     const stageBackground = getReadyStageBackground();
-    if (stageBackground && isStormBossBattle()) {
+    if (stageBackground && (isStormBossBattle() || isFortressStage())) {
       const top = cameraViewportTop(), height = CONTROL_PANEL_Y - top;
       const scale = Math.max(VW / stageBackground.naturalWidth, height / stageBackground.naturalHeight);
       ctx.save(); ctx.beginPath(); ctx.rect(0, top, VW, height); ctx.clip();
       ctx.drawImage(stageBackground, (VW - stageBackground.naturalWidth * scale) / 2,
         top + (height - stageBackground.naturalHeight * scale) / 2,
         stageBackground.naturalWidth * scale, stageBackground.naturalHeight * scale);
+      if (isFortressStage()) {
+        ctx.fillStyle = 'rgba(12,18,28,0.20)';
+        ctx.fillRect(0, top, VW, height);
+      }
       ctx.restore();
     } else if (stageBackground) ctx.drawImage(stageBackground, 0, 0, VW, VH);
     drawSkyParticles();
@@ -23863,7 +23925,7 @@
     ctx.restore();
 
     // ステージ名の真鍮プレート
-    const stageName = currentPattern === 'stormAltar' ? '雷雲の祭壇' : currentPattern === 'tieredBasin'
+    const stageName = isFortressStage() ? '灼鉄の包囲工廠' : currentPattern === 'stormAltar' ? '雷雲の祭壇' : currentPattern === 'tieredBasin'
       ? '闘技場ステージ'
       : `${THEME_LABELS[currentThemeKey] || 'バトル'}ステージ`;
     drawIronPlate(VW / 2, 19, 178, 27, { cut: 9, lineWidth: 2 });

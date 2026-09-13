@@ -1,5 +1,7 @@
 # tests — ブラウザなしで index.html を回す検証ハーネス
 
+第1ボス専用ステージ: `node tests/fortress-stage-browser.cjs`（HTTP 4188、Playwright）。[仕様・検証記録](../docs/tasks/2026-09-13-fortress-stage.md)。
+
 協力ボスアニメーション: `node tests/coop-boss-motion.test.js`。
 実ブラウザ: `node tests/coop-boss-motion-browser.cjs`（Playwrightが必要。ローカル4191ポートを自身で起動・終了）。
 仕様・結果は [作業記録](../docs/tasks/2026-09-13-boss-motion.md)を参照。

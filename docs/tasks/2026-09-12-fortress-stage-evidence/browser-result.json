@@ -1,0 +1,14 @@
+[
+  {
+    "boss": "siege-fortress-01",
+    "background": "http://127.0.0.1:4188/assets/stages/runtime/fortress-foundry.webp",
+    "realSalvo": true,
+    "errors": []
+  },
+  {
+    "boss": "storm-dragon-02",
+    "background": "http://127.0.0.1:4188/assets/stages/runtime/thunder-altar.webp",
+    "realSalvo": true,
+    "errors": []
+  }
+]
