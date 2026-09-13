@@ -1,0 +1,14 @@
+[
+  {
+    "boss": "siege-fortress-01",
+    "realSalvo": true,
+    "neutralPoseRestored": true,
+    "errors": []
+  },
+  {
+    "boss": "storm-dragon-02",
+    "realSalvo": true,
+    "neutralPoseRestored": true,
+    "errors": []
+  }
+]

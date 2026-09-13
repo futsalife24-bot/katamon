@@ -49,6 +49,14 @@ let code = `${externalPrelude}\n;\n${scriptTags[inlineIndex][2]}`;
 // (本体には残さない。ここで組み立てるだけ。)
 const HOOK = `
   globalThis.__kt = {
+    bossMotionTest: {
+      pose: () => coopBossMotionPose(coopBossUnit),
+      point: (x,y) => coopBossVisualPoint(coopBossRect(coopBossUnit),x,y,coopBossMotionPose(coopBossUnit)),
+      locked: () => coopBossMotionLocked(coopBossUnit),
+      bossTurn: () => { coopSalvoState=null; activeIndex=turnOrder.indexOf('boss1'); },
+      phase: value => { coopSalvoState={phase:value}; },
+      advance: dt => updateCoopBossMotion(dt),
+    },
     salvoTest: {
       reopen: () => { coopSalvoState = null; beginCoopSalvoRound(); startCoopSalvoPreparation(); },
       freezeAI: () => { for (const u of units) if (u.team === 'player' && u.id !== localUnitId) u.control = 'remote'; },
