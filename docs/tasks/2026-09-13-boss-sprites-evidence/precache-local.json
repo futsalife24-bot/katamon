@@ -1,0 +1,18 @@
+[
+  {
+    "browser": "progressive-precache-local-5d71f-3bを順次取得し、二重取得なしでオフライン再表示できる-android-chromium-portrait-touch",
+    "beforeTapBytes": 7152724,
+    "afterT3aBytes": 42140535,
+    "afterT3bBytes": 78289048,
+    "duplicateBytes": 0,
+    "atlasRequests": 0
+  },
+  {
+    "browser": "progressive-precache-local-5d71f-3bを順次取得し、二重取得なしでオフライン再表示できる-iphone-webkit-portrait-touch",
+    "beforeTapBytes": 10321693,
+    "afterT3aBytes": 45729862,
+    "afterT3bBytes": 81878375,
+    "duplicateBytes": 1808376,
+    "atlasRequests": 0
+  }
+]

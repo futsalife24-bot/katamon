@@ -32,3 +32,9 @@
 ## 公開前の容量修正
 
 初回CIは115件成功・1件失敗。iPhone WebKitのT3a取得量が47,518,110 bytesで45MiB上限を332,190 bytes超過。atlasのWebP qualityを92→80へ調整し、計1,883,310→1,360,406 bytes（522,904 bytes減）。解像度・8コマ・透過率・ゲームコードは維持。24コマ境界QA再成功。ローカルWebKit取得は配布元タイムアウトで実行できず、同じ容量E2EをGitHub CIで確認する。
+
+## 先読み容量の最終修正
+
+圧縮のみではCIのWebKitでT3a/T3b上限超過が残った。3形態を全員へ先読みする設計を改め、atlasは対象ボスを描画するときだけ取得する。既存SWのassetsキャッシュが初回取得を保存し、再戦・以後のオフラインでは再利用。未取得でオフラインの場合は元の静止画を使う。通常のT2/T3先読みからatlas3枚を除外し、タイトルでatlasリクエストが0件であるE2Eを追加。容量上限・テスト条件の緩和なし。既存WebKit 2336と同じPlaywright 1.62.1を使えばローカル実行できることを確認した。
+
+ローカル `progressive-precache.spec.js` はiPhone WebKit・Android Chromiumの通常取得とsaveData設定の全4件成功（6.0分）。[計測値](2026-09-13-boss-sprites-evidence/precache-local.json)。修正後のボス実Chromiumと2,086 assertionsも成功。

@@ -168,6 +168,8 @@ test('localhost上でT2/T3a/T3bを順次取得し、二重取得なしでオフ�
     const afterT3aBytes = bytesFor(requests);
     await expect.poll(() => cacheHas(page, T3B_SENTINEL), { timeout: 120000 }).toBe(true);
     const afterT3bBytes = bytesFor(requests);
+    // Boss animation atlases load only when that boss is drawn, not at title precache.
+    expect(requests.filter(request => request.pathname.endsWith('-idle-atlas.webp'))).toEqual([]);
     const duplicateBytes = requests
       .filter(request => request.pathname.startsWith('/assets/'))
       .reduce((total, request, _index, all) => total + (all.filter(other => other.pathname === request.pathname).length > 1 ? request.bytes : 0), 0);
