@@ -10,11 +10,10 @@
 - PR #398 / `v2.0.181-boss-motion`。両ボスの揺れ・羽ばたきと部位追従、味方一斉攻撃中の固定を追加。CI全6件・公開Chromium確認済み。
 - [仕様・検証記録](docs/tasks/2026-09-13-boss-motion.md)。物理スマホ・今回の本番複数人は未確認。
 
-## 2026-09-12 協力戦の同時行動（PR #396・公開チェック中）
+## 2026-09-12 協力戦の同時行動（PR #396・公開済み）
 
-- 作業場所 `.codex-worktrees/coop-simultaneous-20260912` / branch `feat/coop-simultaneous-20260912` / base `3d404d96867e98966b0f6595e4368404476765db`。BUILD `v2.0.179-coop-salvo`。
-- 両ボス・ソロ/複数人の味方準備を同時化。共通30秒、全員READYで早期一斉発射、期限切れの未READYは待機。
-- 新規80項目、既存回帰の各コマンド、モバイル相当Chromiumを確認。実Firebase複数人・物理スマホ・公開は未実施。詳細は[作業記録](docs/tasks/2026-09-12-coop-simultaneous.md)。
+- `v2.0.179-coop-salvo`。共通30秒の同時準備、全員READYで一斉発射、期限切れの未READYは待機。公開4ブラウザ同期確認済み、物理スマホは未確認。
+- 仕様・実装詳細: [作業記録](docs/tasks/2026-09-12-coop-simultaneous.md)。
 
 
 ## 2026-09-12 フォント修正（v2.0.178-font-repair）
