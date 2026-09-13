@@ -32,6 +32,9 @@ for(const record of LEGACY_CHARACTERS){let count=0;for(const dir of ['runtime','
 const files=[],mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.webmanifest':'application/manifest+json','.png':'image/png','.webp':'image/webp','.svg':'image/svg+xml'};
 async function scan(dir){for(const entry of await readdir(dir,{withFileTypes:true})){const full=path.join(dir,entry.name);if(entry.isSymbolicLink())throw new Error('Release cannot contain symbolic links');if(entry.isDirectory()){await scan(full);continue;}const relative=path.relative(path.join(output,'public'),full).replaceAll('\\','/');const bytes=await readFile(full);files.push({url:'/'+relative,path:'public/'+relative,mime:mime[path.extname(relative)],bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});}}
 await scan(path.join(output,'public'));
-const sourceSha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+let sourceSha='';
+try { sourceSha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(); } catch {}
+if(!/^[a-f0-9]{40}$/.test(sourceSha)) sourceSha=(process.env.SOURCE_SHA??'').trim();
+if(!/^[a-f0-9]{40}$/.test(sourceSha)) throw new Error('SOURCE_SHA must be a 40-character commit SHA when git metadata is unavailable');
 await writeFile(path.join(output,'release.json'),JSON.stringify({schemaVersion:1,mode:'server',version,appPath:'/tools/content-studio/',sourceSha,files:files.sort((a,b)=>a.url.localeCompare(b.url))},null,2));
 console.log(JSON.stringify({mode:'server',version,sourceSha,files:files.length,staticBytes:files.reduce((sum,file)=>sum+file.bytes,0),output:'production'}));
