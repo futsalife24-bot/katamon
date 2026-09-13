@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.182-fortress-foundry';
+  const BUILD_ID = 'v2.0.183-boss-sprites';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.183', date: '2026/09/13', summary: '協力ボス2体を8コマの描き分けアニメーションへ変更' },
     { version: 'v2.0.182', date: '2026/09/13', summary: '協力ボス1専用の背景と足場「灼鉄の包囲工廠」を追加' },
     { version: 'v2.0.181', date: '2026/09/13', summary: '協力ボス2体のアニメーションと味方攻撃中の部位固定を追加' },
     { version: 'v2.0.180', date: '2026/09/12', summary: '協力戦の一斉発射前にReady! → Fire!の合図を追加' },
@@ -4599,6 +4600,19 @@
     Object.freeze({ type: 'circle', x: 0.83, y: 0.31, radius: 0.15, partId: 'missilePod' }),
   ]);
   const coopBossImages = { phase1: new Image(), phase2: new Image() };
+  const coopBossSpriteImages = {};
+  function coopBossSpriteKey(u) {
+    return isStormBossBattle() ? 'volteris' : u?.phase >= 2 ? 'fortressPhase2' : 'fortress';
+  }
+  function ensureCoopBossSpriteImage(key) {
+    const data = globalThis.KatamonBossSpriteData?.[key];
+    if (!data) return null;
+    if (!coopBossSpriteImages[key]) {
+      const image = new Image(); image.decoding = 'async'; image.src = data.path;
+      coopBossSpriteImages[key] = image;
+    }
+    return coopBossSpriteImages[key];
+  }
   const stormBossImage = new Image();
   const stormStageImage = new Image();
   const fortressStageImage = new Image();
@@ -23426,56 +23440,43 @@
     else coopBossMotionTime += Math.max(0, dt);
   }
   function coopBossMotionPose(u) {
-    if (coopBossMotionLocked(u)) return { time: 0, bob: 0, flap: 0, sway: 0 };
-    const time = coopBossMotionTime;
-    const fade = Math.min(1, time / .35);
-    return isStormBossBattle()
-      ? { time, bob: Math.sin(time * 2.2) * 5 * fade,
-          flap: Math.sin(time * 3.6) * .22 * fade, sway: 0 }
-      : { time, bob: Math.sin(time * 3) * 3 * fade, flap: 0,
-          sway: Math.sin(time * 1.5) * 1.8 * fade };
+    // Allied aiming/volleys always use the original, authoritative hit silhouette.
+    if (coopBossMotionLocked(u)) return { time: 0, frame: -1, sheet: null };
+    const time = coopBossMotionTime, key = coopBossSpriteKey(u);
+    const data = globalThis.KatamonBossSpriteData?.[key], image = coopBossSpriteImages[key];
+    const ready = data && image?.complete && image.naturalWidth === data.cell * data.columns
+      && image.naturalHeight === data.cell * Math.ceil(data.count / data.columns);
+    return { time, frame: ready ? Math.floor(time * data.fps) % data.count : -1, sheet: ready ? key : null };
+  }
+  function coopBossSpritePlacement(rect, data) {
+    const scale = rect.width / data.sourceWidth;
+    return { x: rect.x + rect.width * data.reference[0] - data.anchor[0] * scale,
+      y: rect.y + rect.height * data.reference[1] - data.anchor[1] * scale, scale };
   }
   function coopBossVisualPoint(rect, x, y, pose) {
-    if (!isStormBossBattle()) return {
-      x: rect.x + rect.width * x + pose.sway * (1 - y),
-      y: rect.y + rect.height * y + pose.bob * (1 - y),
-    };
-    // The head stays stable; wing lift grows from the shoulder to the wing tips.
-    const shoulder = Math.max(0, Math.min(1, (x - .20) / .16));
-    const weight = shoulder * shoulder * (3 - 2 * shoulder);
-    return { x: rect.x + rect.width * x,
-      y: rect.y + rect.height * y + pose.bob
-        + rect.height * pose.flap * weight * Math.max(0, .54 - y) };
+    if (pose.sheet && pose.frame >= 0) {
+      const data = globalThis.KatamonBossSpriteData[pose.sheet], api = coopBossLiveApi();
+      const entries = [...Object.entries(api.PART_DEFS), ['core', api.LIVE_CORE_SHAPE]];
+      const id = entries.find(([, p]) => p && Math.abs(p.x - x) < .0001 && Math.abs(p.y - y) < .0001)?.[0];
+      const point = data.frames[pose.frame].points[id];
+      if (point) {
+        const at = coopBossSpritePlacement(rect, data);
+        return { x: at.x + point[0] * at.scale, y: at.y + point[1] * at.scale };
+      }
+    }
+    return { x: rect.x + rect.width * x, y: rect.y + rect.height * y };
   }
   function drawCoopBossSprite(image, rect, pose) {
-    if (!pose.bob && !pose.flap && !pose.sway) {
+    if (pose.sheet && pose.frame >= 0) {
+      const data = globalThis.KatamonBossSpriteData[pose.sheet], at = coopBossSpritePlacement(rect, data);
+      const sourceX = pose.frame % data.columns * data.cell;
+      const sourceY = Math.floor(pose.frame / data.columns) * data.cell;
+      // One uniformly scaled source cell. No shear, strip bending or squash/stretch.
+      ctx.drawImage(coopBossSpriteImages[pose.sheet], sourceX, sourceY, data.cell, data.cell,
+        at.x, at.y, data.cell * at.scale, data.cell * at.scale);
+    } else {
       ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
-      return;
     }
-    if (!isStormBossBattle()) {
-      ctx.save();
-      ctx.translate(rect.x + pose.sway, rect.y + pose.bob);
-      ctx.transform(1, 0, -pose.sway / rect.height, 1 - pose.bob / rect.height, 0, 0);
-      ctx.drawImage(image, 0, 0, rect.width, rect.height);
-      ctx.restore();
-      return;
-    }
-    // Contiguous narrow source strips bend the existing transparent wings without new assets.
-    // No per-strip shadow: it would outline the internal strip edges.
-    ctx.save(); ctx.shadowBlur = 0;
-    const hinge = .54, strips = 96;
-    for (let i = 0; i < strips; i++) {
-      const x = i / strips;
-      const top = coopBossVisualPoint(rect, (i + .5) / strips, 0, pose);
-      const bottom = rect.y + rect.height * hinge + pose.bob;
-      ctx.drawImage(image, image.naturalWidth * x, 0, image.naturalWidth / strips,
-        image.naturalHeight * hinge, rect.x + rect.width * x, top.y,
-        rect.width / strips, bottom - top.y);
-    }
-    ctx.drawImage(image, 0, image.naturalHeight * hinge, image.naturalWidth,
-      image.naturalHeight * (1 - hinge), rect.x, rect.y + rect.height * hinge + pose.bob,
-      rect.width, rect.height * (1 - hinge));
-    ctx.restore();
   }
 
   function drawCoopBossIdleMotion(u, rect, foreground) {
@@ -23559,6 +23560,7 @@
   }
 
   function drawCoopBossUnit(u) {
+    ensureCoopBossSpriteImage(coopBossSpriteKey(u));
     const images = ensureCoopBossImages();
     const rect = coopBossRect(u);
     const pose = coopBossMotionPose(u);
@@ -31914,6 +31916,7 @@
 </script>
 <script src="coop-mvp-boss.js"></script>
 <script src="coop-storm-boss.js"></script>
+<script src="shared/coop-boss-sprite-data.js"></script>
 <script src="coop-mvp-boss-ai.js"></script>
 <script src="coop-mvp-engine.js"></script>
 <script src="coop-mvp-survival.js"></script>

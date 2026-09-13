@@ -85,3 +85,5 @@ npm run test:e2e:storm-boss
 - Firebase本番回線・物理スマホの複数人検証は別工程。Node中継は実ネットワークの検証ではない。
 
 - `tests/coop-ready-fire-browser.cjs`: 両ボスで実ドラッグによる必殺のReady→Fire→オーラ→カットイン→同tick発射を実時間で確認。`COOP_BASE_URL`（既定4186）でHTTPサーバーを指定。`COOP_PUBLISHED=1`では公開レスポンスを取得して観測用フックだけ注入する。
+
+ボス8コマ素材検証: `node tests/coop-boss-sprite-assets.cjs`（sharp）。モーションNode・ブラウザ検証は上記既存コマンド。[更新記録](../docs/tasks/2026-09-13-boss-spritesheets.md)。

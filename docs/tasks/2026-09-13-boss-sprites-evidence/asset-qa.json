@@ -1,0 +1,53 @@
+[
+  {
+    "id": "fortress",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "79d06a42be1f0caa155197d430b1d554ea398ae7d7402f37dbb381d59ea66d10",
+      "bb6c1395755dee17391b872dcfd4979add45239cebc9184b77646af2fdb24161",
+      "09061ef2e18e5ce1f9063cd4b6f022e0239121209490fb3fe9c00c68b0346ed5",
+      "cd1d0677ba149b4ec9ce3c731036572e6e682c73e5cb4d58b0253cdc157a12b2",
+      "a153cd31865845cbecd7a258412f1e0fae25f53a0b2294ae6b01c4c7a8ae90cb",
+      "b0a64e57461e8b52a61f94a1a5012f018b05656a518d155819dbe274732caf55",
+      "7d81da8bc7e237823caa5e85f1a66aff5d6ac471c598ffe37834ce6847842442",
+      "1f2648bd6b54c7bc2e64e8c8c465f55a768a82328cfdfcc73645851284152201"
+    ]
+  },
+  {
+    "id": "fortressPhase2",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "3104981dfca2d9241fdee0ffe6841365277be994f28e60e903c86293fa51921b",
+      "d6bbc56ca9290fc1cf290b682092ac16a02679f78de6c629ac4b10860581b202",
+      "a8dc06768d4e0b89703b83220ec5d780010a7c38b89c925f92ca001f6cd87ebb",
+      "17efb48fdba0de2ffe87c0b33d3ac97c4e9c8bed197f5c9ca764b243dca1c1fa",
+      "b5a1250b2c08e1ac66455eb7d25ab040874b123a2d03d0810669ca3fe37ddaef",
+      "fc22a98de19d7344b37d2002743edbac229784c9bccf5a3a5d38319e5e3ee5b5",
+      "fba9e7e5f387f012e1ab17e52a81255d609d91551197238e3b5ede461ccd1df2",
+      "e6d0c1021ef808f2443feb81a0092e44ef20380cb97566744d5b738eeaba98d4"
+    ]
+  },
+  {
+    "id": "volteris",
+    "width": 2560,
+    "height": 1280,
+    "distinctFrames": 8,
+    "allCellEdgesTransparent": true,
+    "hashes": [
+      "02c29edc3166769f6f455e363a0dcbe28ba911ff6e5547120fa531cdf0ac7abe",
+      "fa6e1d7eb48bcf60a68965beaaba28da14abc65e873bf0764137b6163d55a516",
+      "e745b7a77ac2c6fa374e160e11b65386fb827324ffea58baa7cb6492af338196",
+      "824d4816c411a6b45f26acc62b12db003bf947842a2a0b739953abc0c1edf325",
+      "ae73a722d111b3cdde351645e4495ca5a6f9c2184ca3f03c387bb32e8d62bc37",
+      "e6f26318a240912fe1d6329152940a3e85b7e9a274f6080f45568126f1136041",
+      "e6f97db800e5ad407d73887dc433f2dbe11a0d72914ebf4546c2e439d66728a8",
+      "f86344f355a718303d523cdc738754914d45cd840ffcb9f4055b739343d8d593"
+    ]
+  }
+]
