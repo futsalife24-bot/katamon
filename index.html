@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.183-boss-sprites';
+  const BUILD_ID = 'v2.0.184-shared-analytics';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
     { version: 'v2.0.183', date: '2026/09/13', summary: '協力ボス2体を8コマの描き分けアニメーションへ変更' },
     { version: 'v2.0.182', date: '2026/09/13', summary: '協力ボス1専用の背景と足場「灼鉄の包囲工廠」を追加' },
     { version: 'v2.0.181', date: '2026/09/13', summary: '協力ボス2体のアニメーションと味方攻撃中の部位固定を追加' },
@@ -31928,5 +31929,20 @@
 <script src="coop-mvp-battle.js"></script>
 <script src="coop-mvp-room.js"></script>
 <script src="game-custom-stages.js"></script>
+
+<!-- Anonymous daily access counts; never sends account/save data or page URL. -->
+<script>
+(()=>{'use strict';try{
+  const query=new URLSearchParams(location.search);
+  if(location.origin!=='https://futsalife24-bot.github.io'||!['/katamon/','/katamon/index.html'].includes(location.pathname)||window.top!==window.self||query.get('developer')==='1'||query.get('analytics')==='off'||navigator.doNotTrack==='1'||navigator.globalPrivacyControl===true)return;
+  let sent=false;
+  function count(){if(sent||document.visibilityState!=='visible')return;sent=true;
+    let visitor=null;try{const key='app-analytics-katamon-visitor';visitor=localStorage.getItem(key);if(!/^[a-f0-9]{32}$/.test(visitor||'')){visitor=crypto.randomUUID().replaceAll('-','');localStorage.setItem(key,visitor)}}catch{visitor=null}
+    try{void fetch('https://swarm-front.melosalife-24.workers.dev/api/analytics/collect/katamon',{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({visitor})}).catch(()=>{})}catch{}
+    document.removeEventListener('visibilitychange',count);
+  }
+  document.addEventListener('visibilitychange',count);count();
+}catch{}})();
+</script>
 </body>
 </html>
