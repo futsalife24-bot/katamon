@@ -1,3 +1,7 @@
+# 現在地: 共通アクセス計測を追加・未公開（2026-09-17）
+
+workspace内作業コピー、branch `codex/shared-analytics`。v2.0.184-shared-analytics、実装・関連検証済み。[記録](docs/tasks/2026-09-17-shared-analytics.md)。元作業場所の未保存差分は保護。独立監査・公開前。
+
 # カタモン 現在作業状態
 
 ## 2026-09-13 ボス8コマ（公開準備）
