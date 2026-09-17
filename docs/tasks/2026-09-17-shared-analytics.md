@@ -7,3 +7,5 @@
 元作業場所の未保存差分を保護し、workspace内cloneのorigin/master `1fdbd583cff70ba354270f8c3df4d8245e12e318`から作業。
 
 検証: cache-version 2、app-shell 3、seat p1 20項目成功。共通Worker側の実Chromeテストで実スニペットの重複排除・開発者除外・無通信時の継続を確認。本番送信はすべてローカルへ差し替え。独立監査・公開前。実機未確認。
+
+CI追補: 描画/registry E2Eの注入処理がHTML最後のIIFEをゲーム本体と仮定し、追加した計測IIFEを拾った。ゲーム本体直後の既存coop-mvp-boss.jsタグより前の終端に限定し、アンカー欠落時はassert失敗にする。テスト期待値・機能コードは不変。実Chromiumの360/390/412px描画E2E 3/3成功、cache-version 2/2、app-shell 3/3、registryテスト構文確認成功。registry実EmulatorはCIで確認。
