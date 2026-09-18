@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const EXPECTED_BUILD_ID = 'v2.0.184-shared-analytics';
+const EXPECTED_BUILD_ID = 'v2.0.185-admin-analytics';
 
 function tierBody(worker, tier) {
   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
