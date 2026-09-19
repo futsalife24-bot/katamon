@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.185-admin-analytics';
+  const BUILD_ID = 'v2.0.186-project-hub';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
     { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
     { version: 'v2.0.183', date: '2026/09/13', summary: '協力ボス2体を8コマの描き分けアニメーションへ変更' },
@@ -31948,7 +31949,7 @@ const adminKey='app-analytics-admin';
   let sent=false;
   function count(){if(sent||document.visibilityState!=='visible')return;sent=true;
     let visitor=null;try{const key='app-analytics-katamon-visitor';visitor=localStorage.getItem(key);if(!/^[a-f0-9]{32}$/.test(visitor||'')){visitor=crypto.randomUUID().replaceAll('-','');localStorage.setItem(key,visitor)}}catch{visitor=null}
-    try{void fetch('https://swarm-front.melosalife-24.workers.dev/api/analytics/collect/katamon',{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({visitor,admin:isAnalyticsAdmin()})}).catch(()=>{})}catch{}
+    try{void fetch('https://project-hub.melosalife-24.workers.dev/api/analytics/collect/katamon',{method:'POST',credentials:'omit',referrerPolicy:'no-referrer',keepalive:true,headers:{'Content-Type':'text/plain'},body:JSON.stringify({visitor,admin:isAnalyticsAdmin()})}).catch(()=>{})}catch{}
     document.removeEventListener('visibilitychange',count);
   }
   document.addEventListener('visibilitychange',count);count();
