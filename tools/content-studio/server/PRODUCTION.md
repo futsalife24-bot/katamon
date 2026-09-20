@@ -14,6 +14,26 @@ npm run production:preflight
 npm run production:start
 ```
 
+### Cloud Run packaging (optional host)
+
+The repository includes a production-only image definition at
+`tools/content-studio/Dockerfile` and a Cloud Build config at
+`tools/content-studio/cloudbuild.yaml`. Build from the repository root so the
+trusted legacy images can be copied into the release:
+
+```sh
+docker build -f tools/content-studio/Dockerfile \
+  --build-arg SOURCE_SHA="$(git rev-parse HEAD)" .
+```
+
+Cloud Build supplies `$COMMIT_SHA` to the same build argument. The image only
+contains the generated `production/` directory; source files, `.env` files,
+Git metadata, and npm dependencies are left in the build stage. At runtime
+Cloud Run must provide the required environment settings through its secret
+store, keep one instance (or sticky routing), and set the public HTTPS origin
+as `PUBLIC_APP_URL`. The image does not enable mock mode and exits when the
+production preflight rejects configuration or the release manifest.
+
 Distribute the entire `production/` directory privately and run `node production/server.mjs`. It contains the bundled Node entry/runtime/preflight modules and `release.json`, plus only the PWA and existing legacy image copies under `public/`. No runtime npm install, Vite server or container is required. The Node process binds to loopback by default. HTTPS terminates at the host/reverse proxy. Do not expose the Node port directly.
 
 `npm run build` explicitly builds **mock** `dist/` for Pages. `production:build` explicitly builds **server** `production/`. Both ignore `.env` during Vite compilation; only their overridden, non-secret mode/version/API flags are used. Neither backend failure nor missing configuration changes a server client into mock mode. Runtime and release version, mode, required files, MIME, bounded sizes and complete SHA-256 values are checked before listening. HTML, SW and unversioned legacy images use `no-cache`; hashed JS/CSS/Workers use immutable caching. Studio SW excludes all routes outside its narrow app scope, including `/api` and OAuth navigations. The root game SW is never distributed or registered here.
