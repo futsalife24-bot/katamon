@@ -1,0 +1,97 @@
+[
+  {
+    "log": "output/issue8/round2-test-seat.log",
+    "exit": 0,
+    "command": "npm run test:seat"
+  },
+  {
+    "log": "output/issue8/round2-test-regression.log",
+    "exit": 0,
+    "command": "npm run test:regression"
+  },
+  {
+    "log": "output/issue8/round2-test-result.log",
+    "exit": 0,
+    "command": "npm run test:result"
+  },
+  {
+    "log": "output/issue8/round2-test-loopback.log",
+    "exit": 0,
+    "command": "npm run test:loopback"
+  },
+  {
+    "log": "output/issue8/round2-test-stage3.log",
+    "exit": 0,
+    "command": "npm run test:stage3"
+  },
+  {
+    "log": "output/issue8/round2-test-lobby.log",
+    "exit": 0,
+    "command": "npm run test:lobby"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-online-reentry-phase3d8b2.log",
+    "exit": 0,
+    "command": "npm run test:firebase-online-reentry-phase3d8b2"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-online-battle-recovery-plan-phase3d8b3a.log",
+    "exit": 0,
+    "command": "npm run test:firebase-online-battle-recovery-plan-phase3d8b3a"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-online-battle-replay-runner-phase3d8b3b1.log",
+    "exit": 0,
+    "command": "npm run test:firebase-online-battle-replay-runner-phase3d8b3b1"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-online-battle-reentry-activation-phase3d8b3b2.log",
+    "exit": 0,
+    "command": "npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-online-live-round-contract-phase3d8c.log",
+    "exit": 0,
+    "command": "npm run test:firebase-online-live-round-contract-phase3d8c"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-reentry-startup-priority-phase3d8df4.log",
+    "exit": 0,
+    "command": "npm run test:firebase-reentry-startup-priority-phase3d8df4"
+  },
+  {
+    "log": "output/issue8/round2-test-firebase-reentry-lock-handoff-phase3d8df5.log",
+    "exit": 0,
+    "command": "npm run test:firebase-reentry-lock-handoff-phase3d8df5"
+  },
+  {
+    "log": "output/issue8/round2-test-gear-online-battle-runtime-checkpoint-phase3d8b1.log",
+    "exit": 0,
+    "command": "npm run test:gear-online-battle-runtime-checkpoint-phase3d8b1"
+  },
+  {
+    "log": "output/issue8/round2-test-gear-online-battle-same-owner-conflict-phase3d8a.log",
+    "exit": 0,
+    "command": "npm run test:gear-online-battle-same-owner-conflict-phase3d8a"
+  },
+  {
+    "log": "output/issue8/round2-test-issue8.log",
+    "exit": 0,
+    "command": "npm run test:issue8"
+  },
+  {
+    "log": "output/issue8/round2-test-cache-version.log",
+    "exit": 0,
+    "command": "npm run test:cache-version"
+  },
+  {
+    "log": "output/issue8/round2-test-docs.log",
+    "exit": 0,
+    "command": "npm run test:docs"
+  },
+  {
+    "log": "output/issue8/round2-test-undef.log",
+    "exit": 0,
+    "command": "npm run test:undef"
+  }
+]

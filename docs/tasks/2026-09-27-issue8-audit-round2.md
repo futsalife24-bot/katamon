@@ -17,3 +17,13 @@ CI on 53c1a32: five checks succeeded; Stage Studio mobile-e2e failed in three re
 The native rerun passed the new GET fault, movement and guest offline/SSE recovery, then failed because the waiting host reached the existing **35s visible-peer timeout during guest reload**. Its failure log is retained. The harness now explicitly reloads that waiting client only for the exact documented timeout, requires playing state and canonical convergence, and records this manual re-entry event. It does not increase the production timer, treat an ended UI as success, or claim 35s+ disconnect is automatic recovery. Final native rerun is pending.
 
 No Firebase Rules/schema, balance, spectator resurrection, production mutation, merge or deployment. Separate unverified checks remain physical phone lock/OS suspension/network switching/PWA, WebKit and production A–K. Issue stays OPEN. Independent re-audit is required before claiming PASS.
+
+## Latest completed checks (code/test 1f01916)
+
+All **19 targeted commands exit 0**, including the six requested suites. Loopback remains **78 / 89 / 128 / 89 / 89**, 103 assertions. [Command summary](2026-09-27-issue8-evidence/audit-round2/round2-results.json).
+
+F4 browser: 12/13 passed, with one Web Lock handoff timed out at 15s (`onlinePhase: null`). The unchanged isolated case then passed in 27.7s. All 13 now have successful execution, but the first failure remains visible. No timeout or lock rule was relaxed. The three previous CI failures all passed.
+
+A later native rerun passed both reconnect/reloads but timed out waiting for the old-tab ping after creating the third tab; both participants had reached the existing peer timeout. That log remains preserved. A further run is in progress with other browser operations paused. Observed free RAM was about359MiB of7.4GiB; resource pressure is a possible contributor, not a proven sole cause.
+
+The third independent audit was sent to the same approved normal ChatGPT conversation for fixed HEAD `1f01916b906a7ea39cdd1506cfe4d4722fdc1e30`, explicitly disclosing all incomplete/failed browser runs. No code audit PASS is claimed yet.

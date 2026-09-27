@@ -1,0 +1,19 @@
+
+> stage-studio-mvp@0.1.0 test:firebase-online-battle-recovery-plan-phase3d8b3a
+> node tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
+
+  ok lobby and revealing logs are pure plans without a Battle start
+  ok Firebase push IDs use binary canonical order across 9/A/Z/_/a/z, never locale collation
+  ok start authority and battle-start candidate semantics are enforced
+  ok matching fire/state makes only a replay-required candidate chain; persisted early terminals reject
+  ok completed action chains remain ordered and an active tail is only a wait candidate
+  ok host and guest losing fire/result chains retain action authority instead of becoming fire-less concede
+  ok normal and concede result double-send keep the first result while conflicting duplicates reject
+  ok late copies of a completed action cannot poison canonical recovery or replace its first boundary
+  ok persisted playing metadata does not override a replay-required authoritative result
+  ok Gear/runtime payloads are retained as opaque packets and an SSE deduper can pre-seed history
+  ok 2v2 Gear evidence remains ordered through start and p2/e2 action identities stay unit-generic
+  ok production validator boundary accepts a real Gear-OFF start snapshot without mutating Battle state
+  ok invalid packet, invalid push key, orphan terminal, and old-round logs fail closed
+  ok a B2 pending candidate reads the current log through REST only and leaves Battle, transport, outbound messages, and its lease untouched
+Firebase Battle Recovery Plan Phase 3D-8B3A tests: 14/14 passed

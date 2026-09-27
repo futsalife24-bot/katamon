@@ -1,0 +1,26 @@
+
+> stage-studio-mvp@0.1.0 test:firebase-online-battle-reentry-activation-phase3d8b3b2
+> node tests/firebase-online-battle-reentry-activation-phase3d8b3b2.test.js
+
+  ok lobby re-entry transfers the existing lease only after a deferred, pre-seeded SSE shell activates
+[Firebase re-entry] FIREBASE_RECOVERY_PENDING_MISSING
+  ok wait plans keep the pending candidate and lease without opening Battle or SSE
+  ok hiding a queued wait retry cancels it, and repeated visible resumes schedule exactly one retry
+  ok revealing re-entry rebuilds persisted own commit, ready, and reveal evidence before seeded SSE starts
+  ok historical rematch votes are rebuilt before their seeded history can be ignored by SSE
+  ok an old-round nextRoundId handoff waits without activating stale results or seeding its history
+  ok transport connection failure occurs before Battle commit and preserves the same pending lease
+  ok a bare recovery transport activation exception is normalized as retryable without adopting the candidate
+  ok a verified Gear-OFF start bundle commits only after B3B1 verification, then hands off to seeded SSE
+  ok Gear ON 2v2 directly activates every occupied Firebase seat with its canonical Battle unit and control boundary
+  ok seeded historical SSE packets stay inert while a REST-to-SSE gap packet drains exactly once after activation
+  ok a final round fence race after replay rejects before commit, transfer, or live receiver handoff
+  ok a replay-verified turn boundary commits the local baseline, never the candidate board, before SSE handoff
+  ok a fresh SSE push key carrying an already verified remote action remains a completed-action no-op
+  ok a conceded results candidate activates once from the verified start rather than its arbitrary result board
+  ok a production-generated normal result is replayed and recorded exactly once without recovery result outbound
+  ok host and guest reload a production-replayed time-cap defeat with the same HP and winner
+  ok the existing round ledger records a verified recovery in a new round independently
+  ok a Gear ON 2v2 verified boundary commits its non-zero Shield runtime rather than the candidate runtime
+  ok a canonical 2v2 enemy fire creates and commits a non-zero Last Stand pending runtime for p2
+Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: 20/20 passed

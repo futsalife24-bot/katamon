@@ -1,0 +1,12 @@
+
+[WebServer] (node:20876) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+
+(node:1668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1/1] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:462:1 › native Firebase re-entry Web Lock contention retries without weakening second-tab exclusivity
+  1 passed (27.7s)
