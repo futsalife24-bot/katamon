@@ -405,6 +405,21 @@ await test('completed action identities survive more than sixteen turns until th
 });
 
 
+await test('a short final walk still persists exact fuel before Firebase fire', () => {
+  const sent=[],fixture=setupRemoteTurn({send:async msg=>{sent.push(structuredClone(msg));return true;}});
+  fixture.online.role='host';fixture.online.seat='p1';fixture.online.clientId=hostUid;fixture.online.auth.uid=hostUid;h.setOnlineSeat('p1');
+  const actor=kt.unitById('p1');
+  live.sendMove('p1');
+  actor.x+=3;actor.fuel-=3;
+  live.sendMove('p1');
+  assert.equal(sent.filter(m=>m.t==='move').length,1,'ordinary short movement stays throttled');
+  live.sendFire('p1');
+  const fireIndex=sent.findIndex(m=>m.t==='fire');
+  assert.equal(sent[fireIndex-1].t,'move');
+  assert.equal(sent[fireIndex-1].fuel,actor.fuel,'last movement fuel must be durable before the action');
+  assert.equal(sent[fireIndex-1].x,actor.x);
+});
+
 await test('turn-limit fire has result as its sole terminal and keeps the same actionId', () => {
   const fixture = setupRemoteTurn();
   const sent = [];
@@ -439,15 +454,27 @@ await test('remote turn-limit result is verified from settled local HP ratios', 
   assert.equal(kt.state().matchOver, true);
 });
 
+await test('losing fire/result uses settled HP, never the concession packet HP', () => {
+  const fixture=setupRemoteTurn();
+  kt.unitById('p1').hp=1;
+  kt.setTurnCountForTest(29);
+  h.receiveFirebaseForTest(fixture.fire);h.drainOneNetworkMessageForTest();settleRemoteFire();
+  const before=kt.snapshot().units.map(u=>({id:u.id,hp:u.hp}));
+  h.receiveFirebaseForTest(packet('result',{actionId:fixture.actionId,unitId:'p1',winner:'cpu',reason:'時間切れ',units:before.map(u=>({...u,hp:u.id==='p1'?0:u.hp}))}));
+  h.drainOneNetworkMessageForTest();
+  assert.equal(fixture.online.phase,'results');
+  assert.deepEqual(kt.snapshot().units.map(u=>({id:u.id,hp:u.hp})),before);
+});
+
 await test('time-limit result cannot override replayed turn count or HP winner', () => {
-  for (const turn of [0, 29]) {
+  for (const turn of [0, 29]) for (const winner of ['player','cpu']) {
     const fixture = setupRemoteTurn();
     kt.setTurnCountForTest(turn);
     h.receiveFirebaseForTest(fixture.fire);
     h.drainOneNetworkMessageForTest();
     settleRemoteFire();
     h.receiveFirebaseForTest(packet('result', {
-      actionId: fixture.actionId, unitId: 'p1', winner: 'player', reason: '時間切れ',
+      actionId: fixture.actionId, unitId: 'p1', winner, reason: '時間切れ',
       units: kt.snapshot().units.map(u => ({ id: u.id, hp: u.hp }))
     }));
     h.drainOneNetworkMessageForTest();

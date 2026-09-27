@@ -1,0 +1,54 @@
+
+> stage-studio-mvp@0.1.0 test:seat
+> node tests/seattest.js p1 && node tests/seattest.js e1 && node tests/pointercanceltest.js && node tests/pointercanceltest.js e1
+
+
+=== seat=p1 ===
+  ok   席が URL のとおり
+  ok   localUnit() が自席
+  ok   foeUnit() が相手
+  ok   control は席にだけ local
+  ok   試合が始まっている
+  ok   自分のカードは自キャラと同じ側
+  ok   相手のカードは相手キャラと同じ側
+  ok   カードは左右に1枚ずつ
+  ok   isLocalTurn() が席と一致
+  ok   ターン表示が席から見た呼び名
+  ok   発射ボタンの活性が手番と一致
+  ok   自席の手番までたどり着く
+  ok   移動ボタンで自席が動く
+  ok   移動で自席の燃料が減る
+  ok   相手は動かない
+  ok   発射できる状態になる
+  ok   弾が発射された
+  ok   弾の owner が自席
+  ok   自陣営が勝ったら localWon()=true
+  ok   相手陣営が勝ったら localWon()=false
+
+20 passed, 0 failed
+
+=== seat=e1 ===
+  ok   席が URL のとおり
+  ok   localUnit() が自席
+  ok   foeUnit() が相手
+  ok   control は席にだけ local
+  ok   試合が始まっている
+  ok   自分のカードは自キャラと同じ側
+  ok   相手のカードは相手キャラと同じ側
+  ok   カードは左右に1枚ずつ
+  ok   isLocalTurn() が席と一致
+  ok   ターン表示が席から見た呼び名
+  ok   発射ボタンの活性が手番と一致
+  ok   自席の手番までたどり着く
+  ok   移動ボタンで自席が動く
+  ok   移動で自席の燃料が減る
+  ok   相手は動かない
+  ok   発射できる状態になる
+  ok   弾が発射された
+  ok   弾の owner が自席
+  ok   自陣営が勝ったら localWon()=true
+  ok   相手陣営が勝ったら localWon()=false
+
+20 passed, 0 failed
+Pointer cancellation: 6 assertions passed
+Pointer cancellation: 6 assertions passed

@@ -851,9 +851,9 @@ function check(name, value) {
     && syncResultSrc[0].includes('actionId = secureNonce();')
     // 席名とユニット名は2vs2で一致しない(s1→p2 / s2→e2)。必ず対応表を通して名乗る。
     && syncResultSrc[0].includes('actionUnitId = firebaseSeatUnitId(online.seat);'));
-  check('a peer conceding its own defeat is accepted even when the local sim disagrees',
+  check('a fire-less peer defeat uses the concession path when the local sim disagrees',
     htmlText.includes('function firebaseResultConcedes(msg)')
-    && htmlText.includes('const concedes = firebaseResultConcedes(msg);')
+    && htmlText.includes('const concedes = !online.remoteAction && firebaseResultConcedes(msg);')
     && htmlText.includes('if (!concedes && (!online.remoteAction'));
   // 降参は通すが、勝利の主張は通さない。判定は「送信者の陣営 !== 勝者」でのみ真になる。
   check('a peer cannot claim its own victory through the concession path', (() => {
@@ -894,7 +894,7 @@ function check(name, value) {
     htmlText.includes('#onlineLobby.error #onlineLobbyStatus { color: #f06060; }')
     && htmlText.includes("onlineLobbyEl.classList.toggle('error', !!(online && online.protocolError));"));
   check('a conceded result copies the declared HP so the loser is shown as defeated',
-    htmlText.includes('if (concedes) {') && htmlText.includes('for (const u of msg.units) {'));
+    htmlText.includes('if (concedes) applyFirebaseConcededResultHp(msg);') && htmlText.includes('function applyFirebaseConcededResultHp(msg)') && htmlText.includes('for (const u of msg.units) {'));
   // 移動の配信(2026-07-27)。移動を送っていなかったことが、燃料不一致・落下死が
   // 伝わらないという切断の共通の根だった。移動は戦略なので相手にも見せる。
   check('Firebase accepts a well-formed move packet',

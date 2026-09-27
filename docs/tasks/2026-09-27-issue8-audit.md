@@ -1,6 +1,6 @@
 # Issue #8 独立監査依頼資料
 
-状態: **送信承認待ち・独立監査未実施**。自己レビューをPASS扱いしない。IssueはOPEN、受入状態は **Awaiting manual / real-device acceptance**。merge・公開の承認は含まない。
+状態: **送信承認済み。初回独立監査FAIL、F1〜F4修正・再監査中**。[監査指摘と対応](2026-09-27-issue8-audit-corrections.md)。自己レビューをPASS扱いしない。IssueはOPEN、受入状態は **Awaiting manual / real-device acceptance**。merge・公開の承認は含まない。
 
 ## 対象を固定
 
@@ -50,4 +50,4 @@ PR #333〜#340の同一試合re-entry/recovery、UID/room/seat確認、Web Lock�
 
 上記code HEADと差分を確認し、Issue #8に直接関わるauthority/recoveryの破綻、正しい現clientを巻き込む拒否、result/turn境界の回帰があれば再現条件・該当行・重要度を示してください。既存境界を無断で新仕様へ変えず、仕様判断が必要なら分けてください。PASSの場合も物理端末と公開が未実施であることを保持してください。
 
-外部送信はまだ行っていません。適用されるローカル正本 `docs/development-workflow.md` の外部顧問節には「公開、送信、削除、重要仕様の確定はユーザー承認なしに進めない」とあるため、資料完成後に送信承認を待ちます。
+通常ChatGPTへの送信はユーザー承認を得て実施済み。初回FAILを保存し、同じ監査目的の修正差分を再提出する。merge・公開の承認は別途。

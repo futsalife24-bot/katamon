@@ -1,0 +1,8 @@
+
+> stage-studio-mvp@0.1.0 test:firebase-reentry-lock-handoff-phase3d8df5
+> node tests/firebase-reentry-lock-handoff-phase3d8df5.test.js
+
+  ok startup retries exclusive Web Lock contention and preserves both credentials
+  ok bootstrap and replay retries are limited to transient failures while exclusivity stays unchanged
+  ok non-bfcache guest document handoff closes transport and releases only its existing lease
+firebase re-entry lock handoff phase3d8df5: 3/3 passed

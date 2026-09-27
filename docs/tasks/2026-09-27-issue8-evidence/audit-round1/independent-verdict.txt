@@ -1,0 +1,163 @@
+① 判定：FAIL
+
+確認した必須指摘は、P0：0件／P1：1件／P2：3件です。
+実機未確認だけを理由とする「条件付き」ではありません。PC上で確認できる復元・送信処理の問題が残っているため、提出HEADをIssue #8の監査PASSにはできません。
+
+ID	重要度	指摘	区分
+F1	P1	最終行動側が負ける時間切れresultを、復元時に拒否する	今回の変更と既存concede判定の統合不整合
+F2	P2	pingの権限拒否・内容競合が、後続の一時エラーで握りつぶされる	今回の回帰
+F3	P2	transportのclose後に、未送信queueのfireを新規PUTできる	既存不具合の残存
+F4	P2	fireなしconcedeの結果reloadで、HPが古い境界へ戻る	既存不具合の残存
+
+監査対象は以下です。GitHubでもPR #404が指定HEAD・Draft・未mergeであることを確認しました。code/test HEAD以後の変更は、compareで監査資料2ファイルだけと確認しています。
+
+プレーンテキスト
+Base       48a5182a7b6d27b4838e3b18d197fe08e79890a6
+提出HEAD   fed6875b0f61fcc4193a482e2b0816651d3a15a8
+code/test  60946bc1b3635b25eaafe7b37fe43edb621e29d6
+② 必須指摘
+F1／P1：敗北側が送った、正常なfire → result履歴を復元できない
+
+箇所：
+shared/firebase-online-battle-recovery.js:93–100
+関連：index.html:16473–16483, 16498–16525、firebaseResultConcedes
+
+再現条件：
+1v1の最終手番で、行動側のHP残存率が相手より低い状態にします。最後の砲撃が終わると、本PRでは同じactionIdのfire A → result Aが保存され、途中のstate Aは送られません。この変更自体は意図どおりです。
+katamon-issue8-independent-audit
+
+ところが、実コードのfirebaseResultConcedesは「勝者が送信者の反対陣営」なら真になります。plannerは対応するactive fireとの照合より先にconcede分岐へ入り、activeが存在することを理由にFIREBASE_RECOVERY_TERMINAL_MISMATCHを投げます。 正常に保存された敗北resultでも、物理replayに到達できません。
+katamon-issue8-independent-audit
+
+独立確認： 固定SHAとバイト一致するrecovery moduleと、取得した実concede判定を使う分離試験で、host／guestの敗北resultが拒否されました。勝利・引き分けはresults_candidateになり、fireなしconcedeも対照条件では受理されました。
+
+提出されたnative受入は最終結果がdrawなので、この敗北側の分岐を保証しません。
+katamon-issue8-independent-audit
+
+最小修正： active fireがある場合は、まずfrom／unitId／actionIdを照合して、そのfireのterminalとしてchainを構築すること。fireなしconcedeの例外は別に維持してください。余分なstateを戻したり、未知actionを許可したりする修正ではありません。
+
+F2／P2：途中の恒久エラーが、最後の一時エラーに上書きされる
+
+箇所：
+index.html:14838–14852, 14915–14922
+
+再現条件： 同じpingの再試行を、次のいずれかにします。
+
+プレーンテキスト
+401 → 503 → 503
+403 → network error → network error
+412＋GETで異なる保存内容を確認 → 503 → 503
+
+firebasePutMessageWithRetryは全エラーを再試行し、最後の例外だけを保持します。その最後がFIREBASE_MESSAGE_TRANSIENTになると、新設のping例外処理が破棄します。途中で確認できていた権限拒否や内容競合が失われます。
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+
+独立確認： 上記3条件すべてで、send(ping) = true、fatal呼び出し0回、後続fireも送信されました。追加されたping catchだけを戻した比較用コードでは、同じ条件でqueueが停止しました。これはBase全体の再実行ではなく、該当変更の対照試験です。
+
+最小修正： 401／403、確認済みの異内容などは、その時点で再試行を終了して恒久エラーを保持すること。一時エラーだけを再試行・破棄対象にしてください。
+
+これはFirebase Rulesの突破を実証した指摘ではなく、本PRが掲げるfail-closed契約の回帰です。
+
+F3／P2：close後も、まだ送信していない旧queueのfireが送られる
+
+箇所：
+index.html:14808–14812, 14845–14851, 14915–14922, 14930–14946
+handoff側：index.html:30622–30624
+
+再現条件： pingの応答を保留し、その後ろにfireをenqueueします。続いて旧transportをcloseし、その後でping応答を返します。
+
+send()入口にはclosed判定がありますが、既にenqueueした項目の実行時やretry前にはありません。close()もSSEを閉じるだけでqueueを取り消しません。
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+
+独立確認： close後にfireの最初のPUTが実行されました。一方、close後に新しく呼び出したsend(fire)はfalseになります。したがって、提出試験の「閉鎖後の新規send拒否」だけでは、この経路を検出できません。
+katamon-issue8-independent-audit
+
+二重タブでは、旧documentがleaseを解放した後にも、旧queueが同じroundへ書き込み得ます。これは「既に送信中だった要求の取消保証外」とは別です。まだ一度も送信していないfireが対象です。
+
+最小修正： queue実行時と各retry前にも閉鎖状態を確認し、handoff／closeで未送信項目を取消すこと。取消を送信成功扱いにせず、旧transportから新しい要求を発行させないことです。新しいサーバーgenerationや、サーバー到達済み要求の取消は要求していません。
+
+この欠落は既存コードにもあるため、今回新設された回帰とは数えません。ただしIssue #8の旧client・二重タブ受入には残ります。
+
+F4／P2：fireなしconcedeの結果reloadで、保存済みterminalのHPが復元されない
+
+箇所：
+index.html:14754–14765, 17962–17979
+比較対象：通常受信のindex.html:16334–16339
+
+再現条件： 最後の検証済み境界でp1のHPが70あり、その後、移動中の落下などによりfireなしで敗北します。保存されたconcede resultはp1のHPが0です。
+
+通常受信ではconcedeのmsg.unitsを適用します。しかし復元側はlastBoundaryをcommitした後、conceded=trueでは通常resultのfinalBaseline適用を飛ばし、concedeのterminal HPも適用しません。
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+
+独立確認： 検証済みreplay結果をfixtureとして渡すactivation分離試験では、次の結果でした。
+
+プレーンテキスト
+保存されたconcede：winner=cpu、p1 HP=0
+reload後のcommit ：winner=cpu、p1 HP=70
+
+通常resultのfinalBaselineを与えた対照条件では、HP0を復元しました。
+
+最小修正： 身元・round・concede妥当性の検証を通ったfireなしconcedeに限り、通常受信と同じHPを結果表示・記録前に復元すること。一般のresultや未検証snapshotへ、packetのHP採用を広げないでください。
+
+これは既存の復元処理の欠落です。terminalが保存されていないケースではなく、保存済みの結果を再現できないケースです。
+
+③ 既存設計との区別・監査範囲
+
+F1のconcede分岐自体は既存です。 今回の最終手番terminal-only化と整合していない点を指摘しており、「Baseの結果reloadが全面的に正常だった」とは主張しません。F2は今回の回帰、F3・F4は今回の受入対象に残っている既存不具合です。
+
+一方、以下は今回の修正要求へ広げません。行動側がterminalを保存する前に消えた場合に未完tailを待つこと、別端末の同一UIDをサーバー側で強制失効しないこと、既に送信中の要求を完全取消できないことは、明記された既存境界として扱います。途中観戦廃止も維持し、s1／s2は2v2の操作席として扱っています。
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+
+確認した範囲では、候補snapshotを直接権威へ昇格せずreplay基準をcommitする構造、最終round fence、受信時と適用時の二段階の重複terminal判定は残っています。今回の指摘は、これらを撤去する提案ではありません。
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+ 
+katamon-issue8-independent-audit
+
+独立実行と提出証拠の区別
+区分	今回の扱い
+独立実行	実transport関数のVM試験、固定blobと一致するplannerの分離試験、実activation関数への検証済みreplay fixture注入試験
+依存を置換した部分	通信・SSE・時計・待ち時間、plannerのpacket validator／unit対応、activationのUI・通信等。完全なゲーム統合試験ではありません
+提出証拠として確認	19コマンドの結果、native Chromium受入、F4全体実行とGear再実行、追加テストの内容
+独立再実行していないもの	全npm回帰、Emulator／実Rules、native Chromium、WebKit、物理端末、production A〜K
+
+CI成功や提出ログのPASSを、上記反例を覆す根拠にはしていません。また、今回の4指摘に必要なコードは取得できており、追加資料待ちの推測として挙げているものではありません。
+
+④ 物理端末で残る受入
+
+F1〜F4はPCで修正・回帰検査できる項目です。実機だけの残項目へ回さないでください。
+
+実機側には、Android Chrome／iPhone Safariでの実際の画面ロック・長時間の背景退避、OSによる凍結やタブ／process破棄、Wi-Fiとモバイル回線の切替、モバイルブラウザの履歴復元、インストールPWAの再開とSW更新が残ります。
+
+復帰後は、同一room／round／seat、HP・位置・燃料・地形・手番、手番側だけの入力許可を比較し、結果では勝者・HP・記録の重複がないことを確認する必要があります。提出されたbfcache試験はPageTransitionEventの手動dispatchであり、実際のモバイル退避・凍結・復帰の確認ではありません。
+katamon-issue8-independent-audit
+
+WebKitは未確認、production A〜Kも未確認のままです。 PC上のWebKit再試験やproduction環境の受入は、物理端末専用項目とは分けて管理してください。
+katamon-issue8-independent-audit
+
+監査再現パックをダウンロード
+
+日本語の指摘書、再現コード、実行結果JSON、ファイル別SHA256を収録しています。プローブのexit=0は「指摘した不具合を再現した」の意味で、製品PASSではありません。
+
+プレーンテキスト
+40,598 bytes
+SHA256: 7ce59be0c34447bdfde679c9bc53b19e1da2008560125de242b0c63ecd250153
+
+GitHubへの変更・投稿、merge、公開、Console／production DB操作は行っていません。
+
+最新の回答
+
+
+
+
+Pro
+ChatGPT は間違えることがあります。重要な情報は確認してください。
+回答が完了しました

@@ -91,8 +91,9 @@
       if (result && packet.t === 'result' && sameResult(result.terminal, entry)) continue; // normal double-send delivery
       if (result) fail('FIREBASE_RECOVERY_RESULT_CONFLICT', { key: entry.key });
       const conceded = packet.t === 'result' && typeof options.isConcededResult === 'function' && options.isConcededResult(packet);
-      if (conceded) {
-        if (active) fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
+      // A losing sender can still be completing a real fire. Its matching
+      // action takes precedence over the fire-less concession exception.
+      if (conceded && !active) {
         result = Object.freeze({ fire: null, terminal: entry, conceded: true });
         continue;
       }

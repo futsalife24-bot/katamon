@@ -14742,9 +14742,8 @@
               catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
               validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
             } else if (terminal.t === 'result') {
-              const conceded = firebaseResultConcedes(terminal);
               const localWinner = firebaseLocallyResolvedWinner();
-              if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
+              if (localWinner === null || localWinner !== terminal.winner) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
             } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
           } finally {
             clearFirebaseBattleReplayAction(replayAction);
@@ -14842,12 +14841,25 @@
     }
     throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
   }
-  async function firebasePutMessageWithRetry(path, auth, body, retryDelays = [0, 250, 750]) {
+  async function firebasePutMessageWithRetry(path, auth, body, retryDelays = [0, 250, 750], isClosed = () => false) {
+    const assertOpen = () => {
+      if (isClosed()) throw Object.assign(new Error('通信を終了しました。'), { code: 'FIREBASE_MESSAGE_CLOSED' });
+    };
     let lastError;
     for (let attempt = 0; attempt < retryDelays.length; attempt++) {
       if (attempt > 0) await waitForFirebaseRetry(retryDelays[attempt]);
-      try { await firebasePutMessageIfAbsent(path, auth, body); return; }
-      catch (err) { lastError = err; }
+      assertOpen();
+      try {
+        await firebasePutMessageIfAbsent(path, auth, body);
+        assertOpen();
+        return;
+      } catch (err) {
+        assertOpen();
+        // Never replace a confirmed permission/conflict failure with a later
+        // transient error. Only failures explicitly classified as temporary retry.
+        if (err?.code !== 'FIREBASE_MESSAGE_TRANSIENT') throw err;
+        lastError = err;
+      }
     }
     throw lastError || new Error('通信に失敗しました。');
   }
@@ -14913,7 +14925,7 @@
     }
     if (!options.deferConnect && !connect()) return null;
     sendQueue = createSerialSendQueue(async ({ path, body }) => {
-      try { await firebasePutMessageWithRetry(path, auth, body); }
+      try { await firebasePutMessageWithRetry(path, auth, body, undefined, () => closed); }
       catch (error) {
         // A lost liveness ping carries no Battle authority. Dropping only its
         // transient failure keeps the serial action queue usable after offline.
@@ -15584,6 +15596,12 @@
   // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
   // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
   // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
+  function applyFirebaseConcededResultHp(msg) {
+    for (const u of msg.units) {
+      const target = unitById(u.id);
+      if (target) target.hp = u.hp;
+    }
+  }
   function firebaseResultConcedes(msg) {
     if (!msg || msg.t !== 'result') return false;
     // 送信者の陣営は「席→ユニット」の対応で引く。2vs2では席名とユニット名が一致しない。
@@ -15788,11 +15806,11 @@
     lastSentMoveX = null;
   }
 
-  function sendMoveUpdate(unit) {
+  function sendMoveUpdate(unit, force = false) {
     if (coopSalvoCollecting()) { sendCoopSalvoMove(unit); moveSyncPending = false; moveSyncTimer = 0; return; }
     moveSyncTimer = 0;
     if (!isOnline() || !netControlsUnit(unit)) { moveSyncPending = false; return; }
-    if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
+    if (!force && lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
     lastSentMoveX = unit.x;
     moveSyncPending = false;
     netSend({ t: 'move', unitId: unit.id, x: unit.x, fuel: unit.fuel });
@@ -16321,10 +16339,9 @@
         if (online.phase !== 'playing') break;
         if (online.kind === 'firebase') {
           const localWinner = firebaseLocallyResolvedWinner();
-          // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
-          // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
-          // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
-          const concedes = firebaseResultConcedes(msg);
+          // Only a fire-less loss (for example a fall while moving) uses the
+          // concession exception. A fired action must match its replayed result.
+          const concedes = !online.remoteAction && firebaseResultConcedes(msg);
           if (!concedes && (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
             rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
             break;
@@ -16332,12 +16349,7 @@
           rememberFirebaseTerminal(msg);
           online.remoteAction = null;
           // 敗北宣言はこちらで再現できていないので、決着時のHPを相手の申告で揃える。
-          if (concedes) {
-            for (const u of msg.units) {
-              const target = unitById(u.id);
-              if (target) target.hp = u.hp;
-            }
-          }
+          if (concedes) applyFirebaseConcededResultHp(msg);
           logOnlineEvent({ type: 'result', ok: true, winner: msg.winner, reason: msg.reason });
           // 決着打も同じ扱い。ここで出さないと、とどめの一撃だけ数字が出ない。
           flushRemoteDamageText();
@@ -16446,7 +16458,10 @@
       online.localAction = { unitId: unit.id, actionId, ...(gearRngActionIdentity ? { gearRngActionIdentity } : {}) };
     }
     // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
-    if (moveSyncPending) sendMoveUpdate(unit);
+    // Recovery needs the exact pre-fire fuel, including a short last step
+    // omitted by the ordinary movement throttle. Keep the existing wire shape.
+    if (online.kind === 'firebase') sendMoveUpdate(unit, true);
+    else if (moveSyncPending) sendMoveUpdate(unit);
     logOnlineEvent({ type: 'sendFire', unitId: unit.id, actionId });
     netSend({
       t: 'fire', unitId: unit.id, x: unit.x, y: unit.y,
@@ -17960,6 +17975,9 @@
         online.pendingRemoteTerminals = new Map();
         seedFirebaseRecoveryCompletedActions(plan);
         if (replay.result) {
+          // Only validated fire-less concessions retain the existing terminal
+          // HP authority, exactly as live reception does.
+          if (replay.result.conceded) applyFirebaseConcededResultHp(replay.result.terminal.packet);
           if (!replay.result.conceded && replay.result.finalBaseline) {
             applySnapshot(replay.result.finalBaseline, { preserveTerrain: true });
             // This runtime comes from the verified local replay, not from the

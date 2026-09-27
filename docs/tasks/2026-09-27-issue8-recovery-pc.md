@@ -1,6 +1,6 @@
 # Issue #8 — PC recovery acceptance (2026-09-27)
 
-Status: **Awaiting manual / real-device acceptance**. The main PC acceptance is complete; independent audit submission and authorized release remain separate gates. Issue #8 stays OPEN. This is the requested approximate 95% preparation point, not a measured guarantee of full production/device coverage.
+Status: **Awaiting manual / real-device acceptance**. The initial PC acceptance was followed by independent audit FAIL; four findings have been corrected and re-audit is pending. See [corrections](2026-09-27-issue8-audit-corrections.md). Authorized release remains a separate gate. Issue #8 stays OPEN. This is the requested approximate 95% preparation point, not a measured guarantee of full production/device coverage.
 
 ## Source and protected work
 

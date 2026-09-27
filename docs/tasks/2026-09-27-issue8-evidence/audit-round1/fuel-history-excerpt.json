@@ -1,0 +1,33 @@
+[
+  {
+    "key": "-P2Wzvl_M6dqkCIfPLth",
+    "t": "move",
+    "seat": "p1",
+    "x": 239.883,
+    "fuel": 78.11699999999999
+  },
+  {
+    "key": "-P2Wzw6qiPwFxoQy6Lno",
+    "t": "fire",
+    "seat": "p1",
+    "x": 243.113
+  },
+  {
+    "key": "-P2WzwfKsb7ORkHR_9ds",
+    "t": "state",
+    "seat": "p1",
+    "turn": 1,
+    "units": [
+      {
+        "id": "p1",
+        "x": 243.113,
+        "fuel": 74.887
+      },
+      {
+        "id": "e1",
+        "x": 1224,
+        "fuel": 87
+      }
+    ]
+  }
+]

@@ -1,0 +1,13 @@
+{"status":200,"ping":true,"fire":true,"calls":["ping","fire"]}
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+true !== false
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\output\issue8\audit-close-probe.cjs:5:598 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: true,
+  expected: false,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

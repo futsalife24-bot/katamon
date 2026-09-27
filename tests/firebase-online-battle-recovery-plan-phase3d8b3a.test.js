@@ -77,6 +77,20 @@ await test('completed action chains remain ordered and an active tail is only a 
   assert.equal(Object.hasOwn(actual, 'activeAttackRuntime'), false);
 });
 
+await test('host and guest losing fire/result chains retain action authority instead of becoming fire-less concede', () => {
+  for (const [seat,from,winner] of [['p1',hostUid,'cpu'],['e1','guest-e1','player']]) {
+    const actor={seat,from,unitId:seat};
+    const messages={[key(1)]:packet('start'),[key(2)]:fire(actor),[key(3)]:result({...actor,winner})};
+    const options={isConcededResult: p=>p.t==='result' && p.winner===(p.seat==='p1'?'cpu':'player')};
+    const actual=plan('playing',messages,options);
+    assert.equal(actual.result.conceded,false);
+    assert.equal(actual.completedActionChain.length,1);
+    assert.equal(actual.result.fire.packet.from,from);
+    messages[key(3)].actionId='e'.repeat(48);
+    fails('FIREBASE_RECOVERY_TERMINAL_MISMATCH',()=>plan('playing',messages,options));
+  }
+});
+
 await test('normal and concede result double-send keep the first result while conflicting duplicates reject', () => {
   const ordinary = plan('results', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: result({ reason: 'first' }), [key(4)]: result({ reason: 'second' }) });
   assert.equal(ordinary.kind, 'results_candidate'); assert.equal(ordinary.result.conceded, false); assert.equal(ordinary.result.terminal.packet.reason, 'first');

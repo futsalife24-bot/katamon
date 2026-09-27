@@ -1,0 +1,15 @@
+  ok lobby and revealing logs are pure plans without a Battle start
+  ok Firebase push IDs use binary canonical order across 9/A/Z/_/a/z, never locale collation
+  ok start authority and battle-start candidate semantics are enforced
+  ok matching fire/state makes only a replay-required candidate chain; persisted early terminals reject
+  ok completed action chains remain ordered and an active tail is only a wait candidate
+Error: FIREBASE_RECOVERY_TERMINAL_MISMATCH
+    at fail (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\shared\firebase-online-battle-recovery.js:10:48)
+    at Object.buildRecoveryPlan (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\shared\firebase-online-battle-recovery.js:95:21)
+    at plan (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-recovery-plan-phase3d8b3a.test.js:20:19)
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-recovery-plan-phase3d8b3a.test.js:85:18
+    at test (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-recovery-plan-phase3d8b3a.test.js:11:42)
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-recovery-plan-phase3d8b3a.test.js:80:7 {
+  code: 'FIREBASE_RECOVERY_TERMINAL_MISMATCH',
+  details: { key: '-0000000000000000003' }
+}

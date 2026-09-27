@@ -1,0 +1,29 @@
+  ok lobby re-entry transfers the existing lease only after a deferred, pre-seeded SSE shell activates
+[Firebase re-entry] FIREBASE_RECOVERY_PENDING_MISSING
+  ok wait plans keep the pending candidate and lease without opening Battle or SSE
+  ok hiding a queued wait retry cancels it, and repeated visible resumes schedule exactly one retry
+  ok revealing re-entry rebuilds persisted own commit, ready, and reveal evidence before seeded SSE starts
+  ok historical rematch votes are rebuilt before their seeded history can be ignored by SSE
+  ok an old-round nextRoundId handoff waits without activating stale results or seeding its history
+  ok transport connection failure occurs before Battle commit and preserves the same pending lease
+  ok a bare recovery transport activation exception is normalized as retryable without adopting the candidate
+  ok a verified Gear-OFF start bundle commits only after B3B1 verification, then hands off to seeded SSE
+  ok Gear ON 2v2 directly activates every occupied Firebase seat with its canonical Battle unit and control boundary
+  ok seeded historical SSE packets stay inert while a REST-to-SSE gap packet drains exactly once after activation
+  ok a final round fence race after replay rejects before commit, transfer, or live receiver handoff
+  ok a replay-verified turn boundary commits the local baseline, never the candidate board, before SSE handoff
+  ok a fresh SSE push key carrying an already verified remote action remains a completed-action no-op
+AssertionError [ERR_ASSERTION]: validated fire-less concede HP survives reload
+
+100 !== 0
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-reentry-activation-phase3d8b3b2.test.js:607:14
+    at async test (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-reentry-activation-phase3d8b3b2.test.js:21:36)
+    at async C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-battle-reentry-activation-phase3d8b3b2.test.js:592:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 100,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

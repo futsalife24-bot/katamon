@@ -61,6 +61,7 @@ const bridge = `
     },
     ownPacket(t,extra={}) { return {v:FIREBASE_PROTO_VERSION,t,from:online.clientId,seat:online.seat,roundId:online.currentRoundId,...extra}; },
     handoff() { globalThis.issue8OldTransport=online.transport; dispatchEvent(new PageTransitionEvent('pagehide',{persisted:false})); },
+    queue(packet) { return online.transport.send(packet); },
     oldSend(packet) { return globalThis.issue8OldTransport.send(packet); },
     reconnect() { return online.transport.reconnect(); },
     rematch() { return requestFirebaseRematch(); },
@@ -94,6 +95,12 @@ async function main(){
   const loaded=await fetch(db+'/.settings/rules.json?ns='+project+'-default-rtdb',{headers:{Authorization:'Bearer owner'}});
   assert.equal(loaded.status,200,'local emulator required');
   assert.deepEqual(await loaded.json(),JSON.parse(fs.readFileSync(path.join(root,'database.rules.json'))),'actual repository Rules');
+  // Prime only the local Auth emulator before starting timed gameplay requests.
+  // A cold emulator/browser startup is not a recovery latency assertion.
+  const ready=await fetch(auth+'/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator-only',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({returnSecureToken:true}),signal:AbortSignal.timeout(60000)});
+  assert.equal(ready.status,200,'local Auth emulator ready');
+  await ready.arrayBuffer();
+  console.log('READY local Auth and RTDB emulators');
   await new Promise(r=>server.listen(4189,'127.0.0.1',r));
   const browser=await ({chromium,webkit}[engine]).launch({headless:true});
   let host,guest;
@@ -107,7 +114,7 @@ async function main(){
       }
       await r.fallback();
     });
-    async function page(c){const p=await c.newPage();p.on('console',m=>{if(m.type()==='error')console.log('browser-error',m.text().replace(/[?][^\s]+/g,'?REDACTED'));});p.on('response',r=>{if(r.status()>=400)console.log('HTTP',r.status(),new URL(r.url()).pathname);});p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:4189/index.html');await p.waitForFunction(()=>!!globalThis.issue8);if((await state(p)).gamePhase==='press'){await p.mouse.click(640,400);await until(async()=> (await state(p)).gamePhase!=='press','leave press screen');}return p;}
+    async function page(c){const p=await c.newPage();p.setDefaultNavigationTimeout(120000);p.on('console',m=>{if(m.type()==='error')console.log('browser-error',m.text().replace(/[?][^\s]+/g,'?REDACTED'));});p.on('response',r=>{if(r.status()>=400)console.log('HTTP',r.status(),new URL(r.url()).pathname);});p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:4189/index.html',{waitUntil:'domcontentloaded'});await p.waitForFunction(()=>!!globalThis.issue8,null,{timeout:120000});if((await state(p)).gamePhase==='press'){await p.mouse.click(640,400);await until(async()=> (await state(p)).gamePhase!=='press','leave press screen');}return p;}
     host=await page(hc); guest=await page(gc);
     const room=await host.evaluate(()=>issue8.create());
     await guest.evaluate(code=>issue8.join(code),room);
@@ -124,6 +131,7 @@ async function main(){
     assert.equal(await mover.evaluate(()=>issue8.move()),true);
     record('production movement changes position and fuel');
     await shot();await converged('first action boundary');
+    fs.writeFileSync(path.join(out,engine+'-first-history.json'),JSON.stringify(await host.evaluate(()=>issue8.history()),null,2));
     // Disconnect the non-acting client so the authority can finish a real action.
     for (const seat of ['e1','p1']) {
       let a=await state(host);
@@ -135,7 +143,7 @@ async function main(){
       await lostContext.setOffline(false);
       if(seat==='p1') await lost.evaluate(()=>issue8.reconnect());
       await converged('native SSE offline/'+(seat==='e1'?'automatic reconnect ':'explicit reconnect ')+seat);
-      await lost.reload();await lost.waitForFunction(()=>!!globalThis.issue8);
+      await lost.reload({waitUntil:'domcontentloaded'});await lost.waitForFunction(()=>!!globalThis.issue8);
       await until(async()=> (await state(lost)).phase==='playing','zero-input reload '+seat,45000);
       await converged('canonical history reload '+seat);
     }
@@ -144,7 +152,25 @@ async function main(){
     await until(async()=> (await state(duplicate)).bootstrap==='retry_wait','second-tab rejection');
     assert.equal((await state(duplicate)).canAct,false);
     const oldPacket=await old.evaluate(()=>issue8.ownPacket('ping'));
+    // Hold a real old-tab request; its queued fire must never begin after lease handoff.
+    let heldPing=false, releasePing, queuedFirePuts=0;
+    const pingGate=new Promise(resolve=>{releasePing=resolve;});
+    await old.route('**/messages/*.json?*',async route=>{
+      const message=route.request().postDataJSON();
+      if(route.request().method()==='PUT' && message?.t==='fire') queuedFirePuts++;
+      if(route.request().method()==='PUT' && message?.t==='ping' && !heldPing){heldPing=true;await pingGate;}
+      await route.continue();
+    });
+    await old.evaluate(()=>{globalThis.issue8QueuedPing=issue8.queue(issue8.ownPacket('ping'));});
+    await until(()=>heldPing,'old ping is in flight');
+    const priorGuestFire=Object.values(await old.evaluate(()=>issue8.history())).find(p=>p.t==='fire'&&p.seat==='e1');
+    assert.ok(priorGuestFire);
+    await old.evaluate(p=>{globalThis.issue8QueuedFire=issue8.queue(p);},priorGuestFire);
     await old.evaluate(()=>issue8.handoff());
+    releasePing();
+    assert.deepEqual(await old.evaluate(async()=>[await globalThis.issue8QueuedPing,await globalThis.issue8QueuedFire]),[false,false]);
+    assert.equal(queuedFirePuts,0,'closed old queue must not dispatch even its first fire PUT');
+    record('native old-tab queued fire cancelled at handoff',{queuedFirePuts});
     await until(async()=> (await state(duplicate)).phase==='playing','replacement acquires lease',45000);
     assert.equal(await old.evaluate(p=>issue8.oldSend(p),oldPacket),false);
     guest=duplicate;
@@ -179,7 +205,7 @@ async function main(){
     assert.equal(await sender.evaluate(p=>issue8.raw(p),terminal),200);
     await sleep(250); assert.deepEqual(board(await state(host)),result); assert.deepEqual(board(await state(guest)),result);
     record('late battle state cannot rewrite a result');
-    for(const p of [host,guest]){await p.reload();await p.waitForFunction(()=>!!globalThis.issue8);await until(async()=> (await state(p)).phase==='results','result reload',180000);assert.deepEqual(board(await state(p)),result);}
+    for(const p of [host,guest]){await p.reload({waitUntil:'domcontentloaded'});await p.waitForFunction(()=>!!globalThis.issue8);await until(async()=> (await state(p)).phase==='results','result reload',180000);assert.deepEqual(board(await state(p)),result);}
     record('same result after host and guest reload');
     await host.screenshot({path:path.join(out,engine+'-result.png')});
     await host.evaluate(()=>issue8.rematch()); await guest.evaluate(()=>issue8.rematch());
@@ -191,6 +217,7 @@ async function main(){
     await host.screenshot({path:path.join(out,engine+'-rematch.png')});
     assert.deepEqual(errors,[],'page errors');
   } catch(error) {
+    if(host&&!host.isClosed())try{fs.writeFileSync(path.join(out,engine+'-failure-history.json'),JSON.stringify(await host.evaluate(()=>issue8.history()),null,2));}catch{}
     for(const [name,p] of [['host',host],['guest',guest]]) if(p&&!p.isClosed()) {try{fs.writeFileSync(path.join(out,engine+'-'+name+'-failure.json'),JSON.stringify(await state(p),null,2));await p.screenshot({path:path.join(out,engine+'-'+name+'-failure.png')});}catch{}}
     throw error;
   } finally {await browser.close();await new Promise(r=>server.close(r));}
