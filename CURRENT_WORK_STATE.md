@@ -1,6 +1,6 @@
-# Issue #8: 独立監査指摘修正・再監査中（2026-09-27）
+# Issue #8: PC受入・独立監査完了（2026-09-27）
 
-専用branch `codex/issue8-recovery-pc` / v2.0.187。既存3D-8Dを維持し、復帰・旧packet・結果reload検証済。[証拠・残課題](docs/tasks/2026-09-27-issue8-recovery-pc.md)、[実機手順](docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。初回監査FAILの4件を修正し再監査中。merge・公開・実機は未実施。元のdirty差分は保護。
+`codex/issue8-recovery-pc` / v2.0.187。19回帰・PC複数client成功、独立監査PASS。**Awaiting manual / real-device acceptance**。[証拠](docs/tasks/2026-09-27-issue8-audit-round2.md)・[実機手順](docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。Issue OPEN、未merge・未公開。WebKit・production A〜K未確認。元dirty差分保護。
 
 # 現在地: 共通アクセス計測を追加・未公開（2026-09-17）
 

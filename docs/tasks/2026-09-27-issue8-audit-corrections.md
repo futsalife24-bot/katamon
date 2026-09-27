@@ -1,3 +1,5 @@
+> Historical audit stage. Final code PASS and PC evidence acceptance: [latest record](2026-09-27-issue8-audit-round2.md).
+
 # Issue #8 — independent audit round 1 and corrections
 
 - Auditor: normal ChatGPT, [same audit conversation](https://chatgpt.com/c/6ab8c88d-cd48-83e8-b519-d812461f74f3). UI showed Pro; actual model ID is unverified. No Codex subagent used.

@@ -1,3 +1,5 @@
+> Historical audit stage. Final code PASS and PC evidence acceptance: [latest record](2026-09-27-issue8-audit-round2.md).
+
 # Issue #8 独立監査依頼資料
 
 状態: **送信承認済み。初回独立監査FAIL、F1〜F4修正・再監査中**。[監査指摘と対応](2026-09-27-issue8-audit-corrections.md)。自己レビューをPASS扱いしない。IssueはOPEN、受入状態は **Awaiting manual / real-device acceptance**。merge・公開の承認は含まない。

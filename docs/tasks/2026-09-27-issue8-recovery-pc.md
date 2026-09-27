@@ -1,6 +1,6 @@
 # Issue #8 — PC recovery acceptance (2026-09-27)
 
-Status: **Awaiting manual / real-device acceptance**. The initial PC acceptance was followed by independent audit FAIL; four findings have been corrected and re-audit is pending. See [corrections](2026-09-27-issue8-audit-corrections.md). Authorized release remains a separate gate. Issue #8 stays OPEN. This is the requested approximate 95% preparation point, not a measured guarantee of full production/device coverage.
+Status: **Awaiting manual / real-device acceptance**. PC acceptance and independent code/evidence audit are complete. Issue #8 stays OPEN; merge/release remain separate. [Latest corrections and evidence](2026-09-27-issue8-audit-round2.md) supersede historical results below. Approximate95% is a preparation target, not a measured production/device guarantee.
 
 ## Source and protected work
 
@@ -72,7 +72,7 @@ The existing Chromium suite was 11 passed / 1 failed. The failing assertion quer
 - Production A–K matrix is not certified by these local tests. No production fault injection, Firebase Console change, DB operation, manual Pages deploy, merge, branch deletion or other-project change was made.
 - WebKit was attempted with separate contexts on Windows but the page/browser closed before room creation. It is unverified, not PASS. Android/iOS and installed PWA are still manual checks.
 
-## Final PC results and evidence
+## Initial PC results and historical evidence
 
 Evidence directory: [2026-09-27-issue8-evidence](2026-09-27-issue8-evidence/). `results.json` records every final command's exit code; all 19 succeeded. `*-before.log` / `*-after.log` preserve the red/green observations at the time of each correction. The final suite logs supersede their intermediate assertion counts.
 
@@ -99,6 +99,10 @@ The copied Meloso Judge entry was invoked from the isolated worktree. Both fixed
 
 ## Remaining gates
 
-- Independent ChatGPT audit: packet prepared; not sent, not approved. Applicable canonical workflow §外部顧問 says external transmission needs user approval. No self-review is labelled independent approval.
+- Independent normal ChatGPT audit: user approved transmission; three submissions sent in the same audit conversation. First two FAIL verdicts and fixes are preserved; third code verdict PASS and final PC evidence accepted. No self-review is labelled independent approval.
 - Merge and normal release require their existing approval; no Console/Rules/manual Pages operation is included.
 - Then run [the two-phone OK/NG checklist](2026-09-27-issue8-mobile-acceptance.md). Physical Android Chrome / iPhone Safari lock, network switch, browser suspension and installed-PWA lifecycle remain human checks. Production A–K remains unconfirmed until the corresponding real acceptance is recorded.
+
+## Latest verified runtime
+
+Code/test `1f01916b906a7ea39cdd1506cfe4d4722fdc1e30`: all19 targeted commands PASS; loopback78/89/128/89/89; transport23/live19. Native independent-context Chromium with actual unchanged emulator Rules PASS through result reload/rematch. F4 browser12PASS plus unchanged isolated handoff case1PASS; original full-run failure retained. See [second audit corrections](2026-09-27-issue8-audit-round2.md). Independent audit confirms code PASS and accepts the final PC evidence; it did not rerun all browser tests. Physical/mobile/PWA, WebKit and production A–K remain separate unverified environment checks.
