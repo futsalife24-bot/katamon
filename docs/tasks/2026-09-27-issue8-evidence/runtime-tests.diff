@@ -1,0 +1,747 @@
+diff --git a/.gitignore b/.gitignore
+index 3bf7023..b12ebe9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,6 +2,9 @@ node_modules/
+ playwright-report/
+ test-results/
+ debug.log
++firebase-debug.log
++database-debug.log
++output/issue8/
+ .codex-worktrees/
+ .codex-remote-attachments/
+ catamon_vertical_pv/
+diff --git a/index.html b/index.html
+index 2b5ea32..e9942df 100644
+--- a/index.html
++++ b/index.html
+@@ -978,13 +978,14 @@
+   // ===== ビルド番号 =====
+   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
+   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
+-  const BUILD_ID = 'v2.0.186-project-hub';
++  const BUILD_ID = 'v2.0.187-issue8-recovery';
+   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
+   // download on first paint. Activate it at the first title tap, independently
+   // of Service Worker availability and the large T2 media download queue.
+   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
+   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
+   const UPDATE_HISTORY = Object.freeze([
++    { version: 'v2.0.187', date: '2026/09/27', summary: 'オンラインの一時退避と通信断からの復帰を改善' },
+     { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
+     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
+     { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
+@@ -14742,7 +14743,7 @@
+               validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
+             } else if (terminal.t === 'result') {
+               const conceded = firebaseResultConcedes(terminal);
+-              const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
++              const localWinner = firebaseLocallyResolvedWinner();
+               if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
+             } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
+           } finally {
+@@ -14822,9 +14823,17 @@
+   function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+   async function firebasePutMessageIfAbsent(path, auth, body) {
+     const url = firebaseRequestUrl(path, auth);
+-    const response = await firebaseFetchWithTimeout(url, {
+-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
+-    });
++    let response;
++    try {
++      response = await firebaseFetchWithTimeout(url, {
++        method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
++      });
++    } catch (cause) {
++      throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT', cause });
++    }
++    if (response.status >= 500 || response.status === 408 || response.status === 429) {
++      throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT' });
++    }
+     if (response.ok) return;
+     if (response.status === 412) {
+       const existing = await firebaseRequest(path, auth);
+@@ -14904,7 +14913,13 @@
+     }
+     if (!options.deferConnect && !connect()) return null;
+     sendQueue = createSerialSendQueue(async ({ path, body }) => {
+-      await firebasePutMessageWithRetry(path, auth, body);
++      try { await firebasePutMessageWithRetry(path, auth, body); }
++      catch (error) {
++        // A lost liveness ping carries no Battle authority. Dropping only its
++        // transient failure keeps the serial action queue usable after offline.
++        // Action writes, permission failures and conflicting push IDs still fail closed.
++        if (body.t !== 'ping' || error?.code !== 'FIREBASE_MESSAGE_TRANSIENT') throw error;
++      }
+     }, err => {
+       if (closed) return;
+       if (onStatus) onStatus(err && err.message ? err.message : '通信に失敗しました。対戦を終了します。');
+@@ -14919,7 +14934,9 @@
+         let sentAt;
+         try { sentAt = firebaseServerNow(auth); }
+         catch (err) { if (onFatal) onFatal(err); return Promise.resolve(false); }
+-        const body = { ...msg, sentAt };
++        // Snapshot fields can share live arrays/counters. Retries must keep the
++        // exact first wire body even after the next local action advances them.
++        const body = JSON.parse(JSON.stringify({ ...msg, sentAt }));
+         return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
+       },
+       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
+@@ -15812,7 +15829,7 @@
+   function firebaseCompletedTerminalStatus(msg) {
+     const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg.actionId);
+     if (!completed) return '';
+-    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
++    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === msg.t) return 'duplicate-terminal';
+     return 'mismatch';
+   }
+   function firebaseCompletedActionStatus(msg) {
+@@ -15823,11 +15840,12 @@
+   function rememberFirebaseTerminal(msg) {
+     if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
+     online.completedRemoteActions.set(msg.actionId, { from: msg.from, unitId: msg.unitId, t: msg.t });
+-    while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
++    // Keep completed identities for the whole bounded round (up to 80 turns).
++    // resetLocalFirebaseRoundState releases them when the round changes.
+   }
+   function receiveFirebaseTerminal(msg) {
+     const completed = firebaseCompletedTerminalStatus(msg);
+-    if (completed === 'duplicate-result') return true;
++    if (completed === 'duplicate-terminal') return true;
+     if (completed === 'mismatch') {
+       rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+       return true;
+@@ -16063,7 +16081,7 @@
+     // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
+     if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
+       const completed = firebaseCompletedTerminalStatus(msg);
+-      if (completed === 'duplicate-result') return;
++      if (completed === 'duplicate-terminal') return;
+       if (completed === 'mismatch') {
+         rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
+         return;
+@@ -16302,9 +16320,7 @@
+       case 'result':
+         if (online.phase !== 'playing') break;
+         if (online.kind === 'firebase') {
+-          const playerAlive = teamAlive('player');
+-          const cpuAlive = teamAlive('cpu');
+-          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : !playerAlive && !cpuAlive ? 'draw' : null;
++          const localWinner = firebaseLocallyResolvedWinner();
+           // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
+           // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
+           // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
+@@ -16456,7 +16472,7 @@
+       }
+       // 最終手番は直後の判定結果が同じactionIdを使う。ここでstateを送りIDを
+       // 捨てると、相手が決着通知を直前の砲撃へ結び付けられない。
+-      if (online.kind === 'coop' && turnCount >= maxTurnsTotal()) return;
++      if (turnCount >= maxTurnsTotal()) return;
+       const snap = buildSnapshot({ includeTerrain: false });
+       if (online.kind === 'firebase') {
+         const runtimeState = createFirebaseOnlineGearRuntimeState();
+@@ -18819,8 +18835,9 @@
+         applyPersistedFirebaseRoomAuthority(room);
+         if (!online || online !== target) return false;
+         // 同時刻のfalse/true要求は1本のGETへ畳むが、後から来たbroadcast=trueを
+-        // 失わない。presenceで参加者を拾ったホストのlobbyState通知を必ず残す。
+-        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()) {
++        // 失わない。ロビーのpresence通知は残すが、試合中の復帰にロビー通知は不要。
++        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()
++            && (target.phase === 'lobby' || target.phase === 'revealing')) {
+           await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
+         }
+         renderFirebaseLobby();
+@@ -21712,6 +21729,17 @@
+     return max > 0 ? hp / max : 0;
+   }
+ 
++  function firebaseLocallyResolvedWinner() {
++    const playerAlive = teamAlive('player');
++    const cpuAlive = teamAlive('cpu');
++    if (!playerAlive || !cpuAlive) return playerAlive ? 'player' : cpuAlive ? 'cpu' : 'draw';
++    if (turnCount < maxTurnsTotal()) return null;
++    // The replayed turn count and HP decide a timeout, never the received reason/HP.
++    const playerRatio = teamHpRatio('player');
++    const cpuRatio = teamHpRatio('cpu');
++    return playerRatio > cpuRatio ? 'player' : playerRatio < cpuRatio ? 'cpu' : 'draw';
++  }
++
+   function judgeByHp() {
+     // 時間切れの判定も行動側が計算して送る(endTurn は手番を進める前に抜けるので、
+     // ここでの activeUnit() はまだ「最後に動いた側」を指している)。
+@@ -30597,9 +30625,9 @@
+     return true;
+   }
+   window.addEventListener('pagehide', event => {
+-    // ホストだけは部屋を残さないよう、終了通知と削除をベストエフォートで投げる。
+-    // ここで待つとbfcache/終了処理を妨げるため、失敗は次の期限切れに任せる。
+-    if (online && online.kind === 'firebase' && online.role === 'host') endOnline(true, true, true);
++    // bfcacheへ退避するhostはguestと同様にroom/seatとWeb Lockを保持する。
++    // documentの置換だけ既存の終了処理へ進める。v3の部屋は消さず再入室へ引き継ぐ。
++    if (online && online.kind === 'firebase' && online.role === 'host' && event?.persisted !== true) endOnline(true, true, true);
+     else releaseFirebaseGuestLeaseForDocumentHandoff(event);
+     suspendAudioForHidden();
+   });
+diff --git a/package.json b/package.json
+index 84a2627..d972f92 100644
+--- a/package.json
++++ b/package.json
+@@ -129,7 +129,7 @@
+     "test:existing": "npm run test:seat && npm run test:regression && npm run test:result && npm run test:loopback && npm run test:stage3 && npm run test:lobby && npm run test:back && npm run test:ranking && npm run test:undef && npm run test:app-shell && npm run test:cache-version && npm run test:weekday-dungeon",
+     "test:stage": "node --test tests/stage-*.test.js",
+     "test:reward-summary-x-share": "node tests/reward-summary-x-share.test.js",
+-    "pretest": "npm run test:firebase-online-reentry-phase3d8b2 && npm run test:firebase-online-battle-recovery-plan-phase3d8b3a && npm run test:firebase-online-battle-replay-runner-phase3d8b3b1 && npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2 && npm run test:firebase-online-live-round-contract-phase3d8c && npm run test:firebase-online-player-name-phase3d8df1 && npm run test:firebase-guest-battle-render-phase3d8df3 && npm run test:firebase-reentry-startup-priority-phase3d8df4 && npm run test:firebase-reentry-lock-handoff-phase3d8df5",
++    "pretest": "npm run test:firebase-online-reentry-phase3d8b2 && npm run test:firebase-online-battle-recovery-plan-phase3d8b3a && npm run test:firebase-online-battle-replay-runner-phase3d8b3b1 && npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2 && npm run test:firebase-online-live-round-contract-phase3d8c && npm run test:firebase-online-player-name-phase3d8df1 && npm run test:firebase-guest-battle-render-phase3d8df3 && npm run test:firebase-reentry-startup-priority-phase3d8df4 && npm run test:firebase-reentry-lock-handoff-phase3d8df5 && node tests/issue8-heartbeat.test.cjs",
+     "test": "npm run test:content-motion && npm run test:docs && npm run test:gear && npm run test:gear-storage && npm run test:gear-rewards && npm run test:gear-cpu-rewards && npm run test:gear-coop-rewards && npm run test:gear-coop-settlement && npm run test:gear-coop-phase2d && npm run test:gear-presets && npm run test:gear-preset-storage && npm run test:gear-preset-capture && npm run test:gear-combat && npm run test:gear-battle-snapshot && npm run test:gear-online-protocol && npm run test:gear-online-lobby-protocol && npm run test:gear-online-firebase-wire && npm run test:gear-online-firebase-lobby && npm run test:gear-online-battle-start-phase3d3a && npm run test:gear-online-battle-damage-phase3d3b && npm run test:gear-online-battle-rng-phase3d4a && npm run test:gear-online-battle-crit-phase3d4b && npm run test:gear-online-battle-blast-phase3d4c && npm run test:gear-online-battle-knockback-phase3d5a && npm run test:gear-online-battle-status-phase3d5b && npm run test:gear-online-battle-shield-phase3d6a && npm run test:gear-online-battle-healing-phase3d6b && npm run test:gear-online-battle-runtime-state-phase3d6c && npm run test:gear-online-battle-last-stand-phase3d7a && npm run test:gear-online-battle-2v2-foundation-phase3d7b1 && npm run test:gear-online-battle-rescue4-phase3d7b2 && npm run test:gear-online-battle-same-owner-conflict-phase3d8a && npm run test:gear-online-battle-runtime-checkpoint-phase3d8b1 && npm run test:gear-combat-runtime && npm run test:gear-battle-rng && npm run test:gear-battle-start-phase3c1 && npm run test:gear-battle-damage-phase3c2a && npm run test:gear-battle-crit-blast-phase3c2b && npm run test:gear-battle-knockback-phase3c3a && npm run test:gear-battle-status-phase3c3b && npm run test:gear-battle-shield-phase3c3c1 && npm run test:gear-battle-healing-phase3c3c2 && npm run test:gear-battle-last-stand-phase3c3d && npm run test:gear-cpu-run-storage && npm run test:gear-cpu-phase2c && npm run test:gear-transactions && npm run test:gear-enhance-dismantle-phase4e && npm run test:gear-guide-phase4k && npm run test:gear-assets && npm run test:foundation-writer-lock && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-live-boss && npm run test:storm-boss && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:coop-rewards && npm run test:coop-shop && npm run test:shop-assets && npm run test:battle-item-assets && npm run test:preview-effects-phase5b && npm run test:coop-session && npm run test:coop-playable && npm run test:reward-summary-x-share && npm run test:existing && npm run test:stage",
+     "pree2e": "npm ci --prefix tools/content-studio",
+     "e2e": "playwright test",
+@@ -148,7 +148,9 @@
+     "test:e2e:firebase-reentry-startup-priority-phase3d8df4": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
+     "test:e2e:firebase-reentry-lock-handoff-phase3d8df5": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
+     "test:storm-boss": "node tests/storm-boss.test.js && node tests/storm-boss-runtime.test.js && node tests/storm-boss-transport.test.js",
+-    "test:e2e:storm-boss": "node tests/storm-boss-browser.cjs"
++    "test:e2e:storm-boss": "node tests/storm-boss-browser.cjs",
++    "test:issue8": "node tests/issue8-heartbeat.test.cjs && node tests/firebase-online-live-round-contract-phase3d8c.test.js && node tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js",
++    "test:issue8:browser": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"node tests/issue8-browser.cjs\""
+   },
+   "devDependencies": {
+     "@playwright/test": "^1.55.0",
+diff --git a/shared/firebase-online-battle-recovery.js b/shared/firebase-online-battle-recovery.js
+index 29f0824..7bcaaa5 100644
+--- a/shared/firebase-online-battle-recovery.js
++++ b/shared/firebase-online-battle-recovery.js
+@@ -66,11 +66,21 @@
+     if (start.packet.seat !== 'p1' || (options.hostUid && start.packet.from !== options.hostUid)) fail('FIREBASE_RECOVERY_START_AUTHORITY_INVALID', { key: start.key });
+ 
+     const chain = [];
++    const completedById = new Map();
+     let active = null;
+     let result = null;
+     for (const entry of entries.slice(entries.indexOf(start) + 1)) {
+       const packet = entry.packet;
+       if (packet.t === 'start') fail('FIREBASE_RECOVERY_START_CONFLICT');
++      const prior = completedById.get(packet.actionId);
++      if (prior && (packet.t === 'fire' || packet.t === 'state')) {
++        const original = packet.t === 'fire' ? prior.fire.packet : prior.terminal.packet;
++        // A new push key cannot grant a completed action new authority. Keep
++        // the first candidate; production replay still validates that boundary.
++        if (original.t === packet.t && original.from === packet.from
++            && original.seat === packet.seat && original.unitId === packet.unitId) continue;
++        fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
++      }
+       if (packet.t === 'fire') {
+         if (result) fail('FIREBASE_RECOVERY_ACTION_AFTER_RESULT', { key: entry.key });
+         if (active) fail('FIREBASE_RECOVERY_ACTION_OVERLAP', { key: entry.key });
+@@ -90,11 +100,14 @@
+       if (!actionMatches(packet, active.identity, options.actionMatches)) fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
+       const completed = Object.freeze({ fire: active.entry, terminal: entry });
+       chain.push(completed);
++      completedById.set(packet.actionId, completed);
+       if (packet.t === 'result') result = Object.freeze({ fire: active.entry, terminal: entry, conceded: false });
+       active = null;
+     }
+     const lastCandidateBoundary = [...chain].reverse().find(item => item.terminal.packet.t === 'state') || null;
+-    if (options.roundStatus === 'results') {
++    // Live result authority is the action sender's immutable result packet.
++    // Only p1 can write round metadata, which may still say playing.
++    if (options.roundStatus === 'results' || result) {
+       if (!result) fail('FIREBASE_RECOVERY_RESULT_MISSING');
+       if (active) fail('FIREBASE_RECOVERY_ACTIVE_TAIL', { key: active.entry.key });
+       return plan('results_candidate', options.roundId, entries, start, { completedActionChain: chain, lastCandidateBoundary, result });
+diff --git a/sw.js b/sw.js
+index 72d9fde..93fb9c6 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE_VERSION = 'katamon-pwa-v2.0.186-project-hub';
++const CACHE_VERSION = 'katamon-pwa-v2.0.187-issue8-recovery';
+ const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
+ const ASSET_CACHE = 'katamon-assets-v1';
+ // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
+diff --git a/tests/README.md b/tests/README.md
+index f51924c..c9c5301 100644
+--- a/tests/README.md
++++ b/tests/README.md
+@@ -78,6 +78,15 @@ npm run test:e2e:storm-boss
+   シード固定は「再現しない稀な引きを踏まないようにする」処置であって、原因の修正ではない
+ - 完走まで1〜3分かかる(1試合を何度も通すため)。遅延・ロス・必殺・プロトコル不一致の7シナリオ
+ 
++## Issue #8 recovery PC受入（2026-09-27）
++
++- `npm run test:issue8`: 一時的なheartbeat失敗・送信本文固定・古いaction/state・時間切れresult・履歴planの回帰。
++- `npm run test:issue8:browser`: Java 21以上とPlaywright Chromiumが必要。既存のdemo Auth/RTDB emulatorを起動して、独立host/guest context＋同一seatの第三タブを実行する。19000/19099/19400/19450/4189番を空ける。実行中の別emulatorへ重ねて起動しない。
++- Emulator起動済みなら `node tests/issue8-browser.cjs`。実際のRulesとの一致を先に検査し、ブラウザからの外部通信を禁止する。room操作・move/fireは配信レスポンス限定のbridgeから実runtimeを呼ぶ。結果は `output/issue8/chromium-acceptance.json`、結果画面と再戦画面のPNGへ保存。
++- PowerShellで `$env:KATAMON_BROWSER='webkit'` とするとWebKitを試せる。Windowsでの今回の実行はpage終了により未確認。スマホ実機とは呼ばない。
++- 起動・Web Lock・bfcacheの既存回帰: `npx playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch`。
++- [対応表・結果・設計上の境界](../docs/tasks/2026-09-27-issue8-recovery-pc.md)、[スマホ最終手順](../docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。
++
+ ## 協力戦の同時行動（2026-09-12）
+ 
+ - `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。
+diff --git a/tests/cache-version-test.js b/tests/cache-version-test.js
+index be7bdab..2f06b5b 100644
+--- a/tests/cache-version-test.js
++++ b/tests/cache-version-test.js
+@@ -5,7 +5,7 @@ const path = require('node:path');
+ const root = path.join(__dirname, '..');
+ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+ const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+-const EXPECTED_BUILD_ID = 'v2.0.186-project-hub';
++const EXPECTED_BUILD_ID = 'v2.0.187-issue8-recovery';
+ 
+ function tierBody(worker, tier) {
+   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
+diff --git a/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js b/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
+index 1a610e1..8d9038c 100644
+--- a/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
++++ b/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
+@@ -623,10 +623,15 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
+     });
+     expect(persistedStillHeld).toBe(true);
+ 
++    const oldLockClient = await ownerPage.evaluate(async () => (
++      (await navigator.locks.query()).held.find(lock => lock.name.startsWith('katamon_firebase_reentry:'))?.clientId
++    ));
++    expect(oldLockClient).toBeTruthy();
+     await ownerPage.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
+     await expect.poll(async () => ownerPage.evaluate(async () => (
+-      !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive')
+-    )), { timeout: 2000 }).toBe(true);
++      (await navigator.locks.query()).held
++        .filter(lock => lock.name.startsWith('katamon_firebase_reentry:')).map(lock => lock.clientId)
++    )), { timeout: 5000 }).not.toContain(oldLockClient);
+     await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+     expect(fixture.authSignUpCount).toBe(0);
+   } finally {
+@@ -921,3 +926,27 @@ test('2v2 support zero-input reload retries a transient history read and restore
+     await context.close();
+   }
+ });
++
++test('host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease', async ({ browser }) => {
++  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium lifecycle regression; native WebKit is tracked separately.');
++  const fixture = { room: null, messages: null };
++  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
++  await installF4Bridge(context, fixture);
++  const page = await context.newPage();
++  try {
++    await page.goto(GAME_URL);
++    const seeded = await page.evaluate(() => KatamonF4StartupBridge.seed({ reentrySeat: 'p1', activeOnlineLease: true }));
++    fixture.room = seeded.room;
++    fixture.messages = seeded.messages;
++    const before = await page.evaluate(() => KatamonF4StartupBridge.state());
++    const held = await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')));
++    expect(held).toHaveLength(1);
++    await page.evaluate(() => {
++      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
++      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
++    });
++    const after = await page.evaluate(() => KatamonF4StartupBridge.state());
++    expect(after).toMatchObject({ onlineKind: 'firebase', onlinePhase: before.onlinePhase, onlineSeat: 'p1', currentRoundId: before.currentRoundId, credentialPresent: true });
++    expect(await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')))).toEqual(held);
++  } finally { await context.close(); }
++});
+diff --git a/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js b/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
+index 11bd437..da96794 100644
+--- a/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
++++ b/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
+@@ -88,6 +88,23 @@ await test('normal and concede result double-send keep the first result while co
+   fails('FIREBASE_RECOVERY_RESULT_MISSING', () => plan('results', { [key(1)]: packet('start'), [key(2)]: fire() }));
+ });
+ 
++
++await test('late copies of a completed action cannot poison canonical recovery or replace its first boundary', () => {
++  const first = state();
++  const actual = plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: first,
++    [key(4)]: fire(), [key(5)]: state({ snap: { craters: ['stale-forgery'] } }) });
++  assert.equal(actual.completedActionChain.length, 1);
++  assert.deepEqual(actual.lastCandidateBoundary.terminal.packet, first);
++  assert.equal(actual.historicalMessageKeys.length, 5);
++  fails('FIREBASE_RECOVERY_TERMINAL_MISMATCH', () => plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: first,
++    [key(4)]: state({ from: 'other' }) }));
++});
++await test('persisted playing metadata does not override a replay-required authoritative result', () => {
++  const actual = plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: result() });
++  assert.equal(actual.kind, 'results_candidate');
++  assert.equal(actual.requiresBattleReplayValidation, true);
++});
++
+ await test('Gear/runtime payloads are retained as opaque packets and an SSE deduper can pre-seed history', () => {
+   const runtime = { version: 3, matchFormat: '1v1', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 } }, runtimeEffectsByUnit: { p1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 1500 }, e1: { rescueNextAttackDamageBp: 1000, lastStandNextAttackDamageBp: 0 } } };
+   const actual = plan('playing', { [key(1)]: packet('start', { gearManifestJson: '{}' }), [key(2)]: fire(), [key(3)]: state({ snap: { craters: [], gearRuntimeState: runtime } }) });
+@@ -163,5 +180,5 @@ await test('a B2 pending candidate reads the current log through REST only and l
+     assert.equal(candidate.reentryLease.release(), true, 'the plan itself did not release B2 lease');
+   } finally { global.fetch = originalFetch; reentryBridge.reset(); }
+ });
+-console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/11 passed`);
++console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/${passed} passed`);
+ })().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/tests/firebase-online-live-round-contract-phase3d8c.test.js b/tests/firebase-online-live-round-contract-phase3d8c.test.js
+index f720e4d..2bb202d 100644
+--- a/tests/firebase-online-live-round-contract-phase3d8c.test.js
++++ b/tests/firebase-online-live-round-contract-phase3d8c.test.js
+@@ -195,6 +195,9 @@ await test('fresh push key carrying the same completed action remains a no-op',
+     assert.equal(kt.projectiles().length, 0);
+     assert.deepEqual(kt.snapshot(), before);
+     source.put(es, '-fresh-state-key', terminal);
++    assert.equal(fixture.online.protocolError, undefined, 'duplicate state must not disconnect the healthy client');
++    assert.equal(fixture.online.phase, 'playing');
++    assert.deepEqual(kt.snapshot(), before, 'stale state cannot roll back the board');
+     assert.equal(fixture.online.queue.length, 0);
+     assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
+   } finally { source.restore(); }
+@@ -375,6 +378,84 @@ await test('result ledger keeps the old round idempotent and accepts the new rou
+   } finally { records.reset(); }
+ });
+ 
++
++await test('completed action identities survive more than sixteen turns until the round resets', () => {
++  const fixture = setupRemoteTurn();
++  let firstTerminal;
++  for (let i = 0; i < 18; i++) {
++    h.setActiveUnitForTest('p1');
++    const unit = kt.unitById('p1');
++    const actionId = (i + 1).toString(16).padStart(48, '0');
++    const fire = { ...fixture.fire, actionId, x: unit.x, y: unit.y, anchor: live.unitAnchor('p1') };
++    h.receiveFirebaseForTest(fire);
++    h.drainOneNetworkMessageForTest();
++    settleRemoteFire();
++    const terminal = packet('state', { actionId, unitId: 'p1', snap: turnStateFrom(kt.snapshot()) });
++    h.receiveFirebaseForTest(terminal);
++    h.drainOneNetworkMessageForTest();
++    assert.equal(fixture.online.protocolError, undefined);
++    if (!firstTerminal) firstTerminal = terminal;
++  }
++  assert.equal(live.state().completedRemoteActions.length, 18, 'no eviction within the same round');
++  const before = structuredClone(kt.snapshot());
++  h.receiveFirebaseForTest(firstTerminal);
++  assert.equal(fixture.online.protocolError, undefined);
++  assert.deepEqual(kt.snapshot(), before);
++  assert.deepEqual(live.state().pendingRemoteTerminals, []);
++});
++
++
++await test('turn-limit fire has result as its sole terminal and keeps the same actionId', () => {
++  const fixture = setupRemoteTurn();
++  const sent = [];
++  fixture.online.role = 'host'; fixture.online.seat = 'p1'; fixture.online.clientId = hostUid;
++  fixture.online.auth.uid = hostUid;
++  fixture.online.transport.send = msg => { sent.push(structuredClone(msg)); return Promise.resolve(true); };
++  fixture.online.localAction = { actionId: fixture.actionId, unitId: 'p1' };
++  h.setOnlineSeat('p1');
++  kt.setTurnCountForTest(29);
++  kt.endTurnForTest();
++  live.syncTurn('p1');
++  for (let i = 0; i < 2000 && !kt.state().matchOver; i++) kt.step(0.05);
++  assert.equal(sent.filter(msg => msg.t === 'state').length, 0);
++  const results = sent.filter(msg => msg.t === 'result');
++  assert.equal(results.length, 2);
++  assert.ok(results.every(msg => msg.actionId === fixture.actionId));
++});
++
++await test('remote turn-limit result is verified from settled local HP ratios', () => {
++  const fixture = setupRemoteTurn();
++  kt.setTurnCountForTest(29);
++  h.receiveFirebaseForTest(fixture.fire);
++  h.drainOneNetworkMessageForTest();
++  settleRemoteFire();
++  h.receiveFirebaseForTest(packet('result', {
++    actionId: fixture.actionId, unitId: 'p1', winner: 'draw', reason: '時間切れ',
++    units: kt.snapshot().units.map(u => ({ id: u.id, hp: u.hp }))
++  }));
++  h.drainOneNetworkMessageForTest();
++  assert.equal(fixture.online.protocolError, undefined);
++  assert.equal(fixture.online.phase, 'results');
++  assert.equal(kt.state().matchOver, true);
++});
++
++await test('time-limit result cannot override replayed turn count or HP winner', () => {
++  for (const turn of [0, 29]) {
++    const fixture = setupRemoteTurn();
++    kt.setTurnCountForTest(turn);
++    h.receiveFirebaseForTest(fixture.fire);
++    h.drainOneNetworkMessageForTest();
++    settleRemoteFire();
++    h.receiveFirebaseForTest(packet('result', {
++      actionId: fixture.actionId, unitId: 'p1', winner: 'player', reason: '時間切れ',
++      units: kt.snapshot().units.map(u => ({ id: u.id, hp: u.hp }))
++    }));
++    h.drainOneNetworkMessageForTest();
++    assert.equal(fixture.online.phase, 'ended');
++    assert.match(fixture.online.protocolError, /ローカル結果/);
++  }
++});
++
+ console.log(`firebase live ordering / rematch Phase 3D-8C: ${passed}/${passed} passed`);
+ }
+ 
+diff --git a/tests/issue8-browser.cjs b/tests/issue8-browser.cjs
+new file mode 100644
+index 0000000..1320022
+--- /dev/null
++++ b/tests/issue8-browser.cjs
+@@ -0,0 +1,198 @@
++'use strict';
++// Real Chromium/WebKit, independent storage contexts, native SSE, actual RTDB Rules.
++// Requires only LOCAL Auth + RTDB emulators; every non-loopback request is blocked.
++const fs = require('node:fs');
++const path = require('node:path');
++const http = require('node:http');
++const assert = require('node:assert/strict');
++const { chromium, webkit } = require('playwright');
++const root = path.resolve(__dirname, '..');
++const out = path.join(root, 'output/issue8');
++fs.mkdirSync(out, { recursive: true });
++const project = 'demo-catamon-registration';
++const db = 'http://127.0.0.1:19000';
++const auth = 'http://127.0.0.1:19099';
++const engine = process.env.KATAMON_BROWSER || 'chromium';
++const events = [], errors = [];
++const bridge = `
++  const issue8WriteFailures=[]; const issue8MakeTransport=makeFirebaseTransport;
++  makeFirebaseTransport=function(...args){const transport=issue8MakeTransport(...args);if(transport){const send=transport.send;transport.send=packet=>send(packet).then(ok=>{if(!ok)issue8WriteFailures.push({t:packet.t,seat:packet.seat,actionId:packet.actionId});return ok;});}return transport;};
++  globalThis.issue8 = {
++    async create() {
++      const r = await createFirebaseRoom(null, { terrain:'rolling',wind:'calm',turnsPerPlayer:10,format:'1v1',stageSize:'standard',revision:1 }, {visibility:'private',gearMode:globalThis.KatamonGearOnlineProtocol.GEAR_MODE_OFF});
++      beginFirebaseOnline('host',r.code,r.auth,'kyoryu',r.room,r.seat,null,r.reentryLease);
++      return r.code;
++    },
++    async join(code) {
++      const r = await claimFirebaseRoom(code);
++      beginFirebaseOnline('guest',code,r.auth,'iwa',r.room,r.seat,null,r.reentryLease);
++    },
++    ready() { return commitOwnCharacterSelection(online.seat === 'p1' ? 'kyoryu' : 'iwa'); },
++    start() { return requestFirebaseStart(); },
++    state() {
++      return structuredClone({room:online?.room, round:online?.currentRoundId,seat:online?.seat,
++        phase:online?.phase,rosterSeats:Object.keys(online?.slots || {}).filter(k=>online.slots[k]?.uid),gamePhase,localUnitId,turn:turnCount,active:activeUnit()?.id,
++        action:online?.localAction?.actionId || online?.remoteAction?.actionId || null,
++        completed:Array.from(online?.completedRemoteActions?.keys() || []),
++        canAct:online?.phase === 'playing' && gamePhase === 'battle' && isLocalTurn() && !netInputLocked() && !awaitingResolve && !matchOver && !cutIn,
++        matchOver,winner,hidden:document.hidden,cutIn:!!cutIn,projectiles:projectiles.map(p=>({x:p.x,y:p.y,vx:p.vx,vy:p.vy})),pending:awaitingResolve,protocolError:online?.protocolError || null,
++        failure:firebaseReentryLastFailureCode,bootstrap:firebaseReentryBootstrapState,status:onlineLobbyStatusEl?.textContent,
++        writesFailed:issue8WriteFailures,snapshot:buildSnapshot(),credential:!!loadFirebaseReentryCredential()});
++    },
++    async move() {
++      if (!isLocalTurn() || netInputLocked() || awaitingResolve || cutIn) return false;
++      const u=localUnit(), x=u.x, fuel=u.fuel;
++      moveDir=u.id==='p1'?1:-1;
++      await new Promise(resolve=>setTimeout(resolve,350));
++      moveDir=0; sendMoveUpdate(u);
++      return u.x!==x && u.fuel<fuel;
++    },
++    fire() {
++      if (online?.phase !== 'playing' || gamePhase !== 'battle' || !isLocalTurn() || netInputLocked() || awaitingResolve || matchOver || cutIn) return false;
++      const u=localUnit(), a={x:u.x,y:u.y}, vx=u.id === 'p1' ? -1000 : 1000;
++      netSendFire(u,a,vx,-140,false,false);
++      launchShot(u,a,vx,-140,false,false,false);
++      awaitingResolve=true;
++      return true;
++    },
++    async raw(packet, round) {
++      const response=await fetch(firebaseRequestUrl('rooms/'+online.room+'/rounds/'+(round || online.currentRoundId)+'/messages/'+firebasePushId(),online.auth),{method:'PUT',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','if-match':'null_etag'},body:JSON.stringify({...packet,sentAt:firebaseServerNow(online.auth)})});
++      return response.status;
++    },
++    ownPacket(t,extra={}) { return {v:FIREBASE_PROTO_VERSION,t,from:online.clientId,seat:online.seat,roundId:online.currentRoundId,...extra}; },
++    handoff() { globalThis.issue8OldTransport=online.transport; dispatchEvent(new PageTransitionEvent('pagehide',{persisted:false})); },
++    oldSend(packet) { return globalThis.issue8OldTransport.send(packet); },
++    reconnect() { return online.transport.reconnect(); },
++    rematch() { return requestFirebaseRematch(); },
++    receive(packet) { netReceive(packet); },
++    async history() { return firebaseRequest('rooms/'+online.room+'/rounds/'+online.currentRoundId+'/messages',online.auth); }
++  };
++`;
++function instrument(source) {
++  source=source.replace(/\r\n/g,'\n');
++  source=source.replace(/https:\/\/[^'"\s]+\.firebasedatabase\.app/g,db);
++  source=source.replaceAll('https://identitytoolkit.googleapis.com/',auth+'/identitytoolkit.googleapis.com/');
++  source=source.replaceAll('https://securetoken.googleapis.com/',auth+'/securetoken.googleapis.com/');
++  source=source.replace('new URLSearchParams({ auth: auth.idToken })',`new URLSearchParams({ auth: auth.idToken, ns: '${project}-default-rtdb' })`);
++  const marker='\n})();\n</script>\n<script src="coop-mvp-boss.js"';
++  assert.ok(source.includes(marker),'production main script boundary');
++  return source.replace(marker,bridge+marker);
++}
++const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.webp':'image/webp','.svg':'image/svg+xml','.mp3':'audio/mpeg','.woff2':'font/woff2'};
++const server=http.createServer((req,res)=>{
++  const p=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
++  if (!p.startsWith(root+path.sep)) {res.writeHead(403).end();return;}
++  fs.readFile(p,(err,bytes)=>{if(err){res.writeHead(404).end();return;}res.setHeader('Content-Type',mime[path.extname(p)]||'application/octet-stream');res.setHeader('Cache-Control','no-store');res.end(p.endsWith('index.html')?instrument(bytes.toString()):bytes);});
++});
++const sleep=ms=>new Promise(r=>setTimeout(r,ms));
++async function until(fn,label,ms=30000) {const deadline=Date.now()+ms;let last;while(Date.now()<deadline){last=await fn();if(last)return last;await sleep(150);}throw new Error('Timeout: '+label);}
++const state=p=>p.evaluate(()=>issue8.state());
++function board(s) {return {round:s.round,turn:s.turn,active:s.active,matchOver:s.matchOver,winner:s.winner,units:s.snapshot.units.map(u=>({id:u.id,hp:u.hp,x:u.x,y:u.y,fuel:u.fuel})),craters:s.snapshot.craters,wind:s.snapshot.wind,turnOrder:s.snapshot.turnOrder};}
++function record(name,detail={}) {events.push({name,...detail});console.log('PASS '+name);}
++async function main(){
++  // Fail closed before any browser starts. No production DB fallback.
++  const loaded=await fetch(db+'/.settings/rules.json?ns='+project+'-default-rtdb',{headers:{Authorization:'Bearer owner'}});
++  assert.equal(loaded.status,200,'local emulator required');
++  assert.deepEqual(await loaded.json(),JSON.parse(fs.readFileSync(path.join(root,'database.rules.json'))),'actual repository Rules');
++  await new Promise(r=>server.listen(4189,'127.0.0.1',r));
++  const browser=await ({chromium,webkit}[engine]).launch({headless:true});
++  let host,guest;
++  try {
++    async function context(){const c=await browser.newContext({viewport:{width:1280,height:800},serviceWorkers:'block'});await c.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());return c;}
++    const hc=await context(), gc=await context();
++    let delayed=0;
++    await hc.route('**/messages/*.json?*',async r=>{
++      if (!delayed && r.request().method()==='PUT' && r.request().postDataJSON()?.t==='state') {
++        delayed++; await sleep(750);
++      }
++      await r.fallback();
++    });
++    async function page(c){const p=await c.newPage();p.on('console',m=>{if(m.type()==='error')console.log('browser-error',m.text().replace(/[?][^\s]+/g,'?REDACTED'));});p.on('response',r=>{if(r.status()>=400)console.log('HTTP',r.status(),new URL(r.url()).pathname);});p.on('pageerror',e=>errors.push(e.message));await p.goto('http://127.0.0.1:4189/index.html');await p.waitForFunction(()=>!!globalThis.issue8);if((await state(p)).gamePhase==='press'){await p.mouse.click(640,400);await until(async()=> (await state(p)).gamePhase!=='press','leave press screen');}return p;}
++    host=await page(hc); guest=await page(gc);
++    const room=await host.evaluate(()=>issue8.create());
++    await guest.evaluate(code=>issue8.join(code),room);
++    await until(async()=> (await state(host)).phase==='lobby'&&(await state(guest)).phase==='lobby'&&(await state(host)).rosterSeats.includes('e1'),'two independent lobby clients');
++    record('independent host + guest lobby',{room});
++    assert.equal(await host.evaluate(()=>issue8.ready()),true);
++    assert.equal(await guest.evaluate(()=>issue8.ready()),true);
++    await until(async()=>{await host.evaluate(()=>issue8.start());return (await state(host)).phase==='playing'&&(await state(guest)).phase==='playing';},'start');
++    await until(async()=> (await state(host)).canAct || (await state(guest)).canAct,'first input');
++    record('commit/reveal/start through actual Rules and native SSE');
++    async function converged(label){await until(async()=>{const a=await state(host),b=await state(guest);return !a.pending&&!b.pending&&!a.action&&!b.action&&(a.matchOver || a.canAct || b.canAct)&&JSON.stringify(board(a))===JSON.stringify(board(b));},label,45000);const a=await state(host),b=await state(guest);assert.equal(a.protocolError,null);assert.equal(b.protocolError,null);if(!a.matchOver)assert.notEqual(a.canAct,b.canAct);record(label,{turn:a.turn,active:a.active});}
++    async function shot(){await until(async()=> (await state(host)).canAct || (await state(guest)).canAct,'input available');const actor=(await state(host)).canAct?host:guest;record('fire attempt',{seat:(await state(actor)).seat,turn:(await state(actor)).turn,active:(await state(actor)).active});assert.equal(await actor.evaluate(()=>issue8.fire()),true);return actor;}
++    const mover=(await state(host)).canAct?host:guest;
++    assert.equal(await mover.evaluate(()=>issue8.move()),true);
++    record('production movement changes position and fuel');
++    await shot();await converged('first action boundary');
++    // Disconnect the non-acting client so the authority can finish a real action.
++    for (const seat of ['e1','p1']) {
++      let a=await state(host);
++      if(a.active===seat){await shot();await converged('arrange peer turn '+seat);}
++      const lost=seat==='p1'?host:guest, lostContext=seat==='p1'?hc:gc;
++      await lostContext.setOffline(true);
++      await shot();
++      await until(async()=>!(await state(seat==='p1'?guest:host)).pending,'actor settles offline peer');
++      await lostContext.setOffline(false);
++      if(seat==='p1') await lost.evaluate(()=>issue8.reconnect());
++      await converged('native SSE offline/'+(seat==='e1'?'automatic reconnect ':'explicit reconnect ')+seat);
++      await lost.reload();await lost.waitForFunction(()=>!!globalThis.issue8);
++      await until(async()=> (await state(lost)).phase==='playing','zero-input reload '+seat,45000);
++      await converged('canonical history reload '+seat);
++    }
++    // Native lock takeover: new tab cannot act until old document hands off.
++    const old=guest, duplicate=await page(gc);
++    await until(async()=> (await state(duplicate)).bootstrap==='retry_wait','second-tab rejection');
++    assert.equal((await state(duplicate)).canAct,false);
++    const oldPacket=await old.evaluate(()=>issue8.ownPacket('ping'));
++    await old.evaluate(()=>issue8.handoff());
++    await until(async()=> (await state(duplicate)).phase==='playing','replacement acquires lease',45000);
++    assert.equal(await old.evaluate(p=>issue8.oldSend(p),oldPacket),false);
++    guest=duplicate;
++    await converged('two-tab handoff and old transport rejection');
++    await old.close();
++    // Re-deliver an already completed authoritative state under a fresh key.
++    const history=await host.evaluate(()=>issue8.history());
++    const terminal=Object.values(history).find(p=>p.t==='state');assert.ok(terminal);
++    const sender=terminal.seat==='p1'?host:guest;
++    const before=board(await state(host));
++    assert.equal(await sender.evaluate(p=>issue8.raw(p),terminal),200);
++    await sleep(500);await converged('duplicate old actionId ignored');
++    assert.deepEqual(board(await state(host)),before);
++    const stale = structuredClone(terminal); stale.snap.units[0].hp = Math.max(0, stale.snap.units[0].hp - 1);
++    assert.equal(await sender.evaluate(p=>issue8.raw(p),stale),200);
++    await sleep(250); await converged('stale snapshot cannot overwrite current board');
++    assert.deepEqual(board(await state(host)),before);
++    const oldRound='f'.repeat(48), packet={...terminal,roundId:oldRound};
++    assert.equal(await sender.evaluate(({p,r})=>issue8.raw(p,r),{p:packet,r:oldRound}),401);
++    record('old-round write rejected by actual Rules');
++    // Complete without changing HP/balance: ordinary outward shots reach turn cap.
++    for(let i=0;i<24 && !(await state(host)).matchOver;i++){
++      const s=await state(host), final=s.turn===19;
++      const lostContext=s.canAct?gc:hc, lost=s.canAct?guest:host;
++      if(final)await lostContext.setOffline(true);
++      const actor=await shot();
++      if(final){await until(async()=> (await state(actor)).matchOver,'result while peer offline');await lostContext.setOffline(false);await lost.evaluate(()=>issue8.reconnect());}
++      await converged(final?'result-boundary offline/reconnect':'normal action '+i);
++    }
++    await until(async()=> (await state(host)).matchOver&&(await state(guest)).matchOver,'same result');
++    const result=board(await state(host));record('normal result',{winner:result.winner});
++    assert.equal(await sender.evaluate(p=>issue8.raw(p),terminal),200);
++    await sleep(250); assert.deepEqual(board(await state(host)),result); assert.deepEqual(board(await state(guest)),result);
++    record('late battle state cannot rewrite a result');
++    for(const p of [host,guest]){await p.reload();await p.waitForFunction(()=>!!globalThis.issue8);await until(async()=> (await state(p)).phase==='results','result reload',180000);assert.deepEqual(board(await state(p)),result);}
++    record('same result after host and guest reload');
++    await host.screenshot({path:path.join(out,engine+'-result.png')});
++    await host.evaluate(()=>issue8.rematch()); await guest.evaluate(()=>issue8.rematch());
++    await until(async()=>{const a=await state(host),b=await state(guest);return a.round!==result.round&&a.round===b.round;},'rematch round fence');
++    const delayedPacket={...terminal,roundId:result.round};
++    assert.equal(await sender.evaluate(({p,r})=>issue8.raw(p,r),{p:delayedPacket,r:result.round}),401);
++    record('rematch advances round and rejects old-round packet');
++    assert.equal(delayed,1); record('delayed authoritative PUT preserves serial action ordering');
++    await host.screenshot({path:path.join(out,engine+'-rematch.png')});
++    assert.deepEqual(errors,[],'page errors');
++  } catch(error) {
++    for(const [name,p] of [['host',host],['guest',guest]]) if(p&&!p.isClosed()) {try{fs.writeFileSync(path.join(out,engine+'-'+name+'-failure.json'),JSON.stringify(await state(p),null,2));await p.screenshot({path:path.join(out,engine+'-'+name+'-failure.png')});}catch{}}
++    throw error;
++  } finally {await browser.close();await new Promise(r=>server.close(r));}
++}
++main().then(()=>{fs.writeFileSync(path.join(out,engine+'-acceptance.json'),JSON.stringify({engine,passed:true,events,errors},null,2));}).catch(e=>{fs.writeFileSync(path.join(out,engine+'-acceptance.json'),JSON.stringify({engine,passed:false,events,errors,error:e.stack},null,2));console.error(e);server.close();process.exitCode=1;});
+diff --git a/tests/issue8-heartbeat.test.cjs b/tests/issue8-heartbeat.test.cjs
+new file mode 100644
+index 0000000..12682a1
+--- /dev/null
++++ b/tests/issue8-heartbeat.test.cjs
+@@ -0,0 +1,46 @@
++'use strict';
++const assert = require('node:assert/strict');
++const h = require('./seatharness.js').kt().stage3();
++const live = h.firebaseLiveRoundContractForTest();
++const originalFetch = global.fetch, originalSource = global.EventSource;
++global.EventSource = class { addEventListener(){} close(){} };
++const auth = {uid:'issue8-host',idToken:'test-only',serverTimeOffset:0};
++const packet = t => ({v:3,t,from:auth.uid,seat:'p1',roundId:'a'.repeat(48),...(t==='ping'?{}:{actionId:'c'.repeat(48)})});
++let passed=0;
++(async()=>{
++  for(const fault of ['network','timeout',503,408,429]) {
++    let fatal=0, failing=true;
++    global.fetch=async()=>{
++      if(!failing)return {ok:true,status:200};
++      if(fault==='network')throw new TypeError('Failed to fetch');
++      if(fault==='timeout')throw Object.assign(new Error('request aborted'),{name:'AbortError'});
++      return {ok:false,status:fault};
++    };
++    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>{fatal++;});
++    await transport.send(packet('ping'));
++    assert.equal(fatal,0,'lost heartbeat must not poison action queue: '+fault);
++    failing=false;
++    assert.equal(await transport.send(packet('fire')),true);
++    transport.close();
++    assert.equal(await transport.send(packet('fire')),false,'closed old client stays fenced');
++    passed++;
++  }
++  for(const fault of ['action-offline',401,403]) {
++    let fatal=0;
++    global.fetch=async()=>{if(fault==='action-offline')throw new TypeError('Failed to fetch');return {ok:false,status:fault};};
++    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>{fatal++;});
++    assert.equal(await transport.send(packet(fault==='action-offline'?'fire':'ping')),false);
++    assert.equal(fatal,1,'authority/permission failure stays terminal: '+fault);
++    assert.equal(await transport.send(packet('fire')),false,'poisoned action queue is not revived');
++    transport.close();passed++;
++  }
++  {
++    const msg={...packet('state'),snap:{runStats:{shots:1},craters:[]}}, writes=[];
++    global.fetch=async(url,options)=>{writes.push(JSON.parse(options.body));if(writes.length===1){msg.snap.runStats.shots=2;msg.snap.craters.push({x:1,y:2,r:3});throw new TypeError('lost response');}return {ok:true,status:200};};
++    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>{});
++    assert.equal(await transport.send(msg),true);
++    assert.deepEqual(writes[1],writes[0],'retry must retain the original wire body after local state advances');
++    transport.close();passed++;
++  }
++  console.log('issue8 transport: '+passed+'/'+passed+' cases passed');
++})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{global.fetch=originalFetch;global.EventSource=originalSource;});
+diff --git a/tests/seatharness.js b/tests/seatharness.js
+index a0c5f32..929a94e 100644
+--- a/tests/seatharness.js
++++ b/tests/seatharness.js
+@@ -1814,6 +1814,7 @@ const HOOK = `
+       allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
+       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
+       firebaseLiveRoundContractForTest: () => ({
++        syncTurn: unitId => netSyncTurn(unitById(unitId)),
+         createTransport: (...args) => makeFirebaseTransport(...args),
+         requestRematch: () => requestFirebaseRematch(),
+         resetRound: autoReady => resetFirebaseRound(autoReady === true),
