@@ -77,6 +77,20 @@ await test('completed action chains remain ordered and an active tail is only a 
   assert.equal(Object.hasOwn(actual, 'activeAttackRuntime'), false);
 });
 
+await test('host and guest losing fire/result chains retain action authority instead of becoming fire-less concede', () => {
+  for (const [seat,from,winner] of [['p1',hostUid,'cpu'],['e1','guest-e1','player']]) {
+    const actor={seat,from,unitId:seat};
+    const messages={[key(1)]:packet('start'),[key(2)]:fire(actor),[key(3)]:result({...actor,winner})};
+    const options={isConcededResult: p=>p.t==='result' && p.winner===(p.seat==='p1'?'cpu':'player')};
+    const actual=plan('playing',messages,options);
+    assert.equal(actual.result.conceded,false);
+    assert.equal(actual.completedActionChain.length,1);
+    assert.equal(actual.result.fire.packet.from,from);
+    messages[key(3)].actionId='e'.repeat(48);
+    fails('FIREBASE_RECOVERY_TERMINAL_MISMATCH',()=>plan('playing',messages,options));
+  }
+});
+
 await test('normal and concede result double-send keep the first result while conflicting duplicates reject', () => {
   const ordinary = plan('results', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: result({ reason: 'first' }), [key(4)]: result({ reason: 'second' }) });
   assert.equal(ordinary.kind, 'results_candidate'); assert.equal(ordinary.result.conceded, false); assert.equal(ordinary.result.terminal.packet.reason, 'first');
@@ -86,6 +100,23 @@ await test('normal and concede result double-send keep the first result while co
   fails('FIREBASE_RECOVERY_RESULT_CONFLICT', () => plan('results', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: result(), [key(4)]: result({ from: 'other' }) }));
   fails('FIREBASE_RECOVERY_RESULT_MISSING', () => plan('results', { [key(1)]: packet('start') }));
   fails('FIREBASE_RECOVERY_RESULT_MISSING', () => plan('results', { [key(1)]: packet('start'), [key(2)]: fire() }));
+});
+
+
+await test('late copies of a completed action cannot poison canonical recovery or replace its first boundary', () => {
+  const first = state();
+  const actual = plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: first,
+    [key(4)]: fire(), [key(5)]: state({ snap: { craters: ['stale-forgery'] } }) });
+  assert.equal(actual.completedActionChain.length, 1);
+  assert.deepEqual(actual.lastCandidateBoundary.terminal.packet, first);
+  assert.equal(actual.historicalMessageKeys.length, 5);
+  fails('FIREBASE_RECOVERY_TERMINAL_MISMATCH', () => plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: first,
+    [key(4)]: state({ from: 'other' }) }));
+});
+await test('persisted playing metadata does not override a replay-required authoritative result', () => {
+  const actual = plan('playing', { [key(1)]: packet('start'), [key(2)]: fire(), [key(3)]: result() });
+  assert.equal(actual.kind, 'results_candidate');
+  assert.equal(actual.requiresBattleReplayValidation, true);
 });
 
 await test('Gear/runtime payloads are retained as opaque packets and an SSE deduper can pre-seed history', () => {
@@ -163,5 +194,5 @@ await test('a B2 pending candidate reads the current log through REST only and l
     assert.equal(candidate.reentryLease.release(), true, 'the plan itself did not release B2 lease');
   } finally { global.fetch = originalFetch; reentryBridge.reset(); }
 });
-console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/11 passed`);
+console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/${passed} passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

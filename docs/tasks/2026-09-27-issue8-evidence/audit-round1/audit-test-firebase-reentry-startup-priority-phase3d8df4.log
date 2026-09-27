@@ -1,0 +1,9 @@
+
+> stage-studio-mvp@0.1.0 test:firebase-reentry-startup-priority-phase3d8df4
+> node tests/firebase-reentry-startup-priority-phase3d8df4.test.js
+
+  ok fresh-boot replay rollback restores a null ONLINE shell without inventing character authority
+  ok valid local Battle rollback remains exact and does not weaken normal snapshot validation
+  ok CPU suspend remains explicit-user authority and is not consumed by Firebase rollback
+  ok transient and definitive Firebase failures preserve CPU suspend while credential retention follows B2
+firebase re-entry startup priority phase3d8df4: 4/4 passed

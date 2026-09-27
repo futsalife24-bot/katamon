@@ -1,0 +1,346 @@
+{
+  "engine": "chromium",
+  "passed": true,
+  "events": [
+    {
+      "name": "independent host + guest lobby",
+      "at": "2026-09-27T09:57:35.689Z",
+      "room": "MHYR8QLQ"
+    },
+    {
+      "name": "commit/reveal/start through actual Rules and native SSE",
+      "at": "2026-09-27T09:57:57.726Z"
+    },
+    {
+      "name": "persisted ping response loss then comparison GET 503 recovers",
+      "at": "2026-09-27T09:58:01.519Z",
+      "puts": 3,
+      "gets": 2
+    },
+    {
+      "name": "production movement changes position and fuel",
+      "at": "2026-09-27T09:58:01.949Z"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:58:02.151Z",
+      "seat": "e1",
+      "turn": 0,
+      "active": "e1"
+    },
+    {
+      "name": "first action boundary",
+      "at": "2026-09-27T09:58:07.499Z",
+      "turn": 1,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:58:07.917Z",
+      "seat": "p1",
+      "turn": 1,
+      "active": "p1"
+    },
+    {
+      "name": "native SSE offline/automatic reconnect e1",
+      "at": "2026-09-27T09:58:11.276Z",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "canonical history reload e1",
+      "at": "2026-09-27T09:58:19.184Z",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:58:19.616Z",
+      "seat": "e1",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "native SSE offline/explicit reconnect p1",
+      "at": "2026-09-27T09:58:24.025Z",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "canonical history reload p1",
+      "at": "2026-09-27T09:58:39.602Z",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "native old-tab queued fire cancelled at handoff",
+      "at": "2026-09-27T09:58:56.520Z",
+      "queuedFirePuts": 0
+    },
+    {
+      "name": "two-tab handoff and old transport rejection",
+      "at": "2026-09-27T09:59:09.670Z",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "duplicate old actionId ignored",
+      "at": "2026-09-27T09:59:11.353Z",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "stale snapshot cannot overwrite current board",
+      "at": "2026-09-27T09:59:12.872Z",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "old-round write rejected by actual Rules",
+      "at": "2026-09-27T09:59:15.372Z"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:15.869Z",
+      "seat": "p1",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 0",
+      "at": "2026-09-27T09:59:22.149Z",
+      "turn": 4,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:22.714Z",
+      "seat": "e1",
+      "turn": 4,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 1",
+      "at": "2026-09-27T09:59:27.651Z",
+      "turn": 5,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:27.891Z",
+      "seat": "p1",
+      "turn": 5,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 2",
+      "at": "2026-09-27T09:59:31.986Z",
+      "turn": 6,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:32.161Z",
+      "seat": "e1",
+      "turn": 6,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 3",
+      "at": "2026-09-27T09:59:35.358Z",
+      "turn": 7,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:35.486Z",
+      "seat": "p1",
+      "turn": 7,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 4",
+      "at": "2026-09-27T09:59:38.535Z",
+      "turn": 8,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:38.790Z",
+      "seat": "e1",
+      "turn": 8,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 5",
+      "at": "2026-09-27T09:59:41.952Z",
+      "turn": 9,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:42.226Z",
+      "seat": "p1",
+      "turn": 9,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 6",
+      "at": "2026-09-27T09:59:45.482Z",
+      "turn": 10,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:45.747Z",
+      "seat": "e1",
+      "turn": 10,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 7",
+      "at": "2026-09-27T09:59:50.705Z",
+      "turn": 11,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:50.955Z",
+      "seat": "p1",
+      "turn": 11,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 8",
+      "at": "2026-09-27T09:59:54.394Z",
+      "turn": 12,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:54.575Z",
+      "seat": "e1",
+      "turn": 12,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 9",
+      "at": "2026-09-27T09:59:58.248Z",
+      "turn": 13,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T09:59:58.469Z",
+      "seat": "p1",
+      "turn": 13,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 10",
+      "at": "2026-09-27T10:00:01.851Z",
+      "turn": 14,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:02.057Z",
+      "seat": "e1",
+      "turn": 14,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 11",
+      "at": "2026-09-27T10:00:05.235Z",
+      "turn": 15,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:05.389Z",
+      "seat": "p1",
+      "turn": 15,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 12",
+      "at": "2026-09-27T10:00:08.513Z",
+      "turn": 16,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:08.664Z",
+      "seat": "e1",
+      "turn": 16,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 13",
+      "at": "2026-09-27T10:00:12.285Z",
+      "turn": 17,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:12.424Z",
+      "seat": "p1",
+      "turn": 17,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 14",
+      "at": "2026-09-27T10:00:15.778Z",
+      "turn": 18,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:15.949Z",
+      "seat": "e1",
+      "turn": 18,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 15",
+      "at": "2026-09-27T10:00:19.031Z",
+      "turn": 19,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "at": "2026-09-27T10:00:19.163Z",
+      "seat": "p1",
+      "turn": 19,
+      "active": "p1"
+    },
+    {
+      "name": "result-boundary offline/reconnect",
+      "at": "2026-09-27T10:00:23.334Z",
+      "turn": 20,
+      "active": "p1"
+    },
+    {
+      "name": "normal result",
+      "at": "2026-09-27T10:00:23.460Z",
+      "winner": "draw"
+    },
+    {
+      "name": "late battle state cannot rewrite a result",
+      "at": "2026-09-27T10:00:24.041Z"
+    },
+    {
+      "name": "same result after host and guest reload",
+      "at": "2026-09-27T10:01:39.330Z"
+    },
+    {
+      "name": "rematch advances round and rejects old-round packet",
+      "at": "2026-09-27T10:01:42.306Z"
+    },
+    {
+      "name": "delayed authoritative PUT preserves serial action ordering",
+      "at": "2026-09-27T10:01:42.307Z"
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,10 @@
+
+> stage-studio-mvp@0.1.0 test:gear-online-battle-same-owner-conflict-phase3d8a
+> node tests/gear-online-battle-same-owner-conflict-phase3d8a.test.js
+
+  ok owner-scoped resolver accepts Gearless and distinct physical Gear loadouts, including matching IDs across owners
+  ok owner-scoped resolver rejects only a repeated physical Gear and preserves conflict identity
+  ok three and four same-owner units are checked as one owner group while 1v1 remains unchanged
+  ok production Firebase 2v2 start accepts same-owner distinct Gear and rejects a conflict before Battle mutation
+  ok manifest v6 fences v5 while core, snapshot and Firebase wire remain unchanged
+gear-online-battle-same-owner-conflict-phase3d8a: 5/5 passed

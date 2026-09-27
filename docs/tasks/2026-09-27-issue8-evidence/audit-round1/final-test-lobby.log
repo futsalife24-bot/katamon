@@ -1,0 +1,15 @@
+
+> stage-studio-mvp@0.1.0 test:lobby
+> node tests/lobbysimtest.js
+
+
+=== lobby sim (commit/reveal) ===
+  ok   1回ずつ確定して公開すれば両者とも検証できる
+  ok   準備完了を押し直しても、順番どおり届けば通る
+  ok   新旧のコミットが逆順で届いても、古い方に上書きされない
+  ok   古いコミットが再送で後から届いても、最新が生き残る
+  ok   3回押し直してばらばらに届いても最新が生き残る
+  ok   コミットより先に公開したら通らない
+  ok   公開の後にコミットを差し替えたら弾かれる
+
+7 passed, 0 failed

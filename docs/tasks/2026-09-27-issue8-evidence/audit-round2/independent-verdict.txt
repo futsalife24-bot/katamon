@@ -1,0 +1,85 @@
+判定：FAIL
+
+必須指摘：P0＝0件／P1＝0件／P2＝2件。
+元の反例は修正されていますが、関連経路に照合漏れ1件と、今回の再送回帰1件を独立再現しました。
+
+プレーンテキスト
+提出HEAD：53c1a326571b62fedaf9709cf3c9cdd395faeeed
+code/test：56423f7e2958e15ac5ee16bc0db4bb630f28f3c7
+
+GitHubでも指定HEAD・Draft・未mergeを確認しています。
+
+F1〜F4／L1の確認結果
+対象	元の再現条件に対する結果
+F1	解消。 active fireに対応する敗北resultを通常の完了chainとして扱い、replayではローカル勝者を検証。ただし、liveの適用時照合に下記R1が残ります。
+katamon-issue8-reaudit
+ 
+katamon-issue8-reaudit
+
+F2	解消。 401／403／照合で確定した異内容412を保持して停止。ただし、照合GETの一時失敗に下記R2の回帰があります。
+katamon-issue8-reaudit
+
+F3	解消。 先頭・最終retryの応答待ち中にcloseした分離試験で、200／503とも送信結果false、待機fireのPUTは0件でした。
+katamon-issue8-reaudit
+
+F4	解消。 検証済み発射なしconcedeのHP0を記録前に復元。通常resultはpacketのHPではなく、検証済みbaselineを維持します。
+katamon-issue8-reaudit
+
+L1	解消。 通常の間引きを維持し、Firebase発射直前には最終位置・燃料のmoveをfireより先に送ります。送信関数の分離試験でも確認しました。
+katamon-issue8-reaudit
+R1／P2：待機中fireに対する敗北resultのactionIdが、適用時に未照合
+
+箇所： index.html:15617、15873–15884、16344–16350
+区分：既存の照合漏れが、F1関連の修正後も残存。
+
+再現条件： fire Aを受信キューへ積み、まだ適用していない間に、同一UID・席・roundの敗北result Bを受信します。AとBのactionIdは異なります。
+
+受信時はremoteActionがないためBがキューへ入り、Aの確定後は「送信者の敗北」というflow例外を通過します。result適用では勝者とresolvedを確認しますが、actionIdの一致を再確認していません。
+katamon-issue8-reaudit
+ 
+katamon-issue8-reaudit
+
+独立分離試験では、host／guest双方でliveはBを結果として記録する一方、同じ履歴のreload用plannerはFIREBASE_RECOVERY_TERMINAL_MISMATCHで拒否しました。Bをfire適用後に受信する対照条件では拒否され、受信タイミングで判定が変わります。
+
+最小修正： 適用時にも、remoteActionが存在するresultにはfirebaseActionMatches(msg, online.remoteAction)を必須にすること。発射なしconcedeだけは例外を維持し、「fire待機中に異ID resultを受信」の負例を追加してください。
+
+R2／P2：412の照合GETが一時失敗すると、再試行せずqueueを停止する
+
+箇所： index.html:14837–14840、14856–14861
+区分：F2の再送対象を絞った変更による、今回の回帰。
+
+再現条件：
+
+プレーンテキスト
+PUTは保存されたが応答喪失
+→ 同じキーへの再送が412
+→ 保存本文の照合GETだけ503、または通信断
+
+GETのエラーはFIREBASE_REQUEST_TRANSIENTですが、再送対象はFIREBASE_MESSAGE_TRANSIENTだけです。そのため、照合GETの一時失敗1回でqueue全体を停止します。
+katamon-issue8-reaudit
+
+独立試験では、旧版は次の照合で同一本文を確認して継続、新版はping／fireともfalseになり、後続fireも停止しました。権限拒否や、確認済みの異内容は含まない条件です。
+
+最小修正： 412照合GETの一時失敗だけを有限回再試行し、本文一致を確認して初めて成功にすること。401／403・確認済み異内容の即停止と、closeによる取消は維持してください。
+
+検証限界・残る境界
+
+独立実行は実関数の分離試験です。HTTP／SSE／確定盤面などは試験用データで置き換えており、物理エンジン全体の再実行ではありません。19コマンド・native Chromium＋実Rulesは、テスト実装と提出証拠を照合したもので、こちらで再実行した結果とは区別しています。
+
+物理スマホ、WebKit、production A〜Kは未確認のままです。 terminal未保存時の待機、欠落済み燃料履歴を推測復元しない方針、別端末同UIDのサーバー失効・送信済み要求の完全取消を保証しない境界も維持します。
+katamon-issue8-reaudit
+ 
+katamon-issue8-independent-audit
+
+独立再現コード・実行結果・詳細報告
+
+このプローブのexit＝0は「期待した不具合再現・対照確認が成立した」という意味で、製品PASSではありません。製品コードの修正、GitHub投稿、merge、公開、production操作は行っていません。
+
+最新の回答
+
+
+
+
+Pro
+ChatGPT は間違えることがあります。重要な情報は確認してください。
+回答が完了しました

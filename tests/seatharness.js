@@ -1814,6 +1814,9 @@ const HOOK = `
       allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
       firebaseLiveRoundContractForTest: () => ({
+        sendMove: unitId => sendMoveUpdate(unitById(unitId)),
+        sendFire: unitId => { const u = unitById(unitId); return netSendFire(u, unitAnchor(u), -5000, -140, false, false); },
+        syncTurn: unitId => netSyncTurn(unitById(unitId)),
         createTransport: (...args) => makeFirebaseTransport(...args),
         requestRematch: () => requestFirebaseRematch(),
         resetRound: autoReady => resetFirebaseRound(autoReady === true),

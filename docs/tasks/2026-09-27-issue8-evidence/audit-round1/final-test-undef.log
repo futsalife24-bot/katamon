@@ -1,0 +1,5 @@
+
+> stage-studio-mvp@0.1.0 test:undef
+> node tests/undef-scan.js
+
+未定義大文字識別子: なし（2/2 passed）

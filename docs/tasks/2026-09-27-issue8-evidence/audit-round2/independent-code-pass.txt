@@ -1,0 +1,51 @@
+判定：コード限定 PASS
+
+R1・R2は解消。今回の差分と直接影響の範囲で、新規必須指摘はP0＝0件／P1＝0件／P2＝0件です。
+ただし、PC受入は未完であり、PR全体の受入PASS・Issue完了・公開承認ではありません。
+
+対象：1f01916b906a7ea39cdd1506cfe4d4722fdc1e30
+比較元：53c1a326571b62fedaf9709cf3c9cdd395faeeed
+
+R1／R2の解消確認
+対象	判定・確認内容
+R1：結果適用時の照合	解消。 index.html:16345–16371、特に16352行で、記録・HP・勝者・phase変更より前にfirebaseActionMatchesを要求しています。host／guest双方で、待機中fireに対する異ID resultを拒否し、同IDは受理。発射なしconcedeの例外も維持しています。
+katamon-issue8-third-audit
+
+R2：412照合GETの再送	解消。 index.html:14837–14871で、FIREBASE_REQUEST_TRANSIENTだけを正規化。同一本文照合、最大3回の試行、権限拒否・確定した異内容の停止、close取消を維持しています。比較GETの待機中にcloseする条件も確認しました。
+katamon-issue8-third-audit
+
+独立実行は送信62条件・受信／適用28条件で、旧版の反例と修正後の対照を確認しました。実関数を使った分離試験ですが、HTTP／SSE・確定盤面などは試験用に置き換えています。提出の19コマンドや実物理・nativeブラウザ全体を、こちらで再実行した結果ではありません。
+
+テスト変更の妥当性
+
+変更は妥当です。 R1の追加テストはfire未適用を明示し、物理処理の完了後にhost／guestそれぞれの異ID拒否・同ID受理を要求しています。期待値を緩めただけの修正ではありません。
+katamon-issue8-third-audit
+
+F4の単体message PUT／GET対応、保存されたpingの検査、非loopbackへのfallback遮断も適切です。ただし、模擬通信の成功は実Rulesの検証を代替しません。
+katamon-issue8-third-audit
+
+待機側reloadの追加は、特定のpeer timeoutとendedを確認し、その後のplaying・盤面一致を要求しています。手動再入室の検証としては妥当ですが、自動復帰成功には数えられません。
+katamon-issue8-third-audit
+
+PC受入：未完として残します
+項目	残る状態
+F4ブラウザ	12/13成功。 Web Lock引継ぎ後の15秒timeout・onlinePhase nullは未解消。ログから原因までは確定できません。
+katamon-issue8-third-audit
+
+native通し試験	最新報告では、新GET障害ケース成功後に35秒peer timeout。手動再入室を加えた次の試験も旧ping待ちでtimeout。対象HEADの通しPASSは未取得です。
+CI	固定HEADを取得確認した時点でも実行中のチェックが残っています。全完了とは判定しません。
+
+RAM不足は観測情報にとどめ、原因とは断定しません。旧56423f7のnative PASSも流用しません。物理スマホ、WebKit、production A〜Kは引き続き未確認です。
+
+独立再検証コード・実行結果・詳細報告
+
+製品コードの実装、GitHub投稿、merge、公開、production操作は行っていません。
+
+最新の回答
+
+
+
+
+Pro
+ChatGPT は間違えることがあります。重要な情報は確認してください。
+回答が完了しました

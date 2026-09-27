@@ -343,6 +343,7 @@ async function installF4Bridge(context, fixture) {
         validation: Object.entries(messages).map(([key, value]) => ({ key, result: validateFirebaseMessageDetail(value) }))
       };
     },
+    sendPingForTest() { return online.transport.send({v:3,t:'ping',from:online.clientId,seat:online.seat,roundId:online.currentRoundId}); },
     state() {
       const unit = localUnit();
       return structuredClone({
@@ -380,6 +381,19 @@ async function installF4Bridge(context, fixture) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: fixture.reentryUid || GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
     }
     if (url.includes(`/rooms/${ROOM_CODE}/slots/`) && url.includes('/seenAt.json')) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    if (new URL(url).pathname.startsWith(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages/`)) {
+      const request=route.request();
+      const key=new URL(url).pathname.split('/').pop().replace(/\.json$/, '');
+      fixture.messageWrites ||= [];
+      fixture.transportMessages ||= {};
+      if(request.method()==='PUT') {
+        if(Object.hasOwn(fixture.transportMessages,key)) return route.fulfill({status:412,contentType:'application/json',body:'null'});
+        const packet=request.postDataJSON();
+        fixture.transportMessages[key]=packet;fixture.messageWrites.push(packet);
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(packet)});
+      }
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture.transportMessages[key] || null)});
+    }
     if (url.includes(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages.json`)) {
       if ((fixture.recoveryMessageFailuresRemaining || 0) > 0) {
         fixture.recoveryMessageFailuresRemaining -= 1;
@@ -392,6 +406,8 @@ async function installF4Bridge(context, fixture) {
     }
     if (url.includes(`/rooms/${ROOM_CODE}/round.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room.round) });
     if (url.includes(`/rooms/${ROOM_CODE}.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room) });
+    // Mock recovery must never fall through to a production service.
+    if (!['127.0.0.1','localhost'].includes(new URL(url).hostname)) return route.abort('blockedbyclient');
     return route.fallback();
   });
 }
@@ -431,6 +447,8 @@ test('zero-input reload gives Firebase re-entry authority while preserving CPU s
       localUnitId: 'e1', localCharacter: 'iwa', pendingReentry: false,
       credentialPresent: true,
     });
+    expect(await page.evaluate(() => KatamonF4StartupBridge.sendPingForTest())).toBe(true);
+    expect((fixture.messageWrites || []).some(packet => packet.t === 'ping')).toBe(true);
     expect(state.cpuRaw).toBe(cpuRawBeforeReload);
     expect(state.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
     expect(state.trace.some(entry => entry.name === 'restoreFirebaseBattleReplayRollback' && entry.phase === 'error')).toBe(false);
@@ -623,10 +641,15 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
     });
     expect(persistedStillHeld).toBe(true);
 
+    const oldLockClient = await ownerPage.evaluate(async () => (
+      (await navigator.locks.query()).held.find(lock => lock.name.startsWith('katamon_firebase_reentry:'))?.clientId
+    ));
+    expect(oldLockClient).toBeTruthy();
     await ownerPage.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
     await expect.poll(async () => ownerPage.evaluate(async () => (
-      !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive')
-    )), { timeout: 2000 }).toBe(true);
+      (await navigator.locks.query()).held
+        .filter(lock => lock.name.startsWith('katamon_firebase_reentry:')).map(lock => lock.clientId)
+    )), { timeout: 5000 }).not.toContain(oldLockClient);
     await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
@@ -920,4 +943,28 @@ test('2v2 support zero-input reload retries a transient history read and restore
   } finally {
     await context.close();
   }
+});
+
+test('host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium lifecycle regression; native WebKit is tracked separately.');
+  const fixture = { room: null, messages: null };
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    const seeded = await page.evaluate(() => KatamonF4StartupBridge.seed({ reentrySeat: 'p1', activeOnlineLease: true }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    const before = await page.evaluate(() => KatamonF4StartupBridge.state());
+    const held = await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')));
+    expect(held).toHaveLength(1);
+    await page.evaluate(() => {
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    const after = await page.evaluate(() => KatamonF4StartupBridge.state());
+    expect(after).toMatchObject({ onlineKind: 'firebase', onlinePhase: before.onlinePhase, onlineSeat: 'p1', currentRoundId: before.currentRoundId, credentialPresent: true });
+    expect(await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')))).toEqual(held);
+  } finally { await context.close(); }
 });

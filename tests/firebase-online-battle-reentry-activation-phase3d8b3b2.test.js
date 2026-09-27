@@ -195,7 +195,7 @@ async function concedeResultPlan(lease) {
   const start = await battleStartPlan(lease);
   const messages = Object.fromEntries(start.orderedEntries.map(entry => [entry.key, structuredClone(entry.packet)]));
   messages[key(0)] = packet('presence', { rivalId: 'c'.repeat(64), name: 'Host' });
-  messages[key(6)] = packet('result', { actionId: 'f'.repeat(48), unitId: 'p1', winner: 'cpu', reason: '投了', units: start.start.packet.snap.units.map(unit => ({ id: unit.id, hp: unit.hp })) });
+  messages[key(6)] = packet('result', { actionId: 'f'.repeat(48), unitId: 'p1', winner: 'cpu', reason: '投了', units: start.start.packet.snap.units.map(unit => ({ id: unit.id, hp: unit.id === 'p1' ? 0 : unit.hp })) });
   return { value, plan: bridge.build(value, messages) };
 }
 // Fixed firing lanes for tests whose acceptance requires a hit. The unseeded
@@ -604,6 +604,7 @@ async function normalResultPlan(lease) {
       assert.equal(bridge.activeOnline().resultSent, true);
       assert.equal(kt.state().matchOver, true);
       assert.equal(kt.state().winner, 'cpu');
+      assert.equal(kt.unitById('p1').hp, 0, 'validated fire-less concede HP survives reload');
       assert.equal(source.instances.length, 1);
       assert.deepEqual(records.snapshot().processedRoundIds, [roundId], 'verified results record once through the existing round ledger');
       bridge.endActive();
@@ -640,6 +641,38 @@ async function normalResultPlan(lease) {
       records.reset();
       source.restore();
     }
+  });
+
+  await test('host and guest reload a production-replayed time-cap defeat with the same HP and winner', async () => {
+    const source=fakeEventSource(),lease={release:()=>{}};
+    const initial=await battleStartPlan(lease),start=structuredClone(initial.start.packet.snap);
+    fixedProjectileTerrain(start);
+    start.turnCount=29;
+    const actorId=start.turnOrder[start.activeIndex],actor=start.units.find(u=>u.id===actorId);
+    actor.hp=1; actor.x=actorId==='p1'?240:1200;actor.y=360;
+    const from=actorId==='p1'?hostUid:guestUid,seat=actorId;
+    const fire={...packet('fire',{actionId:'e'.repeat(48),unitId:actorId,x:actor.x,y:actor.y,anchor:{x:actor.x,y:actor.y},vx0:actorId==='p1'?-5000:5000,vy0:-140,useSpecial:false,useJump:false}),from,seat};
+    const messages=Object.fromEntries(initial.orderedEntries.map(e=>[e.key,structuredClone(e.packet)]));
+    messages[initial.start.key].snap=start;
+    const setup=bridge.build(candidate('playing',lease),messages);
+    const frame=callback=>setImmediate(()=>{kt.step(0.05);callback();});
+    const generated=await bridge.generateTerminal(setup,fire,{frame,timeoutMs:15000});
+    assert.equal(generated.action.turnCount,30);
+    const hp=generated.fullSnap.units.map(u=>({id:u.id,hp:u.hp}));
+    const winner=actorId==='p1'?'cpu':'player';
+    messages[key(6)]=fire;
+    messages[key(7)]={...packet('result',{actionId:fire.actionId,unitId:actorId,winner,reason:'時間切れ',units:hp}),from,seat};
+    try {
+      for(const value of [hostCandidate('results',lease),candidate('results',lease)]){
+        const plan=bridge.build(value,messages);
+        assert.equal(plan.result.conceded,false);
+        bridge.setPending(value);
+        await bridge.activatePending({plan,frame,timeoutMs:15000});
+        assert.equal(bridge.activeOnline().phase,'results');assert.equal(kt.state().winner,winner);
+        assert.deepEqual(kt.snapshot().units.map(u=>({id:u.id,hp:u.hp})),hp);
+        bridge.endActive();
+      }
+    } finally {bridge.endActive();bridge.setPending(null);source.restore();}
   });
 
   await test('the existing round ledger records a verified recovery in a new round independently', async () => {
@@ -729,5 +762,5 @@ async function normalResultPlan(lease) {
     } finally { bridge.endActive(); source.restore(); }
   });
 
-  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/19 passed`);
+  console.log(`Firebase Battle Re-entry Activation Phase 3D-8B3B2 tests: ${passed}/20 passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

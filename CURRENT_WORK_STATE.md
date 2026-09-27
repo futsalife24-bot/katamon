@@ -1,3 +1,7 @@
+# Issue #8: PC受入・独立監査完了（2026-09-27）
+
+`codex/issue8-recovery-pc` / v2.0.187。19回帰・PC複数client成功、独立監査PASS。**Awaiting manual / real-device acceptance**。[証拠](docs/tasks/2026-09-27-issue8-audit-round2.md)・[実機手順](docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。Issue OPEN、未merge・未公開。WebKit・production A〜K未確認。元dirty差分保護。
+
 # 現在地: 共通アクセス計測を追加・未公開（2026-09-17）
 
 workspace内作業コピー、branch `codex/shared-analytics`。v2.0.184-shared-analytics、実装・関連検証済み。[記録](docs/tasks/2026-09-17-shared-analytics.md)。元作業場所の未保存差分は保護。独立監査・公開前。
@@ -311,17 +315,7 @@ Gear ONLINEはPhase 3D-8CまでCOMPLETE。Phase 3D-8DではF1〜F6のre-entry / 
 - 地形グリッド、当たり判定、クレーター履歴、固定刻み、雲・物理・通信は変えない。
 - 旧実装で新規Stage 3検証が **473/474** に失敗することを確認後、実装後 **474/474**、Regression **401/401**、`npm test` **1,198件**（loopback **38 / 64 / 83 / 61 / 48**）成功。ローカルHTTPのAndroid Chromium E2Eは1件成功・pageerror 0件（Mobile WebKit 1件は既知canvasクラッシュでスキップ）。
 
-## v2.0.47 遠景の丘のキャッシュ（PR #213）
-
-### 何を / なぜ
-
-- 試合中に形が変わらない遠景の丘2層を、試合ごとに必要な時だけオフスクリーンCanvasへ描き、通常フレームは貼り付けだけにした。
-- 丘の層ごとのカメラ追従率は従来どおり別なのでCanvasも分け、雲は動く演出のため従来どおり毎フレーム描く。
-
-### やってはいけないこと / テスト
-
-- 雲を丘のキャッシュへ混ぜない。専用ステージ背景がある時の遠景省略も変えない。
-- 旧実装で新規Stage 3検証が **472/473** に失敗することを確認後、実装後 **473/473**、`npm test` **1,197件**（loopback **38 / 64 / 83 / 61 / 48**）成功。ローカルHTTPのAndroid Chromium E2Eは1件成功・pageerror 0件（Mobile WebKit 1件は既知canvasクラッシュでスキップ）。
+旧v2.0.47の記録は[履歴](docs/history/2026-09-27-state-v2.0.47.md)へ移動（本文維持）。
 
 ## 保留・ユーザー判断待ち
 

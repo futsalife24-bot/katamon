@@ -1,0 +1,40 @@
+
+> stage-studio-mvp@0.1.0 test:issue8
+> node tests/issue8-heartbeat.test.cjs && node tests/firebase-online-live-round-contract-phase3d8c.test.js && node tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
+
+issue8 transport: 23/23 cases passed
+  ok ordinary live receiver completes move -> fire -> state exactly once
+  ok terminal-before-fire is buffered and applied only after the production action settles
+  ok same SSE push key is a room-lifetime no-op on second delivery
+  ok fresh push key carrying the same completed action remains a no-op
+  ok a completed actionId reused by another valid seat fails closed
+  ok a completed actionId reused by the same sender for another unit fails closed
+  ok 1v1 rematch advances only after every seated human votes and switches transport once
+  ok failed old-round handoff leaves local round and round-local state untouched
+  ok new-round reset clears Battle-round state but preserves room authority
+  ok 2v2 live rematch waits for four humans but advances without empty CPU support votes
+  ok SSE deduper survives round switching while Battle completed-action cache resets
+  ok result ledger keeps the old round idempotent and accepts the new round as another match
+  ok completed action identities survive more than sixteen turns until the round resets
+  ok a short final walk still persists exact fuel before Firebase fire
+  ok turn-limit fire has result as its sole terminal and keeps the same actionId
+  ok remote turn-limit result is verified from settled local HP ratios
+  ok losing fire/result uses settled HP, never the concession packet HP
+  ok queued losing result must match the applied fire action for host and guest
+  ok time-limit result cannot override replayed turn count or HP winner
+firebase live ordering / rematch Phase 3D-8C: 19/19 passed
+  ok lobby and revealing logs are pure plans without a Battle start
+  ok Firebase push IDs use binary canonical order across 9/A/Z/_/a/z, never locale collation
+  ok start authority and battle-start candidate semantics are enforced
+  ok matching fire/state makes only a replay-required candidate chain; persisted early terminals reject
+  ok completed action chains remain ordered and an active tail is only a wait candidate
+  ok host and guest losing fire/result chains retain action authority instead of becoming fire-less concede
+  ok normal and concede result double-send keep the first result while conflicting duplicates reject
+  ok late copies of a completed action cannot poison canonical recovery or replace its first boundary
+  ok persisted playing metadata does not override a replay-required authoritative result
+  ok Gear/runtime payloads are retained as opaque packets and an SSE deduper can pre-seed history
+  ok 2v2 Gear evidence remains ordered through start and p2/e2 action identities stay unit-generic
+  ok production validator boundary accepts a real Gear-OFF start snapshot without mutating Battle state
+  ok invalid packet, invalid push key, orphan terminal, and old-round logs fail closed
+  ok a B2 pending candidate reads the current log through REST only and leaves Battle, transport, outbound messages, and its lease untouched
+Firebase Battle Recovery Plan Phase 3D-8B3A tests: 14/14 passed

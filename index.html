@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.186-project-hub';
+  const BUILD_ID = 'v2.0.187-issue8-recovery';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.187', date: '2026/09/27', summary: 'オンラインの一時退避と通信断からの復帰を改善' },
     { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
     { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
@@ -14741,9 +14742,8 @@
               catch (error) { firebaseRecoveryFail(error?.code || 'FIREBASE_RECOVERY_RUNTIME_MISMATCH'); }
               validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
             } else if (terminal.t === 'result') {
-              const conceded = firebaseResultConcedes(terminal);
-              const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
-              if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
+              const localWinner = firebaseLocallyResolvedWinner();
+              if (localWinner === null || localWinner !== terminal.winner) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
             } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
           } finally {
             clearFirebaseBattleReplayAction(replayAction);
@@ -14822,23 +14822,51 @@
   function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
   async function firebasePutMessageIfAbsent(path, auth, body) {
     const url = firebaseRequestUrl(path, auth);
-    const response = await firebaseFetchWithTimeout(url, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
-    });
+    let response;
+    try {
+      response = await firebaseFetchWithTimeout(url, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
+      });
+    } catch (cause) {
+      throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT', cause });
+    }
+    if (response.status >= 500 || response.status === 408 || response.status === 429) {
+      throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT' });
+    }
     if (response.ok) return;
     if (response.status === 412) {
-      const existing = await firebaseRequest(path, auth);
+      let existing;
+      try { existing = await firebaseRequest(path, auth); }
+      catch (cause) {
+        // A lost comparison GET is still an unresolved idempotent write.
+        // Preserve hard authorization errors; normalize only temporary failures.
+        if (cause?.code !== 'FIREBASE_REQUEST_TRANSIENT') throw cause;
+        throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT', cause });
+      }
       if (stableFirebaseJson(normalizeFirebaseMessageForCompare(existing)) === stableFirebaseJson(normalizeFirebaseMessageForCompare(body))) return;
       throw new Error('同じ通信IDに異なる内容が保存されています');
     }
     throw new Error(response.status === 401 ? '認証が切れました。もう一度お試しください。' : '通信に失敗しました。');
   }
-  async function firebasePutMessageWithRetry(path, auth, body, retryDelays = [0, 250, 750]) {
+  async function firebasePutMessageWithRetry(path, auth, body, retryDelays = [0, 250, 750], isClosed = () => false) {
+    const assertOpen = () => {
+      if (isClosed()) throw Object.assign(new Error('通信を終了しました。'), { code: 'FIREBASE_MESSAGE_CLOSED' });
+    };
     let lastError;
     for (let attempt = 0; attempt < retryDelays.length; attempt++) {
       if (attempt > 0) await waitForFirebaseRetry(retryDelays[attempt]);
-      try { await firebasePutMessageIfAbsent(path, auth, body); return; }
-      catch (err) { lastError = err; }
+      assertOpen();
+      try {
+        await firebasePutMessageIfAbsent(path, auth, body);
+        assertOpen();
+        return;
+      } catch (err) {
+        assertOpen();
+        // Never replace a confirmed permission/conflict failure with a later
+        // transient error. Only failures explicitly classified as temporary retry.
+        if (err?.code !== 'FIREBASE_MESSAGE_TRANSIENT') throw err;
+        lastError = err;
+      }
     }
     throw lastError || new Error('通信に失敗しました。');
   }
@@ -14904,7 +14932,13 @@
     }
     if (!options.deferConnect && !connect()) return null;
     sendQueue = createSerialSendQueue(async ({ path, body }) => {
-      await firebasePutMessageWithRetry(path, auth, body);
+      try { await firebasePutMessageWithRetry(path, auth, body, undefined, () => closed); }
+      catch (error) {
+        // A lost liveness ping carries no Battle authority. Dropping only its
+        // transient failure keeps the serial action queue usable after offline.
+        // Action writes, permission failures and conflicting push IDs still fail closed.
+        if (body.t !== 'ping' || error?.code !== 'FIREBASE_MESSAGE_TRANSIENT') throw error;
+      }
     }, err => {
       if (closed) return;
       if (onStatus) onStatus(err && err.message ? err.message : '通信に失敗しました。対戦を終了します。');
@@ -14919,7 +14953,9 @@
         let sentAt;
         try { sentAt = firebaseServerNow(auth); }
         catch (err) { if (onFatal) onFatal(err); return Promise.resolve(false); }
-        const body = { ...msg, sentAt };
+        // Snapshot fields can share live arrays/counters. Retries must keep the
+        // exact first wire body even after the next local action advances them.
+        const body = JSON.parse(JSON.stringify({ ...msg, sentAt }));
         return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
       },
       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
@@ -15567,6 +15603,12 @@
   // 送信者が「自分の負け」を宣言しているか。移動中の落下死など、こちらでは
   // 再現できない決着はこの形で届く。負けを譲る側に不正の動機は無いので信用してよい。
   // 逆に「自分の勝ち」の主張はここでは真にならず、従来どおり厳格に検証される。
+  function applyFirebaseConcededResultHp(msg) {
+    for (const u of msg.units) {
+      const target = unitById(u.id);
+      if (target) target.hp = u.hp;
+    }
+  }
   function firebaseResultConcedes(msg) {
     if (!msg || msg.t !== 'result') return false;
     // 送信者の陣営は「席→ユニット」の対応で引く。2vs2では席名とユニット名が一致しない。
@@ -15771,11 +15813,11 @@
     lastSentMoveX = null;
   }
 
-  function sendMoveUpdate(unit) {
+  function sendMoveUpdate(unit, force = false) {
     if (coopSalvoCollecting()) { sendCoopSalvoMove(unit); moveSyncPending = false; moveSyncTimer = 0; return; }
     moveSyncTimer = 0;
     if (!isOnline() || !netControlsUnit(unit)) { moveSyncPending = false; return; }
-    if (lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
+    if (!force && lastSentMoveX !== null && Math.abs(unit.x - lastSentMoveX) < MOVE_SYNC_MIN_DELTA) { moveSyncPending = false; return; }
     lastSentMoveX = unit.x;
     moveSyncPending = false;
     netSend({ t: 'move', unitId: unit.id, x: unit.x, fuel: unit.fuel });
@@ -15812,7 +15854,7 @@
   function firebaseCompletedTerminalStatus(msg) {
     const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg.actionId);
     if (!completed) return '';
-    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
+    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === msg.t) return 'duplicate-terminal';
     return 'mismatch';
   }
   function firebaseCompletedActionStatus(msg) {
@@ -15823,11 +15865,12 @@
   function rememberFirebaseTerminal(msg) {
     if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
     online.completedRemoteActions.set(msg.actionId, { from: msg.from, unitId: msg.unitId, t: msg.t });
-    while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
+    // Keep completed identities for the whole bounded round (up to 80 turns).
+    // resetLocalFirebaseRoundState releases them when the round changes.
   }
   function receiveFirebaseTerminal(msg) {
     const completed = firebaseCompletedTerminalStatus(msg);
-    if (completed === 'duplicate-result') return true;
+    if (completed === 'duplicate-terminal') return true;
     if (completed === 'mismatch') {
       rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
       return true;
@@ -16063,7 +16106,7 @@
     // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
     if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
       const completed = firebaseCompletedTerminalStatus(msg);
-      if (completed === 'duplicate-result') return;
+      if (completed === 'duplicate-terminal') return;
       if (completed === 'mismatch') {
         rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
         return;
@@ -16302,26 +16345,18 @@
       case 'result':
         if (online.phase !== 'playing') break;
         if (online.kind === 'firebase') {
-          const playerAlive = teamAlive('player');
-          const cpuAlive = teamAlive('cpu');
-          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : !playerAlive && !cpuAlive ? 'draw' : null;
-          // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
-          // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
-          // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
-          const concedes = firebaseResultConcedes(msg);
-          if (!concedes && (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
+          const localWinner = firebaseLocallyResolvedWinner();
+          // Only a fire-less loss (for example a fall while moving) uses the
+          // concession exception. A fired action must match its replayed result.
+          const concedes = !online.remoteAction && firebaseResultConcedes(msg);
+          if (!concedes && (!online.remoteAction || !firebaseActionMatches(msg, online.remoteAction) || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
             rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
             break;
           }
           rememberFirebaseTerminal(msg);
           online.remoteAction = null;
           // 敗北宣言はこちらで再現できていないので、決着時のHPを相手の申告で揃える。
-          if (concedes) {
-            for (const u of msg.units) {
-              const target = unitById(u.id);
-              if (target) target.hp = u.hp;
-            }
-          }
+          if (concedes) applyFirebaseConcededResultHp(msg);
           logOnlineEvent({ type: 'result', ok: true, winner: msg.winner, reason: msg.reason });
           // 決着打も同じ扱い。ここで出さないと、とどめの一撃だけ数字が出ない。
           flushRemoteDamageText();
@@ -16430,7 +16465,10 @@
       online.localAction = { unitId: unit.id, actionId, ...(gearRngActionIdentity ? { gearRngActionIdentity } : {}) };
     }
     // 撃つ前に未送信の移動を確定させる。fire は座標を運ぶが燃料は move でしか伝わらない。
-    if (moveSyncPending) sendMoveUpdate(unit);
+    // Recovery needs the exact pre-fire fuel, including a short last step
+    // omitted by the ordinary movement throttle. Keep the existing wire shape.
+    if (online.kind === 'firebase') sendMoveUpdate(unit, true);
+    else if (moveSyncPending) sendMoveUpdate(unit);
     logOnlineEvent({ type: 'sendFire', unitId: unit.id, actionId });
     netSend({
       t: 'fire', unitId: unit.id, x: unit.x, y: unit.y,
@@ -16456,7 +16494,7 @@
       }
       // 最終手番は直後の判定結果が同じactionIdを使う。ここでstateを送りIDを
       // 捨てると、相手が決着通知を直前の砲撃へ結び付けられない。
-      if (online.kind === 'coop' && turnCount >= maxTurnsTotal()) return;
+      if (turnCount >= maxTurnsTotal()) return;
       const snap = buildSnapshot({ includeTerrain: false });
       if (online.kind === 'firebase') {
         const runtimeState = createFirebaseOnlineGearRuntimeState();
@@ -17944,6 +17982,9 @@
         online.pendingRemoteTerminals = new Map();
         seedFirebaseRecoveryCompletedActions(plan);
         if (replay.result) {
+          // Only validated fire-less concessions retain the existing terminal
+          // HP authority, exactly as live reception does.
+          if (replay.result.conceded) applyFirebaseConcededResultHp(replay.result.terminal.packet);
           if (!replay.result.conceded && replay.result.finalBaseline) {
             applySnapshot(replay.result.finalBaseline, { preserveTerrain: true });
             // This runtime comes from the verified local replay, not from the
@@ -18819,8 +18860,9 @@
         applyPersistedFirebaseRoomAuthority(room);
         if (!online || online !== target) return false;
         // 同時刻のfalse/true要求は1本のGETへ畳むが、後から来たbroadcast=trueを
-        // 失わない。presenceで参加者を拾ったホストのlobbyState通知を必ず残す。
-        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()) {
+        // 失わない。ロビーのpresence通知は残すが、試合中の復帰にロビー通知は不要。
+        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()
+            && (target.phase === 'lobby' || target.phase === 'revealing')) {
           await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
         }
         renderFirebaseLobby();
@@ -21710,6 +21752,17 @@
       max += u.maxHp;
     }
     return max > 0 ? hp / max : 0;
+  }
+
+  function firebaseLocallyResolvedWinner() {
+    const playerAlive = teamAlive('player');
+    const cpuAlive = teamAlive('cpu');
+    if (!playerAlive || !cpuAlive) return playerAlive ? 'player' : cpuAlive ? 'cpu' : 'draw';
+    if (turnCount < maxTurnsTotal()) return null;
+    // The replayed turn count and HP decide a timeout, never the received reason/HP.
+    const playerRatio = teamHpRatio('player');
+    const cpuRatio = teamHpRatio('cpu');
+    return playerRatio > cpuRatio ? 'player' : playerRatio < cpuRatio ? 'cpu' : 'draw';
   }
 
   function judgeByHp() {
@@ -30597,9 +30650,9 @@
     return true;
   }
   window.addEventListener('pagehide', event => {
-    // ホストだけは部屋を残さないよう、終了通知と削除をベストエフォートで投げる。
-    // ここで待つとbfcache/終了処理を妨げるため、失敗は次の期限切れに任せる。
-    if (online && online.kind === 'firebase' && online.role === 'host') endOnline(true, true, true);
+    // bfcacheへ退避するhostはguestと同様にroom/seatとWeb Lockを保持する。
+    // documentの置換だけ既存の終了処理へ進める。v3の部屋は消さず再入室へ引き継ぐ。
+    if (online && online.kind === 'firebase' && online.role === 'host' && event?.persisted !== true) endOnline(true, true, true);
     else releaseFirebaseGuestLeaseForDocumentHandoff(event);
     suspendAudioForHidden();
   });

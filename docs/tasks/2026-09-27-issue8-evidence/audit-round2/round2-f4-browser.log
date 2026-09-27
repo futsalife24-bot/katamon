@@ -1,0 +1,60 @@
+
+[WebServer] (node:4100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 13 tests using 1 worker
+
+
+
+(node:29204) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:415:1 › zero-input reload gives Firebase re-entry authority while preserving CPU suspend bytes
+[2/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:462:1 › native Firebase re-entry Web Lock contention retries without weakening second-tab exclusivity
+  1) [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:462:1 › native Firebase re-entry Web Lock contention retries without weakening second-tab exclusivity 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "playing"
+    Received: null
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      518 |     const handoffStartedAt = await contenderPage.evaluate(() => performance.now());
+      519 |     await lockOwnerPage.close();
+    > 520 |     await expect.poll(async () => (await contenderPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
+          |                                                                                                                                                    ^
+      521 |     const restoredState = await contenderPage.evaluate(() => {
+      522 |       const state = globalThis.KatamonF4StartupBridge.state();
+      523 |       return {
+        at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:520:148
+
+    Error Context: test-results\playwright\firebase-reentry-startup-p-8139a-ning-second-tab-exclusivity-android-chromium-portrait-touch\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright\firebase-reentry-startup-p-8139a-ning-second-tab-exclusivity-android-chromium-portrait-touch\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright\firebase-reentry-startup-p-8139a-ning-second-tab-exclusivity-android-chromium-portrait-touch\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+(node:25168) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[3/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:561:1 › same-tab zero-input reload releases and reacquires its native Firebase re-entry Web Lock
+[4/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:615:1 › non-bfcache guest pagehide releases its native lease for the replacement document
+[5/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:661:1 › same-tab zero-input reload replays two completed production actions after native lock handoff
+[6/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:703:1 › same-tab zero-input reload replans after one bare recovery transport activation exception
+[7/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:744:1 › zero-input reload retries a transient canonical history read without losing its active guest identity
+[8/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:775:1 › permission failure remains terminal without replacing or deleting the existing identity
+[9/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:808:1 › host zero-input reload retries a transient history read and retains p1 authority
+[10/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:844:1 › results reload retries a transient history read and restores a verified concede result once
+[11/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:877:1 › Gear ON reload retries a transient history read and restores the verified manifest runtime
+[12/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:912:1 › 2v2 support zero-input reload retries a transient history read and restores s1 only as p2
+[13/13] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:948:1 › host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease
+  1 failed
+    [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:462:1 › native Firebase re-entry Web Lock contention retries without weakening second-tab exclusivity 
+  12 passed (10.6m)

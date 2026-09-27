@@ -1,0 +1,16 @@
+  ok ordinary live receiver completes move -> fire -> state exactly once
+  ok terminal-before-fire is buffered and applied only after the production action settles
+  ok same SSE push key is a room-lifetime no-op on second delivery
+  ok fresh push key carrying the same completed action remains a no-op
+  ok a completed actionId reused by another valid seat fails closed
+  ok a completed actionId reused by the same sender for another unit fails closed
+  ok 1v1 rematch advances only after every seated human votes and switches transport once
+  ok failed old-round handoff leaves local round and round-local state untouched
+  ok new-round reset clears Battle-round state but preserves room authority
+  ok 2v2 live rematch waits for four humans but advances without empty CPU support votes
+  ok SSE deduper survives round switching while Battle completed-action cache resets
+  ok result ledger keeps the old round idempotent and accepts the new round as another match
+  ok completed action identities survive more than sixteen turns until the round resets
+  ok turn-limit fire has result as its sole terminal and keeps the same actionId
+  ok remote turn-limit result is verified from settled local HP ratios
+firebase live ordering / rematch Phase 3D-8C: 15/15 passed

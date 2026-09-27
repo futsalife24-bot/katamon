@@ -1,0 +1,102 @@
+[
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-seat.log",
+    "command": "npm run test:seat"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-regression.log",
+    "command": "npm run test:regression"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-result.log",
+    "command": "npm run test:result"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-loopback.log",
+    "command": "npm run test:loopback"
+  },
+  {
+    "exit": 1,
+    "log": "output/issue8/audit-test-stage3.log",
+    "command": "npm run test:stage3"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-lobby.log",
+    "command": "npm run test:lobby"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-online-reentry-phase3d8b2.log",
+    "command": "npm run test:firebase-online-reentry-phase3d8b2"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-online-battle-recovery-plan-phase3d8b3a.log",
+    "command": "npm run test:firebase-online-battle-recovery-plan-phase3d8b3a"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-online-battle-replay-runner-phase3d8b3b1.log",
+    "command": "npm run test:firebase-online-battle-replay-runner-phase3d8b3b1"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-online-battle-reentry-activation-phase3d8b3b2.log",
+    "command": "npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-online-live-round-contract-phase3d8c.log",
+    "command": "npm run test:firebase-online-live-round-contract-phase3d8c"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-reentry-startup-priority-phase3d8df4.log",
+    "command": "npm run test:firebase-reentry-startup-priority-phase3d8df4"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-firebase-reentry-lock-handoff-phase3d8df5.log",
+    "command": "npm run test:firebase-reentry-lock-handoff-phase3d8df5"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-gear-online-battle-runtime-checkpoint-phase3d8b1.log",
+    "command": "npm run test:gear-online-battle-runtime-checkpoint-phase3d8b1"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-gear-online-battle-same-owner-conflict-phase3d8a.log",
+    "command": "npm run test:gear-online-battle-same-owner-conflict-phase3d8a"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-issue8.log",
+    "command": "npm run test:issue8"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-cache-version.log",
+    "command": "npm run test:cache-version"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-docs.log",
+    "command": "npm run test:docs"
+  },
+  {
+    "exit": 0,
+    "log": "output/issue8/audit-test-undef.log",
+    "command": "npm run test:undef"
+  },
+  {
+    "command": "npm run test:stage3 (updated source-contract checks)",
+    "exit": 0,
+    "log": "audit-test-stage3-after.log"
+  }
+]

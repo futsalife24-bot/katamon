@@ -1,0 +1,62 @@
+PASS independent host + guest lobby
+PASS commit/reveal/start through actual Rules and native SSE
+PASS production movement changes position and fuel
+PASS fire attempt
+PASS first action boundary
+PASS fire attempt
+PASS native SSE offline/automatic reconnect e1
+PASS canonical history reload e1
+PASS fire attempt
+browser-error Failed to load resource: net::ERR_INTERNET_DISCONNECTED
+PASS native SSE offline/explicit reconnect p1
+PASS canonical history reload p1
+PASS two-tab handoff and old transport rejection
+PASS duplicate old actionId ignored
+PASS stale snapshot cannot overwrite current board
+HTTP 401 /rooms/45KW229V/rounds/ffffffffffffffffffffffffffffffffffffffffffffffff/messages/-P2WX0-RFFJGZ0hlCmpO.json
+browser-error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+PASS old-round write rejected by actual Rules
+PASS fire attempt
+PASS normal action 0
+PASS fire attempt
+PASS normal action 1
+PASS fire attempt
+PASS normal action 2
+PASS fire attempt
+PASS normal action 3
+PASS fire attempt
+PASS normal action 4
+PASS fire attempt
+PASS normal action 5
+PASS fire attempt
+PASS normal action 6
+PASS fire attempt
+PASS normal action 7
+PASS fire attempt
+PASS normal action 8
+PASS fire attempt
+PASS normal action 9
+PASS fire attempt
+PASS normal action 10
+PASS fire attempt
+PASS normal action 11
+PASS fire attempt
+PASS normal action 12
+PASS fire attempt
+PASS normal action 13
+PASS fire attempt
+PASS normal action 14
+PASS fire attempt
+PASS normal action 15
+PASS fire attempt
+browser-error Failed to load resource: net::ERR_INTERNET_DISCONNECTED
+browser-error Failed to load resource: net::ERR_INTERNET_DISCONNECTED
+browser-error Failed to load resource: net::ERR_INTERNET_DISCONNECTED
+PASS result-boundary offline/reconnect
+PASS normal result
+PASS late battle state cannot rewrite a result
+PASS same result after host and guest reload
+HTTP 401 /rooms/45KW229V/rounds/3b6652a6fed9ef7bcf015bfbc003b2759c6a4c02db4e61a7/messages/-P2WXYkPDeM9bbIC2R1K.json
+browser-error Failed to load resource: the server responded with a status of 401 (Unauthorized)
+PASS rematch advances round and rejects old-round packet
+PASS delayed authoritative PUT preserves serial action ordering

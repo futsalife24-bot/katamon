@@ -1,0 +1,5 @@
+
+> stage-studio-mvp@0.1.0 test:docs
+> node tests/current-work-state-size.test.js
+
+CURRENT_WORK_STATE.md: 30489/30720 bytes (1/1 passed)

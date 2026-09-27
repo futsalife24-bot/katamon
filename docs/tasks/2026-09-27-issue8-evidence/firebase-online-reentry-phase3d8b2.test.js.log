@@ -1,0 +1,14 @@
+  ok credential is exact, excludes idToken/game state, and malformed local data falls back to absent
+  ok refreshes the same UID, rotates only refreshToken, validates all legal round statuses, and never claims an empty seat
+  ok stored expiry is only a hint: server-token time keeps a valid room through local clock skew and clears an authoritatively expired room
+  ok UID, room identity, expiry, and seat mismatches fail closed and clear the credential
+  ok transient refresh keeps the credential and does not silently create another anonymous UID, while definitive invalid refresh clears it
+  ok room 408, 429, and 5xx responses are retryable, retain the rotated token, and a retry uses that token
+  ok definitive missing rooms and non-canonical round identities clear the credential
+  ok a validated pending candidate blocks normal create and join without replacing its credential or lease
+  ok create and join re-check pending after auth restores a persisted candidate, before either new-room mutation
+  ok re-entry transient failures stop create/join before mutation, while a definitive cleanup permits the next normal auth attempt
+  ok known terminal seat and fatal exits clear the persisted re-entry credential
+  ok exclusive lease rejects a second tab and releases for the next activation without exposing refresh credentials
+  ok guest heartbeat is allowed after validation, p1 performs no slot write, and no Battle resume code is called
+firebase-online-reentry-phase3d8b2: 13/13 passed

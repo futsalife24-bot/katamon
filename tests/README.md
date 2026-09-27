@@ -78,6 +78,15 @@ npm run test:e2e:storm-boss
   シード固定は「再現しない稀な引きを踏まないようにする」処置であって、原因の修正ではない
 - 完走まで1〜3分かかる(1試合を何度も通すため)。遅延・ロス・必殺・プロトコル不一致の7シナリオ
 
+## Issue #8 recovery PC受入（2026-09-27）
+
+- `npm run test:issue8`: 一時的なheartbeat失敗・送信本文固定・古いaction/state・時間切れresult・履歴planの回帰。
+- `npm run test:issue8:browser`: Java 21以上とPlaywright Chromiumが必要。既存のdemo Auth/RTDB emulatorを起動して、独立host/guest context＋同一seatの第三タブを実行する。19000/19099/19400/19450/4189番を空ける。実行中の別emulatorへ重ねて起動しない。
+- Emulator起動済みなら `node tests/issue8-browser.cjs`。実際のRulesとの一致を先に検査し、ブラウザからの外部通信を禁止する。room操作・move/fireは配信レスポンス限定のbridgeから実runtimeを呼ぶ。結果は `output/issue8/chromium-acceptance.json`、結果画面と再戦画面のPNGへ保存。
+- PowerShellで `$env:KATAMON_BROWSER='webkit'` とするとWebKitを試せる。Windowsでの今回の実行はpage終了により未確認。スマホ実機とは呼ばない。
+- 起動・Web Lock・bfcacheの既存回帰: `npx playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch`。
+- [対応表・結果・設計上の境界](../docs/tasks/2026-09-27-issue8-recovery-pc.md)、[スマホ最終手順](../docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。
+
 ## 協力戦の同時行動（2026-09-12）
 
 - `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。

@@ -1,0 +1,38 @@
+[
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310333299/job/108595370707",
+    "name": "Android 13 portrait Chromium E2E",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310335496/job/108595250384",
+    "name": "Android 13 portrait Chromium E2E",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310335496/job/108594911422",
+    "name": "Type, unit, integration, build and regression",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310335397/job/108594911163",
+    "name": "mobile-e2e",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310335397/job/108594911079",
+    "name": "test",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "html_url": "https://github.com/futsalife24-bot/katamon/actions/runs/36310333299/job/108594905317",
+    "name": "Type, unit, integration, build and regression",
+    "status": "completed"
+  }
+]

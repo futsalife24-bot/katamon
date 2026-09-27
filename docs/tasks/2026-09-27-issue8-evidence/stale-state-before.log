@@ -1,0 +1,19 @@
+  ok ordinary live receiver completes move -> fire -> state exactly once
+  ok terminal-before-fire is buffered and applied only after the production action settles
+  ok same SSE push key is a room-lifetime no-op on second delivery
+AssertionError [ERR_ASSERTION]: duplicate state must not disconnect the healthy client
++ actual - expected
+
++ '不正な通信順序です（terminal.actionId）'
+- undefined
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:198:12
+    at test (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:15:9)
+    at main (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:183:7) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: '不正な通信順序です（terminal.actionId）',
+  expected: undefined,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

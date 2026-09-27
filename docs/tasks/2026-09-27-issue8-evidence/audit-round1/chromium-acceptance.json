@@ -1,0 +1,285 @@
+{
+  "engine": "chromium",
+  "passed": true,
+  "events": [
+    {
+      "name": "independent host + guest lobby",
+      "room": "WPPV6YU9"
+    },
+    {
+      "name": "commit/reveal/start through actual Rules and native SSE"
+    },
+    {
+      "name": "production movement changes position and fuel"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 0,
+      "active": "e1"
+    },
+    {
+      "name": "first action boundary",
+      "turn": 1,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 1,
+      "active": "p1"
+    },
+    {
+      "name": "native SSE offline/automatic reconnect e1",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "canonical history reload e1",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 2,
+      "active": "e1"
+    },
+    {
+      "name": "native SSE offline/explicit reconnect p1",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "canonical history reload p1",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "native old-tab queued fire cancelled at handoff",
+      "queuedFirePuts": 0
+    },
+    {
+      "name": "two-tab handoff and old transport rejection",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "duplicate old actionId ignored",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "stale snapshot cannot overwrite current board",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "old-round write rejected by actual Rules"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 3,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 0",
+      "turn": 4,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 4,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 1",
+      "turn": 5,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 5,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 2",
+      "turn": 6,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 6,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 3",
+      "turn": 7,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 7,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 4",
+      "turn": 8,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 8,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 5",
+      "turn": 9,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 9,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 6",
+      "turn": 10,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 10,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 7",
+      "turn": 11,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 11,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 8",
+      "turn": 12,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 12,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 9",
+      "turn": 13,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 13,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 10",
+      "turn": 14,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 14,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 11",
+      "turn": 15,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 15,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 12",
+      "turn": 16,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 16,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 13",
+      "turn": 17,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 17,
+      "active": "p1"
+    },
+    {
+      "name": "normal action 14",
+      "turn": 18,
+      "active": "e1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "e1",
+      "turn": 18,
+      "active": "e1"
+    },
+    {
+      "name": "normal action 15",
+      "turn": 19,
+      "active": "p1"
+    },
+    {
+      "name": "fire attempt",
+      "seat": "p1",
+      "turn": 19,
+      "active": "p1"
+    },
+    {
+      "name": "result-boundary offline/reconnect",
+      "turn": 20,
+      "active": "p1"
+    },
+    {
+      "name": "normal result",
+      "winner": "draw"
+    },
+    {
+      "name": "late battle state cannot rewrite a result"
+    },
+    {
+      "name": "same result after host and guest reload"
+    },
+    {
+      "name": "rematch advances round and rejects old-round packet"
+    },
+    {
+      "name": "delayed authoritative PUT preserves serial action ordering"
+    }
+  ],
+  "errors": []
+}

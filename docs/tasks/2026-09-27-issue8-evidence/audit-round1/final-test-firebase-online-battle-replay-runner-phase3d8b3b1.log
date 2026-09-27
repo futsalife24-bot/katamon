@@ -1,0 +1,19 @@
+
+> stage-studio-mvp@0.1.0 test:firebase-online-battle-replay-runner-phase3d8b3b1
+> node tests/firebase-online-battle-replay-runner-phase3d8b3b1.test.js
+
+  ok historical start validates through the production snapshot path without outbound, visual, or Math.random side effects
+  ok historical start rejects a character mismatch instead of adopting its candidate snapshot
+  ok candidate HP, fuel, and crater changes are stricter replay mismatches
+  ok a forbidden replay Math.random call fails before the captured native RNG can advance
+  ok historical local/remote move and fire settle through the production game loop before terminal acceptance
+  ok an independently generated canonical 1v1 terminal is accepted by the replay verifier
+  ok an independently generated canonical 1v1 move then fire terminal is accepted by the replay verifier
+  ok a production-generated Gear ON 2v2 chain accepts the occupied s1 to p2 historical action
+  ok the live and replay Gear RNG identities are exactly equal for the same canonical 2v2 p2 turn
+  ok a production-generated non-zero Gear runtime v3 checkpoint is accepted only after the Battle baseline
+  ok a historical concede result is validated without result delivery, records, or visible transition
+  ok a replay wind boundary consumes only the persisted forecast and never native Math.random
+  ok Gear ON historical evidence validates for both host and guest without adopting the candidate board
+  ok Gear ON 2v2 validates all four occupied seats for host and s1 re-entry without board adoption
+Firebase Battle Replay Runner Phase 3D-8B3B1 tests: 14/14 passed

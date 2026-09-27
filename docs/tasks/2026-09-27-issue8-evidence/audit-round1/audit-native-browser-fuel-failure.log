@@ -1,0 +1,43 @@
+
+> stage-studio-mvp@0.1.0 test:issue8:browser
+> firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json "node tests/issue8-browser.cjs"
+
+i  emulators: Starting emulators: auth, database
+i  emulators: Detected demo project ID "demo-catamon-registration", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  database: Database Emulator logging to database-debug.log
+(node:10480) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+    at urlParse (node:url:136:13)
+    at Object.urlResolve [as resolve] (node:url:725:10)
+    at $RefParser.parse (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\@apidevtools\json-schema-ref-parser\lib\index.js:103:19)
+    at $RefParser.resolve (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\@apidevtools\json-schema-ref-parser\lib\index.js:184:16)
+    at $RefParser.bundle (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\@apidevtools\json-schema-ref-parser\lib\index.js:227:16)
+    at bundle (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\exegesis\lib\index.js:55:22)
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\exegesis\lib\index.js:60:34
+    at Generator.next (<anonymous>)
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\node_modules\exegesis\lib\index.js:22:71
+    at new Promise (<anonymous>)
+i  Running script: node tests/issue8-browser.cjs
+READY local Auth and RTDB emulators
+PASS independent host + guest lobby
+PASS commit/reveal/start through actual Rules and native SSE
+PASS production movement changes position and fuel
+PASS fire attempt
+PASS first action boundary
+PASS fire attempt
+PASS arrange peer turn e1
+PASS fire attempt
+PASS native SSE offline/automatic reconnect e1
+Error: Timeout: zero-input reload e1
+    at until (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-browser.cjs:89:167)
+    at async main (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-browser.cjs:146:7)
+!  Script exited unsuccessfully (code 1)
+i  emulators: Shutting down emulators.
+i  database: Stopping Database Emulator
+!  Database Emulator has exited upon receiving signal: SIGINT
+i  auth: Stopping Authentication Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator
+
+Error: Script "node tests/issue8-browser.cjs" exited with code 1
