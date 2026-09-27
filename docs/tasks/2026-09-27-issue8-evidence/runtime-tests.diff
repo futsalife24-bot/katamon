@@ -2,49 +2,23 @@ diff --git a/.gitignore b/.gitignore
 index 3bf7023..b12ebe9 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -2,6 +2,9 @@ node_modules/
- playwright-report/
- test-results/
- debug.log
+@@ -4,0 +5,3 @@ debug.log
 +firebase-debug.log
 +database-debug.log
 +output/issue8/
- .codex-worktrees/
- .codex-remote-attachments/
- catamon_vertical_pv/
 diff --git a/index.html b/index.html
 index 2b5ea32..e9942df 100644
 --- a/index.html
 +++ b/index.html
-@@ -978,13 +978,14 @@
-   // ===== ビルド番号 =====
-   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
-   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
+@@ -981 +981 @@
 -  const BUILD_ID = 'v2.0.186-project-hub';
 +  const BUILD_ID = 'v2.0.187-issue8-recovery';
-   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
-   // download on first paint. Activate it at the first title tap, independently
-   // of Service Worker availability and the large T2 media download queue.
-   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
-   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
-   const UPDATE_HISTORY = Object.freeze([
+@@ -987,0 +988 @@
 +    { version: 'v2.0.187', date: '2026/09/27', summary: 'オンラインの一時退避と通信断からの復帰を改善' },
-     { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
-     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
-     { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
-@@ -14742,7 +14743,7 @@
-               validatedBoundaries.push(Object.freeze({ fire: chain.fire, terminal: chain.terminal, baseline: structuredClone(acceptedBaseline), runtime }));
-             } else if (terminal.t === 'result') {
-               const conceded = firebaseResultConcedes(terminal);
+@@ -14745 +14746 @@
 -              const localWinner = teamAlive('player') && !teamAlive('cpu') ? 'player' : !teamAlive('player') && teamAlive('cpu') ? 'cpu' : !teamAlive('player') && !teamAlive('cpu') ? 'draw' : null;
 +              const localWinner = firebaseLocallyResolvedWinner();
-               if (!conceded && (localWinner === null || localWinner !== terminal.winner)) firebaseRecoveryFail('FIREBASE_RECOVERY_RESULT_MISMATCH');
-             } else firebaseRecoveryFail('FIREBASE_RECOVERY_TERMINAL_INVALID');
-           } finally {
-@@ -14822,9 +14823,17 @@
-   function waitForFirebaseRetry(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-   async function firebasePutMessageIfAbsent(path, auth, body) {
-     const url = firebaseRequestUrl(path, auth);
+@@ -14825,3 +14826,11 @@
 -    const response = await firebaseFetchWithTimeout(url, {
 -      method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(body)
 -    });
@@ -59,13 +33,7 @@ index 2b5ea32..e9942df 100644
 +    if (response.status >= 500 || response.status === 408 || response.status === 429) {
 +      throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT' });
 +    }
-     if (response.ok) return;
-     if (response.status === 412) {
-       const existing = await firebaseRequest(path, auth);
-@@ -14904,7 +14913,13 @@
-     }
-     if (!options.deferConnect && !connect()) return null;
-     sendQueue = createSerialSendQueue(async ({ path, body }) => {
+@@ -14907 +14916,7 @@
 -      await firebasePutMessageWithRetry(path, auth, body);
 +      try { await firebasePutMessageWithRetry(path, auth, body); }
 +      catch (error) {
@@ -74,89 +42,39 @@ index 2b5ea32..e9942df 100644
 +        // Action writes, permission failures and conflicting push IDs still fail closed.
 +        if (body.t !== 'ping' || error?.code !== 'FIREBASE_MESSAGE_TRANSIENT') throw error;
 +      }
-     }, err => {
-       if (closed) return;
-       if (onStatus) onStatus(err && err.message ? err.message : '通信に失敗しました。対戦を終了します。');
-@@ -14919,7 +14934,9 @@
-         let sentAt;
-         try { sentAt = firebaseServerNow(auth); }
-         catch (err) { if (onFatal) onFatal(err); return Promise.resolve(false); }
+@@ -14922 +14937,3 @@
 -        const body = { ...msg, sentAt };
 +        // Snapshot fields can share live arrays/counters. Retries must keep the
 +        // exact first wire body even after the next local action advances them.
 +        const body = JSON.parse(JSON.stringify({ ...msg, sentAt }));
-         return sendQueue.send({ path: `rooms/${encodeURIComponent(room)}/rounds/${encodeURIComponent(roundId)}/messages/${key}`, body });
-       },
-       onMessage: fn => { handler = fn; while (backlog.length && handler) handler(backlog.shift()); },
-@@ -15812,7 +15829,7 @@
-   function firebaseCompletedTerminalStatus(msg) {
-     const completed = online && online.completedRemoteActions && online.completedRemoteActions.get(msg.actionId);
-     if (!completed) return '';
+@@ -15815 +15832 @@
 -    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === 'result' && msg.t === 'result') return 'duplicate-result';
 +    if (completed.from === msg.from && completed.unitId === msg.unitId && completed.t === msg.t) return 'duplicate-terminal';
-     return 'mismatch';
-   }
-   function firebaseCompletedActionStatus(msg) {
-@@ -15823,11 +15840,12 @@
-   function rememberFirebaseTerminal(msg) {
-     if (!online.completedRemoteActions) online.completedRemoteActions = new Map();
-     online.completedRemoteActions.set(msg.actionId, { from: msg.from, unitId: msg.unitId, t: msg.t });
+@@ -15826 +15843,2 @@
 -    while (online.completedRemoteActions.size > 16) online.completedRemoteActions.delete(online.completedRemoteActions.keys().next().value);
 +    // Keep completed identities for the whole bounded round (up to 80 turns).
 +    // resetLocalFirebaseRoundState releases them when the round changes.
-   }
-   function receiveFirebaseTerminal(msg) {
-     const completed = firebaseCompletedTerminalStatus(msg);
+@@ -15830 +15848 @@
 -    if (completed === 'duplicate-result') return true;
 +    if (completed === 'duplicate-terminal') return true;
-     if (completed === 'mismatch') {
-       rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
-       return true;
-@@ -16063,7 +16081,7 @@
-     // fireを再生した後に順序を判定し、state/resultの単体注入だけを拒否する。
-     if (online && online.kind === 'firebase' && (msg.t === 'state' || msg.t === 'result')) {
-       const completed = firebaseCompletedTerminalStatus(msg);
+@@ -16066 +16084 @@
 -      if (completed === 'duplicate-result') return;
 +      if (completed === 'duplicate-terminal') return;
-       if (completed === 'mismatch') {
-         rejectFirebaseMessage('不正な通信順序です（terminal.actionId）');
-         return;
-@@ -16302,9 +16320,7 @@
-       case 'result':
-         if (online.phase !== 'playing') break;
-         if (online.kind === 'firebase') {
+@@ -16305,3 +16323 @@
 -          const playerAlive = teamAlive('player');
 -          const cpuAlive = teamAlive('cpu');
 -          const localWinner = playerAlive && !cpuAlive ? 'player' : !playerAlive && cpuAlive ? 'cpu' : !playerAlive && !cpuAlive ? 'draw' : null;
 +          const localWinner = firebaseLocallyResolvedWinner();
-           // 送信者が「自分の負け」を宣言している場合は、こちらの再現結果と食い違っていても受理する。
-           // 移動は通信していないため、相手が自分のターンに落下死したことはこちらでは再現できない。
-           // 負けを譲る側に不正の動機は無く、相手を害することもないので信用してよい。
-@@ -16456,7 +16472,7 @@
-       }
-       // 最終手番は直後の判定結果が同じactionIdを使う。ここでstateを送りIDを
-       // 捨てると、相手が決着通知を直前の砲撃へ結び付けられない。
+@@ -16459 +16475 @@
 -      if (online.kind === 'coop' && turnCount >= maxTurnsTotal()) return;
 +      if (turnCount >= maxTurnsTotal()) return;
-       const snap = buildSnapshot({ includeTerrain: false });
-       if (online.kind === 'firebase') {
-         const runtimeState = createFirebaseOnlineGearRuntimeState();
-@@ -18819,8 +18835,9 @@
-         applyPersistedFirebaseRoomAuthority(room);
-         if (!online || online !== target) return false;
-         // 同時刻のfalse/true要求は1本のGETへ畳むが、後から来たbroadcast=trueを
+@@ -18822,2 +18838,3 @@
 -        // 失わない。presenceで参加者を拾ったホストのlobbyState通知を必ず残す。
 -        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()) {
 +        // 失わない。ロビーのpresence通知は残すが、試合中の復帰にロビー通知は不要。
 +        if (target.settingsRefreshBroadcastRequested && isFirebaseHost()
 +            && (target.phase === 'lobby' || target.phase === 'revealing')) {
-           await sendFirebaseIdentityPacket({ t: 'lobbyState', status: online.phase, slots: online.slots, settings: online.settings });
-         }
-         renderFirebaseLobby();
-@@ -21712,6 +21729,17 @@
-     return max > 0 ? hp / max : 0;
-   }
- 
+@@ -21714,0 +21732,11 @@
 +  function firebaseLocallyResolvedWinner() {
 +    const playerAlive = teamAlive('player');
 +    const cpuAlive = teamAlive('cpu');
@@ -168,60 +86,32 @@ index 2b5ea32..e9942df 100644
 +    return playerRatio > cpuRatio ? 'player' : playerRatio < cpuRatio ? 'cpu' : 'draw';
 +  }
 +
-   function judgeByHp() {
-     // 時間切れの判定も行動側が計算して送る(endTurn は手番を進める前に抜けるので、
-     // ここでの activeUnit() はまだ「最後に動いた側」を指している)。
-@@ -30597,9 +30625,9 @@
-     return true;
-   }
-   window.addEventListener('pagehide', event => {
+@@ -30600,3 +30628,3 @@
 -    // ホストだけは部屋を残さないよう、終了通知と削除をベストエフォートで投げる。
 -    // ここで待つとbfcache/終了処理を妨げるため、失敗は次の期限切れに任せる。
 -    if (online && online.kind === 'firebase' && online.role === 'host') endOnline(true, true, true);
 +    // bfcacheへ退避するhostはguestと同様にroom/seatとWeb Lockを保持する。
 +    // documentの置換だけ既存の終了処理へ進める。v3の部屋は消さず再入室へ引き継ぐ。
 +    if (online && online.kind === 'firebase' && online.role === 'host' && event?.persisted !== true) endOnline(true, true, true);
-     else releaseFirebaseGuestLeaseForDocumentHandoff(event);
-     suspendAudioForHidden();
-   });
 diff --git a/package.json b/package.json
 index 84a2627..d972f92 100644
 --- a/package.json
 +++ b/package.json
-@@ -129,7 +129,7 @@
-     "test:existing": "npm run test:seat && npm run test:regression && npm run test:result && npm run test:loopback && npm run test:stage3 && npm run test:lobby && npm run test:back && npm run test:ranking && npm run test:undef && npm run test:app-shell && npm run test:cache-version && npm run test:weekday-dungeon",
-     "test:stage": "node --test tests/stage-*.test.js",
-     "test:reward-summary-x-share": "node tests/reward-summary-x-share.test.js",
+@@ -132 +132 @@
 -    "pretest": "npm run test:firebase-online-reentry-phase3d8b2 && npm run test:firebase-online-battle-recovery-plan-phase3d8b3a && npm run test:firebase-online-battle-replay-runner-phase3d8b3b1 && npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2 && npm run test:firebase-online-live-round-contract-phase3d8c && npm run test:firebase-online-player-name-phase3d8df1 && npm run test:firebase-guest-battle-render-phase3d8df3 && npm run test:firebase-reentry-startup-priority-phase3d8df4 && npm run test:firebase-reentry-lock-handoff-phase3d8df5",
 +    "pretest": "npm run test:firebase-online-reentry-phase3d8b2 && npm run test:firebase-online-battle-recovery-plan-phase3d8b3a && npm run test:firebase-online-battle-replay-runner-phase3d8b3b1 && npm run test:firebase-online-battle-reentry-activation-phase3d8b3b2 && npm run test:firebase-online-live-round-contract-phase3d8c && npm run test:firebase-online-player-name-phase3d8df1 && npm run test:firebase-guest-battle-render-phase3d8df3 && npm run test:firebase-reentry-startup-priority-phase3d8df4 && npm run test:firebase-reentry-lock-handoff-phase3d8df5 && node tests/issue8-heartbeat.test.cjs",
-     "test": "npm run test:content-motion && npm run test:docs && npm run test:gear && npm run test:gear-storage && npm run test:gear-rewards && npm run test:gear-cpu-rewards && npm run test:gear-coop-rewards && npm run test:gear-coop-settlement && npm run test:gear-coop-phase2d && npm run test:gear-presets && npm run test:gear-preset-storage && npm run test:gear-preset-capture && npm run test:gear-combat && npm run test:gear-battle-snapshot && npm run test:gear-online-protocol && npm run test:gear-online-lobby-protocol && npm run test:gear-online-firebase-wire && npm run test:gear-online-firebase-lobby && npm run test:gear-online-battle-start-phase3d3a && npm run test:gear-online-battle-damage-phase3d3b && npm run test:gear-online-battle-rng-phase3d4a && npm run test:gear-online-battle-crit-phase3d4b && npm run test:gear-online-battle-blast-phase3d4c && npm run test:gear-online-battle-knockback-phase3d5a && npm run test:gear-online-battle-status-phase3d5b && npm run test:gear-online-battle-shield-phase3d6a && npm run test:gear-online-battle-healing-phase3d6b && npm run test:gear-online-battle-runtime-state-phase3d6c && npm run test:gear-online-battle-last-stand-phase3d7a && npm run test:gear-online-battle-2v2-foundation-phase3d7b1 && npm run test:gear-online-battle-rescue4-phase3d7b2 && npm run test:gear-online-battle-same-owner-conflict-phase3d8a && npm run test:gear-online-battle-runtime-checkpoint-phase3d8b1 && npm run test:gear-combat-runtime && npm run test:gear-battle-rng && npm run test:gear-battle-start-phase3c1 && npm run test:gear-battle-damage-phase3c2a && npm run test:gear-battle-crit-blast-phase3c2b && npm run test:gear-battle-knockback-phase3c3a && npm run test:gear-battle-status-phase3c3b && npm run test:gear-battle-shield-phase3c3c1 && npm run test:gear-battle-healing-phase3c3c2 && npm run test:gear-battle-last-stand-phase3c3d && npm run test:gear-cpu-run-storage && npm run test:gear-cpu-phase2c && npm run test:gear-transactions && npm run test:gear-enhance-dismantle-phase4e && npm run test:gear-guide-phase4k && npm run test:gear-assets && npm run test:foundation-writer-lock && npm run test:coop-foundation && npm run test:coop-room && npm run test:coop-round && npm run test:coop-boss && npm run test:coop-live-boss && npm run test:storm-boss && npm run test:coop-boss-ai && npm run test:coop-survival && npm run test:coop-items && npm run test:coop-rewards && npm run test:coop-shop && npm run test:shop-assets && npm run test:battle-item-assets && npm run test:preview-effects-phase5b && npm run test:coop-session && npm run test:coop-playable && npm run test:reward-summary-x-share && npm run test:existing && npm run test:stage",
-     "pree2e": "npm ci --prefix tools/content-studio",
-     "e2e": "playwright test",
-@@ -148,7 +148,9 @@
-     "test:e2e:firebase-reentry-startup-priority-phase3d8df4": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
-     "test:e2e:firebase-reentry-lock-handoff-phase3d8df5": "playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch",
-     "test:storm-boss": "node tests/storm-boss.test.js && node tests/storm-boss-runtime.test.js && node tests/storm-boss-transport.test.js",
+@@ -151 +151,3 @@
 -    "test:e2e:storm-boss": "node tests/storm-boss-browser.cjs"
 +    "test:e2e:storm-boss": "node tests/storm-boss-browser.cjs",
 +    "test:issue8": "node tests/issue8-heartbeat.test.cjs && node tests/firebase-online-live-round-contract-phase3d8c.test.js && node tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js",
 +    "test:issue8:browser": "firebase emulators:exec --only database,auth --project demo-catamon-registration --config firebase.emulator.json \"node tests/issue8-browser.cjs\""
-   },
-   "devDependencies": {
-     "@playwright/test": "^1.55.0",
 diff --git a/shared/firebase-online-battle-recovery.js b/shared/firebase-online-battle-recovery.js
 index 29f0824..7bcaaa5 100644
 --- a/shared/firebase-online-battle-recovery.js
 +++ b/shared/firebase-online-battle-recovery.js
-@@ -66,11 +66,21 @@
-     if (start.packet.seat !== 'p1' || (options.hostUid && start.packet.from !== options.hostUid)) fail('FIREBASE_RECOVERY_START_AUTHORITY_INVALID', { key: start.key });
- 
-     const chain = [];
+@@ -68,0 +69 @@
 +    const completedById = new Map();
-     let active = null;
-     let result = null;
-     for (const entry of entries.slice(entries.indexOf(start) + 1)) {
-       const packet = entry.packet;
-       if (packet.t === 'start') fail('FIREBASE_RECOVERY_START_CONFLICT');
+@@ -73,0 +75,9 @@
 +      const prior = completedById.get(packet.actionId);
 +      if (prior && (packet.t === 'fire' || packet.t === 'state')) {
 +        const original = packet.t === 'fire' ? prior.fire.packet : prior.terminal.packet;
@@ -231,43 +121,25 @@ index 29f0824..7bcaaa5 100644
 +            && original.seat === packet.seat && original.unitId === packet.unitId) continue;
 +        fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
 +      }
-       if (packet.t === 'fire') {
-         if (result) fail('FIREBASE_RECOVERY_ACTION_AFTER_RESULT', { key: entry.key });
-         if (active) fail('FIREBASE_RECOVERY_ACTION_OVERLAP', { key: entry.key });
-@@ -90,11 +100,14 @@
-       if (!actionMatches(packet, active.identity, options.actionMatches)) fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
-       const completed = Object.freeze({ fire: active.entry, terminal: entry });
-       chain.push(completed);
+@@ -92,0 +103 @@
 +      completedById.set(packet.actionId, completed);
-       if (packet.t === 'result') result = Object.freeze({ fire: active.entry, terminal: entry, conceded: false });
-       active = null;
-     }
-     const lastCandidateBoundary = [...chain].reverse().find(item => item.terminal.packet.t === 'state') || null;
+@@ -97 +108,3 @@
 -    if (options.roundStatus === 'results') {
 +    // Live result authority is the action sender's immutable result packet.
 +    // Only p1 can write round metadata, which may still say playing.
 +    if (options.roundStatus === 'results' || result) {
-       if (!result) fail('FIREBASE_RECOVERY_RESULT_MISSING');
-       if (active) fail('FIREBASE_RECOVERY_ACTIVE_TAIL', { key: active.entry.key });
-       return plan('results_candidate', options.roundId, entries, start, { completedActionChain: chain, lastCandidateBoundary, result });
 diff --git a/sw.js b/sw.js
 index 72d9fde..93fb9c6 100644
 --- a/sw.js
 +++ b/sw.js
-@@ -1,4 +1,4 @@
+@@ -1 +1 @@
 -const CACHE_VERSION = 'katamon-pwa-v2.0.186-project-hub';
 +const CACHE_VERSION = 'katamon-pwa-v2.0.187-issue8-recovery';
- const BUILD_ID = CACHE_VERSION.slice('katamon-pwa-'.length);
- const ASSET_CACHE = 'katamon-assets-v1';
- // 素材を差し替えたら改訂番号を更新する。各端末はその改訂を一度だけ取得する。
 diff --git a/tests/README.md b/tests/README.md
 index f51924c..c9c5301 100644
 --- a/tests/README.md
 +++ b/tests/README.md
-@@ -78,6 +78,15 @@ npm run test:e2e:storm-boss
-   シード固定は「再現しない稀な引きを踏まないようにする」処置であって、原因の修正ではない
- - 完走まで1〜3分かかる(1試合を何度も通すため)。遅延・ロス・必殺・プロトコル不一致の7シナリオ
- 
+@@ -80,0 +81,9 @@ npm run test:e2e:storm-boss
 +## Issue #8 recovery PC受入（2026-09-27）
 +
 +- `npm run test:issue8`: 一時的なheartbeat失敗・送信本文固定・古いaction/state・時間切れresult・履歴planの回帰。
@@ -277,48 +149,29 @@ index f51924c..c9c5301 100644
 +- 起動・Web Lock・bfcacheの既存回帰: `npx playwright test tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js --project=android-chromium-portrait-touch`。
 +- [対応表・結果・設計上の境界](../docs/tasks/2026-09-27-issue8-recovery-pc.md)、[スマホ最終手順](../docs/tasks/2026-09-27-issue8-mobile-acceptance.md)。
 +
- ## 協力戦の同時行動（2026-09-12）
- 
- - `npm run test:coop-simultaneous`: 実エンジンのソロと、4独立Nodeプロセス・実通信バリデータで両ボスを検証する。既存 `test:coop-playable` からも実行する。
 diff --git a/tests/cache-version-test.js b/tests/cache-version-test.js
 index be7bdab..2f06b5b 100644
 --- a/tests/cache-version-test.js
 +++ b/tests/cache-version-test.js
-@@ -5,7 +5,7 @@ const path = require('node:path');
- const root = path.join(__dirname, '..');
- const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
- const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+@@ -8 +8 @@ const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 -const EXPECTED_BUILD_ID = 'v2.0.186-project-hub';
 +const EXPECTED_BUILD_ID = 'v2.0.187-issue8-recovery';
- 
- function tierBody(worker, tier) {
-   return new RegExp(`const TIER${tier}_ASSETS = \\[([\\s\\S]*?)\\];`).exec(worker)?.[1] || '';
 diff --git a/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js b/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
 index 1a610e1..8d9038c 100644
 --- a/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
 +++ b/tests/e2e/firebase-reentry-startup-priority-phase3d8df4.spec.js
-@@ -623,10 +623,15 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
-     });
-     expect(persistedStillHeld).toBe(true);
- 
+@@ -625,0 +626,4 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
 +    const oldLockClient = await ownerPage.evaluate(async () => (
 +      (await navigator.locks.query()).held.find(lock => lock.name.startsWith('katamon_firebase_reentry:'))?.clientId
 +    ));
 +    expect(oldLockClient).toBeTruthy();
-     await ownerPage.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
-     await expect.poll(async () => ownerPage.evaluate(async () => (
+@@ -628,2 +632,3 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
 -      !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive')
 -    )), { timeout: 2000 }).toBe(true);
 +      (await navigator.locks.query()).held
 +        .filter(lock => lock.name.startsWith('katamon_firebase_reentry:')).map(lock => lock.clientId)
 +    )), { timeout: 5000 }).not.toContain(oldLockClient);
-     await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
-     expect(fixture.authSignUpCount).toBe(0);
-   } finally {
-@@ -921,3 +926,27 @@ test('2v2 support zero-input reload retries a transient history read and restore
-     await context.close();
-   }
- });
+@@ -923,0 +929,24 @@ test('2v2 support zero-input reload retries a transient history read and restore
 +
 +test('host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease', async ({ browser }) => {
 +  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium lifecycle regression; native WebKit is tracked separately.');
@@ -347,10 +200,7 @@ diff --git a/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js b/te
 index 11bd437..da96794 100644
 --- a/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
 +++ b/tests/firebase-online-battle-recovery-plan-phase3d8b3a.test.js
-@@ -88,6 +88,23 @@ await test('normal and concede result double-send keep the first result while co
-   fails('FIREBASE_RECOVERY_RESULT_MISSING', () => plan('results', { [key(1)]: packet('start'), [key(2)]: fire() }));
- });
- 
+@@ -90,0 +91,17 @@ await test('normal and concede result double-send keep the first result while co
 +
 +await test('late copies of a completed action cannot poison canonical recovery or replace its first boundary', () => {
 +  const first = state();
@@ -368,34 +218,18 @@ index 11bd437..da96794 100644
 +  assert.equal(actual.requiresBattleReplayValidation, true);
 +});
 +
- await test('Gear/runtime payloads are retained as opaque packets and an SSE deduper can pre-seed history', () => {
-   const runtime = { version: 3, matchFormat: '1v1', shieldByUnit: { p1: { currentShield: 0 }, e1: { currentShield: 0 } }, runtimeEffectsByUnit: { p1: { rescueNextAttackDamageBp: 0, lastStandNextAttackDamageBp: 1500 }, e1: { rescueNextAttackDamageBp: 1000, lastStandNextAttackDamageBp: 0 } } };
-   const actual = plan('playing', { [key(1)]: packet('start', { gearManifestJson: '{}' }), [key(2)]: fire(), [key(3)]: state({ snap: { craters: [], gearRuntimeState: runtime } }) });
-@@ -163,5 +180,5 @@ await test('a B2 pending candidate reads the current log through REST only and l
-     assert.equal(candidate.reentryLease.release(), true, 'the plan itself did not release B2 lease');
-   } finally { global.fetch = originalFetch; reentryBridge.reset(); }
- });
+@@ -166 +183 @@ await test('a B2 pending candidate reads the current log through REST only and l
 -console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/11 passed`);
 +console.log(`Firebase Battle Recovery Plan Phase 3D-8B3A tests: ${passed}/${passed} passed`);
- })().catch(error => { console.error(error); process.exitCode = 1; });
 diff --git a/tests/firebase-online-live-round-contract-phase3d8c.test.js b/tests/firebase-online-live-round-contract-phase3d8c.test.js
 index f720e4d..2bb202d 100644
 --- a/tests/firebase-online-live-round-contract-phase3d8c.test.js
 +++ b/tests/firebase-online-live-round-contract-phase3d8c.test.js
-@@ -195,6 +195,9 @@ await test('fresh push key carrying the same completed action remains a no-op',
-     assert.equal(kt.projectiles().length, 0);
-     assert.deepEqual(kt.snapshot(), before);
-     source.put(es, '-fresh-state-key', terminal);
+@@ -197,0 +198,3 @@ await test('fresh push key carrying the same completed action remains a no-op',
 +    assert.equal(fixture.online.protocolError, undefined, 'duplicate state must not disconnect the healthy client');
 +    assert.equal(fixture.online.phase, 'playing');
 +    assert.deepEqual(kt.snapshot(), before, 'stale state cannot roll back the board');
-     assert.equal(fixture.online.queue.length, 0);
-     assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
-   } finally { source.restore(); }
-@@ -375,6 +378,84 @@ await test('result ledger keeps the old round idempotent and accepts the new rou
-   } finally { records.reset(); }
- });
- 
+@@ -377,0 +381,78 @@ await test('result ledger keeps the old round idempotent and accepts the new rou
 +
 +await test('completed action identities survive more than sixteen turns until the round resets', () => {
 +  const fixture = setupRemoteTurn();
@@ -474,9 +308,6 @@ index f720e4d..2bb202d 100644
 +  }
 +});
 +
- console.log(`firebase live ordering / rematch Phase 3D-8C: ${passed}/${passed} passed`);
- }
- 
 diff --git a/tests/issue8-browser.cjs b/tests/issue8-browser.cjs
 new file mode 100644
 index 0000000..1320022
@@ -737,11 +568,5 @@ diff --git a/tests/seatharness.js b/tests/seatharness.js
 index a0c5f32..929a94e 100644
 --- a/tests/seatharness.js
 +++ b/tests/seatharness.js
-@@ -1814,6 +1814,7 @@ const HOOK = `
-       allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
-       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
-       firebaseLiveRoundContractForTest: () => ({
+@@ -1816,0 +1817 @@ const HOOK = `
 +        syncTurn: unitId => netSyncTurn(unitById(unitId)),
-         createTransport: (...args) => makeFirebaseTransport(...args),
-         requestRematch: () => requestFirebaseRematch(),
-         resetRound: autoReady => resetFirebaseRound(autoReady === true),
