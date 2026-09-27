@@ -78,5 +78,52 @@ let passed=0;
     assert.equal(await pending,false,'close during the final failed attempt is cancellation, not a dropped ping');
     assert.equal(calls,3);passed++;
   }
+  for (const fault of ['network','timeout',408,429,503]) {
+    let writes=0, reads=0, fatal=0, saved;
+    global.fetch=async(url,options)=>{
+      if(options?.method==='PUT') {
+        writes++; saved=JSON.parse(options.body);
+        if(writes===1)throw new TypeError('persisted write response lost');
+        return {ok:false,status:412};
+      }
+      reads++;
+      if(reads===1) {
+        if(fault==='network')throw new TypeError('comparison fetch lost');
+        if(fault==='timeout')throw Object.assign(new Error('aborted'),{name:'AbortError'});
+        return {ok:false,status:fault};
+      }
+      return {ok:true,status:200,json:async()=>saved};
+    };
+    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>fatal++);
+    assert.equal(await transport.send(packet('ping')),true,'comparison GET transient retries: '+fault);
+    assert.equal(fatal,0); assert.equal(writes,3); assert.equal(reads,2);
+    transport.close(); passed++;
+  }
+  for (const type of ['ping','fire']) {
+    let fatal=0, reads=0, recover=false;
+    global.fetch=async(url,options)=>{
+      if(recover)return {ok:true,status:200};
+      if(options?.method==='PUT')return {ok:false,status:412};
+      reads++; return {ok:false,status:503};
+    };
+    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>fatal++);
+    assert.equal(await transport.send(packet(type)),type==='ping');
+    assert.equal(reads,3); assert.equal(fatal,type==='ping'?0:1);
+    recover=true;
+    assert.equal(await transport.send(packet('fire')),type==='ping','only transient ping may keep queue alive');
+    transport.close(); passed++;
+  }
+  {
+    let writes=0, reads=0, fatal=0;
+    global.fetch=async(url,options)=>{
+      if(options?.method==='PUT'){writes++;return {ok:false,status:412};}
+      reads++;return {ok:false,status:403};
+    };
+    const transport=live.createTransport('A2BC3DEF',auth,'a'.repeat(48),()=>{},()=>{},()=>fatal++);
+    assert.equal(await transport.send(packet('ping')),false);
+    assert.equal(writes,1);assert.equal(reads,1);assert.equal(fatal,1);
+    assert.equal(await transport.send(packet('fire')),false);
+    transport.close();passed++;
+  }
   console.log('issue8 transport: '+passed+'/'+passed+' cases passed');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{global.fetch=originalFetch;global.EventSource=originalSource;});

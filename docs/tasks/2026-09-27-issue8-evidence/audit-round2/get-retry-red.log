@@ -1,0 +1,12 @@
+AssertionError [ERR_ASSERTION]: comparison GET transient retries: network
+
+false !== true
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-heartbeat.test.cjs:98:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

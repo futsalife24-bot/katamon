@@ -89,7 +89,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label,ms=30000) {const deadline=Date.now()+ms;let last;while(Date.now()<deadline){last=await fn();if(last)return last;await sleep(150);}throw new Error('Timeout: '+label);}
 const state=p=>p.evaluate(()=>issue8.state());
 function board(s) {return {round:s.round,turn:s.turn,active:s.active,matchOver:s.matchOver,winner:s.winner,units:s.snapshot.units.map(u=>({id:u.id,hp:u.hp,x:u.x,y:u.y,fuel:u.fuel})),craters:s.snapshot.craters,wind:s.snapshot.wind,turnOrder:s.snapshot.turnOrder};}
-function record(name,detail={}) {events.push({name,...detail});console.log('PASS '+name);}
+function record(name,detail={}) {events.push({name,at:new Date().toISOString(),...detail});console.log('PASS '+name);}
 async function main(){
   // Fail closed before any browser starts. No production DB fallback.
   const loaded=await fetch(db+'/.settings/rules.json?ns='+project+'-default-rtdb',{headers:{Authorization:'Bearer owner'}});
@@ -107,8 +107,22 @@ async function main(){
   try {
     async function context(){const c=await browser.newContext({viewport:{width:1280,height:800},serviceWorkers:'block'});await c.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());return c;}
     const hc=await context(), gc=await context();
-    let delayed=0;
+    let delayed=0, comparisonTarget=null, comparisonPuts=0, comparisonGets=0, injectComparison=false;
     await hc.route('**/messages/*.json?*',async r=>{
+      const request=r.request();
+      if(injectComparison && !comparisonTarget && request.method()==='PUT' && request.postDataJSON()?.t==='ping')comparisonTarget=request.url();
+      if(comparisonTarget && request.url()===comparisonTarget) {
+        if(request.method()==='PUT') {
+          comparisonPuts++;
+          if(comparisonPuts===1) {
+            const persisted=await r.fetch();assert.equal(persisted.status(),200);
+            await r.abort('connectionreset');return;
+          }
+        } else if(request.method()==='GET') {
+          comparisonGets++;
+          if(comparisonGets===1){await r.fulfill({status:503,contentType:'application/json',body:'null'});return;}
+        }
+      }
       if (!delayed && r.request().method()==='PUT' && r.request().postDataJSON()?.t==='state') {
         delayed++; await sleep(750);
       }
@@ -125,6 +139,11 @@ async function main(){
     await until(async()=>{await host.evaluate(()=>issue8.start());return (await state(host)).phase==='playing'&&(await state(guest)).phase==='playing';},'start');
     await until(async()=> (await state(host)).canAct || (await state(guest)).canAct,'first input');
     record('commit/reveal/start through actual Rules and native SSE');
+    injectComparison=true;
+    assert.equal(await host.evaluate(()=>issue8.queue(issue8.ownPacket('ping'))),true);
+    injectComparison=false;
+    assert.equal(comparisonPuts,3);assert.equal(comparisonGets,2);
+    record('persisted ping response loss then comparison GET 503 recovers',{puts:comparisonPuts,gets:comparisonGets});
     async function converged(label){await until(async()=>{const a=await state(host),b=await state(guest);return !a.pending&&!b.pending&&!a.action&&!b.action&&(a.matchOver || a.canAct || b.canAct)&&JSON.stringify(board(a))===JSON.stringify(board(b));},label,45000);const a=await state(host),b=await state(guest);assert.equal(a.protocolError,null);assert.equal(b.protocolError,null);if(!a.matchOver)assert.notEqual(a.canAct,b.canAct);record(label,{turn:a.turn,active:a.active});}
     async function shot(){await until(async()=> (await state(host)).canAct || (await state(guest)).canAct,'input available');const actor=(await state(host)).canAct?host:guest;record('fire attempt',{seat:(await state(actor)).seat,turn:(await state(actor)).turn,active:(await state(actor)).active});assert.equal(await actor.evaluate(()=>issue8.fire()),true);return actor;}
     const mover=(await state(host)).canAct?host:guest;
@@ -145,6 +164,17 @@ async function main(){
       await converged('native SSE offline/'+(seat==='e1'?'automatic reconnect ':'explicit reconnect ')+seat);
       await lost.reload({waitUntil:'domcontentloaded'});await lost.waitForFunction(()=>!!globalThis.issue8);
       await until(async()=> (await state(lost)).phase==='playing','zero-input reload '+seat,45000);
+      // A slow full reload can exceed the existing 35s visible-peer timeout.
+      // Preserve that production policy; explicitly test manual re-entry of the
+      // waiting client rather than increasing timeouts or accepting an ended UI.
+      const waiting=seat==='p1'?guest:host;
+      const waitingState=await state(waiting);
+      if(waitingState.protocolError==='相手との通信が途切れました。') {
+        assert.equal(waitingState.phase,'ended');
+        record('visible peer timeout requires explicit re-entry',{seat:waitingState.seat});
+        await waiting.reload({waitUntil:'domcontentloaded'});await waiting.waitForFunction(()=>!!globalThis.issue8);
+        await until(async()=> (await state(waiting)).phase==='playing','waiting peer manual re-entry',45000);
+      }
       await converged('canonical history reload '+seat);
     }
     // Native lock takeover: new tab cannot act until old document hands off.

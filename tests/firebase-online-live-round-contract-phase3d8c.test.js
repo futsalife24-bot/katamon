@@ -466,6 +466,28 @@ await test('losing fire/result uses settled HP, never the concession packet HP',
   assert.deepEqual(kt.snapshot().units.map(u=>({id:u.id,hp:u.hp})),before);
 });
 
+await test('queued losing result must match the applied fire action for host and guest', () => {
+  for (const receiver of ['host','guest']) for (const matches of [false,true]) {
+    const fixture=setupRemoteTurn();
+    const unitId=receiver==='host'?'e1':'p1';
+    if(receiver==='host') {
+      Object.assign(fixture.online,{role:'host',seat:'p1',peerSeat:'e1',clientId:hostUid,auth:{uid:hostUid,idToken:'test',serverTimeOffset:0}});
+      h.setOnlineSeat('p1');h.setActiveUnitForTest('e1');
+    }
+    const actor=kt.unitById(unitId);actor.hp=1;
+    kt.setTurnCountForTest(29);
+    const fire={...fixture.fire,from:receiver==='host'?guestUid:hostUid,seat:unitId,unitId,x:actor.x,y:actor.y,anchor:live.unitAnchor(unitId),vx0:unitId==='p1'?-5000:5000};
+    h.receiveFirebaseForTest(fire);
+    assert.equal(fixture.online.remoteAction,null,'fire is queued, not applied');
+    h.receiveFirebaseForTest({...fire,t:'result',actionId:matches?fire.actionId:'d'.repeat(48),winner:receiver==='host'?'player':'cpu',reason:'時間切れ',units:kt.snapshot().units.map(u=>({id:u.id,hp:u.hp}))});
+    assert.equal(fixture.online.queue.length,2);
+    h.drainOneNetworkMessageForTest();settleRemoteFire();h.drainOneNetworkMessageForTest();
+    assert.equal(fixture.online.phase,matches?'results':'ended');
+    if(matches)assert.equal(fixture.online.protocolError,undefined);
+    else {assert.match(fixture.online.protocolError,/ローカル結果/);assert.equal(fixture.online.completedRemoteActions.has('d'.repeat(48)),false);}
+  }
+});
+
 await test('time-limit result cannot override replayed turn count or HP winner', () => {
   for (const turn of [0, 29]) for (const winner of ['player','cpu']) {
     const fixture = setupRemoteTurn();

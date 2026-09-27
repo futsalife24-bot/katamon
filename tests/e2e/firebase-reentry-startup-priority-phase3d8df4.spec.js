@@ -343,6 +343,7 @@ async function installF4Bridge(context, fixture) {
         validation: Object.entries(messages).map(([key, value]) => ({ key, result: validateFirebaseMessageDetail(value) }))
       };
     },
+    sendPingForTest() { return online.transport.send({v:3,t:'ping',from:online.clientId,seat:online.seat,roundId:online.currentRoundId}); },
     state() {
       const unit = localUnit();
       return structuredClone({
@@ -380,6 +381,19 @@ async function installF4Bridge(context, fixture) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: fixture.reentryUid || GUEST_UID, id_token: token(), refresh_token: 'rotated-f4', expires_in: '3600' }) });
     }
     if (url.includes(`/rooms/${ROOM_CODE}/slots/`) && url.includes('/seenAt.json')) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    if (new URL(url).pathname.startsWith(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages/`)) {
+      const request=route.request();
+      const key=new URL(url).pathname.split('/').pop().replace(/\.json$/, '');
+      fixture.messageWrites ||= [];
+      fixture.transportMessages ||= {};
+      if(request.method()==='PUT') {
+        if(Object.hasOwn(fixture.transportMessages,key)) return route.fulfill({status:412,contentType:'application/json',body:'null'});
+        const packet=request.postDataJSON();
+        fixture.transportMessages[key]=packet;fixture.messageWrites.push(packet);
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(packet)});
+      }
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture.transportMessages[key] || null)});
+    }
     if (url.includes(`/rooms/${ROOM_CODE}/rounds/${ROUND_ID}/messages.json`)) {
       if ((fixture.recoveryMessageFailuresRemaining || 0) > 0) {
         fixture.recoveryMessageFailuresRemaining -= 1;
@@ -392,6 +406,8 @@ async function installF4Bridge(context, fixture) {
     }
     if (url.includes(`/rooms/${ROOM_CODE}/round.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room.round) });
     if (url.includes(`/rooms/${ROOM_CODE}.json`)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture.room) });
+    // Mock recovery must never fall through to a production service.
+    if (!['127.0.0.1','localhost'].includes(new URL(url).hostname)) return route.abort('blockedbyclient');
     return route.fallback();
   });
 }
@@ -431,6 +447,8 @@ test('zero-input reload gives Firebase re-entry authority while preserving CPU s
       localUnitId: 'e1', localCharacter: 'iwa', pendingReentry: false,
       credentialPresent: true,
     });
+    expect(await page.evaluate(() => KatamonF4StartupBridge.sendPingForTest())).toBe(true);
+    expect((fixture.messageWrites || []).some(packet => packet.t === 'ping')).toBe(true);
     expect(state.cpuRaw).toBe(cpuRawBeforeReload);
     expect(state.trace.some(entry => entry.name === 'resumeSuspendedMatch')).toBe(false);
     expect(state.trace.some(entry => entry.name === 'restoreFirebaseBattleReplayRollback' && entry.phase === 'error')).toBe(false);

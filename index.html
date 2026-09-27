@@ -14835,7 +14835,14 @@
     }
     if (response.ok) return;
     if (response.status === 412) {
-      const existing = await firebaseRequest(path, auth);
+      let existing;
+      try { existing = await firebaseRequest(path, auth); }
+      catch (cause) {
+        // A lost comparison GET is still an unresolved idempotent write.
+        // Preserve hard authorization errors; normalize only temporary failures.
+        if (cause?.code !== 'FIREBASE_REQUEST_TRANSIENT') throw cause;
+        throw Object.assign(new Error('通信に失敗しました。'), { code: 'FIREBASE_MESSAGE_TRANSIENT', cause });
+      }
       if (stableFirebaseJson(normalizeFirebaseMessageForCompare(existing)) === stableFirebaseJson(normalizeFirebaseMessageForCompare(body))) return;
       throw new Error('同じ通信IDに異なる内容が保存されています');
     }
@@ -16342,7 +16349,7 @@
           // Only a fire-less loss (for example a fall while moving) uses the
           // concession exception. A fired action must match its replayed result.
           const concedes = !online.remoteAction && firebaseResultConcedes(msg);
-          if (!concedes && (!online.remoteAction || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
+          if (!concedes && (!online.remoteAction || !firebaseActionMatches(msg, online.remoteAction) || !online.remoteAction.resolved || !localWinner || localWinner !== msg.winner)) {
             rejectFirebaseMessage('ローカル結果と一致しない決着通知です');
             break;
           }
