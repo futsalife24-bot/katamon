@@ -1,0 +1,12 @@
+AssertionError [ERR_ASSERTION]: temporary lost heartbeat must not poison the action queue
+
+1 !== 0
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-heartbeat.test.cjs:14:10 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

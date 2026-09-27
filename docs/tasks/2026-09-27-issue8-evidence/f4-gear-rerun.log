@@ -1,0 +1,12 @@
+
+[WebServer] (node:9200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:25304) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1/1] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:859:1 › Gear ON reload retries a transient history read and restores the verified manifest runtime
+  1 passed (15.5s)

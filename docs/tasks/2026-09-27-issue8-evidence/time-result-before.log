@@ -1,0 +1,30 @@
+  ok ordinary live receiver completes move -> fire -> state exactly once
+  ok terminal-before-fire is buffered and applied only after the production action settles
+  ok same SSE push key is a room-lifetime no-op on second delivery
+  ok fresh push key carrying the same completed action remains a no-op
+  ok a completed actionId reused by another valid seat fails closed
+  ok a completed actionId reused by the same sender for another unit fails closed
+  ok 1v1 rematch advances only after every seated human votes and switches transport once
+  ok failed old-round handoff leaves local round and round-local state untouched
+  ok new-round reset clears Battle-round state but preserves room authority
+  ok 2v2 live rematch waits for four humans but advances without empty CPU support votes
+  ok SSE deduper survives round switching while Battle completed-action cache resets
+  ok result ledger keeps the old round idempotent and accepts the new round as another match
+  ok completed action identities survive more than sixteen turns until the round resets
+  ok turn-limit fire has result as its sole terminal and keeps the same actionId
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'ローカル結果と一致しない決着通知です'
+- undefined
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:437:10
+    at test (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:15:9)
+    at main (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\firebase-online-live-round-contract-phase3d8c.test.js:426:7) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'ローカル結果と一致しない決着通知です',
+  expected: undefined,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

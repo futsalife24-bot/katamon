@@ -66,11 +66,21 @@
     if (start.packet.seat !== 'p1' || (options.hostUid && start.packet.from !== options.hostUid)) fail('FIREBASE_RECOVERY_START_AUTHORITY_INVALID', { key: start.key });
 
     const chain = [];
+    const completedById = new Map();
     let active = null;
     let result = null;
     for (const entry of entries.slice(entries.indexOf(start) + 1)) {
       const packet = entry.packet;
       if (packet.t === 'start') fail('FIREBASE_RECOVERY_START_CONFLICT');
+      const prior = completedById.get(packet.actionId);
+      if (prior && (packet.t === 'fire' || packet.t === 'state')) {
+        const original = packet.t === 'fire' ? prior.fire.packet : prior.terminal.packet;
+        // A new push key cannot grant a completed action new authority. Keep
+        // the first candidate; production replay still validates that boundary.
+        if (original.t === packet.t && original.from === packet.from
+            && original.seat === packet.seat && original.unitId === packet.unitId) continue;
+        fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
+      }
       if (packet.t === 'fire') {
         if (result) fail('FIREBASE_RECOVERY_ACTION_AFTER_RESULT', { key: entry.key });
         if (active) fail('FIREBASE_RECOVERY_ACTION_OVERLAP', { key: entry.key });
@@ -90,11 +100,14 @@
       if (!actionMatches(packet, active.identity, options.actionMatches)) fail('FIREBASE_RECOVERY_TERMINAL_MISMATCH', { key: entry.key });
       const completed = Object.freeze({ fire: active.entry, terminal: entry });
       chain.push(completed);
+      completedById.set(packet.actionId, completed);
       if (packet.t === 'result') result = Object.freeze({ fire: active.entry, terminal: entry, conceded: false });
       active = null;
     }
     const lastCandidateBoundary = [...chain].reverse().find(item => item.terminal.packet.t === 'state') || null;
-    if (options.roundStatus === 'results') {
+    // Live result authority is the action sender's immutable result packet.
+    // Only p1 can write round metadata, which may still say playing.
+    if (options.roundStatus === 'results' || result) {
       if (!result) fail('FIREBASE_RECOVERY_RESULT_MISSING');
       if (active) fail('FIREBASE_RECOVERY_ACTIVE_TAIL', { key: active.entry.key });
       return plan('results_candidate', options.roundId, entries, start, { completedActionChain: chain, lastCandidateBoundary, result });

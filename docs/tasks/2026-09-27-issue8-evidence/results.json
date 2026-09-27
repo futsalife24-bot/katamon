@@ -1,0 +1,78 @@
+[
+  {
+    "suite": "seat",
+    "exit": 0
+  },
+  {
+    "suite": "regression",
+    "exit": 0
+  },
+  {
+    "suite": "result",
+    "exit": 0
+  },
+  {
+    "suite": "loopback",
+    "exit": 0
+  },
+  {
+    "suite": "stage3",
+    "exit": 0
+  },
+  {
+    "suite": "lobby",
+    "exit": 0
+  },
+  {
+    "suite": "issue8-heartbeat.test.cjs",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-online-reentry-phase3d8b2.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-online-battle-recovery-plan-phase3d8b3a.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-online-battle-replay-runner-phase3d8b3b1.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-online-battle-reentry-activation-phase3d8b3b2.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-online-live-round-contract-phase3d8c.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-reentry-startup-priority-phase3d8df4.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "firebase-reentry-lock-handoff-phase3d8df5.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "gear-online-battle-runtime-checkpoint-phase3d8b1.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "gear-online-battle-same-owner-conflict-phase3d8a.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "cache-version-test.js",
+    "exit": 0
+  },
+  {
+    "suite": "current-work-state-size.test.js",
+    "exit": 0
+  },
+  {
+    "suite": "undef-scan.js",
+    "exit": 0
+  }
+]

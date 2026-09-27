@@ -1,0 +1,4 @@
+page.evaluate: Target page, context or browser has been closed
+    at main (C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-browser.cjs:105:27) {
+  log: []
+}

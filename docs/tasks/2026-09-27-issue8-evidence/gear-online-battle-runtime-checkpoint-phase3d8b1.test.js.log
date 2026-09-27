@@ -1,0 +1,6 @@
+  ok v3 has exact Shield and next-action effect maps, rejects v2, format/unit mismatches, and active fields
+  ok canonical Last Stand and target-side Rescue values restore separately, while invalid ownership values fail closed
+  ok production Last Stand checkpoint restores only from a null local effect state and consumes to explicit zeroes
+  ok live local effects must exactly match an incoming checkpoint, and null state restores without Shield mutation
+  ok checkpoint remains turn-state-only: Gear OFF, start, fire, result and Battle Snapshot receive no runtime field
+gear-online-battle-runtime-checkpoint-phase3d8b1: 5/5 passed

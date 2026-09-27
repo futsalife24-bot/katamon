@@ -2,6 +2,9 @@ node_modules/
 playwright-report/
 test-results/
 debug.log
+firebase-debug.log
+database-debug.log
+output/issue8/
 .codex-worktrees/
 .codex-remote-attachments/
 catamon_vertical_pv/

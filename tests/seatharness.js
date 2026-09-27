@@ -1814,6 +1814,7 @@ const HOOK = `
       allFirebaseRevealsVerified: () => allFirebaseRevealsVerified(),
       allFirebaseRematchVotesIn: () => allFirebaseRematchVotesIn(),
       firebaseLiveRoundContractForTest: () => ({
+        syncTurn: unitId => netSyncTurn(unitById(unitId)),
         createTransport: (...args) => makeFirebaseTransport(...args),
         requestRematch: () => requestFirebaseRematch(),
         resetRound: autoReady => resetFirebaseRound(autoReady === true),

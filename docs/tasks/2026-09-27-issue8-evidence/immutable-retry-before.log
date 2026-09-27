@@ -1,0 +1,35 @@
+AssertionError [ERR_ASSERTION]: retry must retain the original wire body after local state advances
++ actual - expected
+
+  {
+    actionId: 'cccccccccccccccccccccccccccccccccccccccccccccccc',
+    from: 'issue8-host',
+    roundId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    seat: 'p1',
+    sentAt: 1790489856442,
+    snap: {
++     craters: [
++       {
++         r: 3,
++         x: 1,
++         y: 2
++       }
++     ],
+-     craters: [],
+      runStats: {
++       shots: 2
+-       shots: 1
+      }
+    },
+    t: 'state',
+    v: 3
+  }
+
+    at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\issue8-heartbeat.test.cjs:42:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [Object],
+  expected: [Object],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}

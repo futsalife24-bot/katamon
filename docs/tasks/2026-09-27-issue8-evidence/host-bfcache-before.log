@@ -1,0 +1,56 @@
+
+[WebServer] (node:22144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+
+
+(node:27272) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1/1] [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:930:1 › host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease
+  1) [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:930:1 › host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease
+
+    Error: expect(received).toMatchObject(expected)
+
+    - Expected  - 4
+    + Received  + 4
+
+      Object {
+        "credentialPresent": true,
+    -   "currentRoundId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    -   "onlineKind": "firebase",
+    -   "onlinePhase": "playing",
+    -   "onlineSeat": "p1",
+    +   "currentRoundId": null,
+    +   "onlineKind": null,
+    +   "onlinePhase": null,
+    +   "onlineSeat": null,
+      }
+
+      947 |     });
+      948 |     const after = await page.evaluate(() => KatamonF4StartupBridge.state());
+    > 949 |     expect(after).toMatchObject({ onlineKind: 'firebase', onlinePhase: before.onlinePhase, onlineSeat: 'p1', currentRoundId: before.currentRoundId, credentialPresent: true });
+          |                   ^
+      950 |     expect(await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')))).toEqual(held);
+      951 |   } finally { await context.close(); }
+      952 | });
+        at C:\Users\futsa\.codex\worktrees\issue8-recovery-pc\カタモン\tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:949:19
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\playwright\firebase-reentry-startup-p-9aaec-thority-and-exclusive-lease-android-chromium-portrait-touch\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\playwright\firebase-reentry-startup-p-9aaec-thority-and-exclusive-lease-android-chromium-portrait-touch\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\playwright\firebase-reentry-startup-p-9aaec-thority-and-exclusive-lease-android-chromium-portrait-touch\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\playwright\firebase-reentry-startup-p-9aaec-thority-and-exclusive-lease-android-chromium-portrait-touch\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  1 failed
+    [android-chromium-portrait-touch] › tests\e2e\firebase-reentry-startup-priority-phase3d8df4.spec.js:930:1 › host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease

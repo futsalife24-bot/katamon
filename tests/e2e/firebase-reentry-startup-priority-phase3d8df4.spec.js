@@ -623,10 +623,15 @@ test('non-bfcache guest pagehide releases its native lease for the replacement d
     });
     expect(persistedStillHeld).toBe(true);
 
+    const oldLockClient = await ownerPage.evaluate(async () => (
+      (await navigator.locks.query()).held.find(lock => lock.name.startsWith('katamon_firebase_reentry:'))?.clientId
+    ));
+    expect(oldLockClient).toBeTruthy();
     await ownerPage.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
     await expect.poll(async () => ownerPage.evaluate(async () => (
-      !(await navigator.locks.query()).held.some(lock => lock.mode === 'exclusive')
-    )), { timeout: 2000 }).toBe(true);
+      (await navigator.locks.query()).held
+        .filter(lock => lock.name.startsWith('katamon_firebase_reentry:')).map(lock => lock.clientId)
+    )), { timeout: 5000 }).not.toContain(oldLockClient);
     await expect.poll(async () => (await replacementPage.evaluate(() => globalThis.KatamonF4StartupBridge.state())).onlinePhase, { timeout: 15000 }).toBe('playing');
     expect(fixture.authSignUpCount).toBe(0);
   } finally {
@@ -920,4 +925,28 @@ test('2v2 support zero-input reload retries a transient history read and restore
   } finally {
     await context.close();
   }
+});
+
+test('host bfcache pagehide/pageshow retains its live room-seat authority and exclusive lease', async ({ browser }) => {
+  test.skip(test.info().project.name.startsWith('iphone-webkit'), 'Chromium lifecycle regression; native WebKit is tracked separately.');
+  const fixture = { room: null, messages: null };
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  await installF4Bridge(context, fixture);
+  const page = await context.newPage();
+  try {
+    await page.goto(GAME_URL);
+    const seeded = await page.evaluate(() => KatamonF4StartupBridge.seed({ reentrySeat: 'p1', activeOnlineLease: true }));
+    fixture.room = seeded.room;
+    fixture.messages = seeded.messages;
+    const before = await page.evaluate(() => KatamonF4StartupBridge.state());
+    const held = await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')));
+    expect(held).toHaveLength(1);
+    await page.evaluate(() => {
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    const after = await page.evaluate(() => KatamonF4StartupBridge.state());
+    expect(after).toMatchObject({ onlineKind: 'firebase', onlinePhase: before.onlinePhase, onlineSeat: 'p1', currentRoundId: before.currentRoundId, credentialPresent: true });
+    expect(await page.evaluate(async () => (await navigator.locks.query()).held.filter(l => l.name.startsWith('katamon_firebase_reentry:')))).toEqual(held);
+  } finally { await context.close(); }
 });

@@ -195,6 +195,9 @@ await test('fresh push key carrying the same completed action remains a no-op', 
     assert.equal(kt.projectiles().length, 0);
     assert.deepEqual(kt.snapshot(), before);
     source.put(es, '-fresh-state-key', terminal);
+    assert.equal(fixture.online.protocolError, undefined, 'duplicate state must not disconnect the healthy client');
+    assert.equal(fixture.online.phase, 'playing');
+    assert.deepEqual(kt.snapshot(), before, 'stale state cannot roll back the board');
     assert.equal(fixture.online.queue.length, 0);
     assert.deepEqual(live.state().completedRemoteActions, [[fixture.actionId, { from: hostUid, unitId: 'p1', t: 'state' }]]);
   } finally { source.restore(); }
@@ -373,6 +376,84 @@ await test('result ledger keeps the old round idempotent and accepts the new rou
     assert.equal(records.record(detail(roundB)), true, 'a new round id is a new match identity');
     assert.deepEqual(records.snapshot().processedRoundIds, [roundA, roundB]);
   } finally { records.reset(); }
+});
+
+
+await test('completed action identities survive more than sixteen turns until the round resets', () => {
+  const fixture = setupRemoteTurn();
+  let firstTerminal;
+  for (let i = 0; i < 18; i++) {
+    h.setActiveUnitForTest('p1');
+    const unit = kt.unitById('p1');
+    const actionId = (i + 1).toString(16).padStart(48, '0');
+    const fire = { ...fixture.fire, actionId, x: unit.x, y: unit.y, anchor: live.unitAnchor('p1') };
+    h.receiveFirebaseForTest(fire);
+    h.drainOneNetworkMessageForTest();
+    settleRemoteFire();
+    const terminal = packet('state', { actionId, unitId: 'p1', snap: turnStateFrom(kt.snapshot()) });
+    h.receiveFirebaseForTest(terminal);
+    h.drainOneNetworkMessageForTest();
+    assert.equal(fixture.online.protocolError, undefined);
+    if (!firstTerminal) firstTerminal = terminal;
+  }
+  assert.equal(live.state().completedRemoteActions.length, 18, 'no eviction within the same round');
+  const before = structuredClone(kt.snapshot());
+  h.receiveFirebaseForTest(firstTerminal);
+  assert.equal(fixture.online.protocolError, undefined);
+  assert.deepEqual(kt.snapshot(), before);
+  assert.deepEqual(live.state().pendingRemoteTerminals, []);
+});
+
+
+await test('turn-limit fire has result as its sole terminal and keeps the same actionId', () => {
+  const fixture = setupRemoteTurn();
+  const sent = [];
+  fixture.online.role = 'host'; fixture.online.seat = 'p1'; fixture.online.clientId = hostUid;
+  fixture.online.auth.uid = hostUid;
+  fixture.online.transport.send = msg => { sent.push(structuredClone(msg)); return Promise.resolve(true); };
+  fixture.online.localAction = { actionId: fixture.actionId, unitId: 'p1' };
+  h.setOnlineSeat('p1');
+  kt.setTurnCountForTest(29);
+  kt.endTurnForTest();
+  live.syncTurn('p1');
+  for (let i = 0; i < 2000 && !kt.state().matchOver; i++) kt.step(0.05);
+  assert.equal(sent.filter(msg => msg.t === 'state').length, 0);
+  const results = sent.filter(msg => msg.t === 'result');
+  assert.equal(results.length, 2);
+  assert.ok(results.every(msg => msg.actionId === fixture.actionId));
+});
+
+await test('remote turn-limit result is verified from settled local HP ratios', () => {
+  const fixture = setupRemoteTurn();
+  kt.setTurnCountForTest(29);
+  h.receiveFirebaseForTest(fixture.fire);
+  h.drainOneNetworkMessageForTest();
+  settleRemoteFire();
+  h.receiveFirebaseForTest(packet('result', {
+    actionId: fixture.actionId, unitId: 'p1', winner: 'draw', reason: '時間切れ',
+    units: kt.snapshot().units.map(u => ({ id: u.id, hp: u.hp }))
+  }));
+  h.drainOneNetworkMessageForTest();
+  assert.equal(fixture.online.protocolError, undefined);
+  assert.equal(fixture.online.phase, 'results');
+  assert.equal(kt.state().matchOver, true);
+});
+
+await test('time-limit result cannot override replayed turn count or HP winner', () => {
+  for (const turn of [0, 29]) {
+    const fixture = setupRemoteTurn();
+    kt.setTurnCountForTest(turn);
+    h.receiveFirebaseForTest(fixture.fire);
+    h.drainOneNetworkMessageForTest();
+    settleRemoteFire();
+    h.receiveFirebaseForTest(packet('result', {
+      actionId: fixture.actionId, unitId: 'p1', winner: 'player', reason: '時間切れ',
+      units: kt.snapshot().units.map(u => ({ id: u.id, hp: u.hp }))
+    }));
+    h.drainOneNetworkMessageForTest();
+    assert.equal(fixture.online.phase, 'ended');
+    assert.match(fixture.online.protocolError, /ローカル結果/);
+  }
 });
 
 console.log(`firebase live ordering / rematch Phase 3D-8C: ${passed}/${passed} passed`);
