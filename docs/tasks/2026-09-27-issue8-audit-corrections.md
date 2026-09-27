@@ -32,3 +32,7 @@ The correction keeps ordinary movement throttling, but Firebase fire always flus
 This prevents newly generated incomplete movement histories. Pre-existing logs that already lack final movement fuel remain fail-closed; their missing authority is not reconstructed from an unverified terminal snapshot. No production history migration is attempted.
 
 Final runtime targeted rerun: **19/19 commands exit 0**, including all six requested suites. Recovery B2/B3A/B3B1/B3B2/live = 13/14/14/20/18; transport = 15 cases. [Final command results](2026-09-27-issue8-evidence/audit-round1/final-results.json). Browser run and re-audit outcome are pending in this commit.
+
+## Final native acceptance
+
+Validated code/test commit: `56423f7e2958e15ac5ee16bc0db4bb630f28f3c7`. Native Chromium on the final runtime **PASS**, local Auth/RTDB emulator with unchanged real Rules and independent host/guest contexts plus a guest replacement tab. Verified both reconnect/reloads, queued old fire cancelled with **0 PUTs**, live turn continuation, stale action/state, old round 401, result-boundary offline, result, both result reloads, rematch, and 750ms delayed state. [Machine record](2026-09-27-issue8-evidence/audit-round1/chromium-acceptance.json). The observed 401 console line belongs to the intentionally rejected old-round write. No unexpected page errors. Initial startup/recovery failures remain preserved above; they are not hidden by the passing run.
