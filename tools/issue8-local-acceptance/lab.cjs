@@ -7,6 +7,7 @@ const https = require('node:https');
 const crypto = require('node:crypto');
 const { spawn, spawnSync, execFile } = require('node:child_process');
 const core = require('./core.cjs');
+const {USB_PORT,createUsbEntry}=require('./usb-entry.cjs');
 const root=__dirname, state=path.join(root,'.state');
 const certPath=path.join(state,'localhost-cert.pem'), keyPath=path.join(state,'localhost-key.pem');
 const firebasePath=path.join(root,'.runtime/node_modules/firebase-tools/lib/bin/firebase.js');
@@ -20,7 +21,7 @@ function childEnv(config) {
 }
 function portFree(port) { return new Promise(resolve=>{ const s=net.createServer(); s.once('error',()=>resolve(false)); s.listen(port,'127.0.0.1',()=>s.close(()=>resolve(true))); }); }
 function request(url, options={}) { return new Promise((resolve,reject)=>{ const transport=url.startsWith('https:')?https:http; const req=transport.request(url,{...options,timeout:3000},res=>{ const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,body:Buffer.concat(chunks).toString()})); }); req.on('timeout',()=>req.destroy(new Error('ローカル接続timeout')));req.on('error',reject);req.end(options.body); }); }
-async function preflight(config) {
+async function preflight(config,usb=false) {
   const checks=[];
   const add=(name,ok,detail)=>checks.push({name,ok,detail});
   try { const source=core.sourceReader(config.repo); core.instrumentIndex(source.read('index.html'));add('固定コード',true,core.SOURCE_SHA); } catch { add('固定コード',false,'対象Git objectが必要です。checkoutの差分は使用しません'); }
@@ -31,6 +32,7 @@ async function preflight(config) {
     add('Java',false,'Java21以上が必要です。KATAMON_JAVA_HOMEは子processにだけ使用します');
   }
   for(const [name,port] of Object.entries(core.PORTS)) add('port '+name,await portFree(port),'127.0.0.1:'+port);
+  if(usb)add('port USB',await portFree(USB_PORT),'127.0.0.1:'+USB_PORT);
   return {sourceSha:core.SOURCE_SHA,build:core.BUILD,checks,ready:checks.every(c=>c.ok),lanEnabled:false,serviceWorkers:'blocked',physicalDeviceVerified:false};
 }
 function canonical(value) { if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]));return value; }
@@ -44,8 +46,8 @@ async function verifyEmulators(source) {
   for(const name of ['auth','database'])if(!services[name]||services[name].host!=='127.0.0.1'||services[name].port!==core.PORTS[name])throw Error('emulatorのbind/port不一致');
   return true;
 }
-async function start(config) {
-  const check=await preflight(config); console.log(JSON.stringify(check,null,2));
+async function start(config,usb=false) {
+  const check=await preflight(config,usb); console.log(JSON.stringify(check,null,2));
   if(!check.ready) { process.exitCode=2;return; }
   if(fs.existsSync(sessionPath)) throw Error('既存session.jsonがあります。status/stopで前の起動を確認してください');
   const source=core.sourceReader(config.repo);fs.mkdirSync(state,{recursive:true});
@@ -55,11 +57,12 @@ async function start(config) {
   const log=fs.createWriteStream(path.join(state,'emulator.log'),{flags:'a'});
   const child=spawn(process.execPath,[config.firebase,'emulators:start','--only','auth,database','--project',core.PROJECT,'--config',path.join(state,'firebase.json'),'--non-interactive'],{cwd:state,env:childEnv(config),windowsHide:true,stdio:['ignore','pipe','pipe']});
   child.stdout.pipe(log); child.stderr.pipe(log);
-  let server, stopping=false, childFailure=null;
+  let server, usbServer, stopping=false, childFailure=null;
   child.on('error',error=>{childFailure=error;});
   child.on('exit',code=>{if(!stopping)childFailure=Error('emulator終了: '+code);});
   async function shutdown() {
     if(stopping)return;stopping=true;
+    if(usbServer){usbServer.closeAllConnections();await new Promise(r=>usbServer.close(r));}
     if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
     if(child.exitCode===null&&child.pid){
       if(process.platform==='win32')await new Promise(resolve=>execFile('taskkill',['/PID',String(child.pid),'/T','/F'],{windowsHide:true},()=>resolve()));
@@ -77,9 +80,14 @@ async function start(config) {
     const token=crypto.randomBytes(32).toString('hex');
     const lab=core.createLab({source,key:fs.readFileSync(keyPath),cert:fs.readFileSync(certPath),shutdownToken:token,onStop:shutdown});server=lab.server;
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(core.PORTS.web,'127.0.0.1',resolve);});
-    fs.writeFileSync(sessionPath,JSON.stringify({port:core.PORTS.web,token,pid:process.pid,sourceSha:core.SOURCE_SHA,startedAt:new Date().toISOString()}));
+    if(usb){
+      usbServer=createUsbEntry({cert:fs.readFileSync(certPath)});
+      await new Promise((resolve,reject)=>{usbServer.once('error',reject);usbServer.listen(USB_PORT,'127.0.0.1',resolve);});
+    }
+    fs.writeFileSync(sessionPath,JSON.stringify({port:core.PORTS.web,usbPort:usb?USB_PORT:null,token,pid:process.pid,sourceSha:core.SOURCE_SHA,startedAt:new Date().toISOString()}));
     console.log('起動: https://localhost:'+core.PORTS.web+'/（loopback専用、証明書は未信頼）');
     console.log('固定Rules読戻し一致 / 本番通信遮断 / SW無効 / 実機未確認');
+    if(usb)console.log('USB入口: http://localhost:'+USB_PORT+'/（127.0.0.1専用。端末設定/転送は自動実行しません）');
     child.once('exit',()=>{if(!stopping)void shutdown();});
   } catch(error) { await shutdown();throw error; }
 }
@@ -95,8 +103,10 @@ async function main() {
   if(process.argv.length>3)throw Error('追加引数は非対応です。LAN bind指定はできません');
   if(command==='preflight'){const result=await preflight(settings());console.log(JSON.stringify(result,null,2));if(!result.ready)process.exitCode=2;}
   else if(command==='start')await start(settings());
+  else if(command==='startusb')await start(settings(),true);
+  else if(command==='preflightusb'){const result=await preflight(settings(),true);console.log(JSON.stringify(result,null,2));if(!result.ready)process.exitCode=2;}
   else if(command==='stop')await stop();
-  else throw Error('preflight / start / stop のいずれかを指定してください');
+  else throw Error('preflight / preflightusb / start / startusb / stop のいずれかを指定してください');
 }
 if(require.main===module)main().catch(error=>{console.error(error.message);process.exitCode=1;});
 module.exports={preflight,verifyEmulators,request,childEnv,canonical};

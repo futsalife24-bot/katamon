@@ -3,6 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "description": "PR404固定版のloopback専用受入準備。公開・本番接続なし。",
-  "scripts": { "test": "node --test lab.test.cjs", "preflight": "node lab.cjs preflight", "start": "node lab.cjs start", "stop": "node lab.cjs stop", "browser-probe": "node browser-probe.cjs" },
+  "scripts": { "test": "node --test lab.test.cjs", "preflight": "node lab.cjs preflight", "start": "node lab.cjs start", "stop": "node lab.cjs stop", "browser-probe": "node browser-probe.cjs", "preflight-usb": "node lab.cjs preflightusb", "start-usb": "node lab.cjs startusb", "usb-smoke": "node usb-smoke.cjs" },
   "engines": { "node": ">=22" }
 }

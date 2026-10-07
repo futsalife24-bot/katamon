@@ -1,5 +1,7 @@
 # 実機への到達条件：2026-10-07
 
+**後続更新:** 以下はbrowser確認時点の判断記録です。Android向けloopback HTTP入口の実装と実Auth/RTDBの9観測、起動停止/6portの検証は後続工程で完了しました。現在の操作は [Android USB手順](android-usb.md) が優先です。platform-tools/adb導入は必須にせず、既存ChromeのUSB port forwardingを使えます。実機未接続、USB debugging/PC鍵承認未実施は変わりません。
+
 今回完了したのはPC上のbrowser適用確認です。実機は接続していません。推奨は、利用できるAndroidがあればUSB経由のlocalhostで短停止/復帰から始めることです。iPhone/PWA/携帯網切替と、元定義未取得のA〜K完全受入は別に残ります。
 
 ## 観測済みの状態

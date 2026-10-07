@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-07T07:18:34.933Z",
+  "sourceSha": "1f01916b906a7ea39cdd1506cfe4d4722fdc1e30",
+  "passed": true,
+  "checks": [
+    "USB入口から固定版status",
+    "Host/厳密Origin/cross-site/Admin/停止要求を拒否",
+    "管理token/別namespaceを拒否",
+    "USB originを使う固定HTML",
+    "実Authで独立した2identity",
+    "私室は入室前拒否、変更なしRulesで別identity入室後read",
+    "別identityの実RTDB SSEをUSB入口がstream配送",
+    "USB入口でguest token更新・UID維持",
+    "生成した架空私室だけ削除"
+  ],
+  "entry": "http://localhost:42885",
+  "backend": "actual local Auth/RTDB emulators",
+  "physicalDevice": false,
+  "browserUi": false,
+  "usbForwarding": false,
+  "productionAccess": false,
+  "lifecycle": {
+    "observedListeningAddresses": [
+      "127.0.0.1"
+    ],
+    "observedPorts": [
+      42884,
+      42885,
+      19000,
+      19099,
+      19400,
+      19450
+    ],
+    "stopCompleted": true,
+    "sessionRemoved": true,
+    "allSixPortsReleased": true
+  }
+}

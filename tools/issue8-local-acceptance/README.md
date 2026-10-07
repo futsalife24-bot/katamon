@@ -1,6 +1,6 @@
 # カタモン：PR #404固定版のローカル受入準備
 
-実機受入へ進む前の、**loopback専用の再利用キット**です。ゲーム本体・Rules・wire/schemaは変更しません。公開・LAN接続・証明書のOS/スマホ信頼登録・Firewall変更は行いません。現時点では物理端末を接続できる完成環境ではありません。
+実機受入へ進む前の、**loopback専用の再利用キット**です。ゲーム本体・Rules・wire/schemaは変更しません。公開・LAN接続・証明書のOS/スマホ信頼登録・Firewall変更は行いません。Android USB localhost用のPC側入口は実Auth/RTDB emulatorで確認済みです。物理端末の接続・信頼操作は未実施です。
 
 - 対象コード: `1f01916b906a7ea39cdd1506cfe4d4722fdc1e30`、`v2.0.187-issue8-recovery`。[PR #404](https://github.com/futsalife24-bot/katamon/pull/404) の既存監査済みコードです。
 - このキット自体は新しい開発補助コードで、PR #404の独立監査PASSの対象ではありません。
@@ -65,6 +65,8 @@ HTTPS endpoint `https://localhost:42884/__lab/status` は版・hash・制限の�
 
 ## 本番不干渉と実際の検証範囲
 
+Android USB向けには `PreflightUsb` → `StartUsb` → 別shellで `UsbSmoke` → `Stop` を使います。追加入口はHTTP `127.0.0.1:42885` だけで、既存HTTPSと同じ固定コード・実emulatorを配信します。通常の `Start` はUSB入口を開きません。手順・2clientの分離・端末で行う操作・停止/撤去は [Android USB手順](android-usb.md) を参照してください。
+
 - 本体HTMLのDB/Auth接続先を配信時だけ同originの限定proxyへ置換し、公開API keyも架空値へ置換します。元Git objectは変更しません。
 - proxyの送信先はコード内で127.0.0.1のAuth/RTDBポートに固定。外部URL、redirect追従、別namespace、管理API、browserからのAdmin Authorizationを拒否します。対象はONLINEの`rooms/open`のみで、協力部屋・登録キャラ・他モードを受入対象に広げません。
 - CSPは `connect-src 'self'`。外部fetch/EventSource/WebSocket・iframe・form送信を許可せず、静的配信も公開ゲーム資産に限定します。`.git`、Rules、package情報等は配りません。
@@ -94,7 +96,7 @@ Playwright moduleとChrome実行ファイルが必要です。初回検証PCの�
 
 次工程では、専用テストoriginへ接続する端末2台を特定し、その端末から到達するLANのアドレス、限定bindとWindows inbound許可の必要性、端末が信頼できるHTTPSの方法を決めます。端末への証明書登録やFirewall変更が必要なら、対象端末・証明書fingerprint・許可するアドレス/port・撤去手順を示したうえで、その操作だけを本人に判断してもらいます。OS/端末信頼登録、Firewall変更、LAN公開は今回の許可範囲外です。
 
-読み取りで確認した既存経路、Android USB案、iPhone向けHTTPS条件、必要な本人判断は [実機への到達条件](device-readiness-20261007.md) を参照してください。Android USBが使えるなら、まずその経路を推奨します。新規のLAN公開・証明書登録が必須とは確定していません。
+読み取りで確認した既存経路とiPhone向けHTTPS条件は [実機への到達条件](device-readiness-20261007.md)、実装済みAndroid USB入口の現在手順は [Android USB手順](android-usb.md) を参照してください。Android USBが使えるなら、まずその経路を推奨します。新規のLAN公開・証明書登録が必須とは確定していません。
 
 LAN emulatorでは携帯網からLANへ戻れない場合があるため、Wi-Fi↔携帯網の連続切替と本番A〜Kを別に残します。外部Previewや本番公開が必須と判明したわけではなく、merge/公開承認をこの準備のために要求しません。
 

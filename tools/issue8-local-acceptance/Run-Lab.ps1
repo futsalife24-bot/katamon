@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('Preflight','Start','Stop','Test','Smoke','BrowserProbe')][string]$Action = 'Preflight',
+  [ValidateSet('Preflight','PreflightUsb','Start','StartUsb','Stop','Test','Smoke','BrowserProbe','UsbSmoke')][string]$Action = 'Preflight',
   [string]$Repository = '',
   [string]$JavaHome = ''
 )
@@ -16,6 +16,7 @@ try {
     'Test' { & $nodeExecutable --test (Join-Path $PSScriptRoot 'lab.test.cjs') }
     'Smoke' { & $nodeExecutable (Join-Path $PSScriptRoot 'smoke.cjs') }
     'BrowserProbe' { & $nodeExecutable (Join-Path $PSScriptRoot 'browser-probe.cjs') }
+    'UsbSmoke' { & $nodeExecutable (Join-Path $PSScriptRoot 'usb-smoke.cjs') }
     default { & $nodeExecutable (Join-Path $PSScriptRoot 'lab.cjs') $Action.ToLowerInvariant() }
   }
   $resultCode = $LASTEXITCODE
