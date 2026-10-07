@@ -1,0 +1,67 @@
+{
+  "at": "2026-10-07T06:43:22.412Z",
+  "sourceSha": "1f01916b906a7ea39cdd1506cfe4d4722fdc1e30",
+  "build": "v2.0.187-issue8-recovery",
+  "browser": "154.0.8037.98",
+  "passed": true,
+  "checks": [
+    "固定版ゲームHTMLを通常設定のsecure localhostで実行",
+    "同profileの共有と独立profileのstorage分離",
+    "同profileの同席exclusive競合と別profileの独立",
+    "CSPが外部fetch/EventSource/WebSocketを送信前に拒否",
+    "CSPがService Worker登録を拒否しcontroller/登録数0",
+    "native EventSourceが既存proxy経由のSSEを受信",
+    "旧document終了後に同profileの新documentがlease取得",
+    "未信頼自己署名HTTPSはbrowserが拒否（迂回なし）"
+  ],
+  "capabilities": {
+    "secure": true,
+    "locks": true,
+    "origin": "http://127.0.0.1:60592",
+    "canvas": true,
+    "swController": false
+  },
+  "cspResults": {
+    "fetch": false,
+    "eventSource": false,
+    "webSocket": false,
+    "serviceWorker": false,
+    "registrations": 0
+  },
+  "cspViolations": [
+    {
+      "directive": "connect-src",
+      "target": "https://katamon-csp-probe.invalid/fetch"
+    },
+    {
+      "directive": "connect-src",
+      "target": "https://katamon-csp-probe.invalid/events"
+    },
+    {
+      "directive": "connect-src",
+      "target": "wss://katamon-csp-probe.invalid/socket"
+    },
+    {
+      "directive": "worker-src",
+      "target": "http://127.0.0.1:60592/sw.js"
+    }
+  ],
+  "interceptedExternalRequests": 0,
+  "pageErrors": [],
+  "scope": {
+    "isolatedHeadless": true,
+    "existingUserProfileUsed": false,
+    "chromiumSandbox": true,
+    "ignoreHTTPSErrors": false,
+    "certificateBypassFlags": false,
+    "osTrustChanged": false,
+    "lanBind": false,
+    "realEmulatorRepeated": false,
+    "backend": "synthetic SSE fixture",
+    "browserOrigin": "HTTP loopback secure context",
+    "upstreamTls": "Node validates only this certificate via explicit ca",
+    "physicalDevice": false,
+    "pwa": false,
+    "production": false
+  }
+}

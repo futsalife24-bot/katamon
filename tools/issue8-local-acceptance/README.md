@@ -68,11 +68,23 @@ HTTPS endpoint `https://localhost:42884/__lab/status` は版・hash・制限の�
 - 本体HTMLのDB/Auth接続先を配信時だけ同originの限定proxyへ置換し、公開API keyも架空値へ置換します。元Git objectは変更しません。
 - proxyの送信先はコード内で127.0.0.1のAuth/RTDBポートに固定。外部URL、redirect追従、別namespace、管理API、browserからのAdmin Authorizationを拒否します。対象はONLINEの`rooms/open`のみで、協力部屋・登録キャラ・他モードを受入対象に広げません。
 - CSPは `connect-src 'self'`。外部fetch/EventSource/WebSocket・iframe・form送信を許可せず、静的配信も公開ゲーム資産に限定します。`.git`、Rules、package情報等は配りません。
-- 外部計測や外部コンテンツもCSPでブロックされます。browserでのCSP実適用・表示の最終確認は今回UI未貸出のため未実施です。外部向けコードが本体ソースから完全に消えたという意味ではありません。
+- 外部計測や外部コンテンツもCSPでブロックされます。独立headless Chromeで外部fetch/EventSource/WebSocketがCSPにより送信前に拒否され、固定HTMLの開始画面が描画されることを確認しました。本人browser/共有UIは使っていません。外部向けコードが本体ソースから完全に消えたという意味ではありません。
 - Service Workerは`worker-src 'none'`と`/sw.js`拒否で無効化。元PCハーネスと同じ初期切り分けです。PWA/SW upgrade/cache復旧は**このモードでは検証できません**。
 - SSEは応答をbufferせずstreamし、条件付きPUT/ETagを保持します。Rulesは固定コードの原本をそのままemulatorへ読み込み、起動時に読戻しを比較します。
 
-2026-10-07の結果は `verification-20261007.json` に保存。補助コード5試験PASS（固定HTMLのローカルscript/link参照63件を含む）、実Auth/RTDB経由の8観測PASS、停止/5port解放を確認しました。ゲーム通し対戦、Web Lockのbrowser動作、実機、SW/PWA、本番A〜Kは未実施です。成功済みStage Studio/既存PC多client試験は繰り返していません。
+2026-10-07の結果は `verification-20261007.json` に保存。補助コード5試験PASS（固定HTMLのローカルscript/link参照63件を含む）、実Auth/RTDB経由の8観測PASS、停止/5port解放を確認しました。追加のbrowser試験8項目は `browser-verification-20261007.json`。ゲーム通し対戦、実機、SW/PWA、本番A〜Kは未実施です。成功済みStage Studio/既存PC多client試験と実emulator8項目は追加工程で繰り返していません。
+
+## 独立browser試験の再実行
+
+```powershell
+.\Run-Lab.ps1 BrowserProbe
+```
+
+Playwright moduleとChrome実行ファイルが必要です。初回検証PCの既存配置を既定値にしており、別PCでは環境変数 `KATAMON_PLAYWRIGHT_MODULE` と `KATAMON_CHROMIUM` に実パスを渡してください。自動導入やbrowser取得はしません。事前の実emulator起動は不要です。
+
+一時HTTP/HTTPS/SSE fixtureを127.0.0.1の動的portだけへbindし、独立headless profileで固定HTMLを開きます。browserはHTTP localhostの標準secure-context判定を使い、Nodeから上流HTTPSへの1接続だけに生成証明書をCAとして渡します。browserの証明書検証、Chromium sandbox、CSP、SW機能は無効化しません。外部requestの追加guardも置きますが、guardが1件でも作動すればCSP合格にしません。
+
+同profile/別profileのstorage分離、native Web Lockのexclusive競合とdocument終了後の解放、CSP、native EventSourceを検査します。lockは試験用名を使う基礎動作試験であり、ゲームのlease/replay/live復帰コードを呼ぶ受入ではありません。SSE backendは架空fixtureです。未信頼HTTPSをbrowserが拒否する負例も検査します。試験終了時にbrowserと自分の一時serverを閉じます。結果JSONと `.state/browser-probe.png` は再実行で更新されるため、過去の証拠を残す場合は先に別保管してください。
 
 最初の補助試験はGit所有者の違いで起動不可。安全設定を維持し利用者アカウント実行へ変更しました。続く試験は悪いHostヘッダーにTLSのSNIまで追従したテスト条件で失敗し、SNIを実接続先localhostに固定してHost拒否を検査するよう試験を訂正しました。TLS検証は無効化していません。
 
@@ -82,12 +94,7 @@ HTTPS endpoint `https://localhost:42884/__lab/status` は版・hash・制限の�
 
 次工程では、専用テストoriginへ接続する端末2台を特定し、その端末から到達するLANのアドレス、限定bindとWindows inbound許可の必要性、端末が信頼できるHTTPSの方法を決めます。端末への証明書登録やFirewall変更が必要なら、対象端末・証明書fingerprint・許可するアドレス/port・撤去手順を示したうえで、その操作だけを本人に判断してもらいます。OS/端末信頼登録、Firewall変更、LAN公開は今回の許可範囲外です。
 
-推奨順は以下です。
-
-1. 既存の信頼済みHTTPS経路が使えるかを確認。利用可能なら新しい証明書登録を足さない。
-2. なければ限定LAN HTTPS案の具体的設定と撤去方法を用意。操作対象を確定して必要な登録/接続だけ承認を得る。
-3. 補助コードのbrowser確認→物理2台の短停止/復帰→同profileの二重tabを実施。
-4. SWを有効にする別モードを追加・検証してからPWAへ進む。今の遮断を緩めるだけでPWA合格にしない。
+読み取りで確認した既存経路、Android USB案、iPhone向けHTTPS条件、必要な本人判断は [実機への到達条件](device-readiness-20261007.md) を参照してください。Android USBが使えるなら、まずその経路を推奨します。新規のLAN公開・証明書登録が必須とは確定していません。
 
 LAN emulatorでは携帯網からLANへ戻れない場合があるため、Wi-Fi↔携帯網の連続切替と本番A〜Kを別に残します。外部Previewや本番公開が必須と判明したわけではなく、merge/公開承認をこの準備のために要求しません。
 
