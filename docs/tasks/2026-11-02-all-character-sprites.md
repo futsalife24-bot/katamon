@@ -55,6 +55,8 @@ forgeによる切り出しは`process --mode sheet --cols 4 --rows 2`（被弾�
 
 ## 保留境界
 
+2026-11-02、本人から「公開して」と明示依頼。既存GitHub Pagesへ本変更を公開する。別checkoutのサイト移行候補は含めない。公開版を`v2.0.187-character-sprites`とし、BUILD_ID・Service Workerのキャッシュ版・更新履歴を揃える。先行実装のCI run 41322442859は全件成功。公開結果は本記録またはプロジェクト記憶へ追記する。
+
 merge・公開・本番反映は未実施。既存の独立監査と公開承認条件を維持する。元の移行作業checkoutの未保存差分は触らない。スワフロはアイデア・優先タスクの記録のみで、実装対象外。
 
 変更は`assets/content-studio/`、motion manifest、生成catalog、公式generatorのmanifest接続、packスクリプト、回帰検証、制作・作業記録。ゲーム本体、能力、物理、通信、保存には変更なし。GitHub正本: https://github.com/futsalife24-bot/katamon 。
