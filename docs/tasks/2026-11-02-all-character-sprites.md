@@ -2,7 +2,7 @@
 
 ## 現在地
 
-- branch `feat/all-character-sprites-20261101`。base / HEAD は `48a5182a7b6d27b4838e3b18d197fe08e79890a6`（`origin/master`）。作業場所は `C:/Users/futsa/Documents/Codex/2026-11-01/https-x-com-codestudiopjbk-status-2116806197743591494/katamon-integration`。変更は未コミット・未公開。
+- branch `feat/all-character-sprites-20261101`。baseは `48a5182a7b6d27b4838e3b18d197fe08e79890a6`（開始時の`origin/master`）。実装commit `341ed696e72bc665f484d750e6bbca0dd1d72292`を同ブランチへpush済み。作業場所は `C:/Users/futsa/Documents/Codex/2026-11-01/https-x-com-codestudiopjbk-status-2116806197743591494/katamon-integration`。未公開。
 - 対象は手書き定義の既存18キャラ。各キャラの前進8、後退8、発射8、被弾12、着地8の計44コマ。全18体90動作792コマのpack、画素照合、Chromeでの読込・左右描画を確認済み。新規15体75動作のstrict QCは75/75合格。残り3体は採用済み試作を再利用した。
 - 画像の変更は見た目だけ。既存の能力、物理、通信、ルール、保存形式、静止画の参照は変更しない。画像取得中・失敗時と動作終了時は既存の静止画へ戻る。右向き原画を左右へ反転表示する。
 - 通常対戦の既存キャラに適用する。協力ボスunit、Firebase replay中の動作通知、リモートregistryを使う登録対戦は既存の制約を維持する。登録対戦の原画・版はローカルと一致する保証がないため、ローカル動作を重ねない。
@@ -49,7 +49,9 @@ Remove-Item Env:PLAYWRIGHT_MODULE
 - 実indexの検査ではメニューのRAF更新がPlayerをresetする競合があったため、テストページに限りRAFを停止して隔離した。ゲーム本体は変更していない。これは実対戦全体の操作試験ではなく、実indexの参照・描画接続の検査。ネット対戦、実機スマホ、公開環境は今回未検証。
 - 公式generatorの型確認、catalog関連テスト15件、manifest再生成の追加テスト1件、公式生成と`--check`が合格。pack後に公式生成を実行してカタログの並び順・LFを正規化した。
 - 全18体の画像一覧を目視確認。会話内の全18体前進プレビューは401,734 bytes。Chromeでキャラ選択、コマ送り、描画、JSエラーなしを確認。プレビューは96px、ゲーム用は256px、元の整列済み素材は512px。
-- 新規75動作の採用版、生成指示、原画と各フレームのSHA-256は[制作記録](../records/2026-11-02-generated-motion-provenance.json)。生成は組込みimage_genを使用し、有料外部APIは呼んでいない。forge処理の参照commitは同記録に保存。生成元PNGと512pxフレームは作業場所の親にある`all-character-sprites/`、既存3体は上記試作フォルダーに保存。
+- 新規75動作の採用版、生成指示、生成シートと各フレームのSHA-256は[制作記録](../records/2026-11-02-generated-motion-provenance.json)。生成は組込みimage_genを使用し、有料外部APIは呼んでいない。forge処理の参照commitは同記録に保存。生成元PNGと512pxフレームは作業場所の親にある`all-character-sprites/`、既存3体は上記試作フォルダーに保存。
+
+forgeによる切り出しは`process --mode sheet --cols 4 --rows 2`（被弾のみ3）、`--background-mode native_alpha --cell-size 512 --fit-scale 0.8 --grid-rounding nearest --strict-qc`。前進/後退/砲撃は`--scale-strategy preserve --align feet`、被弾/着地は`--scale-strategy registered --align center`。欠けが検出されたシートは生成ツールで余白を修正し、QCを緩めず再検査した。生のシートと512pxの中間物はローカル保管、ゲームが使う全素材と採用指示・ハッシュはGitHub管理。
 
 ## 保留境界
 
