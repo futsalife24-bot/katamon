@@ -19,6 +19,31 @@ afterEach(async () => {
 });
 
 describe('generate-game-content script', () => {
+  it('keeps manifest-backed legacy motions when the catalog is regenerated', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'content-studio-test-'));
+    temporaryDirectories.push(root);
+    await seedGame(root);
+    const clips = ['move-forward', 'move-backward', 'fire', 'hit', 'land'];
+    const directory = 'assets/content-studio/kyoryu/aaaaaaaaaaaa';
+    const motionSheets = Object.fromEntries(clips.map(clip => [clip, `${directory}/${clip}.png`]));
+    const motionMetadata = Object.fromEntries(clips.map(clip => [clip, `${directory}/${clip}.json`]));
+    for (const file of [...Object.values(motionSheets), ...Object.values(motionMetadata)]) {
+      await mkdir(dirname(join(root, file)), { recursive: true });
+      await writeFile(join(root, file), 'fixture');
+    }
+    await mkdir(join(root, 'content'), { recursive: true });
+    await writeFile(join(root, 'content/generated-motion-manifest.json'), JSON.stringify({
+      schemaVersion: 1, characters: { kyoryu: { asset: 'dirano', slug: 'kyoryu', motionSheets, motionMetadata } },
+    }));
+    const generated = await generateGameContent({ repoRoot: root });
+    expect(generated.catalogText).toContain('"legacyTargetId": "kyoryu"');
+    expect(generated.catalogText).toContain(`${directory}/fire.png`);
+    await expect(generateGameContent({ repoRoot: root, check: true })).resolves.toMatchObject({ recordCount: 0 });
+    await writeFile(join(root, 'content/generated-motion-manifest.json'), JSON.stringify({
+      schemaVersion: 1, characters: { kyoryu: { asset: 'eyebolt', slug: 'kyoryu', motionSheets, motionMetadata } },
+    }));
+    await expect(generateGameContent({ repoRoot: root, check: true })).rejects.toThrow('motion manifest identity');
+  });
   it('regenerates all current legacy motion overlays without reserved identity rejection', async () => {
     const root = await mkdtemp(join(tmpdir(), 'content-studio-test-'));
     temporaryDirectories.push(root);
