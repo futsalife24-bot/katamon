@@ -1,4 +1,8 @@
-# 現在地: 共通アクセス計測を追加・未公開（2026-09-17）
+# 現在地: 既存18体の5動作（実装・検証済み、未公開）
+
+branch `feat/all-character-sprites-20261101`。[記録](docs/tasks/2026-11-02-all-character-sprites.md)。90動作792コマ、Chrome検証済み。
+
+# 共通アクセス計測を追加・未公開（2026-09-17）
 
 workspace内作業コピー、branch `codex/shared-analytics`。v2.0.184-shared-analytics、実装・関連検証済み。[記録](docs/tasks/2026-09-17-shared-analytics.md)。元作業場所の未保存差分は保護。独立監査・公開前。
 
@@ -45,15 +49,13 @@ Gear Systemは **Phase 4HまでCOMPLETE**。PR #341〜#354でWorkbench、6部位
 
 PR #355では装備中Gearの詳細導線、水平照準ガイド、CPU連勝終了確認、サウンドテスト音量追従を統合した。Phase 3D-8D、ONLINE/Firebase、Gear authority / balanceは変更していない。
 
-PR #378まではmasterへ統合・Pages公開済み。PR #379では、通常CPU 1v1へ決定的な5%の希少個体と勝利時の追加Gear報酬を追加し、Gearのユーザー向け能力表示を日本語化した。レーザー・直進固定系を除く15キャラの砲弾型必殺は通常砲弾と同じ初速・風・重力へ統一し、弾数と着弾後の固有効果は維持する。クール=カイ→フェニーチェの進行停止報告は自動再現できず、移動禁止5手中も射撃可能な現行境界を回帰テストへ固定した。
+PR #378までmaster統合・Pages公開済み。PR #379は通常CPUの希少個体・Gear報酬、日本語能力表示、15キャラの砲弾型必殺の初速・風・重力統一を含む。クール=カイ→フェニーチェの進行停止は再現できず、現行境界を回帰テストへ固定した。
 
 PR #380では、通常CPU 1v1の連勝精算へGear粉末と設計片の獲得ルートを追加した。3連勝から両素材を付与し、20・30・50連勝の既存設計片報酬は維持する。Gear保存形式はv3へ移行し、公開済みv1/v2保存データ、旧CPU未精算報酬、旧協力報酬は素材0の権利として後方互換を保つ。受取はGear・粉末・設計片を一括で確定し、二重加算・競合・上限超過時の部分反映を防止する。
 
 v2.0.171では、通常CPU 1v1・公式ステージ・非ボス戦へ回復、必殺チャージ、Gear資源箱の3種を追加した。turn 2以降に決定的に抽選し、通常砲弾・歩行・跳躍着地でプレイヤー/CPUの双方が取得できる。資源箱は2連勝以上で候補となり、プレイヤー取得時は粉末3と独立5%の設計片1をCPU runのエスクローへ即時保存して終了時の1件の報酬へ合算する。保存失敗時は同じ箱を保持し、継続・精算・中断の前に自動再試行して素材0の精算へ進ませない。ONLINE wire、Firebase Rules/Console、実機GOAL QAは変更・実施していない。詳細は [`docs/tasks/2026-09-04-stage-battle-items.md`](docs/tasks/2026-09-04-stage-battle-items.md)。
 
 v2.0.172では、CPU連勝精算の合計を「連勝報酬」と「資源箱（連戦累計）」へ分けて結果・未精算・保存再試行画面に表示し、通常CPU 1vs1・非ボス戦の結果をWeb ShareまたはXへ共有できる導線を追加した。共有文面は集計値と固定公開URLだけで生成し、名前・部屋ID・内部ID・seed・query/hashは含めない。Gear 0個で素材だけの未受取報酬も既存の明示claim、lock、台帳、読戻しを再利用して受け取れ、内容確定後の素材のみ精算は物理倉庫満杯でも未受取上限を守って保存できるよう修正した。保存schema、報酬テーブル、ONLINE/Firebase、実機GOAL QAは変更・実施していない。詳細は [`docs/tasks/2026-09-04-reward-summary-x-share.md`](docs/tasks/2026-09-04-reward-summary-x-share.md)。
-
-v2.0.173では、GARAGEへJST基準で1日1射の曜日ダンジョンを追加した。詳細は後続のv2.0.174再設計へ引き継いだ。
 
 v2.0.174では、専用portrait Canvas・独自発射を廃止し、既存BATTLE `#game`・既存FIRE・共通物理へ曜日ダンジョンを統合した。ステージ中央のディラノから左右の近・中・遠、計6つの雲で覆われたzoneを狙い、着弾zoneのみ雲を開示して当日の6部位報酬を決定する。外れは粉末3、命中は対応部位Gear 1個。v1 fired attemptの復旧、複数タブ、queue/ledger、保存再試行（WAL）の安全性を維持し、通常CPU・ONLINE/Firebase・GOALへは変更を波及させない。unit/static、既存回帰、Mobile WebKit／Android ChromiumのPlaywright **12/12**（各6件）は確認済み。実機GOAL QAは今回開始せずP0のまま保留する。詳細は [`docs/tasks/2026-09-04-weekday-dungeon.md`](docs/tasks/2026-09-04-weekday-dungeon.md)。
 

@@ -978,13 +978,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.186-project-hub';
+  const BUILD_ID = 'v2.0.187-character-sprites';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.187', date: '2026/11/02', summary: '全18キャラの前進・後退・砲撃・被弾・着地アニメーションを追加' },
     { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
     { version: 'v2.0.184', date: '2026/09/17', summary: '匿名のアクセス集計に対応' },
