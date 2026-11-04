@@ -101,6 +101,7 @@
     letter-spacing: .08em; text-shadow: 0 2px 0 #130b05, 0 0 12px rgba(255,194,79,.25);
   }
   #nameNote { color: #d39b4b; font-size: 11px; margin-top: 6px; }
+  #nameNote.error { color: #ffb8a8; font-size: 14px; font-weight: 700; }
   #nameInput {
     width: 100%;
     box-sizing: border-box;
@@ -115,6 +116,7 @@
     outline: none;
   }
   #nameInput:focus { border-color: #ffd24a; }
+  #nameInput[aria-invalid="true"] { border-color: #ffb8a8; }
   #nameButtons { display: flex; gap: 10px; margin-top: 16px; }
   #nameButtons button {
     flex: 1;
@@ -713,8 +715,8 @@
 <div id="nameOverlay">
   <div id="nameBox">
     <div id="nameTitle">プレイヤー名</div>
-    <div id="nameNote">12文字まで。あとから変更できます。</div>
-    <input id="nameInput" type="text" maxlength="12" autocomplete="off" placeholder="プレイヤー名">
+    <div id="nameNote" role="alert">12文字まで。あとから変更できます。</div>
+    <input id="nameInput" type="text" maxlength="12" autocomplete="off" placeholder="プレイヤー名" aria-label="プレイヤー名" aria-describedby="nameNote">
     <div id="nameButtons">
       <button id="nameCancel" type="button">やめる</button>
       <button id="nameOk" type="button">決定</button>
@@ -978,13 +980,14 @@
   // ===== ビルド番号 =====
   // 端末がどの版を掴んでいるかを目で確かめるための番号。sw.js の CACHE_VERSION と必ず揃えること。
   // 不具合報告の時、双方が同じ版で動いているかをここ一箇所で確認できる。
-  const BUILD_ID = 'v2.0.187-character-sprites';
+  const BUILD_ID = 'v2.0.188-name-feedback';
   // RocknRoll One is 2.56MB. font-display:swap alone still initiates its
   // download on first paint. Activate it at the first title tap, independently
   // of Service Worker availability and the large T2 media download queue.
   // 版を上げるたびにBUILD_IDと一緒に先頭へ追加する、タイトル画面用の更新履歴。
   // 最下部には先頭の最新1件だけを表示し、タップした一覧で過去分を読めるようにする。
   const UPDATE_HISTORY = Object.freeze([
+    { version: 'v2.0.188', date: '2026/11/05', summary: '名前が空のときの案内を見やすく表示' },
     { version: 'v2.0.187', date: '2026/11/02', summary: '全18キャラの前進・後退・砲撃・被弾・着地アニメーションを追加' },
     { version: 'v2.0.186', date: '2026/09/19', summary: 'アクセス集計の保存先を専用管理ツールへ移行' },
     { version: 'v2.0.185', date: '2026/09/18', summary: '管理者のアクセスを区別するブラウザ登録に対応' },
@@ -27836,11 +27839,19 @@
   const nameNote = document.getElementById('nameNote');
   const nameInput = document.getElementById('nameInput');
   let nameDialogDone = null;
+  let nameDialogNote = '';
+
+  function clearNameError() {
+    nameNote?.classList.remove('error');
+    nameInput.setAttribute('aria-invalid', 'false');
+    if (nameNote) nameNote.textContent = nameDialogNote;
+  }
 
   function openNameDialog(onDone, copy = null) {
     nameDialogDone = onDone || null;
     if (nameTitle) nameTitle.textContent = copy?.title || 'プレイヤー名';
-    if (nameNote) nameNote.textContent = copy?.note || '12文字まで。あとから変更できます。';
+    nameDialogNote = copy?.note || '12文字まで。あとから変更できます。';
+    clearNameError();
     nameInput.value = localPlayerName();
     nameOverlay.classList.add('open');
     // スマホでキーボードを確実に出すため、表示が確定してから焦点を当てる
@@ -27858,7 +27869,11 @@
   document.getElementById('nameOk').addEventListener('click', () => {
     const value = normalizeBattleName(nameInput.value);
     if (!value) {
-      if (nameNote) nameNote.textContent = 'CPU BATTLEとONLINE BATTLEには、名前を1文字以上入力してください。';
+      if (nameNote) {
+        nameNote.textContent = '名前を1文字以上入力してください。';
+        nameNote.classList.add('error');
+      }
+      nameInput.setAttribute('aria-invalid', 'true');
       try { nameInput.focus(); } catch (_) { /* noop */ }
       return;
     }
@@ -27871,6 +27886,7 @@
     playUiSound();
     closeNameDialog(false);
   });
+  nameInput.addEventListener('input', clearNameError);
   nameInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('nameOk').click();
   });
