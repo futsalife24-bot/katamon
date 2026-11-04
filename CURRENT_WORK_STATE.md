@@ -1,6 +1,6 @@
-# 現在地: 既存18体の5動作（実装・検証済み、未公開）
+# 現在地: 名前の空欄案内を改善（2026-11-05、未公開）
 
-branch `feat/all-character-sprites-20261101`。[記録](docs/tasks/2026-11-02-all-character-sprites.md)。90動作792コマ、Chrome検証済み。
+`fix/name-required-20261105`。[変更・検証・作業場所](docs/tasks/2026-11-05-name-feedback.md)。旧18体の記録は変更履歴へ保持。
 
 # 共通アクセス計測を追加・未公開（2026-09-17）
 
